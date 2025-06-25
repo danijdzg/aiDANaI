@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Agenda aiDANaI</title>
+    
+    <!-- Parse SDK (para Back4App) -->
+    <script src="https://npmcdn.com/parse/dist/parse.min.js"></script>
+    <!-- Hammer.js para gestos de swipe -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <!-- RRule.js para manejar eventos recurrentes - ELIMINADO SEGÚN SOLICITUD -->
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="aiDANaI-Agenda.jpg">
+
+    <style>
+        /* [CSS IDÉNTICO AL ANTERIOR, CON AJUSTES MENORES PARA SVGs] */
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root {
+            --bg-primary: #000000; --bg-secondary: #111111; --bg-tertiary: #1C1C1E; --bg-quaternary: #2C2C2E;
+            --text-primary: #FFFFFF; --text-secondary: #E5E5EA; --text-muted: #8E8E93;
+            --border-subtle: #2b2b2b; --border-medium: #444444; --shadow-soft: rgba(0, 0, 0, 0.5);
+            --accent-dani: #0A84FF; --accent-dani-glow: rgba(10, 132, 255, 0.3); --accent-dani-hover: #0073e6; --accent-dani-text: #FFFFFF;
+            --accent-norma: #FF453A; --accent-norma-glow: rgba(255, 69, 58, 0.3); --accent-norma-hover: #e6362c; --accent-norma-text: #FFFFFF;
+            --accent-comun: #30D158; --accent-comun-glow: rgba(48, 209, 88, 0.3); --accent-comun-hover: #29b74e; --accent-comun-text: #000000;
+            --accent-delete: #FF453A; --accent-complete: #30D158;
+            --current-user-accent: var(--accent-dani); --current-user-accent-glow: var(--accent-dani-glow); --current-user-accent-hover: var(--accent-dani-hover);
+            --font-geist: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            --header-height: 45px; --nav-height: 50px;
+        }
+        html.light-theme {
+            --bg-primary: #F2F2F7; --bg-secondary: #FFFFFF; --bg-tertiary: #FFFFFF; --bg-quaternary: #E5E5EA;
+            --text-primary: #000000; --text-secondary: #3C3C43; --text-muted: #8E8E93;
+            --border-subtle: #D1D1D6; --border-medium: #C7C7CC; --shadow-soft: rgba(0, 0, 0, 0.15);
+        }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
+        html { height: -webkit-fill-available; }
+        body { font-family: var(--font-geist); background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; min-height: -webkit-fill-available; height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; line-height: 1.3; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; transition: background-color 0.3s, color 0.3s; }
+        *:focus-visible { outline: 2px solid var(--current-user-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--current-user-accent-glow); border-radius: 4px; }
+        #app-root { display: none; flex-direction: column; flex-grow: 1; height: 100%; opacity: 0; transition: opacity 0.5s ease-out; padding-top: var(--header-height); padding-bottom: var(--nav-height); }
+        #app-root.visible { display: flex; opacity: 1; }
+        .app-header { display: flex; justify-content: space-between; align-items: center; padding: 0 8px; height: var(--header-height); background-color: transparent; border-bottom: none; position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding-left: calc(8px + env(safe-area-inset-left)); padding-right: calc(8px + env(safe-area-inset-right)); }
+        .header-left, .header-right { display: flex; align-items: center; gap: 4px; }
+        .header-center { display: flex; align-items: center; justify-content: center; flex-grow: 1; }
+        .header-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s ease, color 0.2s ease; }
+        .header-btn:hover { background-color: var(--bg-quaternary); color: var(--text-primary); }
+        .header-btn:disabled { color: var(--border-medium); cursor: default; background: none !important; }
+        .header-btn svg { width: 20px; height: 20px; }
+        #current-month-year-btn { font-size: 0.9rem; font-weight: 600; text-transform: lowercase; margin: 0 4px; padding: 4px 8px; border-radius: 6px; }
+        #current-user-display-header { font-size: 0.7rem; margin-right: 4px; color: var(--current-user-accent); font-weight: bold; }
+        #sync-indicator { width: 16px; height: 16px; border: 2px solid var(--text-muted); border-top-color: var(--current-user-accent); border-radius: 50%; animation: spin 1s linear infinite; display: none; margin-left: 6px; }
+        #sync-indicator.active { display: block; } @keyframes spin { to { transform: rotate(360deg); } }
+        
+        main { flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+        #pull-to-refresh-indicator { position: absolute; top: -40px; left: 0; right: 0; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); transition: top 0.2s, transform 0.2s; }
+        #pull-to-refresh-indicator svg { width: 22px; height: 22px; transition: transform 0.2s; }
+        .view-section { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--bg-primary); display: none; flex-direction: column; overflow: hidden; transition: background-color 0.3s; }
+        .view-section.active { display: flex; animation: fadeInView 0.3s ease; } @keyframes fadeInView { from { opacity: 0; } to { opacity: 1; } }
+        .bottom-nav { display: flex; justify-content: space-around; align-items: stretch; background-color: #1c1c1c; border-top: 1px solid #38383a; height: var(--nav-height); position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom); transition: background-color 0.3s, border-top-color 0.3s; }
+        html.light-theme .bottom-nav { background-color: #F9F9F9; border-top-color: #BDBDC2; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); text-decoration: none; font-size: 0.6rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; flex: 1; text-align: center; }
+        .nav-item:hover { background-color: var(--bg-quaternary); } .nav-item.active { color: var(--current-user-accent); }
+        .nav-item-icon { margin-bottom: 2px; line-height: 1; }
+        .nav-item-icon svg { width: 22px; height: 22px; }
+
+        #calendar-view { padding: 0; display: flex; flex-direction: column; height: 100%; }
+        .calendar-grid-container { flex: 0 0 50%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-bottom: 1px solid var(--border-subtle); transition: border-color 0.3s; }
+        .calendar-day-names { display: grid; grid-template-columns: repeat(7, 1fr); background-color: var(--bg-tertiary); transition: background-color 0.3s; }
+        .calendar-day-name { font-weight: 500; font-size: 0.7rem; color: var(--text-muted); padding: 5px 1px; text-align: center; text-transform: lowercase; transition: color 0.3s; }
+        .calendar-day-name:nth-of-type(6) { color: #87CEFA; } .calendar-day-name:nth-of-type(7) { color: #F08080; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); background-color: var(--border-subtle); flex-grow: 1; gap: 1px; transition: background-color 0.3s; }
+        .calendar-day { background-color: var(--bg-primary); cursor: pointer; position: relative; padding: 4px; transition: background-color 0.1s ease; }
+        html.light-theme .calendar-day.other-month { background-color: #f7f7f7; }
+        .calendar-day.other-month { background-color: #080808; pointer-events: none; } .calendar-day.other-month .day-number { color: var(--text-muted); opacity: 0.5; }
+        .calendar-day.weekend-sat { background-color: rgba(10, 132, 255, 0.08); } .calendar-day.weekend-sun { background-color: rgba(255, 69, 58, 0.08); }
+        .day-number { font-size: 0.8rem; font-weight: 400; padding: 3px 5px; border-radius: 6px; }
+        .calendar-day.today .day-number { color: var(--current-user-accent); font-weight: 700; }
+        .calendar-day.selected .day-number { background-color: var(--current-user-accent); color: var(--accent-dani-text); }
+        .day-dots-container { position: absolute; bottom: 4px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 2px; height: 5px; pointer-events: none; }
+        .event-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+        .event-dot.owner-Dani { background-color: var(--accent-dani); } .event-dot.owner-Norma { background-color: var(--accent-norma); } .event-dot.owner-Comun { background-color: var(--accent-comun); }
+
+        .day-detail-area, .list-view-container { flex-grow: 1; overflow-y: auto; min-height: 0; }
+        .list-view-container { padding: 12px; background-color: var(--bg-primary); transition: background-color 0.3s; }
+        .day-detail-area { padding: 8px 12px; }
+        .view-title { font-size: 1.1rem; color: var(--text-primary); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); font-weight: 600; transition: color 0.3s, border-color 0.3s; }
+        .list-section-title { font-size: 0.8rem; color: var(--text-muted); margin: 1rem 0 0.5rem; text-transform: uppercase; font-weight: 600; transition: color 0.3s; }
+        .item-list { display: flex; flex-direction: column; gap: 6px; }
+        .no-items { font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 20px 0; transition: color 0.3s; }
+        
+        article.item-card { background-color: var(--bg-tertiary); border-radius: 8px; padding: 8px 10px; border-left: 4px solid var(--current-user-accent); display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; position: relative; user-select: none; transition: transform 0.2s ease-out, opacity 0.3s, background-color 0.3s; }
+        html.light-theme article.item-card { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .item-card-swipe-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; color: white; opacity: 0; transition: opacity 0.2s; z-index: -1; }
+        .item-card-swipe-background svg { width: 24px; height: 24px; }
+        .item-card.swiping-right .item-card-swipe-background { background-color: var(--accent-complete); justify-content: flex-start; opacity: 1; }
+        .item-card.swiping-left .item-card-swipe-background { background-color: var(--accent-delete); justify-content: flex-end; opacity: 1; }
+        .item-card.owner-Dani { border-left-color: var(--accent-dani); } .item-card.owner-Norma { border-left-color: var(--accent-norma); } .item-card.owner-Comun { border-left-color: var(--accent-comun); }
+        .item-card.completed { opacity: 0.5; border-left-color: var(--text-muted); } .item-card.completed .item-card-title { text-decoration: line-through; color: var(--text-secondary); }
+        .item-card-content { flex-grow: 1; overflow: hidden; }
+        .item-card-title { font-weight: 500; font-size: 0.9rem; color: var(--text-primary); margin-bottom: 3px; word-break: break-word; transition: color 0.3s; }
+        .item-card-meta { display: flex; align-items: center; font-size: 0.7rem; color: var(--text-muted); gap: 8px; transition: color 0.3s; }
+        .item-card-meta .meta-icon { width: 14px; height: 14px; opacity: 0.7; }
+        .item-card-time { font-weight: 600; color: var(--text-primary); transition: color 0.3s; }
+        .item-card-owner { font-weight: 600; padding: 2px 5px; border-radius: 4px; font-size: 0.6rem; flex-shrink: 0; }
+        .item-card-owner.owner-Dani { background-color: var(--accent-dani); color: var(--accent-dani-text); }
+        .item-card-owner.owner-Norma { background-color: var(--accent-norma); color: var(--accent-norma-text); }
+        .item-card-owner.owner-Comun { background-color: var(--accent-comun); color: var(--accent-comun-text); }
+        .item-card-actions { display: flex; gap: 2px; flex-shrink: 0; align-items: center; }
+        .item-card-action { background: none; border: none; color: var(--text-muted); cursor: pointer; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
+        .item-card-action svg { width: 16px; height: 16px; }
+        .item-card-action:hover { color: var(--text-primary); background-color: var(--bg-quaternary); }
+        
+        #fab-add-item { position: fixed; bottom: calc(var(--nav-height) + 15px + env(safe-area-inset-bottom)); right: 15px; width: 50px; height: 50px; background-color: var(--current-user-accent); color: var(--accent-dani-text); border-radius: 16px; border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px var(--shadow-soft); cursor: pointer; z-index: 99; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        #fab-add-item svg { width: 28px; height: 28px; }
+
+        .intro-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-primary); padding: 20px; text-align: center; transition: opacity 0.5s ease-out, transform 0.5s ease-out, background-color 0.3s; }
+        #initial-user-selection-screen { visibility: hidden; opacity: 0; transform: translateY(20px); }
+        #initial-user-selection-screen.visible { visibility: visible; opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
+        .user-selection-card { background-color: var(--bg-secondary); padding: 1.8rem 1.3rem; border-radius: 12px; box-shadow: 0 8px 30px var(--shadow-soft); width: 100%; max-width: 360px; border: 1px solid var(--border-subtle); transition: background-color 0.3s, border-color 0.3s; }
+        .user-selection-logo-container { 
+            display: flex; 
+            flex-direction: column; /* Changed to column to stack image and text */
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px; /* Gap between image and text */
+            margin-bottom: 1.2rem; 
+        }
+        .app-logo {
+            width: 100%; /* Double the previous width (was 50%) */
+            max-width: 500px; /* Double the previous max-width (was 250px) */
+            height: auto;
+            border-radius: 8px; /* Optional: adds a slight rounded corner to the image */
+        }
+        .user-selection-logo-text { font-size: clamp(1.4rem, 4.5vw, 1.8rem); font-weight: 700; background: linear-gradient(to right, var(--accent-dani), var(--accent-norma), var(--accent-comun)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .profile-buttons button { margin: 0.4rem 0.2rem; width: calc(50% - 0.6rem); max-width: 130px; padding: 12px 10px; border: 1px solid var(--border-medium); background-color: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; border-radius: 7px; font-size: 0.9rem; transition: all 0.2s ease; cursor: pointer; }
+        .profile-buttons button:hover { background-color: var(--bg-quaternary); transform: translateY(-2px); box-shadow: 0 4px 10px var(--shadow-soft); }
+        .profile-buttons button.profile-dani { border-color: var(--accent-dani); color: var(--accent-dani); } .profile-buttons button.profile-norma { border-color: var(--accent-norma); color: var(--accent-norma); }
+        #personalized-greeting-screen { visibility: hidden; opacity: 0; }
+        #personalized-greeting-screen.visible { visibility: visible; opacity: 1; }
+        #personalized-greeting-text { font-size: clamp(1.8rem, 7vw, 2.8rem); line-height: 1.3; font-weight: 500; max-width: 90%; opacity: 0; transform: scale(0.9); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
+        #personalized-greeting-text.visible { opacity: 1; transform: scale(1); }
+        /* Removed #intro-animation CSS */
+        /* Removed #zoom-image CSS */
+        /* Removed @keyframes elegantIntro */
+        
+        .modal { display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); align-items: center; justify-content: center; }
+        html.light-theme .modal { background-color: rgba(30, 30, 30, 0.6); backdrop-filter: blur(5px); }
+        .modal-content { background-color: var(--bg-secondary); padding: 10px 12px; border: 1px solid var(--border-medium); width: 90%; max-width: 400px; border-radius: 8px; box-shadow: 0 5px 15px var(--shadow-soft); animation: modalOpen 0.3s ease-out; transition: background-color 0.3s, border-color 0.3s; }
+        @keyframes modalOpen { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        #modal-title { font-size: 1rem; font-weight: 600; margin-bottom: 12px; text-align: center; }
+        .form-group { margin-bottom: 10px; }
+        .form-group label { display: block; margin-bottom: 4px; font-size: 0.75rem; font-weight: 500; color: var(--text-secondary); transition: color 0.3s; }
+        .form-group input[type="text"], .form-group input[type="date"], .form-group input[type="time"], .form-group input[type="number"], .form-group select, .form-group textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--border-medium); border-radius: 5px; background-color: var(--bg-tertiary); color: var(--text-primary); font-size: 0.8rem; transition: all 0.2s ease; -webkit-appearance: none; }
+        html.light-theme .form-group input, html.light-theme .form-group select, html.light-theme .form-group textarea, html.light-theme .form-group input[type="number"] { background-color: var(--bg-quaternary); }
+        .form-group textarea { min-height: 65px; resize: vertical; }
+        .form-group-datetime { border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px; margin-top: 5px; display: none; transition: border-color 0.3s; }
+        .form-group-inline { display: flex; align-items: center; gap: 8px; }
+        .form-group-inline label { flex-shrink: 0; }
+        .btn { padding: 6px 12px; border-radius: 5px; font-weight: 600; font-size: 0.8rem; cursor: pointer; transition: all 0.2s ease; border: none; }
+        .btn-primary { background-color: var(--current-user-accent); color: var(--accent-dani-text); }
+        .btn-primary:hover { background-color: var(--current-user-accent-hover); }
+        .btn-secondary { background-color: var(--bg-quaternary); color: var(--text-secondary); }
+        .btn-secondary:hover { background-color: var(--border-medium); }
+        
+        .help-section { margin-bottom: 1rem; background-color: var(--bg-secondary); border-radius: 8px; padding: 1rem; transition: background-color 0.3s; }
+        .help-section h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 700; transition: color 0.3s; }
+        .help-section p, .help-section li { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.5rem; transition: color 0.3s; }
+        .help-section ul { margin-left: 1rem; list-style-position: inside; } 
+        .help-section .highlight { color: var(--current-user-accent); font-weight: 600; }
+        .help-section .important-note { background-color: rgba(255, 204, 0, 0.1); border-left: 3px solid #FFCC00; padding: 0.5rem 0.8rem; font-size: 0.8rem; color: #FFCC00; border-radius: 4px; margin-top: 0.5rem; }
+        .help-section details { border: 1px solid var(--border-medium); border-radius: 6px; padding: 0.5rem; }
+        .help-section summary { font-weight: bold; cursor: pointer; }
+        .help-section pre { background-color: var(--bg-primary); padding: 0.8rem; border-radius: 4px; overflow-x: auto; font-size: 0.75rem; margin-top: 0.5rem; }
+        
+        .theme-switcher-container { display: flex; justify-content: space-between; align-items: center; }
+        .theme-switcher { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .theme-switcher input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--bg-quaternary); transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--current-user-accent); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .task-filters { display: flex; gap: 6px; margin-bottom: 1rem; flex-wrap: wrap; }
+        .task-filter-btn { background-color: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-medium); padding: 4px 10px; font-size: 0.75rem; font-weight: 500; border-radius: 14px; cursor: pointer; transition: all 0.2s ease; }
+        .task-filter-btn.active { background-color: var(--current-user-accent); color: var(--accent-dani-text); border-color: var(--current-user-accent); }
+        #search-input { width: 100%; border: none; background: var(--bg-tertiary); color: var(--text-primary); padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; display: none; }
+        #search-input:focus { outline: none; box-shadow: 0 0 0 2px var(--current-user-accent); }
+
+        #swipe-tooltip-overlay { position: fixed; bottom: calc(var(--nav-height) + 10px + env(safe-area-inset-bottom)); left: 10px; right: 10px; z-index: 2001; display: none; justify-content: center; animation: tooltipFadeIn 0.5s ease-out; }
+        @keyframes tooltipFadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .swipe-tooltip-content { background-color: rgba(50, 50, 50, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: white; padding: 12px 16px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; max-width: 400px; display: flex; align-items: center; gap: 15px; }
+        html.light-theme .swipe-tooltip-content { background-color: rgba(255, 255, 255, 0.85); color: black; }
+        .swipe-tooltip-content p { font-size: 0.8rem; line-height: 1.4; margin: 0; }
+        .swipe-tooltip-content button { background-color: var(--current-user-accent); color: var(--accent-dani-text); border: none; border-radius: 8px; padding: 6px 12px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+
+        #toast-container { position: fixed; bottom: calc(var(--nav-height) + 8px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 2000; width: max-content; max-width: 90%; pointer-events: none; }
+        .toast { background-color: rgba(40, 40, 40, 0.95); backdrop-filter: blur(5px); color: var(--text-primary); padding: 7px 12px; border-radius: 18px; margin-bottom: 6px; box-shadow: 0 2px 6px var(--shadow-soft); display: flex; align-items: center; animation: toastFadeIn 0.3s, toastFadeOut 0.3s 2.7s; font-size: 0.75rem; }
+        @keyframes toastFadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastFadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(10px); } }
+    </style>
+</head>
+<body>
+    
+    <div id="initial-user-selection-screen" class="intro-screen">
+         <div class="user-selection-card">
+            <div class="user-selection-logo-container">
+                <img src="aiDANaI-Agenda.jpg" alt="Logo Agenda aiDANaI" class="app-logo">
+                <div class="user-selection-logo-text">Agenda aiDANaI</div>
+            </div>
+            <h1 class="user-selection-logo-text" style="margin-bottom: 0.5rem; font-size: 1.3rem; background: none; color: var(--text-primary);">Selecciona tu perfil:</h1>
+            <div class="profile-buttons"><button class="profile-dani" data-user="Dani">Dani</button><button class="profile-norma" data-user="Norma">Norma</button></div>
+        </div>
+    </div>
+    <div id="personalized-greeting-screen" class="intro-screen"><p id="personalized-greeting-text" role="status"></p></div>
+    <!-- Removed original intro-animation div -->
+
+    <div id="app-root">
+        <header class="app-header">
+            <div class="header-left">
+                <button id="user-menu-btn" class="header-btn" title="Menú de Usuario y Ayuda" aria-label="Menú de usuario y ayuda">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="header-center" id="header-title-container">
+                <button id="prev-month-btn-header" class="header-btn" title="Mes anterior" aria-label="Mes anterior">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <button id="current-month-year-btn" class="header-btn" title="Seleccionar mes y año" aria-label="Seleccionar mes y año"></button>
+                <button id="next-month-btn-header" class="header-btn" title="Mes siguiente" aria-label="Mes siguiente">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+                <input type="search" id="search-input" placeholder="Buscar eventos o tareas..." aria-label="Buscar ítems">
+            </div>
+            <div class="header-right">
+                <span id="current-user-display-header"></span>
+                <div id="sync-indicator" role="status" aria-live="polite">
+                    <span class="visually-hidden">Sincronizando datos...</span>
+                </div>
+                <button id="search-btn-header" class="header-btn" title="Buscar" aria-label="Buscar ítems">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </button>
+                <button id="today-btn-header" class="header-btn" title="Hoy" aria-label="Ir al día de hoy">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                </button>
+                <button id="logout-btn-header" class="header-btn" title="Cerrar Sesión" aria-label="Cerrar sesión">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                </button>
+            </div>
+        </header>
+
+        <main id="main-content-area" tabindex="-1">
+            <!-- El contenido de la vista se renderizará aquí dinámicamente -->
+        </main>
+
+        <button id="fab-add-item" title="Añadir Nuevo Ítem" aria-label="Añadir nuevo ítem">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+
+        <nav class="bottom-nav" aria-label="Navegación principal">
+             <button class="nav-item active" data-view="calendar" title="Calendario">
+                <div class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></div>
+                <span>Agenda</span>
+            </button>
+             <button class="nav-item" data-view="tasks" title="Lista de Tareas">
+                <div class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
+                <span>Tareas</span>
+            </button>
+             <button class="nav-item" data-view="help" title="Ayuda y Configuración">
+                <div class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></div>
+                <span>Ayuda</span>
+            </button>
+        </nav>
+    </div>
+
+    <div id="date-picker-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="date-picker-title">
+        <div class="modal-content">
+            <h3 id="date-picker-title" class="modal-title">Ir a la fecha</h3>
+            <form id="date-picker-form">
+                <div class="form-group-inline" style="justify-content: space-between;">
+                    <div class="form-group" style="width: 58%;">
+                        <label for="month-select">Mes</label>
+                        <select id="month-select"></select>
+                    </div>
+                    <div class="form-group" style="width: 38%;">
+                        <label for="year-select">Año</label>
+                        <input type="number" id="year-select" min="2020" max="2030" step="1">
+                    </div>
+                </div>
+                <div class="form-actions" style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" id="cancel-date-picker-btn" style="flex:1;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" style="flex:2;">Ir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="add-item-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-h3">
+        <div class="modal-content">
+            <form id="add-item-form">
+                <h3 id="modal-title-h3" class="modal-title">Añadir Ítem</h3>
+                <input type="hidden" id="item-id"><input type="hidden" id="item-local-id"><input type="hidden" id="item-last-modified">
+                <div class="form-group"><label for="item-type">Tipo:</label><select id="item-type" required><option value="task">Tarea</option><option value="agenda">Evento de Agenda</option></select></div>
+                <div class="form-group"><label for="item-description">Descripción:</label><textarea id="item-description" required placeholder="Describe el ítem..."></textarea></div>
+                <div id="datetime-notification-group" class="form-group-datetime">
+                    <div class="form-group"><label for="item-due-date">Fecha:</label><input type="date" id="item-due-date"></div>
+                    <div class="form-group"><label for="item-due-time">Hora:</label><input type="time" id="item-due-time"></div>
+                    <div class="form-group form-group-inline"><input type="checkbox" id="item-notification-enabled" style="width: auto;"><label for="item-notification-enabled">Activar notificación</label></div>
+                    <div class="form-group" id="notification-time-group" style="display: none;"><label for="item-notification-remind-time">Recordar:</label><select id="item-notification-remind-time"><option value="0">Justo a la hora</option><option value="5">5 minutos antes</option><option value="15" selected>15 minutos antes</option><option value="30">30 minutos antes</option><option value="60">1 hora antes</option></select></div>
+                    <!-- CAMPOS DE RECURRENCIA ELIMINADOS SEGÚN SOLICITUD -->
+                </div>
+                <div class="form-group"><label for="item-owner">Propietario:</label><select id="item-owner" required><option value="Dani">Dani</option><option value="Norma">Norma</option><option value="Comun">Común</option></select></div>
+                <div class="form-actions" style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" id="cancel-item-btn" style="flex:1;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="save-item-btn" style="flex:2;">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="swipe-tooltip-overlay">
+        <div class="swipe-tooltip-content">
+            <p><strong>¡NUEVO!</strong> Desliza una tarea a la derecha (✓) para completarla o a la izquierda (🗑️) para eliminarla.</p>
+            <button id="dismiss-swipe-tooltip-btn">¡Entendido!</button>
+        </div>
+    </div>
+
+    <div id="toast-container" aria-live="assertive"></div>
+    
+    <template id="view-section-template">
+        <section class="view-section" aria-live="polite"></section>
+    </template>
+
+    <template id="item-card-template">
+        <article class="item-card">
+            <div class="item-card-swipe-background">
+                <span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+                <span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></span>
+            </div>
+            <div class="item-card-content">
+                <h4 class="item-card-title"></h4>
+                <div class="item-card-meta"></div>
+            </div>
+            <div class="item-card-actions"></div>
+        </article>
+    </template>
+
+    <script>
+        const PARSE_APP_ID = "v6TC3TP1vvPfkVXErWsox54UQtj9G6vJr8aTWpLl";
+        const PARSE_JS_KEY = "ZomACaFL7RcBKbwfOvonnJ4JLNp1jBTlYaDTIMhy";
+        const PARSE_SERVER_URL = "https://parseapi.back4app.com/";
+        Parse.initialize(PARSE_APP_ID, PARSE_JS_KEY);
+        Parse.serverURL = PARSE_SERVER_URL;
+
+        const citasFamosas = [ { cita: "Pienso, luego existo.", autor: "René Descartes" }, { cita: "Sé el cambio que quieres ver en el mundo.", autor: "Mahatma Gandhi" }, { cita: "La vida es lo que pasa mientras estás ocupado haciendo otros planes.", autor: "John Lennon" }, { cita: "La imaginación es más importante que el conocimiento.", autor: "Albert Einstein" }, { cita: "No hay camino para la paz, la paz es el camino.", autor: "Mahatma Gandhi" } ];
+        const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+        const gebi = id => document.getElementById(id);
+        const qs = selector => document.querySelector(selector);
+        const qsa = selector => document.querySelectorAll(selector);
+        
+        function createStore(initialState) { let state = initialState; const listeners = new Set(); return { getState() { return state; }, setState(updater) { const oldState = state; state = { ...state, ...(typeof updater === 'function' ? updater(state) : updater) }; listeners.forEach(listener => listener(state, oldState)); }, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); } }; }
+        const initialState = { currentUser: null, items: [], currentView: 'calendar', calendar: { currentMonth: new Date().getMonth(), currentYear: new Date().getFullYear(), selectedDate: dateToYYYYMMDD(new Date()) }, isLoading: false, fetchedMonths: new Set(), pendingSyncOperations: 0, theme: 'dark', taskFilter: 'all', isSearching: false, searchQuery: '' };
+        const store = createStore(initialState);
+        const scheduledNotifications = new Map();
+        let lastFocusedElement = null;
+        
+        // --- UTILIDADES ---
+        function debounce(func, delay) { let timeout; return function(...args) { const context = this; clearTimeout(timeout); timeout = setTimeout(() => func.apply(context, args), delay); }; }
+        function triggerHapticFeedback(heavy = false) { if (navigator.vibrate) navigator.vibrate(heavy ? 40 : 10); }
+        function dateToYYYYMMDD(date) { if (!(date instanceof Date) || isNaN(date)) { const now = new Date(); return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`; } return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`; }
+        function dateToHHMM(date) { if (!(date instanceof Date) || isNaN(date)) return "00:00"; return `${date.getUTCHours().toString().padStart(2, '0')}:${date.getUTCMinutes().toString().padStart(2, '0')}`; }
+        function YYYYMMDDToDate(dateStr) { if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null; const parts = dateStr.split('-'); return new Date(Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))); }
+        function showToast(message) { const tc = gebi('toast-container'); if (!tc) return; const t = document.createElement('div'); t.className = `toast`; t.textContent = message; tc.appendChild(t); setTimeout(() => { t.remove(); }, 3300); }
+        function updateSyncIndicator(change) { store.setState(prev => ({ pendingSyncOperations: prev.pendingSyncOperations + change })); }
+        function uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }); }
+        
+        function parseObjectToAppItem(p) { 
+            if (!p) return null; 
+            return { 
+                id: p.id, 
+                type: p.get('type'), 
+                description: p.get('description'), 
+                owner: p.get('owner'), 
+                isComplete: p.get('isComplete') || false, 
+                createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(), 
+                createdBy: p.get('createdBy'), 
+                completedAt: p.get('completedAt') ? p.get('completedAt').getTime() : null, 
+                lastModified: p.updatedAt ? p.updatedAt.getTime() : Date.now(), 
+                lastModifiedBy: p.get('lastModifiedBy'), 
+                dueDate: p.get('dueDate') ? new Date(p.get('dueDate')).toISOString() : null, 
+                notificationEnabled: p.get('notificationEnabled') || false, 
+                notificationRemindTime: p.get('notificationRemindTime') || 15, 
+                localId: p.get('localId') || p.id,
+                // recurrenceRule y recurrenceEndDate eliminados
+            }; 
+        }
+        
+        const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const TODO_ITEM_CLASS_NAME = 'TodoItem';
+
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        function initializeApp() {
+            loadAndApplyTheme();
+            // Iniciar la aplicación directamente con la selección de usuario
+            showUserSelectionScreen(); 
+            attachGlobalEventListeners();
+            store.subscribe(handleStateChange);
+            store.subscribe(saveDataToLocalStorageOnChange);
+        }
+
+        // Removed startInitialAnimation function
+
+        function handleStateChange(newState, oldState) {
+            if ( newState.currentView !== oldState.currentView || newState.items !== oldState.items || newState.calendar !== oldState.calendar || newState.taskFilter !== oldState.taskFilter || newState.searchQuery !== oldState.searchQuery || newState.isSearching !== oldState.isSearching ) { renderApp(); }
+            if (newState.pendingSyncOperations !== oldState.pendingSyncOperations) { gebi('sync-indicator')?.classList.toggle('active', newState.pendingSyncOperations > 0); }
+            if (newState.theme !== oldState.theme) { applyTheme(newState.theme); }
+        }
+        
+        const saveDataToLocalStorageOnChange = debounce((newState, oldState) => { if (newState.items !== oldState.items) { try { localStorage.setItem('items', JSON.stringify(newState.items)); } catch (e) { showToast('Error al guardar datos localmente.'); } } }, 500);
+
+        function showUserSelectionScreen() { 
+            gebi('app-root').classList.remove('visible'); 
+            gebi('initial-user-selection-screen').classList.add('visible'); 
+            qsa('.profile-buttons button').forEach(b => { 
+                if (!b.dataset.listenerAttached) { 
+                    b.addEventListener('click', () => selectUserProfile(b.dataset.user)); 
+                    b.dataset.listenerAttached = 'true'; 
+                } 
+            }); 
+        }
+        
+        async function selectUserProfile(userName) {
+            const user = { name: userName }; 
+            localStorage.setItem('currentUser', JSON.stringify(user)); 
+            setUserSpecificStyles(userName);
+
+            const selectionScreen = gebi('initial-user-selection-screen'); 
+            const greetingScreen = gebi('personalized-greeting-screen'); 
+            const greetingText = gebi('personalized-greeting-text'); 
+            
+            selectionScreen.style.opacity = '0'; 
+            await wait(500); 
+            selectionScreen.classList.remove('visible');
+
+            // Mostrar saludo personalizado
+            const { cita, autor } = citasFamosas[Math.floor(Math.random() * citasFamosas.length)]; 
+            greetingText.innerHTML = `"${cita}"<br><span style="font-size:0.6em; color:var(--text-muted);">- ${autor} -</span>`; 
+            greetingScreen.classList.add('visible'); 
+            await wait(50); 
+            greetingText.classList.add('visible');
+            
+            await wait(3500); // Mostrar la cita por un tiempo razonable
+            greetingText.classList.remove('visible'); 
+            greetingScreen.style.opacity = '0'; 
+            await wait(500); 
+            greetingScreen.classList.remove('visible');
+            
+            store.setState(prev => ({...prev, currentUser: user }));
+            loadDataAndInitializeApp(); // Finalmente cargar la aplicación
+        }
+
+        function setUserSpecificStyles(userName) { const accentVar = userName === 'Dani' ? 'var(--accent-dani)' : 'var(--accent-norma)'; const accentGlowVar = userName === 'Dani' ? 'var(--accent-dani-glow)' : 'var(--accent-norma-glow)'; const accentHoverVar = userName === 'Dani' ? 'var(--accent-dani-hover)' : 'var(--accent-dani-hover)'; document.documentElement.style.setProperty('--current-user-accent', accentVar); document.documentElement.style.setProperty('--current-user-accent-glow', accentGlowVar); document.documentElement.style.setProperty('--current-user-accent-hover', accentHoverVar); gebi('current-user-display-header').textContent = userName; }
+        
+        async function loadDataAndInitializeApp() {
+            gebi('app-root').classList.add('visible'); 
+            loadDataFromLocalStorage(); 
+            await fetchInitialData();
+            if (!store.getState().isLoading) { goToToday(); } 
+            scheduleAllPendingNotifications();
+        }
+        
+        function attachGlobalEventListeners() {
+            qsa('.nav-item').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
+            window.addEventListener('click', e => { if (e.target.classList.contains('modal')) closeModal(e.target.id); });
+            window.addEventListener('keydown', e => { if (e.key === 'Escape') { const openModal = qs('.modal[style*="display: flex"]'); if (openModal) closeModal(openModal.id); }});
+            gebi('add-item-form')?.addEventListener('submit', handleItemFormSubmit);
+            gebi('cancel-item-btn')?.addEventListener('click', () => closeModal('add-item-modal'));
+            gebi('item-type')?.addEventListener('change', toggleDateTimeNotificationVisibility);
+            gebi('item-notification-enabled')?.addEventListener('change', () => { gebi('notification-time-group').style.display = gebi('item-notification-enabled').checked ? 'block' : 'none'; });
+            const debouncedChangeMonth = debounce(changeMonth, 300);
+            gebi('prev-month-btn-header')?.addEventListener('click', () => debouncedChangeMonth(-1));
+            gebi('next-month-btn-header')?.addEventListener('click', () => debouncedChangeMonth(1));
+            gebi('today-btn-header')?.addEventListener('click', goToToday);
+            gebi('logout-btn-header')?.addEventListener('click', handleLogout);
+            gebi('fab-add-item')?.addEventListener('click', () => openAddItemModal());
+            gebi('user-menu-btn')?.addEventListener('click', () => switchView('help'));
+            attachPullToRefresh(gebi('main-content-area'));
+            gebi('search-btn-header')?.addEventListener('click', toggleSearch);
+            const debouncedSearch = debounce(handleSearch, 300);
+            gebi('search-input')?.addEventListener('input', debouncedSearch);
+            gebi('dismiss-swipe-tooltip-btn')?.addEventListener('click', dismissSwipeTooltip);
+            gebi('current-month-year-btn')?.addEventListener('click', openDatePickerModal);
+            gebi('date-picker-form')?.addEventListener('submit', handleDateSelectionFromPicker);
+            gebi('cancel-date-picker-btn')?.addEventListener('click', () => closeModal('date-picker-modal'));
+            
+            // ELIMINADO: Listener para la regla de recurrencia
+        }
+        
+        function renderApp() { const state = store.getState(); updateHeader(state); renderCurrentView(state); updateNav(state); }
+        function updateHeader(state) { const { currentView, isSearching, calendar } = state; const monthYearBtn = gebi('current-month-year-btn'); const prevBtn = gebi('prev-month-btn-header'); const nextBtn = gebi('next-month-btn-header'); const searchInput = gebi('search-input'); monthYearBtn.style.display = isSearching ? 'none' : 'inline-flex'; prevBtn.style.display = isSearching || currentView !== 'calendar' ? 'none' : 'inline-flex'; nextBtn.style.display = isSearching || currentView !== 'calendar' ? 'none' : 'inline-flex'; searchInput.style.display = isSearching ? 'block' : 'none'; if (!isSearching) { if (currentView === 'calendar') { monthYearBtn.textContent = `${MESES_CORTOS[calendar.currentMonth]}/${calendar.currentYear.toString().slice(-2)}`; monthYearBtn.disabled = false; } else { let viewTitle = currentView.charAt(0).toUpperCase() + currentView.slice(1); if (currentView === 'tasks') viewTitle = "Tareas"; if (currentView === 'help') viewTitle = "Ayuda"; if (currentView === 'search') viewTitle = "Búsqueda"; monthYearBtn.textContent = viewTitle; monthYearBtn.disabled = true; } } }
+        function updateNav(state) { qsa('.nav-item').forEach(item => { item.classList.toggle('active', item.dataset.view === state.currentView); }); }
+        
+        function renderCurrentView(state) { 
+            const main = gebi('main-content-area'); if (!main) return; 
+            let viewEl = main.querySelector('.view-section'); const viewId = `${state.currentView}-view`;
+            if (!viewEl || viewEl.id !== viewId) { const template = gebi('view-section-template'); viewEl = template.content.cloneNode(true).firstElementChild; viewEl.id = viewId; main.innerHTML = ''; main.appendChild(viewEl); }
+            switch(state.currentView) { 
+                case 'calendar': renderCalendarView(viewEl, state); break; 
+                case 'tasks': renderTaskListView(viewEl, state); break; 
+                case 'help': renderHelpView(viewEl, state); break; 
+                case 'search': renderSearchView(viewEl, state); break;
+            } 
+            if(!viewEl.classList.contains('active')) { void viewEl.offsetWidth; viewEl.classList.add('active'); }
+        }
+        
+        function switchView(view) { if (!view || store.getState().isLoading) return; triggerHapticFeedback(); if (store.getState().isSearching) { store.setState({ isSearching: false, searchQuery: '' }); } store.setState({ currentView: view }); if (view === 'tasks' && !localStorage.getItem('hasSeenSwipeHint')) { gebi('swipe-tooltip-overlay').style.display = 'flex'; } }
+
+        function reconcileList(parentElement, data, renderFn, updateFn, keyFn) { const newKeys = new Set(data.map(keyFn)); const existingNodesMap = new Map(); for (const child of parentElement.children) { const key = child.dataset.id; if (key) { if (newKeys.has(key)) { existingNodesMap.set(key, child); } else { child.remove(); } } } data.forEach((item, index) => { const key = keyFn(item); const existingNode = existingNodesMap.get(key); if (existingNode) { updateFn(existingNode, item); if (parentElement.children[index] !== existingNode) { parentElement.insertBefore(existingNode, parentElement.children[index+1]); } } else { const newNode = renderFn(item); parentElement.insertBefore(newNode, parentElement.children[index]); } }); if (data.length === 0 && parentElement.dataset.emptyMessage) { if (!parentElement.querySelector('.no-items')) { parentElement.innerHTML = `<p class="no-items">${parentElement.dataset.emptyMessage}</p>`; } } else if (data.length > 0 && parentElement.querySelector('.no-items')) { parentElement.querySelector('.no-items').remove(); } }
+
+        function renderCalendarView(viewEl, state) {
+            const { calendar, items } = state;
+            viewEl.innerHTML = `<div class="calendar-grid-container"><div class="calendar-day-names">`+
+                ['lun','mar','mié','jue','vie','sáb','dom'].map(n => `<div class="calendar-day-name">${n}</div>`).join('')+
+                `</div><div class="calendar-grid"></div></div><div class="day-detail-area" aria-live="polite"></div>`;
+
+            const grid = viewEl.querySelector('.calendar-grid');
+            const {currentMonth, currentYear} = calendar; const firstDay = new Date(currentYear, currentMonth, 1); const lastDay = new Date(currentYear, currentMonth + 1, 0); const startDayIndex = (firstDay.getDay() + 6) % 7; const lastDayPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
+            let gridHtml = '';
+            for (let i = startDayIndex; i > 0; i--) { gridHtml += `<div class="calendar-day other-month"><span class="day-number">${lastDayPrevMonth - i + 1}</span></div>`; }
+            const todayStr = dateToYYYYMMDD(new Date());
+            for (let day = 1; day <= lastDay.getDate(); day++) {
+                const date = new Date(currentYear, currentMonth, day); const dateStr = dateToYYYYMMDD(date); const dayOfWeek = (date.getDay() + 6) % 7; 
+                const eventsForDay = getItemsForDate(dateStr, items);
+                let dotsHtml = eventsForDay.length > 0 ? `<div class="day-dots-container" aria-hidden="true">${eventsForDay.slice(0, 5).map(event => `<span class="event-dot owner-${event.owner || 'Comun'}"></span>`).join('')}</div>` : '';
+                let dayClasses = `calendar-day ${dateStr === todayStr ? 'today' : ''} ${dateStr === calendar.selectedDate ? 'selected' : ''} ${dayOfWeek === 5 ? 'weekend-sat' : ''} ${dayOfWeek === 6 ? 'weekend-sun' : ''}`;
+                gridHtml += `<div class="${dayClasses}" data-date="${dateStr}" role="button" aria-label="Día ${day}"><div class="day-number">${day}</div>${dotsHtml}</div>`;
+            }
+            const totalCells = startDayIndex + lastDay.getDate(); const remainingCells = (7 - (totalCells % 7)) % 7;
+            for (let i = 1; i <= remainingCells; i++) { gridHtml += `<div class="calendar-day other-month"><span class="day-number">${i}</span></div>`; }
+            grid.innerHTML = gridHtml;
+
+            renderDayDetailArea(viewEl.querySelector('.day-detail-area'), state);
+            attachCalendarListeners(grid);
+        }
+
+        function renderDayDetailArea(detailArea, state) { if (!detailArea) return; const { calendar, items } = state; const dateObj = YYYYMMDDToDate(calendar.selectedDate); const titleText = dateObj ? `Detalles del ${dateObj.toLocaleDateString('es-ES', {weekday: 'long', day: 'numeric', month: 'long'})}` : 'Detalles'; let titleEl = detailArea.querySelector('.list-section-title'); if (!titleEl) { titleEl = document.createElement('h2'); titleEl.className = 'list-section-title'; detailArea.appendChild(titleEl); } titleEl.textContent = titleText; let itemListEl = detailArea.querySelector('.item-list'); if (!itemListEl) { itemListEl = document.createElement('div'); itemListEl.className = 'item-list'; itemListEl.dataset.emptyMessage = 'No hay eventos para este día.'; detailArea.appendChild(itemListEl); } const agendaItems = getItemsForDate(calendar.selectedDate, items); reconcileList( itemListEl, agendaItems, renderItemCard, updateItemCard, item => item.localId + (item.virtualDate || '') ); }
+        function renderTaskListView(viewEl, state) { const { taskFilter, items } = state; if (!viewEl.querySelector('.view-title')) { viewEl.innerHTML = `<h2 class="view-title" id="tasks-heading">Tareas</h2><div class="task-filters"></div><h3 class="list-section-title">Pendientes</h3><div class="item-list pending-tasks" data-empty-message="¡Ninguna tarea pendiente! 🎉"></div><h3 class="list-section-title completed-title">Completadas</h3><div class="item-list completed-tasks" data-empty-message="Aún no has completado ninguna tarea."></div>`; attachTaskFilterListeners(viewEl.querySelector('.task-filters')); } const filtersContainer = viewEl.querySelector('.task-filters'); filtersContainer.innerHTML = [{label: 'Todos', value: 'all'}, {label: 'Dani', value: 'Dani'}, {label: 'Norma', value: 'Norma'}, {label: 'Común', value: 'Comun'}].map(filter => `<button class="task-filter-btn ${taskFilter === filter.value ? 'active' : ''}" data-filter="${filter.value}">${filter.label}</button>`).join(''); const allTasks = items.filter(i => i.type === 'task'); const filteredTasks = taskFilter === 'all' ? allTasks : allTasks.filter(i => i.owner === taskFilter); const pendingTasks = filteredTasks.filter(i => !i.isComplete).sort((a,b) => (b.createdAt||0)-(a.createdAt||0)); const completedTasks = filteredTasks.filter(i => i.isComplete).sort((a,b) => (b.completedAt||0)-(a.completedAt||0)); reconcileList(viewEl.querySelector('.pending-tasks'), pendingTasks, renderItemCard, updateItemCard, item => item.localId); reconcileList(viewEl.querySelector('.completed-tasks'), completedTasks.slice(0, 15), renderItemCard, updateItemCard, item => item.localId); viewEl.querySelector('.completed-title').style.display = completedTasks.length > 0 ? 'block' : 'none'; }
+        function renderHelpView(viewEl, state) { if (viewEl.dataset.rendered) return; const { calendar, theme } = state; viewEl.innerHTML = `<h2 id="help-heading" class="view-title">Ayuda y Configuración</h2><div class="help-section"><h3>⚙️ Configuración Visual</h3><div class="theme-switcher-container"><span>Modo Claro / Oscuro</span><label class="theme-switcher"><input type="checkbox" id="theme-toggle-checkbox" ${theme === 'light' ? 'checked' : ''}><span class="slider"></span></label></div></div><div class="help-section"><h3>🧭 Navegación y Vistas</h3><ul><li><strong class="highlight">Agenda:</strong> Vista de calendario. Pulsa en el nombre del mes (<strong class="highlight">${MESES_CORTOS[calendar.currentMonth]}/${calendar.currentYear.toString().slice(-2)}</strong>) para saltar rápidamente a otra fecha.</li><li><strong class="highlight">Tareas:</strong> Tu lista de tareas pendientes y completadas. Usa los filtros por propietario para organizarte.</li><li><strong class="highlight">Ayuda:</strong> Estás aquí.</li></ul></div><div class="help-section"><h3>🚀 Sincronización y Modo Offline</h3><p>La app está diseñada para funcionar <strong class="highlight">siempre</strong>, con o sin conexión a internet.</p><ul><li><strong class="highlight">Guardado Automático:</strong> Cualquier cambio que hagas se guarda instantáneamente en tu dispositivo.</li><li><strong class="highlight">Feedback de Sincronización:</strong><ul><li><strong>Icono de Nube con Tacha:</strong> Aparece al lado de un ítem para indicar que se ha guardado en tu dispositivo pero aún no se ha subido a la nube. Desaparece en cuanto se sincroniza.</li><li><strong>Círculo Giratorio:</strong> En la cabecera, indica que la app se está comunicando activamente con el servidor.</li></ul></li></ul><p>La sincronización ocurre automáticamente cuando recuperas la conexión.</p></div><div class="help-section"><h3>✨ Funciones Principales</h3><ul><li><strong class="highlight">Gestos de Deslizamiento:</strong> En las listas, desliza un ítem a la <strong class="highlight">derecha (→)</strong> para completarlo/descompletarlo, o a la <strong class="highlight">izquierda (←)</strong> para eliminarlo.</li><li><strong class="highlight">Recargar:</strong> En cualquier vista, arrastra la pantalla hacia abajo desde la parte superior para forzar una sincronización y recargar todos los datos.</li><li><strong class="highlight">Notificaciones:</strong> Activa recordatorios para eventos importantes. Para que funcionen, la app debe estar abierta en una pestaña del navegador.</li></ul></div><div class="help-section"><h3>🧹 Mantenimiento</h3><p>Con el tiempo, la lista de tareas completadas puede crecer. Usa este botón para eliminar de forma segura las tareas que se completaron hace más de 30 días, manteniendo la app rápida.</p><button class="btn btn-secondary" id="cleanup-tasks-btn" style="width:100%; margin-top: 5px;">Limpiar tareas antiguas</button></div>`; attachHelpViewListeners(viewEl); viewEl.dataset.rendered = true; }
+        function renderSearchView(viewEl, state) { const { searchQuery, items } = state; const query = searchQuery.trim(); if (!viewEl.querySelector('.item-list')) { viewEl.innerHTML = `<div class="item-list" data-empty-message="Escribe para buscar en tus ítems..."></div>`; } const itemListEl = viewEl.querySelector('.item-list'); if (!query) { reconcileList(itemListEl, [], renderItemCard, updateItemCard, item => item.localId); } else { const results = items.filter(item => item.description.toLowerCase().includes(query) ).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)); itemListEl.dataset.emptyMessage = `No se encontraron resultados para "${searchQuery}"`; reconcileList(itemListEl, results, renderItemCard, updateItemCard, item => item.localId); } }
+        function renderItemCard(item) { const template = gebi('item-card-template'); const article = template.content.cloneNode(true).firstElementChild; article.dataset.id = item.localId + (item.virtualDate || ''); updateItemCard(article, item); attachSwipeListeners(article); return article; }
+        function updateItemCard(article, item) { 
+            article.className = `item-card owner-${item.owner||'Comun'}`; 
+            article.classList.toggle('completed', !!item.isComplete); 
+            article.querySelector('.item-card-title').textContent = item.description || ''; 
+            const metaDiv = article.querySelector('.item-card-meta'); 
+            const itemDate = item.dueDate ? new Date(item.dueDate) : null; 
+            let metaHtml = ''; 
+            if (item.type === 'agenda' && itemDate) { 
+                metaHtml += `<span class="item-card-time">${dateToHHMM(itemDate)}</span>`; 
+            } 
+            metaHtml += `<span class="item-card-owner owner-${item.owner||'Comun'}">${item.owner || 'Común'}</span>`; 
+            if (!item.id) { metaHtml += `<span title="Pendiente de sincronizar"><svg class="meta-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 20.7A9.7 9.7 0 1 1 22 12.6"/><path d="m22 2-5 5"/><path d="m17 2 5 5"/></svg></span>`; } 
+            // ELIMINADO: Icono de recurrencia
+            metaDiv.innerHTML = metaHtml; 
+            const actionsDiv = article.querySelector('.item-card-actions'); 
+            let actionsHtml = ''; 
+            if (item.type === 'task') { const completeIcon = item.isComplete ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`; actionsHtml += `<button class="item-card-action" title="${item.isComplete ? 'Marcar como pendiente' : 'Marcar como completada'}" data-action="complete">${completeIcon}</button>`; } 
+            actionsHtml += `<button class="item-card-action" title="Editar" data-action="edit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>`; 
+            actionsHtml += `<button class="item-card-action" title="Duplicar" data-action="duplicate"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>`; 
+            actionsHtml += `<button class="item-card-action" title="Eliminar" data-action="delete"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`; 
+            actionsDiv.innerHTML = actionsHtml; 
+            if (!actionsDiv.dataset.listener) { 
+                actionsDiv.addEventListener('click', e => { const button = e.target.closest('button'); if (!button) return; e.stopPropagation(); const action = button.dataset.action; const id = article.dataset.id.replace(/-\d{4}-\d{2}-\d{2}$/, ''); const currentItem = getExistingItem(id); if (!currentItem) return; if (action === 'complete') handleItemComplete(id, !currentItem.isComplete); if (action === 'edit') openAddItemModal(currentItem); if (action === 'duplicate') handleItemDuplicate(id); if (action === 'delete') handleItemDelete(id); }); 
+                actionsDiv.dataset.listener = 'true'; 
+            } 
+        }
+
+        function loadAndApplyTheme() { const savedTheme = localStorage.getItem('theme') || 'dark'; store.setState({ theme: savedTheme }); }
+        function applyTheme(theme) { document.documentElement.classList.toggle('light-theme', theme === 'light'); const themeToggle = gebi('theme-toggle-checkbox'); if (themeToggle) themeToggle.checked = theme === 'light'; document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'light' ? '#F2F2F7' : '#000000'); }
+        function handleThemeToggle() { const newTheme = store.getState().theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', newTheme); store.setState({ theme: newTheme }); }
+
+        function toggleSearch(forceState = null) { const isCurrentlySearching = store.getState().isSearching; const shouldBeSearching = forceState !== null ? forceState : !isCurrentlySearching; store.setState({ isSearching: shouldBeSearching, currentView: shouldBeSearching ? 'search' : 'calendar' }); if (shouldBeSearching) { setTimeout(() => gebi('search-input')?.focus(), 50); } else { gebi('search-input').value = ''; store.setState({ searchQuery: '' }); } }
+        function handleSearch(e) { store.setState({ searchQuery: e.target.value.toLowerCase() }); }
+        function dismissSwipeTooltip() { gebi('swipe-tooltip-overlay').style.display = 'none'; localStorage.setItem('hasSeenSwipeHint', 'true'); }
+        function handleLogout() { localStorage.clear(); location.reload(); }
+        function loadDataFromLocalStorage() { try { const sI = localStorage.getItem('items'); if (sI) store.setState({ items: JSON.parse(sI).map(i => ({ ...i, localId: i.localId || i.id || uuid() })) }); } catch (e) { store.setState({ items: [] }); } }
+        
+        async function fetchInitialData() { 
+            if (!store.getState().currentUser) return; 
+            store.setState({ isLoading: true }); 
+            updateSyncIndicator(1); 
+            
+            // Consulta para obtener todos los items (tareas y eventos de agenda)
+            const allItemsQuery = new Parse.Query(TODO_ITEM_CLASS_NAME);
+            allItemsQuery.limit(1000); // Límite para evitar consultas masivas
+
+            try { 
+                const results = await allItemsQuery.find();
+                const backendItems = results.map(parseObjectToAppItem).filter(Boolean); 
+                store.setState(prev => { 
+                    const localItemMap = new Map(prev.items.map(item => [item.localId, item])); 
+                    backendItems.forEach(bItem => localItemMap.set(bItem.localId, bItem)); 
+                    // Asegurar que el mes actual está marcado como 'fetched'
+                    const { currentYear, currentMonth } = prev.calendar;
+                    prev.fetchedMonths.add(`${currentYear}-${currentMonth}`);
+                    return { items: Array.from(localItemMap.values()), fetchedMonths: prev.fetchedMonths }; 
+                }); 
+                showToast("Datos sincronizados."); 
+            } catch (e) { 
+                showToast(`Error al sincronizar: ${e.message}.`); 
+            } finally { 
+                store.setState({ isLoading: false }); 
+                updateSyncIndicator(-1); 
+            } 
+        }
+
+        // Función para crear la consulta de eventos de un mes específico (sin recurrencia)
+        function createMonthQuery(year, month) { 
+            const startDate = new Date(Date.UTC(year, month, 1)); 
+            const endDate = new Date(Date.UTC(year, month + 1, 1)); 
+            const agendaQuery = new Parse.Query(TODO_ITEM_CLASS_NAME); 
+            agendaQuery.equalTo("type", "agenda"); 
+            agendaQuery.greaterThanOrEqualTo("dueDate", startDate); 
+            agendaQuery.lessThan( "dueDate", endDate); 
+            return agendaQuery; 
+        }
+        
+        async function fetchMonthDataIfNeeded(year, month) { 
+            const state = store.getState(); 
+            const monthKey = `${year}-${month}`; 
+            
+            if (state.fetchedMonths.has(monthKey) || !state.currentUser) return; 
+
+            store.setState({ isLoading: true }); 
+            updateSyncIndicator(1); 
+            showToast(`Cargando eventos de ${MESES[month]}...`); 
+            
+            const monthQuery = createMonthQuery(year, month); 
+            monthQuery.limit(500); 
+            
+            try { 
+                const results = await monthQuery.find(); 
+                const newItems = results.map(parseObjectToAppItem).filter(Boolean); 
+                store.setState(prev => { 
+                    const localItemMap = new Map(prev.items.map(item => [item.localId, item])); 
+                    newItems.forEach(bItem => {
+                        const existing = localItemMap.get(bItem.localId);
+                        if (!existing || bItem.lastModified > existing.lastModified) {
+                            localItemMap.set(bItem.localId, bItem);
+                        }
+                    }); 
+                    scheduleAllPendingNotifications(); 
+                    return { items: Array.from(localItemMap.values()), fetchedMonths: prev.fetchedMonths.add(monthKey) }; 
+                }); 
+            } catch (e) { 
+                showToast(`Error al cargar mes: ${e.message}`); 
+            } finally { 
+                store.setState({ isLoading: false }); 
+                updateSyncIndicator(-1); 
+            } 
+        }
+        
+        function openModal(modalId) { lastFocusedElement = document.activeElement; const modal = gebi(modalId); modal.style.display = 'flex'; manageFocus(modal); }
+        function closeModal(modalId) { const modal = gebi(modalId); if (!modal || modal.style.display === 'none') return; modal.style.display = 'none'; modal.removeEventListener('keydown', handleFocusTrap); if (lastFocusedElement) { lastFocusedElement.focus(); lastFocusedElement = null; } }
+        function handleFocusTrap(e) { if (e.key !== 'Tab') return; const focusableElements = this.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'); if (focusableElements.length === 0) return; const firstElement = focusableElements[0]; const lastElement = focusableElements[focusableElements.length - 1]; if (e.shiftKey) { if (document.activeElement === firstElement) { lastElement.focus(); e.preventDefault(); } } else { if (document.activeElement === lastElement) { firstElement.focus(); e.preventDefault(); } } }
+        function manageFocus(modalElement) { const focusableElements = modalElement.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'); if (focusableElements.length > 0) { focusableElements[0].focus(); modalElement.addEventListener('keydown', handleFocusTrap); } }
+        
+        function openAddItemModal(itemToEdit = null) {
+            const state = store.getState();
+            const f = gebi('add-item-form');
+            if (!f) return;
+            f.reset();
+            gebi('modal-title-h3').textContent = itemToEdit ? 'Editar Ítem' : 'Añadir Ítem';
+            gebi('item-id').value = itemToEdit?.id || '';
+            gebi('item-local-id').value = itemToEdit?.localId || uuid();
+            gebi('item-last-modified').value = itemToEdit?.lastModified || '';
+            gebi('item-type').value = itemToEdit?.type || (state.currentView === 'tasks' ? 'task' : 'agenda');
+            gebi('item-description').value = itemToEdit?.description || '';
+            const dueDate = itemToEdit?.dueDate ? new Date(itemToEdit.dueDate) : (state.currentView === 'calendar' ? YYYYMMDDToDate(state.calendar.selectedDate) : new Date());
+            if (dueDate) {
+                gebi('item-due-date').value = dateToYYYYMMDD(dueDate);
+                if (itemToEdit && itemToEdit.dueDate) {
+                    gebi('item-due-time').value = dateToHHMM(dueDate);
+                } else {
+                    const now = new Date();
+                    now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+                    gebi('item-due-time').value = dateToHHMM(now);
+                }
+            } else {
+                gebi('item-due-date').value = dateToYYYYMMDD(new Date());
+                gebi('item-due-time').value = '09:00';
+            }
+            gebi('item-notification-enabled').checked = itemToEdit?.notificationEnabled || false;
+            gebi('item-notification-remind-time').value = itemToEdit?.notificationRemindTime || '15';
+            gebi('item-owner').value = itemToEdit?.owner || (state.taskFilter !== 'all' ? state.taskFilter : (state.currentUser?.name || 'Comun'));
+
+            // ELIMINADO: Lógica de campos de recurrencia
+            
+            toggleDateTimeNotificationVisibility();
+            gebi('notification-time-group').style.display = gebi('item-notification-enabled').checked ? 'block' : 'none';
+            openModal('add-item-modal');
+        }
+        function toggleDateTimeNotificationVisibility() { const isAgenda = gebi('item-type').value === 'agenda'; gebi('datetime-notification-group').style.display = isAgenda ? 'block' : 'none'; }
+        function changeMonth(delta) { const { currentMonth, currentYear } = store.getState().calendar; let newMonth = currentMonth + delta; let newYear = currentYear; if (newMonth < 0) { newMonth = 11; newYear--; } else if (newMonth > 11) { newYear = 0; newYear++; } store.setState(prev => ({ calendar: { ...prev.calendar, currentMonth: newMonth, currentYear: newYear }})); fetchMonthDataIfNeeded(newYear, newMonth); }
+        function goToToday() { const today = new Date(); const newCalendarState = { currentMonth: today.getMonth(), currentYear: today.getFullYear(), selectedDate: dateToYYYYMMDD(today) }; if (store.getState().currentView !== 'calendar') { store.setState({ currentView: 'calendar', calendar: newCalendarState }); } else { store.setState({ calendar: newCalendarState }); } }
+        function selectDate(dateStr) { triggerHapticFeedback(); store.setState(prev => ({ calendar: { ...prev.calendar, selectedDate: dateStr }})); }
+        function handleItemFormSubmit(e) { 
+            e.preventDefault(); 
+            const { currentUser } = store.getState(); if (!currentUser) return; 
+            const id = gebi('item-id').value; const localId = gebi('item-local-id').value; 
+            const existingItem = getExistingItem(id || localId); 
+            const itemData = { id, localId, type: gebi('item-type').value, description: gebi('item-description').value.trim(), owner: gebi('item-owner').value, isComplete: existingItem?.isComplete || false, createdAt: existingItem?.createdAt || Date.now(), createdBy: existingItem?.createdBy || currentUser.name, completedAt: existingItem?.completedAt || null, lastModified: gebi('item-last-modified').value || null, notificationEnabled: false, notificationRemindTime: 15, dueDate: null, 
+                // recurrenceRule y recurrenceEndDate eliminados
+            }; 
+            if (itemData.type === 'agenda') { 
+                const datePart = gebi('item-due-date').value; const timePart = gebi('item-due-time').value || '00:00'; 
+                if (!datePart) { showToast('La fecha es obligatoria para eventos de agenda.'); return; } 
+                const [year, month, day] = datePart.split('-'); const [hour, minute] = timePart.split(':'); 
+                const fullDate = new Date(Date.UTC(year, month - 1, day, hour, minute)); 
+                itemData.dueDate = fullDate.toISOString(); 
+                itemData.notificationEnabled = gebi('item-notification-enabled').checked; 
+                itemData.notificationRemindTime = parseInt(gebi('item-notification-remind-time').value, 10); 
+                // ELIMINADO: Lógica de recurrencia en el envío del formulario
+            } 
+            handleItemSave(itemData); 
+            closeModal('add-item-modal'); 
+        }
+        function getExistingItem(idOrLocalId) { return store.getState().items.find(i => i.id === idOrLocalId || i.localId === idOrLocalId); }
+        async function handleItemSave(itemToSave) { 
+            const { currentUser } = store.getState(); if (!currentUser) return; 
+            store.setState({ isLoading: true }); updateSyncIndicator(1); 
+            const itemForUI = { ...itemToSave, lastModified: Date.now(), lastModifiedBy: currentUser.name }; 
+            store.setState(prev => { 
+                const items = [...prev.items]; 
+                const index = items.findIndex(i => i.localId === itemForUI.localId); 
+                if (index > -1) { items[index] = itemForUI; } else { items.unshift(itemForUI); } 
+                return { items }; 
+            }); 
+            scheduleAllPendingNotifications(); 
+            let parseItem; 
+            try { 
+                if (itemToSave.id) { 
+                    parseItem = await new Parse.Query(TODO_ITEM_CLASS_NAME).get(itemToSave.id); 
+                    parseItem.set('clientLastModified', new Date(itemToSave.lastModified)); 
+                } else { 
+                    parseItem = new (Parse.Object.extend(TODO_ITEM_CLASS_NAME))(); 
+                    parseItem.set('createdBy', currentUser.name); 
+                    parseItem.set('localId', itemToSave.localId); 
+                } 
+                parseItem.set('type', itemToSave.type); 
+                parseItem.set('description', itemToSave.description); 
+                parseItem.set('owner', itemToSave.owner); 
+                parseItem.set('isComplete', itemToSave.isComplete || false); 
+                parseItem.set('lastModifiedBy', currentUser.name); 
+                if (itemToSave.completedAt) parseItem.set('completedAt', new Date(itemToSave.completedAt)); else parseItem.unset('completedAt'); 
+                
+                if (itemToSave.type === 'agenda' && itemToSave.dueDate) { 
+                    parseItem.set('dueDate', new Date(itemToSave.dueDate)); 
+                    parseItem.set('notificationEnabled', itemToSave.notificationEnabled); 
+                    parseItem.set('notificationRemindTime', itemToSave.notificationRemindTime); 
+                    // ELIMINADO: Campos de regla de recurrencia de Parse
+                    parseItem.unset('recurrenceRule'); 
+                    parseItem.unset('recurrenceEndDate'); 
+                } else { 
+                    parseItem.unset('dueDate'); 
+                    parseItem.unset('notificationEnabled'); 
+                    parseItem.unset('notificationRemindTime'); 
+                    // Asegurar que los campos de recurrencia se desestablecen si el tipo no es agenda o falta la fecha de vencimiento
+                    parseItem.unset('recurrenceRule'); 
+                    parseItem.unset('recurrenceEndDate'); 
+                } 
+                const savedParseItem = await parseItem.save(); 
+                const savedAppItem = parseObjectToAppItem(savedParseItem); // Usa parseObjectToAppItem actualizado
+                if (savedAppItem) { 
+                    store.setState(prev => { 
+                        const items = [...prev.items]; 
+                        const idx = items.findIndex(i => i.localId === itemToSave.localId || i.id === savedAppItem.id); 
+                        if (idx > -1) items[idx] = savedAppItem; 
+                        else items.push(savedAppItem); 
+                        return { items }; 
+                    }); 
+                    scheduleAllPendingNotifications(); 
+                } 
+                showToast(`Ítem ${itemToSave.id ? 'actualizado' : 'añadido'}.`); 
+            } catch (e) { 
+                if (e.code === 142) { showToast('Conflicto: Ítem editado por otro usuario. Refrescando...'); await fetchInitialData(); } else { showToast(`Error al guardar en la nube: ${e.message}`); } 
+            } finally { 
+                store.setState({ isLoading: false }); 
+                updateSyncIndicator(-1); 
+            } 
+        }
+        async function handleItemDelete(idOrLocalId) { triggerHapticFeedback(true); const itemToDelete = getExistingItem(idOrLocalId); if (!itemToDelete) return; if (!confirm("¿Eliminar este ítem permanentemente?")) return; store.setState({ isLoading: true }); updateSyncIndicator(1); const itemIndex = store.getState().items.findIndex(i => i.localId === idOrLocalId); if (itemIndex > -1) { const deleted = store.getState().items[itemIndex]; cancelScheduledNotification(deleted.localId); store.setState(prev => ({ items: prev.items.filter(i => i.localId !== idOrLocalId) })); } if (itemToDelete.id) { try { await Parse.Object.extend(TODO_ITEM_CLASS_NAME).createWithoutData(itemToDelete.id).destroy(); showToast('Ítem eliminado.'); } catch (e) { showToast(`Error al eliminar en la nube.`); } } else { showToast('Ítem local eliminado.'); } store.setState({ isLoading: false }); updateSyncIndicator(-1); }
+        async function handleItemDuplicate(idOrLocalId) { triggerHapticFeedback(); const itemToDup = getExistingItem(idOrLocalId); if (!itemToDup) return; const newItemData = { localId: uuid(), type: itemToDup.type, description: itemToDup.description, owner: itemToDup.owner, isComplete: false, createdAt: Date.now(), createdBy: store.getState().currentUser.name, completedAt: null, dueDate: itemToDup.dueDate, notificationEnabled: itemToDup.notificationEnabled, notificationRemindTime: itemToDup.notificationRemindTime, 
+            // ELIMINADO: Campos de recurrencia para item duplicado
+        }; handleItemSave(newItemData); showToast('Ítem duplicado.'); }
+        async function handleItemComplete(idOrLocalId, isComplete) { triggerHapticFeedback(); const itemIndex = store.getState().items.findIndex(i => i.localId === idOrLocalId); if (itemIndex === -1) return; const itemToUpdate = { ...store.getState().items[itemIndex], isComplete: isComplete, completedAt: isComplete ? Date.now() : null }; handleItemSave(itemToUpdate); showToast(isComplete ? 'Tarea completada.' : 'Tarea marcada como pendiente.'); }
+        
+        function attachCalendarListeners(grid) { if (grid.dataset.listener) return; grid.addEventListener('click', e => { const dayCell = e.target.closest('.calendar-day:not(.other-month)'); if(dayCell) selectDate(dayCell.dataset.date); }); grid.dataset.listener = 'true'; }
+        
+        function getItemsForDate(dateStr, allItems) {
+            const events = [];
+            for (const item of allItems) {
+                // Solo considerar ítems de agenda y aquellos con una fecha de vencimiento
+                if (item.type !== 'agenda' || !item.dueDate) continue;
+                
+                // Para ítems de agenda, verificar si la fecha de vencimiento coincide con la fecha objetivo
+                if (dateToYYYYMMDD(new Date(item.dueDate)) === dateStr) {
+                    events.push(item);
+                }
+                // ELIMINADO: Lógica de recurrencia
+            }
+            return events.sort((a,b) => (a.dueDate && b.dueDate) ? (new Date(a.dueDate) - new Date(b.dueDate)) : 0);
+        }
+
+        function attachHelpViewListeners(viewEl) { viewEl.querySelector('#theme-toggle-checkbox')?.addEventListener('change', handleThemeToggle); viewEl.querySelector('#cleanup-tasks-btn')?.addEventListener('click', handleCleanupOldTasks); }
+        function attachTaskFilterListeners(filtersContainer) { if (filtersContainer.dataset.listener) return; filtersContainer.addEventListener('click', e => { const btn = e.target.closest('.task-filter-btn'); if (btn) store.setState({ taskFilter: btn.dataset.filter }); }); filtersContainer.dataset.listener = 'true'; }
+        
+        function scheduleOrCancelNotification(item) { cancelScheduledNotification(item.localId); if (item.type === 'agenda' && item.notificationEnabled && item.dueDate) { scheduleNotification(item); } }
+        function scheduleNotification(item) { const now = new Date(); const eventDate = new Date(item.dueDate); const reminderTime = new Date(eventDate.getTime() - (item.notificationRemindTime * 60000)); if (reminderTime > now) { const delay = reminderTime.getTime() - now.getTime(); const timerId = setTimeout(() => { const timeStr = dateToHHMM(eventDate); showSystemNotification(`Recordatorio: ${timeStr}`, item.description); scheduledNotifications.delete(item.localId); }, delay); scheduledNotifications.set(item.localId, timerId); } }
+        function cancelScheduledNotification(localId) { if (scheduledNotifications.has(localId)) { clearTimeout(scheduledNotifications.get(localId)); scheduledNotifications.delete(localId); } }
+        function scheduleAllPendingNotifications() { if (Notification.permission !== 'granted') return; scheduledNotifications.forEach(timer => clearTimeout(timer)); scheduledNotifications.clear(); const futureEvents = store.getState().items.filter(i => i.type === 'agenda' && i.notificationEnabled && i.dueDate && new Date(i.dueDate) > new Date()); futureEvents.forEach(scheduleNotification); }
+        function showSystemNotification(title, body) { if (Notification.permission === 'granted') { navigator.serviceWorker.ready.then(registration => { registration.showNotification(title, { body: body, icon: 'aiDANaI-Agenda.jpg', badge: 'aiDANaI-Agenda.jpg', vibrate: [200, 100, 200] }); }); } }
+        async function requestNotificationPermission() { if (!('Notification' in window) || !('serviceWorker' in navigator)) { showToast("Las notificaciones no son compatibles."); return; } const permission = await Notification.requestPermission(); if (permission === 'granted') { showToast("¡Permiso concedido! Probando..."); showSystemNotification('aiDANaI dice ¡Hola!', '¡Las notificaciones funcionan!'); scheduleAllPendingNotifications(); } else { showToast("Permiso denegado."); } }
+        
+        function attachPullToRefresh(element) { let touchStartY = 0; let isPulling = false; const ptrIndicator = document.createElement('div'); ptrIndicator.id = 'pull-to-refresh-indicator'; ptrIndicator.innerHTML = `<svg id="ptr-arrow" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg><svg id="ptr-spinner" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; animation: spin 1s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>`; element.prepend(ptrIndicator); const PULL_THRESHOLD = 70; element.addEventListener('touchstart', (e) => { const activeView = element.querySelector('.view-section.active'); if (!activeView) return; const scrollableContent = activeView.querySelector('.list-view-container, .day-detail-area'); if ((!scrollableContent || scrollableContent.scrollTop === 0)) { touchStartY = e.touches[0].clientY; isPulling = true; ptrIndicator.querySelector('#ptr-spinner').style.display = 'none'; ptrIndicator.querySelector('#ptr-arrow').style.display = 'block'; } }, { passive: true }); element.addEventListener('touchmove', (e) => { if (!isPulling) return; const pullDistance = e.touches[0].clientY - touchStartY; if (pullDistance > 0) { const rotation = Math.min(pullDistance / PULL_THRESHOLD, 1) * 180; ptrIndicator.style.top = `${Math.min(pullDistance, PULL_THRESHOLD) - 40}px`; ptrIndicator.querySelector('#ptr-arrow').style.transform = `rotate(${rotation}deg)`; } }, { passive: true }); element.addEventListener('touchend', (e) => { if (!isPulling) return; const pullDistance = e.changedTouches[0].clientY - touchStartY; if (pullDistance > PULL_THRESHOLD) { ptrIndicator.style.top = '10px'; ptrIndicator.querySelector('#ptr-arrow').style.display = 'none'; ptrIndicator.querySelector('#ptr-spinner').style.display = 'block'; fetchInitialData().finally(() => { ptrIndicator.style.top = '-40px'; ptrIndicator.querySelector('#ptr-arrow').style.transform = 'rotate(0deg)'; }); } else { ptrIndicator.style.top = '-40px'; ptrIndicator.querySelector('#ptr-arrow').style.transform = 'rotate(0deg)'; } isPulling = false; }); }
+        function attachSwipeListeners(cardElement) { if (!cardElement || cardElement.dataset.hammer) return; const mc = new Hammer.Manager(cardElement); mc.add(new Hammer.Pan({ threshold: 10, pointers: 1 })); mc.on('panstart', () => cardElement.style.transition = 'none' ); mc.on('pan', (ev) => { cardElement.style.transform = `translateX(${ev.deltaX}px)`; cardElement.classList.toggle('swiping-right', ev.deltaX > 20); cardElement.classList.toggle('swiping-left', ev.deltaX < -20); }); mc.on('panend', (ev) => { cardElement.style.transition = 'transform 0.2s ease-out, opacity 0.3s'; cardElement.classList.remove('swiping-right', 'swiping-left'); const SWIPE_ACTION_THRESHOLD = cardElement.offsetWidth * 0.35; const id = cardElement.dataset.id.replace(/-\d{4}-\d{2}-\d{2}$/, ''); const item = getExistingItem(id); if (!item) return; if (ev.deltaX > SWIPE_ACTION_THRESHOLD && item.type === 'task') { cardElement.style.transform = `translateX(100%)`; cardElement.style.opacity = '0'; setTimeout(() => handleItemComplete(id, !item.isComplete), 200); } else if (ev.deltaX < -SWIPE_ACTION_THRESHOLD) { cardElement.style.transform = `translateX(-100%)`; cardElement.style.opacity = '0'; setTimeout(() => handleItemDelete(id), 200); } else { cardElement.style.transform = 'translateX(0)'; } }); cardElement.dataset.hammer = 'true'; }
+        function openDatePickerModal() { if (store.getState().currentView !== 'calendar') return; openModal('date-picker-modal'); const monthSelect = gebi('month-select'); const yearSelect = gebi('year-select'); monthSelect.innerHTML = MESES.map((mes, index) => `<option value="${index}">${mes}</option>`).join(''); monthSelect.value = store.getState().calendar.currentMonth; yearSelect.value = store.getState().calendar.currentYear; }
+        async function handleDateSelectionFromPicker(e) { e.preventDefault(); const newMonth = parseInt(gebi('month-select').value, 10); const newYear = parseInt(gebi('year-select').value, 10); store.setState(prev => ({ calendar: { ...prev.calendar, currentMonth: newMonth, currentYear: newYear }})); closeModal('date-picker-modal'); fetchMonthDataIfNeeded(newYear, newMonth); }
+        async function handleCleanupOldTasks() { const THIRTY_DAYS_AGO = Date.now() - (30 * 24 * 60 * 60 * 1000); const tasksToClean = store.getState().items.filter(item => item.type === 'task' && item.isComplete && item.completedAt && item.completedAt < THIRTY_DAYS_AGO); if (tasksToClean.length === 0) { showToast("No hay tareas antiguas que limpiar."); return; } if (!confirm(`¿Estás seguro de que quieres eliminar permanentemente ${tasksToClean.length} tarea(s) completada(s) hace más de 30 días?`)) { return; } store.setState({ isLoading: true }); updateSyncIndicator(1); showToast(`Limpiando ${tasksToClean.length} tareas...`); const idsToClean = new Set(tasksToClean.map(t => t.localId)); store.setState(prev => ({ items: prev.items.filter(item => !idsToClean.has(item.localId)) })); const parseObjectsToDelete = tasksToClean.filter(t => t.id).map(t => Parse.Object.extend(TODO_ITEM_CLASS_NAME).createWithoutData(t.id)); try { if (parseObjectsToDelete.length > 0) await Parse.Object.destroyAll(parseObjectsToDelete); showToast("Limpieza completada."); } catch (error) { showToast("Error al limpiar tareas en la nube."); } finally { store.setState({ isLoading: false }); updateSyncIndicator(-1); } }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./service-worker.js').then(r => console.log('ServiceWorker OK')).catch(e => console.log('ServiceWorker Fail', e)); }); }
+    </script>
+</body>
+</html>
