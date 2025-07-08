@@ -27,6 +27,8 @@
     <link rel="apple-touch-icon" href="aiDANaI-Cuentas.jpg">
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 
     <style>
@@ -145,7 +147,6 @@
             align-items: center;
             flex-grow: 1;
             padding: var(--sp-3) var(--sp-4);
-            padding-left: calc(var(--sp-4) + 12px);
             gap: var(--sp-3);
             width: 100%;
             position: relative;
@@ -156,7 +157,23 @@
             border-radius: inherit; 
             border-bottom: none;
         }
-
+        
+        .transaction-card__icon {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--c-surface-variant);
+            border-radius: 50%;
+            margin-right: var(--sp-3);
+            color: var(--c-on-surface-secondary);
+        }
+        .transaction-card__icon .material-icons {
+             font-size: 20px;
+        }
+        
         .transaction-card__details { display: flex; flex-direction: column; flex-grow: 1; min-width: 0; }
         .transaction-card__description { font-weight: 500; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .transaction-card__meta { font-size: var(--fs-xs); color: var(--c-on-surface-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -168,10 +185,10 @@
         .transaction-card--swiped-left .transaction-card__swipe-content { transform: translateX(-65px); }
         .transaction-card--swiped-right .transaction-card__swipe-content { transform: translateX(65px); }
         
-        .transaction-card__swipe-content::before { content: ''; display: block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--c-outline); position: absolute; left: var(--sp-3); top: 50%; transform: translateY(-50%); }
-        .transaction-card--owner-dani .transaction-card__swipe-content::before { background-color: var(--c-owner-dani); }
-        .transaction-card--owner-norma .transaction-card__swipe-content::before { background-color: var(--c-owner-norma); }
-        .transaction-card--owner-comun .transaction-card__swipe-content::before, .transaction-card--owner-común .transaction-card__swipe-content::before { background-color: var(--c-owner-comun); }
+        .transaction-card__swipe-content::before { content: ''; display: block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--c-outline); position: absolute; left: -100px; /* Oculto por defecto */ }
+        .transaction-card--owner-dani .transaction-card__icon { border: 2px solid var(--c-owner-dani); color: var(--c-owner-dani); }
+        .transaction-card--owner-norma .transaction-card__icon { border: 2px solid var(--c-owner-norma); color: var(--c-owner-norma); }
+        .transaction-card--owner-comun .transaction-card__icon, .transaction-card--owner-común .transaction-card__icon { border: 2px solid var(--c-owner-comun); color: var(--c-owner-comun); }
         
         .card > .accordion { margin-bottom: 0; background-color: var(--c-surface); overflow: hidden; }
         .card > .accordion:first-child { border-top-left-radius: var(--border-radius-lg); border-top-right-radius: var(--border-radius-lg); }
@@ -314,10 +331,16 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: var(--sp-2);
+            flex-wrap: wrap;
         }
         .budget-track-item__concept-name {
             font-weight: 600;
             font-size: var(--fs-sm);
+        }
+        .budget-track-item__header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--sp-2);
         }
         .budget-track-item__details {
             display: flex;
@@ -325,14 +348,6 @@
             font-size: var(--fs-xs);
             color: var(--c-on-surface-secondary);
             margin-bottom: var(--sp-2);
-        }
-        .budget-track-item__diff--positive {
-            color: var(--c-success);
-            font-weight: 600;
-        }
-        .budget-track-item__diff--negative {
-            color: var(--c-danger);
-            font-weight: 600;
         }
         .budget-item__progress {
             width: 100%;
@@ -410,6 +425,7 @@
             </div>
             <section id="kpi-container" class="kpi-grid" aria-label="Indicadores clave de rendimiento">
             </section>
+            
             <div class="card">
                  <div class="accordion" open>
                     <summary>
@@ -591,7 +607,10 @@
     <div class="modal">
         <header class="modal__header">
             <h3 id="form-movimiento-title" class="modal__title">Añadir Movimiento</h3>
-            <button class="icon-btn" data-action="close-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
+            <div style="display: flex; align-items: center; gap: var(--sp-1); margin-left: auto;">
+                <button class="icon-btn" data-action="copy-last-movement" title="Copiar último movimiento" aria-label="Copiar último movimiento"><span class="material-icons">history</span></button>
+                <button class="icon-btn" data-action="close-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
+            </div>
         </header>
         <div class="modal__body">
              <form id="form-movimiento" novalidate>
@@ -670,8 +689,8 @@ document.addEventListener('DOMContentLoaded', () => {
         movimientos: [], 
         presupuestos: [], 
         config: { 
-            beneficiarios: ["Dani", "Norma"], // Eliminado "Común"
-            visibleOwners: ["Dani", "Norma"], 
+            beneficiarios: ["Dani", "Norma", "Común"],
+            visibleOwners: ["Dani", "Norma", "Común"], 
             skipIntro: false 
         } 
     });
@@ -693,14 +712,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (doc.exists && doc.data().db) {
                 db = doc.data().db;
                 if (!db.presupuestos) { db.presupuestos = []; dataNeedsMigration = true; }
-                if (!db.config?.beneficiarios?.length || db.config.beneficiarios.includes('Común') || db.config.beneficiarios.includes('común')) { 
-                    db.config.beneficiarios = ["Dani", "Norma"]; 
+                if (!db.config?.beneficiarios?.length) { 
+                    db.config.beneficiarios = ["Dani", "Norma", "Común"]; 
                     dataNeedsMigration = true; 
                 }
-                if (!db.config.visibleOwners) { db.config.visibleOwners = (db.config.beneficiarios || []).filter(b => b.toLowerCase() !== 'común' && b.toLowerCase() !== 'comun'); dataNeedsMigration = true; }
+                if (!db.config.visibleOwners) { db.config.visibleOwners = (db.config.beneficiarios || []); dataNeedsMigration = true; }
                 if (db.config.skipIntro === undefined) { db.config.skipIntro = false; dataNeedsMigration = true; }
                 if ((db.movimientos || []).some(m => !Number.isInteger(m.cantidad))) { (db.movimientos || []).forEach(m => m.cantidad = Math.round((parseFloat(m.cantidad) || 0) * 100)); dataNeedsMigration = true; showToast("Migrando datos de movimientos...", "info"); }
                 if ((db.presupuestos || []).some(p => !Number.isInteger(p.cantidad))) { (db.presupuestos || []).forEach(p => p.cantidad = Math.round((parseFloat(p.cantidad) || 0) * 100)); dataNeedsMigration = true; showToast("Migrando datos de presupuestos...", "info"); }
+                if ((db.conceptos || []).some(c => c.icon === undefined)) {
+                    (db.conceptos || []).forEach(c => { if (c.icon === undefined) c.icon = 'label'; });
+                    dataNeedsMigration = true;
+                    showToast("Actualizando conceptos...", "info");
+                }
                 localStorage.setItem('skipIntro', db.config.skipIntro);
             } else { 
                 db = getInitialDb(); 
@@ -892,7 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================================================
     // 6. CORE LOGIC & CALCULATIONS
     // =================================================================================
-    const getVisibleOwners = () => db.config?.visibleOwners || (db.config?.beneficiarios || []).filter(b => b.toLowerCase() !== 'común' && b.toLowerCase() !== 'comun');
+    const getVisibleOwners = () => db.config?.visibleOwners || db.config?.beneficiarios || [];
     const getLiquidAccounts = () => (db.cuentas || []).filter(c => !['PROPIEDAD', 'PRÉSTAMO'].includes((c.tipo || '').trim().toUpperCase()));
     
     const getSaldos = () => {
@@ -930,7 +954,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const visibleOwners = getVisibleOwners();
         let f = (db.movimientos || []).filter(m => {
             const owner = m.beneficiario || '';
-            return visibleOwners.includes(owner) || owner.toLowerCase() === 'común' || owner.toLowerCase() === 'comun';
+            return visibleOwners.includes(owner);
         });
 
         if (sDate && eDate) f = f.filter(m => { const d = new Date(m.fecha); return d >= sDate && d <= eDate; });
@@ -944,6 +968,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 7. RENDERING ENGINE & BUDGET FUNCTIONS
     // =================================================================================
     const renderAll = () => { if (!db || !currentUser) return; populateAllDropdowns(); renderMovimientos(); renderCuentas(); loadConfig(); updateDashboard(); };
+    
     const populateAllDropdowns = () => {
         const populate = (id, data, nameKey, valKey='id', all=false, none=false) => {
             const el = select(id); if (!el) return; const currentVal = el.value;
@@ -951,11 +976,13 @@ document.addEventListener('DOMContentLoaded', () => {
             [...data].sort((a,b) => (a[nameKey]||"").localeCompare(b[nameKey]||"")).forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
             el.innerHTML = opts; el.value = Array.from(el.options).some(o=>o.value===currentVal) ? currentVal : (el.options[0]?.value || "");
         };
-
-        const allBeneficiarios = (db.config?.beneficiarios || []).map(b => ({id:b, nombre:b})).filter(b => b.nombre.toLowerCase() !== 'común' && b.nombre.toLowerCase() !== 'comun');
+        
+        const allBeneficiarios = (db.config?.beneficiarios || []).map(b => ({id:b, nombre:b}));
+        const principalBeneficiarios = allBeneficiarios.filter(b => b.nombre.toLowerCase() !== 'común');
         
         populate('movimiento-beneficiario', allBeneficiarios, 'nombre', 'id');
         populate('filter-beneficiario', allBeneficiarios, 'nombre', 'id', true);
+        populate('ai-user-select', principalBeneficiarios, 'nombre', 'id');
         populate('movimiento-cuenta', db.cuentas, 'nombre', 'id', false, true); 
         populate('movimiento-cuenta-origen', db.cuentas, 'nombre', 'id', false, true); 
         populate('movimiento-cuenta-destino', db.cuentas, 'nombre', 'id', false, true);
@@ -963,12 +990,11 @@ document.addEventListener('DOMContentLoaded', () => {
         populate('movimiento-concepto', db.conceptos, 'nombre', 'id', false, true);
         populate('filter-concepto', db.conceptos, 'nombre', 'id', true);
         
-        // Populate budget dropdowns
         const budgetOwnerSelect = select('budget-owner-selector');
         if(budgetOwnerSelect) {
             const currentVal = budgetOwnerSelect.value;
-            budgetOwnerSelect.innerHTML = allBeneficiarios.map(b => `<option value="${b.id}">${b.nombre}</option>`).join('');
-            if(currentVal && allBeneficiarios.some(b => b.id === currentVal)) budgetOwnerSelect.value = currentVal;
+            budgetOwnerSelect.innerHTML = principalBeneficiarios.map(b => `<option value="${b.id}">${b.nombre}</option>`).join('');
+            if(currentVal && principalBeneficiarios.some(b => b.id === currentVal)) budgetOwnerSelect.value = currentVal;
         }
 
         const budgetYearSelect = select('budget-year-selector');
@@ -999,7 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ano: year,
                     beneficiario: owner,
                     conceptoId: concepto.id,
-                    cantidad: 0 // Default limit 0.00 €
+                    cantidad: 0
                 });
             }
         });
@@ -1029,11 +1055,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const budgetsToUpdate = (db.presupuestos || []).filter(p => p.ano === year && p.beneficiario === owner);
         
-        let formHtml = `<form id="update-budgets-form" novalidate><p class="form-label" style="margin-bottom: var(--sp-3)">Introduce el límite anual para cada concepto. Usa valores positivos para límites de gasto.</p>`;
+        let formHtml = `<form id="update-budgets-form" novalidate><p class="form-label" style="margin-bottom: var(--sp-3)">Introduce el límite anual. Usa <b>valores positivos para metas de ingreso</b> y <b>valores negativos para límites de gasto</b>.</p>`;
         
         const conceptsWithBudget = new Set(budgetsToUpdate.map(b => b.conceptoId));
 
-        // Display existing budgets first
         db.conceptos.filter(c => conceptsWithBudget.has(c.id)).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach(c => {
             const budget = budgetsToUpdate.find(b => b.conceptoId === c.id);
             const currentAmount = budget ? (budget.cantidad / 100).toFixed(2) : '0.00';
@@ -1044,7 +1069,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
         });
         
-        // Option to add missing budgets
         const missingConcepts = db.conceptos.filter(c => !conceptsWithBudget.has(c.id));
         if(missingConcepts.length > 0) {
              formHtml += `<hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-bottom: var(--sp-2);">Añadir nuevos conceptos al presupuesto</h4>`
@@ -1073,7 +1097,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const conceptoId = input.dataset.conceptId;
                         const newAmountStr = input.value.trim().replace(/\./g, '').replace(',', '.');
                         
-                        if (newAmountStr === '') return; // Skip empty inputs
+                        if (newAmountStr === '') return;
 
                         const newAmountInCents = Math.round(parseFloat(newAmountStr) * 100);
 
@@ -1081,7 +1105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             let budget = (db.presupuestos || []).find(b => b.ano === year && b.beneficiario === owner && b.conceptoId === conceptoId);
                             if (budget) {
                                 budget.cantidad = newAmountInCents;
-                            } else { // Create new budget if it didn't exist
+                            } else {
                                  db.presupuestos.push({
                                     id: generateId(),
                                     ano: year,
@@ -1132,6 +1156,12 @@ document.addEventListener('DOMContentLoaded', () => {
         listContainer.classList.remove('hidden');
         placeholder.classList.add('hidden');
 
+        const now = new Date();
+        const startOfYear = new Date(year, 0, 1);
+        const endOfYear = new Date(year, 11, 31);
+        const yearProgress = (now > endOfYear) ? 1 : (now < startOfYear ? 0 : (now - startOfYear) / (endOfYear - startOfYear));
+        const isCurrentYear = now.getFullYear() === year;
+
         let html = '';
         ownerBudgets.sort((a,b) => {
             const nameA = db.conceptos.find(c => c.id === a.conceptoId)?.nombre || '';
@@ -1139,55 +1169,57 @@ document.addEventListener('DOMContentLoaded', () => {
             return nameA.localeCompare(nameB);
         }).forEach(budget => {
             const concepto = db.conceptos.find(c => c.id === budget.conceptoId);
-            if (!concepto) return;
+            if (!concepto || budget.cantidad === 0) return;
 
+            const isIncomeBudget = budget.cantidad > 0;
+            
             const actualAmount = db.movimientos
-                .filter(m =>
-                    new Date(m.fecha).getFullYear() === year &&
-                    m.conceptoId === budget.conceptoId &&
-                    m.tipo === 'movimiento'
-                )
+                .filter(m => new Date(m.fecha).getFullYear() === year && m.conceptoId === budget.conceptoId && m.tipo === 'movimiento')
                 .reduce((sum, m) => {
-                    const cuentaDeOrigen = db.cuentas.find(c => c.id === m.cuentaId);
-                    if (cuentaDeOrigen && cuentaDeOrigen.propietario === owner) {
-                        return sum + m.cantidad;
-                    }
-                    return sum;
+                    const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
+                    return (cuenta && cuenta.propietario === owner) ? sum + m.cantidad : sum;
                 }, 0);
-            
-            const isExpenseBudget = budget.cantidad >= 0;
-            const actualSpent = Math.abs(actualAmount);
-            
-            let difference, diffClass, progressValue, progressMax;
-            
-            if (isExpenseBudget) {
-                difference = budget.cantidad - actualSpent;
-                diffClass = difference >= 0 ? 'budget-track-item__diff--positive' : 'budget-track-item__diff--negative';
-                progressValue = actualSpent;
-                progressMax = budget.cantidad;
-            } else { // Legacy income budget (not primary use case now)
-                difference = actualSpent - Math.abs(budget.cantidad);
-                diffClass = difference >= 0 ? 'budget-track-item__diff--positive' : 'budget-track-item__diff--negative';
-                progressValue = actualSpent;
-                progressMax = Math.abs(budget.cantidad);
-            }
 
-            const percentage = progressMax > 0 ? (progressValue / progressMax) * 100 : 0;
+            const budgetLimit = Math.abs(budget.cantidad);
+            const actualValue = isIncomeBudget ? actualAmount : Math.abs(actualAmount);
+
+            const difference = isIncomeBudget ? (actualAmount - budgetLimit) : (budgetLimit - actualValue);
+            const differenceClass = difference >= 0 ? 'text-positive' : 'text-negative';
+            
+            const progressValue = actualValue;
+            const progressMax = budgetLimit;
             let progressClass = '';
-            if (isExpenseBudget) {
-                 if (percentage > 100) progressClass = 'budget-item__progress--danger';
-                 else if (percentage >= 85) progressClass = 'budget-item__progress--warning';
-            }
+            const percentage = progressMax > 0 ? (progressValue / progressMax) * 100 : 0;
+            if (percentage > 100) progressClass = 'budget-item__progress--danger';
+            else if (percentage >= 85) progressClass = 'budget-item__progress--warning';
 
+            let deviationHtml = '';
+            if (isCurrentYear && now < endOfYear) {
+                const proRatedTarget = budgetLimit * yearProgress;
+                if (proRatedTarget > 0) {
+                    const deviationPercent = ((actualValue / proRatedTarget) - 1) * 100;
+                    let devClass = '';
+                    if (isIncomeBudget) {
+                        devClass = deviationPercent >= 0 ? 'text-positive' : 'text-negative';
+                    } else {
+                        devClass = deviationPercent > 5 ? 'text-negative' : 'text-positive';
+                    }
+                    deviationHtml = `<span class="${devClass}" style="font-size: 0.75rem; font-weight: 600;">(${deviationPercent > 0 ? '+' : ''}${deviationPercent.toFixed(0)}%)</span>`;
+                }
+            }
+            
             html += `
                 <div class="budget-track-item">
                     <div class="budget-track-item__header">
                         <span class="budget-track-item__concept-name">${concepto.nombre}</span>
-                        <span class="${diffClass}">${difference >= 0 ? 'Disp:' : 'Exceso:'} ${formatCurrency(difference)} €</span>
+                        <div class="budget-track-item__header-right">
+                           <span class="${differenceClass}">Diferencia: <strong>${formatCurrency(difference)} €</strong></span>
+                           ${deviationHtml}
+                        </div>
                     </div>
                     <div class="budget-track-item__details">
-                        <span>Gastado: <strong>${formatCurrency(actualSpent)} €</strong></span>
-                        <span>Límite: <strong>${formatCurrency(budget.cantidad)} €</strong></span>
+                        <span>${isIncomeBudget ? 'Ingresado' : 'Gastado'}: <strong>${formatCurrency(actualValue)} €</strong></span>
+                        <span>Objetivo: <strong>${formatCurrency(budgetLimit)} €</strong></span>
                     </div>
                     <progress class="budget-item__progress ${progressClass}" value="${progressValue}" max="${progressMax > 0 ? progressMax : 1}"></progress>
                 </div>`;
@@ -1195,6 +1227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         listContainer.innerHTML = html;
     };
+
 
     const renderMovementRow = (item) => {
         if (item.type === 'header') {
@@ -1214,8 +1247,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<span class="text-negative">${formatCurrency(m.cantidad)} € ${amountIcon}</span>` 
                 : `<span class="text-positive">+${formatCurrency(m.cantidad)} €</span>`);
         
-        let meta = '';
-        let saldoHtml = '';
+        let meta = '', saldoHtml = '', conceptIcon = 'label';
+        const concept = m.conceptoId ? db.conceptos.find(c => c.id === m.conceptoId) : null;
+        if(concept && concept.icon) {
+            conceptIcon = concept.icon;
+        } else if (m.tipo === 'traspaso') {
+            conceptIcon = 'swap_horiz';
+        }
 
         if (m.tipo === 'traspaso') {
             const origen = db.cuentas.find(c=>c.id===m.cuentaOrigenId)?.nombre||'?';
@@ -1233,13 +1271,12 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const tagHtml = m.beneficiario ? `<div class="transaction-card__tags"><span class="transaction-card__tag">${m.beneficiario}</span></div>` : '';
         
-        const mainTitle = m.descripcion;
-
-        return `<div class="transaction-card ${oClass}" data-id="${m.id}">
+        return `<div class="transaction-card" data-id="${m.id}">
                     <div class="transaction-card__actions transaction-card__actions--left"><button class="icon-btn" data-action="copy-movement-swipe" title="Copiar"><span class="material-icons">content_copy</span></button></div>
                     <div class="transaction-card__swipe-content" data-action="edit-movement" data-id="${m.id}">
+                        <div class="transaction-card__icon ${oClass}"><span class="material-icons">${conceptIcon}</span></div>
                         <div class="transaction-card__details">
-                            <div class="transaction-card__description">${mainTitle}</div>
+                            <div class="transaction-card__description">${m.descripcion}</div>
                             <div class="transaction-card__meta">${meta}</div>
                              ${tagHtml}
                         </div>
@@ -1306,8 +1343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const filterText = (select('search-movimientos')?.value || '').toLowerCase();
         
         const filtered = allMovementsWithBalances.filter(m => {
-            const cuenta = db.cuentas.find(c => c.id === m.cuentaId || c.id === m.cuentaOrigenId);
-            const owner = cuenta?.propietario || m.beneficiario || '';
+            const owner = m.beneficiario || '';
             const isOwnerVisible = visibleOwners.includes(owner);
             if (!isOwnerVisible) return false;
             if (filterText) {
@@ -1334,7 +1370,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateStr = new Date(mov.fecha).toLocaleDateString('es-ES');
             if (!acc[dateStr]) acc[dateStr] = { movements: [], total: 0 };
             acc[dateStr].movements.push(mov);
-            if (mov.cantidad < 0 && mov.tipo !== 'traspaso') acc[dateStr].total += mov.cantidad;
+            if (mov.tipo !== 'traspaso' && mov.cantidad < 0) {
+                 acc[dateStr].total += mov.cantidad;
+            }
             return acc;
         }, {});
         
@@ -1379,11 +1417,11 @@ document.addEventListener('DOMContentLoaded', () => {
         pillsCont.innerHTML = allLiquidAccountTypes.map(t => `<button class="filter-pill ${!deselectedAccountTypesFilter.has(t) ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}">${t}</button>`).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas líquidas.</p>`;
         
         const filteredAccountTypes = new Set(allLiquidAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
-        const visibleOwners = getVisibleOwners();
+        const visibleOwners = (db.config.beneficiarios || []).filter(owner => getVisibleOwners().includes(owner));
         
-        resCont.innerHTML = (db.config.beneficiarios || [])
-            .filter(owner => visibleOwners.includes(owner))
-            .map(owner => {
+        resCont.innerHTML = visibleOwners.map(owner => {
+                if(owner.toLowerCase() === 'común') return '';
+                
                 const ownerAccounts = allAccounts.filter(c => c.propietario === owner);
                 
                 let totalOwnerLiquidFunds = 0;
@@ -1470,7 +1508,7 @@ document.addEventListener('DOMContentLoaded', () => {
         select('config-beneficiarios').value = (db.config?.beneficiarios || []).join(', ');
         select('config-skip-intro').checked = !!db.config?.skipIntro;
         const ownersContainer = select('config-visible-owners-container'); if (!ownersContainer) return;
-        const mainOwners = (db.config?.beneficiarios || []).filter(b => b.toLowerCase() !== 'común' && b.toLowerCase() !== 'comun');
+        const mainOwners = (db.config?.beneficiarios || []);
         const visibleOwners = getVisibleOwners();
         ownersContainer.innerHTML = mainOwners.map(owner => `<div class="form-checkbox-group"><input type="checkbox" id="owner-vis-${owner}" value="${owner}" ${visibleOwners.includes(owner) ? 'checked' : ''}><label for="owner-vis-${owner}">${owner}</label></div>`).join('') || '<p style="font-size: var(--fs-sm); color: var(--c-on-surface-secondary);">No hay propietarios principales definidos.</p>';
     };
@@ -1478,19 +1516,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateDashboard = () => {
         const kpiCont = select('kpi-container'), concCont = select('concepto-totals-list'), chartCtx = select('conceptos-chart')?.getContext('2d');
         if(!kpiCont || !concCont || !chartCtx) return;
+        
         if (!kpiCont.innerHTML.trim()) { kpiCont.innerHTML = `<div class="kpi-item"><h4 class="kpi-item__label">Ingresos</h4><strong id="kpi-ingresos-value" class="kpi-item__value text-positive" data-current-value="0">+0,00 €</strong></div><div class="kpi-item"><h4 class="kpi-item__label">Gastos</h4><strong id="kpi-gastos-value" class="kpi-item__value text-negative" data-current-value="0">0,00 €</strong></div><div class="kpi-item"><h4 class="kpi-item__label">Saldo Neto</h4><strong id="kpi-saldo-value" class="kpi-item__value" data-current-value="0">0,00 €</strong></div>`; }
         concCont.innerHTML = Array(4).fill('<div class="skeleton" style="height: 48px; margin-bottom: 2px;"></div>').join('');
+        
+        if (conceptosChart) conceptosChart.destroy();
+        
         setTimeout(() => {
             const movs = getFilteredMovements();
             const ing = movs.filter(m=>m.cantidad>0 && m.tipo!=='traspaso').reduce((s,m)=>s+m.cantidad,0), gas = movs.filter(m=>m.cantidad<0).reduce((s,m)=>s+m.cantidad,0), sal = ing+gas;
             const kpiSaldoValueEl = select('kpi-saldo-value'); if(kpiSaldoValueEl) { kpiSaldoValueEl.classList.remove('text-positive', 'text-negative'); kpiSaldoValueEl.classList.add(sal >= 0 ? 'text-positive' : 'text-negative'); }
             animateCountUp(select('kpi-ingresos-value'), ing); animateCountUp(select('kpi-gastos-value'), gas); animateCountUp(kpiSaldoValueEl, sal);
-            const cTots = movs.reduce((a,m)=>{if(m.tipo==='movimiento'&&m.conceptoId){if(!a[m.conceptoId])a[m.conceptoId]={total:0,movements:[]};a[m.conceptoId].total+=m.cantidad;a[m.conceptoId].movements.push(m);}return a;},{});
+            const cTots = movs.reduce((a,m)=>{if(m.tipo==='movimiento'&&m.conceptoId){if(!a[m.conceptoId])a[m.conceptoId]={total:0,movements:[],icon:db.conceptos.find(c=>c.id===m.conceptoId)?.icon||'label'};a[m.conceptoId].total+=m.cantidad;a[m.conceptoId].movements.push(m);}return a;},{});
             const sortedTotals = Object.entries(cTots).sort(([,a],[,b])=>a.total-b.total);
-            if (conceptosChart) conceptosChart.destroy();
+            
             const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-success').trim(), colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim();
             conceptosChart = new Chart(chartCtx, { type: 'bar', data: { labels: sortedTotals.map(([id]) => db.conceptos.find(c=>c.id===id)?.nombre || '?'), datasets: [{ data: sortedTotals.map(([,data]) => data.total / 100), backgroundColor: sortedTotals.map(([,data]) => data.total >= 0 ? colorSuccess : colorDanger), borderRadius: 6, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } }, scales: { y: { ticks: { callback: value => `${value.toLocaleString('es-ES')}€` } } } } });
-            concCont.innerHTML = sortedTotals.length===0?'<div class="empty-state" style="padding:16px 0; background:transparent;"><p>Sin datos para los filtros.</p></div>' : sortedTotals.map(([id, data]) => { const con = db.conceptos.find(c => c.id === id), t = data.total; return `<details class="accordion" style="background-color: var(--c-surface-variant);"><summary><span>${con?.nombre || '?'}</span><span><strong class="${t >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(t)} €</strong><span class="material-icons accordion__icon">expand_more</span></span></summary><div class="accordion__content">${data.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(mov => `<div class="transaction-card transaction-card--owner-${mov.beneficiario ? mov.beneficiario.toLowerCase().replace('ú', 'u') : ''}" data-action="edit-movement" data-id="${mov.id}"><div class="transaction-card__swipe-content" style="background:transparent;"><div class="transaction-card__amount ${mov.cantidad >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(mov.cantidad)} €</div><div class="transaction-card__details"><div class="transaction-card__description">${mov.descripcion}</div><div class="transaction-card__meta">${new Date(mov.fecha).toLocaleDateString('es-ES')}</div></div></div></div>`).join('')}</div></details>`; }).join('');
+            
+            concCont.innerHTML = sortedTotals.length===0?'<div class="empty-state" style="padding:16px 0; background:transparent;"><p>Sin datos para los filtros.</p></div>' : sortedTotals.map(([id, data]) => { const con = db.conceptos.find(c => c.id === id), t = data.total; return `<details class="accordion" style="background-color: var(--c-surface-variant);"><summary><span style="display: flex; align-items: center; gap: 8px;"><span class="material-icons" style="font-size: 18px;">${data.icon}</span>${con?.nombre || '?'}</span><span><strong class="${t >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(t)} €</strong><span class="material-icons accordion__icon">expand_more</span></span></summary><div class="accordion__content">${data.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(mov => `<div class="transaction-card transaction-card--owner-${mov.beneficiario ? mov.beneficiario.toLowerCase().replace('ú', 'u') : ''}" data-action="edit-movement" data-id="${mov.id}"><div class="transaction-card__swipe-content" style="background:transparent;"><div class="transaction-card__amount ${mov.cantidad >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(mov.cantidad)} €</div><div class="transaction-card__details"><div class="transaction-card__description">${mov.descripcion}</div><div class="transaction-card__meta">${new Date(mov.fecha).toLocaleDateString('es-ES')}</div></div></div></div>`).join('')}</div></details>`; }).join('');
+
         }, 150); 
     };
     
@@ -1520,8 +1564,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? `<span class="text-info">${formatCurrency(m.cantidad)} €</span>` 
                     : (m.cantidad < 0 ? `<span class="text-negative">${formatCurrency(m.cantidad)} € ${amountIcon}</span>` : `<span class="text-positive">+${formatCurrency(m.cantidad)} €</span>`);
 
-                let meta = '';
-                let saldoHtml = '';
+                let meta = '', saldoHtml = '', conceptIcon = 'label';
+                const concept = m.conceptoId ? db.conceptos.find(c => c.id === m.conceptoId) : null;
+                if(concept && concept.icon) {
+                    conceptIcon = concept.icon;
+                } else if (m.tipo === 'traspaso') {
+                    conceptIcon = 'swap_horiz';
+                }
 
                 if (m.tipo === 'traspaso') {
                     const origen = db.cuentas.find(c=>c.id===m.cuentaOrigenId)?.nombre||'?';
@@ -1539,7 +1588,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tagHtml = m.beneficiario ? `<div class="transaction-card__tags"><span class="transaction-card__tag">${m.beneficiario}</span></div>` : '';
 
                 return `<div class="transaction-card ${oClass}" data-action="edit-movement" data-id="${m.id}" style="cursor: pointer;">
-                            <div class="transaction-card__swipe-content">
+                           <div class="transaction-card__swipe-content">
+                               <div class="transaction-card__icon ${oClass}"><span class="material-icons">${conceptIcon}</span></div>
                                 <div class="transaction-card__details">
                                     <div class="transaction-card__description">${mainTitle}</div>
                                     <div class="transaction-card__meta">${meta}</div>
@@ -1579,99 +1629,114 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================================================
     const showHelpModal = () => {
         const helpHTML = `
-            <h3>👋 ¡Bienvenido a Cuentas aiDANaI!</h3>
-            <p>Esta es tu guía completa para dominar la gestión de tus finanzas personales y compartidas. La aplicación está diseñada para ser intuitiva, potente y con un diseño inspirado en la elegancia de iOS.</p>
+            <h3>👋 ¡Bienvenido a la Guía Completa de Cuentas aiDANaI!</h3>
+            <p>Esta es tu central de información para sacar el máximo partido a la aplicación. Aquí desglosamos cada función para que no se te escape nada.</p>
 
-            <h3>🧭 Navegación Principal</h3>
-            <p>La barra de navegación inferior es tu centro de mando. Te permite moverte entre las cinco secciones principales de la app:</p>
+            <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">dashboard</span>Panel de Control: Tu Vistazo Financiero</h4>
+            <p>Es la pantalla principal y tu centro de operaciones. Te ofrece una visión global e instantánea de tu salud financiera.</p>
             <ul>
-                <li><strong><span class="material-icons" style="font-size:1em; vertical-align: sub;">dashboard</span> Panel:</strong> Tu vista general financiera.</li>
-                <li><strong><span class="material-icons" style="font-size:1em; vertical-align: sub;">swap_horiz</span> Movim.:</strong> El historial detallado de todas tus transacciones.</li>
-                <li><strong><span class="material-icons" style="font-size:1em; vertical-align: sub;">account_balance_wallet</span> Cuentas:</strong> Un resumen de tus activos y deudas.</li>
-                <li><strong><span class="material-icons" style="font-size:1em; vertical-align: sub;">pie_chart</span> Presup.:</strong> Herramientas para crear y seguir tus presupuestos.</li>
-                <li><strong><span class="material-icons" style="font-size:1em; vertical-align: sub;">settings</span> Config.:</strong> Para personalizar la app a tu gusto.</li>
+                <li><strong>Filtros Globales:</strong> En la parte superior, puedes filtrar <strong>toda la información del panel</strong> por periodo (mes, año, personalizado), propietario, cuenta o concepto. Los cambios que hagas aquí afectan a todos los gráficos y tarjetas de esta pantalla.</li>
+                <li><strong>Indicadores Clave (KPIs):</strong> Las tres tarjetas superiores te muestran un resumen rápido del periodo filtrado: <strong>Ingresos</strong> (dinero que ha entrado), <strong>Gastos</strong> (dinero que ha salido) y el <strong>Saldo Neto</strong> (la diferencia entre ambos).</li>
+                <li><strong>Totales por Concepto:</strong> Este gráfico de barras desglosa tus ingresos y gastos por cada categoría. Es perfecto para saber exactamente a dónde se va tu dinero. Puedes hacer clic en cada barra para desplegar una lista con todos los movimientos asociados a ese concepto dentro del periodo que has filtrado.</li>
             </ul>
 
-            <h3>📊 Panel de Control</h3>
-            <p>Es la primera pantalla que ves. Te ofrece una visión rápida y potente de tu salud financiera para el periodo que elijas.</p>
+            <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">swap_horiz</span>Movimientos: El Corazón de tus Finanzas</h4>
+            <p>Aquí reside el historial completo de todas tus transacciones, ordenadas de la más reciente a la más antigua.</p>
             <ul>
-                <li><strong>Filtros:</strong> Puedes filtrar los datos por periodo (mes actual, año, etc.), propietario, cuenta y concepto. ¡Combínalos para un análisis granular!</li>
-                <li><strong>KPIs (Indicadores Clave):</strong> Tres tarjetas te muestran tus <strong>Ingresos</strong>, <strong>Gastos</strong> y el <strong>Saldo Neto</strong> del periodo filtrado.</li>
-                <li><strong>Totales por Concepto:</strong> Un gráfico de barras te muestra visualmente en qué conceptos has tenido más ingresos o gastos. Pulsa en cada barra para desplegar y ver los movimientos asociados.</li>
-            </ul>
-
-            <h3>💸 Movimientos</h3>
-            <p>Aquí encontrarás un listado de todas tus transacciones, ordenadas por fecha. Es una lista virtualizada para un rendimiento óptimo, incluso con miles de movimientos.</p>
-            <ul>
-                <li><strong>Búsqueda:</strong> Usa la barra de búsqueda en la parte superior para encontrar movimientos por descripción, concepto o cuenta.</li>
-                <li><strong>Gestos (Swipe):</strong> Desliza una tarjeta de movimiento hacia la <strong>izquierda</strong> para revelar el botón de <strong>eliminar</strong>. Deslízala hacia la <strong>derecha</strong> para <strong>copiar</strong> ese movimiento (muy útil para gastos recurrentes).</li>
-                <li><strong>Editar:</strong> Toca en cualquier parte de una tarjeta para abrir el modo de edición.</li>
-            </ul>
-            <div class="pro-tip">
-                <strong>Pro-Tip:</strong> El botón flotante azul <button class="fab fab--visible" style="position:relative;display:inline-flex;width:28px;height:28px;transform:none;opacity:1;bottom:0;right:0;vertical-align:middle;"><span class="material-icons" style="font-size:18px;">add</span></button> te permite añadir un nuevo movimiento desde casi cualquier pantalla.
-            </div>
-
-            <h3>🏦 Cuentas</h3>
-            <p>Esta sección agrupa tu dinero por propietario y por tipo de cuenta, dándote una visión clara de dónde están tus activos.</p>
-            <ul>
-                <li><strong>Filtro por Tipo:</strong> Toca las píldoras en la parte superior para mostrar u ocultar ciertos tipos de cuentas de los totales (Ej: Ocultar "Efectivo").</li>
-                <li><strong>Resumen por Propietario:</strong> Cada propietario tiene una sección con el total de sus activos líquidos. Despliégala para ver el desglose por tipo de cuenta (Cuenta Corriente, Ahorro, Inversión, etc.).</li>
-                <li><strong>Gráficos de Activos:</strong> Un gráfico de tarta visualiza la distribución de los activos líquidos de cada persona.</li>
-                <li><strong>Detalle de Cuenta:</strong> Toca en cualquier cuenta individual para ver un historial de todos sus movimientos en una ventana modal.</li>
-            </ul>
-
-            <h3>🎯 Presupuestos</h3>
-            <p>Una sección completamente rediseñada para un control total sobre tus metas de gasto.</p>
-            <ul>
-                <li><strong>Selección de Periodo:</strong> Elige el <strong>Año</strong> y el <strong>Propietario</strong> que quieres consultar.</li>
-                <li><strong>Seguimiento Detallado:</strong> Para cada concepto, verás una línea que incluye:
+                <li><strong>Lista Visual:</strong> Cada movimiento muestra un <strong>icono</strong> representativo de su concepto para una identificación rápida. Verás la descripción, la cuenta de origen y el propietario.</li>
+                <li><strong>Búsqueda Rápida:</strong> Usa la barra de búsqueda superior para encontrar cualquier transacción por su descripción, concepto o nombre de cuenta.</li>
+                <li><strong>Acciones con Gestos (Swipe):</strong>
                     <ul>
-                        <li>El límite de gasto anual (<strong>Límite</strong>).</li>
-                        <li>Cuánto has gastado hasta la fecha (<strong>Gastado</strong>).</li>
-                        <li>El dinero que te queda disponible o te has excedido (<strong>Disp/Exceso</strong>).</li>
-                        <li>Una <strong>barra de progreso</strong> que se vuelve amarilla al 85% y roja al 100% para alertarte.</li>
+                        <li><span class="material-icons" style="font-size:1em; vertical-align: sub;">chevron_left</span> Desliza hacia la <strong>izquierda</strong> para revelar el botón de <strong>Eliminar</strong>.</li>
+                        <li><span class="material-icons" style="font-size:1em; vertical-align: sub;">chevron_right</span> Desliza hacia la <strong>derecha</strong> para <strong>Copiar</strong> un movimiento y crear uno nuevo con los mismos datos.</li>
                     </ul>
                 </li>
-                <li><strong>Gestión Centralizada:</strong> Usa el botón <strong>"Gestionar Presupuestos"</strong> para abrir un panel donde puedes crear o actualizar todos los límites de gasto para el año y propietario seleccionados de una sola vez. ¡Mucho más rápido!</li>
-            </ul>
-
-            <h3>🤖 Asesor de Inversión IA</h3>
-            <p>Una herramienta experimental para darte ideas. La encontrarás tocando el icono del cerebro <span class="material-icons" style="font-size:1em; vertical-align: sub;">psychology_alt</span> en la barra superior.</p>
-            <ul>
-                <li>Selecciona un usuario, un periodo de meses a analizar y tu perfil de riesgo (Bajo, Medio o Alto).</li>
-                <li>La IA calculará tu capacidad de ahorro media mensual y te ofrecerá sugerencias de inversión acordes a tu perfil.</li>
-                <li><small><strong>Aviso Importante:</strong> Esto no es asesoramiento financiero profesional. Son sugerencias generadas automáticamente. Consulta siempre con un experto cualificado.</small></li>
             </ul>
             
-            <h3>⚙️ Configuración</h3>
-            <p>Aquí puedes adaptar la aplicación a tus necesidades.</p>
+            <div class="pro-tip">
+                <strong>Añadir y Editar Movimientos:</strong><br/>
+                Toca cualquier movimiento para editarlo o pulsa el botón flotante azul <span class="material-icons" style="font-size:1em; vertical-align: middle;">add_circle</span> para crear uno nuevo.
+                <ul>
+                    <li><strong>Cantidad:</strong> Recuerda siempre usar un signo <strong>negativo (-)</strong> para los gastos (ej: <code>-50,25</code>).</li>
+                    <li><strong>Propietario:</strong> Puedes asignar un movimiento a <strong>Dani</strong>, <strong>Norma</strong> o a <strong>Común</strong>, ideal para registrar gastos compartidos.</li>
+                    <li><strong>Atajo "Copiar Último":</strong> Dentro del formulario, pulsa el icono <span class="material-icons" style="font-size:1em; vertical-align: sub;">history</span> para rellenar todos los campos con los datos de la última transacción que registraste. ¡Ahorra tiempo!</li>
+                </ul>
+            </div>
+
+            <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">account_balance_wallet</span>Cuentas: ¿Dónde está tu Dinero?</h4>
+            <p>Esta sección te ofrece una vista patrimonial, agrupando tus fondos por propietario y por tipo de cuenta.</p>
             <ul>
-                <li><strong>Gestión General:</strong> Define los nombres de los <strong>propietarios</strong> y elige cuáles quieres que estén <strong>visibles</strong> en la app.</li>
-                <li><strong>Gestión de Cuentas/Conceptos:</strong> Desde aquí puedes añadir o eliminar las cuentas y los conceptos que usarás en toda la aplicación.</li>
+                <li><strong>Resumen por Propietario:</strong> Cada persona (excepto "Común") tiene una tarjeta principal que muestra el total de sus activos líquidos. Despliégala para ver un desglose detallado por cada tipo de cuenta (Efectivo, Corriente, Ahorro, etc.).</li>
+                <li><strong>Gráficos de Tarta:</strong> Para Dani y Norma, un gráfico visualiza la distribución de sus activos líquidos.</li>
+                <li><strong>Detalle de Movimientos:</strong> Toca en cualquier cuenta individual para ver un historial completo y exclusivo de sus movimientos.</li>
+            </ul>
+
+            <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">pie_chart</span>Presupuestos: Planifica y Conquista</h4>
+            <p>Define tus metas financieras anuales y comprueba si vas por el buen camino.</p>
+            <ul>
+                <li><strong>Creación de Presupuestos:</strong> Al gestionar los presupuestos, debes introducir un valor <strong>positivo</strong> para metas de <strong>ingreso</strong> (ej: <code>2000</code> para una nómina) y un valor <strong>negativo</strong> para límites de <strong>gasto</strong> (ej: <code>-500</code> para ocio).</li>
+                 <li><strong>Seguimiento Detallado:</strong> Cada línea muestra el objetivo, el total actual ("Ingresado" o "Gastado") y la diferencia total.</li>
+                <li><strong><span class="text-positive">Desviación Proporcional (%):</span></strong> Este es el indicador más inteligente. Compara tu progreso actual con el que <i>deberías</i> tener a fecha de hoy para cumplir tu meta a final de año. Si para un gasto ves <strong>+20%</strong> en rojo, significa que vas un 20% por encima de lo previsto y deberías moderarte. Si para un ingreso ves <strong>-15%</strong> en rojo, significa que estás un 15% por debajo de tu meta.</li>
+            </ul>
+
+            <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">settings</span>Configuración: Tu App, a tu Manera</h4>
+            <p>Desde aquí puedes personalizar todos los aspectos fundamentales de la aplicación.</p>
+            <ul>
+                <li><strong>Propietarios y Visibilidad:</strong> Edita la lista de propietarios (separados por comas) y decide cuáles quieres ver en las vistas principales.</li>
+                <li><strong>Gestión de Cuentas:</strong> Crea o elimina tus cuentas bancarias, de efectivo, de inversión, etc. Puedes añadir tipos nuevos como "Plan de Pensiones".</li>
+                <li><strong>Gestión de Conceptos:</strong> Crea o elimina tus categorías de gasto/ingreso. Aquí es donde puedes asignar un <strong>icono</strong> a cada concepto. Busca el nombre del icono en <a href="https://fonts.google.com/icons" target="_blank" rel="noopener noreferrer">Material Symbols</a> y pégalo en el campo "Icono" (ej: <code>shopping_cart</code>, <code>restaurant</code>, <code>train</code>).</li>
                 <li><strong>Gestión de Datos:</strong>
                     <ul>
-                        <li><strong>Exportar:</strong> Crea una copia de seguridad de todos tus datos en un archivo <code>.json</code>. ¡Hazlo regularmente!</li>
-                        <li><strong>Importar:</strong> Restaura tus datos desde un archivo <code>.json</code>. <strong>¡CUIDADO!</strong> Esto sobreescribe todos los datos actuales.</li>
-                        <li><strong>Borrar Todos los Datos:</strong> Elimina permanentemente toda tu información de la base de datos. Es una acción irreversible.</li>
+                        <li><strong>Exportar:</strong> Crea una copia de seguridad de <strong>todos tus datos</strong> en un archivo. Es muy recomendable hacerlo periódicamente.</li>
+                        <li><strong>Importar:</strong> Restaura la app desde un archivo de copia de seguridad. <strong>¡CUIDADO! Esta acción borra todos los datos actuales y los reemplaza.</strong></li>
+                        <li><strong>Borrar Todos los Datos:</strong> Acción irreversible que elimina toda tu información de la base de datos. Úsala con extrema precaución.</li>
                     </ul>
                 </li>
-                <li><strong>Ayuda:</strong> ¡El botón que te trajo aquí!</li>
             </ul>
         `;
-        showGenericModal("Guía de Usuario de Cuentas aiDANaI", helpHTML);
+        showGenericModal("Guía de Usuario Detallada", helpHTML);
     };
+    
     const showConceptosModal = () => {
-        const html = `<form id="add-concepto-form" novalidate style="margin-bottom: var(--sp-4);"><div class="form-group-addon"><div class="form-group"><label for="new-concepto-nombre" class="form-label">Nuevo Concepto</label><input type="text" id="new-concepto-nombre" class="form-input" placeholder="Ej: Nómina" required></div><button type="submit" class="btn btn--primary" style="align-self: flex-end; padding-top: var(--sp-2); padding-bottom: var(--sp-2);">Añadir</button></div></form><hr style="border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Conceptos Existentes</h4><div id="conceptos-modal-list"></div>`;
+        const html = `<form id="add-concepto-form" novalidate style="margin-bottom: var(--sp-4);">
+                        <div class="form-grid">
+                            <div class="form-group" style="grid-column: 1 / 2;">
+                                <label for="new-concepto-nombre" class="form-label">Nombre del Concepto</label>
+                                <input type="text" id="new-concepto-nombre" class="form-input" placeholder="Ej: Nómina" required>
+                            </div>
+                            <div class="form-group" style="grid-column: 2 / 3;">
+                                <label for="new-concepto-icon" class="form-label">Icono (Material)</label>
+                                <input type="text" id="new-concepto-icon" class="form-input" placeholder="Ej: shopping_cart">
+                            </div>
+                        </div>
+                        <p style="font-size: var(--fs-xs); color: var(--c-on-surface-secondary); margin-top: calc(-1 * var(--sp-2)); margin-bottom: var(--sp-3);">
+                           Busca nombres de iconos en <a href="https://fonts.google.com/icons" target="_blank" rel="noopener noreferrer">Google Fonts</a>.
+                        </p>
+                        <button type="submit" class="btn btn--primary btn--full">Añadir Concepto</button>
+                      </form>
+                      <hr style="border-color: var(--c-outline); opacity: 0.5;">
+                      <h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Conceptos Existentes</h4>
+                      <div id="conceptos-modal-list"></div>`;
         showGenericModal('Gestionar Conceptos', html);
         renderConceptosModalList();
     };
+
     const renderConceptosModalList = () => {
         const list = select('conceptos-modal-list'); if (!list) return;
-        list.innerHTML = (db.conceptos || []).length === 0 ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay conceptos.</p>` : [...db.conceptos].sort((a,b) => a.nombre.localeCompare(b.nombre)).map(c => `<div class="modal__list-item"><span>${c.nombre}</span><button class="icon-btn" data-action="delete-concepto" data-id="${c.id}" title="Eliminar Concepto"><span class="material-icons">delete_outline</span></button></div>`).join('');
+        list.innerHTML = (db.conceptos || []).length === 0 ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay conceptos.</p>` : [...db.conceptos].sort((a,b) => a.nombre.localeCompare(b.nombre)).map(c => 
+            `<div class="modal__list-item">
+                <span style="display: flex; align-items: center; gap: 12px;">
+                    <span class="material-icons" style="color: var(--c-primary);">${c.icon || 'label'}</span>
+                    ${c.nombre}
+                </span>
+                <button class="icon-btn" data-action="delete-concepto" data-id="${c.id}" title="Eliminar Concepto"><span class="material-icons">delete_outline</span></button>
+            </div>`
+        ).join('');
     };
+
     const showCuentasModal = () => {
         const ownersOptions = (db.config?.beneficiarios || []).map(o => `<option value="${o}">${o}</option>`).join('');
-        const html = `<form id="add-cuenta-form" novalidate><div class="form-group"><label for="new-cuenta-nombre" class="form-label">Nombre de la Cuenta</label><input type="text" id="new-cuenta-nombre" class="form-input" placeholder="Ej: Cartera de Dani" required></div><div class="form-grid"><div class="form-group"><label for="new-cuenta-tipo" class="form-label">Tipo de Cuenta</label><input type="text" id="new-cuenta-tipo" class="form-input" list="tipos-cuenta-list" placeholder="Ej: Efectivo" required><datalist id="tipos-cuenta-list"><option value="Efectivo"></option><option value="Cuenta Corriente"></option><option value="Ahorro"></option><option value="Inversión"></option><option value="Tarjeta Crédito"></option><option value="Préstamo"></option><option value="Propiedad"></option></datalist></div><div class="form-group"><label for="new-cuenta-propietario" class="form-label">Propietario</label><select id="new-cuenta-propietario" class="form-select" required><option value="" disabled selected>Seleccionar...</option>${ownersOptions}</select></div></div><button type="submit" class="btn btn--primary btn--full" style="margin-top: var(--sp-3)">Añadir Cuenta</button></form><hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Cuentas Existentes</h4><div id="cuentas-modal-list"></div>`;
+        const html = `<form id="add-cuenta-form" novalidate><div class="form-group"><label for="new-cuenta-nombre" class="form-label">Nombre de la Cuenta</label><input type="text" id="new-cuenta-nombre" class="form-input" placeholder="Ej: Cartera de Dani" required></div><div class="form-grid"><div class="form-group"><label for="new-cuenta-tipo" class="form-label">Tipo de Cuenta</label><input type="text" id="new-cuenta-tipo" class="form-input" list="tipos-cuenta-list" placeholder="Ej: Efectivo" required><datalist id="tipos-cuenta-list"><option value="Efectivo"></option><option value="Cuenta Corriente"></option><option value="Ahorro"></option><option value="Inversión"></option><option value="Tarjeta Crédito"></option><option value="Préstamo"></option><option value="Propiedad"></option><option value="Plan de Pensiones"></option></datalist></div><div class="form-group"><label for="new-cuenta-propietario" class="form-label">Propietario</label><select id="new-cuenta-propietario" class="form-select" required><option value="" disabled selected>Seleccionar...</option>${ownersOptions}</select></div></div><button type="submit" class="btn btn--primary btn--full" style="margin-top: var(--sp-3)">Añadir Cuenta</button></form><hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Cuentas Existentes</h4><div id="cuentas-modal-list"></div>`;
         showGenericModal('Gestionar Cuentas', html);
         renderCuentasModalList();
     };
@@ -1685,7 +1750,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================================================
     const showAiAdvisorModal = () => {
         const userSelect = select('ai-user-select'), resultsContainer = select('ai-results-container'); if (!userSelect || !resultsContainer) return;
-        const owners = getVisibleOwners(); userSelect.innerHTML = owners.map(o => `<option value="${o}">${o}</option>`).join('');
+        const owners = (db.config?.beneficiarios || []).filter(b => b.toLowerCase() !== 'común');
+        userSelect.innerHTML = owners.map(o => `<option value="${o}">${o}</option>`).join('');
         resultsContainer.classList.add('hidden'); resultsContainer.innerHTML = ''; select('ai-advisor-form').reset();
         showModal('ai-advisor-modal');
     };
@@ -1739,6 +1805,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'login': handleLogin(btn); break; case 'register': handleRegister(btn); break; case 'exit': handleExitApp(); break; case 'navigate': navigateTo(page); break; case 'theme-toggle': toggleTheme(); break; case 'help': showHelpModal(); break; case 'ai-advisor': showAiAdvisorModal(); break; case 'apply-filters': vibrate(); updateDashboard(); renderCuentas(); break; case 'add-movement': vibrate(); startEditMovement(null); break; case 'edit-movement': vibrate(); startEditMovement(actionTarget.dataset.id); break;
                 case 'delete-movement-swipe': showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', ()=>{db.movimientos=db.movimientos.filter(m=>m.id!==cardElement.dataset.id);saveData(null,()=>{renderMovimientos();showToast('Movimiento eliminado.');});}); break;
                 case 'copy-movement-swipe': handleCopyMovement(cardElement.dataset.id); break;
+                case 'copy-last-movement': handleCopyLastMovement(); break;
                 case 'delete-movement-from-modal': showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', ()=>{db.movimientos=db.movimientos.filter(m=>m.id!==select('movimiento-id').value);saveData(null,()=>{hideModal('movimiento-modal');renderAll();showToast('Movimiento eliminado.');});}); break;
                 case 'delete-concepto': if(db.movimientos.some(m=>m.conceptoId===id)){showToast("Concepto en uso, no se puede borrar.","warning");return;} showConfirmationModal('¿Seguro que quieres eliminar este concepto?',()=>{db.conceptos=db.conceptos.filter(c=>c.id!==id);saveData(null,()=>{showToast("Concepto eliminado.");renderConceptosModalList();populateAllDropdowns();});}); break;
                 case 'delete-cuenta': if(db.movimientos.some(m=>m.cuentaId===id||m.cuentaOrigenId===id||m.cuentaDestinoId===id)){showToast("Cuenta con movimientos, no se puede borrar.","warning",3500);return;} showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?',()=>{db.cuentas=db.cuentas.filter(c=>c.id!==id);saveData(null,()=>{showToast("Cuenta eliminada.");renderCuentasModalList();populateAllDropdowns();renderCuentas();});}); break;
@@ -1788,6 +1855,44 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally { setButtonLoading(btn, false); }
     };
     
+    const handleCopyLastMovement = () => {
+        vibrate();
+        if (!db.movimientos || db.movimientos.length === 0) {
+            showToast('No hay movimientos para copiar.', 'info');
+            return;
+        }
+        
+        const lastMov = [...db.movimientos].sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0];
+        
+        if (!lastMov) {
+            showToast('No se pudo encontrar el último movimiento.', 'warning');
+            return;
+        }
+
+        clearAllErrors('form-movimiento');
+        select('movimiento-id').value = '';
+        select('movimiento-tipo-selector').value = lastMov.tipo || 'movimiento';
+        select('movimiento-tipo-selector').dispatchEvent(new Event('change'));
+
+        select('movimiento-cantidad').value = formatCurrency(lastMov.cantidad);
+        select('movimiento-descripcion').value = lastMov.descripcion;
+        
+        const now = new Date();
+        select('movimiento-fecha').value = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+
+        if (lastMov.tipo === 'traspaso') {
+            select('movimiento-cuenta-origen').value = lastMov.cuentaOrigenId || '';
+            select('movimiento-cuenta-destino').value = lastMov.cuentaDestinoId || '';
+        } else {
+            select('movimiento-cuenta').value = lastMov.cuentaId || '';
+            select('movimiento-concepto').value = lastMov.conceptoId || '';
+            select('movimiento-beneficiario').value = lastMov.beneficiario || '';
+        }
+        
+        showToast('Datos del último movimiento copiados.', 'default');
+        select('movimiento-descripcion').focus();
+    };
+
     const handleCopyMovement = (idToCopy) => {
         vibrate();
         const originalMov = db.movimientos.find(m => m.id === idToCopy);
@@ -1809,7 +1914,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newMov = { id: id || generateId(), tipo, cantidad: cantCent, fecha: new Date(fecha).toISOString(), descripcion: desc };
         if (tipo === 'traspaso') {
             newMov.cuentaOrigenId = select('movimiento-cuenta-origen').value; newMov.cuentaDestinoId = select('movimiento-cuenta-destino').value; 
-            newMov.beneficiario = db.cuentas.find(c => c.id === newMov.cuentaOrigenId)?.propietario || ''; // Asignar beneficiario del traspaso
+            newMov.beneficiario = db.cuentas.find(c => c.id === newMov.cuentaOrigenId)?.propietario || '';
             if (!newMov.cuentaOrigenId || !newMov.cuentaDestinoId || newMov.cuentaOrigenId === newMov.cuentaDestinoId) { displayError('movimiento-cuenta-destino', 'Cuentas de origen y destino deben ser válidas y diferentes.'); v = false; }
             if (cantCent <= 0) { displayError('movimiento-cantidad', 'En traspasos, la cantidad debe ser positiva.'); v = false; }
         } else {
@@ -1824,7 +1929,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (idx > -1) db.movimientos[idx] = newMov; else db.movimientos.push(newMov);
         saveData(btn, () => { hideModal('movimiento-modal'); showToast(id ? 'Movimiento actualizado' : 'Movimiento añadido'); renderAll(); });
     };
-    const handleAddConcept = form => { vibrate(); const input=form.querySelector('input'),nombre=input.value.trim();if(nombre){db.conceptos.push({id:generateId(),nombre});saveData(null,()=>{input.value='';showToast('Concepto añadido.');renderConceptosModalList();populateAllDropdowns();});}};
+
+    const handleAddConcept = form => {
+        vibrate();
+        const nameInput = select('new-concepto-nombre');
+        const iconInput = select('new-concepto-icon');
+        const nombre = nameInput.value.trim();
+        let icon = iconInput.value.trim().toLowerCase().replace(/\s/g, '_');
+        if (!icon) {
+            icon = 'label';
+        }
+        if (nombre) {
+            db.conceptos.push({ id: generateId(), nombre: nombre, icon: icon });
+            saveData(null, () => {
+                nameInput.value = '';
+                iconInput.value = '';
+                showToast('Concepto añadido.');
+                renderConceptosModalList();
+                populateAllDropdowns();
+            });
+        }
+    };
+    
     const handleAddAccount = form => { vibrate(); const nom=select('new-cuenta-nombre').value.trim(),tip=select('new-cuenta-tipo').value.trim().toUpperCase(),pro=select('new-cuenta-propietario').value;if(nom&&tip&&pro){db.cuentas.push({id:generateId(),nombre:nom,tipo:tip,propietario:pro});saveData(null,()=>{form.reset();showToast('Cuenta añadida.');renderCuentasModalList();populateAllDropdowns();renderCuentas();});}else{showToast("Rellena todos los campos.","warning");}};
 
     // =================================================================================
