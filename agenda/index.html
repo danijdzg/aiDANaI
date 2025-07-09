@@ -17,7 +17,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
 
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Agenda aiDANaI","short_name":"aiDANaI","description":"Agenda aiDANaI: When the ideas become real","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","icons":[{"src":"aiDANaI-Agenda.jpg","sizes":"192x192","type":"image/jpeg"},{"src":"aiDANaI-Agenda.jpg","sizes":"512x512","type":"image/jpeg"},{"src":"aiDANaI-Agenda.jpg","sizes":"180x180","type":"image/jpeg","purpose":"apple touch icon"}]}'>
     <meta name="theme-color" content="#1A1C20">
     <link rel="apple-touch-icon" href="aiDANaI-Agenda.jpg">
 
@@ -1081,8 +1081,90 @@
     function scheduleAllNotifications() { if (!db.items) return; Object.values(activeTimers).forEach(clearTimeout); activeTimers = {}; db.items.forEach(scheduleNotification); }
     function checkMissedNotifications() { if (Notification.permission !== "granted" || !db.items) return; const now = Date.now(); db.items.forEach(item => { if (item.notificationEnabled && !item.isComplete && !item.notificationShown && item.dueDate) { const dueDate = new Date(item.dueDate).getTime(); if (dueDate < now) { showNotification(item); } } }); scheduleAllNotifications(); }
     </script>
+    
     <script>
-        if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./service-worker.js').then(r => console.log('ServiceWorker OK')).catch(e => console.log('ServiceWorker Fail', e)); }); }
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const CACHE_NAME = 'aidanai-agenda-v2'; // Versión actualizada
+                const urlsToCache = [
+                    './',
+                    './aiDANaI-Agenda.html', // Coincide con el nombre del archivo actual
+                    './aiDANaI-Agenda.jpg',
+                    'https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js',
+                    'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap',
+                    'https://fonts.googleapis.com/icon?family=Material+Icons',
+                    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
+                    'https://cdn.jsdelivr.net/npm/flatpickr',
+                    'https://npmcdn.com/flatpickr/dist/l10n/es.js',
+                    'https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js',
+                    'https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js',
+                    'https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js'
+                ];
+
+                self.addEventListener('install', (event) => {
+                  event.waitUntil(
+                    caches.open(CACHE_NAME)
+                      .then((cache) => {
+                        console.log('Caché abierto, añadiendo URLs para funcionamiento offline.');
+                        return cache.addAll(urlsToCache);
+                      })
+                  );
+                });
+
+                self.addEventListener('fetch', (event) => {
+                  // Estrategia: Cache first, then network. Excluir peticiones de Firebase.
+                  if (event.request.url.includes('firestore.googleapis.com')) {
+                    return fetch(event.request);
+                  }
+                
+                  event.respondWith(
+                    caches.match(event.request)
+                      .then((response) => {
+                        if (response) {
+                          return response; // Servir desde la caché si está disponible
+                        }
+                        // Si no, obtener de la red, cachear y devolver
+                        return fetch(event.request).then(
+                          (response) => {
+                            // Solo cachear respuestas válidas
+                            if (!response || response.status !== 200 || response.type !== 'basic') {
+                              return response;
+                            }
+                            const responseToCache = response.clone();
+                            caches.open(CACHE_NAME)
+                              .then((cache) => {
+                                cache.put(event.request, responseToCache);
+                              });
+                            return response;
+                          }
+                        );
+                      })
+                  );
+                });
+
+                self.addEventListener('activate', (event) => {
+                  const cacheWhitelist = [CACHE_NAME];
+                  event.waitUntil(
+                    caches.keys().then((cacheNames) => {
+                      return Promise.all(
+                        cacheNames.map((cacheName) => {
+                          if (cacheWhitelist.indexOf(cacheName) === -1) {
+                            return caches.delete(cacheName); // Eliminar cachés antiguas
+                          }
+                        })
+                      );
+                    })
+                  );
+                });
+            `;
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(blob);
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register(swUrl)
+                    .then(registration => console.log('ServiceWorker registrado con éxito:', registration.scope))
+                    .catch(error => console.log('Fallo en el registro del ServiceWorker:', error));
+            });
+        }
     </script>
 </body>
 </html>
