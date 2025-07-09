@@ -10,7 +10,7 @@ La aplicación menu aiDANaI agrupa las otras dos aplicaciones Cuentas y Agenda
 
 Versión final 05/07/2025
 
-
+********************************************************************
 
 Hay tres aplicaciones individuales para PC: menu, cuentas y agenda
 
