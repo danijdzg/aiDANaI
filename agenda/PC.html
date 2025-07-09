@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aiDANaI Agenda - Tu Organizador Inteligente</title>
+    <meta name="description" content="Gestiona tus tareas y eventos de forma eficiente con la agenda inteligente aiDANaI, optimizada para móvil y escritorio.">
+    <meta name="author" content="aiDANaI">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1A1C20">
+    <link rel="apple-touch-icon" href="aiDANaI-Agenda.jpg">
+
+    <style>
+        /* ================================================================== */
+        /* CSS MEJORADO Y REFACTORIZADO                                     */
+        /* ================================================================== */
+        
+        /* 1. PALETA DE COLORES Y VARIABLES GLOBALES */
+        :root {
+            /* REFINADO: Paleta de Modo Claro Profesional */
+            --primary-color: #6D5BD0;
+            --primary-variant: #5345A1;
+            --secondary-color: #6E7191;
+            --background: #F7F7FC; /* Un blanco más suave */
+            --surface: #FFFFFF;
+            --surface-variant: #EFF0F6;
+            --on-primary: #FFFFFF;
+            --on-background: #14142B;
+            --on-surface: #262338;
+            --outline: #D9DBE9;
+            --accent-task: #E53935;
+            --accent-event-normal: #008A5E;
+            --accent-event-important: #007AFF;
+            --accent-delete: #E53935;
+            --accent-complete: #008A5E;
+            
+            /* Variables de UI/UX */
+            --font-inter: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Roboto', sans-serif;
+            --shadow-layered: 0px 4px 8px rgba(26, 28, 32, 0.04), 0px 8px 24px rgba(26, 28, 32, 0.08);
+            --shadow-fab: 0px 4px 12px rgba(109, 91, 208, 0.4);
+            --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        
+        [data-theme="dark"] {
+            /* Paleta de Modo Oscuro existente, ligeramente ajustada */
+            --primary-color: #937EFF;
+            --primary-variant: #7B68EE;
+            --secondary-color: #A0A0B4;
+            --background: #121217;
+            --surface: #1E1E24;
+            --surface-variant: #2A2A32;
+            --on-primary: #FFFFFF;
+            --on-background: #EAEAF2;
+            --on-surface: #EAEAF2;
+            --outline: #383842;
+        }
+
+        /* Estilos Flatpickr en modo oscuro */
+        .flatpickr-calendar.darkTheme { background: var(--surface); border-color: var(--outline); box-shadow: var(--shadow-layered); }
+        .darkTheme .flatpickr-month, .darkTheme .flatpickr-weekday, .darkTheme .flatpickr-weekwrapper, .darkTheme .flatpickr-time { color: var(--on-surface); }
+        .darkTheme span.flatpickr-day { color: var(--on-surface); }
+        .darkTheme span.flatpickr-day:hover, .darkTheme span.flatpickr-day:focus { background: var(--surface-variant); }
+        .darkTheme span.flatpickr-day.today { border-color: var(--primary-color); }
+        .darkTheme span.flatpickr-day.selected, .darkTheme span.flatpickr-day.startRange, .darkTheme span.flatpickr-day.endRange { background: var(--primary-color); border-color: var(--primary-color); color: var(--on-primary); }
+        .darkTheme .numInput { background: transparent; color: var(--on-surface); border-color: var(--outline); }
+        
+        /* Estilos base */
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { height: -webkit-fill-available; }
+        body { font-family: var(--font-inter); background-color: var(--background); color: var(--on-background); line-height: 1.5; overflow: hidden; min-height: 100vh; min-height: -webkit-fill-available; height: 100vh; transition: background-color 0.3s, color 0.3s; font-size: 14px; }
+        *:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; border-radius: 6px; }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
+        
+        /* Intro/Exit Screens */
+        .intro-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; background-color: #000; background-image: radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 40px), radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 30px), radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 40px), radial-gradient(rgba(255,255,255,.4), rgba(255,255,255,.1) 2px, transparent 30px); background-size: 550px 550px, 350px 350px, 250px 250px, 150px 150px; background-position: 0 0, 40px 60px, 130px 270px, 70px 100px; animation: move-stars 120s linear infinite; transition: opacity 0.5s ease-out; }
+        .intro-screen.visible { display: flex; }
+        #welcomeScreen #welcomeImage { width: 250px; height: auto; opacity: 0; animation: growAndFade 2.5s ease-in-out forwards; }
+        #exitScreen { background: var(--background); color: var(--on-background); }
+        #exitMessage { font-size: 2.5rem; font-weight: 300; animation: focus-out-contract 2s cubic-bezier(0.550, 0.085, 0.680, 0.530) forwards; }
+        @keyframes growAndFade { 0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(8); opacity: 0; } }
+        @keyframes focus-out-contract { 0% { letter-spacing: 1em; transform: translateZ(300px); filter: blur(12px); opacity: 0; } 100% { transform: translateZ(12px); filter: blur(0); opacity: 1; } }
+        @keyframes move-stars { from { background-position: 0 0, 40px 60px, 130px 270px, 70px 100px; } to { background-position: -10000px 5000px, -10000px 5000px, -10000px 5000px, -10000px 5000px; } }
+        #quoteScreen { text-align: center; color: #FFF; padding: 20px; opacity: 0; transition: opacity 1.5s; }
+        #quoteScreen.visible { opacity: 1; }
+        #quoteText { font-size: 22px; font-style: italic; font-weight: 300; max-width: 600px; }
+        #quoteAuthor { display: block; font-size: 16px; margin-top: 12px; font-weight: 500; }
+
+        /* Login Screen Styles */
+        .login-view { position: fixed; inset: 0; z-index: 1040; display: none; flex-direction: column; justify-content: center; align-items: center; padding: 1rem; opacity: 0; transition: opacity .5s; background-color: var(--background); }
+        .login-view--visible { display: flex; opacity: 1; }
+        .login-view__card { background-color: var(--surface); padding: 1.25rem; border-radius: 18px; box-shadow: var(--shadow-layered); width: 100%; max-width: 340px; text-align: center; animation: pop-in 0.3s ease-out; }
+        @keyframes pop-in { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .login-view__title { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
+        .form-error { color: #E53935; font-size: 0.75rem; margin-top: 0.25rem; min-height: 14px; display: block; }
+        .form-input--invalid { border-color: #E53935 !important; }
+        .spinner { display: inline-block; width: 1em; height: 1em; border: .15em solid currentColor; border-radius: 50%; border-top-color: transparent; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 8px; }
+        
+
+        /* 2. LAYOUT PRINCIPAL (MÓVIL) */
+        #app-root-container { display: flex; flex-direction: column; height: 100vh; }
+        #sidebar { display: none; } /* Oculto por defecto en móvil */
+        #app-root { display: none; max-width: 420px; margin: 0 auto; height: 100vh; background: var(--background); position: relative; flex-direction: column; opacity: 0; transition: opacity 0.5s ease-out; padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+        #app-root.visible { display: flex; opacity: 1; }
+        .main-content { flex: 1; display: flex; position: relative; overflow: hidden; }
+        .view { display: none; width: 100%; flex-direction: column; animation: slideAndFadeIn 0.4s var(--ease-out-quint); height: 100%; overflow: hidden; }
+        #tasksView, #helpView, #searchView { overflow-y: auto; padding: 16px; padding-bottom: 80px; }
+        #calendarView { overflow-y: auto; padding: 0; padding-bottom: 80px; }
+        .view.active { display: flex; }
+        @keyframes slideAndFadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        .fab { position: fixed; bottom: calc(85px + env(safe-area-inset-bottom)); right: 20px; width: 56px; height: 56px; background: var(--primary-color); color: white; border: none; border-radius: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-fab); transition: all 0.3s var(--ease-out-quint); z-index: 50; }
+        .fab:hover { transform: scale(1.05) translateY(-2px); box-shadow: 0px 6px 16px rgba(123, 104, 238, 0.5); }
+        .fab.fab-hidden { transform: translateY(calc(100% + 20px)); pointer-events: none; }
+        .fab .material-icons { font-size: 28px; }
+        
+        .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 420px; background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid rgba(224, 224, 230, 0.5); display: flex; padding: 4px 0 calc(8px + env(safe-area-inset-bottom)) 0; z-index: 100; }
+        [data-theme="dark"] .bottom-nav { background: rgba(30, 30, 36, 0.7); border-top: 1px solid rgba(56, 56, 66, 0.5); }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4px; cursor: pointer; transition: color 0.2s; color: var(--secondary-color); border: none; background: transparent; }
+        .nav-item.active { color: var(--primary-color); }
+        .nav-item .material-icons { font-size: 24px; margin-bottom: 2px; }
+        .nav-label { font-size: 11px; font-weight: 500; }
+        .main-header { display: none; } /* Oculto por defecto en móvil */
+
+        .calendar-container { flex-shrink: 0; padding: 12px 16px; border-bottom: 1px solid var(--outline); }
+        .calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; position: relative; }
+        #calendar-title-btn { font-size: 18px; font-weight: 500; background: none; border: none; color: var(--on-background); padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+        #calendar-title-btn:hover { background-color: var(--surface-variant); }
+        .calendar-nav { display: flex; align-items: center; gap: 4px; }
+        .icon-button { background: none; border: none; color: var(--secondary-color); cursor: pointer; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s; }
+        .icon-button:hover { background-color: var(--surface-variant); color: var(--on-surface); }
+        #calendar-main-area { position: relative; }
+        .calendar-grid { background: var(--surface); border-radius: 16px; padding: 8px; box-shadow: var(--shadow-layered); }
+        .calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; }
+        .weekday { text-align: center; font-size: 11px; font-weight: 500; color: var(--secondary-color); padding: 4px; }
+        .calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+        .calendar-day { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 12px; cursor: pointer; position: relative; font-size: 13px; transition: all 0.2s; padding: 4px 0; }
+        .calendar-day:hover { background: var(--surface-variant); }
+        .day-number { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+        .calendar-day.today .day-number { background: var(--primary-color); color: var(--on-primary); font-weight: 700; }
+        .calendar-day.selected .day-number { background: var(--primary-variant); color: var(--on-primary); transform: scale(1.1); }
+        .calendar-day.other-month { color: var(--outline); pointer-events: none; }
+        .calendar-day .event-dots-container { position: absolute; bottom: 4px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; }
+        .calendar-day .event-dot { width: 5px; height: 5px; border-radius: 50%; }
+        .calendar-day .event-dot.important { background-color: var(--accent-event-important); }
+        .calendar-day .event-dot.normal { background-color: var(--accent-event-normal); }
+
+        .list-item-swipe-container { display: flex; align-items: center; background: var(--surface); border-radius: 12px; margin-bottom: 8px; box-shadow: var(--shadow-layered); transition: all 0.3s var(--ease-out-quint); user-select: none; position: relative; }
+        #tasksView .list-item-swipe-container.item-card, #searchResultsList .list-item-swipe-container.item-card { padding: 12px 16px; border-left: 5px solid transparent; transition: opacity 0.3s, transform 0.3s, border-left-color 0.3s; }
+        .list-item-swipe-container .item-content { flex: 1; cursor: pointer; }
+        .item-card-swipe-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; color: white; opacity: 0; transition: opacity 0.2s; z-index: -1; }
+        .item-card-swipe-background .material-icons { font-size: 28px; }
+        .list-item-swipe-container.swiping-right .item-card-swipe-background { background-color: var(--accent-complete); justify-content: flex-start; opacity: 1; }
+        .list-item-swipe-container.swiping-left .item-card-swipe-background { background-color: var(--accent-delete); justify-content: flex-end; opacity: 1; }
+        .list-item-swipe-container.completed { opacity: 0.6; }
+        .list-item-swipe-container.completed .item-title { text-decoration-color: var(--secondary-color); }
+        
+        .item-checkbox { width: 22px; height: 22px; border: 2px solid var(--outline); border-radius: 50%; margin-right: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .item-checkbox.checked { background: var(--accent-complete); border-color: var(--accent-complete); color: white; }
+        .item-checkbox .material-icons { font-size: 18px; transform: scale(0); transition: transform 0.3s var(--ease-out-quint); }
+        .item-checkbox.checked .material-icons { transform: scale(1); }
+        
+        #tasksView .item-title, #searchResultsList .item-title { font-weight: 500; font-size: 15px; }
+        #tasksView .item-title.completed, #searchResultsList .item-title.completed { text-decoration: line-through; }
+        .item-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--secondary-color); margin-top: 4px; }
+        .item-meta .material-icons.recurrent-icon { font-size: 14px; vertical-align: -3px; }
+
+        .settings-section { background: var(--surface); border-radius: 20px; padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow-layered); }
+        .section-title { font-size: 16px; font-weight: 500; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; letter-spacing: 0.2px; }
+        .help-section details { margin-bottom: 10px; border: 1px solid var(--surface-variant); border-radius: 16px; }
+        .help-section summary { font-weight: 500; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; list-style: none; }
+        .help-section summary::-webkit-details-marker { display: none; }
+        .help-section summary .material-icons { transition: transform 0.2s; }
+        .help-section details[open] summary .material-icons { transform: rotate(180deg); }
+        .help-section .details-content { padding: 4px 16px 16px 16px; font-size: 14px; line-height: 1.6; border-top: 1px solid var(--surface-variant); margin: 8px 0 0 0; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding: 0; opacity: 0; pointer-events: none; transition: opacity 0.4s var(--ease-out-quint); }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal { background: var(--surface); border-radius: 24px 24px 0 0; padding: 24px; width: 100%; max-width: 420px; max-height: 95vh; overflow-y: auto; box-shadow: var(--shadow-layered); transform: translateY(100%); transition: transform 0.4s var(--ease-out-quint); }
+        .modal-overlay.active .modal { transform: translateY(0); }
+        
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--secondary-color); }
+        .form-input, .form-select { width: 100%; padding: 12px; border: 1.5px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--on-surface); font-size: 14px; }
+        .form-input:focus, .form-select:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent); }
+        .btn { padding: 10px 20px; border: none; border-radius: 24px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+        .btn-primary { background: var(--primary-color); color: white; }
+        .btn-secondary { background: transparent; color: var(--secondary-color); border: 1.5px solid var(--outline); }
+        
+        #toast-container { position: fixed; bottom: calc(85px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 2000; width: max-content; max-width: 90%; pointer-events: none; }
+        .toast { background-color: rgba(30, 30, 36, 0.8); backdrop-filter: blur(5px); color: white; padding: 10px 18px; border-radius: 12px; margin-bottom: 8px; box-shadow: var(--shadow-layered); display: flex; align-items: center; animation: toastFadeIn 0.4s var(--ease-out-quint), toastFadeOut 0.4s 2.6s var(--ease-out-quint); font-size: 14px; }
+        @keyframes toastFadeIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastFadeOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(10px) scale(0.95); } }
+
+        .search-wrapper { width: 100%; position: relative; margin-bottom: 16px; }
+        .search-wrapper .search-input { width: 100%; border: none; background: var(--surface-variant); color: var(--on-surface); padding: 12px 40px 12px 16px; border-radius: 12px; font-size: 14px; }
+        .search-wrapper .search-input:focus { outline: none; box-shadow: 0 0 0 2px var(--primary-color); }
+        .search-clear-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; display: none; align-items: center; justify-content: center; background: none; border: none; color: var(--secondary-color); cursor: pointer; border-radius: 50%; }
+        .search-wrapper.has-text .search-clear-btn { display: inline-flex; }
+
+        .agenda-list-container { flex-grow: 1; overflow-y: auto; padding: 8px 16px 80px 16px; }
+        .agenda-date-header { font-weight: 700; letter-spacing: 0.3px; font-size: 12px; color: var(--primary-color); padding: 8px 12px; background-color: var(--surface-variant); position: sticky; top: 0; z-index: 1; border-radius: 8px; margin-top: 8px; }
+
+        /* ================================================================================= */
+        /* 3. ADAPTACIONES Y ESTILOS PARA ESCRITORIO (min-width: 1024px)             */
+        /* ================================================================================= */
+        @media (min-width: 1024px) {
+            body {
+                overflow: hidden;
+            }
+
+            /* Ocultamos elementos de móvil */
+            .bottom-nav, .fab {
+                display: none !important;
+            }
+
+            /* Nuevo Layout Principal con CSS Grid */
+            #app-root-container {
+                display: grid;
+                grid-template-columns: 280px 1fr; /* Sidebar más ancha */
+                grid-template-rows: 100vh;
+                height: 100vh;
+            }
+            #login-screen.login-view--visible,
+            .intro-screen.visible {
+                grid-column: 1 / -1;
+            }
+
+            /* Estilos de la Barra Lateral (Sidebar) */
+            #sidebar {
+                display: flex; /* Hacemos visible el sidebar en escritorio */
+                flex-direction: column;
+                background-color: var(--surface);
+                border-right: 1px solid var(--outline);
+                padding: 24px 16px;
+                transition: transform 0.3s ease;
+            }
+            .sidebar-header { text-align: center; margin-bottom: 32px; flex-shrink: 0; }
+            .sidebar-logo { width: 60px; height: 60px; border-radius: 12px; margin-bottom: 8px; }
+            .sidebar-title { font-size: 20px; font-weight: 600; color: var(--on-surface); }
+            
+            .sidebar-nav { flex-grow: 1; overflow-y: auto; }
+            
+            /* Re-estilo de .nav-item para el sidebar */
+            #sidebar .nav-item {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                justify-content: flex-start;
+                width: 100%;
+                padding: 10px 16px;
+                margin-bottom: 4px;
+                border-radius: 8px;
+                flex: none;
+                transition: background-color 0.2s, color 0.2s;
+            }
+            #sidebar .nav-item .nav-label {
+                font-size: 14px;
+                font-weight: 500;
+                margin-left: 16px;
+            }
+            #sidebar .nav-item .material-icons {
+                 margin-bottom: 0;
+            }
+            #sidebar .nav-item:hover {
+                background-color: var(--surface-variant);
+            }
+            #sidebar .nav-item.active {
+                background-color: var(--primary-color);
+                color: var(--on-primary);
+                font-weight: 600;
+            }
+            #sidebar .nav-item.active:hover {
+                background-color: var(--primary-variant);
+            }
+
+            /* NUEVO: Sidebar Footer para perfil y acciones */
+            .sidebar-footer {
+                flex-shrink: 0;
+                margin-top: 16px;
+            }
+            .sidebar-profile {
+                padding: 12px;
+                border-top: 1px solid var(--outline);
+            }
+            .user-info {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 12px;
+            }
+            .user-avatar {
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                background: var(--primary-color);
+                color: var(--on-primary);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 600;
+                font-size: 16px;
+            }
+            .user-details .user-name {
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--on-surface);
+            }
+            .user-details .user-email {
+                font-size: 12px;
+                color: var(--secondary-color);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 150px;
+            }
+            .sidebar-actions {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+             .sidebar-actions .icon-button {
+                width: 100%;
+                height: 36px;
+                background: var(--surface-variant);
+                border-radius: 8px;
+                color: var(--secondary-color);
+             }
+             .sidebar-actions .icon-button:hover {
+                 background: var(--outline);
+                 color: var(--on-surface);
+             }
+
+
+            /* Ajustes del Contenido Principal */
+            #app-root {
+                max-width: none;
+                height: 100vh;
+                padding-bottom: 0;
+            }
+            .main-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 16px 32px;
+                border-bottom: 1px solid var(--outline);
+                flex-shrink: 0;
+            }
+            #main-header-title { font-size: 28px; font-weight: 700; }
+            .btn-add-item {
+                display: inline-flex;
+                gap: 8px;
+                padding: 10px 20px;
+                border-radius: 12px;
+                font-size: 15px;
+                font-weight: 600;
+            }
+            .main-content { height: 100%; }
+            .view { padding: 32px; padding-bottom: 32px; overflow-y: auto; }
+            #toast-container {
+                bottom: 20px;
+                left: auto;
+                right: 20px;
+                transform: none;
+            }
+
+            /* Adaptación de Componentes */
+            .modal-overlay {
+                align-items: center;
+                padding: 40px;
+            }
+            .modal {
+                border-radius: 16px;
+                transform: scale(0.95);
+                transition: transform 0.3s var(--ease-out-quint), opacity 0.3s;
+                max-width: 520px;
+                opacity: 0;
+            }
+            .modal-overlay.active .modal {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            .list-item-swipe-container.item-card {
+                max-width: 900px;
+                margin-left: auto;
+                margin-right: auto;
+                transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+            }
+            .list-item-swipe-container.item-card:hover {
+                background-color: var(--surface-variant);
+                transform: translateY(-2px);
+                box-shadow: var(--shadow-layered);
+            }
+            
+            .item-card-swipe-background { display: none; }
+            
+            #calendarView {
+                display: grid;
+                grid-template-columns: minmax(0, 2.5fr) minmax(320px, 1fr);
+                gap: 24px;
+                padding: 24px;
+                height: 100%;
+            }
+            .calendar-container {
+                border-bottom: none;
+                padding: 0;
+            }
+            .agenda-list-container {
+                border-left: 1px solid var(--outline);
+                padding-left: 24px;
+                height: 100%;
+                overflow-y: auto;
+                max-height: calc(100vh - 120px); /* Ajustar altura para scroll */
+            }
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="welcomeScreen" class="intro-screen visible"><img src="aiDANaI-Agenda.jpg" id="welcomeImage" alt="Logo Agenda aiDANaI"></div>
+    <div id="quoteScreen" class="intro-screen"><p id="quoteText"></p><span id="quoteAuthor"></span></div>
+    <div id="exitScreen" class="intro-screen"><h1 id="exitMessage">Hasta la próxima...</h1></div>
+
+    <div id="login-screen" class="login-view">
+        <div class="login-view__card">
+            <h2 id="login-title" class="login-view__title">🗓️ Agenda aiDANaI</h2>
+            <form id="login-form" novalidate>
+                <div class="form-group"><input type="email" id="login-email" class="form-input" placeholder="Correo electrónico" required autocomplete="email" autocapitalize="none"><span class="form-error" id="login-email-error"></span></div>
+                <div class="form-group"><input type="password" id="login-password" class="form-input" placeholder="Contraseña" required autocomplete="current-password"><span class="form-error" id="login-password-error"></span></div>
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button type="button" data-action="login" class="btn btn-primary" style="flex: 1;">Iniciar Sesión</button>
+                    <button type="button" data-action="register" class="btn btn-secondary" style="flex: 1;">Registrarse</button>
+                </div>
+                <p id="login-error" class="form-error" style="min-height: 16px; margin-top: 8px;"></p>
+            </form>
+        </div>
+    </div>
+    
+    <div id="app-root-container">
+        
+        <aside id="sidebar">
+            <header class="sidebar-header">
+                <img src="aiDANaI-Agenda.jpg" alt="Logo" class="sidebar-logo">
+                <h1 class="sidebar-title">aiDANaI Agenda</h1>
+            </header>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-view="tasks" title="Tareas (T)" aria-label="Ver Tareas">
+                    <span class="material-icons">task_alt</span>
+                    <span class="nav-label">Tareas</span>
+                </button>
+                <button class="nav-item" data-view="calendar" title="Agenda (A)" aria-label="Ver Agenda/Calendario">
+                    <span class="material-icons">calendar_today</span>
+                    <span class="nav-label">Agenda</span>
+                </button>
+                <button class="nav-item" data-view="help" title="Ayuda (H)" aria-label="Ver Ayuda y Configuración">
+                    <span class="material-icons">help_outline</span>
+                    <span class="nav-label">Ayuda</span>
+                </button>
+            </nav>
+            <footer class="sidebar-footer">
+                <div class="sidebar-profile">
+                    <div class="user-info">
+                        <div id="user-avatar" class="user-avatar">?</div>
+                        <div class="user-details">
+                            <div id="user-name" class="user-name">Usuario</div>
+                            <div id="user-email" class="user-email">cargando...</div>
+                        </div>
+                    </div>
+                    <div class="sidebar-actions">
+                         <button id="sidebar-theme-btn" class="icon-button" title="Cambiar Tema" aria-label="Cambiar Tema">
+                             <span class="material-icons">brightness_6</span>
+                         </button>
+                         <button id="sidebar-intro-btn" class="icon-button" title="Mostrar Bienvenida" aria-label="Activar o desactivar pantalla de bienvenida">
+                             <span class="material-icons">movie</span>
+                         </button>
+                    </div>
+                </div>
+                 <button class="nav-item" data-action="logout" title="Salir de la App" aria-label="Salir de la aplicación" style="width: 100%; margin-top: 8px;">
+                    <span class="material-icons">logout</span>
+                    <span class="nav-label">Salir</span>
+                </button>
+            </footer>
+        </aside>
+
+        <div id="app-root">
+            <header class="main-header">
+                <h2 id="main-header-title">Tareas</h2>
+                <button id="main-add-item-btn" class="btn btn-primary btn-add-item">
+                    <span class="material-icons">add</span>
+                    <span>Añadir Ítem</span>
+                </button>
+            </header>
+
+            <main class="main-content" id="main-content-area">
+                 <div id="tasksView" class="view active">
+                    <h3 class="section-title" id="pending-items-title">
+                        <span>Pendientes</span>
+                        <button id="tasks-search-btn" class="icon-button" title="Buscar" aria-label="Buscar"><span class="material-icons">search</span></button>
+                    </h3>
+                    <div id="pendingItemsList"></div>
+                    <h3 class="section-title" id="completed-items-title" style="margin-top:24px;">Completados</h3>
+                    <div id="completedItemsList"></div>
+                    <div id="emptyItems" class="empty-state" style="display: none;"></div>
+                </div>
+                <div id="calendarView" class="view">
+                    <div class="calendar-container">
+                        <div class="calendar-header">
+                            <button id="calendar-title-btn" title="Seleccionar mes y año" aria-label="Seleccionar mes y año"></button>
+                            <div class="calendar-nav">
+                                 <button id="calendar-search-btn" class="icon-button" title="Buscar" aria-label="Buscar"><span class="material-icons">search</span></button>
+                                 <button id="today-btn" class="icon-button" title="Hoy" aria-label="Volver a la fecha de hoy"><span class="material-icons">today</span></button>
+                                 <button id="prev-nav-btn" class="icon-button" title="Mes anterior" aria-label="Mes anterior"><span class="material-icons">chevron_left</span></button>
+                                 <button id="next-nav-btn" class="icon-button" title="Mes siguiente" aria-label="Mes siguiente"><span class="material-icons">chevron_right</span></button>
+                                 <div id="sync-indicator" role="status" aria-label="Sincronizando datos"><span class="material-icons">sync</span></div>
+                            </div>
+                        </div>
+                        <div id="calendar-main-area">
+                            <div id="calendar-grid" class="calendar-grid">
+                                <div class="calendar-weekdays" id="calendarWeekdays"></div>
+                                <div class="calendar-days" id="calendarDays"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="agenda-list-container" id="agendaListContainer">
+                         <h3 class="section-title" style="padding: 0 16px;" id="agenda-title"><span class="material-icons">view_agenda</span>Próximos eventos</h3>
+                        <div id="agendaList"></div>
+                    </div>
+                </div>
+                <div id="searchView" class="view">
+                    <div id="search-container" class="search-wrapper">
+                        <input type="search" id="search-input" class="search-input" placeholder="Buscar eventos o tareas..." aria-label="Buscar ítems">
+                        <button id="search-clear-btn" class="search-clear-btn" aria-label="Limpiar búsqueda"><span class="material-icons">close</span></button>
+                    </div>
+                    <h3 class="section-title"><span>Resultados de la Búsqueda</span></h3>
+                    <div id="searchResultsList"></div>
+                </div>
+                <div id="helpView" class="view">
+                    <div class="settings-section help-section">
+                        <h3 class="section-title" style="font-size: 20px; letter-spacing: 0.3px;"><span><span class="material-icons">rocket_launch</span>Guía Maestra de aiDANaI</span></h3>
+                        <p style="padding: 0 4px 12px; font-size: 15px; color: var(--secondary-color);">¡Hola! Tu agenda inteligente está lista para ser tu segundo cerebro 🧠. Explora esta guía para dominar cada función.</p>
+                        
+                        <details open>
+                            <summary>Conceptos: Tareas vs. Eventos<span class="material-icons">expand_more</span></summary>
+                            <div class="details-content">
+                                <ul>
+                                    <li><b>Tareas (<span class="material-icons" style="color:var(--accent-task)">task_alt</span>):</b> Son tus "cosas por hacer". No dependen de una fecha/hora específica. Se identifican con una barra lateral <b>roja</b>.</li>
+                                    <li><b>Eventos (<span class="material-icons" style="color:var(--accent-event-normal)">event</span>):</b> Ocurren en un momento concreto. Siempre tienen fecha y hora. Se identifican con una barra <b>verde</b> (normales) o <b>azul</b> (importantes).</li>
+                                </ul>
+                            </div>
+                        </details>
+                        
+                        <details>
+                            <summary>Interacción: Móvil vs. Escritorio ✨<span class="material-icons">expand_more</span></summary>
+                            <div class="details-content">
+                                <p>Interactúa de la forma más natural según tu dispositivo:</p>
+                                <ul>
+                                    <li><b>Añadir Ítem:</b> Usa el botón flotante <span class="material-icons" style="background: var(--primary-color); color: var(--on-primary); border-radius: 8px; padding: 2px;">add</span> en móvil, o el botón "+ Añadir Ítem" en la cabecera en la versión de escritorio.</li>
+                                    <li><b>Editar Ítem:</b> Un <b>simple toque (tap) o clic</b> en cualquier ítem abre la ventana de edición.</li>
+                                    <li><b>Completar Ítem:</b> <b>(Móvil)</b> Desliza la tarjeta a la DERECHA. <b>(Escritorio)</b> Haz clic en el círculo de verificación a la izquierda del ítem.</li>
+                                    <li><b>Eliminar Ítem:</b> <b>(Móvil)</b> Desliza la tarjeta a la IZQUIERDA. <b>(Escritorio)</b> Haz clic en el ítem para editarlo y pulsa el botón de la papelera.</li>
+                                </ul>
+                            </div>
+                        </details>
+                        
+                        <details>
+                            <summary>Funciones Especiales 🚀<span class="material-icons">expand_more</span></summary>
+                            <div class="details-content">
+                                <ul>
+                                     <li><b><span class="material-icons" style="color:var(--primary-color)">autorenew</span> Eventos Recurrentes:</b> Al crear o editar un evento, puedes hacer que se repita (diaria, semanal, mensual o anualmente). Al completar un evento recurrente, la app creará automáticamente la siguiente ocurrencia por ti.</li>
+                                     <li><b><span class="material-icons" style="color:var(--accent-event-important)">label_important</span> Eventos Importantes:</b> Marca un evento como "importante" para que destaque con un color azul, tanto en la lista como en el calendario.</li>
+                                     <li><b><span class="material-icons" style="color:var(--primary-color)">dark_mode</span> Tema Oscuro/Claro:</b> Cambia entre un tema claro y oscuro desde el botón <span class="material-icons">brightness_6</span> en la barra de navegación (móvil) o en el pie del menú lateral (escritorio). Tu preferencia se guardará.</li>
+                                </ul>
+                            </div>
+                        </details>
+
+                        <details>
+                            <summary>Atajos de Teclado (Escritorio) ⌨️<span class="material-icons">expand_more</span></summary>
+                            <div class="details-content">
+                                <p>Cuando no estés editando un texto, usa estas teclas para navegar más rápido:</p>
+                                <table>
+                                    <thead><tr><th>Tecla</th><th>Acción</th></tr></thead>
+                                    <tbody>
+                                        <tr><td><kbd>N</kbd></td><td>Abrir modal para <b>N</b>uevo ítem</td></tr>
+                                        <tr><td><kbd>T</kbd></td><td>Ir a la vista de <b>T</b>areas</td></tr>
+                                        <tr><td><kbd>A</kbd></td><td>Ir a la vista de <b>A</b>genda/Calendario</td></tr>
+                                        <tr><td><kbd>H</kbd></td><td>Ir a la vista de <b>H</b>elp (Ayuda)</td></tr>
+                                        <tr><td><kbd>Esc</kbd></td><td>Cerrar ventana modal activa</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </main>
+
+            <button id="fab-add-item" class="fab" title="Añadir nuevo ítem" aria-label="Añadir nuevo ítem"><span class="material-icons">add</span></button>
+            
+            <nav class="bottom-nav">
+                <button class="nav-item active" data-view="tasks" title="Tareas" aria-label="Ver Tareas"><span class="material-icons">task_alt</span><span class="nav-label">Tareas</span></button>
+                <button class="nav-item" data-view="calendar" title="Agenda" aria-label="Ver Agenda/Calendario"><span class="material-icons">calendar_today</span><span class="nav-label">Agenda</span></button>
+                <button class="nav-item" data-view="help" title="Ayuda" aria-label="Ver Ayuda y Configuración"><span class="material-icons">help_outline</span><span class="nav-label">Ayuda</span></button>
+                <button class="nav-item" id="nav-theme-btn" title="Cambiar Tema" aria-label="Cambiar Tema"><span class="material-icons">brightness_6</span><span class="nav-label">Tema</span></button>
+                <button class="nav-item" data-action="logout" title="Salir" aria-label="Salir de la aplicación"><span class="material-icons">logout</span><span class="nav-label">Salir</span></button>
+            </nav>
+        </div>
+    </div>
+    
+    <div id="add-item-modal" class="modal-overlay">
+        <div class="modal">
+            <h2 id="modal-title-h3" class="modal-title">Crear Nuevo</h2>
+            <form id="add-item-form">
+                <input type="hidden" id="item-id"><input type="hidden" id="item-local-id">
+                <div class="form-group"><label class="form-label" for="item-description">Descripción</label><textarea class="form-input" id="item-description" placeholder="Describe el ítem..."></textarea></div>
+                <div class="form-group"><label class="form-label" for="item-type">Tipo</label><select class="form-select" id="item-type"><option value="task">Tarea (Roja, sin fecha)</option><option value="agenda">Evento (Verde/Azul, con fecha)</option></select></div>
+                <div id="datetime-notification-group" class="form-group-datetime"><div class="form-group"><label class="form-label" for="item-datetime">Fecha y Hora</label><input type="text" class="form-input" id="item-datetime" placeholder="Selecciona fecha y hora..."></div><div id="event-options" style="margin-top: 12px;"><div class="form-group form-group-inline"><input type="checkbox" id="item-important" style="width: auto; height: 20px;"><label for="item-important" style="margin-bottom: 0; font-weight: normal; color: var(--on-surface);">Marcar como importante (azul)</label></div><div class="form-group form-group-inline" style="margin-top: 8px;"><input type="checkbox" id="item-notification-enabled" style="width: auto; height: 20px;"><label for="item-notification-enabled" style="margin-bottom: 0; font-weight: normal; color: var(--on-surface);">Activar notificación</label></div><div class="form-group" style="margin-top: 12px;"><label class="form-label" for="item-recurrence">Repetir</label><select class="form-select" id="item-recurrence"><option value="none">No repetir</option><option value="daily">Diariamente</option><option value="weekly">Semanalmente</option><option value="monthly">Mensualmente</option><option value="yearly">Anualmente</option></select></div></div></div>
+                <div class="modal-actions"><button type="button" class="btn btn-danger" id="delete-item-btn" style="margin-right: auto; display: none;" title="Eliminar" aria-label="Eliminar ítem"><span class="material-icons">delete</span></button><button type="button" class="btn btn-secondary" id="cancel-item-btn" title="Cancelar" aria-label="Cancelar"><span class="material-icons">close</span></button><button type="submit" class="btn btn-primary" id="save-item-btn" title="Guardar" aria-label="Guardar cambios"><span class="material-icons">check</span></button></div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="date-picker-modal" class="modal-overlay">
+         <div class="modal">
+            <h3 class="modal-title">Ir a la fecha</h3>
+            <form id="date-picker-form"><div class="form-group"><label class="form-label">Mes</label><select id="month-select" class="form-select"></select></div><div class="form-group"><label class="form-label">Año</label><input type="number" id="year-select" min="2020" max="2030" step="1" class="form-input"></div><div class="modal-actions"><button type="button" class="btn btn-secondary" id="cancel-date-picker-btn">Cancelar</button><button type="submit" class="btn btn-primary">Ir</button></div></form>
+        </div>
+    </div>
+
+    <div id="toast-container" aria-live="assertive"></div>
+    <div id="swipe-tooltip-overlay" style="display:none;"></div>
+
+    <script>
+    /* ================================================================== */
+    /* JAVASCRIPT REFACTORIZADO Y SIMPLIFICADO                          */
+    /* ================================================================== */
+
+    // 1. GLOBAL VARIABLES & CONFIG
+    const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
+    const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const QUOTES = [ { text: "La única forma de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs" }, { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" }, { text: "Cree que puedes y ya estás a medio camino.", author: "Theodore Roosevelt" } ];
+    
+    let flatpickrInstance = null;
+    let activeTimers = {};
+    let lastScrollY = 0;
+    let currentUser = null, unsubscribeFromDb = null, saveTimeout = null, db = {};
+    const originalButtonTexts = new Map();
+
+    const initialState = { currentView: 'tasks', calendar: { currentMonth: new Date().getMonth(), currentYear: new Date().getFullYear(), selectedDate: dateToYYYYMMDD(new Date()) }, isLoading: false, fetchedMonths: new Set(), pendingSyncOperations: 0, theme: 'dark', showIntro: true, searchQuery: '' };
+    let appState = {...initialState};
+
+    const gebi = id => document.getElementById(id);
+    const qs = selector => document.querySelector(selector);
+    const qsa = selector => document.querySelectorAll(selector);
+    function debounce(func, delay) { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; }
+    function dateToYYYYMMDD(date) { if (!date || isNaN(date)) return ''; return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`; }
+    function dateToHHMM(date) { if (!date || isNaN(date)) return "00:00"; return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`; }
+    function yyyymmddToDate(dateStr) { if (!dateStr) return new Date(); const parts = dateStr.split('-'); return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)); }
+    function showToast(message, type = 'default', duration = 3000) { const tc = gebi('toast-container'); if (!tc) return; const t = document.createElement('div'); t.className = `toast`; t.textContent = message; tc.appendChild(t); setTimeout(() => t.remove(), duration + 300); }
+    function uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }); }
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    function triggerHapticFeedback(duration = 50) { if ('vibrate' in navigator) { try { navigator.vibrate(duration); } catch (e) {} } }
+    function autoGrow(element) { if(element) { element.style.height = 'auto'; element.style.height = (element.scrollHeight) + 'px'; } }
+    
+    document.addEventListener('DOMContentLoaded', initApp);
+
+    // 2. FIREBASE & DATA HANDLING
+    firebase.initializeApp(firebaseConfig);
+    const fbAuth = firebase.auth(), fbDb = firebase.firestore();
+
+    const getInitialDb = () => ({ 
+        items: [], 
+        config: { showIntro: true, theme: 'dark' } 
+    });
+
+    const saveData = (buttonElement = null, successCallback = () => {}) => {
+        if (!currentUser) { showToast("Error: No hay usuario autenticado.", "danger"); return; }
+        clearTimeout(saveTimeout);
+        gebi('sync-indicator')?.classList.add('active');
+        if (buttonElement) setButtonLoading(buttonElement, true, 'Guardando...');
+        saveTimeout = setTimeout(() => {
+            fbDb.collection('users').doc(currentUser.uid).set({ db })
+                .then(() => { 
+                    if (buttonElement) setButtonLoading(buttonElement, false); 
+                    successCallback(); 
+                    setTimeout(() => gebi('sync-indicator')?.classList.remove('active'), 500);
+                })
+                .catch(error => { 
+                    console.error("Error al guardar datos:", error); 
+                    showToast("Error al guardar.", "danger"); 
+                    if (buttonElement) setButtonLoading(buttonElement, false);
+                    gebi('sync-indicator')?.classList.remove('active');
+                });
+        }, 300);
+    };
+
+    const loadData = uid => {
+        const userDocRef = fbDb.collection('users').doc(uid);
+        if (unsubscribeFromDb) unsubscribeFromDb();
+        unsubscribeFromDb = userDocRef.onSnapshot(doc => {
+            let dataNeedsMigration = false;
+            if (doc.exists && doc.data().db) {
+                db = doc.data().db;
+                if (!db.items) { db.items = []; dataNeedsMigration = true; }
+                if (!db.config) { db.config = { showIntro: true, theme: 'dark' }; dataNeedsMigration = true; }
+                if (db.config.showIntro === undefined) { db.config.showIntro = true; dataNeedsMigration = true; }
+                if (db.config.theme === undefined) { db.config.theme = 'dark'; dataNeedsMigration = true; }
+            } else { 
+                db = getInitialDb(); 
+                dataNeedsMigration = true; 
+            }
+            if (dataNeedsMigration) saveData();
+            startMainApp();
+        }, error => { 
+            console.error("Error con Firestore:", error); 
+            showToast("Error de conexión.", "danger"); 
+        });
+    };
+
+    // 3. APP INITIALIZATION & AUTH (SIMPLIFICADO)
+    async function initApp() {
+        attachGlobalEventListeners();
+        initializeDatePicker();
+        const showIntroPref = localStorage.getItem('showIntro') === 'false' ? false : true;
+        await runWelcomeSequence(showIntroPref);
+        checkAuthState();
+    }
+
+    const checkAuthState = () => fbAuth.onAuthStateChanged(user => { 
+        if (user) { 
+            currentUser = user; 
+            // Rellenar datos del perfil en el sidebar
+            const userEmailEl = gebi('user-email');
+            const userNameEl = gebi('user-name');
+            const userAvatarEl = gebi('user-avatar');
+            if(userEmailEl) userEmailEl.textContent = user.email;
+            if(userNameEl) userNameEl.textContent = user.displayName || user.email.split('@')[0];
+            if(userAvatarEl) userAvatarEl.textContent = (user.displayName || user.email)[0].toUpperCase();
+            
+            loadData(user.uid); 
+        } else { 
+            currentUser = null; 
+            if (unsubscribeFromDb) unsubscribeFromDb(); 
+            db = getInitialDb(); 
+            showLoginScreen(); 
+        } 
+    });
+
+    const startMainApp = () => {
+        applyTheme(db.config.theme || 'dark');
+        appState.showIntro = db.config.showIntro;
+        updateIntroToggleVisual();
+        
+        gebi('login-screen').classList.remove('login-view--visible');
+        gebi('app-root-container').style.display = 'grid';
+        gebi('app-root').classList.add('visible'); 
+        
+        renderApp();
+        checkMissedNotifications();
+        scheduleAllNotifications();
+    };
+    
+    const showLoginScreen = () => {
+        applyTheme(localStorage.getItem('theme') || 'dark');
+        gebi('app-root-container').style.display = 'none';
+        gebi('app-root').classList.remove('visible');
+        gebi('login-screen').classList.add('login-view--visible');
+    };
+    
+    const setButtonLoading = (btn, isLoading, text = 'Cargando...') => { if (!btn) return; if (isLoading) { if (!originalButtonTexts.has(btn)) originalButtonTexts.set(btn, btn.innerHTML); btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> <span>${text}</span>`; } else { btn.disabled = false; if (originalButtonTexts.has(btn)) { btn.innerHTML = originalButtonTexts.get(btn); originalButtonTexts.delete(btn); } } };
+    const displayError = (id, msg) => { const err = gebi(`${id}-error`); if (err) { err.textContent = msg; } const inp = gebi(id); if (inp) inp.classList.add('form-input--invalid'); };
+    const clearError = id => { const err = gebi(`${id}-error`); if (err) { err.textContent = ''; } const inp = gebi(id); if (inp) inp.classList.remove('form-input--invalid'); };
+    const clearAllErrors = formId => { const f = gebi(formId); if (!f) return; f.querySelectorAll('.form-error').forEach(e => e.textContent = ''); f.querySelectorAll('.form-input--invalid').forEach(e => e.classList.remove('form-input--invalid')); };
+    const handleLogin = btn => { triggerHapticFeedback(); const email = gebi('login-email').value.trim(), password = gebi('login-password').value, errEl = gebi('login-error'); clearAllErrors('login-form'); errEl.textContent = ''; let v = true; if (!email) { displayError('login-email', 'El correo es obligatorio.'); v = false; } if (!password) { displayError('login-password', 'La contraseña es obligatoria.'); v = false; } if (!v) return; setButtonLoading(btn, true, 'Iniciando...'); fbAuth.signInWithEmailAndPassword(email, password).then(() => showToast(`¡Bienvenido/a de nuevo!`)).catch(err => { setButtonLoading(btn, false); if (['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential'].includes(err.code)) errEl.textContent = 'Error: Credenciales incorrectas.'; else if (err.code === 'auth/invalid-email') displayError('login-email', 'Formato de correo no válido.'); else errEl.textContent = 'Error al iniciar sesión.'; }); };
+    const handleRegister = btn => { triggerHapticFeedback(); const email = gebi('login-email').value.trim(), password = gebi('login-password').value, errEl = gebi('login-error'); clearAllErrors('login-form'); errEl.textContent = ''; let v = true; if (!email) { displayError('login-email', 'El correo es obligatorio.'); v = false; } if (password.length < 6) { displayError('login-password', 'La contraseña debe tener al menos 6 caracteres.'); v = false; } if (!v) return; setButtonLoading(btn, true, 'Registrando...'); fbAuth.createUserWithEmailAndPassword(email, password).then(() => showToast(`¡Registro completado!`)).catch(err => { setButtonLoading(btn, false); if (err.code == 'auth/weak-password') displayError('login-password', 'La contraseña debe tener al menos 6 caracteres.'); else if (err.code == 'auth/email-already-in-use') displayError('login-email', 'El correo ya está registrado.'); else if (err.code === 'auth/invalid-email') displayError('login-email', 'Formato de correo no válido.'); else errEl.textContent = 'Error en el registro.'; }); };
+    async function runWelcomeSequence(show) { if (!show) { gebi('welcomeScreen').style.display = 'none'; gebi('quoteScreen').style.display = 'none'; return; } const welcomeScreen = gebi('welcomeScreen'); const quoteScreen = gebi('quoteScreen'); await wait(2500); welcomeScreen.style.opacity = '0'; const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)]; gebi('quoteText').textContent = `“${quote.text}”`; gebi('quoteAuthor').textContent = `– ${quote.author}`; quoteScreen.classList.add('visible'); await wait(100); quoteScreen.style.opacity = '1'; await wait(3000); quoteScreen.style.opacity = '0'; await wait(500); welcomeScreen.style.display = 'none'; quoteScreen.style.display = 'none'; }
+
+
+    // 4. RENDERING & UI LOGIC
+    function renderApp() { 
+        if (!db || !currentUser) return;
+        updateNav(appState.currentView); 
+        renderCurrentView(appState); 
+    }
+
+    function renderCurrentView(state) {
+        qsa('.view').forEach(v => v.classList.remove('active'));
+        const viewEl = gebi(`${state.currentView}View`);
+        if (viewEl) { 
+            viewEl.classList.add('active');
+            switch (state.currentView) {
+                case 'calendar': renderCalendarView(state); break;
+                case 'tasks': renderTaskListView(state); break;
+                case 'search': renderSearchView(state); break;
+            }
+        }
+    }
+    
+    function updateNav(currentView) { 
+        qsa('#sidebar .nav-item[data-view], .bottom-nav .nav-item[data-view]').forEach(item => { 
+            item.classList.toggle('active', item.dataset.view === currentView); 
+        }); 
+        const itemTypeSelect = gebi('item-type'); 
+        if(itemTypeSelect) { itemTypeSelect.value = currentView === 'tasks' ? 'task' : 'agenda'; }
+
+        const headerTitleEl = gebi('main-header-title');
+        if (headerTitleEl) {
+            let title = '';
+            switch(currentView) {
+                case 'tasks': title = 'Mis Tareas'; break;
+                case 'calendar': title = 'Agenda y Calendario'; break;
+                case 'search': title = 'Búsqueda Global'; break;
+                case 'help': title = 'Guía y Ayuda'; break;
+            }
+            headerTitleEl.textContent = title;
+        }
+    }
+    
+    function renderUpcomingAgenda(items, selectedDateStr) {
+        const agendaList = gebi('agendaList'); 
+        const agendaTitle = gebi('agenda-title');
+        if (!agendaList || !agendaTitle) return;
+
+        const startDate = yyyymmddToDate(selectedDateStr); 
+        startDate.setHours(0, 0, 0, 0);
+        const upcomingItems = items.filter(item => item.type === 'agenda' && item.dueDate && new Date(item.dueDate) >= startDate).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+        
+        const todayStr = dateToYYYYMMDD(new Date());
+        if (selectedDateStr === todayStr) { 
+            agendaTitle.innerHTML = `<span class="material-icons">view_agenda</span><span>Próximos Eventos</span>`; 
+        } else { 
+            const friendlyDate = startDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' }); 
+            agendaTitle.innerHTML = `<span class="material-icons">event</span><span>Eventos desde el ${friendlyDate}</span>`; 
+        }
+
+        agendaList.innerHTML = '';
+        let lastHeaderDate = null;
+
+        if (upcomingItems.length === 0) {
+            agendaList.innerHTML = `<div class="empty-state" style="padding-top:2rem;"><span class="material-icons">event_available</span><div>No hay eventos futuros desde esta fecha.</div></div>`;
+            return;
+        }
+
+        upcomingItems.forEach(item => {
+            const itemDate = new Date(item.dueDate);
+            const itemDateStr = dateToYYYYMMDD(itemDate);
+
+            if (itemDateStr !== lastHeaderDate) {
+                const header = document.createElement('div');
+                header.className = 'agenda-date-header';
+                header.textContent = itemDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+                agendaList.appendChild(header);
+                lastHeaderDate = itemDateStr;
+            }
+
+            const itemEl = document.createElement('div');
+            itemEl.className = `list-item-swipe-container agenda-item-compact ${item.isComplete ? 'completed' : ''}`;
+            itemEl.dataset.id = item.localId;
+            const time = dateToHHMM(itemDate);
+            const itemColor = item.isImportant ? 'var(--accent-event-important)' : 'var(--accent-event-normal)';
+            itemEl.innerHTML = `<div class="item-content agenda-item-content" data-action="edit"><div class="indicator" style="background-color:${itemColor};"></div><span class="time">${time}</span><div class="title">${item.description}</div></div>`;
+            itemEl.querySelector('[data-action="edit"]').onclick = () => openAddItemModal(item);
+            agendaList.appendChild(itemEl);
+        });
+    }
+
+    function createItemNode(item) {
+        const itemEl = document.createElement('div');
+        itemEl.dataset.id = item.localId;
+        updateItemNode(itemEl, item);
+        itemEl.addEventListener('click', (e) => { 
+            const action = e.target.closest('[data-action]')?.dataset.action; 
+            if (action) { 
+                e.stopPropagation(); 
+                const id = item.localId; 
+                if (action === 'complete') handleItemComplete(id, !item.isComplete); 
+                if (action === 'edit') openAddItemModal(item); 
+                if (action === 'duplicate') handleItemDuplicate(id); 
+            } 
+        });
+        return itemEl;
+    }
+
+    function renderTaskListView() { const { items } = db; const pendingRaw = items.filter(i => !i.isComplete); const pendingTasks = pendingRaw.filter(i => i.type === 'task').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); const pendingEvents = pendingRaw.filter(i => i.type === 'agenda').sort((a, b) => (a.dueDate && b.dueDate) ? new Date(a.dueDate) - new Date(b.dueDate) : 0); const pendingItems = [...pendingTasks, ...pendingEvents]; const completedItems = items.filter(i => i.isComplete).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0)); gebi('pending-items-title').style.display = pendingItems.length > 0 ? 'flex' : 'none'; gebi('completed-items-title').style.display = completedItems.length > 0 ? 'flex' : 'none'; renderItemsList(gebi('pendingItemsList'), pendingItems); renderItemsList(gebi('completedItemsList'), completedItems.slice(0, 20)); const emptyEl = gebi('emptyItems'); if (emptyEl) { if (items.length === 0) { emptyEl.style.display = 'block'; emptyEl.innerHTML = `<span class="material-icons" style="font-size: 48px;">task_alt</span><div style="font-size: 1.2rem; margin-top: 1rem;">Todo en orden</div><p>Pulsa el botón '+' para añadir una nueva tarea o evento.</p>`; } else { emptyEl.style.display = 'none'; } } }
+    function updateItemNode(node, item) { node.className = `list-item-swipe-container item-card ${item.isComplete ? 'completed' : ''}`; let itemColor, iconName; if (item.type === 'task') { itemColor = 'var(--accent-task)'; iconName = 'task_alt'; } else { itemColor = item.isImportant ? 'var(--accent-event-important)' : 'var(--accent-event-normal)'; iconName = 'event'; } node.style.borderLeftColor = itemColor; let metaInfo = `<span class="material-icons" style="font-size: 14px; vertical-align: -2px; color: ${itemColor};">${iconName}</span>`; if (item.dueDate) { metaInfo += ` <span style="margin-left: 4px;">${new Date(item.dueDate).toLocaleDateString('es-ES', {day: 'numeric', month: 'short'})} ${dateToHHMM(new Date(item.dueDate))}</span>`; } if (item.recurrenceRule && item.recurrenceRule !== 'none') { metaInfo += `<span class="material-icons recurrent-icon" title="Evento recurrente">autorenew</span>`; } const isCompleted = item.isComplete; const checkboxLabel = isCompleted ? 'Marcar como pendiente' : 'Marcar como completado'; node.innerHTML = `<div class="item-checkbox ${isCompleted ? 'checked' : ''}" data-action="complete" aria-label="${checkboxLabel}">${isCompleted ? '<span class="material-icons">check</span>' : ''}</div><div class="item-content" data-action="edit"><div class="item-title ${isCompleted ? 'completed' : ''}">${item.description}</div><div class="item-meta">${metaInfo}</div></div><div class="item-actions"><button class="icon-button" data-action="duplicate" title="Duplicar" aria-label="Duplicar ítem"><span class="material-icons">content_copy</span></button></div>`; }
+    function renderItemsList(container, items) { if (!container) return; const existingNodes = new Map([...container.children].map(node => [node.dataset.id, node])); const itemsToKeep = new Set(); items.forEach(item => { itemsToKeep.add(item.localId); const existingNode = existingNodes.get(item.localId); if (existingNode) { updateItemNode(existingNode, item); } else { container.appendChild(createItemNode(item)); } }); existingNodes.forEach((node, id) => { if (!itemsToKeep.has(id)) { node.remove(); } }); }
+    function renderSearchView(state) { const { searchQuery } = state; const { items } = db; const resultsList = gebi('searchResultsList'); if (!resultsList) return; const query = searchQuery.trim().toLowerCase(); if (!query) { resultsList.innerHTML = `<div class="empty-state"><span class="material-icons">search</span><div>Escribe para buscar...</div></div>`; return; } const results = items.filter(item => item.description.toLowerCase().includes(query)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); if (results.length > 0) { renderItemsList(resultsList, results); } else { resultsList.innerHTML = `<div class="empty-state"><span class="material-icons">search_off</span><div>No se encontraron resultados para "${searchQuery}"</div></div>`; } }
+    function renderCalendarView(state) { const { calendar } = state; const { items } = db; const { currentMonth, currentYear, selectedDate } = calendar; gebi('calendar-title-btn').textContent = `${MESES[currentMonth]} ${currentYear}`; const weekdaysContainer = gebi('calendarWeekdays'); if (weekdaysContainer && !weekdaysContainer.hasChildNodes()) { weekdaysContainer.innerHTML = DIAS_SEMANA.map((day) => `<div class="weekday">${day}</div>`).join(''); } const calendarDays = gebi('calendarDays'); if (calendarDays) { calendarDays.innerHTML = ''; const firstDayOfMonth = new Date(currentYear, currentMonth, 1); const offset = (firstDayOfMonth.getDay() + 6) % 7; const startDate = new Date(firstDayOfMonth); startDate.setDate(startDate.getDate() - offset); const todayStr = dateToYYYYMMDD(new Date()); const dailyEventMarkers = new Map(); items.filter(it => it.type === 'agenda' && it.dueDate).forEach(it => { const dateStr = dateToYYYYMMDD(new Date(it.dueDate)); if (!dailyEventMarkers.has(dateStr)) { dailyEventMarkers.set(dateStr, { hasImportant: false, hasNormal: false }); } const marker = dailyEventMarkers.get(dateStr); if (it.isImportant) marker.hasImportant = true; else marker.hasNormal = true; }); for (let i = 0; i < 42; i++) { const cellDate = new Date(startDate); cellDate.setDate(startDate.getDate() + i); const dateStr = dateToYYYYMMDD(cellDate); const dayElement = document.createElement('div'); dayElement.className = 'calendar-day'; dayElement.dataset.date = dateStr; if (cellDate.getMonth() !== currentMonth) dayElement.classList.add('other-month'); if (dateStr === todayStr) dayElement.classList.add('today'); if (dateStr === selectedDate) dayElement.classList.add('selected'); let dotsHtml = ''; if (dailyEventMarkers.has(dateStr)) { const markers = dailyEventMarkers.get(dateStr); let innerDots = ''; if (markers.hasImportant) innerDots += '<span class="event-dot important"></span>'; if (markers.hasNormal) innerDots += '<span class="event-dot normal"></span>'; dotsHtml = `<div class="event-dots-container">${innerDots}</div>`; } dayElement.innerHTML = `<span class="day-number">${cellDate.getDate()}</span>${dotsHtml}`; if (cellDate.getMonth() === currentMonth) { dayElement.onclick = () => selectDate(dateStr); } calendarDays.appendChild(dayElement); } } renderUpcomingAgenda(items, selectedDate); }
+
+
+    // 5. EVENT LISTENERS & HANDLERS
+    function attachGlobalEventListeners() {
+        document.body.addEventListener('click', e => {
+            const target = e.target;
+            const actionTarget = target.closest('[data-action]');
+            if (actionTarget) {
+                 const action = actionTarget.dataset.action;
+                 const btn = actionTarget.closest('button');
+                 if (action === 'logout') {
+                     if (confirm("¿Seguro que quieres cerrar sesión?")) { fbAuth.signOut().catch(e => showToast("Error al cerrar sesión.", "danger")); }
+                 }
+                 if (action === 'login') handleLogin(btn);
+                 if (action === 'register') handleRegister(btn);
+            }
+
+            const viewTarget = target.closest('[data-view]');
+            if (viewTarget) {
+                triggerHapticFeedback(20);
+                switchView(viewTarget.dataset.view);
+            }
+        });
+
+        gebi('sidebar-theme-btn')?.addEventListener('click', () => { triggerHapticFeedback(20); handleThemeToggle(); });
+        gebi('nav-theme-btn')?.addEventListener('click', () => { triggerHapticFeedback(20); handleThemeToggle(); });
+        gebi('sidebar-intro-btn')?.addEventListener('click', () => { triggerHapticFeedback(20); handleIntroToggle(); });
+        
+        gebi('prev-nav-btn')?.addEventListener('click', () => { triggerHapticFeedback(20); changeMonth(-1); });
+        gebi('next-nav-btn')?.addEventListener('click', () => { triggerHapticFeedback(20); changeMonth(1); });
+        gebi('today-btn')?.addEventListener('click', () => { triggerHapticFeedback(20); goToToday(); });
+        gebi('calendar-title-btn')?.addEventListener('click', openDatePickerModal);
+        
+        gebi('tasks-search-btn')?.addEventListener('click', () => switchView('search'));
+        gebi('calendar-search-btn')?.addEventListener('click', () => switchView('search'));
+
+        const searchInput = gebi('search-input');
+        const searchContainer = gebi('search-container');
+        const searchClearBtn = gebi('search-clear-btn');
+        const debouncedSearch = debounce((e) => { appState.searchQuery = e.target.value; renderApp(); }, 300);
+        searchInput?.addEventListener('input', (e) => { searchContainer.classList.toggle('has-text', e.target.value.length > 0); debouncedSearch(e); });
+        searchClearBtn?.addEventListener('click', () => { searchInput.value = ''; searchInput.dispatchEvent(new Event('input', { bubbles: true })); searchInput.focus(); });
+        
+        gebi('fab-add-item')?.addEventListener('click', () => { triggerHapticFeedback(40); openAddItemModal(); });
+        gebi('main-add-item-btn')?.addEventListener('click', () => openAddItemModal());
+
+        gebi('add-item-form')?.addEventListener('submit', handleItemFormSubmit);
+        gebi('cancel-item-btn')?.addEventListener('click', () => closeModal('add-item-modal'));
+        gebi('item-type')?.addEventListener('change', toggleDateTimeNotificationVisibility);
+        gebi('delete-item-btn')?.addEventListener('click', handleDeleteFromModal);
+        gebi('date-picker-form')?.addEventListener('submit', handleDateSelectionFromPicker);
+        gebi('cancel-date-picker-btn')?.addEventListener('click', () => closeModal('date-picker-modal'));
+        gebi('item-description')?.addEventListener('input', () => autoGrow(gebi('item-description')));
+        attachPullToRefresh(gebi('main-content-area'));
+        
+        window.addEventListener('keydown', (e) => {
+            const activeModal = qs('.modal-overlay.active');
+            if (e.key === 'Escape' && activeModal) {
+                closeModal(activeModal.id);
+                return;
+            }
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || activeModal) { return; }
+            switch(e.key.toLowerCase()) {
+                case 'n': e.preventDefault(); openAddItemModal(); break;
+                case 't': e.preventDefault(); switchView('tasks'); break;
+                case 'a': e.preventDefault(); switchView('calendar'); break;
+                case 'h': e.preventDefault(); switchView('help'); break;
+                case 'f': e.preventDefault(); switchView('search'); break;
+            }
+        });
+    }
+
+    // 6. CORE LOGIC (CRUD & ACTIONS)
+    function switchView(view) { if (appState.isLoading || !view) return; appState.currentView = view; if (view === 'search') { setTimeout(() => { const searchInput = gebi('search-input'); if (searchInput) searchInput.focus(); }, 50); } renderApp(); }
+    function selectDate(dateStr) { appState.calendar.selectedDate = dateStr; renderApp(); }
+    function changeMonth(delta) { const { currentMonth, currentYear } = appState.calendar; let newDate = new Date(currentYear, currentMonth, 1); newDate.setMonth(newDate.getMonth() + delta); appState.calendar.currentMonth = newDate.getMonth(); appState.calendar.currentYear = newDate.getFullYear(); renderApp(); }
+    function goToToday() { const today = new Date(); appState.calendar = { ...appState.calendar, currentMonth: today.getMonth(), currentYear: today.getFullYear(), selectedDate: dateToYYYYMMDD(today) }; if (appState.currentView !== 'calendar') { switchView('calendar'); } else { renderApp(); } }
+    function openModal(modalId) { const modal = gebi(modalId); if(modal) modal.classList.add('active'); }
+    function closeModal(modalId) { const modal = gebi(modalId); if(modal) modal.classList.remove('active'); }
+    function openAddItemModal(itemToEdit = null) { const state = appState; const f = gebi('add-item-form'); f.reset(); const isEditing = itemToEdit !== null; gebi('modal-title-h3').textContent = isEditing ? 'Editar Ítem' : 'Añadir Ítem'; gebi('delete-item-btn').style.display = isEditing ? 'inline-flex' : 'none'; gebi('item-local-id').value = itemToEdit?.localId || uuid(); gebi('item-type').value = itemToEdit?.type || (state.currentView === 'tasks' ? 'task' : 'agenda'); const descriptionTextarea = gebi('item-description'); descriptionTextarea.value = itemToEdit?.description || ''; setTimeout(() => autoGrow(descriptionTextarea), 0); const defaultDate = new Date(); defaultDate.setMinutes(Math.ceil(defaultDate.getMinutes() / 15) * 15); const dateToShow = itemToEdit?.dueDate ? new Date(itemToEdit.dueDate) : yyyymmddToDate(state.calendar.selectedDate) || defaultDate; if(itemToEdit?.type !== 'task' && !itemToEdit?.dueDate) { const selected = yyyymmddToDate(state.calendar.selectedDate); dateToShow.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate()); } flatpickrInstance.setDate(dateToShow, false); gebi('item-notification-enabled').checked = itemToEdit?.notificationEnabled || false; gebi('item-important').checked = itemToEdit?.isImportant || false; gebi('item-recurrence').value = itemToEdit?.recurrenceRule || 'none'; toggleDateTimeNotificationVisibility(); openModal('add-item-modal'); }
+    function toggleDateTimeNotificationVisibility() { gebi('datetime-notification-group').style.display = gebi('item-type').value === 'agenda' ? 'block' : 'none'; }
+    function handleItemFormSubmit(e) { e.preventDefault(); triggerHapticFeedback(40); const localId = gebi('item-local-id').value; const existingItem = db.items.find(i => i.localId === localId); const itemType = gebi('item-type').value; const itemData = { localId: localId, type: itemType, description: gebi('item-description').value.trim(), isComplete: existingItem?.isComplete || false, createdAt: existingItem?.createdAt || Date.now(), notificationEnabled: gebi('item-notification-enabled').checked, notificationShown: existingItem?.notificationShown || false, isImportant: itemType === 'agenda' ? gebi('item-important').checked : false, recurrenceRule: itemType === 'agenda' ? gebi('item-recurrence').value : 'none', dueDate: null }; if (itemType === 'agenda') { const selectedDates = flatpickrInstance.selectedDates; if (selectedDates.length > 0) { itemData.dueDate = selectedDates[0].toISOString(); } else { showToast("Los eventos deben tener una fecha y hora."); return; } if (existingItem && existingItem.dueDate !== itemData.dueDate) { itemData.notificationShown = false; } } handleItemSave(itemData); closeModal('add-item-modal'); }
+    function handleItemSave(itemData) { const itemForDb = { ...itemData, lastModified: Date.now() }; const index = db.items.findIndex(i => i.localId === itemForDb.localId); if (index > -1) { db.items[index] = { ...db.items[index], ...itemForDb }; } else { db.items.unshift(itemForDb); } saveData(null, () => { showToast(`Ítem ${index > -1 ? 'actualizado' : 'guardado'}.`); }); renderApp(); scheduleAllNotifications(); }
+    function handleItemComplete(localId, isComplete) { triggerHapticFeedback(40); const item = db.items.find(i => i.localId === localId); if (!item) return; if (isComplete && item.recurrenceRule && item.recurrenceRule !== 'none') { const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule); if (nextDueDate) { const newItemData = { ...item, id: null, localId: uuid(), isComplete: false, completedAt: null, createdAt: Date.now(), dueDate: nextDueDate.toISOString(), notificationShown: false }; handleItemSave(newItemData); handleItemDelete(localId); showToast('Evento completado. ¡Siguiente recurrencia creada!'); } } else { const updatedItem = { ...item, isComplete, completedAt: isComplete ? Date.now() : null }; const index = db.items.findIndex(i => i.localId === localId); if (index > -1) { db.items[index] = updatedItem; saveData(null, () => { showToast(isComplete ? 'Ítem completado.' : 'Ítem marcado como pendiente.'); }); renderApp(); } } }
+    function handleItemDelete(localId) { triggerHapticFeedback(70); const itemToDelete = db.items.find(i => i.localId === localId); if (!itemToDelete) return; db.items = db.items.filter(i => i.localId !== localId); saveData(null, () => showToast('Ítem eliminado.')); renderApp(); }
+    function handleDeleteFromModal() { const localId = gebi('item-local-id').value; if (localId && confirm("¿Eliminar este ítem permanentemente?")) { triggerHapticFeedback(70); handleItemDelete(localId); closeModal('add-item-modal'); } }
+    function handleItemDuplicate(localId) { triggerHapticFeedback(30); const itemToDup = db.items.find(i => i.localId === localId); if (!itemToDup) return; const newItemData = { ...itemToDup, id: null, localId: uuid(), isComplete: false, completedAt: null, createdAt: Date.now() }; handleItemSave(newItemData); showToast('Ítem duplicado.'); }
+    function applyTheme(theme) { document.documentElement.setAttribute('data-theme', theme); document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#1A1C20' : '#F7F7FC'); if(flatpickrInstance) flatpickrInstance.set('theme', theme); localStorage.setItem('theme', theme); }
+    function handleThemeToggle() { const newTheme = db.config.theme === 'dark' ? 'light' : 'dark'; db.config.theme = newTheme; applyTheme(newTheme); saveData(null, () => showToast(`Tema cambiado a ${newTheme === 'light' ? 'claro' : 'oscuro'}.`)); }
+    function handleIntroToggle() { const newPref = !db.config.showIntro; db.config.showIntro = newPref; appState.showIntro = newPref; updateIntroToggleVisual(); saveData(null, () => showToast(newPref ? "Intro activada para el próximo inicio." : "Intro desactivada.")); }
+    function updateIntroToggleVisual() { qsa('#sidebar-intro-btn').forEach(btn => btn.classList.toggle('active', appState.showIntro)); }
+    function openDatePickerModal() { openModal('date-picker-modal'); const monthSelect = gebi('month-select'); const yearSelect = gebi('year-select'); monthSelect.innerHTML = MESES.map((mes, index) => `<option value="${index}">${mes}</option>`).join(''); monthSelect.value = appState.calendar.currentMonth; yearSelect.value = appState.calendar.currentYear; }
+    function handleDateSelectionFromPicker(e) { e.preventDefault(); appState.calendar.currentMonth = parseInt(gebi('month-select').value, 10); appState.calendar.currentYear = parseInt(gebi('year-select').value, 10); renderApp(); closeModal('date-picker-modal'); }
+    
+    // 7. UTILITIES & HELPERS
+    function attachPullToRefresh(element) { let touchStartY = 0; let isPulling = false; const ptrIndicator = document.createElement('div'); ptrIndicator.id = 'pull-to-refresh-indicator'; ptrIndicator.innerHTML = `<span id="ptr-arrow" class="material-icons">arrow_downward</span><span id="ptr-spinner" class="material-icons" style="display:none; animation: spin 1s linear infinite;">sync</span>`; element.prepend(ptrIndicator); const PULL_THRESHOLD = 80; element.addEventListener('touchstart', (e) => { const activeView = element.querySelector('.view.active'); if (!activeView || activeView.scrollTop !== 0) return; touchStartY = e.touches[0].clientY; isPulling = true; ptrIndicator.querySelector('#ptr-spinner').style.display = 'none'; ptrIndicator.querySelector('#ptr-arrow').style.display = 'block'; }, { passive: true }); element.addEventListener('touchmove', (e) => { if (!isPulling) return; const pullDistance = e.touches[0].clientY - touchStartY; if (pullDistance > 0) { e.preventDefault(); const rotation = Math.min(pullDistance / PULL_THRESHOLD, 1) * 180; ptrIndicator.style.top = `${Math.min(pullDistance, PULL_THRESHOLD) - 50}px`; ptrIndicator.querySelector('#ptr-arrow').style.transform = `rotate(${rotation}deg)`; } }, { passive: false }); element.addEventListener('touchend', async (e) => { if (!isPulling) return; const pullDistance = e.changedTouches[0].clientY - touchStartY; ptrIndicator.querySelector('#ptr-arrow').style.transform = 'rotate(0deg)'; if (pullDistance > PULL_THRESHOLD) { triggerHapticFeedback(40); ptrIndicator.style.top = '10px'; ptrIndicator.querySelector('#ptr-arrow').style.display = 'none'; ptrIndicator.querySelector('#ptr-spinner').style.display = 'block'; if (currentUser) { const userDocRef = fbDb.collection('users').doc(currentUser.uid); try { const doc = await userDocRef.get(); if (doc.exists && doc.data().db) { db = doc.data().db; renderApp(); showToast("Datos sincronizados."); } } catch (err) { showToast("Error al sincronizar.", "danger"); } } } ptrIndicator.style.top = '-50px'; isPulling = false; }); }
+    function initializeDatePicker() { flatpickr.localize(flatpickr.l10ns.es); flatpickrInstance = flatpickr("#item-datetime", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true, minuteIncrement: 15, theme: db?.config?.theme || 'dark', }); }
+    function calculateNextDueDate(currentDate, rule) { let nextDate = new Date(currentDate); switch (rule) { case 'daily': nextDate.setDate(nextDate.getDate() + 1); break; case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break; case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break; case 'yearly': nextDate.setFullYear(nextDate.getFullYear() + 1); break; default: return null; } return nextDate; }
+    
+    // 8. NOTIFICATIONS
+    async function requestNotificationPermission() { if (!("Notification" in window)) { showToast("Este navegador no soporta notificaciones."); return; } const permission = await Notification.requestPermission(); if (permission === "granted") { showToast("¡Permiso de notificaciones concedido!"); } else if (permission === "denied") { showToast("Permiso de notificaciones denegado."); } else { showToast("Permiso de notificaciones pendiente."); } }
+    function showNotification(item) { if (Notification.permission !== "granted") return; const notificationOptions = { body: `Tu evento "${item.description}" es ahora.`, icon: 'aiDANaI-Agenda.jpg', vibrate: [200, 100, 200], }; new Notification('Recordatorio de Agenda', notificationOptions); const updatedItem = {...item, notificationShown: true}; const index = db.items.findIndex(i => i.localId === item.localId); if(index > -1) { db.items[index] = updatedItem; saveData(); } }
+    function scheduleNotification(item) { if (activeTimers[item.localId]) { clearTimeout(activeTimers[item.localId]); } if (!item.notificationEnabled || item.isComplete || !item.dueDate || item.notificationShown) { return; } const msUntilDue = new Date(item.dueDate).getTime() - Date.now(); if (msUntilDue > 0) { activeTimers[item.localId] = setTimeout(() => { showNotification(item); delete activeTimers[item.localId]; }, msUntilDue); } }
+    function scheduleAllNotifications() { if (!db.items) return; Object.values(activeTimers).forEach(clearTimeout); activeTimers = {}; db.items.forEach(scheduleNotification); }
+    function checkMissedNotifications() { if (Notification.permission !== "granted" || !db.items) return; const now = Date.now(); db.items.forEach(item => { if (item.notificationEnabled && !item.isComplete && !item.notificationShown && item.dueDate) { const dueDate = new Date(item.dueDate).getTime(); if (dueDate < now) { showNotification(item); } } }); scheduleAllNotifications(); }
+    
+    // Service Worker
+    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./service-worker.js').then(r => console.log('ServiceWorker OK')).catch(e => console.log('ServiceWorker Fail', e)); }); }
+
+    </script>
+</body>
+</html>
