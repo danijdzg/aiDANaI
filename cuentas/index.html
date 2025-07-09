@@ -1815,21 +1815,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const {action, id, page, type} = actionTarget.dataset, btn = actionTarget.closest('button'), cardElement = actionTarget.closest('.transaction-card');
             switch (action) {
                 case 'login': handleLogin(btn); break; case 'register': handleRegister(btn); break; case 'exit': handleExitApp(); break; case 'navigate': navigateTo(page); break; case 'theme-toggle': toggleTheme(); break; case 'help': showHelpModal(); break; case 'ai-advisor': showAiAdvisorModal(); break; case 'apply-filters': vibrate(); updateDashboard(); renderCuentas(); break; case 'add-movement': vibrate(); startEditMovement(null); break; case 'edit-movement': vibrate(); startEditMovement(actionTarget.dataset.id); break;
-                case 'delete-movement-swipe': showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', ()=>{db.movimientos=db.movimientos.filter(m=>m.id!==cardElement.dataset.id);saveData(null,()=>{renderMovimientos();showToast('Movimiento eliminado.');});}); break;
+                case 'delete-movement-swipe': showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', ()=>{db.movimientos=db.movimientos.filter(m=>m.id!==cardElement.dataset.id);saveData(null,()=>{renderMovimientos();updateDashboard();renderCuentas();showToast('Movimiento eliminado.');});}); break;
                 case 'copy-movement-swipe': handleCopyMovement(cardElement.dataset.id); break;
                 case 'copy-last-movement': handleCopyLastMovement(); break;
                 case 'delete-movement-from-modal':
-    showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', () => {
-        db.movimientos = db.movimientos.filter(m => m.id !== select('movimiento-id').value);
-        saveData(null, () => {
-            hideModal('movimiento-modal');
-            showToast('Movimiento eliminado.');
-            renderAll(); // Mantenemos esto para refrescar todos los datos.
-            // ▼▼▼ LÍNEA AÑADIDA PARA CORREGIR LA NAVEGACIÓN ▼▼▼
-            navigateTo('movimientos-page');
-        });
-    });
-    break;
+                    showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', () => {
+                        const idToDelete = select('movimiento-id').value;
+                        db.movimientos = db.movimientos.filter(m => m.id !== idToDelete);
+                        // ▼▼▼ INICIO DE LA CORRECCIÓN ▼▼▼
+                        saveData(null, () => {
+                            hideModal('movimiento-modal');
+                            showToast('Movimiento eliminado.');
+                            // Actualización dirigida para evitar romper la app
+                            renderMovimientos();
+                            updateDashboard();
+                            renderCuentas();
+                            // Navega a movimientos para ver el resultado
+                            navigateTo('movimientos-page');
+                        });
+                        // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
+                    });
+                    break;
                 case 'delete-concepto': if(db.movimientos.some(m=>m.conceptoId===id)){showToast("Concepto en uso, no se puede borrar.","warning");return;} showConfirmationModal('¿Seguro que quieres eliminar este concepto?',()=>{db.conceptos=db.conceptos.filter(c=>c.id!==id);saveData(null,()=>{showToast("Concepto eliminado.");renderConceptosModalList();populateAllDropdowns();});}); break;
                 case 'delete-cuenta': if(db.movimientos.some(m=>m.cuentaId===id||m.cuentaOrigenId===id||m.cuentaDestinoId===id)){showToast("Cuenta con movimientos, no se puede borrar.","warning",3500);return;} showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?',()=>{db.cuentas=db.cuentas.filter(c=>c.id!==id);saveData(null,()=>{showToast("Cuenta eliminada.");renderCuentasModalList();populateAllDropdowns();renderCuentas();});}); break;
                 case 'close-modal': hideModal(target.closest('.modal-overlay').id); break; case 'manage-conceptos': showConceptosModal(); break; case 'manage-cuentas': showCuentasModal(); break; case 'view-account-details': showAccountMovementsModal(id); break; case 'save-config': handleSaveConfig(btn); break; case 'export-data': handleExportData(btn); break; case 'import-data': select('import-file-input').click(); break;
@@ -1932,10 +1938,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const newMov = JSON.parse(JSON.stringify(originalMov)); newMov.id = generateId(); newMov.fecha = new Date().toISOString();
         db.movimientos.push(newMov);
         saveData(null, () => {
-            showToast('Movimiento copiado.'); renderMovimientos();
+            showToast('Movimiento copiado.');
+            // Actualización dirigida
+            renderMovimientos();
+            updateDashboard();
+            renderCuentas();
+            // Animación para el nuevo elemento
             setTimeout(() => { const newCardContent = document.querySelector(`.transaction-card[data-id="${newMov.id}"] .transaction-card__swipe-content`); if (newCardContent) { newCardContent.classList.add('highlight-animation'); newCardContent.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => newCardContent.classList.remove('highlight-animation'), 1500); } }, 250);
         });
     };
+    
     const handleSaveMovement = form => {
         vibrate(); clearAllErrors(form.id);
         const id = select('movimiento-id').value, tipo = select('movimiento-tipo-selector').value, fecha = select('movimiento-fecha').value, desc = select('movimiento-descripcion').value.trim(), btn = select('save-movimiento-btn'), cantStr = select('movimiento-cantidad').value.trim().replace(/\./g, '').replace(',', '.'), cantCent = Math.round(parseFloat(cantStr) * 100);
@@ -1959,13 +1971,21 @@ document.addEventListener('DOMContentLoaded', () => {
         setButtonLoading(btn, true, 'Guardando...');
         const idx = id ? db.movimientos.findIndex(m => m.id === id) : -1;
         if (idx > -1) db.movimientos[idx] = newMov; else db.movimientos.push(newMov);
+
+        // ▼▼▼ INICIO DE LA CORRECCIÓN ▼▼▼
         saveData(btn, () => { 
             hideModal('movimiento-modal'); 
             showToast(id ? 'Movimiento actualizado' : 'Movimiento añadido'); 
-            renderAll();
-            // ▼▼▼ LÍNEA AÑADIDA ▼▼▼
-            navigateTo('movimientos-page'); 
+            
+            // Actualización dirigida y eficiente en lugar de renderAll()
+            renderMovimientos();
+            updateDashboard();
+            renderCuentas();
+
+            // Navega a la página de movimientos para que el usuario vea el cambio.
+            navigateTo('movimientos-page');
         });
+        // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
     };
 
     const handleAddConcept = form => {
