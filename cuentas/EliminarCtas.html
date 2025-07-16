@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Herramienta para Eliminar Cuentas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h1 {
+            color: #1c1e21;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #606770;
+            margin-bottom: 20px;
+        }
+        .warning {
+            color: #d93025;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            border: 1px solid #dddfe2;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            background-color: #d93025;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #a50e0e;
+        }
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Eliminar Cuenta de Usuario</h1>
+        <p>Introduce las credenciales del usuario que deseas eliminar permanentemente.</p>
+        <p class="warning">¡ATENCIÓN! Esta acción es irreversible y borrará tanto la cuenta como todos sus datos asociados.</p>
+        
+        <form id="delete-form">
+            <input type="email" id="delete-email" placeholder="Correo electrónico del usuario" required>
+            <input type="password" id="delete-password" placeholder="Contraseña del usuario" required>
+            <button type="submit">ELIMINAR CUENTA PERMANENTEMENTE</button>
+        </form>
+
+        <div id="status"></div>
+    </div>
+
+    <!-- SDKs de Firebase (copiados de tu app original) -->
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Configuración de Firebase (copiada de tu app original)
+        const firebaseConfig = { 
+            apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", 
+            authDomain: "cuentas-aidanai.firebaseapp.com", 
+            projectId: "cuentas-aidanai", 
+            storageBucket: "cuentas-aidanai.appspot.com", 
+            messagingSenderId: "58244686591", 
+            appId: "1:58244686591:web:85c87256c2287d350322ca" 
+        };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const fbAuth = firebase.auth();
+        const fbDb = firebase.firestore();
+
+        const deleteForm = document.getElementById('delete-form');
+        const statusDiv = document.getElementById('status');
+
+        deleteForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Evita que el formulario se envíe de la forma tradicional
+
+            const email = document.getElementById('delete-email').value;
+            const password = document.getElementById('delete-password').value;
+            
+            statusDiv.textContent = 'Procesando...';
+            statusDiv.style.color = '#606770';
+
+            try {
+                // Paso 1: Iniciar sesión con las credenciales proporcionadas.
+                // Esto es necesario para que Firebase considere la sesión como "reciente".
+                const userCredential = await fbAuth.signInWithEmailAndPassword(email, password);
+                statusDiv.textContent = 'Inicio de sesión exitoso. Eliminando...';
+
+                const user = userCredential.user;
+                const uid = user.uid;
+
+                // Paso 2: Borrar los datos del usuario en Firestore.
+                await fbDb.collection('users').doc(uid).delete();
+                console.log(`Datos de Firestore para el UID ${uid} eliminados.`);
+
+                // Paso 3: Borrar el usuario de Firebase Authentication.
+                await user.delete();
+                console.log(`Usuario de Authentication ${email} eliminado.`);
+
+                // Mostrar mensaje de éxito final
+                statusDiv.style.color = 'green';
+                statusDiv.textContent = `¡ÉXITO! La cuenta para ${email} ha sido eliminada permanentemente.`;
+                
+                deleteForm.reset(); // Limpia el formulario
+
+            } catch (error) {
+                // Manejar errores comunes de inicio de sesión o de borrado
+                statusDiv.style.color = 'red';
+                console.error("Error durante el proceso de eliminación:", error);
+
+                switch (error.code) {
+                    case 'auth/user-not-found':
+                        statusDiv.textContent = 'Error: No se encontró ningún usuario con ese correo.';
+                        break;
+                    case 'auth/wrong-password':
+                    case 'auth/invalid-credential':
+                        statusDiv.textContent = 'Error: La contraseña es incorrecta.';
+                        break;
+                    default:
+                        statusDiv.textContent = `Error inesperado: ${error.message}`;
+                }
+            }
+        });
+    </script>
+
+</body>
+</html>

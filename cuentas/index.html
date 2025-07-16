@@ -105,12 +105,13 @@
             flex: 1; 
             overflow-y: auto; 
             -webkit-overflow-scrolling: touch;
-            padding: 44px var(--sp-4) 48px var(--sp-4);
+            padding: 44px 0 48px 0;
         }
         .view {
             display: none;
             flex-direction: column;
             width: 100%;
+            padding: 0 var(--sp-4);
         }
         .view--active {
             display: flex;
@@ -121,9 +122,9 @@
             height: 34px; 
             position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 500px; 
         }
-        .top-bar__title { font-size: var(--fs-lg); font-weight: 700; position: absolute; left: 50%; transform: translateX(-50%); }
-        .top-bar__actions { display: flex; align-items: center; gap: var(--sp-1); margin-left: auto; }
-        .top-bar__left { flex-basis: 50px; }
+        .top-bar__title { font-size: var(--fs-lg); font-weight: 700; margin-right: auto; }
+        .top-bar__actions { display: flex; align-items: center; gap: var(--sp-1); }
+        .top-bar__left-button { margin-right: var(--sp-2); }
 
         .card { background: var(--c-surface); border: none; box-shadow: var(--shadow-sm); padding: 0; margin-bottom: var(--sp-4); border-radius: var(--border-radius-lg); overflow: hidden; }
         .card__title { font-size: var(--fs-lg); font-weight: 600; margin-bottom: var(--sp-3); display: flex; align-items: center; gap: var(--sp-2); color: var(--c-primary); padding: var(--sp-4) var(--sp-4) 0 var(--sp-4); }
@@ -138,9 +139,20 @@
         .kpi-item__label { font-size: var(--fs-xs); font-weight: 500; color: var(--c-on-surface-secondary); margin-bottom: var(--sp-1); text-transform: uppercase; }
         .kpi-item__value { font-size: var(--fs-base); font-weight: 700; }
         
-        #movimientos-list-container { position: relative; }
+        #movimientos-list-container { position: relative; padding: 0 var(--sp-4); }
         #virtual-list-sizer { position: relative; width: 100%; }
         #virtual-list-content { position: absolute; top: 0; left: 0; width: 100%; }
+
+        .date-header-sticky {
+            font-size: var(--fs-sm);
+            font-weight: 600;
+            color: var(--c-on-surface);
+            background-color: var(--c-background);
+            padding: var(--sp-3) 0 var(--sp-2) 0;
+            position: sticky;
+            top: 34px; /* Altura de la top-bar */
+            z-index: 10;
+        }
         
         .transaction-card {
             display: flex;
@@ -211,7 +223,29 @@
         .accordion__content { padding: 0; }
         .card > .accordion { border-radius: 0; }
 
-        .cuentas-type-name { font-size: var(--fs-lg); font-weight: 600; }
+        .account-group {
+            background: var(--c-surface);
+            border-radius: var(--border-radius-lg);
+            margin-bottom: var(--sp-3);
+            overflow: hidden;
+        }
+        .account-group__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--sp-2) var(--sp-4);
+            border-bottom: 1px solid var(--c-outline);
+        }
+        .account-group__name {
+            font-size: var(--fs-base);
+            font-weight: 600;
+        }
+        .account-group__balance {
+            font-size: var(--fs-sm);
+            font-weight: 500;
+        }
+        .account-group .modal__list-item { padding: var(--sp-2) var(--sp-4); }
+
 
         .form-group { margin-bottom: var(--sp-3); }
         .form-label { display: block; font-size: var(--fs-sm); font-weight: 500; margin-bottom: var(--sp-2); color: var(--c-on-surface-secondary); }
@@ -252,6 +286,32 @@
         }
         .fab--visible { transform: scale(1); opacity: 1; }
         .fab:hover { transform: scale(1.08) !important; } .fab .material-icons { font-size: 28px; }
+
+        .fab-menu {
+            position: fixed;
+            bottom: calc(48px + env(safe-area-inset-bottom) + 64px); /* FAB bottom + FAB height + margin */
+            right: var(--sp-5);
+            z-index: 1040;
+            display: none;
+            flex-direction: column;
+            gap: var(--sp-2);
+            align-items: flex-end;
+        }
+        .fab-menu--visible { display: flex; animation: fade-in 0.2s ease-out; }
+        .fab-menu__item {
+            display: flex;
+            align-items: center;
+            gap: var(--sp-3);
+            background-color: var(--c-surface);
+            color: var(--c-on-surface);
+            padding: var(--sp-2) var(--sp-3);
+            border-radius: var(--border-radius-md);
+            box-shadow: var(--shadow-md);
+            font-size: var(--fs-sm);
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+        }
 
         .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 500px; background-color: var(--c-surface); border-top: 1px solid var(--c-outline); display: flex; padding: 0 0 env(safe-area-inset-bottom) 0; z-index: 200; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); 
             height: 38px; 
@@ -317,59 +377,61 @@
         .spinner { display: inline-block; width: 1em; height: 1em; border: .15em solid currentColor; border-radius: 50%; border-top-color: transparent; animation: spin .8s linear infinite; vertical-align: middle; }
         @keyframes spin { to { transform:rotate(360deg); } }
 
-        /* ====== ESTILOS PARA SEGUIMIENTO DE PRESUPUESTO ====== */
-        .budget-track-item { padding: var(--sp-2) 0; border-bottom: 1px solid var(--c-outline); }
+        /* ====== COMPACT BUDGET STYLES ====== */
+        .budget-track-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: var(--sp-3);
+            padding: var(--sp-2) 0;
+            border-bottom: 1px solid var(--c-outline);
+        }
         .budget-track-item:last-child { border-bottom: none; }
-        .budget-track-item__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-2); flex-wrap: wrap; }
-        .budget-track-item__concept-name { font-weight: 600; font-size: var(--fs-sm); }
-        .budget-track-item__header-right { display: flex; align-items: center; gap: var(--sp-2); }
-        .budget-track-item__details { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--c-on-surface-secondary); margin-bottom: var(--sp-2); }
-        .budget-item__progress { width: 100%; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 99px; overflow: hidden; border: 1px solid var(--c-outline); }
+        .budget-track-item__main { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+        .budget-track-item__concept-name { font-weight: 600; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .budget-track-item__figures { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-size: var(--fs-xs); }
+        .budget-track-item__amount { color: var(--c-on-surface-secondary); }
+        .budget-track-item__amount strong { color: var(--c-on-surface); font-weight: 500;}
+        .budget-track-item__difference { font-weight: 600; }
+
+        .budget-item__progress { width: 100%; -webkit-appearance: none; appearance: none; height: 6px; border-radius: 99px; overflow: hidden; background-color: var(--c-surface-variant); }
         .budget-item__progress::-webkit-progress-bar { background-color: var(--c-surface-variant); }
         .budget-item__progress::-webkit-progress-value { background-color: var(--c-primary); transition: width 0.3s ease; }
         .budget-item__progress.budget-item__progress--danger::-webkit-progress-value { background-color: var(--c-danger); }
         .budget-item__progress.budget-item__progress--warning::-webkit-progress-value { background-color: var(--c-warning); }
 
-        /* ====== NUEVOS ESTILOS PARA INVERSION ====== */
+        /* ====== COMPACT PORTFOLIO STYLES ====== */
         .investment-asset-card {
             background-color: var(--c-surface);
             border-radius: var(--border-radius-lg);
-            padding: var(--sp-4);
-            margin-bottom: var(--sp-3);
+            padding: var(--sp-3);
+            margin-bottom: var(--sp-2);
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .investment-asset-card:hover {
-            transform: translateY(-3px);
+            transform: translateY(-2px);
             box-shadow: var(--shadow-md);
         }
         .investment-asset-card__header {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto;
             align-items: flex-start;
-            margin-bottom: var(--sp-4);
+            gap: var(--sp-2);
         }
         .investment-asset-card__name {
-            font-size: var(--fs-lg);
+            font-size: var(--fs-base);
             font-weight: 600;
         }
         .investment-asset-card__value {
-            font-size: var(--fs-xl);
+            font-size: var(--fs-lg);
             font-weight: 700;
             text-align: right;
         }
         .investment-asset-card__pnl {
-            font-size: var(--fs-sm);
+            font-size: var(--fs-xs);
             font-weight: 500;
             text-align: right;
-        }
-        .investment-asset-card__footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: var(--sp-2);
-            margin-top: var(--sp-4);
-            border-top: 1px solid var(--c-outline);
-            padding-top: var(--sp-3);
         }
         
         .investment-timeline-item { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--c-outline); }
@@ -415,7 +477,7 @@
 
     <div id="app-root" class="app-layout">
         <header id="app-top-bar" class="top-bar">
-            <div id="top-bar-left"></div>
+            <div id="top-bar-left-button"></div>
             <h1 id="top-bar-title" class="top-bar__title"></h1>
             <div id="top-bar-actions" class="top-bar__actions"></div>
         </header>
@@ -459,16 +521,16 @@
                 </div>
             </section>
 
-            <section id="movimientos-page" class="view">
+            <section id="movimientos-page" class="view" style="padding: 0;">
                 <div id="movimientos-list-container">
                     <div id="virtual-list-sizer">
                         <div id="virtual-list-content"></div>
                     </div>
                 </div> 
-                <div id="empty-movimientos" class="empty-state hidden">
+                <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
                     <span class="material-icons">receipt_long</span>
-                    <h3>Sin Movimientos</h3>
-                    <p>Añade tu primer movimiento con el botón de abajo.</p>
+                    <h3>Tu historial empieza aquí</h3>
+                    <p>Pulsa el botón `+` para añadir tu primer ingreso o gasto.</p>
                 </div>
             </section>
             
@@ -484,8 +546,8 @@
                     <div id="investment-assets-list"></div>
                     <div id="empty-investments" class="empty-state hidden">
                         <span class="material-icons">rocket_launch</span>
-                        <h3>Crea tu Portfolio de Inversión</h3>
-                        <p>Para empezar, pulsa en "Gestionar Activos" y selecciona las cuentas que quieres incluir.</p>
+                        <h3>¿Listo para despegar?</h3>
+                        <p>Para empezar, pulsa en "Gestionar Activos" y selecciona las cuentas que quieres incluir en tu portafolio.</p>
                     </div>
                 </div>
                 <div id="investment-detail-view" class="hidden"></div>
@@ -517,10 +579,9 @@
                         </details>
                     </div>
                 </div>
-                 <div class="card card--no-bg accordion-wrapper">
-                    <div id="resumen-cuentas-container"></div>
-                 </div>
-                 <div class="card card--no-bg accordion-wrapper">
+                <div id="resumen-cuentas-container"></div>
+
+                <div class="card card--no-bg accordion-wrapper">
                     <div id="liquid-assets-chart-container" class="hidden accordion" style="margin-bottom: var(--sp-4);">
                         <div style="padding: var(--sp-3) var(--sp-4);">
                            <h4 class="kpi-item__label" style="text-align: center; margin-bottom: var(--sp-2);">Distribución de Activos Líquidos</h4>
@@ -543,12 +604,6 @@
                             <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                                 <div id="budget-controls" style="display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap;">
                                     <select id="budget-year-selector" class="form-select" style="flex-basis: 120px; flex-grow: 1;"></select>
-                                </div>
-                                <div style="margin-bottom: var(--sp-4);">
-                                    <button data-action="update-budgets" class="btn btn--primary btn--full">
-                                        <span class="material-icons" style="font-size: 16px;">edit</span>
-                                        Gestionar Presupuestos
-                                    </button>
                                 </div>
                                 <div id="budget-tracking-list"></div>
                                 <div id="budget-init-placeholder" class="empty-state hidden" style="background: transparent; padding: var(--sp-2) 0;">
@@ -581,6 +636,10 @@
                             <button data-action="logout" class="btn btn--danger btn--full" style="margin-top: var(--sp-4);">
                                 <span class="material-icons" style="font-size: 16px;">logout</span>
                                 Cerrar Sesión
+                            </button>
+                            <button data-action="delete-account" class="btn btn--danger btn--full" style="margin-top: var(--sp-2); background-color: var(--c-black); border: 1px solid var(--c-danger);">
+                                <span class="material-icons" style="font-size: 16px;">delete_forever</span>
+                                Eliminar Mi Cuenta Permanentemente
                             </button>
                         </div>
                     </details>
@@ -618,7 +677,7 @@
                                 <button data-action="export-data" class="btn btn--secondary" title="Exportar una copia de seguridad completa en formato JSON."><span class="material-icons" style="font-size: 16px;">save</span>Exportar JSON</button>
                                 <button data-action="import-data" class="btn btn--secondary" title="Importar desde un archivo de seguridad JSON."><span class="material-icons" style="font-size: 16px;">file_upload</span>Importar JSON</button>
                                 <button data-action="export-csv" class="btn btn--secondary" title="Exportar movimientos a un archivo CSV para abrir en hojas de cálculo."><span class="material-icons" style="font-size: 16px;">list_alt</span>Exportar CSV</button>
-                                <button data-action="import-csv" class="btn btn--secondary" title="Importar movimientos desde un archivo CSV."><span class="material-icons" style="font-size: 16px;">file_download</span>Importar CSV</button>
+                                <button data-action="import-csv-wizard" class="btn btn--secondary" title="Importar movimientos desde un archivo CSV con un asistente."><span class="material-icons" style="font-size: 16px;">file_download</span>Importar CSV</button>
                                 <input type="file" id="import-file-input" class="hidden" accept=".json" />
                                 <input type="file" id="import-csv-file-input" class="hidden" accept=".csv,text/csv" />
                             </div>
@@ -630,12 +689,22 @@
         </main>
         
         <button data-action="add-movement" id="fab-add-movimiento" class="fab" title="Añadir Movimiento" aria-label="Añadir Movimiento"><span class="material-icons">add</span></button>
+        <div id="fab-menu" class="fab-menu">
+            <button class="fab-menu__item" data-action="add-aportacion-from-menu">
+                <span>Aportar / Retirar</span>
+                <span class="material-icons">add_card</span>
+            </button>
+            <button class="fab-menu__item" data-action="update-investment-value-from-menu">
+                <span>Actualizar Valor</span>
+                <span class="material-icons">update</span>
+            </button>
+        </div>
 
         <nav class="bottom-nav">
-            <button data-action="navigate" data-page="panel-control-page" class="bottom-nav__item"><span class="material-icons">dashboard</span></button>
             <button data-action="navigate" data-page="movimientos-page" class="bottom-nav__item"><span class="material-icons">swap_horiz</span></button>
-            <button data-action="navigate" data-page="inversiones-page" class="bottom-nav__item"><span class="material-icons">trending_up</span></button>
+            <button data-action="navigate" data-page="panel-control-page" class="bottom-nav__item"><span class="material-icons">dashboard</span></button>
             <button data-action="navigate" data-page="cuentas-page" class="bottom-nav__item"><span class="material-icons">account_balance_wallet</span></button>
+            <button data-action="navigate" data-page="inversiones-page" class="bottom-nav__item"><span class="material-icons">trending_up</span></button>
             <button data-action="navigate" data-page="presupuestos-page" class="bottom-nav__item"><span class="material-icons">pie_chart</span></button>
             <button data-action="navigate" data-page="configuracion-page" class="bottom-nav__item"><span class="material-icons">settings</span></button>
         </nav>
@@ -719,6 +788,21 @@
     <div id="manage-investment-accounts-modal" class="modal-overlay"></div>
     <div id="valoracion-modal" class="modal-overlay"></div>
     <div id="aportacion-modal" class="modal-overlay"></div>
+    <div id="import-csv-wizard-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="import-csv-wizard-title">
+        <div class="modal" style="max-width: 95%; max-height: 90vh; width: 600px;">
+            <header class="modal__header">
+                <h3 id="import-csv-wizard-title" class="modal__title">Asistente de Importación CSV</h3>
+                <button class="icon-btn" data-action="close-modal" data-modal-id="import-csv-wizard-modal" title="Cerrar"><span class="material-icons">close</span></button>
+            </header>
+            <div id="import-csv-wizard-body" class="modal__body">
+                <!-- Contenido dinámico del asistente -->
+            </div>
+            <div id="import-csv-wizard-actions" class="modal__actions">
+                <!-- Botones dinámicos del asistente -->
+            </div>
+        </div>
+    </div>
+
 
     <div id="exit-screen">
         <p>Gracias por usar la app.<br>¡Hasta pronto!</p>
@@ -740,7 +824,8 @@
 
         const vList = {
             scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
-            heights: { transaction: 64 }, renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
+            heights: { transaction: 64, dateHeader: 38 }, 
+            renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
         };
         
         // =================================================================================
@@ -888,7 +973,7 @@
             checkAuthState();
         };
         const checkAuthState = () => fbAuth.onAuthStateChanged((user) => { if (user) { currentUser = user; loadData(user.uid); } else { currentUser = null; if (unsubscribeFromDb) unsubscribeFromDb(); db = getInitialDb(); showLoginScreen(); } });
-        const startMainApp = () => { select('login-screen')?.classList.remove('login-view--visible'); select('app-root')?.classList.add('app-layout--visible'); renderAll(); navigateTo('panel-control-page', true); };
+        const startMainApp = () => { select('login-screen')?.classList.remove('login-view--visible'); select('app-root')?.classList.add('app-layout--visible'); renderAll(); navigateTo('movimientos-page', true); };
         const showLoginScreen = () => { select('app-root')?.classList.remove('app-layout--visible'); select('login-screen')?.classList.add('login-view--visible'); };
         const handleLogin = (btn) => {
             const email = (select('login-email')).value.trim(), password = (select('login-password')).value, errEl = select('login-error'); clearAllErrors('login-form'); if(errEl) errEl.textContent = ''; let v = true;
@@ -918,15 +1003,32 @@
         const navigateTo = (pageId, isInitial = false) => {
             if (!isInitial) vibrate();
             
-            const titleEl = select('top-bar-title'), actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left');
+            const titleEl = select('top-bar-title'), actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento'), fabMenu = select('fab-menu');
             if(leftEl) leftEl.innerHTML = '';
             const standardActions = `<button data-action="help" class="icon-btn" title="Ayuda"><span class="material-icons">help_outline</span></button> <button data-action="theme-toggle" class="icon-btn" title="Cambiar Tema"><span class="material-icons">${document.documentElement.getAttribute('data-theme') === 'dark' ? 'light_mode' : 'dark_mode'}</span></button> <button data-action="exit" class="icon-btn" title="Salir"><span class="material-icons">exit_to_app</span></button>`;
             
+            // --- CONTEXTUAL FAB LOGIC ---
+            fabMenu?.classList.remove('fab-menu--visible');
+            switch(pageId) {
+                case 'inversiones-page': // now "Portafolio"
+                    fab.dataset.action = 'show-investment-fab-menu';
+                    fab.innerHTML = `<span class="material-icons">menu</span>`;
+                    break;
+                case 'presupuestos-page':
+                    fab.dataset.action = 'update-budgets';
+                    fab.innerHTML = `<span class="material-icons">edit</span>`;
+                    break;
+                default:
+                    fab.dataset.action = 'add-movement';
+                    fab.innerHTML = `<span class="material-icons">add</span>`;
+                    break;
+            }
+
             const pageRenderers = {
-                'panel-control-page': { title: 'Panel de Control', render: updateDashboard, actions: standardActions },
                 'movimientos-page': { title: 'Movimientos', render: renderMovimientos, actions: `<input type="search" id="search-movimientos" class="form-input" placeholder="Buscar..." style="width: 150px; height: 34px; font-size: var(--fs-sm);">` },
-                'inversiones-page': { title: 'Inversiones', render: renderInversionesPage, actions: standardActions },
+                'panel-control-page': { title: 'Panel de Control', render: updateDashboard, actions: standardActions },
                 'cuentas-page': { title: 'Cuentas', render: renderCuentas, actions: standardActions },
+                'inversiones-page': { title: 'Portafolio', render: renderInversionesPage, actions: standardActions },
                 'presupuestos-page': { title: 'Presupuestos', render: renderBudgetTracking, actions: standardActions },
                 'configuracion-page': { title: 'Configuración', render: loadConfig, actions: standardActions }
             };
@@ -948,7 +1050,7 @@
             selectAll('.view').forEach(p => p.classList.remove('view--active'));
             select(pageId)?.classList.add('view--active');
             selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', (b).dataset.page === pageId));
-            select('fab-add-movimiento')?.classList.toggle('fab--visible', !['configuracion-page'].includes(pageId));
+            fab.classList.toggle('fab--visible', !['configuracion-page'].includes(pageId));
         };
 
         const setupTheme = () => { 
@@ -1054,11 +1156,19 @@
                 const difference = isIncomeBudget ? (actualAmount - budgetLimit) : (budgetLimit - actualValue); const differenceClass = difference >= 0 ? 'text-positive' : 'text-negative';
                 const progressValue = actualValue, progressMax = budgetLimit; let progressClass = ''; const percentage = progressMax > 0 ? (progressValue / progressMax) * 100 : 0;
                 if (percentage > 100) progressClass = 'budget-item__progress--danger'; else if (percentage >= 85) progressClass = 'budget-item__progress--warning';
-                let deviationHtml = '';
-                if (isCurrentYear && now < endOfYear) { const proRatedTarget = budgetLimit * yearProgress; if (proRatedTarget > 0) { const deviationPercent = ((actualValue / proRatedTarget) - 1) * 100; let devClass = ''; if (isIncomeBudget) devClass = deviationPercent >= 0 ? 'text-positive' : 'text-negative'; else devClass = deviationPercent > 5 ? 'text-negative' : 'text-positive'; deviationHtml = `<span class="${devClass}" style="font-size: 0.75rem; font-weight: 600;">(${deviationPercent > 0 ? '+' : ''}${deviationPercent.toFixed(0)}%)</span>`; } }
-                html += `<div class="budget-track-item"><div class="budget-track-item__header"><span class="budget-track-item__concept-name">${concepto.nombre}</span><div class="budget-track-item__header-right"><span class="${differenceClass}">Diferencia: <strong>${formatCurrency(difference)}</strong></span>${deviationHtml}</div></div><div class="budget-track-item__details"><span>${isIncomeBudget ? 'Ingresado' : 'Gastado'}: <strong>${formatCurrency(actualValue)}</strong></span><span>Objetivo: <strong>${formatCurrency(budgetLimit)}</strong></span></div><progress class="budget-item__progress ${progressClass}" value="${progressValue}" max="${progressMax > 0 ? progressMax : 1}"></progress></div>`;
+                
+                html += `<div class="budget-track-item">
+                    <div class="budget-track-item__main">
+                        <span class="budget-track-item__concept-name">${concepto.nombre}</span>
+                        <progress class="budget-item__progress ${progressClass}" value="${progressValue}" max="${progressMax > 0 ? progressMax : 1}"></progress>
+                    </div>
+                    <div class="budget-track-item__figures">
+                        <span class="budget-track-item__amount"><strong>${formatCurrency(actualValue)}</strong> / ${formatCurrency(budgetLimit)}</span>
+                        <span class="budget-track-item__difference ${differenceClass}">${formatCurrency(difference)}</span>
+                    </div>
+                </div>`;
             });
-            listContainer.innerHTML = html;
+            listContainer.innerHTML = `<div class="card"><div class="card__content" style="padding: 0 var(--sp-4) var(--sp-2) var(--sp-4);">${html}</div></div>`;
         };
         
         // =================================================================================
@@ -1067,8 +1177,8 @@
         const renderInversionesPage = () => {
             (select('investment-list-view')).classList.remove('hidden');
             (select('investment-detail-view')).classList.add('hidden');
-            (select('top-bar-title')).textContent = 'Inversiones';
-            (select('top-bar-left')).innerHTML = '';
+            (select('top-bar-title')).textContent = 'Portafolio';
+            (select('top-bar-left-button')).innerHTML = '';
 
             const investmentAccounts = (db.cuentas || []).filter((c) => c.esInversion);
             const kpisContainer = select('investment-global-kpis');
@@ -1091,7 +1201,18 @@
                 totalValor += performance.valorActual;
                 totalCapital += performance.capitalInvertido;
                 const pnlClass = performance.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-                return `<div class="investment-asset-card" data-action="view-investment-detail" data-id="${cuenta.id}"><div class="investment-asset-card__header"><div><h3 class="investment-asset-card__name">${cuenta.nombre}</h3><small style="color: var(--c-on-surface-secondary);">${cuenta.tipo}</small></div><div><div class="investment-asset-card__value">${formatCurrency(performance.valorActual)}</div><div class="investment-asset-card__pnl ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)} (${performance.pnlPorcentual.toFixed(2)}%)</div></div></div><div class="investment-asset-card__footer"><button class="btn btn--secondary" data-action="update-investment-value" data-id="${cuenta.id}"><span class="material-icons" style="font-size:16px;">update</span>Actualizar</button></div></div>`;
+                return `<div class="investment-asset-card" data-action="view-investment-detail" data-id="${cuenta.id}">
+                    <div class="investment-asset-card__header">
+                        <div>
+                            <h3 class="investment-asset-card__name">${cuenta.nombre}</h3>
+                            <small style="color: var(--c-on-surface-secondary);">${cuenta.tipo}</small>
+                        </div>
+                        <div>
+                            <div class="investment-asset-card__value">${formatCurrency(performance.valorActual)}</div>
+                            <div class="investment-asset-card__pnl ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)} (${performance.pnlPorcentual.toFixed(2)}%)</div>
+                        </div>
+                    </div>
+                </div>`;
             }).join('');
 
             const totalPnlAbsoluto = totalValor - totalCapital;
@@ -1109,7 +1230,7 @@
             detailContainer.classList.remove('hidden');
 
             (select('top-bar-title')).textContent = cuenta.nombre;
-            (select('top-bar-left')).innerHTML = `<button class="icon-btn" data-action="back-to-investment-list"><span class="material-icons">arrow_back_ios</span></button>`;
+            (select('top-bar-left-button')).innerHTML = `<button class="icon-btn" data-action="back-to-investment-list"><span class="material-icons">arrow_back_ios</span></button>`;
             
             if (detailInvestmentChart) detailInvestmentChart.destroy();
 
@@ -1153,27 +1274,61 @@
             }
         };
 
-        const renderMovementRow = (item) => {
-            const m = item.movement;
-            const amountIcon = m.cantidad < 0 ? `<span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-left: 2px; color: var(--c-danger);">north_east</span>` : '';
-            const amount = m.tipo === 'traspaso' ? `<span class="text-info">${formatCurrency(m.cantidad)}</span>` : (m.cantidad < 0 ? `<span class="text-negative">${formatCurrency(m.cantidad)}</span>` : `<span class="text-positive">+${formatCurrency(m.cantidad)}</span>`);
-            let meta = '', saldoHtml = '', conceptIcon = 'label';
-            const concept = m.conceptoId ? db.conceptos.find((c) => c.id === m.conceptoId) : null;
-            if(concept && concept.icon) conceptIcon = concept.icon; else if (m.tipo === 'traspaso') conceptIcon = 'swap_horiz';
-            const formattedDate = new Date(m.fecha).toLocaleDateString('es-ES');
-            if (m.tipo === 'traspaso') { const origen = db.cuentas.find((c)=>c.id===m.cuentaOrigenId)?.nombre||'?', destino = db.cuentas.find((c)=>c.id===m.cuentaDestinoId)?.nombre||'?'; meta = `${formattedDate} · Traspaso: ${origen} → ${destino}`;
-            } else { const cuenta = db.cuentas.find((c) => c.id === m.cuentaId); if (cuenta) { meta = `${formattedDate} · ${cuenta.nombre}`; if (m.hasOwnProperty('saldoPostMovimiento')) { saldoHtml = `<div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-top: 2px;">${formatCurrency(m.saldoPostMovimiento)}</div>`; } } else { meta = formattedDate; } }
-            return `<div class="transaction-card" data-id="${m.id}"><div class="transaction-card__actions transaction-card__actions--left"><button class="icon-btn" data-action="copy-movement-swipe" title="Copiar"><span class="material-icons">content_copy</span></button></div><div class="transaction-card__swipe-content" data-action="edit-movement" data-id="${m.id}"><div class="transaction-card__icon"><span class="material-icons">${conceptIcon}</span></div><div class="transaction-card__details"><div class="transaction-card__description">${m.descripcion}</div><div class="transaction-card__meta">${meta}</div></div><div class="transaction-card__amount">${amount}${saldoHtml}</div></div><div class="transaction-card__actions transaction-card__actions--right"><button class="icon-btn" data-action="delete-movement-swipe" title="Eliminar"><span class="material-icons">delete</span></button></div></div>`;
+        const formatDateHeader = (date) => {
+            const today = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            if (date.toDateString() === today.toDateString()) return 'Hoy';
+            if (date.toDateString() === yesterday.toDateString()) return 'Ayer';
+            
+            return new Intl.DateTimeFormat('es-ES', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            }).format(date);
+        };
+
+        const renderVirtualListItem = (item) => {
+            if (item.type === 'date-header') {
+                return `<div class="date-header-sticky">${item.date}</div>`;
+            }
+            if (item.type === 'transaction') {
+                const m = item.movement;
+                const amountIcon = m.cantidad < 0 ? `<span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-left: 2px; color: var(--c-danger);">north_east</span>` : '';
+                const amount = m.tipo === 'traspaso' ? `<span class="text-info">${formatCurrency(m.cantidad)}</span>` : (m.cantidad < 0 ? `<span class="text-negative">${formatCurrency(m.cantidad)}</span>` : `<span class="text-positive">+${formatCurrency(m.cantidad)}</span>`);
+                let meta = '', saldoHtml = '', conceptIcon = 'label';
+                const concept = m.conceptoId ? db.conceptos.find((c) => c.id === m.conceptoId) : null;
+                if(concept && concept.icon) conceptIcon = concept.icon; else if (m.tipo === 'traspaso') conceptIcon = 'swap_horiz';
+                
+                if (m.tipo === 'traspaso') { const origen = db.cuentas.find((c)=>c.id===m.cuentaOrigenId)?.nombre||'?', destino = db.cuentas.find((c)=>c.id===m.cuentaDestinoId)?.nombre||'?'; meta = `Traspaso: ${origen} → ${destino}`;
+                } else { const cuenta = db.cuentas.find((c) => c.id === m.cuentaId); if (cuenta) { meta = cuenta.nombre; if (m.hasOwnProperty('saldoPostMovimiento')) { saldoHtml = `<div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-top: 2px;">${formatCurrency(m.saldoPostMovimiento)}</div>`; } } else { meta = ''; } }
+                
+                return `<div class="transaction-card" data-id="${m.id}"><div class="transaction-card__actions transaction-card__actions--left"><button class="icon-btn" data-action="copy-movement-swipe" title="Copiar"><span class="material-icons">content_copy</span></button></div><div class="transaction-card__swipe-content" data-action="edit-movement" data-id="${m.id}"><div class="transaction-card__icon"><span class="material-icons">${conceptIcon}</span></div><div class="transaction-card__details"><div class="transaction-card__description">${m.descripcion}</div><div class="transaction-card__meta">${meta}</div></div><div class="transaction-card__amount">${amount}${saldoHtml}</div></div><div class="transaction-card__actions transaction-card__actions--right"><button class="icon-btn" data-action="delete-movement-swipe" title="Eliminar"><span class="material-icons">delete</span></button></div></div>`;
+            }
+            return '';
         };
 
         const renderVisibleItems = () => {
-            if (!vList.scrollerEl) return; const scrollTop = vList.scrollerEl.scrollTop, containerHeight = vList.scrollerEl.clientHeight;
+            if (!vList.scrollerEl) return; 
+            const scrollTop = vList.scrollerEl.scrollTop, containerHeight = vList.scrollerEl.clientHeight;
             let startIndex = -1, endIndex = -1;
+            
             for (let i = 0; i < vList.itemMap.length; i++) { const item = vList.itemMap[i]; if (startIndex === -1 && item.offset + item.height > scrollTop) startIndex = Math.max(0, i - vList.renderBuffer); if (endIndex === -1 && item.offset + item.height > scrollTop + containerHeight) { endIndex = Math.min(vList.itemMap.length - 1, i + vList.renderBuffer); break; } }
-            if (startIndex === -1) startIndex = 0; if (endIndex === -1) endIndex = vList.itemMap.length - 1;
+            if (startIndex === -1 && vList.items.length > 0) startIndex = 0;
+            if (endIndex === -1) endIndex = vList.itemMap.length - 1;
+            
             if (startIndex === vList.lastRenderedRange.start && endIndex === vList.lastRenderedRange.end) return;
-            let visibleHtml = ''; for (let i = startIndex; i <= endIndex; i++) { if (vList.items[i]) visibleHtml += renderMovementRow(vList.items[i]); }
-            vList.contentEl.innerHTML = visibleHtml; const offsetY = vList.itemMap[startIndex]?.offset || 0; vList.contentEl.style.transform = `translateY(${offsetY}px)`; vList.lastRenderedRange = { start: startIndex, end: endIndex };
+            
+            let visibleHtml = ''; 
+            for (let i = startIndex; i <= endIndex; i++) { 
+                if (vList.items[i]) visibleHtml += renderVirtualListItem(vList.items[i]); 
+            }
+            vList.contentEl.innerHTML = visibleHtml; 
+            const offsetY = vList.itemMap[startIndex]?.offset || 0; 
+            vList.contentEl.style.transform = `translateY(${offsetY}px)`; 
+            vList.lastRenderedRange = { start: startIndex, end: endIndex };
         };
 
         const renderMovimientos = () => {
@@ -1198,8 +1353,29 @@
             if (filtered.length === 0) { listContainer.classList.add('hidden'); emptyEl.classList.remove('hidden'); return; }
             listContainer.classList.remove('hidden'); emptyEl.classList.add('hidden');
             vList.items = []; vList.itemMap = []; let totalHeight = 0;
-            filtered.forEach((mov) => { const transactionItem = { type: 'transaction', movement: mov }; vList.items.push(transactionItem); vList.itemMap.push({ height: vList.heights.transaction, offset: totalHeight }); totalHeight += vList.heights.transaction; });
-            vList.sizerEl.style.height = `${totalHeight}px`; vList.lastRenderedRange = { start: -1, end: -1 }; renderVisibleItems();
+            let lastHeaderDate = null;
+            
+            filtered.forEach((mov) => {
+                const movDate = new Date(mov.fecha);
+                const headerText = formatDateHeader(movDate);
+                
+                if (headerText !== lastHeaderDate) {
+                    const dateItem = { type: 'date-header', date: headerText };
+                    vList.items.push(dateItem);
+                    vList.itemMap.push({ height: vList.heights.dateHeader, offset: totalHeight });
+                    totalHeight += vList.heights.dateHeader;
+                    lastHeaderDate = headerText;
+                }
+
+                const transactionItem = { type: 'transaction', movement: mov }; 
+                vList.items.push(transactionItem); 
+                vList.itemMap.push({ height: vList.heights.transaction, offset: totalHeight }); 
+                totalHeight += vList.heights.transaction; 
+            });
+
+            vList.sizerEl.style.height = `${totalHeight}px`; 
+            vList.lastRenderedRange = { start: -1, end: -1 }; 
+            renderVisibleItems();
         };
 
         const renderCuentas = () => {
@@ -1231,10 +1407,8 @@
                 return acc;
             }, {});
             
-            let totalLiquidFunds = 0;
-            getLiquidAccounts().filter((c) => filteredAccountTypes.has((c.tipo || 'S/T').toUpperCase())).forEach((c) => totalLiquidFunds += (saldos[c.id] || 0));
-            
             resCont.innerHTML = Object.keys(accountsByType).sort().map(tipo => {
+                if (!filteredAccountTypes.has(tipo)) return '';
                 const accountsInType = accountsByType[tipo];
                 let typeBalance = 0;
                 const accountsHtml = accountsInType.sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
@@ -1242,17 +1416,24 @@
                     typeBalance += balance;
                     let amountHTML = `<strong>${formatCurrency(balance)}</strong>`;
                     if (tipo === 'PRÉSTAMO') amountHTML = `<strong class="text-warning">${formatCurrency(Math.abs(balance))}</strong>`;
-                    const investmentIcon = c.esInversion ? `<span class="material-icons text-info" style="font-size: 14px; margin-left: var(--sp-2);" title="Cuenta de Inversión">trending_up</span>` : '';
-                    return `<div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" style="cursor: pointer;"><div><span style="display: block; font-weight: 500;">${c.nombre}</span></div><div style="display: flex; align-items: center; gap: var(--sp-2);">${amountHTML}${investmentIcon}<span class="material-icons" style="font-size: 18px; color: var(--c-on-surface-secondary);">chevron_right</span></div></div>`;
+                    const investmentIcon = c.esInversion ? `<span class="material-icons text-info" style="font-size: 14px; margin-left: var(--sp-2);" title="Cuenta de Portafolio">trending_up</span>` : '';
+                    return `<div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" style="cursor: pointer;">
+                                <div><span style="display: block; font-weight: 500;">${c.nombre}</span></div>
+                                <div style="display: flex; align-items: center; gap: var(--sp-2);">${amountHTML}${investmentIcon}<span class="material-icons" style="font-size: 18px; color: var(--c-on-surface-secondary);">chevron_right</span></div>
+                            </div>`;
                 }).join('');
                 
                 if (!accountsHtml) return '';
                 
-                const percentage = totalLiquidFunds > 0 && typeBalance > 0 && getLiquidAccounts().some(acc => acc.tipo.toUpperCase() === tipo) ? (typeBalance / totalLiquidFunds) * 100 : 0;
-                const percentageHtml = percentage ? `<small style="font-weight: 500; color: var(--c-on-surface-secondary); font-size: 0.8rem; margin-left: 8px;">${percentage.toFixed(0)}%</small>` : '';
                 const icon = tipo==='EFECTIVO'?'payments':(tipo.includes('TARJETA')?'credit_card':(tipo==='AHORRO'?'savings':(tipo==='INVERSIÓN'?'trending_up':(tipo==='PROPIEDAD'?'domain':(tipo==='PRÉSTAMO'?'credit_score':'account_balance')))));
                 
-                return `<details class="accordion"><summary><span><span class="material-icons" style="vertical-align:bottom;font-size:18px;margin-right:8px">${icon}</span><span class="cuentas-type-name">${tipo}</span></span><span style="display: flex; align-items: center;"><strong>${formatCurrency(typeBalance)}</strong>${percentageHtml}<span class="material-icons accordion__icon">expand_more</span></span></summary><div class="accordion__content">${accountsHtml}</div></details>`;
+                return `<div class="account-group">
+                            <div class="account-group__header">
+                                <span class="account-group__name"><span class="material-icons" style="vertical-align:bottom;font-size:16px;margin-right:8px">${icon}</span>${tipo}</span>
+                                <span class="account-group__balance">${formatCurrency(typeBalance)}</span>
+                            </div>
+                            <div>${accountsHtml}</div>
+                        </div>`;
             }).join('');
 
             const chartContainer = select(`liquid-assets-chart-container`);
@@ -1343,78 +1524,37 @@
                 <h3><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">menu_book</span>Guía Maestra de la App de Cuentas</h3>
                 <p>¡Bienvenido/a! Esta es tu central de operaciones para dominar tus finanzas. Hemos diseñado cada rincón de esta app para que sea potente pero intuitiva. Aquí te lo contamos todo.</p>
 
-                <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">dashboard</span>Panel de Control: Tu Vistazo Financiero</h4>
-                <p>Es la pantalla de inicio y tu centro neurálgico. Te da una imagen clara de tu salud financiera de un solo vistazo.</p>
+                <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">swap_horiz</span>Movimientos: El Corazón de tus Finanzas</h4>
+                <p>Aquí reside el historial detallado de todas tus transacciones, ordenado de la más reciente a la más antigua y agrupado por fecha para una navegación más clara.</p>
                 <ul>
-                    <li><strong>Filtros Globales:</strong> En la parte superior, puedes filtrar <strong>toda la información del panel</strong> por periodo (mes actual, año, siempre, o un rango personalizado), por una cuenta específica o por un concepto. ¡Prueba a combinar filtros para un análisis más profundo!</li>
-                    <li><strong>Indicadores Clave (KPIs):</strong> Las tres tarjetas superiores son tu resumen vital: <strong>Ingresos</strong> (todo el dinero que ha entrado), <strong>Gastos</strong> (el dinero que ha salido) y el <strong>Saldo Neto</strong> (la diferencia, ¡lo que de verdad importa!).</li>
-                    <li><strong>Totales por Concepto:</strong> Este gráfico de barras es tu mejor aliado para responder a la pregunta "¿A dónde se va mi dinero?". Muestra tus gastos e ingresos agrupados por categoría. <strong>Consejo pro:</strong> Toca una de las barras y se desplegará una lista con todos los movimientos de ese concepto en el periodo que has filtrado.</li>
+                    <li><strong>Búsqueda Instantánea:</strong> La barra de búsqueda superior es muy potente. Puedes buscar por descripción, por el nombre de un concepto o por una cuenta.</li>
+                    <li><strong>Acciones con Gestos (Swipe):</strong> Desliza un movimiento hacia la <strong>izquierda</strong> para revelar el botón de <strong>Eliminar</strong>, o hacia la <strong>derecha</strong> para <strong>Copiar</strong>.</li>
                 </ul>
 
-                <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">swap_horiz</span>Movimientos: El Corazón de tus Finanzas</h4>
-                <p>Aquí reside el historial detallado de todas tus transacciones, ordenado de la más reciente a la más antigua para que siempre tengas lo último a mano.</p>
-                <ul>
-                    <li><strong>Lista Inteligente:</strong> Cada movimiento incluye su descripción, fecha, la cuenta afectada y el saldo acumulado en esa cuenta tras la operación. El icono te ayuda a identificar el concepto visualmente.</li>
-                    <li><strong>Búsqueda Instantánea:</strong> La barra de búsqueda superior es muy potente. Puedes buscar por descripción, por el nombre de un concepto o por el nombre de una cuenta.</li>
-                    <li><strong>Acciones con Gestos (Swipe):</strong> Para agilizar tu día a día, hemos implementado acciones rápidas:
-                        <ul>
-                            <li><span class="material-icons" style="font-size:1em; vertical-align: sub;">chevron_left</span> Desliza un movimiento hacia la <strong>izquierda</strong> para revelar el botón rojo de <strong>Eliminar</strong>. ¡Con cuidado!</li>
-                            <li><span class="material-icons" style="font-size:1em; vertical-align: sub;">chevron_right</span> Desliza hacia la <strong>derecha</strong> para <strong>Copiar</strong>. Esto crea un nuevo movimiento con los mismos datos, listo para que solo cambies la fecha o el importe. Ideal para gastos recurrentes.</li>
-                        </ul>
-                    </li>
-                     <li><strong>Traspasos:</strong> Un traspaso no es un gasto ni un ingreso, es mover dinero entre tus propias cuentas (ej. de tu 'Cuenta Corriente' a 'Efectivo'). Se registra con una cantidad siempre positiva y se elige cuenta de origen y destino.</li>
-                </ul>
-                
-                <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">trending_up</span>Inversiones: Haz Crecer tu Patrimonio</h4>
-                <p>Esta sección es un centro de mando avanzado para seguir tus inversiones. No mezcla tus ahorros del día a día con el capital que pones a trabajar.</p>
-                <ul>
-                    <li><strong>Crea tu Portfolio:</strong> En "Gestionar Activos", puedes marcar cualquier cuenta que hayas creado (ej. tu 'Bróker X', un 'Fondo Indexado Y') como una cuenta de inversión. A partir de ese momento, se analizará aquí.</li>
-                    <li><strong>Flujos de Capital (¡Clave!):</strong> Usa "Aportar/Retirar" para registrar el dinero que metes o sacas de tus inversiones. Esto es <strong>fundamental</strong>. La app lo trata como un flujo de capital, no como un gasto o ingreso, lo que permite calcular tu <strong>rentabilidad real (P&L)</strong> de forma precisa.</li>
-                    <li><strong>Actualiza el Valor de Mercado:</strong> Periódicamente (ej. una vez al mes), pulsa "Actualizar" en cada activo e introduce su valor actual de mercado. Así es como la app sabe si estás ganando o perdiendo dinero.</li>
-                    <li><strong>Análisis Detallado:</strong> Pulsa sobre cualquier activo para una vista increíble: un gráfico que compara la línea de tu <strong>Capital Invertido</strong> (lo que has puesto de tu bolsillo) con la línea del <strong>Valor del Activo</strong> (lo que realmente vale). Debajo, tienes un historial completo de cada aportación, reembolso y valoración que has hecho.</li>
-                </ul>
+                <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">dashboard</span>Panel de Control: Tu Vistazo Financiero</h4>
+                <p>Tu centro neurálgico que te da una imagen clara de tu salud financiera de un solo vistazo, afectado por los filtros globales que apliques.</p>
                 
                 <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">account_balance_wallet</span>Cuentas: Organiza tu Dinero</h4>
-                <p>Aquí tienes una visión global de todo tu dinero y deudas, organizado por tipos.</p>
+                <p>Visión global de todo tu dinero y deudas, organizado por tipos de cuenta de forma compacta para una mejor visualización.</p>
+
+                <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">trending_up</span>Portafolio: Haz Crecer tu Patrimonio</h4>
+                <p>Un centro de mando avanzado para seguir tus activos de inversión de forma separada a tus finanzas del día a día.</p>
                 <ul>
-                    <li><strong>Saldo Total Dinámico:</strong> En la parte superior, verás el saldo total de los tipos de cuenta que estén seleccionados en los filtros.</li>
-                    <li><strong>Grupos Plegados:</strong> Los tipos de cuenta están agrupados y plegados por defecto para una vista más limpia. Pulsa en cualquiera para expandirlo y ver las cuentas individuales.</li>
-                    <li><strong>Filtra por Tipo:</strong> Usa las píldoras de filtro para mostrar u ocultar tipos de cuenta en el resumen y en el gráfico (ej. para ver solo tu dinero líquido, puedes ocultar 'PROPIEDAD' y 'PRÉSTAMO').</li>
-                    <li><strong>Gráfico de Distribución:</strong> El gráfico de tarta (o donut) te muestra visualmente cómo se distribuye tu dinero líquido entre los diferentes tipos de cuenta seleccionados.</li>
+                    <li><strong>Crea tu Portfolio:</strong> En "Gestionar Activos", marca cualquier cuenta como activo de inversión para analizarla aquí.</li>
+                    <li><strong>Flujos de Capital (¡Clave!):</strong> Usa "Aportar/Retirar" (accesible desde el FAB contextual <span class="material-icons" style="font-size:1em; vertical-align: sub;">menu</span>) para registrar el dinero que metes o sacas. Esto es <strong>fundamental</strong> para calcular tu rentabilidad real (P&L) de forma precisa.</li>
+                    <li><strong>Actualiza el Valor de Mercado:</strong> Periódicamente (ej. una vez al mes), pulsa el FAB contextual y "Actualizar Valor" para introducir su valor actual de mercado y saber si estás ganando o perdiendo dinero.</li>
+                    <li><strong>Análisis Detallado:</strong> Pulsa sobre cualquier activo para una vista increíble con gráficos y un historial completo de todas tus operaciones.</li>
                 </ul>
-
-
+                
                 <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">pie_chart</span>Presupuestos: Planifica y Conquista tus Metas</h4>
-                <p>Esta es tu herramienta para pasar de reaccionar a tus gastos a planificarlos activamente. Define tus metas y comprueba si vas por el buen camino.</p>
+                <p>Tu herramienta para planificar activamente tus gastos y metas de ingresos. El FAB contextual (<span class="material-icons" style="font-size:1em; vertical-align: sub;">edit</span>) te da acceso rápido para gestionar los presupuestos del año seleccionado.</p>
                 <ul>
-                    <li><strong>Presupuestos Anuales:</strong> Eliges un año y asignas un límite a cada concepto. <strong>Importante:</strong> Introduce un valor <strong>positivo</strong> para metas de <strong>ingreso</strong> (ej: <code>24000</code> para la nómina anual) y un valor <strong>negativo</strong> para límites de <strong>gasto</strong> (ej: <code>-600</code> para ocio anual).</li>
-                    <li><strong>Seguimiento Visual:</strong> Cada concepto tiene una barra de progreso. A medida que gastas, la barra se llena. Se pondrá amarilla al 85% y roja si te pasas del 100%.</li>
-                    <li><strong>La Métrica Estrella - Desviación (%):</strong> Este pequeño número es el más inteligente de la app. No solo mira cuánto has gastado, sino que lo compara con lo que <i>deberías</i> haber gastado a fecha de hoy para cumplir tu meta anual.
-                        <ul>
-                            <li>Ejemplo de Gasto: Si a mitad de año tu desviación en "Ocio" es <strong><span class="text-negative">+20%</span></strong>, significa que vas un 20% por encima de lo previsto. ¡Alerta!</li>
-                            <li>Ejemplo de Gasto: Si es <strong><span class="text-positive">-15%</span></strong>, ¡genial! Vas un 15% por debajo de tu límite prorrateado.</li>
-                        </ul>
-                    </li>
+                    <li><strong>Presupuestos Anuales:</strong> Asigna un límite a cada concepto. <strong>Importante:</strong> Usa un valor <strong>positivo</strong> para metas de <strong>ingreso</strong> y un valor <strong>negativo</strong> para límites de <strong>gasto</strong>.</li>
+                    <li><strong>Seguimiento Visual Compacto:</strong> Cada concepto muestra tu progreso actual frente al objetivo, la diferencia neta y una barra de progreso que cambia de color para alertarte.</li>
                 </ul>
                 
                 <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">settings</span>Configuración y Gestión de Datos</h4>
-                <p>El centro de control de la app. Desde aquí puedes personalizarla y gestionar tus datos de forma segura.</p>
-                <ul>
-                    <li><strong>Cuentas y Conceptos:</strong> Crea, edita y elimina las categorías de tus gastos/ingresos y las cuentas donde gestionas tu dinero.</li>
-                    <li><strong>Exportar Datos:</strong> Tienes dos opciones:
-                        <ul>
-                            <li><strong>Exportar JSON:</strong> Crea una <strong>copia de seguridad completa</strong> de todos tus datos. Guárdala en un lugar seguro.</li>
-                            <li><strong>Exportar CSV:</strong> Exporta todos tus movimientos a un archivo compatible con Excel, Google Sheets, etc., para tus propios análisis.</li>
-                        </ul>
-                    </li>
-                    <li><strong>Importar Datos:</strong>
-                         <ul>
-                            <li><strong>Importar JSON:</strong> Restaura una copia de seguridad. <strong>¡Atención!</strong> Esto <strong>borrará todos los datos actuales</strong> y los reemplazará por los del archivo.</li>
-                            <li><strong>Importar CSV:</strong> Añade movimientos desde un archivo CSV. El archivo debe contener como mínimo las columnas: <code>fecha</code>, <code>importe</code>, <code>cuenta</code>, <code>descripcion</code>.</li>
-                        </ul>
-                    </li>
-                    <li><strong>Borrar Todos los Datos:</strong> Una opción drástica por si quieres empezar de cero. Te pedirá doble confirmación, ¡úsala con precaución!</li>
-                </ul>
+                <p>El centro de control de la app para personalizarla y gestionar tus datos de forma segura, incluyendo el potente asistente de importación CSV.</p>
             `;
             showGenericModal("Guía Completa de Usuario", helpHTML);
         };
@@ -1425,12 +1565,88 @@
         const renderCuentasModalList = () => { const list = select('cuentas-modal-list'); if (!list) return; list.innerHTML = (db.cuentas || []).length === 0 ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay cuentas.</p>` : [...db.cuentas].sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => `<div class="modal__list-item"><div><span style="display: block; font-weight: 500;">${c.nombre}</span><small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">${c.tipo.toUpperCase()}</small></div><button class="icon-btn" data-action="delete-cuenta" data-id="${c.id}" title="Eliminar Cuenta"><span class="material-icons">delete_outline</span></button></div>`).join(''); };
         
         // =================================================================================
+        // 10. ROBUST CSV IMPORT WIZARD
+        // =================================================================================
+        const csvWizardState = { file: null, rawText: '', parsedData: [], headers: [], previewRows: [], mapping: {}, finalMovements: [], };
+        const startCsvImportWizard = (file) => {
+            if (!file) return; csvWizardState.file = file; const reader = new FileReader();
+            reader.onload = (event) => {
+                csvWizardState.rawText = event.target.result; csvWizardState.parsedData = robustCsvParse(csvWizardState.rawText);
+                if (csvWizardState.parsedData.length < 2) { showToast('Archivo CSV inválido o con menos de una fila de datos.', 'danger'); return; }
+                csvWizardState.headers = csvWizardState.parsedData[0]; csvWizardState.previewRows = csvWizardState.parsedData.slice(1, 6);
+                renderCsvStep1_Mapping(); showModal('import-csv-wizard-modal');
+            };
+            reader.onerror = () => showToast('Error al leer el archivo.', 'danger'); reader.readAsText(file);
+        };
+        const renderCsvStep1_Mapping = () => {
+            select('import-csv-wizard-title').textContent = 'Paso 1: Asignar Columnas';
+            const appFields = [ { value: 'ignore', text: 'Ignorar Columna' }, { value: 'descripcion', text: 'Descripción (Obligatorio)' }, { value: 'fecha', text: 'Fecha (Obligatorio)' }, { value: 'importe', text: 'Importe (una columna, gasto en negativo)' }, { value: 'ingreso', text: 'Importe (Ingresos)' }, { value: 'gasto', text: 'Importe (Gastos, usar positivo)' }, { value: 'cuenta', text: 'Cuenta (Para Movimientos)' }, { value: 'cuentaOrigen', text: 'Cuenta Origen (Para Traspasos)' }, { value: 'cuentaDestino', text: 'Cuenta Destino (Para Traspasos)' }, { value: 'concepto', text: 'Concepto' }, ];
+            const optionsHtml = appFields.map(f => `<option value="${f.value}">${f.text}</option>`).join('');
+            let mappingTableHtml = `<p class="form-label" style="margin-bottom: var(--sp-3)">Asigna cada columna de tu archivo CSV al campo correspondiente. La app creará cuentas y conceptos que no existan.</p><div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; text-align: left;"><thead><tr><th style="padding: 8px; border-bottom: 1px solid var(--c-outline);">Columna CSV</th><th style="padding: 8px; border-bottom: 1px solid var(--c-outline);">Asignar a...</th></tr></thead><tbody>`;
+            csvWizardState.headers.forEach((header, index) => {
+                let selected = 'ignore'; const h = header.toLowerCase().trim(); if (h.includes('fecha') || h.includes('date')) selected = 'fecha'; if (h.includes('descrip') || h.includes('concept') || h.includes('detail')) selected = 'descripcion'; if (h.includes('import') || h.includes('amount') || h.includes('valor')) selected = 'importe'; if (h.includes('debe') || h.includes('debit') || h.includes('gasto')) selected = 'gasto'; if (h.includes('haber') || h.includes('credit') || h.includes('ingreso')) selected = 'ingreso'; if (h.includes('cuenta') || h.includes('account')) selected = 'cuenta';
+                mappingTableHtml += `<tr><td style="padding: 8px; border-bottom: 1px solid var(--c-outline);"><strong>${header}</strong><br><small style="color:var(--c-on-surface-secondary);">${csvWizardState.previewRows[0]?.[index] || '...'}</small></td><td style="padding: 8px; border-bottom: 1px solid var(--c-outline);"><select class="form-select csv-mapping-select" data-header="${header}">${optionsHtml.replace(`value="${selected}"`, `value="${selected}" selected`)}</select></td></tr>`;
+            });
+            mappingTableHtml += '</tbody></table></div>';
+            (select('import-csv-wizard-body')).innerHTML = mappingTableHtml;
+            (select('import-csv-wizard-actions')).innerHTML = `<button data-action="csv-wizard-next-step" class="btn btn--primary">Siguiente: Previsualizar</button>`;
+        };
+        const processMappingAndRenderPreview = () => {
+            csvWizardState.mapping = {};
+            selectAll('.csv-mapping-select').forEach(select => {
+                if (select.value !== 'ignore') {
+                    if (select.value === 'descripcion') { if (!csvWizardState.mapping[select.value]) csvWizardState.mapping[select.value] = []; csvWizardState.mapping[select.value].push(select.dataset.header); } else { if (csvWizardState.mapping[select.value]) { showToast(`El campo '${select.options[select.selectedIndex].text}' ha sido asignado múltiples veces.`, 'warning'); throw new Error('Duplicate mapping'); } csvWizardState.mapping[select.value] = select.dataset.header; }
+                }
+            });
+            if (!csvWizardState.mapping.fecha || !csvWizardState.mapping.descripcion) { showToast('Debes asignar las columnas de Fecha y Descripción.', 'danger'); throw new Error('Missing required mapping'); }
+            const hasAmount = csvWizardState.mapping.importe || (csvWizardState.mapping.ingreso && csvWizardState.mapping.gasto) || csvWizardState.mapping.ingreso || csvWizardState.mapping.gasto; if (!hasAmount) { showToast('Debes asignar al menos una columna de importe.', 'danger'); throw new Error('Missing amount mapping'); }
+            renderCsvStep2_Preview();
+        };
+        const interpretCsvRow = (rowObject) => {
+            const { mapping } = csvWizardState; let mov = { _raw: rowObject, _errors: [], descripcion: '', fecha: null, cantidad: 0, cuenta: null, concepto: null, tipo: 'movimiento', };
+            const dateStr = rowObject[mapping.fecha]; if (dateStr) { let parsedDate = new Date(dateStr.replace(/(\d{2})[\\/.-](\d{2})[\\/.-](\d{4})/, '$3-$2-$1')); if (isNaN(parsedDate.getTime())) parsedDate = new Date(dateStr); if (isNaN(parsedDate.getTime())) mov._errors.push('Fecha inválida'); else mov.fecha = parsedDate; } else { mov._errors.push('Fecha no encontrada'); }
+            if (Array.isArray(mapping.descripcion)) { mov.descripcion = mapping.descripcion.map(header => rowObject[header]).join(' - '); } else { mov.descripcion = rowObject[mapping.descripcion] || ''; } if (!mov.descripcion) mov._errors.push('Descripción vacía');
+            let ingreso = 0, gasto = 0; if (mapping.importe) { const amount = parseFloat(String(rowObject[mapping.importe]).replace(/[^0-9-.,]/g, '').replace(',', '.')); if (isNaN(amount)) mov._errors.push('Importe no numérico'); else mov.cantidad = Math.round(amount * 100); } else { if (mapping.ingreso && rowObject[mapping.ingreso]) { ingreso = parseFloat(String(rowObject[mapping.ingreso]).replace(/[^0-9-.,]/g, '').replace(',', '.')); if (isNaN(ingreso)) mov._errors.push('Ingreso no numérico'); } if (mapping.gasto && rowObject[mapping.gasto]) { gasto = parseFloat(String(rowObject[mapping.gasto]).replace(/[^0-9-.,]/g, '').replace(',', '.')); if (isNaN(gasto)) mov._errors.push('Gasto no numérico'); } mov.cantidad = Math.round((ingreso - gasto) * 100); }
+            const cuentaOrigen = mapping.cuentaOrigen ? rowObject[mapping.cuentaOrigen] : null; const cuentaDestino = mapping.cuentaDestino ? rowObject[mapping.cuentaDestino] : null;
+            if (cuentaOrigen && cuentaDestino) { mov.tipo = 'traspaso'; mov.cuentaOrigen = cuentaOrigen; mov.cuentaDestino = cuentaDestino; mov.cantidad = Math.abs(mov.cantidad); } else { mov.tipo = 'movimiento'; mov.cuenta = mapping.cuenta ? rowObject[mapping.cuenta] : 'Cuenta Importada'; }
+            mov.concepto = mapping.concepto ? rowObject[mapping.concepto] : 'Importado'; return mov;
+        };
+        const renderCsvStep2_Preview = () => {
+            select('import-csv-wizard-title').textContent = 'Paso 2: Previsualizar y Validar';
+            let previewTable = `<p class="form-label" style="margin-bottom: var(--sp-3)">Así es como la app interpretará tus datos. Las filas con errores (en rojo) no se importarán.</p><div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; text-align: left;"><thead><tr><th style="padding: 8px; border-bottom: 1px solid var(--c-outline);">Fecha</th><th style="padding: 8px; border-bottom: 1px solid var(--c-outline);">Descripción</th><th style="padding: 8px; border-bottom: 1px solid var(--c-outline);">Cuenta</th><th style="padding: 8px; border-bottom: 1px solid var(--c-outline);">Importe</th><th style="padding: 8px; border-bottom: 1px solid var(--c-outline);">Estado</th></tr></thead><tbody>`;
+            csvWizardState.finalMovements = [];
+            csvWizardState.parsedData.slice(1).forEach(row => { const rowObject = csvWizardState.headers.reduce((obj, header, i) => ({ ...obj, [header]: row[i] }), {}); csvWizardState.finalMovements.push(interpretCsvRow(rowObject)); });
+            csvWizardState.finalMovements.slice(0, 10).forEach(mov => {
+                const hasError = mov._errors.length > 0; const cuentaText = mov.tipo === 'traspaso' ? `${mov.cuentaOrigen} → ${mov.cuentaDestino}` : mov.cuenta;
+                previewTable += `<tr style="${hasError ? 'background-color: color-mix(in srgb, var(--c-danger) 15%, transparent);' : ''}"><td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${mov.fecha ? mov.fecha.toLocaleDateString('es-ES') : '---'}</td><td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${mov.descripcion}</td><td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${cuentaText}</td><td style="padding: 8px; border-bottom: 1px solid var(--c-outline);" class="${mov.cantidad >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(mov.cantidad)}</td><td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${hasError ? mov._errors.join(', ') : '<span class="text-positive">OK</span>'}</td></tr>`;
+            });
+            previewTable += '</tbody></table></div>'; (select('import-csv-wizard-body')).innerHTML = previewTable;
+            const validCount = csvWizardState.finalMovements.filter(m => m._errors.length === 0).length;
+            (select('import-csv-wizard-actions')).innerHTML = `<span style="margin-right: auto; color: var(--c-on-surface-secondary);">Se importarán <strong>${validCount}</strong> de <strong>${csvWizardState.finalMovements.length}</strong> filas.</span><button data-action="csv-wizard-back-step" class="btn btn--secondary">Atrás</button><button data-action="csv-wizard-import" class="btn btn--primary" ${validCount === 0 ? 'disabled' : ''}>Confirmar e Importar</button>`;
+        };
+        const processAndSaveCsvImport = (btn) => {
+            setButtonLoading(btn, true, 'Importando...');
+            const validMovements = csvWizardState.finalMovements.filter(m => m._errors.length === 0), newAccounts = new Map(), newConcepts = new Map();
+            const getAccountId = (name) => { if (newAccounts.has(name)) return newAccounts.get(name); const existing = db.cuentas.find(c => c.nombre.toLowerCase() === name.toLowerCase()); if (existing) return existing.id; const newId = generateId(); db.cuentas.push({ id: newId, nombre: name, tipo: 'IMPORTADO', esInversion: false, fechaCreacion: new Date().toISOString() }); newAccounts.set(name, newId); return newId; };
+            const getConceptId = (name) => { if (newConcepts.has(name)) return newConcepts.get(name); const existing = db.conceptos.find(c => c.nombre.toLowerCase() === name.toLowerCase()); if (existing) return existing.id; const newId = generateId(); db.conceptos.push({ id: newId, nombre: name, icon: 'file_upload' }); newConcepts.set(name, newId); return newId; };
+            validMovements.forEach(mov => { const finalMov = { id: generateId(), fecha: mov.fecha.toISOString(), descripcion: mov.descripcion, cantidad: mov.cantidad, tipo: mov.tipo }; if (mov.tipo === 'traspaso') { finalMov.cuentaOrigenId = getAccountId(mov.cuentaOrigen); finalMov.cuentaDestinoId = getAccountId(mov.cuentaDestino); } else { finalMov.cuentaId = getAccountId(mov.cuenta); finalMov.conceptoId = getConceptId(mov.concepto); } db.movimientos.push(finalMov); });
+            saveData(btn, () => renderCsvStep3_Summary(validMovements.length, csvWizardState.finalMovements.length - validMovements.length, newAccounts.size, newConcepts.size));
+        };
+        const renderCsvStep3_Summary = (imported, skipped, newAcc, newCon) => {
+            select('import-csv-wizard-title').textContent = 'Importación Completada';
+            (select('import-csv-wizard-body')).innerHTML = `<div class="empty-state" style="padding: var(--sp-5);"><span class="material-icons text-positive" style="font-size: 48px;">check_circle</span><h3>¡Éxito!</h3><p style="max-width: 350px; margin: auto;">Tu archivo ha sido procesado. Aquí tienes el resumen:</p><div style="text-align: left; max-width: 250px; margin: var(--sp-4) auto 0 auto;"><div class="modal__list-item"><span>Movimientos importados:</span><strong>${imported}</strong></div><div class="modal__list-item"><span>Filas omitidas (con errores):</span><strong>${skipped}</strong></div><div class="modal__list-item"><span>Nuevas cuentas creadas:</span><strong>${newAcc}</strong></div><div class="modal__list-item"><span>Nuevos conceptos creados:</span><strong>${newCon}</strong></div></div></div>`;
+            (select('import-csv-wizard-actions')).innerHTML = `<button data-action="close-modal" data-modal-id="import-csv-wizard-modal" class="btn btn--primary btn--full">Entendido</button>`;
+            renderAll();
+        };
+
+        // =================================================================================
         // 11. EVENT LISTENERS & HANDLERS
         // =================================================================================
         const attachEventListeners = () => {
             let currentSwipedCard = null; window.debounceTimer = null; let touchStartX = 0, touchStartY = 0;
             document.body.addEventListener('click', (e) => {
                 if (currentSwipedCard && !currentSwipedCard.contains(e.target)) { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); currentSwipedCard = null; }
+                const fabMenu = select('fab-menu'); if (fabMenu.classList.contains('fab-menu--visible') && !fabMenu.contains(e.target) && !select('fab-add-movimiento').contains(e.target)) { fabMenu.classList.remove('fab-menu--visible'); }
                 const target = e.target;
                 const actionTarget = target.closest('[data-action]');
                 const modalOverlay = target.closest('.modal-overlay');
@@ -1453,12 +1669,13 @@
                     'close-modal': () => hideModal(modalId || target.closest('.modal-overlay').id), 'manage-conceptos': showConceptosModal, 'manage-cuentas': showCuentasModal, 'view-account-details': () => showAccountMovementsModal(id),
                     'save-config': () => handleSaveConfig(btn), 'export-data': () => handleExportData(btn), 'export-csv': showExportCsvModal,
                     'import-data': () => (select('import-file-input')).click(),
-                    'import-csv': () => (select('import-csv-file-input')).click(),
-                    'clear-data': () => showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos? Esta acción es irreversible.',()=>{showConfirmationModal('Esta acción no se puede deshacer. ¿Continuar con el borrado?', () => {db=getInitialDb();saveData(null,()=>{renderAll();showToast('Datos borrados.','danger');});}, 'Confirmación Final')}),
+                    'import-csv-wizard': () => (select('import-csv-file-input')).click(),
+                    'clear-data': () => showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible y no eliminará tu cuenta de usuario.',()=>{showConfirmationModal('Esta acción no se puede deshacer. ¿Continuar con el borrado de datos?', () => {db=getInitialDb();saveData(null,()=>{renderAll();showToast('Datos borrados.','danger');});}, 'Confirmación Final')}),
                     'toggle-account-type-filter': () => { vibrate(); if(deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderCuentas(); },
                     'create-budgets': () => handleCreateBudgets(parseInt((select('budget-year-selector')).value, 10), btn),
                     'update-budgets': handleUpdateBudgets,
                     'logout': () => showConfirmationModal('¿Seguro que quieres cerrar la sesión?', () => { fbAuth.signOut().then(() => { showToast('Sesión cerrada correctamente.'); }).catch(() => { showToast('Error al cerrar sesión.', 'danger'); }); }, 'Cerrar Sesión'),
+                    'delete-account': () => handleDeleteAccount(btn),
                     // --- INVESTMENT HANDLERS ---
                     'back-to-investment-list': renderInversionesPage,
                     'view-investment-detail': () => renderInvestmentAccountDetail(id),
@@ -1468,7 +1685,22 @@
                     'edit-valoracion': () => showValoracionModal(cuentaId, id),
                     'edit-aportacion': () => showAportacionModal(cuentaId, id),
                     'delete-valoracion': () => showConfirmationModal('¿Eliminar esta valoración?', () => { const form = select('valoracion-modal')?.querySelector('form'); if(!form) return; const idToDelete = (form.querySelector('#valoracion-id')).value; const currentCuentaId = (form.querySelector('#valoracion-cuenta-id')).value; db.inversiones_historial = (db.inversiones_historial || []).filter((v) => v.id !== idToDelete); saveData(null, () => { hideModal('valoracion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(currentCuentaId); else renderInversionesPage(); }); }),
-                    'delete-aportacion': () => showConfirmationModal('¿Eliminar este flujo de capital?', () => { const form = select('aportacion-modal')?.querySelector('form'); if(!form) return; const idToDelete = (form.querySelector('#aportacion-id')).value; const currentCuentaId = (form.querySelector('#aportacion-cuenta-id')).value; db.inversion_cashflows = (db.inversion_cashflows || []).filter((cf) => cf.id !== idToDelete); saveData(null, () => { hideModal('aportacion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(currentCuentaId); else renderInversionesPage(); }); })
+                    'delete-aportacion': () => showConfirmationModal('¿Eliminar este flujo de capital?', () => { const form = select('aportacion-modal')?.querySelector('form'); if(!form) return; const idToDelete = (form.querySelector('#aportacion-id')).value; const currentCuentaId = (form.querySelector('#aportacion-cuenta-id')).value; db.inversion_cashflows = (db.inversion_cashflows || []).filter((cf) => cf.id !== idToDelete); saveData(null, () => { hideModal('aportacion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(currentCuentaId); else renderInversionesPage(); }); }),
+                    // --- CONTEXTUAL FAB ACTIONS ---
+                    'show-investment-fab-menu': () => { vibrate(); select('fab-menu')?.classList.toggle('fab-menu--visible'); },
+                    'add-aportacion-from-menu': () => { select('fab-menu')?.classList.remove('fab-menu--visible'); showAportacionModal(); },
+                    'update-investment-value-from-menu': () => {
+                        select('fab-menu')?.classList.remove('fab-menu--visible');
+                        const investmentAccounts = (db.cuentas || []).filter(c => c.esInversion);
+                        if(investmentAccounts.length === 0) { showToast('No hay activos del portafolio para actualizar.', 'warning'); return; }
+                        if(investmentAccounts.length === 1) { showValoracionModal(investmentAccounts[0].id); return; }
+                        let accountsHtml = investmentAccounts.map(acc => `<div class="modal__list-item" data-action="update-investment-value" data-id="${acc.id}" style="cursor:pointer;">${acc.nombre}<span class="material-icons">chevron_right</span></div>`).join('');
+                        showGenericModal('Seleccionar Activo', `<p class="form-label" style="margin-bottom: var(--sp-2)">¿Qué activo quieres actualizar?</p>${accountsHtml}`);
+                    },
+                    // --- CSV WIZARD ACTIONS ---
+                    'csv-wizard-next-step': () => { try { processMappingAndRenderPreview(); } catch (e) { console.error(e); } },
+                    'csv-wizard-back-step': () => renderCsvStep1_Mapping(),
+                    'csv-wizard-import': () => processAndSaveCsvImport(btn),
                 };
                 if (actions[action]) actions[action](e);
             });
@@ -1478,7 +1710,7 @@
             select('filter-periodo')?.addEventListener('change', (e) => select('custom-date-filters')?.classList.toggle('hidden', e.target.value !== 'custom'));
             select('movimiento-tipo-selector')?.addEventListener('change', (e) => { const isT=e.target.value==='traspaso';select('movimiento-fields')?.classList.toggle('hidden',isT);select('traspaso-fields')?.classList.toggle('hidden',!isT);['movimiento-concepto','movimiento-cuenta'].forEach(id=>(select(id)).required=!isT);['movimiento-cuenta-origen','movimiento-cuenta-destino'].forEach(id=>(select(id)).required=isT); });
             select('import-file-input')?.addEventListener('change', (e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=(re)=>{try{let d=JSON.parse(re.target.result);if(d.db)d=d.db;showConfirmationModal('La importación de JSON reemplazará TODOS tus datos. ¿Estás seguro?',()=>{db=d;saveData(null,()=>{renderAll();showToast('Datos importados.');});});}catch(err){showToast('Error: Archivo JSON no válido.','danger');console.error("Import error:",err);}};r.readAsText(f);e.target.value='';});
-            select('import-csv-file-input')?.addEventListener('change', handleCsvImport);
+            select('import-csv-file-input')?.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { startCsvImportWizard(file); } e.target.value = ''; });
             const listContainer = select('movimientos-page');
             listContainer?.addEventListener('touchstart', (e) => { const card = e.target.closest('.transaction-card'); if (!card || !select('movimientos-list-container')?.contains(card)) return; if (currentSwipedCard && currentSwipedCard !== card) { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); } currentSwipedCard = card; touchStartX = e.targetTouches[0].clientX; touchStartY = e.targetTouches[0].clientY; }, { passive: true });
             listContainer?.addEventListener('touchmove', (e) => { if (!currentSwipedCard || !e.targetTouches[0]) return; const diffX = e.targetTouches[0].clientX - touchStartX, diffY = e.targetTouches[0].clientY - touchStartY; if (Math.abs(diffY) > Math.abs(diffX) + 5) { if (currentSwipedCard) { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); } currentSwipedCard = null; return; } const SWIPE_THRESHOLD = 50; if (diffX > SWIPE_THRESHOLD) { currentSwipedCard.classList.add('transaction-card--swiped-right'); currentSwipedCard.classList.remove('transaction-card--swiped-left'); } else if (diffX < -SWIPE_THRESHOLD) { currentSwipedCard.classList.add('transaction-card--swiped-left'); currentSwipedCard.classList.remove('transaction-card--swiped-right'); } else { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); } }, { passive: true });
@@ -1498,7 +1730,7 @@
         // --- INVESTMENT MODAL AND FORM HANDLERS ---
         const showManageInvestmentAccountsModal = () => {
             const accountsHtml = (db.cuentas || []).sort((a,b) => a.nombre.localeCompare(b.nombre)).map((acc) => `<div class="modal__list-item form-switch-group"><div><span style="display: block; font-weight: 500;">${acc.nombre}</span><small style="color: var(--c-on-surface-secondary);">${acc.tipo.toUpperCase()}</small></div><label class="form-switch"><input type="checkbox" data-account-id="${acc.id}" ${acc.esInversion ? 'checked' : ''}><span class="slider"></span></label></div>`).join('');
-            const content = `<div class="modal"><header class="modal__header"><h3 class="modal__title">Gestionar Activos</h3><button class="icon-btn" data-action="close-modal" data-modal-id="manage-investment-accounts-modal"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="manage-investment-accounts-form"><p class="form-label" style="margin-bottom: var(--sp-3)">Selecciona las cuentas a tratar como activos de inversión.</p><div id="investment-accounts-list-modal">${accountsHtml}</div><div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Selección</button></div></form></div></div>`;
+            const content = `<div class="modal"><header class="modal__header"><h3 class="modal__title">Gestionar Activos del Portafolio</h3><button class="icon-btn" data-action="close-modal" data-modal-id="manage-investment-accounts-modal"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="manage-investment-accounts-form"><p class="form-label" style="margin-bottom: var(--sp-3)">Selecciona las cuentas a tratar como activos de inversión.</p><div id="investment-accounts-list-modal">${accountsHtml}</div><div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Selección</button></div></form></div></div>`;
             const modalContainer = select('manage-investment-accounts-modal');
             if(modalContainer) modalContainer.innerHTML = content;
             showModal('manage-investment-accounts-modal');
@@ -1511,6 +1743,7 @@
         };
 
         const showValoracionModal = (cuentaId, valoracionId = null) => {
+            hideModal('generic-modal'); // Hide selector if open
             const cuenta = db.cuentas.find((c) => c.id === cuentaId);
             if (!cuenta) return;
             const valoracion = valoracionId ? (db.inversiones_historial || []).find((v) => v.id === valoracionId) : null;
@@ -1533,6 +1766,7 @@
 
         const showAportacionModal = (cuentaId = null, aportacionId = null) => {
             const investmentAccounts = (db.cuentas || []).filter((c) => c.esInversion);
+            if(investmentAccounts.length === 0) { showToast('Crea primero un activo del portafolio.', 'warning'); return; }
             const aportacion = aportacionId ? (db.inversion_cashflows || []).find((cf) => cf.id === aportacionId) : null;
             const options = investmentAccounts.map((c) => `<option value="${c.id}" ${ (aportacion?.cuentaId || cuentaId) === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('');
             const content = `<div class="modal"><header class="modal__header"><h3 class="modal__title">Flujo de Capital</h3><button class="icon-btn" data-action="close-modal" data-modal-id="aportacion-modal"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="form-aportacion" novalidate><input type="hidden" id="aportacion-id" value="${aportacion?.id || ''}"><div class="form-group"><label for="aportacion-cuenta-id" class="form-label">Activo</label><select id="aportacion-cuenta-id" class="form-select" required>${options}</select><span class="form-error" id="aportacion-cuenta-id-error"></span></div><div class="form-group"><label class="form-label">Tipo</label><div class="form-grid"><div style="background:var(--c-surface-variant); padding: var(--sp-2); border-radius: var(--border-radius-md);"><input type="radio" id="aportacion-tipo-aportacion" name="aportacion-tipo" value="aportacion" ${!aportacion || aportacion.cantidad > 0 ? 'checked' : ''}><label for="aportacion-tipo-aportacion"> Aportación</label></div><div style="background:var(--c-surface-variant); padding: var(--sp-2); border-radius: var(--border-radius-md);"><input type="radio" id="aportacion-tipo-reembolso" name="aportacion-tipo" value="reembolso" ${aportacion?.cantidad < 0 ? 'checked' : ''}><label for="aportacion-tipo-reembolso"> Reembolso</label></div></div></div><div class="form-grid"><div class="form-group"><label for="aportacion-cantidad" class="form-label">Cantidad (€)</label><input type="text" id="aportacion-cantidad" class="form-input" required value="${aportacion ? (Math.abs(aportacion.cantidad)/100).toLocaleString('es-ES') : ''}"><span class="form-error" id="aportacion-cantidad-error"></span></div><div class="form-group"><label for="aportacion-fecha" class="form-label">Fecha</label><input type="date" id="aportacion-fecha" class="form-input" required value="${aportacion ? new Date(aportacion.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}"><span class="form-error" id="aportacion-fecha-error"></span></div></div><div class="form-group"><label for="aportacion-notas" class="form-label">Notas</label><input type="text" id="aportacion-notas" class="form-input" value="${aportacion?.notas || ''}"></div><div class="modal__actions">${aportacion ? `<button type="button" data-action="delete-aportacion" class="btn btn--danger" style="margin-right: auto;"><span class="material-icons">delete</span></button>` : ''}<button type="submit" class="btn btn--primary">Guardar</button></div></form></div></div>`;
@@ -1554,186 +1788,50 @@
             saveData(form.querySelector('button[type=submit]'), () => { hideModal('aportacion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(cuentaId); else renderInversionesPage(); });
         };
         
-        /**
-         * Parses a CSV string into an array of arrays, handling quoted fields.
-         */
         const robustCsvParse = (csvText) => {
             const rows = [];
-            const lines = csvText.split(/\r\n|\n/);
+            const lines = csvText.replace(/\r\n/g, '\n').split('\n');
             lines.forEach(line => {
                 if (!line.trim()) return;
-                const row = [];
-                let field = '';
-                let inQuotes = false;
+                const row = []; let field = ''; let inQuotes = false;
                 for (let i = 0; i < line.length; i++) {
                     const char = line[i];
-                    if (char === '"' && (i === 0 || line[i-1] !== '\\')) {
-                         if (inQuotes && line[i+1] === '"') { // handle escaped quote ""
-                            field += '"';
-                            i++;
-                        } else {
-                            inQuotes = !inQuotes;
-                        }
-                    } else if (char === ',' && !inQuotes) {
-                        row.push(field.trim());
-                        field = '';
-                    } else {
-                        field += char;
-                    }
+                    if (char === '"' && (i === 0 || line[i-1] !== '\\')) { if (inQuotes && line[i+1] === '"') { field += '"'; i++; } else { inQuotes = !inQuotes; } }
+                    else if (char === ',' && !inQuotes) { row.push(field.trim()); field = ''; } else { field += char; }
                 }
-                row.push(field.trim());
-                rows.push(row);
-            });
-            return rows;
-        };
-
-        /**
-         * Handles the entire CSV import process with robust parsing and automatic creation of entities.
-         */
-        const handleCsvImport = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const csvText = event.target.result;
-                const parsedData = robustCsvParse(csvText);
-
-                if (parsedData.length < 2) {
-                    showToast('Archivo CSV inválido o vacío.', 'danger');
-                    return;
-                }
-
-                const headers = parsedData[0].map(h => h.trim().toLowerCase());
-                const requiredHeaders = ['fecha', 'importe', 'cuenta', 'descripcion'];
-                if (!requiredHeaders.every(h => headers.includes(h))) {
-                    showToast(`El CSV debe contener las columnas: ${requiredHeaders.join(', ')}.`, 'danger', 7000);
-                    e.target.value = '';
-                    return;
-                }
-                
-                const headerIndices = {
-                    fecha: headers.indexOf('fecha'),
-                    importe: headers.indexOf('importe'),
-                    cuenta: headers.indexOf('cuenta'),
-                    descripcion: headers.indexOf('descripcion'),
-                    concepto: headers.indexOf('concepto') // optional, returns -1 if not found
-                };
-                
-                const newMovements = [];
-                const newAccounts = new Set();
-                const newConcepts = new Set();
-                const body = parsedData.slice(1);
-
-                const defaultConceptName = 'Importado';
-                // Check if the default concept needs to be created
-                if (!db.conceptos.some(c => c.nombre.toLowerCase() === defaultConceptName.toLowerCase())) {
-                    newConcepts.add(defaultConceptName);
-                }
-
-                body.forEach((row, index) => {
-                    // Skip rows that don't have enough columns for the required headers
-                    if (row.length < requiredHeaders.length) {
-                        console.warn(`Saltando fila ${index + 2}: Fila mal formada.`);
-                        return;
-                    }
-                    
-                    const dateStr = row[headerIndices.fecha];
-                    const amountStr = row[headerIndices.importe];
-                    const accountName = row[headerIndices.cuenta];
-                    const description = row[headerIndices.descripcion];
-                    // Use concept from CSV if present and valid, otherwise use default
-                    const conceptName = (headerIndices.concepto !== -1 && row[headerIndices.concepto]) ? row[headerIndices.concepto] : defaultConceptName;
-
-                    if (!dateStr || !amountStr || !accountName || !description) {
-                         console.warn(`Saltando fila ${index + 2}: Faltan datos obligatorios.`);
-                        return; // Skip rows with missing essential data
-                    }
-
-                    // Attempt to parse date from DD/MM/YYYY or other common formats
-                    let date = new Date(dateStr.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'));
-                    if (isNaN(date.getTime())) {
-                        date = new Date(dateStr); // Fallback for ISO format etc.
-                    }
-
-                    const amount = Math.round(parseFloat(amountStr.replace(/\./g, '').replace(',', '.')) * 100);
-
-                    if (isNaN(date.getTime()) || isNaN(amount)) {
-                        console.warn(`Saltando fila ${index + 2}: Fecha o importe no válido.`);
-                        return; // Skip rows with invalid date or amount
-                    }
-
-                    const newMov = { id: generateId(), fecha: date.toISOString(), cantidad: amount, descripcion, tipo: 'movimiento' };
-
-                    // Find existing account or mark for creation
-                    let cuenta = db.cuentas.find(c => c.nombre.toLowerCase() === accountName.toLowerCase());
-                    if (cuenta) {
-                        newMov.cuentaId = cuenta.id;
-                    } else {
-                        newMov.tempCuenta = accountName;
-                        if (![...newAccounts].some(c => c.toLowerCase() === accountName.toLowerCase())) {
-                            newAccounts.add(accountName);
-                        }
-                    }
-                    
-                    // Find existing concept or mark for creation
-                    let concepto = db.conceptos.find(c => c.nombre.toLowerCase() === conceptName.toLowerCase());
-                    if (concepto) {
-                        newMov.conceptoId = concepto.id;
-                    } else {
-                        newMov.tempConcepto = conceptName;
-                        // Avoid adding duplicates to the creation set
-                        if (![...newConcepts].some(c => c.toLowerCase() === conceptName.toLowerCase())) {
-                            newConcepts.add(conceptName);
-                        }
-                    }
-                    newMovements.push(newMov);
-                });
-                
-                if (newMovements.length === 0) {
-                    showToast('No se encontraron movimientos válidos para importar.', 'warning');
-                    return;
-                }
-
-                showConfirmationModal(`Se importarán ${newMovements.length} movimientos. Se crearán ${newAccounts.size} cuentas y ${newConcepts.size} conceptos nuevos si no existen. ¿Continuar?`, () => {
-                     // Create new accounts and map their IDs to the temporary movements
-                     newAccounts.forEach(nombre => {
-                        const cuenta = { id: generateId(), nombre, tipo: 'IMPORTADO', esInversion: false, fechaCreacion: new Date().toISOString() };
-                        db.cuentas.push(cuenta);
-                        // --- FIX APPLIED HERE ---
-                        newMovements.filter(m => m.tempCuenta && m.tempCuenta.toLowerCase() === nombre.toLowerCase()).forEach(m => m.cuentaId = cuenta.id);
-                    });
-                    
-                    // Create new concepts and map their IDs
-                    newConcepts.forEach(nombre => {
-                        const concepto = { id: generateId(), nombre, icon: 'file_upload' };
-                        db.conceptos.push(concepto);
-                        // --- FIX APPLIED HERE ---
-                        newMovements.filter(m => m.tempConcepto && m.tempConcepto.toLowerCase() === nombre.toLowerCase()).forEach(m => m.conceptoId = concepto.id);
-                    });
-
-                    // Add the processed movements (without temporary fields) to the database
-                    if (newMovements.length > 0) {
-                        if(!db.movimientos) db.movimientos = [];
-                        db.movimientos.push(...newMovements.map(({ tempCuenta, tempConcepto, ...rest }) => rest));
-                    }
-                    
-                    saveData(null, () => {
-                        showToast(`${newMovements.length} movimientos importados.`, 'default', 4000);
-                        renderAll();
-                        navigateTo('movimientos-page');
-                    });
-                }, 'Confirmar Importación CSV');
-            };
-            
-            reader.onerror = () => {
-                showToast('Error al leer el archivo.', 'danger');
-            };
-
-            reader.readAsText(file);
-            e.target.value = ''; // Reset input to allow importing the same file again
+                row.push(field.trim()); rows.push(row);
+            }); return rows;
         };
         
+        const handleDeleteAccount = (btn) => {
+            vibrate(20);
+            showConfirmationModal( 'Esta acción es irreversible. Se borrarán permanentemente tu cuenta y todos tus datos financieros. ¿Estás absolutamente seguro?',
+                () => {
+                    showConfirmationModal( 'Confirmación final: No habrá forma de recuperar tus datos. ¿Continuar con la eliminación permanente?',
+                        async () => {
+                            vibrate(50);
+                            if (btn) setButtonLoading(btn, true, 'Eliminando...');
+                            const user = fbAuth.currentUser;
+                            if (!user) { showToast('Error: No se ha encontrado el usuario.', 'danger'); if (btn) setButtonLoading(btn, false); return; }
+                            try {
+                                await fbDb.collection('users').doc(user.uid).delete();
+                                await user.delete();
+                                showToast('Cuenta eliminada correctamente.', 'default');
+                            } catch (error) {
+                                console.error("Error al eliminar la cuenta:", error);
+                                if (btn) setButtonLoading(btn, false);
+                                if (error.code === 'auth/requires-recent-login') {
+                                    showToast('Por seguridad, cierra sesión y vuelve a iniciarla antes de eliminar tu cuenta.', 'warning', 6000);
+                                } else {
+                                    showToast('Ha ocurrido un error al eliminar la cuenta.', 'danger');
+                                }
+                            }
+                        }, 'Confirmación Final de Borrado'
+                    );
+                }, 'Eliminar Cuenta Permanentemente'
+            );
+        };
+
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
