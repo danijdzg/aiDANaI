@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
@@ -25,7 +24,7 @@
         ]
     }">
     <meta name="theme-color" content="#000000"/>
-    <link rel="apple-touch-icon" href="aiDANaI-Cuentas.jpg">
+    <link rel="apple-touch-icon" href="aiDANaI.webp">
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/cdn.min.js"></script>
@@ -44,17 +43,9 @@
             --c-success: #34C759; --c-danger: #FF3B30; --c-warning: #FF9500; --c-info: #5AC8FA; --c-white: #FFFFFF; --c-black: #000000;
             --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
             --shadow-md: 0 6px 20px 0 rgba(0, 0, 0, 0.1);
-
-            /* iOS-first Font Stack */
             --font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-            
-            /* Font Sizes */
             --fs-xs: 0.75rem; --fs-sm: 0.875rem; --fs-base: 1rem; --fs-lg: 1.125rem; --fs-xl: 1.25rem;
-            
-            /* Spacing units */
             --sp-1: 0.25rem; --sp-2: 0.5rem; --sp-3: 0.75rem; --sp-4: 1rem; --sp-5: 1.25rem; --sp-6: 1.5rem;
-            
-            /* iOS-style Border Radius */
             --border-radius-md: 10px; --border-radius-lg: 18px;
         }
         [data-theme="dark"] {
@@ -436,6 +427,82 @@
         #exit-screen {
             display: none; opacity: 0; position: fixed; inset: 0; background-color: var(--c-background); color: var(--c-on-surface); flex-direction: column; align-items: center; justify-content: center; z-index: 9999; font-size: 1.5rem; text-align: center; transition: opacity 0.5s ease;
         }
+        
+        /* ====== CALCULATOR STYLES ====== */
+        .calculator-overlay {
+            align-items: flex-end;
+            background: rgba(0,0,0,0.3); /* Lighter backdrop for calculator */
+        }
+        .calculator-ui {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            background-color: var(--c-surface-variant);
+            color: var(--c-on-surface);
+            border-top-left-radius: var(--border-radius-lg);
+            border-top-right-radius: var(--border-radius-lg);
+            padding: var(--sp-4) var(--sp-4) env(safe-area-inset-bottom) var(--sp-4);
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .modal-overlay--active .calculator-ui {
+            transform: translateY(0);
+        }
+        .calculator-display {
+            font-size: 2.5rem;
+            font-weight: 300;
+            text-align: right;
+            padding: var(--sp-2) var(--sp-3);
+            margin-bottom: var(--sp-3);
+            min-height: 60px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .calculator-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--sp-3);
+        }
+        .calculator-btn {
+            font-family: var(--font-family);
+            font-size: 1.5rem;
+            font-weight: 400;
+            height: 64px;
+            border-radius: 99px; /* iOS style */
+            border: none;
+            background-color: var(--c-surface);
+            color: var(--c-on-surface);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .calculator-btn:active {
+            transform: scale(0.95);
+        }
+        .calculator-btn.btn-operator {
+            background-color: var(--c-surface-variant);
+            color: var(--c-on-surface);
+            font-weight: 500;
+        }
+        [data-theme="light"] .calculator-btn.btn-operator {
+             background-color: #D1D1D6;
+        }
+        .calculator-btn.btn-confirm {
+            background-color: var(--c-primary);
+            color: var(--c-white);
+            font-weight: 500;
+        }
+        .calculator-btn.zero {
+            grid-column: span 2;
+        }
+        .material-icons.backspace-icon {
+            font-size: 1.5rem;
+        }
+
     </style>
 <script type="importmap">
 {
@@ -450,7 +517,7 @@
     
     <div id="introScreen" class="intro-screen">
         <div class="starry-background"></div>
-        <img id="splashImage" class="intro-screen__logo" src="aiDANaI-Cuentas.jpg" alt="Logo App" />
+        <img id="splashImage" class="intro-screen__logo" src="aiDANaI.webp" alt="Logo App" />
         <div id="quoteContainer" class="intro-screen__quote-container">
             <p id="quoteText" class="intro-screen__quote-text"></p>
             <span id="quoteAuthor" class="intro-screen__quote-author"></span>
@@ -615,6 +682,68 @@
                 </div>
             </section>
 
+            <!-- ======================================================= -->
+            <!-- ========   NUEVA VISTA DE INFORMES   ==================== -->
+            <!-- ======================================================= -->
+            <section id="informes-page" class="view">
+                <div class="card card--no-bg">
+                    <div class="accordion-wrapper">
+                        <details class="accordion" open>
+                            <summary>
+                                <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">filter_list</span>Filtros del Informe</h3>
+                                <span class="material-icons accordion__icon">expand_more</span>
+                            </summary>
+                            <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="informe-fecha-inicio" class="form-label">Desde</label>
+                                        <input type="date" id="informe-fecha-inicio" class="form-input" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="informe-fecha-fin" class="form-label">Hasta</label>
+                                        <input type="date" id="informe-fecha-fin" class="form-input" />
+                                    </div>
+                                </div>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="informe-cuenta" class="form-label">Cuenta</label>
+                                        <select id="informe-cuenta" class="form-select"></select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="informe-concepto" class="form-label">Concepto</label>
+                                        <select id="informe-concepto" class="form-select"></select>
+                                    </div>
+                                </div>
+                                <button data-action="apply-informe-filters" class="btn btn--primary btn--full">Generar Informe</button>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <div id="informe-results-container" class="hidden">
+                     <section id="informe-kpi-container" class="kpi-grid" aria-label="Resumen del informe">
+                        <!-- KPIs se insertarán aquí -->
+                     </section>
+                    <div class="card">
+                        <h3 class="card__title"><span class="material-icons">timeline</span>Evolución Mensual</h3>
+                        <div class="card__content">
+                            <div class="chart-container" style="height: 250px;">
+                                <canvas id="informes-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="empty-informes" class="empty-state" style="margin: 0 var(--sp-4);">
+                    <span class="material-icons">analytics</span>
+                    <h3>Genera tu Informe</h3>
+                    <p>Selecciona los filtros y pulsa "Generar Informe" para ver la evolución de tus finanzas.</p>
+                </div>
+            </section>
+            <!-- ======================================================= -->
+            <!-- ========   FIN DE LA NUEVA VISTA   ====================== -->
+            <!-- ======================================================= -->
+
             <section id="configuracion-page" class="view">
                 <div class="card card--no-bg accordion-wrapper">
                     <details class="accordion" open>
@@ -701,6 +830,7 @@
             <button data-action="navigate" data-page="movimientos-page" class="bottom-nav__item"><span class="material-icons">swap_horiz</span></button>
             <button data-action="navigate" data-page="panel-control-page" class="bottom-nav__item"><span class="material-icons">dashboard</span></button>
             <button data-action="navigate" data-page="cuentas-page" class="bottom-nav__item"><span class="material-icons">account_balance_wallet</span></button>
+            <button data-action="navigate" data-page="informes-page" class="bottom-nav__item"><span class="material-icons">analytics</span></button>
             <button data-action="navigate" data-page="inversiones-page" class="bottom-nav__item"><span class="material-icons">trending_up</span></button>
             <button data-action="navigate" data-page="presupuestos-page" class="bottom-nav__item"><span class="material-icons">pie_chart</span></button>
             <button data-action="navigate" data-page="configuracion-page" class="bottom-nav__item"><span class="material-icons">settings</span></button>
@@ -721,7 +851,7 @@
                  <form id="form-movimiento" noValidate>
                     <input type="hidden" id="movimiento-id" />
                     <div class="form-group"><label for="movimiento-tipo-selector" class="form-label">Tipo</label><select id="movimiento-tipo-selector" class="form-select"><option value="movimiento">Movimiento</option><option value="traspaso">Traspaso</option></select></div>
-                    <div class="form-grid"><div class="form-group"><label for="movimiento-cantidad" class="form-label">Cantidad (gasto en negativo)</label><input type="text" id="movimiento-cantidad" class="form-input" inputMode="decimal" required placeholder="Ej: -50,25" /><span class="form-error" id="movimiento-cantidad-error"></span></div><div class="form-group"><label for="movimiento-fecha" class="form-label">Fecha y Hora</label><input type="datetime-local" id="movimiento-fecha" class="form-input" required /><span class="form-error" id="movimiento-fecha-error"></span></div></div>
+                    <div class="form-grid"><div class="form-group"><label for="movimiento-cantidad" class="form-label">Cantidad (gasto en negativo)</label><input type="text" id="movimiento-cantidad" class="form-input input-amount-calculator" readonly required placeholder="Ej: -50,25" /><span class="form-error" id="movimiento-cantidad-error"></span></div><div class="form-group"><label for="movimiento-fecha" class="form-label">Fecha y Hora</label><input type="datetime-local" id="movimiento-fecha" class="form-input" required /><span class="form-error" id="movimiento-fecha-error"></span></div></div>
                     <div class="form-group"><label for="movimiento-descripcion" class="form-label">Descripción</label><input type="text" id="movimiento-descripcion" class="form-input" required placeholder="Ej: Compra semanal" /><span class="form-error" id="movimiento-descripcion-error"></span></div>
                     <div id="movimiento-fields">
                         <div class="form-group-addon"><div class="form-group"><label for="movimiento-concepto" class="form-label">Concepto</label><select id="movimiento-concepto" class="form-select" required></select><span class="form-error" id="movimiento-concepto-error"></span></div><button type="button" data-action="manage-conceptos" class="icon-btn" title="Gestionar Conceptos"><span class="material-icons">more_vert</span></button></div>
@@ -799,6 +929,43 @@
             </div>
         </div>
     </div>
+    
+    <!-- ======================================================= -->
+    <!-- ========   NUEVA CALCULADORA ESTILO IOS   =============== -->
+    <!-- ======================================================= -->
+    <div id="calculator-modal" class="modal-overlay calculator-overlay">
+        <div class="calculator-ui">
+            <div id="calculator-display" class="calculator-display">0</div>
+            <div id="calculator-grid" class="calculator-grid">
+                <button class="calculator-btn btn-operator" data-key="clear">C</button>
+                <button class="calculator-btn btn-operator" data-key="sign">+/-</button>
+                <button class="calculator-btn btn-operator" data-key="backspace"><span class="material-icons backspace-icon">backspace</span></button>
+                <button class="calculator-btn btn-confirm" data-key="done">OK</button>
+                
+                <button class="calculator-btn" data-key="7">7</button>
+                <button class="calculator-btn" data-key="8">8</button>
+                <button class="calculator-btn" data-key="9">9</button>
+                <button class="calculator-btn btn-operator" data-key="custom-action-1" style="visibility: hidden;"></button>
+
+                <button class="calculator-btn" data-key="4">4</button>
+                <button class="calculator-btn" data-key="5">5</button>
+                <button class="calculator-btn" data-key="6">6</button>
+                <button class="calculator-btn btn-operator" data-key="custom-action-2" style="visibility: hidden;"></button>
+                
+                <button class="calculator-btn" data-key="1">1</button>
+                <button class="calculator-btn" data-key="2">2</button>
+                <button class="calculator-btn" data-key="3">3</button>
+                <button class="calculator-btn btn-operator" data-key="custom-action-3" style="visibility: hidden;"></button>
+
+                <button class="calculator-btn zero" data-key="0">0</button>
+                <button class="calculator-btn" data-key="comma">,</button>
+                <button class="calculator-btn btn-operator" data-key="custom-action-4" style="visibility: hidden;"></button>
+            </div>
+        </div>
+    </div>
+    <!-- ======================================================= -->
+    <!-- ========   FIN DE LA NUEVA CALCULADORA   ================ -->
+    <!-- ======================================================= -->
 
 
     <div id="exit-screen">
@@ -829,12 +996,18 @@ const getInitialDb = () => ({
 
 let currentUser = null, unsubscribeFromDb = null, saveTimeout = null, db = getInitialDb(), deselectedAccountTypesFilter = new Set();
 const originalButtonTexts = new Map();
-let conceptosChart = null, liquidAssetsChart = null, detailInvestmentChart = null;
+let conceptosChart = null, liquidAssetsChart = null, detailInvestmentChart = null, informesChart = null;
 
 const vList = {
     scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
     heights: { transaction: 64 }, 
     renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
+};
+
+const calculatorState = {
+    displayValue: '0',
+    waitingForNewValue: true,
+    targetInput: null,
 };
 
 // =================================================================================
@@ -1038,6 +1211,7 @@ const navigateTo = (pageId, isInitial = false) => {
         'cuentas-page': { title: 'Cuentas', render: renderCuentas, actions: standardActions },
         'inversiones-page': { title: 'Portafolio', render: renderInversionesPage, actions: standardActions },
         'presupuestos-page': { title: 'Presupuestos', render: renderBudgetTracking, actions: standardActions },
+        'informes-page': { title: 'Informes', render: renderInformesPage, actions: standardActions },
         'configuracion-page': { title: 'Configuración', render: loadConfig, actions: standardActions }
     };
     
@@ -1124,7 +1298,7 @@ const calculateInvestmentAccountPerformance = (cuentaId) => {
 // =================================================================================
 // 7. RENDERING ENGINE & BUDGET FUNCTIONS
 // =================================================================================
-const renderAll = () => { if (!db || !currentUser) return; populateAllDropdowns(); renderMovimientos(); renderCuentas(); loadConfig(); updateDashboard(); renderInversionesPage(); };
+const renderAll = () => { if (!db || !currentUser) return; populateAllDropdowns(); renderMovimientos(); renderCuentas(); loadConfig(); updateDashboard(); renderInversionesPage(); renderInformesPage(); };
 
 const populateAllDropdowns = () => {
     const populate = (id, data, nameKey, valKey='id', all=false, none=false) => {
@@ -1140,6 +1314,8 @@ const populateAllDropdowns = () => {
     populate('movimiento-concepto', db.conceptos, 'nombre', 'id', false, true); 
     populate('filter-concepto', db.conceptos, 'nombre', 'id', true);
     const budgetYearSelect = select('budget-year-selector'); if(budgetYearSelect) { const currentVal = budgetYearSelect.value; const currentYear = new Date().getFullYear(); let years = new Set([currentYear]); (db.presupuestos || []).forEach((p) => years.add(p.ano)); budgetYearSelect.innerHTML = [...years].sort((a,b) => b-a).map(y => `<option value="${y}">${y}</option>`).join(''); if(currentVal && [...years].some(y => y == parseInt(currentVal))) budgetYearSelect.value = currentVal; else budgetYearSelect.value = String(currentYear); }
+    populate('informe-cuenta', db.cuentas, 'nombre', 'id', true);
+    populate('informe-concepto', db.conceptos, 'nombre', 'id', true);
 };
 
 const handleCreateBudgets = (year, btn) => { vibrate(); if (btn) setButtonLoading(btn, true, 'Creando...'); const existingBudgets = new Set((db.presupuestos || []).filter((p) => p.ano === year).map((p) => p.conceptoId)); const newBudgets = []; db.conceptos.forEach((concepto) => { if (!existingBudgets.has(concepto.id)) { newBudgets.push({ id: generateId(), ano: year, conceptoId: concepto.id, cantidad: 0 }); } }); if (newBudgets.length > 0) { db.presupuestos.push(...newBudgets); saveData(null, () => { if (btn) setButtonLoading(btn, false); showToast(`Presupuestos para ${year} creados.`); renderBudgetTracking(); }); } else { if (btn) setButtonLoading(btn, false); showToast(`Todos los presupuestos para ${year} ya existían.`, 'info'); renderBudgetTracking(); } };
@@ -1180,7 +1356,7 @@ const renderBudgetTracking = () => {
 };
 
 // =================================================================================
-// 7.5. INVESTMENT PAGE RENDERING
+// 7.5. INVESTMENT & REPORT PAGE RENDERING
 // =================================================================================
 const renderInversionesPage = () => {
     (select('investment-list-view'))?.classList.remove('hidden');
@@ -1286,6 +1462,130 @@ const renderInvestmentAccountDetail = (cuentaId) => {
         }
     }
 };
+
+const renderInformesPage = () => {
+    const resultsContainer = select('informe-results-container');
+    const emptyState = select('empty-informes');
+    const kpiContainer = select('informe-kpi-container');
+    const chartCtx = select('informes-chart')?.getContext('2d');
+
+    if (!resultsContainer || !emptyState || !chartCtx || !kpiContainer) return;
+
+    if (informesChart) {
+        informesChart.destroy();
+    }
+    
+    const fechaInicioVal = select('informe-fecha-inicio').value;
+    const fechaFinVal = select('informe-fecha-fin').value;
+    const cuentaId = select('informe-cuenta').value;
+    const conceptoId = select('informe-concepto').value;
+
+    if (!fechaInicioVal || !fechaFinVal) {
+        resultsContainer.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        return;
+    }
+
+    const fechaInicio = new Date(fechaInicioVal);
+    fechaInicio.setHours(0, 0, 0, 0);
+    const fechaFin = new Date(fechaFinVal);
+    fechaFin.setHours(23, 59, 59, 999);
+
+    let movimientos = (db.movimientos || []).filter(m => {
+        const movDate = new Date(m.fecha);
+        const enRango = movDate >= fechaInicio && movDate <= fechaFin;
+        const cuentaMatch = !cuentaId || m.cuentaId === cuentaId || m.cuentaOrigenId === cuentaId || m.cuentaDestinoId === cuentaId;
+        const conceptoMatch = !conceptoId || m.conceptoId === conceptoId;
+        return enRango && cuentaMatch && conceptoMatch && m.tipo === 'movimiento';
+    });
+    
+    if (movimientos.length === 0) {
+        showToast('No se encontraron movimientos para los filtros seleccionados.', 'info');
+        resultsContainer.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        emptyState.querySelector('p').textContent = "No hay datos para este informe. Prueba a cambiar los filtros.";
+        return;
+    }
+
+    resultsContainer.classList.remove('hidden');
+    emptyState.classList.add('hidden');
+    
+    const datosAgrupados = movimientos.reduce((acc, mov) => {
+        const fecha = new Date(mov.fecha);
+        const clave = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+        if (!acc[clave]) {
+            acc[clave] = { ingresos: 0, gastos: 0 };
+        }
+        if (mov.cantidad > 0) {
+            acc[clave].ingresos += mov.cantidad;
+        } else {
+            acc[clave].gastos += mov.cantidad;
+        }
+        return acc;
+    }, {});
+
+    const etiquetas = Object.keys(datosAgrupados).sort();
+    const datosIngresos = etiquetas.map(clave => datosAgrupados[clave].ingresos / 100);
+    const datosGastos = etiquetas.map(clave => Math.abs(datosAgrupados[clave].gastos / 100));
+
+    const etiquetasFormateadas = etiquetas.map(clave => {
+        const [year, month] = clave.split('-');
+        return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
+    });
+    
+    const totalIngresos = datosIngresos.reduce((sum, val) => sum + (val * 100), 0);
+    const totalGastos = datosGastos.reduce((sum, val) => sum - (val * 100), 0);
+    const neto = totalIngresos + totalGastos;
+    
+    kpiContainer.innerHTML = `
+        <div class="kpi-item"><h4 class="kpi-item__label">Total Ingresos</h4><strong class="kpi-item__value text-positive">${formatCurrency(totalIngresos)}</strong></div>
+        <div class="kpi-item"><h4 class="kpi-item__label">Total Gastos</h4><strong class="kpi-item__value text-negative">${formatCurrency(totalGastos)}</strong></div>
+        <div class="kpi-item"><h4 class="kpi-item__label">Resultado Neto</h4><strong class="kpi-item__value ${neto >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(neto)}</strong></div>
+    `;
+
+    informesChart = new Chart(chartCtx, {
+        type: 'line',
+        data: {
+            labels: etiquetasFormateadas,
+            datasets: [
+                {
+                    label: 'Ingresos',
+                    data: datosIngresos,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--c-success'),
+                    backgroundColor: 'rgba(52, 199, 89, 0.2)',
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success')
+                },
+                {
+                    label: 'Gastos',
+                    data: datosGastos,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--c-danger'),
+                    backgroundColor: 'rgba(255, 59, 48, 0.2)',
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger')
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: (value) => formatCurrency(value * 100).replace(/\s/g, '') }
+                }
+            },
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: { callbacks: { label: (c) => `${c.dataset.label || ''}: ${formatCurrency(c.parsed.y * 100)}` } },
+                datalabels: { display: false }
+            }
+        }
+    });
+};
+
 
 const renderVirtualListItem = (item) => {
     if (item.type === 'transaction') {
@@ -1495,9 +1795,9 @@ const updateDashboard = () => {
 };
 
 // =================================================================================
-// 8. MODAL HANDLING & MANAGEMENT
+// 8. MODAL & CALCULATOR HANDLING
 // =================================================================================
-const showModal=(id)=>{const m=select(id);if(m){m.classList.add('modal-overlay--active');const f=m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');if(f)(f).focus();}};
+const showModal=(id)=>{const m=select(id);if(m){m.classList.add('modal-overlay--active');if(!id.includes('calculator')){const f=m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');if(f)(f).focus();}}};
 const hideModal=(id)=>{const m=select(id);if(m)m.classList.remove('modal-overlay--active');};
 const showGenericModal=(title,html)=>{(select('generic-modal-title')).textContent=title;(select('generic-modal-body')).innerHTML=html;showModal('generic-modal');};
 const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ vibrate(20); const id='confirmation-modal';document.getElementById(id)?.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-confirmation">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{vibrate();onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-confirmation"]')).onclick=()=>overlay.remove(); };
@@ -1512,45 +1812,177 @@ const showAccountMovementsModal = (cId) => {
 
 const startEditMovement=(id)=>{ hideModal('generic-modal'); const f=select('form-movimiento'); f.reset(); clearAllErrors('form-movimiento'); const mov=id?db.movimientos.find((m)=>m.id===id):null; (select('form-movimiento-title')).textContent = mov ? 'Editar Movimiento' : 'Añadir Movimiento'; (select('movimiento-id')).value=mov?.id||''; (select('movimiento-tipo-selector')).value=mov?.tipo||'movimiento'; (select('movimiento-tipo-selector')).dispatchEvent(new Event('change')); (select('movimiento-cantidad')).value = mov ? (mov.cantidad/100).toLocaleString('es-ES') : ''; const fecha=mov?new Date(mov.fecha):new Date(); (select('movimiento-fecha')).value=new Date(fecha.getTime()-(fecha.getTimezoneOffset()*60000)).toISOString().slice(0,16); (select('movimiento-descripcion')).value=mov?.descripcion||''; if(mov?.tipo==='traspaso'){ (select('movimiento-cuenta-origen')).value=mov.cuentaOrigenId; (select('movimiento-cuenta-destino')).value=mov.cuentaDestinoId; } else { (select('movimiento-cuenta')).value=mov?.cuentaId||''; (select('movimiento-concepto')).value=mov?.conceptoId||''; } select('delete-movimiento-btn')?.classList.toggle('hidden',!mov); showModal('movimiento-modal'); };
 
+const showCalculator = (targetInput) => {
+    calculatorState.targetInput = targetInput;
+    const currentValue = targetInput.value.trim();
+    if (currentValue && !isNaN(parseFloat(currentValue.replace(',', '.')))) {
+        calculatorState.displayValue = currentValue.replace('.', ''); // Keep comma for display
+    } else {
+        calculatorState.displayValue = '0';
+    }
+    calculatorState.waitingForNewValue = true;
+    updateCalculatorDisplay();
+    showModal('calculator-modal');
+};
+
+const hideCalculator = () => {
+    hideModal('calculator-modal');
+    calculatorState.targetInput = null;
+};
+
+const updateCalculatorDisplay = () => {
+    const display = select('calculator-display');
+    if (display) {
+        display.textContent = calculatorState.displayValue.replace('.', ',');
+    }
+    if (calculatorState.targetInput) {
+        calculatorState.targetInput.value = calculatorState.displayValue.replace('.', ',');
+    }
+};
+
+const handleCalculatorInput = (key) => {
+    vibrate();
+    const { displayValue, waitingForNewValue } = calculatorState;
+
+    switch(key) {
+        case 'done':
+            hideCalculator();
+            break;
+        case 'comma':
+            if (!displayValue.includes('.')) {
+                calculatorState.displayValue += '.';
+            }
+            break;
+        case 'clear':
+            calculatorState.displayValue = '0';
+            calculatorState.waitingForNewValue = true;
+            break;
+        case 'backspace':
+            calculatorState.displayValue = displayValue.slice(0, -1) || '0';
+            break;
+        case 'sign':
+            if (displayValue !== '0') {
+                calculatorState.displayValue = displayValue.startsWith('-')
+                    ? displayValue.slice(1)
+                    : `-${displayValue}`;
+            }
+            break;
+        default: // Digit
+            if (waitingForNewValue || displayValue === '0') {
+                calculatorState.displayValue = key;
+                calculatorState.waitingForNewValue = false;
+            } else {
+                calculatorState.displayValue += key;
+            }
+            break;
+    }
+    updateCalculatorDisplay();
+};
+
 // =================================================================================
 // 9. FORM HANDLERS & MODAL CONTENT
 // =================================================================================
 const showHelpModal = () => {
     const helpHTML = `
-        <h3><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">menu_book</span>Guía Maestra de la App de Cuentas</h3>
-        <p>¡Bienvenido/a! Esta es tu central de operaciones para dominar tus finanzas. Hemos diseñado cada rincón de esta app para que sea potente pero intuitiva. Aquí te lo contamos todo.</p>
+        <h3><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">school</span>Guía Maestra de tu Universo Financiero</h3>
+        <p>¡Bienvenido/a! Esta no es solo una app, es tu centro de mando personal para entender, controlar y mejorar tu salud financiera. Hemos diseñado cada detalle para que sea potente para los expertos y, a la vez, increíblemente sencillo para quienes empiezan. ¡Vamos a explorarla juntos!</p>
 
-        <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">swap_horiz</span>Movimientos: El Corazón de tus Finanzas</h4>
-        <p>Aquí reside el historial detallado de todas tus transacciones, ordenado de la más reciente a la más antigua y agrupado por fecha para una navegación más clara.</p>
+        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">Glosario para Principiantes</h4>
+        <p>Antes de sumergirnos, aclaremos algunos términos clave:</p>
         <ul>
-            <li><strong>Búsqueda Instantánea:</strong> La barra de búsqueda superior es muy potente. Puedes buscar por descripción, por el nombre de un concepto o por una cuenta.</li>
-            <li><strong>Acciones con Gestos (Swipe):</strong> Desliza un movimiento hacia la <strong>izquierda</strong> para revelar el botón de <strong>Eliminar</strong>, o hacia la <strong>derecha</strong> para <strong>Copiar</strong>.</li>
+            <li><strong>Cuenta:</strong> Representa cualquier lugar donde guardas tu dinero o tienes una deuda. Puede ser tu cartera (Efectivo), tu cuenta bancaria (Cuenta Corriente), una tarjeta, un préstamo, etc.</li>
+            <li><strong>Concepto:</strong> Es la "etiqueta" o categoría de un movimiento. Por ejemplo: "Nómina", "Comida", "Transporte", "Ocio". Te ayuda a saber en qué gastas tu dinero.</li>
+            <li><strong>Movimiento:</strong> Es cualquier transacción individual, ya sea un ingreso (dinero que recibes) o un gasto (dinero que sale).</li>
+            <li><strong>Traspaso:</strong> Es un tipo especial de movimiento que no es ni un ingreso ni un gasto real. Simplemente es mover tu propio dinero de una de tus cuentas a otra (ej: sacar dinero del cajero y pasarlo de tu "Cuenta Corriente" a "Efectivo").</li>
         </ul>
 
-        <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">dashboard</span>Panel de Control: Tu Vistazo Financiero</h4>
-        <p>Tu centro neurálgico que te da una imagen clara de tu salud financiera de un solo vistazo, afectado por los filtros globales que apliques.</p>
-        
-        <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">account_balance_wallet</span>Cuentas: Organiza tu Dinero</h4>
-        <p>Visión global de todo tu dinero y deudas, organizado por tipos de cuenta de forma compacta para una mejor visualización.</p>
+        <!-- ============================================================== -->
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">swap_horiz</span>La Pestaña de Movimientos</h3>
+        <p>Este es el corazón de la app, tu diario financiero. Aquí verás todas tus transacciones ordenadas por fecha.</p>
+        <h4>Superpoderes Ocultos (Gestos)</h4>
+        <p>Cada movimiento en la lista tiene acciones rápidas. ¡Pruébalas!</p>
+        <ul>
+            <li><strong class="text-positive">Desliza a la derecha</strong> para <strong>Copiar</strong> un movimiento. Ideal para gastos recurrentes.</li>
+            <li><strong class="text-negative">Desliza a la izquierda</strong> para <strong>Eliminar</strong> un movimiento permanentemente.</li>
+        </ul>
+        <h4>Añadir un Nuevo Movimiento</h4>
+        <p>Pulsa el botón flotante <button class="fab" style="width:28px; height:28px; position:static; display:inline-flex; vertical-align:middle; transform: scale(1); opacity:1;"><span class="material-icons" style="font-size:18px;">add</span></button> para abrir el formulario. Dentro del formulario:</p>
+        <ul>
+            <li><strong>Calculadora Integrada:</strong> Toca el campo de "Cantidad" y se abrirá una calculadora para que no tengas que salir de la app. <strong>¡Consejo Pro!</strong> Introduce los <strong>gastos con un número negativo</strong> (ej: -50,25) y los ingresos en positivo.</li>
+            <li><strong>Traspasos:</strong> Si seleccionas "Traspaso" en el tipo, podrás mover una cantidad (siempre positiva) de una cuenta de origen a una de destino.</li>
+            <li><strong>Copiar el Último:</strong> El icono <span class="material-icons" style="vertical-align: sub; font-size:1em;">history</span> carga los datos del último movimiento que registraste para ahorrarte tiempo.</li>
+        </ul>
 
-        <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">trending_up</span>Portafolio: Haz Crecer tu Patrimonio</h4>
-        <p>Un centro de mando avanzado para seguir tus activos de inversión de forma separada a tus finanzas del día a día.</p>
+        <!-- ============================================================== -->
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">dashboard</span>Panel de Control</h3>
+        <p>Tu vista de pájaro. Aquí puedes ver un resumen de tu situación financiera basado en los filtros que elijas.</p>
         <ul>
-            <li><strong>Crea tu Portfolio:</strong> En "Gestionar Activos", marca cualquier cuenta como activo de inversión para analizarla aquí.</li>
-            <li><strong>Flujos de Capital (¡Clave!):</strong> Usa "Aportar/Retirar" (accesible desde el FAB contextual <span class="material-icons" style="font-size:1em; vertical-align: sub;">menu</span>) para registrar el dinero que metes o sacas. Esto es <strong>fundamental</strong> para calcular tu rentabilidad real (P&L) de forma precisa.</li>
-            <li><strong>Actualiza el Valor de Mercado:</strong> Periódicamente (ej. una vez al mes), pulsa el FAB contextual y "Actualizar Valor" para introducir su valor actual de mercado y saber si estás ganando o perdiendo dinero.</li>
-            <li><strong>Análisis Detallado:</strong> Pulsa sobre cualquier activo para una vista increíble con gráficos y un historial completo de todas tus operaciones.</li>
+            <li><strong>Filtros:</strong> Elige un periodo de tiempo, una cuenta o un concepto específico para analizar tus datos con precisión.</li>
+            <li><strong>KPIs (Indicadores Clave):</strong> Los tres recuadros superiores te muestran tus Ingresos, Gastos y el Saldo Neto (la diferencia) para el periodo filtrado.</li>
+            <li><strong>Gráfico de Conceptos:</strong> Una barra visual para cada concepto, mostrándote dónde se ha ido tu dinero. Las barras verdes son ingresos y las rojas, gastos.</li>
+            <li><strong>Lista Detallada:</strong> Debajo del gráfico, cada concepto es un desplegable. Tócalo para ver todos los movimientos asociados a ese concepto.</li>
         </ul>
-        
-        <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">pie_chart</span>Presupuestos: Planifica y Conquista tus Metas</h4>
-        <p>Tu herramienta para planificar activamente tus gastos y metas de ingresos. El FAB contextual (<span class="material-icons" style="font-size:1em; vertical-align: sub;">edit</span>) te da acceso rápido para gestionar los presupuestos del año seleccionado.</p>
+
+        <!-- ============================================================== -->
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">account_balance_wallet</span>Pestaña de Cuentas</h3>
+        <p>Aquí tienes un resumen de todas tus cuentas y su estado actual.</p>
         <ul>
-            <li><strong>Presupuestos Anuales:</strong> Asigna un límite a cada concepto. <strong>Importante:</strong> Usa un valor <strong>positivo</strong> para metas de <strong>ingreso</strong> y un valor <strong>negativo</strong> para límites de <strong>gasto</strong>.</li>
-            <li><strong>Seguimiento Visual Compacto:</strong> Cada concepto muestra tu progreso actual frente al objetivo, la diferencia neta y una barra de progreso que cambia de color para alertarte.</li>
+            <li><strong>Saldo Total:</strong> La cifra grande de arriba muestra la suma de los saldos de todas las cuentas que estés visualizando.</li>
+            <li><strong>Filtros por Tipo:</strong> Toca las píldoras ("Efectivo", "Ahorro", etc.) para mostrar u ocultar tipos de cuenta del resumen.</li>
+            <li><strong>Grupos de Cuentas:</strong> Las cuentas están organizadas por su tipo. Toca cualquier cuenta para ver su historial de movimientos.</li>
+            <li><strong>Gráfico de Activos Líquidos:</strong> Un gráfico circular que te muestra cómo se distribuye tu dinero disponible (excluyendo propiedades, préstamos, etc.).</li>
         </ul>
-        
-        <h4><span class="material-icons" style="font-size:1.1em; vertical-align: sub; margin-right: 4px;">settings</span>Configuración y Gestión de Datos</h4>
-        <p>El centro de control de la app para personalizarla y gestionar tus datos de forma segura, incluyendo el potente asistente de importación CSV.</p>
+
+        <!-- ============================================================== -->
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">analytics</span>Pestaña de Informes</h3>
+        <p>Tu centro de análisis avanzado. Esta vista te permite ver la evolución de tus finanzas a lo largo del tiempo.</p>
+        <ul>
+            <li><strong>Genera tu Informe:</strong> Selecciona un rango de fechas (Desde/Hasta) y otros filtros opcionales. Luego, pulsa "Generar Informe".</li>
+            <li><strong>Resumen y Evolución:</strong> La app te mostrará un resumen de ingresos y gastos para ese periodo, y un gráfico de líneas para que veas visualmente cómo han evolucionado mes a mes.</li>
+        </ul>
+
+        <!-- ============================================================== -->
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">trending_up</span>Portafolio de Inversión</h3>
+        <p>Una sección dedicada para seguir el rendimiento de tus activos de inversión (acciones, fondos, cripto, etc.).</p>
+        <ul>
+            <li><strong>Activar un Activo:</strong> Para que una cuenta aparezca aquí, ve a <span class="material-icons" style="font-size:1em;">settings</span> -> Gestión de Cuentas/Conceptos -> Cuentas, o desde la propia pestaña de Portafolio en "Gestionar Activos", y marca las cuentas que son de inversión.</li>
+            <li><strong>Aportar / Retirar:</strong> Usa esta opción para registrar el dinero que metes o sacas de tus inversiones. Esto es crucial para calcular tu rentabilidad real.</li>
+            <li><strong>Actualizar Valor:</strong> Periódicamente, registra el valor de mercado actual de tu activo. La app usará estas "fotos" de valor para trazar tu rendimiento.</li>
+            <li><strong>Análisis Detallado:</strong> Toca un activo para ver su página de detalle, con un gráfico que compara el valor de tu inversión contra el capital que has aportado.</li>
+        </ul>
+
+        <!-- ============================================================== -->
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">pie_chart</span>Pestaña de Presupuestos</h3>
+        <p>Planifica tu futuro financiero. Un presupuesto te ayuda a fijar metas de ingresos y límites de gasto.</p>
+        <ul>
+            <li><strong>Selecciona el Año:</strong> Primero, elige el año para el que quieres ver o crear presupuestos.</li>
+            <li><strong>Crear Presupuestos:</strong> Si es un año nuevo, la app te invitará a crearlos. Esto generará una entrada para cada uno de tus conceptos.</li>
+            <li><strong>Editar Presupuestos:</strong> Pulsa el botón flotante <button class="fab" style="width:28px; height:28px; position:static; display:inline-flex; vertical-align:middle; transform: scale(1); opacity:1;"><span class="material-icons" style="font-size:18px;">edit</span></button> para establecer las cantidades.
+                <ul>
+                    <li><strong class="text-positive">Metas de Ingreso:</strong> Usa un número <strong>positivo</strong> (ej: 24000 para una nómina anual).</li>
+                    <li><strong class="text-negative">Límites de Gasto:</strong> Usa un número <strong>negativo</strong> (ej: -6000 para un límite de gasto en comida anual).</li>
+                </ul>
+            </li>
+            <li><strong>Seguimiento:</strong> Las barras de progreso te mostrarán visualmente cuánto has gastado o ingresado en comparación con tu objetivo.</li>
+        </ul>
+
+        <!-- ============================================================== -->
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">settings</span>Configuración y Datos</h3>
+        <p>El panel de control de la app. Aquí gestionas tu cuenta y tus datos.</p>
+        <ul>
+            <li><strong>Cuenta de Usuario:</strong> Cierra sesión o, si lo necesitas, elimina tu cuenta y todos tus datos de forma permanente (¡con cuidado!).</li>
+            <li><strong>Gestión de Cuentas/Conceptos:</strong> Aquí puedes crear, editar o eliminar las cuentas y conceptos que son los cimientos de tu organización.</li>
+            <li><strong>Gestión de Datos:</strong>
+                <ul>
+                    <li><strong>Exportar JSON:</strong> Crea una copia de seguridad completa de todos tus datos. ¡Guárdala en un lugar seguro!</li>
+                    <li><strong>Importar JSON:</strong> Restaura la app desde un archivo de copia de seguridad. <strong>Atención:</strong> esto reemplazará todos los datos actuales.</li>
+                    <li><strong>Exportar/Importar CSV:</strong> Usa estos formatos si quieres trabajar con tus datos en una hoja de cálculo como Excel o Google Sheets. La importación incluye un asistente para facilitar el proceso.</li>
+                    <li><strong>Borrar Todos los Datos:</strong> Una opción drástica para empezar de cero sin perder tu cuenta de usuario.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">¡Ahora eres un maestro/a de tus finanzas! Explora, registra y toma el control.</p>
     `;
     showGenericModal("Guía Completa de Usuario", helpHTML);
 };
@@ -1558,7 +1990,69 @@ const showHelpModal = () => {
 const showConceptosModal = () => { const html = `<form id="add-concepto-form" novalidate style="margin-bottom: var(--sp-4);"><div class="form-grid"><div class="form-group" style="grid-column: 1 / 2;"><label for="new-concepto-nombre" class="form-label">Nombre del Concepto</label><input type="text" id="new-concepto-nombre" class="form-input" placeholder="Ej: Nómina" required></div><div class="form-group" style="grid-column: 2 / 3;"><label for="new-concepto-icon" class="form-label">Icono (Material)</label><input type="text" id="new-concepto-icon" class="form-input" placeholder="Ej: shopping_cart"></div></div><p style="font-size: var(--fs-xs); color: var(--c-on-surface-secondary); margin-top: calc(-1 * var(--sp-2)); margin-bottom: var(--sp-3);">Busca iconos en <a href="https://fonts.google.com/icons" target="_blank" rel="noopener noreferrer">Google Fonts</a>.</p><button type="submit" class="btn btn--primary btn--full">Añadir Concepto</button></form><hr style="border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Conceptos Existentes</h4><div id="conceptos-modal-list"></div>`; showGenericModal('Gestionar Conceptos', html); renderConceptosModalList(); };
 const renderConceptosModalList = () => { const list = select('conceptos-modal-list'); if (!list) return; list.innerHTML = (db.conceptos || []).length === 0 ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay conceptos.</p>` : [...db.conceptos].sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => `<div class="modal__list-item"><span style="display: flex; align-items: center; gap: 12px;"><span class="material-icons" style="color: var(--c-primary);">${c.icon || 'label'}</span>${c.nombre}</span><button class="icon-btn" data-action="delete-concepto" data-id="${c.id}" title="Eliminar Concepto"><span class="material-icons">delete_outline</span></button></div>`).join(''); };
 const showCuentasModal = () => { const html = `<form id="add-cuenta-form" novalidate><div class="form-group"><label for="new-cuenta-nombre" class="form-label">Nombre de la Cuenta</label><input type="text" id="new-cuenta-nombre" class="form-input" placeholder="Ej: Cartera personal" required></div><div class="form-group"><label for="new-cuenta-tipo" class="form-label">Tipo de Cuenta</label><input type="text" id="new-cuenta-tipo" class="form-input" list="tipos-cuenta-list" placeholder="Ej: Efectivo" required><datalist id="tipos-cuenta-list"><option value="Efectivo"></option><option value="Cuenta Corriente"></option><option value="Ahorro"></option><option value="Inversión"></option><option value="Tarjeta de Crédito"></option><option value="Préstamo"></option><option value="Propiedad"></option><option value="Plan de Pensiones"></option></datalist></div><button type="submit" class="btn btn--primary btn--full" style="margin-top: var(--sp-3)">Añadir Cuenta</button></form><hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Cuentas Existentes</h4><div id="cuentas-modal-list"></div>`; showGenericModal('Gestionar Cuentas', html); renderCuentasModalList(); };
-const renderCuentasModalList = () => { const list = select('cuentas-modal-list'); if (!list) return; list.innerHTML = (db.cuentas || []).length === 0 ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay cuentas.</p>` : [...db.cuentas].sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => `<div class="modal__list-item"><div><span style="display: block; font-weight: 500;">${c.nombre}</span><small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">${c.tipo.toUpperCase()}</small></div><button class="icon-btn" data-action="delete-cuenta" data-id="${c.id}" title="Eliminar Cuenta"><span class="material-icons">delete_outline</span></button></div>`).join(''); };
+const showAccountEditForm = (id) => {
+    const itemContainer = select(`cuenta-item-${id}`);
+    const cuenta = db.cuentas.find(c => c.id === id);
+    if (!itemContainer || !cuenta) return;
+    const escapeHTML = str => str.replace(/[&<>"']/g, match => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[match]);
+    const formHtml = `
+        <div class="cuenta-item-edit-form" data-id="${id}" style="width:100%; display:flex; flex-direction:column; gap: var(--sp-2); padding: var(--sp-2) 0;">
+            <div class="form-grid">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" for="edit-cuenta-nombre-${id}" style="font-size: var(--fs-xs);">Nombre</label>
+                    <input type="text" id="edit-cuenta-nombre-${id}" class="form-input" style="padding: var(--sp-2);" value="${escapeHTML(cuenta.nombre)}" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" for="edit-cuenta-tipo-${id}" style="font-size: var(--fs-xs);">Tipo</label>
+                    <input type="text" id="edit-cuenta-tipo-${id}" class="form-input" style="padding: var(--sp-2);" list="tipos-cuenta-list" value="${escapeHTML(cuenta.tipo)}" required>
+                </div>
+            </div>
+            <div style="display:flex; justify-content: flex-end; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2);">
+                <button type="button" class="btn btn--secondary" data-action="cancel-edit-cuenta">Cancelar</button>
+                <button type="button" class="btn btn--primary" data-action="save-edited-cuenta" data-id="${id}">Guardar</button>
+            </div>
+        </div>
+    `;
+    itemContainer.innerHTML = formHtml;
+    select(`edit-cuenta-nombre-${id}`).focus();
+};
+const handleSaveEditedAccount = (id, btn) => {
+    const nombre = (select(`edit-cuenta-nombre-${id}`)).value.trim();
+    const tipo = (select(`edit-cuenta-tipo-${id}`)).value.trim().toUpperCase();
+    if (!nombre || !tipo) { showToast('El nombre y el tipo no pueden estar vacíos.', 'warning'); return; }
+    const cuentaIndex = db.cuentas.findIndex(c => c.id === id);
+    if (cuentaIndex > -1) {
+        setButtonLoading(btn, true);
+        db.cuentas[cuentaIndex].nombre = nombre;
+        db.cuentas[cuentaIndex].tipo = tipo;
+        saveData(btn, () => {
+            showToast('Cuenta actualizada.');
+            renderCuentasModalList();
+            populateAllDropdowns();
+            renderCuentas();
+            updateDashboard();
+        });
+    }
+};
+const renderCuentasModalList = () => {
+    const list = select('cuentas-modal-list');
+    if (!list) return;
+    list.innerHTML = (db.cuentas || []).length === 0
+        ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay cuentas.</p>`
+        : [...db.cuentas].sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => `
+            <div class="modal__list-item" id="cuenta-item-${c.id}">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div>
+                        <span style="display: block; font-weight: 500;">${c.nombre}</span>
+                        <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">${c.tipo.toUpperCase()}</small>
+                    </div>
+                    <div>
+                        <button class="icon-btn" data-action="edit-cuenta" data-id="${c.id}" title="Editar Cuenta"><span class="material-icons">edit_note</span></button>
+                        <button class="icon-btn" data-action="delete-cuenta" data-id="${c.id}" title="Eliminar Cuenta"><span class="material-icons">delete_outline</span></button>
+                    </div>
+                </div>
+            </div>`).join('');
+};
 
 // =================================================================================
 // 10. ROBUST CSV IMPORT WIZARD
@@ -1656,6 +2150,7 @@ const attachEventListeners = () => {
             'login': () => handleLogin(btn), 'register': () => handleRegister(btn), 'exit': handleExitApp,
             'navigate': () => navigateTo(page), 'theme-toggle': toggleTheme, 'help': showHelpModal,
             'apply-filters': () => { vibrate(); updateDashboard(); renderCuentas(); },
+            'apply-informe-filters': () => { vibrate(); renderInformesPage(); },
             'add-movement': () => { vibrate(); startEditMovement(null); },
             'edit-movement': () => { vibrate(); startEditMovement(id); },
             'delete-movement-swipe': () => showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', ()=>{db.movimientos=db.movimientos.filter((m)=>m.id!==cardElement.dataset.id);saveData(null,()=>{renderMovimientos();updateDashboard();renderCuentas();showToast('Movimiento eliminado.');});}),
@@ -1674,7 +2169,6 @@ const attachEventListeners = () => {
             'update-budgets': handleUpdateBudgets,
             'logout': () => showConfirmationModal('¿Seguro que quieres cerrar la sesión?', () => { fbAuth.signOut().then(() => { showToast('Sesión cerrada correctamente.'); }).catch(() => { showToast('Error al cerrar sesión.', 'danger'); }); }, 'Cerrar Sesión'),
             'delete-account': () => handleDeleteAccount(btn),
-            // --- INVESTMENT HANDLERS ---
             'back-to-investment-list': renderInversionesPage,
             'view-investment-detail': () => renderInvestmentAccountDetail(id),
             'update-investment-value': (ev) => { ev.stopPropagation(); showValoracionModal(id); },
@@ -1684,7 +2178,6 @@ const attachEventListeners = () => {
             'edit-aportacion': () => showAportacionModal(cuentaId, id),
             'delete-valoracion': () => showConfirmationModal('¿Eliminar esta valoración?', () => { const form = select('valoracion-modal')?.querySelector('form'); if(!form) return; const idToDelete = (form.querySelector('#valoracion-id')).value; const currentCuentaId = (form.querySelector('#valoracion-cuenta-id')).value; db.inversiones_historial = (db.inversiones_historial || []).filter((v) => v.id !== idToDelete); saveData(null, () => { hideModal('valoracion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(currentCuentaId); else renderInversionesPage(); }); }),
             'delete-aportacion': () => showConfirmationModal('¿Eliminar este flujo de capital?', () => { const form = select('aportacion-modal')?.querySelector('form'); if(!form) return; const idToDelete = (form.querySelector('#aportacion-id')).value; const currentCuentaId = (form.querySelector('#aportacion-cuenta-id')).value; db.inversion_cashflows = (db.inversion_cashflows || []).filter((cf) => cf.id !== idToDelete); saveData(null, () => { hideModal('aportacion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(currentCuentaId); else renderInversionesPage(); }); }),
-            // --- CONTEXTUAL FAB ACTIONS ---
             'show-investment-fab-menu': () => { vibrate(); select('fab-menu')?.classList.toggle('fab-menu--visible'); },
             'add-aportacion-from-menu': () => { select('fab-menu')?.classList.remove('fab-menu--visible'); showAportacionModal(); },
             'update-investment-value-from-menu': () => {
@@ -1695,20 +2188,27 @@ const attachEventListeners = () => {
                 let accountsHtml = investmentAccounts.map(acc => `<div class="modal__list-item" data-action="update-investment-value" data-id="${acc.id}" style="cursor:pointer;">${acc.nombre}<span class="material-icons">chevron_right</span></div>`).join('');
                 showGenericModal('Seleccionar Activo', `<p class="form-label" style="margin-bottom: var(--sp-2)">¿Qué activo quieres actualizar?</p>${accountsHtml}`);
             },
-            // --- CSV WIZARD ACTIONS ---
             'csv-wizard-next-step': () => { try { processMappingAndRenderPreview(); } catch (e) { console.error(e); } },
             'csv-wizard-back-step': () => renderCsvStep1_Mapping(),
             'csv-wizard-import': () => processAndSaveCsvImport(btn),
+            'edit-cuenta': () => showAccountEditForm(id),
+            'cancel-edit-cuenta': renderCuentasModalList,
+            'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
         };
         if (actions[action]) actions[action](e);
     });
 
     document.body.addEventListener('submit', (e) => { e.preventDefault(); const target = e.target; const handlers = {'form-movimiento':handleSaveMovement, 'add-concepto-form':handleAddConcept, 'add-cuenta-form':handleAddAccount, 'export-csv-form': handleExportCsv, 'form-valoracion': handleSaveValoracion, 'manage-investment-accounts-form': handleSaveInvestmentAccounts, 'form-aportacion': handleSaveAportacion }; if(handlers[target.id]) handlers[target.id](target); });
     document.body.addEventListener('input', (e) => { const id=(e.target).id; if(id && select(`${id}-error`)) clearError(id); });
+    document.body.addEventListener('focusin', (e) => { if (e.target.matches('.input-amount-calculator')) { e.preventDefault(); showCalculator(e.target); } });
+
     select('filter-periodo')?.addEventListener('change', (e) => select('custom-date-filters')?.classList.toggle('hidden', (e.target).value !== 'custom'));
     select('movimiento-tipo-selector')?.addEventListener('change', (e) => { const isT=(e.target).value==='traspaso';select('movimiento-fields')?.classList.toggle('hidden',isT);select('traspaso-fields')?.classList.toggle('hidden',!isT);['movimiento-concepto','movimiento-cuenta'].forEach(id=>(select(id)).required=!isT);['movimiento-cuenta-origen','movimiento-cuenta-destino'].forEach(id=>(select(id)).required=isT); });
     select('import-file-input')?.addEventListener('change', (e)=>{const f=(e.target).files?.[0];if(!f)return;const r=new FileReader();r.onload=(re)=>{try{let d=JSON.parse(re.target.result);if(d.db)d=d.db;showConfirmationModal('La importación de JSON reemplazará TODOS tus datos. ¿Estás seguro?',()=>{db=d;saveData(null,()=>{renderAll();showToast('Datos importados.');});});}catch(err){showToast('Error: Archivo JSON no válido.','danger');console.error("Import error:",err);}};r.readAsText(f);(e.target).value='';});
     select('import-csv-file-input')?.addEventListener('change', (e) => { const file = (e.target).files?.[0]; if (file) { startCsvImportWizard(file); } (e.target).value = ''; });
+    
+    select('calculator-grid')?.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
+    
     const listContainer = select('movimientos-page');
     listContainer?.addEventListener('touchstart', (e) => { const card = (e.target).closest('.transaction-card'); if (!card || !select('movimientos-list-container')?.contains(card)) return; if (currentSwipedCard && currentSwipedCard !== card) { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); } currentSwipedCard = card; touchStartX = e.targetTouches[0].clientX; touchStartY = e.targetTouches[0].clientY; }, { passive: true });
     listContainer?.addEventListener('touchmove', (e) => { if (!currentSwipedCard || !e.targetTouches[0]) return; const diffX = e.targetTouches[0].clientX - touchStartX, diffY = e.targetTouches[0].clientY - touchStartY; if (Math.abs(diffY) > Math.abs(diffX) + 5) { if (currentSwipedCard) { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); } currentSwipedCard = null; return; } const SWIPE_THRESHOLD = 50; if (diffX > SWIPE_THRESHOLD) { currentSwipedCard.classList.add('transaction-card--swiped-right'); currentSwipedCard.classList.remove('transaction-card--swiped-left'); } else if (diffX < -SWIPE_THRESHOLD) { currentSwipedCard.classList.add('transaction-card--swiped-left'); currentSwipedCard.classList.remove('transaction-card--swiped-right'); } else { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); } }, { passive: true });
@@ -1725,7 +2225,6 @@ const handleSaveMovement = (form) => { vibrate(); clearAllErrors(form.id); const
 const handleAddConcept = (form) => { vibrate(); const nameInput = select('new-concepto-nombre'), iconInput = select('new-concepto-icon'), nombre = nameInput.value.trim(); let icon = iconInput.value.trim().toLowerCase().replace(/\s/g, '_'); if (!icon) icon = 'label'; if (nombre) { db.conceptos.push({ id: generateId(), nombre: nombre, icon: icon }); saveData(null, () => { nameInput.value = ''; iconInput.value = ''; showToast('Concepto añadido.'); renderConceptosModalList(); populateAllDropdowns(); }); } };
 const handleAddAccount = (form) => { vibrate(); const nom=(select('new-cuenta-nombre')).value.trim(),tip=(select('new-cuenta-tipo')).value.trim().toUpperCase();if(nom&&tip){db.cuentas.push({id:generateId(),nombre:nom,tipo:tip, esInversion: false, fechaCreacion: new Date().toISOString()});saveData(null,()=>{form.reset();showToast('Cuenta añadida.');renderCuentasModalList();populateAllDropdowns();renderCuentas();});}else{showToast("Rellena todos los campos.","warning");}};
 
-// --- INVESTMENT MODAL AND FORM HANDLERS ---
 const showManageInvestmentAccountsModal = () => {
     const accountsHtml = (db.cuentas || []).sort((a,b) => a.nombre.localeCompare(b.nombre)).map((acc) => `<div class="modal__list-item form-switch-group"><div><span style="display: block; font-weight: 500;">${acc.nombre}</span><small style="color: var(--c-on-surface-secondary);">${acc.tipo.toUpperCase()}</small></div><label class="form-switch"><input type="checkbox" data-account-id="${acc.id}" ${acc.esInversion ? 'checked' : ''}><span class="slider"></span></label></div>`).join('');
     const content = `<div class="modal"><header class="modal__header"><h3 class="modal__title">Gestionar Activos del Portafolio</h3><button class="icon-btn" data-action="close-modal" data-modal-id="manage-investment-accounts-modal"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="manage-investment-accounts-form"><p class="form-label" style="margin-bottom: var(--sp-3)">Selecciona las cuentas a tratar como activos de inversión.</p><div id="investment-accounts-list-modal">${accountsHtml}</div><div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Selección</button></div></form></div></div>`;
@@ -1741,11 +2240,11 @@ const handleSaveInvestmentAccounts = (form) => {
 };
 
 const showValoracionModal = (cuentaId, valoracionId = null) => {
-    hideModal('generic-modal'); // Hide selector if open
+    hideModal('generic-modal');
     const cuenta = db.cuentas.find((c) => c.id === cuentaId);
     if (!cuenta) return;
     const valoracion = valoracionId ? (db.inversiones_historial || []).find((v) => v.id === valoracionId) : null;
-    const content = `<div class="modal"><header class="modal__header"><h3 id="form-valoracion-title" class="modal__title">Valor de ${cuenta.nombre}</h3><button class="icon-btn" data-action="close-modal" data-modal-id="valoracion-modal" title="Cerrar"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="form-valoracion" novalidate><input type="hidden" id="valoracion-id" value="${valoracion?.id || ''}"><input type="hidden" id="valoracion-cuenta-id" value="${cuentaId}"><div class="form-grid"><div class="form-group"><label for="valoracion-fecha" class="form-label">Fecha</label><input type="date" id="valoracion-fecha" class="form-input" required value="${valoracion ? new Date(valoracion.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}"><span class="form-error" id="valoracion-fecha-error"></span></div><div class="form-group"><label for="valoracion-valor" class="form-label">Valor (€)</label><input type="text" id="valoracion-valor" class="form-input" inputmode="decimal" required placeholder="Ej: 15.250,75" value="${valoracion ? (valoracion.valor / 100).toLocaleString('es-ES') : ''}"><span class="form-error" id="valoracion-valor-error"></span></div></div><div class="modal__actions">${valoracion ? `<button type="button" data-action="delete-valoracion" class="btn btn--danger" style="margin-right: auto;"><span class="material-icons">delete</span></button>` : ''}<button type="submit" class="btn btn--primary">Guardar</button></div></form></div></div>`;
+    const content = `<div class="modal"><header class="modal__header"><h3 id="form-valoracion-title" class="modal__title">Valor de ${cuenta.nombre}</h3><button class="icon-btn" data-action="close-modal" data-modal-id="valoracion-modal" title="Cerrar"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="form-valoracion" novalidate><input type="hidden" id="valoracion-id" value="${valoracion?.id || ''}"><input type="hidden" id="valoracion-cuenta-id" value="${cuentaId}"><div class="form-grid"><div class="form-group"><label for="valoracion-fecha" class="form-label">Fecha</label><input type="date" id="valoracion-fecha" class="form-input" required value="${valoracion ? new Date(valoracion.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}"><span class="form-error" id="valoracion-fecha-error"></span></div><div class="form-group"><label for="valoracion-valor" class="form-label">Valor (€)</label><input type="text" id="valoracion-valor" class="form-input input-amount-calculator" readonly required placeholder="Ej: 15.250,75" value="${valoracion ? (valoracion.valor / 100).toLocaleString('es-ES') : ''}"><span class="form-error" id="valoracion-valor-error"></span></div></div><div class="modal__actions">${valoracion ? `<button type="button" data-action="delete-valoracion" class="btn btn--danger" style="margin-right: auto;"><span class="material-icons">delete</span></button>` : ''}<button type="submit" class="btn btn--primary">Guardar</button></div></form></div></div>`;
     const modalContainer = select('valoracion-modal');
     if (modalContainer) modalContainer.innerHTML = content;
     showModal('valoracion-modal');
@@ -1767,7 +2266,7 @@ const showAportacionModal = (cuentaId = null, aportacionId = null) => {
     if(investmentAccounts.length === 0) { showToast('Crea primero un activo del portafolio.', 'warning'); return; }
     const aportacion = aportacionId ? (db.inversion_cashflows || []).find((cf) => cf.id === aportacionId) : null;
     const options = investmentAccounts.map((c) => `<option value="${c.id}" ${ (aportacion?.cuentaId || cuentaId) === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('');
-    const content = `<div class="modal"><header class="modal__header"><h3 class="modal__title">Flujo de Capital</h3><button class="icon-btn" data-action="close-modal" data-modal-id="aportacion-modal"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="form-aportacion" novalidate><input type="hidden" id="aportacion-id" value="${aportacion?.id || ''}"><div class="form-group"><label for="aportacion-cuenta-id" class="form-label">Activo</label><select id="aportacion-cuenta-id" class="form-select" required>${options}</select><span class="form-error" id="aportacion-cuenta-id-error"></span></div><div class="form-group"><label class="form-label">Tipo</label><div class="form-grid"><div style="background:var(--c-surface-variant); padding: var(--sp-2); border-radius: var(--border-radius-md);"><input type="radio" id="aportacion-tipo-aportacion" name="aportacion-tipo" value="aportacion" ${!aportacion || aportacion.cantidad > 0 ? 'checked' : ''}><label for="aportacion-tipo-aportacion"> Aportación</label></div><div style="background:var(--c-surface-variant); padding: var(--sp-2); border-radius: var(--border-radius-md);"><input type="radio" id="aportacion-tipo-reembolso" name="aportacion-tipo" value="reembolso" ${aportacion?.cantidad < 0 ? 'checked' : ''}><label for="aportacion-tipo-reembolso"> Reembolso</label></div></div></div><div class="form-grid"><div class="form-group"><label for="aportacion-cantidad" class="form-label">Cantidad (€)</label><input type="text" id="aportacion-cantidad" class="form-input" required value="${aportacion ? (Math.abs(aportacion.cantidad)/100).toLocaleString('es-ES') : ''}"><span class="form-error" id="aportacion-cantidad-error"></span></div><div class="form-group"><label for="aportacion-fecha" class="form-label">Fecha</label><input type="date" id="aportacion-fecha" class="form-input" required value="${aportacion ? new Date(aportacion.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}"><span class="form-error" id="aportacion-fecha-error"></span></div></div><div class="form-group"><label for="aportacion-notas" class="form-label">Notas</label><input type="text" id="aportacion-notas" class="form-input" value="${aportacion?.notas || ''}"></div><div class="modal__actions">${aportacion ? `<button type="button" data-action="delete-aportacion" class="btn btn--danger" style="margin-right: auto;"><span class="material-icons">delete</span></button>` : ''}<button type="submit" class="btn btn--primary">Guardar</button></div></form></div></div>`;
+    const content = `<div class="modal"><header class="modal__header"><h3 class="modal__title">Flujo de Capital</h3><button class="icon-btn" data-action="close-modal" data-modal-id="aportacion-modal"><span class="material-icons">close</span></button></header><div class="modal__body"><form id="form-aportacion" novalidate><input type="hidden" id="aportacion-id" value="${aportacion?.id || ''}"><div class="form-group"><label for="aportacion-cuenta-id" class="form-label">Activo</label><select id="aportacion-cuenta-id" class="form-select" required>${options}</select><span class="form-error" id="aportacion-cuenta-id-error"></span></div><div class="form-group"><label class="form-label">Tipo</label><div class="form-grid"><div style="background:var(--c-surface-variant); padding: var(--sp-2); border-radius: var(--border-radius-md);"><input type="radio" id="aportacion-tipo-aportacion" name="aportacion-tipo" value="aportacion" ${!aportacion || aportacion.cantidad > 0 ? 'checked' : ''}><label for="aportacion-tipo-aportacion"> Aportación</label></div><div style="background:var(--c-surface-variant); padding: var(--sp-2); border-radius: var(--border-radius-md);"><input type="radio" id="aportacion-tipo-reembolso" name="aportacion-tipo" value="reembolso" ${aportacion?.cantidad < 0 ? 'checked' : ''}><label for="aportacion-tipo-reembolso"> Reembolso</label></div></div></div><div class="form-grid"><div class="form-group"><label for="aportacion-cantidad" class="form-label">Cantidad (€)</label><input type="text" id="aportacion-cantidad" class="form-input input-amount-calculator" readonly required value="${aportacion ? (Math.abs(aportacion.cantidad)/100).toLocaleString('es-ES') : ''}"><span class="form-error" id="aportacion-cantidad-error"></span></div><div class="form-group"><label for="aportacion-fecha" class="form-label">Fecha</label><input type="date" id="aportacion-fecha" class="form-input" required value="${aportacion ? new Date(aportacion.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}"><span class="form-error" id="aportacion-fecha-error"></span></div></div><div class="form-group"><label for="aportacion-notas" class="form-label">Notas</label><input type="text" id="aportacion-notas" class="form-input" value="${aportacion?.notas || ''}"></div><div class="modal__actions">${aportacion ? `<button type="button" data-action="delete-aportacion" class="btn btn--danger" style="margin-right: auto;"><span class="material-icons">delete</span></button>` : ''}<button type="submit" class="btn btn--primary">Guardar</button></div></form></div></div>`;
     const modalContainer = select('aportacion-modal');
     if (modalContainer) modalContainer.innerHTML = content;
     showModal('aportacion-modal');
