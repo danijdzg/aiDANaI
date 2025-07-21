@@ -263,6 +263,7 @@
         .icon-btn .material-icons { font-size: 20px; }
         .icon-btn:hover { background-color: var(--c-surface-variant); color: var(--c-on-surface); }
         .icon-btn:active { transform: scale(0.9); }
+        .icon-btn.active-view { color: var(--c-primary); } /* NUEVO: Estilo para el botón de vista activa */
         .fab-menu--visible { display: flex; animation: fade-in 0.2s ease-out; }
         .fab-menu__item { display: flex; align-items: center; gap: var(--sp-3); background-color: var(--c-surface); color: var(--c-on-surface); padding: var(--sp-2) var(--sp-3); border-radius: var(--border-radius-md); box-shadow: var(--shadow-md); font-size: var(--fs-sm); font-weight: 500; cursor: pointer; white-space: nowrap; }
         .modal__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-3); flex-shrink: 0;}
@@ -1001,6 +1002,11 @@ let descriptionIndex = {}; // <--- IMPLEMENTATION #1: For smart suggestions
 const originalButtonTexts = new Map();
 let conceptosChart = null, liquidAssetsChart = null, detailInvestmentChart = null, informesChart = null;
 
+// =================================================================================
+// MODIFICACIÓN: Nuevo estado global para la contabilidad
+// =================================================================================
+let isContabilidadExcluidaViewActive = false;
+
 const vList = {
     scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
     heights: { transaction: 64 }, 
@@ -1046,7 +1052,8 @@ const saveData = (buttonElement = null, successCallback = () => {}) => {
 // <--- IMPLEMENTATION #1: Build index for smart suggestions
 const buildDescriptionIndex = () => {
     descriptionIndex = {};
-    (db.movimientos || []).forEach(m => {
+    const visibleMovements = getVisibleMovements();
+    (visibleMovements || []).forEach(m => {
         if (!m.descripcion || m.tipo !== 'movimiento') return;
         const desc = m.descripcion.toLowerCase().trim();
         if (!descriptionIndex[desc]) {
@@ -1070,6 +1077,10 @@ const loadData = (uid) => {
             db = doc.data().db;
             
             // --- MIGRATION LOGIC ---
+            if ((db.cuentas || []).some(c => c.contabilidadExcluida === undefined)) {
+                (db.cuentas || []).forEach(c => { if (c.contabilidadExcluida === undefined) c.contabilidadExcluida = false; });
+                dataNeedsMigration = true;
+            }
             if (db.config?.beneficiarios) { delete db.config.beneficiarios; dataNeedsMigration = true; }
             if (db.config?.visibleOwners) { delete db.config.visibleOwners; dataNeedsMigration = true; }
             if ((db.movimientos || []).some((m) => m.hasOwnProperty('beneficiario'))) { (db.movimientos || []).forEach((m) => delete m.beneficiario); dataNeedsMigration = true; }
@@ -1208,7 +1219,8 @@ const navigateTo = (pageId, isInitial = false) => {
     
     const titleEl = select('top-bar-title'), actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento'), fabMenu = select('fab-menu');
     if(leftEl) leftEl.innerHTML = '';
-    const standardActions = `<button data-action="help" class="icon-btn" title="Ayuda"><span class="material-icons">help_outline</span></button> <button data-action="theme-toggle" class="icon-btn" title="Cambiar Tema"><span class="material-icons">${document.documentElement.getAttribute('data-theme') === 'dark' ? 'light_mode' : 'dark_mode'}</span></button> <button data-action="exit" class="icon-btn" title="Salir"><span class="material-icons">exit_to_app</span></button>`;
+    const bViewBtnClass = isContabilidadExcluidaViewActive ? 'icon-btn active-view' : 'icon-btn';
+    const standardActions = `<button data-action="toggle-b-view" class="${bViewBtnClass}" title="Ver Contabilidad B"><span class="material-icons">business_center</span></button> <button data-action="help" class="icon-btn" title="Ayuda"><span class="material-icons">help_outline</span></button> <button data-action="theme-toggle" class="icon-btn" title="Cambiar Tema"><span class="material-icons">${document.documentElement.getAttribute('data-theme') === 'dark' ? 'light_mode' : 'dark_mode'}</span></button> <button data-action="exit" class="icon-btn" title="Salir"><span class="material-icons">exit_to_app</span></button>`;
     
     // --- CONTEXTUAL FAB LOGIC ---
     if(fabMenu) fabMenu.classList.remove('fab-menu--visible');
@@ -1230,7 +1242,7 @@ const navigateTo = (pageId, isInitial = false) => {
     }
 
     const pageRenderers = {
-        'movimientos-page': { title: 'Movimientos', render: renderMovimientos, actions: `<input type="search" id="search-movimientos" class="form-input" placeholder="Buscar..." style="width: 150px; height: 34px; font-size: var(--fs-sm);">` },
+        'movimientos-page': { title: 'Movimientos', render: renderMovimientos, actions: `<input type="search" id="search-movimientos" class="form-input" placeholder="Buscar..." style="width: 150px; height: 34px; font-size: var(--fs-sm);"> ${standardActions.replace('<button data-action="help"','<button style="display:none;" data-action="help"')}` },
         'panel-control-page': { title: 'Panel de Control', render: updateDashboard, actions: standardActions },
         'cuentas-page': { title: 'Cuentas', render: renderCuentas, actions: standardActions },
         'inversiones-page': { title: 'Portafolio', render: renderInversionesPage, actions: standardActions },
@@ -1240,10 +1252,13 @@ const navigateTo = (pageId, isInitial = false) => {
     };
     
     if (pageRenderers[pageId]) {
+        let finalTitle = pageRenderers[pageId].title;
+        if(isContabilidadExcluidaViewActive) finalTitle += " (B)";
+
          if (pageId === 'inversiones-page' && !select('investment-detail-view')?.classList.contains('hidden')) {
             // Title is handled by renderInvestmentAccountDetail
         } else if (titleEl) {
-            titleEl.textContent = pageRenderers[pageId].title;
+            titleEl.textContent = finalTitle;
         }
         if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
         if(pageId === 'movimientos-page') {
@@ -1271,24 +1286,63 @@ const toggleTheme = () => { vibrate(); const newTheme = document.documentElement
 // =================================================================================
 // 6. CORE LOGIC & CALCULATIONS
 // =================================================================================
-const getLiquidAccounts = () => (db.cuentas || []).filter((c) => !['PROPIEDAD', 'PRÉSTAMO'].includes((c.tipo || '').trim().toUpperCase()));
+
+// =================================================================================
+// MODIFICACIÓN: Nuevas funciones para obtener datos según el modo de contabilidad
+// =================================================================================
+const getVisibleAccounts = () => {
+    return (db.cuentas || []).filter(c => c.contabilidadExcluida === isContabilidadExcluidaViewActive);
+};
+const getVisibleMovements = () => {
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+    return (db.movimientos || []).filter(m => {
+        if (m.tipo === 'traspaso') {
+            return visibleAccountIds.has(m.cuentaOrigenId) && visibleAccountIds.has(m.cuentaDestinoId);
+        }
+        return visibleAccountIds.has(m.cuentaId);
+    });
+};
+const getLiquidAccounts = () => getVisibleAccounts().filter((c) => !['PROPIEDAD', 'PRÉSTAMO'].includes((c.tipo || '').trim().toUpperCase()));
 
 const getSaldos = () => {
-    const saldos = (db.cuentas || []).reduce((acc, c) => ({ ...acc, [c.id]: 0 }), {});
-    (db.movimientos || []).forEach((m) => {
-        if (m.tipo === 'traspaso') { if (saldos[m.cuentaOrigenId] !== undefined) saldos[m.cuentaOrigenId] -= m.cantidad; if (saldos[m.cuentaDestinoId] !== undefined) saldos[m.cuentaDestinoId] += m.cantidad;
-        } else { if (saldos[m.cuentaId] !== undefined) saldos[m.cuentaId] += m.cantidad; }
-    }); return saldos;
+    const visibleAccounts = getVisibleAccounts();
+    const visibleMovements = getVisibleMovements();
+    const saldos = visibleAccounts.reduce((acc, c) => ({ ...acc, [c.id]: 0 }), {});
+    
+    visibleMovements.forEach((m) => {
+        if (m.tipo === 'traspaso') {
+            if (saldos[m.cuentaOrigenId] !== undefined) saldos[m.cuentaOrigenId] -= m.cantidad;
+            if (saldos[m.cuentaDestinoId] !== undefined) saldos[m.cuentaDestinoId] += m.cantidad;
+        } else {
+            if (saldos[m.cuentaId] !== undefined) saldos[m.cuentaId] += m.cantidad;
+        }
+    });
+    return saldos;
 };
 
 const calculateRunningBalancesForAll = (movements) => {
-    const movs = JSON.parse(JSON.stringify(movements || [])); movs.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
-    const runningBalances = (db.cuentas || []).reduce((acc, c) => ({ ...acc, [c.id]: 0 }), {});
+    const movs = JSON.parse(JSON.stringify(movements || []));
+    movs.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+    
+    const visibleAccounts = getVisibleAccounts();
+    const runningBalances = visibleAccounts.reduce((acc, c) => ({ ...acc, [c.id]: 0 }), {});
+    
     movs.forEach((mov) => {
-        if (mov.tipo === 'traspaso') { if (runningBalances.hasOwnProperty(mov.cuentaOrigenId)) runningBalances[mov.cuentaOrigenId] -= mov.cantidad; if (runningBalances.hasOwnProperty(mov.cuentaDestinoId)) runningBalances[mov.cuentaDestinoId] += mov.cantidad; mov.saldoPostMovimiento = runningBalances[mov.cuentaOrigenId]; mov.saldoPostMovimientoDestino = runningBalances[mov.cuentaDestinoId];
-        } else if (mov.tipo === 'movimiento') { if (runningBalances.hasOwnProperty(mov.cuentaId)) { runningBalances[mov.cuentaId] += mov.cantidad; mov.saldoPostMovimiento = runningBalances[mov.cuentaId]; } }
-    }); return movs;
+        if (mov.tipo === 'traspaso') {
+            if (runningBalances.hasOwnProperty(mov.cuentaOrigenId)) runningBalances[mov.cuentaOrigenId] -= mov.cantidad;
+            if (runningBalances.hasOwnProperty(mov.cuentaDestinoId)) runningBalances[mov.cuentaDestinoId] += mov.cantidad;
+            mov.saldoPostMovimiento = runningBalances[mov.cuentaOrigenId];
+            mov.saldoPostMovimientoDestino = runningBalances[mov.cuentaDestinoId];
+        } else if (mov.tipo === 'movimiento') {
+            if (runningBalances.hasOwnProperty(mov.cuentaId)) {
+                runningBalances[mov.cuentaId] += mov.cantidad;
+                mov.saldoPostMovimiento = runningBalances[mov.cuentaId];
+            }
+        }
+    });
+    return movs;
 };
+
 
 // <--- IMPLEMENTATION #2: Modified function to get data for two periods
 const getFilteredMovements = (forComparison = false) => {
@@ -1323,12 +1377,12 @@ const getFilteredMovements = (forComparison = false) => {
     }
 
     const filterLogic = (m) => {
-        const cuentaMatch = !cId || m.cuentaId === cId || m.cuentaOrigenId
-		const conceptoMatch = !coId || m.conceptoId === coId;
-        return cuentaMatch && conceptoMatch && ['movimiento', 'traspaso'].includes(m.tipo);
+        const cuentaMatch = !cId || m.cuentaId === cId || m.cuentaOrigenId === cId || m.cuentaDestinoId === cId;
+        const conceptoMatch = !coId || m.conceptoId === coId;
+        return cuentaMatch && ['movimiento', 'traspaso'].includes(m.tipo);
     };
 
-    const allMovements = db.movimientos || [];
+    const allMovements = getVisibleMovements(); // MODIFICADO
     const currentMovs = allMovements.filter(m => {
         const d = new Date(m.fecha);
         const dateMatch = (!sDate || !eDate) ? true : (d >= sDate && d <= eDate);
@@ -1352,16 +1406,20 @@ const getFilteredMovements = (forComparison = false) => {
 
 
 const calculateInvestmentAccountPerformance = (cuentaId) => {
-    const cuenta = db.cuentas.find((c) => c.id === cuentaId);
+    const cuenta = getVisibleAccounts().find((c) => c.id === cuentaId);
     if (!cuenta) return { valorActual: 0, capitalInvertido: 0, pnlAbsoluto: 0, pnlPorcentual: 0 };
 
     const saldos = getSaldos();
     const capitalBase = saldos[cuentaId] || 0;
-    const cashflows = (db.inversion_cashflows || []).filter((cf) => cf.cuentaId === cuentaId);
+    
+    // Filtrar cashflows y valoraciones por las cuentas visibles
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+    const cashflows = (db.inversion_cashflows || []).filter(cf => visibleAccountIds.has(cf.cuentaId) && cf.cuentaId === cuentaId);
+    const valoraciones = (db.inversiones_historial || []).filter(v => visibleAccountIds.has(v.cuentaId) && v.cuentaId === cuentaId).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
     const netCashflow = cashflows.reduce((sum, cf) => sum + cf.cantidad, 0);
     const capitalInvertido = capitalBase + netCashflow;
     
-    const valoraciones = (db.inversiones_historial || []).filter((v) => v.cuentaId === cuentaId).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
     const valorActual = valoraciones.length > 0 ? valoraciones[valoraciones.length - 1].valor : capitalInvertido;
     const pnlAbsoluto = valorActual - capitalInvertido;
     const pnlPorcentual = capitalInvertido !== 0 ? (pnlAbsoluto / capitalInvertido) * 100 : 0;
@@ -1372,23 +1430,24 @@ const calculateInvestmentAccountPerformance = (cuentaId) => {
 // =================================================================================
 // 7. RENDERING ENGINE & BUDGET FUNCTIONS
 // =================================================================================
-const renderAll = () => { if (!db || !currentUser) return; populateAllDropdowns(); renderMovimientos(); renderCuentas(); loadConfig(); updateDashboard(); renderInversionesPage(); renderInformesPage(); };
+const renderAll = () => { if (!db || !currentUser) return; populateAllDropdowns(); renderMovimientos(); renderCuentas(); loadConfig(); updateDashboard(); renderInversionesPage(); renderInformesPage(); renderBudgetTracking(); };
 
 const populateAllDropdowns = () => {
+    const visibleAccounts = getVisibleAccounts();
     const populate = (id, data, nameKey, valKey='id', all=false, none=false) => {
         const el = select(id); if (!el) return; const currentVal = el.value;
         let opts = all ? '<option value="">Todos</option>' : ''; if (none) opts += '<option value="">Ninguno</option>';
         [...data].sort((a,b) => (a[nameKey]||"").localeCompare(b[nameKey]||"")).forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
         el.innerHTML = opts; el.value = Array.from(el.options).some(o=>o.value===currentVal) ? currentVal : (el.options[0]?.value || "");
     };
-    populate('movimiento-cuenta', db.cuentas, 'nombre', 'id', false, true); 
-    populate('movimiento-cuenta-origen', db.cuentas, 'nombre', 'id', false, true); 
-    populate('movimiento-cuenta-destino', db.cuentas, 'nombre', 'id', false, true); 
-    populate('filter-cuenta', db.cuentas, 'nombre', 'id', true); 
+    populate('movimiento-cuenta', visibleAccounts, 'nombre', 'id', false, true); 
+    populate('movimiento-cuenta-origen', visibleAccounts, 'nombre', 'id', false, true); 
+    populate('movimiento-cuenta-destino', visibleAccounts, 'nombre', 'id', false, true); 
+    populate('filter-cuenta', visibleAccounts, 'nombre', 'id', true); 
     populate('movimiento-concepto', db.conceptos, 'nombre', 'id', false, true); 
     populate('filter-concepto', db.conceptos, 'nombre', 'id', true);
     const budgetYearSelect = select('budget-year-selector'); if(budgetYearSelect) { const currentVal = budgetYearSelect.value; const currentYear = new Date().getFullYear(); let years = new Set([currentYear]); (db.presupuestos || []).forEach((p) => years.add(p.ano)); budgetYearSelect.innerHTML = [...years].sort((a,b) => b-a).map(y => `<option value="${y}">${y}</option>`).join(''); if(currentVal && [...years].some(y => y == parseInt(currentVal))) budgetYearSelect.value = currentVal; else budgetYearSelect.value = String(currentYear); }
-    populate('informe-cuenta', db.cuentas, 'nombre', 'id', true);
+    populate('informe-cuenta', visibleAccounts, 'nombre', 'id', true);
     populate('informe-concepto', db.conceptos, 'nombre', 'id', true);
 };
 
@@ -1406,10 +1465,12 @@ const renderBudgetTracking = () => {
     listContainer.classList.remove('hidden'); placeholder.classList.add('hidden');
     const now = new Date(), startOfYear = new Date(year, 0, 1), endOfYear = new Date(year, 11, 31); const yearProgress = (now > endOfYear) ? 1 : (now < startOfYear ? 0 : (now.getTime() - startOfYear.getTime()) / (endOfYear.getTime() - startOfYear.getTime())); const isCurrentYear = now.getFullYear() === year;
     let html = '';
+    const visibleMovements = getVisibleMovements(); // MODIFICADO
+
     yearBudgets.sort((a,b) => (db.conceptos.find((c) => c.id === a.conceptoId)?.nombre || '').localeCompare(db.conceptos.find((c) => c.id === b.conceptoId)?.nombre || '')).forEach((budget) => {
         const concepto = db.conceptos.find((c) => c.id === budget.conceptoId); if (!concepto || budget.cantidad === 0) return;
         const isIncomeBudget = budget.cantidad > 0;
-        const actualAmount = db.movimientos.filter((m) => new Date(m.fecha).getFullYear() === year && m.conceptoId === budget.conceptoId && m.tipo === 'movimiento').reduce((sum, m) => sum + m.cantidad, 0);
+        const actualAmount = visibleMovements.filter((m) => new Date(m.fecha).getFullYear() === year && m.conceptoId === budget.conceptoId && m.tipo === 'movimiento').reduce((sum, m) => sum + m.cantidad, 0);
         const budgetLimit = Math.abs(budget.cantidad), actualValue = isIncomeBudget ? actualAmount : Math.abs(actualAmount);
         const difference = isIncomeBudget ? (actualAmount - budgetLimit) : (budgetLimit - actualValue); const differenceClass = difference >= 0 ? 'text-positive' : 'text-negative';
         const progressValue = actualValue, progressMax = budgetLimit; let progressClass = ''; const percentage = progressMax > 0 ? (progressValue / progressMax) * 100 : 0;
@@ -1436,11 +1497,11 @@ const renderInversionesPage = () => {
     (select('investment-list-view'))?.classList.remove('hidden');
     (select('investment-detail-view'))?.classList.add('hidden');
     const topBarTitle = select('top-bar-title');
-    if (topBarTitle) topBarTitle.textContent = 'Portafolio';
+    if (topBarTitle) topBarTitle.textContent = isContabilidadExcluidaViewActive ? 'Portafolio (B)' : 'Portafolio';
     const topBarLeftButton = select('top-bar-left-button');
     if (topBarLeftButton) topBarLeftButton.innerHTML = '';
 
-    const investmentAccounts = (db.cuentas || []).filter((c) => c.esInversion);
+    const investmentAccounts = getVisibleAccounts().filter((c) => c.esInversion);
     const kpisContainer = select('investment-global-kpis');
     const assetsListContainer = select('investment-assets-list');
     const emptyState = select('empty-investments');
@@ -1482,7 +1543,7 @@ const renderInversionesPage = () => {
 };
 
 const renderInvestmentAccountDetail = (cuentaId) => {
-    const cuenta = db.cuentas.find((c) => c.id === cuentaId);
+    const cuenta = getVisibleAccounts().find((c) => c.id === cuentaId);
     if (!cuenta) return;
     
     (select('investment-list-view'))?.classList.add('hidden');
@@ -1491,7 +1552,9 @@ const renderInvestmentAccountDetail = (cuentaId) => {
     detailContainer.classList.remove('hidden');
 
     const topBarTitle = select('top-bar-title');
-    if (topBarTitle) topBarTitle.textContent = cuenta.nombre;
+    let finalTitle = cuenta.nombre;
+    if(isContabilidadExcluidaViewActive) finalTitle += " (B)";
+    if (topBarTitle) topBarTitle.textContent = finalTitle;
     const topBarLeftButton = select('top-bar-left-button');
     if (topBarLeftButton) topBarLeftButton.innerHTML = `<button class="icon-btn" data-action="back-to-investment-list"><span class="material-icons">arrow_back_ios</span></button>`;
     
@@ -1501,8 +1564,10 @@ const renderInvestmentAccountDetail = (cuentaId) => {
     const pnlClass = performance.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
     const saldos = getSaldos();
     const capitalBase = saldos[cuentaId] || 0;
-    const cashflows = (db.inversion_cashflows || []).filter((cf) => cf.cuentaId === cuentaId).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
-    const valoraciones = (db.inversiones_historial || []).filter((v) => v.cuentaId === cuentaId).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+    
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+    const cashflows = (db.inversion_cashflows || []).filter(cf => visibleAccountIds.has(cf.cuentaId) && cf.cuentaId === cuentaId).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+    const valoraciones = (db.inversiones_historial || []).filter(v => visibleAccountIds.has(v.cuentaId) && v.cuentaId === cuentaId).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
     detailContainer.innerHTML = `<div class="kpi-grid" style="grid-template-columns: 1fr 1fr;"><div class="kpi-item"><h4 class="kpi-item__label">Valor Actual</h4><strong class="kpi-item__value">${formatCurrency(performance.valorActual)}</strong></div><div class="kpi-item"><h4 class="kpi-item__label">Capital Invertido</h4><strong class="kpi-item__value">${formatCurrency(performance.capitalInvertido)}</strong></div><div class="kpi-item"><h4 class="kpi-item__label">Rendimiento (€)</h4><strong class="kpi-item__value ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)}</strong></div><div class="kpi-item"><h4 class="kpi-item__label">Rendimiento (%)</h4><strong class="kpi-item__value ${pnlClass}">${performance.pnlPorcentual.toFixed(2)}%</strong></div></div><div class="card"><h3 class="card__title"><span class="material-icons">show_chart</span>Evolución</h3><div class="card__content"><div class="chart-container" style="height: 200px; margin-bottom: 0;"><canvas id="detail-investment-chart"></canvas></div></div></div><div class="card"><h3 class="card__title"><span class="material-icons">history</span>Historial</h3><div class="card__content" id="investment-detail-timeline" style="padding-top: 0;"></div></div>`;
 
@@ -1564,8 +1629,10 @@ const renderInformesPage = () => {
     fechaInicio.setHours(0, 0, 0, 0);
     const fechaFin = new Date(fechaFinVal);
     fechaFin.setHours(23, 59, 59, 999);
+    
+    const visibleMovements = getVisibleMovements(); // MODIFICADO
 
-    let movimientos = (db.movimientos || []).filter(m => {
+    let movimientos = visibleMovements.filter(m => {
         const movDate = new Date(m.fecha);
         const enRango = movDate >= fechaInicio && movDate <= fechaFin;
         const cuentaMatch = !cuentaId || m.cuentaId === cuentaId || m.cuentaOrigenId === cuentaId || m.cuentaDestinoId === cuentaId;
@@ -1718,7 +1785,8 @@ const renderMovimientos = () => {
     if (!vList.scrollerEl) { vList.scrollerEl = selectOne('.app-layout__main'); vList.sizerEl = select('virtual-list-sizer'); vList.contentEl = select('virtual-list-content'); if(vList.scrollerEl) { vList.scrollerEl.addEventListener('scroll', () => { if (select('movimientos-page')?.classList.contains('view--active')) { if (vList.isScrolling) cancelAnimationFrame(vList.isScrolling); vList.isScrolling = requestAnimationFrame(renderVisibleItems); } }); } }
     if (!listContainer || !emptyEl || !vList.sizerEl) return;
     
-    const allMovementsWithBalances = calculateRunningBalancesForAll(db.movimientos);
+    const visibleMovements = getVisibleMovements(); // MODIFICADO
+    const allMovementsWithBalances = calculateRunningBalancesForAll(visibleMovements);
     const filterText = (select('search-movimientos')?.value || '').toLowerCase();
     
     const filtered = allMovementsWithBalances.filter((m) => {
@@ -1732,7 +1800,18 @@ const renderMovimientos = () => {
         return true;
     }).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
-    if (filtered.length === 0) { listContainer.classList.add('hidden'); emptyEl.classList.remove('hidden'); return; }
+    if (filtered.length === 0) {
+        listContainer.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
+        if (getVisibleAccounts().length === 0) {
+            emptyEl.querySelector('h3').textContent = 'Sin Cuentas Visibles';
+            emptyEl.querySelector('p').textContent = `Actualmente no hay cuentas en la vista de contabilidad ${isContabilidadExcluidaViewActive ? '"B"' : '"Principal"'}.`;
+        } else {
+            emptyEl.querySelector('h3').textContent = 'Tu historial empieza aquí';
+            emptyEl.querySelector('p').textContent = 'Pulsa el botón `+` para añadir tu primer ingreso o gasto.';
+        }
+        return;
+    }
     listContainer.classList.remove('hidden'); emptyEl.classList.add('hidden');
     vList.items = []; vList.itemMap = []; let totalHeight = 0;
     
@@ -1754,15 +1833,15 @@ const renderCuentas = () => {
     if (liquidAssetsChart) liquidAssetsChart.destroy();
     
     const saldos = getSaldos();
-    const allAccounts = db.cuentas || [];
-    const allAccountTypes = [...new Set(allAccounts.map((c) => (c.tipo || 'S/T').toUpperCase()))].sort();
+    const visibleAccounts = getVisibleAccounts();
+    const allAccountTypes = [...new Set(visibleAccounts.map((c) => (c.tipo || 'S/T').toUpperCase()))].sort();
     
-    pillsCont.innerHTML = allAccountTypes.map(t => `<button class="filter-pill ${!deselectedAccountTypesFilter.has(t) ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}">${t}</button>`).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas.</p>`;
+    pillsCont.innerHTML = allAccountTypes.map(t => `<button class="filter-pill ${!deselectedAccountTypesFilter.has(t) ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}">${t}</button>`).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
     
     const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
     
     let totalSelectedBalance = 0;
-    allAccounts.forEach((c) => {
+    visibleAccounts.forEach((c) => {
         const tipo = (c.tipo || 'S/T').toUpperCase();
         if (filteredAccountTypes.has(tipo)) {
             totalSelectedBalance += (saldos[c.id] || 0);
@@ -1770,7 +1849,7 @@ const renderCuentas = () => {
     });
     animateCountUp(totalBalanceEl, totalSelectedBalance, 500);
 
-    const accountsByType = allAccounts.reduce((acc, c) => {
+    const accountsByType = visibleAccounts.reduce((acc, c) => {
         const tipo = (c.tipo || 'S/T').toUpperCase();
         if (!acc[tipo]) acc[tipo] = [];
         acc[tipo].push(c);
@@ -1857,7 +1936,7 @@ const updateDashboard = () => {
     const kpiCont = select('kpi-container'), concCont = select('concepto-totals-list'), chartCtx = (select('conceptos-chart'))?.getContext('2d');
     if (!kpiCont || !concCont || !chartCtx) return;
 
-    if (!kpiCont.innerHTML.trim()) {
+    if (!kpiCont.innerHTML.trim() || kpiCont.querySelectorAll('.skeleton').length > 0) {
         kpiCont.innerHTML = `
             <div class="kpi-item">
                 <h4 class="kpi-item__label">Ingresos</h4>
@@ -1933,14 +2012,15 @@ const showGenericModal=(title,html)=>{(select('generic-modal-title')).textConten
 const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ vibrate(20); const id='confirmation-modal';document.getElementById(id)?.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-confirmation">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{vibrate();onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-confirmation"]')).onclick=()=>overlay.remove(); };
 
 const showAccountMovementsModal = (cId) => {
-    const cuenta = db.cuentas.find((c) => c.id === cId); if (!cuenta) return;
-    const allMovementsWithBalances = calculateRunningBalancesForAll(db.movimientos);
+    const cuenta = getVisibleAccounts().find((c) => c.id === cId); if (!cuenta) return;
+    const visibleMovements = getVisibleMovements();
+    const allMovementsWithBalances = calculateRunningBalancesForAll(visibleMovements);
     const movs = allMovementsWithBalances.filter((m) => m.cuentaId === cId || m.cuentaOrigenId === cId || m.cuentaDestinoId === cId).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
     const html = movs.length === 0 ? `<div class="empty-state"><span class="material-icons">receipt_long</span><h3>Sin Movimientos</h3><p>No hay movimientos en esta cuenta.</p></div>` : `<div class="movements-modal-container">${movs.map((m) => { const amountIcon = m.cantidad < 0 ? `<span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-left: 2px; color: var(--c-danger);">north_east</span>` : ''; const amount = m.tipo === 'traspaso' ? `<span class="text-info">${formatCurrency(m.cantidad)}</span>` : (m.cantidad < 0 ? `<span class="text-negative">${formatCurrency(m.cantidad)}</span>` : `<span class="text-positive">+${formatCurrency(m.cantidad)}</span>`); let meta = '', saldoHtml = '', conceptIcon = 'label'; const concept = m.conceptoId ? db.conceptos.find((c) => c.id === m.conceptoId) : null; if(concept && concept.icon) conceptIcon = concept.icon; else if (m.tipo === 'traspaso') conceptIcon = 'swap_horiz'; if (m.tipo === 'traspaso') { const origen = db.cuentas.find((c)=>c.id===m.cuentaOrigenId)?.nombre||'?', destino = db.cuentas.find((c)=>c.id===m.cuentaDestinoId)?.nombre||'?'; if (m.cuentaOrigenId === cId) meta = `Traspaso a: ${destino}`; else meta = `Traspaso de: ${origen}`; } else { meta = `${new Date(m.fecha).toLocaleDateString('es-ES')}`; if (m.hasOwnProperty('saldoPostMovimiento')) { saldoHtml = `<div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-top: 2px;">Saldo: ${formatCurrency(m.saldoPostMovimiento)}</div>`; } } const mainTitle = m.descripcion; return `<div class="transaction-card" data-action="edit-movement" data-id="${m.id}" style="cursor: pointer;"><div class="transaction-card__swipe-content"><div class="transaction-card__icon"><span class="material-icons">${conceptIcon}</span></div><div class="transaction-card__details"><div class="transaction-card__description">${mainTitle}</div><div class="transaction-card__meta">${meta}</div></div><div class="transaction-card__amount">${amount}${saldoHtml}</div></div></div>`; }).join('')}</div>`;
     showGenericModal(`Movimientos de ${cuenta.nombre}`, html);
 };
 
-const startEditMovement=(id)=>{ hideModal('generic-modal'); const f=select('form-movimiento'); f.reset(); clearAllErrors('form-movimiento'); const mov=id?db.movimientos.find((m)=>m.id===id):null; (select('form-movimiento-title')).textContent = mov ? 'Editar Movimiento' : 'Añadir Movimiento'; (select('movimiento-id')).value=mov?.id||''; (select('movimiento-tipo-selector')).value=mov?.tipo||'movimiento'; (select('movimiento-tipo-selector')).dispatchEvent(new Event('change')); (select('movimiento-cantidad')).value = mov ? (mov.cantidad/100).toLocaleString('es-ES') : ''; const fecha=mov?new Date(mov.fecha):new Date(); (select('movimiento-fecha')).value=new Date(fecha.getTime()-(fecha.getTimezoneOffset()*60000)).toISOString().slice(0,16); (select('movimiento-descripcion')).value=mov?.descripcion||''; if(mov?.tipo==='traspaso'){ (select('movimiento-cuenta-origen')).value=mov.cuentaOrigenId; (select('movimiento-cuenta-destino')).value=mov.cuentaDestinoId; } else { (select('movimiento-cuenta')).value=mov?.cuentaId||''; (select('movimiento-concepto')).value=mov?.conceptoId||''; } select('delete-movimiento-btn')?.classList.toggle('hidden',!mov); showModal('movimiento-modal'); };
+const startEditMovement=(id)=>{ hideModal('generic-modal'); const f=select('form-movimiento'); f.reset(); clearAllErrors('form-movimiento'); const mov=id?getVisibleMovements().find((m)=>m.id===id):null; (select('form-movimiento-title')).textContent = mov ? 'Editar Movimiento' : 'Añadir Movimiento'; (select('movimiento-id')).value=mov?.id||''; (select('movimiento-tipo-selector')).value=mov?.tipo||'movimiento'; (select('movimiento-tipo-selector')).dispatchEvent(new Event('change')); (select('movimiento-cantidad')).value = mov ? (mov.cantidad/100).toLocaleString('es-ES') : ''; const fecha=mov?new Date(mov.fecha):new Date(); (select('movimiento-fecha')).value=new Date(fecha.getTime()-(fecha.getTimezoneOffset()*60000)).toISOString().slice(0,16); (select('movimiento-descripcion')).value=mov?.descripcion||''; if(mov?.tipo==='traspaso'){ (select('movimiento-cuenta-origen')).value=mov.cuentaOrigenId; (select('movimiento-cuenta-destino')).value=mov.cuentaDestinoId; } else { (select('movimiento-cuenta')).value=mov?.cuentaId||''; (select('movimiento-concepto')).value=mov?.conceptoId||''; } select('delete-movimiento-btn')?.classList.toggle('hidden',!mov); showModal('movimiento-modal'); };
 
 const showCalculator = (targetInput) => {
     calculatorState.targetInput = targetInput;
@@ -2016,6 +2096,16 @@ const showHelpModal = () => {
     const helpHTML = `
         <h3><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">school</span>Guía Maestra de tu Universo Financiero</h3>
         <p>¡Bienvenido/a! Esta no es solo una app, es tu centro de mando personal para entender, controlar y mejorar tu salud financiera. Hemos diseñado cada detalle para que sea potente para los expertos y, a la vez, increíblemente sencillo para quienes empiezan. ¡Vamos a explorarla juntos!</p>
+
+        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">MODIFICACIÓN: Contabilidad Principal vs. Contabilidad "B"</h4>
+        <p>Hemos añadido una potente función para separar tus finanzas en dos vistas completamente independientes:</p>
+        <ul>
+            <li><strong>Contabilidad Principal:</strong> Tus cuentas del día a día (nómina, gastos habituales, etc.).</li>
+            <li><strong>Contabilidad "B":</strong> Cuentas que quieres seguir, pero mantener separadas de los cálculos principales (dinero para un proyecto, una caja "B", etc.).</li>
+        </ul>
+        <p>Para cambiar entre vistas, pulsa el <strong>icono del maletín <span class="material-icons" style="font-size:1em; vertical-align:middle;">business_center</span></strong> en la barra superior. Cuando está azul, estás en la contabilidad "B".</p>
+        <p>Para mover una cuenta de una contabilidad a otra, ve a <strong>Ajustes -> Gestión de Cuentas/Conceptos -> Cuentas</strong> y pulsa el icono de archivar <span class="material-icons" style="font-size:1em; vertical-align:middle;">archive</span> / desarchivar <span class="material-icons" style="font-size:1em; vertical-align:middle;">unarchive</span>.</p>
+        <hr style="margin: var(--sp-3) 0;">
 
         <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">Glosario para Principiantes</h4>
         <p>Antes de sumergirnos, aclaremos algunos términos clave:</p>
@@ -2176,13 +2266,15 @@ const renderCuentasModalList = () => {
                         <span style="display: block; font-weight: 500;">${c.nombre}</span>
                         <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">${c.tipo.toUpperCase()}</small>
                     </div>
-                    <div>
+                    <div style="display: flex; align-items:center; gap: 4px;">
+                        <button class="icon-btn" data-action="toggle-account-b-status" data-id="${c.id}" title="${c.contabilidadExcluida ? 'Incluir en contabilidad principal' : 'Excluir de contabilidad principal'}"><span class="material-icons">${c.contabilidadExcluida ? 'unarchive' : 'archive'}</span></button>
                         <button class="icon-btn" data-action="edit-cuenta" data-id="${c.id}" title="Editar Cuenta"><span class="material-icons">edit_note</span></button>
                         <button class="icon-btn" data-action="delete-cuenta" data-id="${c.id}" title="Eliminar Cuenta"><span class="material-icons">delete_outline</span></button>
                     </div>
                 </div>
             </div>`).join('');
 };
+
 
 // =================================================================================
 // 10. ROBUST CSV IMPORT WIZARD
@@ -2249,7 +2341,7 @@ const renderCsvStep2_Preview = () => {
 const processAndSaveCsvImport = (btn) => {
     setButtonLoading(btn, true, 'Importando...');
     const validMovements = csvWizardState.finalMovements.filter(m => m._errors.length === 0), newAccounts = new Map(), newConcepts = new Map();
-    const getAccountId = (name) => { if (newAccounts.has(name)) return newAccounts.get(name); const existing = db.cuentas.find(c => c.nombre.toLowerCase() === name.toLowerCase()); if (existing) return existing.id; const newId = generateId(); db.cuentas.push({ id: newId, nombre: name, tipo: 'IMPORTADO', esInversion: false, fechaCreacion: new Date().toISOString() }); newAccounts.set(name, newId); return newId; };
+    const getAccountId = (name) => { if (newAccounts.has(name)) return newAccounts.get(name); const existing = db.cuentas.find(c => c.nombre.toLowerCase() === name.toLowerCase()); if (existing) return existing.id; const newId = generateId(); db.cuentas.push({ id: newId, nombre: name, tipo: 'IMPORTADO', esInversion: false, contabilidadExcluida: isContabilidadExcluidaViewActive, fechaCreacion: new Date().toISOString() }); newAccounts.set(name, newId); return newId; };
     const getConceptId = (name) => { if (newConcepts.has(name)) return newConcepts.get(name); const existing = db.conceptos.find(c => c.nombre.toLowerCase() === name.toLowerCase()); if (existing) return existing.id; const newId = generateId(); db.conceptos.push({ id: newId, nombre: name, icon: 'file_upload' }); newConcepts.set(name, newId); return newId; };
     validMovements.forEach(mov => { const finalMov = { id: generateId(), fecha: mov.fecha.toISOString(), descripcion: mov.descripcion, cantidad: mov.cantidad, tipo: mov.tipo }; if (mov.tipo === 'traspaso') { finalMov.cuentaOrigenId = getAccountId(mov.cuentaOrigen); finalMov.cuentaDestinoId = getAccountId(mov.cuentaDestino); } else { finalMov.cuentaId = getAccountId(mov.cuenta); finalMov.conceptoId = getConceptId(mov.concepto); } db.movimientos.push(finalMov); });
     saveData(btn, () => renderCsvStep3_Summary(validMovements.length, csvWizardState.finalMovements.length - validMovements.length, newAccounts.size, newConcepts.size));
@@ -2287,6 +2379,13 @@ const attachEventListeners = () => {
         const actions = {
             'login': () => handleLogin(btn), 'register': () => handleRegister(btn), 'exit': handleExitApp,
             'navigate': () => navigateTo(page), 'theme-toggle': toggleTheme, 'help': showHelpModal,
+            'toggle-b-view': () => {
+                isContabilidadExcluidaViewActive = !isContabilidadExcluidaViewActive;
+                showToast(`Vista cambiada a Contabilidad ${isContabilidadExcluidaViewActive ? '"B"' : '"Principal"'}`, 'info');
+                const currentPage = selectOne('.view--active')?.id || 'movimientos-page';
+                renderAll();
+                navigateTo(currentPage, true);
+            },
             'apply-filters': () => { vibrate(); updateDashboard(); renderCuentas(); },
             'apply-informe-filters': () => { vibrate(); renderInformesPage(); },
             'add-movement': () => { vibrate(); startEditMovement(null); },
@@ -2296,13 +2395,23 @@ const attachEventListeners = () => {
             'copy-last-movement': handleCopyLastMovement,
             'delete-movement-from-modal': () => showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', () => { const idToDelete = (select('movimiento-id')).value; db.movimientos = db.movimientos.filter((m) => m.id !== idToDelete); saveData(null, () => { hideModal('movimiento-modal'); showToast('Movimiento eliminado.'); buildDescriptionIndex(); renderMovimientos(); updateDashboard(); renderCuentas(); navigateTo('movimientos-page'); }); }),
             'delete-concepto': () => { if(db.movimientos.some((m)=>m.conceptoId===id)){showToast("Concepto en uso, no se puede borrar.","warning");return;} showConfirmationModal('¿Seguro que quieres eliminar este concepto?',()=>{db.conceptos=db.conceptos.filter((c)=>c.id!==id);saveData(null,()=>{showToast("Concepto eliminado.");renderConceptosModalList();populateAllDropdowns();});}); },
-            'delete-cuenta': () => { if(db.movimientos.some((m)=>m.cuentaId===id||m.cuentaOrigenId===id||m.cuentaDestinoId===id)){showToast("Cuenta con movimientos, no se puede borrar.","warning",3500);return;} showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?',()=>{db.cuentas=db.cuentas.filter((c)=>c.id!==id);saveData(null,()=>{showToast("Cuenta eliminada.");renderCuentasModalList();populateAllDropdowns();renderCuentas();});}); },
+            'delete-cuenta': () => { if(getVisibleMovements().some((m)=>m.cuentaId===id||m.cuentaOrigenId===id||m.cuentaDestinoId===id)){showToast("Cuenta con movimientos, no se puede borrar.","warning",3500);return;} showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?',()=>{db.cuentas=db.cuentas.filter((c)=>c.id!==id);saveData(null,()=>{showToast("Cuenta eliminada.");renderCuentasModalList();populateAllDropdowns();renderCuentas();});}); },
             'close-modal': () => hideModal(modalId || target.closest('.modal-overlay').id), 'manage-conceptos': showConceptosModal, 'manage-cuentas': showCuentasModal, 'view-account-details': () => showAccountMovementsModal(id),
             'save-config': () => handleSaveConfig(btn), 'export-data': () => handleExportData(btn), 'export-csv': showExportCsvModal,
             'import-data': () => (select('import-file-input')).click(),
             'import-csv-wizard': () => (select('import-csv-file-input')).click(),
             'clear-data': () => showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible y no eliminará tu cuenta de usuario.',()=>{showConfirmationModal('Esta acción no se puede deshacer. ¿Continuar con el borrado de datos?', () => {db=getInitialDb();saveData(null,()=>{buildDescriptionIndex(); renderAll();showToast('Datos borrados.','danger');});}, 'Confirmación Final')}),
             'toggle-account-type-filter': () => { vibrate(); if(deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderCuentas(); },
+            'toggle-account-b-status': () => {
+                const cuenta = db.cuentas.find(c => c.id === id);
+                if (cuenta) {
+                    cuenta.contabilidadExcluida = !cuenta.contabilidadExcluida;
+                    saveData(null, () => {
+                        showToast(`'${cuenta.nombre}' movida a contabilidad ${cuenta.contabilidadExcluida ? '"B"' : '"Principal"'}.`, 'info');
+                        renderCuentasModalList();
+                    });
+                }
+            },
             'create-budgets': () => handleCreateBudgets(parseInt((select('budget-year-selector')).value, 10), btn),
             'update-budgets': handleUpdateBudgets,
             'logout': () => showConfirmationModal('¿Seguro que quieres cerrar la sesión?', () => { fbAuth.signOut().then(() => { showToast('Sesión cerrada correctamente.'); }).catch(() => { showToast('Error al cerrar sesión.', 'danger'); }); }, 'Cerrar Sesión'),
@@ -2320,7 +2429,7 @@ const attachEventListeners = () => {
             'add-aportacion-from-menu': () => { select('fab-menu')?.classList.remove('fab-menu--visible'); showAportacionModal(); },
             'update-investment-value-from-menu': () => {
                 select('fab-menu')?.classList.remove('fab-menu--visible');
-                const investmentAccounts = (db.cuentas || []).filter(c => c.esInversion);
+                const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
                 if(investmentAccounts.length === 0) { showToast('No hay activos del portafolio para actualizar.', 'warning'); return; }
                 if(investmentAccounts.length === 1) { showValoracionModal(investmentAccounts[0].id); return; }
                 let accountsHtml = investmentAccounts.map(acc => `<div class="modal__list-item" data-action="update-investment-value" data-id="${acc.id}" style="cursor:pointer;">${acc.nombre}<span class="material-icons">chevron_right</span></div>`).join('');
@@ -2401,8 +2510,8 @@ const attachEventListeners = () => {
 const handleSaveConfig = (btn) => { vibrate(); setButtonLoading(btn, true, 'Guardando...'); db.config.skipIntro = (select('config-skip-intro')).checked; localStorage.setItem('skipIntro', String(db.config.skipIntro)); saveData(btn, () => { showToast('Configuración guardada.'); }); };
 const handleExportData = (btn) => { vibrate(); setButtonLoading(btn, true, 'Exportando...'); try { const dataStr = JSON.stringify({ db }, null, 2), dataBlob = new Blob([dataStr], {type: "application/json"}), url = URL.createObjectURL(dataBlob); const a = document.createElement('a'); a.style.display = 'none'; a.href = url; const dateStr = new Date().toISOString().slice(0, 10); a.download = `cuentas-backup-${dateStr}.json`; document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove(); } catch (error) { console.error("Error al exportar datos:", error); showToast('Error al exportar los datos.', 'danger'); } finally { setButtonLoading(btn, false); } };
 const showExportCsvModal = () => { showModal('export-csv-modal'); const form = select('export-csv-form'); const dateFilters = select('csv-date-filters'); const handleRadioChange = (e) => { if ((e.target).name === 'csv-export-range') { vibrate(); dateFilters?.classList.toggle('hidden', (e.target).value !== 'range'); } }; form?.removeEventListener('change', handleRadioChange); form?.addEventListener('change', handleRadioChange); };
-const handleExportCsv = (form) => { vibrate(); const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true, 'Generando...'); setTimeout(() => { try { const formData = new FormData(form), range = formData.get('csv-export-range'); let startDate, endDate; if (range === 'range') { const startVal = (select('csv-fecha-inicio')).value, endVal = (select('csv-fecha-fin')).value; if (!startVal || !endVal) { showToast('Por favor, selecciona fechas de inicio y fin.', 'warning'); setButtonLoading(btn, false); return; } startDate = new Date(startVal); startDate.setHours(0, 0, 0, 0); endDate = new Date(endVal); endDate.setHours(23, 59, 59, 999); } const allMovementsWithBalances = calculateRunningBalancesForAll(db.movimientos), getAccountName = (id) => db.cuentas.find((c) => c.id === id)?.nombre || 'N/A', getConceptName = (id) => db.conceptos.find((c) => c.id === id)?.nombre || 'N/A'; let allCsvRows = []; allMovementsWithBalances.forEach((mov) => { const movDate = new Date(mov.fecha); if (mov.tipo === 'traspaso') { allCsvRows.push({ date: movDate, data: [ movDate, -mov.cantidad, getAccountName(mov.cuentaOrigenId), 'Traspaso (Salida)', mov.descripcion, mov.saldoPostMovimiento ] }); allCsvRows.push({ date: movDate, data: [ movDate, mov.cantidad, getAccountName(mov.cuentaDestinoId), 'Traspaso (Entrada)', mov.descripcion, mov.saldoPostMovimientoDestino ] }); } else if (mov.tipo === 'movimiento') { allCsvRows.push({ date: movDate, data: [ movDate, mov.cantidad, getAccountName(mov.cuentaId), getConceptName(mov.conceptoId), mov.descripcion, mov.saldoPostMovimiento ] }); } }); let filteredCsvRows = allCsvRows; if (range === 'range' && startDate && endDate) filteredCsvRows = allCsvRows.filter(row => row.date >= startDate && row.date <= endDate); const headers = ["Fecha", "Importe", "Cuenta", "Concepto", "Detalle", "SaldoAcumulado"]; const escapeCsvCell = (cell) => { let cellStr = String(cell === null || cell === undefined ? '' : cell); if (cellStr.includes('"')) cellStr = cellStr.replace(/"/g, '""'); if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) cellStr = `"${cellStr}"`; return cellStr; }; const formatRow = (row) => { const formattedData = [ new Date(row.data[0]).toLocaleDateString('es-ES'), (row.data[1] / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), row.data[2], row.data[3], row.data[4], row.data[5] ? (row.data[5] / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00' ]; return formattedData.map(escapeCsvCell).join(','); }; const csvContent = [ headers.join(','), ...filteredCsvRows.map(formatRow) ].join('\n'); const date = new Date(), dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; const filename = `export-cuentas-${dateStr}.csv`; const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); hideModal('export-csv-modal'); showToast('CSV generado correctamente.'); } catch (error) { console.error("Error al exportar a CSV:", error); showToast('Error al generar el archivo CSV.', 'danger'); } finally { setButtonLoading(btn, false); } }, 50); };
-const handleCopyLastMovement = () => { vibrate(); if (!db.movimientos || db.movimientos.length === 0) { showToast('No hay movimientos para copiar.', 'info'); return; } const lastMov = [...db.movimientos].sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0]; if (!lastMov) { showToast('No se pudo encontrar el último movimiento.', 'warning'); return; } clearAllErrors('form-movimiento'); (select('movimiento-id')).value = ''; (select('movimiento-tipo-selector')).value = lastMov.tipo || 'movimiento'; (select('movimiento-tipo-selector')).dispatchEvent(new Event('change')); (select('movimiento-cantidad')).value = (lastMov.cantidad/100).toLocaleString('es-ES'); (select('movimiento-descripcion')).value = lastMov.descripcion; const now = new Date(); (select('movimiento-fecha')).value = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16); if (lastMov.tipo === 'traspaso') { (select('movimiento-cuenta-origen')).value = lastMov.cuentaOrigenId || ''; (select('movimiento-cuenta-destino')).value = lastMov.cuentaDestinoId || ''; } else { (select('movimiento-cuenta')).value = lastMov.cuentaId || ''; (select('movimiento-concepto')).value = lastMov.conceptoId || ''; } showToast('Datos del último movimiento copiados.', 'default'); (select('movimiento-descripcion')).focus(); };
+const handleExportCsv = (form) => { vibrate(); const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true, 'Generando...'); setTimeout(() => { try { const formData = new FormData(form), range = formData.get('csv-export-range'); let startDate, endDate; if (range === 'range') { const startVal = (select('csv-fecha-inicio')).value, endVal = (select('csv-fecha-fin')).value; if (!startVal || !endVal) { showToast('Por favor, selecciona fechas de inicio y fin.', 'warning'); setButtonLoading(btn, false); return; } startDate = new Date(startVal); startDate.setHours(0, 0, 0, 0); endDate = new Date(endVal); endDate.setHours(23, 59, 59, 999); } const allMovementsWithBalances = calculateRunningBalancesForAll(getVisibleMovements()), getAccountName = (id) => db.cuentas.find((c) => c.id === id)?.nombre || 'N/A', getConceptName = (id) => db.conceptos.find((c) => c.id === id)?.nombre || 'N/A'; let allCsvRows = []; allMovementsWithBalances.forEach((mov) => { const movDate = new Date(mov.fecha); if (mov.tipo === 'traspaso') { allCsvRows.push({ date: movDate, data: [ movDate, -mov.cantidad, getAccountName(mov.cuentaOrigenId), 'Traspaso (Salida)', mov.descripcion, mov.saldoPostMovimiento ] }); allCsvRows.push({ date: movDate, data: [ movDate, mov.cantidad, getAccountName(mov.cuentaDestinoId), 'Traspaso (Entrada)', mov.descripcion, mov.saldoPostMovimientoDestino ] }); } else if (mov.tipo === 'movimiento') { allCsvRows.push({ date: movDate, data: [ movDate, mov.cantidad, getAccountName(mov.cuentaId), getConceptName(mov.conceptoId), mov.descripcion, mov.saldoPostMovimiento ] }); } }); let filteredCsvRows = allCsvRows; if (range === 'range' && startDate && endDate) filteredCsvRows = allCsvRows.filter(row => row.date >= startDate && row.date <= endDate); const headers = ["Fecha", "Importe", "Cuenta", "Concepto", "Detalle", "SaldoAcumulado"]; const escapeCsvCell = (cell) => { let cellStr = String(cell === null || cell === undefined ? '' : cell); if (cellStr.includes('"')) cellStr = cellStr.replace(/"/g, '""'); if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) cellStr = `"${cellStr}"`; return cellStr; }; const formatRow = (row) => { const formattedData = [ new Date(row.data[0]).toLocaleDateString('es-ES'), (row.data[1] / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), row.data[2], row.data[3], row.data[4], row.data[5] ? (row.data[5] / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00' ]; return formattedData.map(escapeCsvCell).join(','); }; const csvContent = [ headers.join(','), ...filteredCsvRows.map(formatRow) ].join('\n'); const date = new Date(), dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; const filename = `export-cuentas-${dateStr}.csv`; const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); hideModal('export-csv-modal'); showToast('CSV generado correctamente.'); } catch (error) { console.error("Error al exportar a CSV:", error); showToast('Error al generar el archivo CSV.', 'danger'); } finally { setButtonLoading(btn, false); } }, 50); };
+const handleCopyLastMovement = () => { vibrate(); const visibleMovements = getVisibleMovements(); if (!visibleMovements || visibleMovements.length === 0) { showToast('No hay movimientos para copiar.', 'info'); return; } const lastMov = [...visibleMovements].sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0]; if (!lastMov) { showToast('No se pudo encontrar el último movimiento.', 'warning'); return; } clearAllErrors('form-movimiento'); (select('movimiento-id')).value = ''; (select('movimiento-tipo-selector')).value = lastMov.tipo || 'movimiento'; (select('movimiento-tipo-selector')).dispatchEvent(new Event('change')); (select('movimiento-cantidad')).value = (lastMov.cantidad/100).toLocaleString('es-ES'); (select('movimiento-descripcion')).value = lastMov.descripcion; const now = new Date(); (select('movimiento-fecha')).value = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16); if (lastMov.tipo === 'traspaso') { (select('movimiento-cuenta-origen')).value = lastMov.cuentaOrigenId || ''; (select('movimiento-cuenta-destino')).value = lastMov.cuentaDestinoId || ''; } else { (select('movimiento-cuenta')).value = lastMov.cuentaId || ''; (select('movimiento-concepto')).value = lastMov.conceptoId || ''; } showToast('Datos del último movimiento copiados.', 'default'); (select('movimiento-descripcion')).focus(); };
 const handleCopyMovement = (idToCopy) => { vibrate(); const originalMov = db.movimientos.find((m) => m.id === idToCopy); if (!originalMov) { showToast('Error: No se encontró el movimiento.', 'danger'); return; } const newMov = JSON.parse(JSON.stringify(originalMov)); newMov.id = generateId(); newMov.fecha = new Date().toISOString(); db.movimientos.push(newMov); saveData(null, () => { showToast('Movimiento copiado.'); buildDescriptionIndex(); renderMovimientos(); updateDashboard(); renderCuentas(); setTimeout(() => { const newCardContent = document.querySelector(`.transaction-card[data-id="${newMov.id}"] .transaction-card__swipe-content`); if (newCardContent) { newCardContent.classList.add('highlight-animation'); newCardContent.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => newCardContent.classList.remove('highlight-animation'), 1500); } }, 250); }); };
 const handleSaveMovement = (form) => { vibrate(); clearAllErrors(form.id); const id = (select('movimiento-id')).value, tipo = (select('movimiento-tipo-selector')).value, fecha = (select('movimiento-fecha')).value, desc = (select('movimiento-descripcion')).value.trim(), btn = select('save-movimiento-btn'), cantStr = (select('movimiento-cantidad')).value.trim().replace(/\./g, '').replace(',', '.'), cantCent = Math.round(parseFloat(cantStr) * 100); let v = true; if (isNaN(cantCent)) { displayError('movimiento-cantidad', 'Cantidad inválida.'); v = false; } if (!fecha) { displayError('movimiento-fecha', 'Fecha obligatoria.'); v = false; } if (!desc) { displayError('movimiento-descripcion', 'Descripción obligatoria.'); v = false; } const newMov = { id: id || generateId(), tipo: tipo, cantidad: cantCent, fecha: new Date(fecha).toISOString(), descripcion: desc }; if (tipo === 'traspaso') { newMov.cuentaOrigenId = (select('movimiento-cuenta-origen')).value; newMov.cuentaOrigenId = (select('movimiento-cuenta-origen')).value; 
                     newMov.cuentaDestinoId = (select('movimiento-cuenta-destino')).value; 
@@ -2416,7 +2525,7 @@ const handleSaveMovement = (form) => { vibrate(); clearAllErrors(form.id); const
                     newMov.cuentaId = (select('movimiento-cuenta')).value; 
                     newMov.conceptoId = (select('movimiento-concepto')).value; 
                     if (!newMov.cuentaId) { displayError('movimiento-cuenta', 'Cuenta obligatoria.'); v = false; } 
-                    if (!newMov.conceptoId) { displayError('movimiento-concepto', 'Concepto obligatorio.'); v = false; } 
+if (!newMov.conceptoId) { displayError('movimiento-concepto', 'Concepto obligatorio.'); v = false;     } 
                 } 
                 if (!v) return; 
                 setButtonLoading(btn, true, 'Guardando...'); 
@@ -2461,7 +2570,14 @@ const handleAddAccount = (form) => {
     const nom = (select('new-cuenta-nombre')).value.trim(), 
           tip = (select('new-cuenta-tipo')).value.trim().toUpperCase();
     if(nom && tip) {
-        db.cuentas.push({ id: generateId(), nombre: nom, tipo: tip, esInversion: false, fechaCreacion: new Date().toISOString() });
+        db.cuentas.push({ 
+            id: generateId(), 
+            nombre: nom, 
+            tipo: tip, 
+            esInversion: false, 
+            contabilidadExcluida: isContabilidadExcluidaViewActive, // MODIFICADO: Asignar al estado actual
+            fechaCreacion: new Date().toISOString() 
+        });
         saveData(null, () => {
             form.reset();
             showToast('Cuenta añadida.');
@@ -2475,7 +2591,7 @@ const handleAddAccount = (form) => {
 };
 
 const showManageInvestmentAccountsModal = () => {
-    const accountsHtml = (db.cuentas || []).sort((a, b) => a.nombre.localeCompare(b.nombre)).map((acc) =>
+    const accountsHtml = (getVisibleAccounts() || []).sort((a, b) => a.nombre.localeCompare(b.nombre)).map((acc) =>
         `<div class="modal__list-item form-switch-group">
             <div>
                 <span style="display: block; font-weight: 500;">${acc.nombre}</span>
@@ -2530,7 +2646,7 @@ const handleSaveInvestmentAccounts = (form) => {
 
 const showValoracionModal = (cuentaId, valoracionId = null) => {
     hideModal('generic-modal');
-    const cuenta = db.cuentas.find((c) => c.id === cuentaId);
+    const cuenta = getVisibleAccounts().find((c) => c.id === cuentaId);
     if (!cuenta) return;
     const valoracion = valoracionId ? (db.inversiones_historial || []).find((v) => v.id === valoracionId) : null;
     const content = `<div class="modal">
@@ -2598,8 +2714,8 @@ const handleSaveValoracion = (form) => {
 };
 
 const showAportacionModal = (cuentaId = null, aportacionId = null) => {
-    const investmentAccounts = (db.cuentas || []).filter((c) => c.esInversion);
-    if(investmentAccounts.length === 0) { showToast('Crea primero un activo del portafolio.', 'warning'); return; }
+    const investmentAccounts = getVisibleAccounts().filter((c) => c.esInversion);
+    if(investmentAccounts.length === 0) { showToast('Crea primero un activo del portafolio en esta vista.', 'warning'); return; }
     
     const aportacion = aportacionId ? (db.inversion_cashflows || []).find((cf) => cf.id === aportacionId) : null;
     const options = investmentAccounts.map((c) => `<option value="${c.id}" ${ (aportacion?.cuentaId || cuentaId) === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('');
