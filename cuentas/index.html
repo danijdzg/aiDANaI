@@ -158,18 +158,7 @@
         }
         .fab--visible { transform: scale(1); opacity: 1; }
         .fab:hover { transform: scale(1.08) !important; } .fab .material-icons { font-size: 28px; }
-
-        .fab-menu {
-            position: fixed;
-            bottom: calc(56px + env(safe-area-inset-bottom) + 64px); /* FAB bottom + FAB height + margin */
-            right: var(--sp-5);
-            z-index: 1040;
-            display: none;
-            flex-direction: column;
-            gap: var(--sp-2);
-            align-items: flex-end;
-        }
-
+        
         /* Estilos de Modales */
         .modal-overlay { 
             position: fixed; inset: 0; background: rgba(0,0,0,0.5); 
@@ -264,8 +253,6 @@
         .icon-btn .material-icons { font-size: 20px; }
         .icon-btn:hover { background-color: var(--c-surface-variant); color: var(--c-on-surface); }
         .icon-btn:active { transform: scale(0.9); }
-        .fab-menu--visible { display: flex; animation: fade-in 0.2s ease-out; }
-        .fab-menu__item { display: flex; align-items: center; gap: var(--sp-3); background-color: var(--c-surface); color: var(--c-on-surface); padding: var(--sp-2) var(--sp-3); border-radius: var(--border-radius-md); box-shadow: var(--shadow-md); font-size: var(--fs-sm); font-weight: 500; cursor: pointer; white-space: nowrap; }
         .modal__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-3); flex-shrink: 0;}
         .modal__title { font-size: var(--fs-lg); font-weight: 600; }
         .modal__body { overflow-y: auto; flex-grow: 1; -webkit-overflow-scrolling: touch; padding-right: var(--sp-2); margin-right: calc(-1 * var(--sp-2)); }
@@ -492,10 +479,17 @@
                 padding-left: var(--sp-6);
                 padding-right: var(--sp-6);
             }
-            /* Ocultar el botón flotante en escritorio, ya que su funcionalidad puede ser reemplazada por botones más visibles */
-            .fab, .fab-menu {
+            
+            /* === INICIO DE LA CORRECCIÓN === */
+            /* Se ha eliminado la regla que ocultaba el botón flotante en escritorio. */
+            /* El FAB ahora será visible en todas las resoluciones. */
+            /*
+            .fab {
                 display: none;
             }
+            */
+            /* === FIN DE LA CORRECCIÓN === */
+            
             /* Ajustar la posición del contenedor de toasts */
             .toast-container {
                 bottom: var(--sp-4);
@@ -703,6 +697,10 @@
                             <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                                 <div id="budget-controls" style="display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap;">
                                     <select id="budget-year-selector" class="form-select" style="flex-basis: 120px; flex-grow: 1;"></select>
+                                    <button data-action="update-budgets" class="btn btn--secondary" title="Editar presupuestos del año seleccionado">
+                                        <span class="material-icons" style="font-size: 16px;">edit</span>
+                                        <span>Editar Año</span>
+                                    </button>
                                 </div>
                                 <div id="budget-tracking-list"></div>
                                 <div id="budget-init-placeholder" class="empty-state hidden" style="background: transparent; padding: var(--sp-2) 0;">
@@ -844,16 +842,6 @@
         </main>
         
         <button data-action="add-movement" id="fab-add-movimiento" class="fab" title="Añadir Movimiento" aria-label="Añadir Movimiento"><span class="material-icons">add</span></button>
-        <div id="fab-menu" class="fab-menu">
-            <button class="fab-menu__item" data-action="add-aportacion-from-menu">
-                <span>Aportar / Retirar</span>
-                <span class="material-icons">add_card</span>
-            </button>
-            <button class="fab-menu__item" data-action="update-investment-value-from-menu">
-                <span>Actualizar Valor</span>
-                <span class="material-icons">update</span>
-            </button>
-        </div>
 
     </div>
 
@@ -1229,7 +1217,7 @@ const handleExitApp = () => {
 const navigateTo = (pageId, isInitial = false) => {
     if (!isInitial) vibrate();
     
-    const titleEl = select('top-bar-title'), actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento'), fabMenu = select('fab-menu');
+    const titleEl = select('top-bar-title'), actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento');
     const ledgerButtonHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar Contabilidad">${isOffBalanceMode ? 'Cont. B' : 'Cont. A'}</button>`;
 
     if(leftEl && !(pageId === 'inversiones-page' && !select('investment-detail-view')?.classList.contains('hidden'))) {
@@ -1239,24 +1227,6 @@ const navigateTo = (pageId, isInitial = false) => {
     }
     const standardActions = `<button data-action="help" class="icon-btn" title="Ayuda"><span class="material-icons">help_outline</span></button> <button data-action="theme-toggle" class="icon-btn" title="Cambiar Tema"><span class="material-icons">${document.documentElement.getAttribute('data-theme') === 'dark' ? 'light_mode' : 'dark_mode'}</span></button> <button data-action="exit" class="icon-btn" title="Salir"><span class="material-icons">exit_to_app</span></button>`;
     
-    if(fabMenu) fabMenu.classList.remove('fab-menu--visible');
-    if (fab) {
-        switch(pageId) {
-            case 'inversiones-page':
-                fab.dataset.action = 'show-investment-fab-menu';
-                fab.innerHTML = `<span class="material-icons">menu</span>`;
-                break;
-            case 'presupuestos-page':
-                fab.dataset.action = 'update-budgets';
-                fab.innerHTML = `<span class="material-icons">edit</span>`;
-                break;
-            default:
-                fab.dataset.action = 'add-movement';
-                fab.innerHTML = `<span class="material-icons">add</span>`;
-                break;
-        }
-    }
-
     const pageRenderers = {
         'movimientos-page': { title: 'Movimientos', render: renderMovimientos, actions: `<input type="search" id="search-movimientos" class="form-input" placeholder="Buscar..." style="width: 150px; height: 34px; font-size: var(--fs-sm);">` },
         'panel-control-page': { title: 'Panel de Control', render: updateDashboard, actions: standardActions },
@@ -1284,6 +1254,8 @@ const navigateTo = (pageId, isInitial = false) => {
     selectAll('.view').forEach(p => p.classList.remove('view--active'));
     select(pageId)?.classList.add('view--active');
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', (b).dataset.page === pageId));
+    
+    // Universal FAB logic: always visible except on the config page.
     fab?.classList.toggle('fab--visible', !['configuracion-page'].includes(pageId));
 };
 
@@ -1294,7 +1266,7 @@ const setupTheme = () => {
     const textColor = theme === 'dark' ? '#F9FAFB' : '#1F2937';
     Chart.defaults.color = textColor; Chart.defaults.borderColor = gridColor;
 };
-const toggleTheme = () => { vibrate(); const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', newTheme); localStorage.setItem('theme', newTheme); setupTheme(); renderAll(); };
+const toggleTheme = () => { vibrate(); const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', newTheme); localStorage.setItem('theme', newTheme); renderAll(); };
 
 // =================================================================================
 // 6. CORE LOGIC & CALCULATIONS
@@ -2140,36 +2112,45 @@ const handleCalculatorInput = (key) => {
 const showHelpModal = () => {
     const helpHTML = `
         <h3><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">school</span>Guía Maestra de tu Universo Financiero</h3>
-        <p>¡Bienvenido/a! Esta no es solo una app, es tu centro de mando personal para entender, controlar y mejorar tu salud financiera. Hemos diseñado cada detalle para que sea potente para los expertos y, a la vez, increíblemente sencillo para quienes empiezan. ¡Vamos a explorarla juntos!</p>
-        
-        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">NUEVO: Contabilidad A / B</h4>
-        <p>Hemos añadido una potente función para llevar una contabilidad dual. Esto te permite separar ciertas cuentas del balance principal, ideal para llevar un control de "caja B", gastos personales separados del negocio, o cualquier otro escenario que requiera discreción.</p>
+        <p>¡Bienvenido/a! Esta no es solo una app, es tu centro de mando personal para entender, controlar y mejorar tu salud financiera. Hemos diseñado cada detalle para que sea potente, intuitivo y, sobre todo, útil.</p>
+
+        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">Lo Esencial para Empezar</h4>
+        <p>Para dominar tus finanzas, primero debes conocer las piezas del puzle:</p>
         <ul>
-            <li><strong>Cambiar de Vista:</strong> Usa el botón <strong>Cont. A / Cont. B</strong> en la esquina superior izquierda para cambiar entre tus dos contabilidades. La interfaz cambiará de color para que siempre sepas en qué vista estás.</li>
-            <li><strong>Asignar Cuentas:</strong> En <span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">settings</span> &rarr; Gestión de Cuentas, ahora verás un interruptor con la letra "B" al lado de cada cuenta. Actívalo para mover esa cuenta a tu Contabilidad B.</li>
-            <li><strong>Total Separación:</strong> Cuando estás en la vista "A", solo verás y operarás con las cuentas "A". Cuando cambias a "B", solo verás las de "B". ¡Todos los cálculos, informes y saldos respetan la vista seleccionada!</li>
+            <li><strong>Cuentas:</strong> Representan cualquier lugar donde tienes dinero o deudas. Ejemplos: "Cartera" (Efectivo), "Banco Santander" (Cuenta Corriente), "Tarjeta VISA" (Tarjeta de Crédito), "Préstamo Coche", etc.</li>
+            <li><strong>Conceptos:</strong> Son las etiquetas o categorías de tus transacciones. Te ayudan a entender <em>en qué</em> gastas o de <em>dónde</em> ingresas dinero. Ejemplos: "Nómina", "Supermercado", "Restaurantes", "Gasolina", "Ocio".</li>
+            <li><strong>Movimiento:</strong> Es una transacción única, un <strong>ingreso</strong> (dinero que entra) o un <strong>gasto</strong> (dinero que sale). Cada movimiento se asocia a una <strong>Cuenta</strong> y un <strong>Concepto</strong>.</li>
+            <li><strong>Traspaso:</strong> Es mover dinero <em>entre tus propias cuentas</em>. Por ejemplo, sacar dinero de un cajero (un traspaso de "Banco Santander" a "Cartera"). No es un gasto, es una reorganización de tu dinero.</li>
         </ul>
 
-        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">Glosario para Principiantes</h4>
+        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">La Gran Novedad: Contabilidad Dual (A / B)</h4>
+        <p>Esta potente función te permite mantener dos libros de contabilidad completamente separados. Es ideal para gestionar finanzas personales y de un negocio de forma independiente, llevar un control de "caja B" o cualquier escenario que requiera discreción.</p>
         <ul>
-            <li><strong>Cuenta:</strong> Representa cualquier lugar donde guardas tu dinero o tienes una deuda. Puede ser tu cartera (Efectivo), tu cuenta bancaria (Cuenta Corriente), una tarjeta, un préstamo, etc.</li>
-            <li><strong>Concepto:</strong> Es la "etiqueta" o categoría de un movimiento. Por ejemplo: "Nómina", "Comida", "Transporte", "Ocio". Te ayuda a saber en qué gastas tu dinero.</li>
-            <li><strong>Movimiento:</strong> Es cualquier transacción individual, ya sea un ingreso (dinero que recibes) o un gasto (dinero que sale).</li>
-            <li><strong>Traspaso:</strong> Es mover tu propio dinero de una de tus cuentas a otra (ej: sacar dinero del cajero). Si mueves dinero entre Cont. A y Cont. B, se registrará como un gasto en una y un ingreso en la otra.</li>
+            <li><strong>Cómo funciona:</strong> Usa el botón <strong>Cont. A / Cont. B</strong> en la esquina superior izquierda. Al pulsarlo, toda la app (saldos, informes, movimientos) cambiará para mostrar únicamente los datos de la contabilidad seleccionada. ¡La interfaz incluso cambia de color para que siempre sepas dónde estás!</li>
+            <li><strong>Asignar Cuentas a "B":</strong> Ve a <span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">settings</span> <strong>Ajustes</strong> &rarr; <strong>Gestión de Cuentas</strong>. Al lado de cada cuenta, verás un interruptor con la letra "B". Actívalo para mover esa cuenta (y todos sus movimientos asociados) a la Contabilidad B.</li>
         </ul>
 
-        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">settings</span>Configuración y Datos</h3>
-        <p>El panel de control de la app. Aquí gestionas tu cuenta y tus datos.</p>
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">explore</span>Un Tour por las Pestañas</h3>
+        <p>Cada pestaña de la barra de navegación tiene un propósito específico:</p>
         <ul>
-            <li><strong>Gestión de Cuentas:</strong> Aquí puedes crear, editar o eliminar las cuentas. Aquí también asignas si una cuenta pertenece a la <strong>Contabilidad B</strong>.</li>
-            <li><strong>Gestión de Datos:</strong>
-                <ul>
-                    <li><strong>Exportar JSON:</strong> Crea una copia de seguridad completa de todos tus datos. ¡Guárdala en un lugar seguro!</li>
-                    <li><strong>Importar JSON:</strong> Restaura la app desde un archivo de copia de seguridad. <strong>Atención:</strong> esto reemplazará todos los datos actuales.</li>
-                </ul>
-            </li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">swap_horiz</span> <strong>Movimientos:</strong> Tu historial completo. Aquí ves todas tus transacciones. Desliza una transacción hacia la izquierda para <strong>eliminarla</strong> o hacia la derecha para <strong>copiarla</strong> rápidamente. Usa la barra de búsqueda para filtrar al instante.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">dashboard</span> <strong>Panel de Control:</strong> Tu vista de pájaro. Muestra tus ingresos, gastos y el saldo neto del periodo que elijas. Analiza en qué conceptos se ha ido el dinero con el gráfico y la lista detallada.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">account_balance_wallet</span> <strong>Cuentas:</strong> Tu patrimonio neto. Ve el saldo de cada una de tus cuentas agrupadas por tipo. Filtra por tipos de cuenta y visualiza la distribución de tus activos líquidos en un gráfico.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">analytics</span> <strong>Informes:</strong> Profundiza en tus datos. Selecciona un rango de fechas para generar un informe sobre la evolución de tus ingresos y gastos a lo largo del tiempo.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">trending_up</span> <strong>Portafolio:</strong> Tu centro de inversiones. Marca cuentas como "de inversión" en Ajustes y podrás seguir aquí su rendimiento, registrar aportaciones, retiradas y valoraciones periódicas para ver cómo crece tu capital.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">pie_chart</span> <strong>Presupuestos:</strong> Planifica tu futuro. Define presupuestos anuales para cada concepto (metas de ingreso o límites de gasto). La app te mostrará tu progreso en tiempo real para que no te desvíes de tus objetivos.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">settings</span> <strong>Ajustes:</strong> La sala de máquinas. Gestiona tus cuentas y conceptos, importa o exporta tus datos, y configura las opciones de la app.</li>
         </ul>
-        <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">¡Ahora eres un maestro/a de tus finanzas! Explora, registra y toma el control.</p>
+
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">star</span>Consejos de Experto</h3>
+        <ul>
+            <li><strong>Calculadora Integrada:</strong> Al añadir o editar un movimiento, pulsa en el campo de la cantidad para abrir una calculadora integrada. ¡Se acabaron los errores de dedo!</li>
+            <li><strong>Sugerencias Inteligentes:</strong> Al escribir una descripción, la app te sugerirá movimientos anteriores que coincidan, rellenando automáticamente el concepto y la cantidad.</li>
+            <li><strong>¡Haz Copias de Seguridad!:</strong> En <strong>Ajustes &rarr; Gestión de Datos</strong>, usa la opción <strong>Exportar JSON</strong> regularmente. Es tu seguro de vida digital. Guárdalo en un lugar seguro.</li>
+            <li><strong>Importación CSV:</strong> ¿Vienes de otra app o del extracto de tu banco? Usa el <strong>Asistente de Importación CSV</strong> en Ajustes para añadir movimientos en masa de forma sencilla.</li>
+        </ul>
+
+        <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">Ahora eres el maestro/a de tus finanzas. ¡Explora, registra y toma el control!</p>
     `;
     showGenericModal("Guía Completa de Usuario", helpHTML);
 };
@@ -2330,7 +2311,7 @@ const attachEventListeners = () => {
     document.body.addEventListener('click', (e) => {
         const target = e.target;
         if (currentSwipedCard && !currentSwipedCard.contains(target)) { currentSwipedCard.classList.remove('transaction-card--swiped-left', 'transaction-card--swiped-right'); currentSwipedCard = null; }
-        const fabMenu = select('fab-menu'); if (fabMenu?.classList.contains('fab-menu--visible') && !fabMenu.contains(target) && !select('fab-add-movimiento')?.contains(target)) { fabMenu.classList.remove('fab-menu--visible'); }
+        
         const actionTarget = target.closest('[data-action]');
         
         const suggestionsBox = select('description-suggestions');
@@ -2382,16 +2363,6 @@ const attachEventListeners = () => {
             'edit-aportacion': () => showAportacionModal(cuentaId, id),
             'delete-valoracion': () => showConfirmationModal('¿Eliminar esta valoración?', () => { const form = select('valoracion-modal')?.querySelector('form'); if(!form) return; const idToDelete = (form.querySelector('#valoracion-id')).value; const currentCuentaId = (form.querySelector('#valoracion-cuenta-id')).value; db.inversiones_historial = (db.inversiones_historial || []).filter((v) => v.id !== idToDelete); saveData(null, () => { hideModal('valoracion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(currentCuentaId); else renderInversionesPage(); }); }),
             'delete-aportacion': () => showConfirmationModal('¿Eliminar este flujo de capital?', () => { const form = select('aportacion-modal')?.querySelector('form'); if(!form) return; const idToDelete = (form.querySelector('#aportacion-id')).value; const currentCuentaId = (form.querySelector('#aportacion-cuenta-id')).value; db.inversion_cashflows = (db.inversion_cashflows || []).filter((cf) => cf.id !== idToDelete); saveData(null, () => { hideModal('aportacion-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(currentCuentaId); else renderInversionesPage(); }); }),
-            'show-investment-fab-menu': () => { vibrate(); select('fab-menu')?.classList.toggle('fab-menu--visible'); },
-            'add-aportacion-from-menu': () => { select('fab-menu')?.classList.remove('fab-menu--visible'); showAportacionModal(); },
-            'update-investment-value-from-menu': () => {
-                select('fab-menu')?.classList.remove('fab-menu--visible');
-                const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
-                if(investmentAccounts.length === 0) { showToast('No hay activos de portafolio para actualizar.', 'warning'); return; }
-                if(investmentAccounts.length === 1) { showValoracionModal(investmentAccounts[0].id); return; }
-                let accountsHtml = investmentAccounts.map(acc => `<div class="modal__list-item" data-action="update-investment-value" data-id="${acc.id}" style="cursor:pointer;">${acc.nombre}<span class="material-icons">chevron_right</span></div>`).join('');
-                showGenericModal('Seleccionar Activo', `<p class="form-label" style="margin-bottom: var(--sp-2)">¿Qué activo quieres actualizar?</p>${accountsHtml}`);
-            },
             'csv-wizard-next-step': () => { try { processMappingAndRenderPreview(); } catch (e) { console.error(e); } },
             'csv-wizard-back-step': () => renderCsvStep1_Mapping(),
             'csv-wizard-import': () => processAndSaveCsvImport(btn),
