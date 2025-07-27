@@ -552,6 +552,39 @@
             
             <section id="inversiones-page" class="view">
                 <div id="investment-list-view">
+                    <div class="card card--no-bg">
+                        <div class="accordion-wrapper">
+                            <details class="accordion">
+                                <summary>
+                                    <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">filter_list</span>Filtros de Rendimiento</h3>
+                                    <span class="material-icons accordion__icon">expand_more</span>
+                                </summary>
+                                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                                    <div class="form-group">
+                                        <label for="portfolio-filter-periodo" class="form-label">Periodo de P&L</label>
+                                        <select id="portfolio-filter-periodo" class="form-select">
+                                            <option value="siempre">Histórico</option>
+                                            <option value="mes-actual">Mes Actual</option>
+                                            <option value="año-actual">Este Año</option>
+                                            <option value="custom">Personalizado</option>
+                                        </select>
+                                    </div>
+                                    <div id="portfolio-custom-date-filters" class="hidden form-grid">
+                                        <div class="form-group">
+                                            <label for="portfolio-filter-fecha-inicio" class="form-label">Desde</label>
+                                            <input type="date" id="portfolio-filter-fecha-inicio" class="form-input" />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="portfolio-filter-fecha-fin" class="form-label">Hasta</label>
+                                            <input type="date" id="portfolio-filter-fecha-fin" class="form-input" />
+                                        </div>
+                                    </div>
+                                    <button data-action="apply-portfolio-filters" class="btn btn--primary btn--full">Aplicar</button>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+
                     <div id="investment-global-kpis"></div>
                     <div class="card card--no-bg" style="padding:0; margin-bottom: var(--sp-3);">
                          <div class="form-grid">
@@ -1343,6 +1376,42 @@ const calculatePortfolioPerformance = (cuentaId = null) => {
     const irrGlobal = calculateIRR(allIrrCashflows); return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto, pnlPorcentual, irr: irrGlobal };
 };
 
+const calculatePortfolioPerformanceForPeriod = (cuentaId, startDate, endDate) => {
+    // Si no hay rango, no hay P&L de periodo.
+    if (!startDate || !endDate) {
+        return { pnlAbsoluto: 0, pnlPorcentual: 0 };
+    }
+
+    const allValoraciones = (db.inversiones_historial || [])
+        .filter(v => v.cuentaId === cuentaId)
+        .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+    const allCashflows = (db.inversion_cashflows || [])
+        .filter(cf => cf.cuentaId === cuentaId);
+
+    // --- Calcular Capital y Valor INICIAL ---
+    const cashflowsBefore = allCashflows.filter(cf => new Date(cf.fecha) < startDate);
+    const startCapital = cashflowsBefore.reduce((sum, cf) => sum + cf.cantidad, 0);
+    
+    const valoracionesBefore = allValoraciones.filter(v => new Date(v.fecha) < startDate);
+    const startValue = valoracionesBefore.length > 0 ? valoracionesBefore[valoracionesBefore.length - 1].valor : startCapital;
+
+    // --- Calcular Valor FINAL y Flujo de Caja en el Periodo ---
+    const valoracionesInPeriod = allValoraciones.filter(v => new Date(v.fecha) >= startDate && new Date(v.fecha) <= endDate);
+    // El valor final es la última valoración DENTRO del periodo, o si no hay, el valor inicial.
+    const endValue = valoracionesInPeriod.length > 0 ? valoracionesInPeriod[valoracionesInPeriod.length - 1].valor : startValue;
+
+    const cashflowsInPeriod = allCashflows.filter(cf => new Date(cf.fecha) >= startDate && new Date(cf.fecha) <= endDate);
+    const netCashflowInPeriod = cashflowsInPeriod.reduce((sum, cf) => sum + cf.cantidad, 0);
+    
+    // --- Calcular P&L del Periodo (basado en TWRR) ---
+    const pnlAbsoluto = (endValue - startValue) - netCashflowInPeriod;
+    const pnlPorcentual = startValue !== 0 ? (pnlAbsoluto / startValue) * 100 : 0;
+    
+    return { pnlAbsoluto, pnlPorcentual };
+};
+
+
 // =================================================================================
 // 7. RENDERING ENGINE & BUDGET FUNCTIONS
 // =================================================================================
@@ -1439,14 +1508,47 @@ const renderInversionesPage = () => {
 
     emptyState.classList.add('hidden');
     
+    // Get date range from filters
+    const p = select('portfolio-filter-periodo').value;
+    let startDate, endDate;
+    const now = new Date();
+    switch (p) {
+        case 'mes-actual':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            break;
+        case 'año-actual':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+            break;
+        case 'custom':
+            const sVal = select('portfolio-filter-fecha-inicio').value;
+            const eVal = select('portfolio-filter-fecha-fin').value;
+            startDate = sVal ? new Date(sVal) : null;
+            if (startDate) startDate.setHours(0, 0, 0, 0);
+            endDate = eVal ? new Date(eVal) : null;
+            if (endDate) endDate.setHours(23, 59, 59, 999);
+            break;
+        default: // 'siempre'
+            startDate = null;
+            endDate = null;
+    }
+
     const globalPerformance = calculatePortfolioPerformance(null);
-    const pnlClassGlobal = globalPerformance.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-    const irrClassGlobal = globalPerformance.irr >= 0 ? 'text-positive' : 'text-negative';
+    let totalPeriodPnl = 0;
 
     assetsListContainer.innerHTML = investmentAccounts.map((cuenta) => {
-        const performance = calculatePortfolioPerformance(cuenta.id);
-        const pnlClass = performance.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-        const irrClass = performance.irr >= 0 ? 'text-positive' : 'text-negative';
+        const historicalPerformance = calculatePortfolioPerformance(cuenta.id);
+        const periodPerformance = startDate ? calculatePortfolioPerformanceForPeriod(cuenta.id, startDate, endDate) : historicalPerformance;
+        
+        totalPeriodPnl += periodPerformance.pnlAbsoluto;
+
+        const pnlToShow = startDate ? periodPerformance.pnlAbsoluto : historicalPerformance.pnlAbsoluto;
+        const pnlPercentToShow = startDate ? periodPerformance.pnlPorcentual : historicalPerformance.pnlPorcentual;
+        
+        const pnlClass = pnlToShow >= 0 ? 'text-positive' : 'text-negative';
+        const irrClass = historicalPerformance.irr >= 0 ? 'text-positive' : 'text-negative';
+
         return `<div class="investment-asset-card" data-action="view-investment-detail" data-id="${cuenta.id}">
             <div class="investment-asset-card__header">
                 <div>
@@ -1454,21 +1556,24 @@ const renderInversionesPage = () => {
                     <small style="color: var(--c-on-surface-secondary);">${cuenta.tipo}</small>
                 </div>
                 <div>
-                    <div class="investment-asset-card__value">${formatCurrency(performance.valorActual)}</div>
-                    <div class="investment-asset-card__pnl ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)} (${performance.pnlPorcentual.toFixed(2)}%)</div>
-                    <div class="investment-asset-card__pnl ${irrClass}" style="font-weight: 600;">TIR: ${(performance.irr * 100).toFixed(2)}%</div>
+                    <div class="investment-asset-card__value">${formatCurrency(historicalPerformance.valorActual)}</div>
+                    <div class="investment-asset-card__pnl ${pnlClass}" title="P&L del periodo seleccionado">${pnlToShow >= 0 ? '+' : ''}${formatCurrency(pnlToShow)} (${pnlPercentToShow.toFixed(2)}%)</div>
+                    <div class="investment-asset-card__pnl ${irrClass}" style="font-weight: 600;" title="TIR Histórica">TIR: ${(historicalPerformance.irr * 100).toFixed(2)}%</div>
                 </div>
             </div>
         </div>`;
     }).join('');
 
+    const pnlGlobalToShow = startDate ? totalPeriodPnl : globalPerformance.pnlAbsoluto;
+    const pnlClassGlobal = pnlGlobalToShow >= 0 ? 'text-positive' : 'text-negative';
+    const irrClassGlobal = globalPerformance.irr >= 0 ? 'text-positive' : 'text-negative';
+
     kpisContainer.innerHTML = `<div class="kpi-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--sp-3);">
         <div class="kpi-item"><h4 class="kpi-item__label">Valor Total</h4><strong class="kpi-item__value">${formatCurrency(globalPerformance.valorActual)}</strong></div>
         <div class="kpi-item"><h4 class="kpi-item__label">Capital Total</h4><strong class="kpi-item__value">${formatCurrency(globalPerformance.capitalInvertido)}</strong></div>
     </div>
-    <div class="kpi-grid" style="grid-template-columns: 1fr 1fr 1fr;">
-        <div class="kpi-item"><h4 class="kpi-item__label">P&L (€)</h4><strong class="kpi-item__value ${pnlClassGlobal}">${globalPerformance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(globalPerformance.pnlAbsoluto)}</strong></div>
-        <div class="kpi-item"><h4 class="kpi-item__label">P&L (%)</h4><strong class="kpi-item__value ${pnlClassGlobal}">${globalPerformance.pnlPorcentual.toFixed(2)}%</strong></div>
+    <div class="kpi-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="kpi-item"><h4 class="kpi-item__label">P&L ${startDate ? 'del Periodo' : 'Histórico'}</h4><strong class="kpi-item__value ${pnlClassGlobal}">${pnlGlobalToShow >= 0 ? '+' : ''}${formatCurrency(pnlGlobalToShow)}</strong></div>
         <div class="kpi-item"><h4 class="kpi-item__label">TIR Anualizada</h4><strong class="kpi-item__value ${irrClassGlobal}">${(globalPerformance.irr * 100).toFixed(2)}%</strong></div>
     </div>`;
 };
@@ -1501,7 +1606,7 @@ const renderInvestmentAccountDetail = (cuentaId) => {
     detailContainer.innerHTML = `<div class="kpi-grid" style="grid-template-columns: 1fr 1fr;">
         <div class="kpi-item"><h4 class="kpi-item__label">Valor Actual</h4><strong class="kpi-item__value">${formatCurrency(performance.valorActual)}</strong></div>
         <div class="kpi-item"><h4 class="kpi-item__label">Capital Invertido</h4><strong class="kpi-item__value">${formatCurrency(performance.capitalInvertido)}</strong></div>
-        <div class="kpi-item"><h4 class="kpi-item__label">P&L Absoluto</h4><strong class="kpi-item__value ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)}</strong></div>
+        <div class="kpi-item"><h4 class="kpi-item__label">P&L Histórico</h4><strong class="kpi-item__value ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)}</strong></div>
         <div class="kpi-item"><h4 class="kpi-item__label">TIR Anualizada</h4><strong class="kpi-item__value ${irrClass}">${(performance.irr * 100).toFixed(2)}%</strong></div>
     </div>
     <div class="card"><h3 class="card__title"><span class="material-icons">show_chart</span>Evolución</h3><div class="card__content"><div class="chart-container" style="height: 200px; margin-bottom: 0;"><canvas id="detail-investment-chart"></canvas></div></div></div><div class="card"><h3 class="card__title"><span class="material-icons">history</span>Historial</h3><div class="card__content" id="investment-detail-timeline" style="padding-top: 0;"></div></div>`;
@@ -2159,111 +2264,32 @@ const performGlobalSearch = (query) => {
 // =================================================================================
 const showHelpModal = () => {
     const helpHTML = `
-        <div style="text-align: center; margin-bottom: var(--sp-4);">
-            <span class="material-icons" style="font-size: 48px; color: var(--c-primary);">school</span>
-            <h3>¡Bienvenido/a a tu Centro de Mando Financiero!</h3>
-        </div>
-        <p>¡Hola! Nos alegra mucho tenerte aquí. Sabemos que el mundo de las finanzas personales puede parecer un laberinto, pero hemos diseñado esta aplicación para que sea tu mapa y tu brújula. Piensa en ella como tu copiloto financiero personal, siempre listo para ayudarte a entender, organizar y tomar el control de tu dinero de una forma clara y sencilla.</p>
-        <p>Vamos a dar un paseo juntos para que no se te escape ni un solo detalle.</p>
+        <h3><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">school</span>Guía Maestra de tu Universo Financiero</h3>
+        <p>¡Bienvenido/a! Esta no es solo una app, es tu centro de mando personal para entender, controlar y mejorar tu salud financiera. Hemos diseñado cada detalle para que sea potente, intuitivo y, sobre todo, útil.</p>
 
-        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">
-            <span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">key</span>
-            La Filosofía de la App: Conceptos Clave
-        </h4>
-        <p>Para sacarle todo el jugo, es útil entender tres ideas fundamentales:</p>
+        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">🚀 Novedades y Funciones Clave</h4>
         <ul>
-            <li><strong>Cuentas:</strong> Son los "recipientes" de tu dinero. Aquí es <strong>DÓNDE</strong> está tu patrimonio (Ej: "Banco Santander", "Cartera", "PayPal", "Bitcoin Wallet").</li>
-            <li><strong>Conceptos:</strong> Son las "etiquetas" que explican tus movimientos. Responden al <strong>PORQUÉ</strong> se mueve el dinero (Ej: "Nómina", "Supermercado", "Alquiler", "Ocio").</li>
-            <li><strong>Movimientos:</strong> Son las <strong>ACCIONES</strong> en sí. Un movimiento siempre une una <strong>Cuenta</strong> con un <strong>Concepto</strong> y una cantidad (Ej: un gasto de 50€ desde la cuenta "Banco Santander" por el concepto "Supermercado").</li>
+            <li><strong><span class="text-primary">Filtros de Periodo en Portafolio</span></strong>: Analiza el rendimiento de tus inversiones (P&L) en periodos específicos (mes actual, año actual, etc.) directamente en la pestaña Portafolio.</li>
+            <li><strong><span class="text-primary">Contabilidad Dual (A/B)</span></strong>: Usa el botón <strong>A / B</strong> en la cabecera para cambiar de vista. La cabecera cambiará de color (azul para A, rojo para B) para darte una referencia visual clara.</li>
+            <li><strong><span class="text-primary">Búsqueda Global</span></strong>: Pulsa el icono <span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">search</span> en la cabecera (o usa el atajo <strong>Cmd/Ctrl + K</strong>) para abrir una potente búsqueda.</li>
+            <li><strong><span class="text-primary">Edición Rápida</span></strong>: Edita tus cuentas y conceptos directamente en su lista de gestión (en Ajustes). Pulsa el icono <span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">edit_note</span>.</li>
         </ul>
 
-        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">
-            <span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">layers</span>
-            La Función Estrella: Contabilidad Dual (A / B)
-        </h4>
-        <p>Esta es una de las herramientas más potentes. Te permite llevar dos contabilidades completamente separadas e independientes dentro de la misma app.</p>
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size:1.2em; vertical-align: bottom; margin-right: 8px;">explore</span>Un Tour por las Pestañas</h3>
         <ul>
-            <li><strong>¿Cómo funciona?</strong> En <strong>Ajustes → Cuentas</strong>, puedes marcar cada cuenta para que pertenezca a la contabilidad "B". Por defecto, todas están en la "A".</li>
-            <li><strong>¿Cómo cambio de vista?</strong> Usa el botón <strong>A / B</strong> que ves arriba a la izquierda. La cabecera cambiará de color (azul para A, rojo para B) para que siempre sepas dónde estás.</li>
-            <li><strong>¿Para qué sirve?</strong> ¡Las posibilidades son infinitas!
-                <ul>
-                    <li>Separa tus finanzas <strong>personales (A)</strong> de las de tu <strong>negocio o proyecto (B)</strong>.</li>
-                    <li>Lleva un control de gastos <strong>compartidos con tu pareja (B)</strong>.</li>
-                    <li>Gestiona la economía de un <strong>familiar (B)</strong> de forma independiente.</li>
-                    <li>Simula escenarios o simplemente, ¡organízate como prefieras!</li>
-                </ul>
-            </li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">swap_horiz</span> <strong>Movimientos:</strong> Tu historial completo y sin agrupaciones. Cada movimiento muestra su fecha (dd/mm) directamente en la tarjeta para una lectura rápida.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">dashboard</span> <strong>Panel:</strong> Tu vista de pájaro. Analiza tus ingresos, gastos y la evolución de tu patrimonio.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">account_balance_wallet</span> <strong>Cuentas:</strong> Tu patrimonio neto. Ve el saldo de cada cuenta agrupado por tipo.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">analytics</span> <strong>Informes:</strong> Profundiza en tus datos y genera informes de evolución.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">trending_up</span> <strong>Portafolio:</strong> Sigue el rendimiento de tus inversiones.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">pie_chart</span> <strong>Presupuestos:</strong> Define metas y sigue tu progreso en tiempo real.</li>
+            <li><span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">settings</span> <strong>Ajustes:</strong> La sala de máquinas. Gestiona todo desde aquí.</li>
         </ul>
-        
-        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">
-            <span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">explore</span>
-            Un Paseo Guiado por tu Espacio Financiero
-        </h3>
-        
-        <details class="accordion" style="margin-bottom: var(--sp-2);">
-            <summary><span class="material-icons" style="margin-right:8px">swap_horiz</span><strong>Movimientos</strong></summary>
-            <div class="accordion__content" style="padding-top: var(--sp-2);">
-                <p>Aquí tienes el diario de todas tus operaciones, tu historial completo. Es la vista más detallada, ordenada por fecha para que veas qué ha pasado y cuándo.</p>
-                <strong>💡 Consejo Pro:</strong> Usa el buscador de esta pantalla para encontrar rápidamente un movimiento por su descripción, concepto o cuenta. ¡Es súper rápido!
-            </div>
-        </details>
-        
-        <details class="accordion" style="margin-bottom: var(--sp-2);">
-            <summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>Panel</strong></summary>
-            <div class="accordion__content" style="padding-top: var(--sp-2);">
-                <p>Tu centro de control. De un solo vistazo, sabrás tus ingresos, gastos y el resultado neto del periodo que elijas (mes actual, año, etc.). Compara tu rendimiento con periodos anteriores y descubre en qué conceptos se te va más el dinero.</p>
-                <strong>💡 Consejo Pro:</strong> Despliega los "Totales por Concepto" para ver un desglose interactivo. Si pulsas en un concepto, verás todos los movimientos asociados a él en ese periodo.
-            </div>
-        </details>
-
-        <details class="accordion" style="margin-bottom: var(--sp-2);">
-            <summary><span class="material-icons" style="margin-right:8px">account_balance_wallet</span><strong>Cuentas</strong></summary>
-            <div class="accordion__content" style="padding-top: var(--sp-2);">
-                <p>Esta es la foto de tu patrimonio. Muestra cuánto dinero tienes en cada una de tus cuentas, agrupadas por tipo. El "Saldo Total Seleccionado" te dice tu patrimonio neto real según los filtros que apliques.</p>
-                <strong>💡 Consejo Pro:</strong> Usa los filtros de tipo de cuenta para analizar partes de tu patrimonio. Por ejemplo, desmarca "PRÉSTAMO" y "PROPIEDAD" para ver solo tu liquidez real (el dinero que puedes usar ya).
-            </div>
-        </details>
-        
-        <details class="accordion" style="margin-bottom: var(--sp-2);">
-            <summary><span class="material-icons" style="margin-right:8px">analytics</span><strong>Informes</strong></summary>
-            <div class="accordion__content" style="padding-top: var(--sp-2);">
-                <p>Para los que les gusta profundizar. Selecciona un rango de fechas y filtros para generar un informe detallado con la evolución de tus ingresos y gastos a lo largo del tiempo. Ideal para análisis trimestrales o anuales.</p>
-                <strong>💡 Consejo Pro:</strong> Genera un informe anual para tener una visión perfecta de cara a la declaración de la renta o para planificar el año siguiente.
-            </div>
-        </details>
-
-        <details class="accordion" style="margin-bottom: var(--sp-2);">
-            <summary><span class="material-icons" style="margin-right:8px">trending_up</span><strong>Portafolio</strong></summary>
-            <div class="accordion__content" style="padding-top: var(--sp-2);">
-                <p>Tu rincón del inversor. Aquí puedes seguir el rendimiento de los activos que hayas marcado como inversión. Controla el valor actual, el capital que has invertido, las ganancias o pérdidas (P&L) y la Tasa Interna de Retorno (TIR), que es la métrica más fiel de tu rentabilidad anualizada.</p>
-                <strong>💡 Consejo Pro:</strong> Para añadir una cuenta a tu portafolio, ve a <strong>Ajustes → Gestión de Cuentas/Conceptos → Cuentas</strong>, pulsa "Gestionar Activos" y actívala. Luego, registra aportaciones, retiradas o actualizaciones de valor para mantenerlo todo al día.
-            </div>
-        </details>
-
-        <details class="accordion" style="margin-bottom: var(--sp-2);">
-            <summary><span class="material-icons" style="margin-right:8px">pie_chart</span><strong>Presupuestos</strong></summary>
-            <div class="accordion__content" style="padding-top: var(--sp-2);">
-                <p>¡Ponte metas y cúmplelas! Define límites de gasto o objetivos de ingreso para cada concepto anualmente. La app te mostrará tu progreso en tiempo real con barras visuales para que sepas si vas por buen camino.</p>
-                <strong>💡 Consejo Pro:</strong> Para presupuestos de gasto, introduce la cantidad en negativo (Ej: -500€). Para metas de ingreso, en positivo (Ej: 2000€).
-            </div>
-        </details>
-        
-        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">
-            <span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">auto_fix_high</span>
-            Herramientas Mágicas para tu día a día
-        </h3>
-        <ul>
-            <li><strong>Búsqueda Global (Cmd/Ctrl + K):</strong> Pulsa el icono <span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">search</span> o usa el atajo. Es la forma más rápida de encontrar CUALQUIER COSA en la app.</li>
-            <li><strong>Duplicar Movimiento:</strong> Al editar un movimiento, pulsa el icono <span class="material-icons" style="font-size:1em; vertical-align: text-bottom;">content_copy</span>. Perfecto para gastos recurrentes.</li>
-            <li><strong>La Calculadora Integrada:</strong> Al añadir o editar una cantidad, la app te abre una calculadora. ¡Olvídate de salir para hacer cuentas!</li>
-            <li><strong>Sugerencias Inteligentes:</strong> Al escribir una descripción, la app te sugerirá movimientos pasados para autocompletar la información. ¡Ahorra tiempo!</li>
-            <li><strong>Gestión de Datos:</strong> En <strong>Ajustes</strong>, puedes <strong>exportar</strong> todos tus datos a un archivo JSON (¡haz copias de seguridad!) o <strong>importar</strong> desde uno. Tu información es tuya.</li>
-        </ul>
-
-        <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">Ahora ya conoces todos los secretos. El poder de tus finanzas está, literalmente, en tus manos. ¡Explora, registra y alcanza tus metas!</p>
+        <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">Ahora eres el maestro/a de tus finanzas. ¡Explora, registra y toma el control!</p>
     `;
     showGenericModal("Guía Completa de Usuario", helpHTML);
 };
+
 const showConceptosModal = () => { const html = `<form id="add-concepto-form" novalidate style="margin-bottom: var(--sp-4);"><div class="form-grid"><div class="form-group" style="grid-column: 1 / -1;"><label for="new-concepto-nombre" class="form-label">Nombre del Concepto</label><input type="text" id="new-concepto-nombre" class="form-input" placeholder="Ej: Nómina" required></div></div><button type="submit" class="btn btn--primary btn--full">Añadir Concepto</button></form><hr style="border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Conceptos Existentes</h4><div id="conceptos-modal-list"></div>`; showGenericModal('Gestionar Conceptos', html); renderConceptosModalList(); };
 
 const renderConceptosModalList = () => { 
@@ -2427,6 +2453,7 @@ const attachEventListeners = () => {
                 if (account) { account.offBalance = checkbox.checked; saveData(null, () => renderAll()); }
             },
             'apply-filters': () => { vibrate(); updateDashboard(); renderCuentas(); },
+            'apply-portfolio-filters': () => { vibrate(); renderInversionesPage(); },
             'apply-informe-filters': () => { vibrate(); renderInformesPage(); },
             'add-movement': () => { vibrate(); startEditMovement(null); },
             'edit-movement': () => { vibrate(); startEditMovement(id); },
@@ -2471,6 +2498,7 @@ const attachEventListeners = () => {
     document.body.addEventListener('focusin', (e) => { if (e.target.matches('.input-amount-calculator')) { e.preventDefault(); showCalculator(e.target); } });
     
     select('filter-periodo')?.addEventListener('change', (e) => select('custom-date-filters')?.classList.toggle('hidden', (e.target).value !==	'custom'));
+    select('portfolio-filter-periodo')?.addEventListener('change', (e) => select('portfolio-custom-date-filters')?.classList.toggle('hidden', e.target.value !== 'custom'));
     select('movimiento-tipo-selector')?.addEventListener('change', (e) => { const isT=(e.target).value==='traspaso';select('movimiento-fields')?.classList.toggle('hidden',isT);select('traspaso-fields')?.classList.toggle('hidden',!isT);['movimiento-concepto','movimiento-cuenta'].forEach(id=>(select(id)).required=!isT);['movimiento-cuenta-origen','movimiento-cuenta-destino'].forEach(id=>(select(id)).required=isT); });
     select('import-file-input')?.addEventListener('change', handleImportData);
     select('calculator-grid')?.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
