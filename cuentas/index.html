@@ -19,8 +19,8 @@
         %22theme_color%22:%22#0A84FF%22,
         %22description%22:%22Gestor de finanzas personales, elegante y profesional.%22,
         %22icons%22:[
-            {%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='85' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22192x192%22,%22type%22:%22image/svg%2bxml%22},
-            {%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='85' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg%2bxml%22}
+            {%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='85' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22192x192%22,%22type%22:%22image/svg%2bxml%2bxml%22},
+            {%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='85' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg%2bxml%2bxml%22}
         ]
     }">
     <meta name="theme-color" content="#000000"/>
@@ -400,6 +400,78 @@
         .inline-edit-form .form-label {
             font-size: var(--fs-xs);
             margin-bottom: 4px;
+        }
+
+        /* ESTILOS PARA EL TOUR DE BIENVENIDA (ONBOARDING) */
+        .onboarding-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(3px);
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            pointer-events: none;
+        }
+        .onboarding-overlay--visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .onboarding-highlight {
+            position: absolute;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+            border-radius: var(--border-radius-md);
+            z-index: 2001;
+            pointer-events: none;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .onboarding-step-box {
+            position: absolute;
+            z-index: 2002;
+            background-color: var(--c-surface);
+            color: var(--c-on-surface);
+            padding: var(--sp-4);
+            border-radius: var(--border-radius-lg);
+            width: 90%;
+            max-width: 350px;
+            box-shadow: var(--shadow-md);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .onboarding-overlay--visible .onboarding-step-box {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .onboarding-step-box__title {
+            font-size: var(--fs-lg);
+            font-weight: 700;
+            margin-bottom: var(--sp-2);
+            color: var(--c-primary);
+        }
+        .onboarding-step-box__content {
+            font-size: var(--fs-sm);
+            line-height: 1.5;
+            margin-bottom: var(--sp-4);
+        }
+        .onboarding-step-box__footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .onboarding-step-box__dots {
+            display: flex;
+            gap: var(--sp-2);
+        }
+        .onboarding-step-box__dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--c-outline);
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+        .onboarding-step-box__dot--active {
+            background-color: var(--c-primary);
         }
 
         @media (min-width: 768px) {
@@ -872,6 +944,24 @@
             </div>
         </div>
     </div>
+    
+    <!-- INICIO: Elementos para el Tour Guiado de Bienvenida -->
+    <div id="onboarding-tour" class="onboarding-overlay">
+        <div id="onboarding-highlight" class="onboarding-highlight"></div>
+        <div id="onboarding-step-box" class="onboarding-step-box">
+            <h3 id="onboarding-title" class="onboarding-step-box__title"></h3>
+            <p id="onboarding-content" class="onboarding-step-box__content"></p>
+            <div class="onboarding-step-box__footer">
+                <button id="onboarding-skip-btn" class="btn btn--secondary" data-action="end-tour">Saltar</button>
+                <div id="onboarding-dots" class="onboarding-step-box__dots"></div>
+                <div>
+                    <button id="onboarding-prev-btn" class="btn btn--secondary" data-action="prev-tour-step">Anterior</button>
+                    <button id="onboarding-next-btn" class="btn btn--primary" data-action="next-tour-step">Siguiente</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- FIN: Elementos para el Tour Guiado de Bienvenida -->
 
     <div id="exit-screen">
         <p>🧮✨ ¡Tus números están en orden, es hora de descansar! ✨🧮<br>💰 Tu asistente de finanzas personales se queda cuidando tus cuentas 💰</p>
@@ -893,7 +983,7 @@
 // =================================================================================
 // 1. STATE & GLOBAL VARIABLES
 // =================================================================================
-const quotesData = [ { "cita": "Los inversores conservadores duermen bien.", "autor": "Benjamin Graham" }, { "cita": "Nunca asciendas a alguien que no ha cometido errores, porque si lo haces, estás ascendiendo a alguien que nunca ha hecho nada.", "autor": "Benjamin Graham" }, { "cita": "Si se han hecho los deberes antes de comprar una acción, el momento de venderla es: normalmente, nunca.", "autor": "Benjamin Graham" }, { "cita": "Mientras que el entusiasmo é necessário para conseguir grandes logros en cualquier lugar, en Wall Street suele conducir al desastre.", "autor": "John Templeton" }, { "cita": "Sin tener fe en el futuro, nadie invertiría. Para ser inversor, debes creer en un mañana mejor.", "autor": "John Templeton" }, { "cita": "Las cuatro palabras más caras de nuestro lenguaje son: 'Esta vez es diferente'.", "autor": "John Templeton" }, { "cita": "Céntrate en el valor porque la mayoría de los inversores se fijan en perspectivas y tendencias.", "autor": "Peter Lynch" }, { "cita": "El éxito es un proceso de búsqueda continua de respuestas a nuevas preguntas.", "autor": "Peter Lynch" }, { "cita": "Conoce en lo que inviertes, y por qué.", "autor": "Peter Lynch" }, { "cita": "Cuando vendes en momentos de desesperación, siempre vendes barato.", "autor": "Peter Lynch" }, { "cita": "Una persona que posee una propiedad y tiene una participación en la empresa probablemente trabajará más duro, se sentirá más feliz y hará un mejor trabajo que otra que no tiene nada.", "autor": "Peter Lynch" }, { "cita": "El riesgo viene de no saber lo que se está haciendo.", "autor": "Warren Buffett" }, { "cita": "Cuesta 20 años construir una reputación y 5 minutos destruirla. Si piensas sobre ello, harás las cosas de manera diferente.", "autor": "Warren Buffett" }, { "cita": "En el mundo de los negocios, el espejo retrovisor está siempre más claro que el parabrisas.", "autor": "Warren Buffett" }, { "cita": "La inversión más importante que puedes hacer es en uno mismo.", "autor": "Warren Buffett" }, { "cita": "Sé temeroso cuando otros sean avariciosos, sé avaricioso cuando otros sean temerosos.", "autor": "Warren Buffett" }, { "cita": "Sé consciente de lo que no sabes. Siéntete a gusto entendiendo tus errores y debilidades.", "autor": "Charlie Munger" }, { "cita": "Para hacer dinero en los mercados, tienes que pensar diferente y ser humilde.", "autor": "Charlie Munger" }, { "cita": "El principal problema del inversor, e incluso su peor enemigo, es probablemente él mismo", "autor": "Benjamin Graham" }, { "cita": "Las personas que no pueden controlar sus emociones no son aptas para obtener beneficios mediante la inversión", "autor": "Benjamin Graham" }, { "cita": "Trato de comprar acciones en los negocios que son tan maravillosos que un tonto podría manejarlos. Tarde o temprano uno lo hará", "autor": "Warren Buffett" }, { "cita": "Un inversor debería actuar como si tuviera una tarjeta con solo 20 decisiones (de compra) para tomar a lo largo de su vida", "autor": "Warren Buffett" }, { "cita": "Regla número 1: nunca pierdas dinero. Regla número 2: nunca olvides la regla número 1", "autor": "Warren Buffett" }, { "cita": "Se gana dinero descontando lo obvio y apostando a lo inesperado", "autor": "George Soros" }, { "cita": "El problema no es lo que uno no sabe, sino lo que uno cree que sabe estando equivocado", "autor": "George Soros" }, { "cita": "Si invertir es entretenido, si te estás divirtiendo, probablemente no estés ganando dinero. Las buenas inversiones son aburridas", "autor": "George Soros" }, { "cita": "Se puede perder dinero a corto plazo, pero necesitas del largo plazo para ganar dinero", "autor": "Peter Lynch" }, { "cita": "La mejor empresa para comprar puede ser alguna que ya tienes en cartera", "autor": "Peter Lynch" }, { "cita": "La clave para ganar dinero con las acciones es no tenerles miedo", "autor": "Peter Lynch" }, { "cita": "Los mercados alcistas nacen en el pesimismo, crecen en el escepticismo, maduran en el optimismo y mueren en la euforia", "autor": "John Templeton" }, { "cita": "El momento de máximo pesimismo es el mejor para comprar y el momento de máximo optimismo es el mejor para vender", "autor": "John Templeton" }, { "cita": "Un inversor que tiene todas las respuestas ni siquiera entiende las preguntas", "autor": "John Templeton" }, { "cita": "La inversión es un negocio a largo plazo donde la paciencia marca la rentabilidad", "autor": "Francisco García Paramés" }, { "cita": "¿Cuándo vendemos un valor? Respondemos siempre: cuando haya una oportunidad mejor. Ese es nuestro objetivo permanente, mejorar la cartera cada día", "autor": "Francisco García Paramés" }, { "cita": "Lo que en la Bolsa saben todos, no me interesa", "autor": "André Kostolany" }, { "cita": "No sirve para nada proclamar la verdad en economía o recomendar cosas útiles. Es la mejor manera de hacerse enemigos", "autor": "André Kostolany" }, { "cita": "Un inversionista pierde la capacidad de raciocinio cuando gana los primeros diez mil dólares. A partir de entonces se convierte en un pelele fácilmente manipulable", "autor": "André Kostolany" }, { "cita": "Comprar títulos, acciones de empresas, tomarse unas pastillas para dormir durante 20/30 años y cuando uno despierta, ¡voilà! es millonario", "autor": "André Kostolany" }, { "cita": "No sé si los próximos 1.000 puntos del Dow Jones serán hacia arriba o hacia abajo, pero estoy seguro de que los próximos 10.000 serán hacia arriba", "autor": "Peter Lynch" }, { "cita": "El destino de un inversor lo marca su estómago , no su cerebro", "autor": "Peter Lynch" }, { "cita": "No siga mis pasos porque aun en el caso de que acierte al comprar usted no sabrá cuando vendo", "autor": "Peter Lynch" }, { "cita": "Calcule las 'ganancias del dueño' para conseguir una reflexión verdadera del valor", "autor": "Warren Buffett" }, { "cita": "Busque compañías con altos márgenes de beneficio", "autor": "Warren Buffett" }, { "cita": "Invierta siempre para el largo plazo", "autor": "Warren Buffett" }, { "cita": "El consejo de que 'usted nunca quiebra tomando un beneficio' es absurdo", "autor": "Warren Buffett" }, { "cita": "¿El negocio tiene una historia de funcionamiento constante?", "autor": "Warren Buffett" }, { "cita": "Recuerde que el mercado de valores es maníaco-depresivo", "autor": "Benjamin Graham" }, { "cita": "Compre un negocio, no alquile la acción", "autor": "Warren Buffett" }, { "cita": "Mientras más absurdo sea el comportamiento del mercado mejor será la oportunidad para el inversor metódico", "autor": "Benjamin Graham" }, { "cita": "Se puede perder dinero a corto plazo, pero usted sigue siendo un idiota", "autor": "Joel Greenblatt" }, { "cita": "Los mercados alcistas no tienen resistencia y los bajistas no tienen soporte", "autor": "Ed Downs" }, { "cita": "El pánico causa que vendas en el bajón, y la codicia causa que compres cerca a la cima", "autor": "Stan Weinstein" }, { "cita": "Las dos grandes fuerzas que mueven los mercados son la codicia y el miedo", "autor": "Anónimo" }, { "cita": "Todo lo que sube baja y todo lo que baja sube", "autor": "Anónimo" }, { "cita": "Si no sientes miedo en el momento de comprar es que estás comprando mal", "autor": "Anónimo" }, { "cita": "Que el último duro lo gane otro", "autor": "Anónimo" }, { "cita": "La clave para hacer dinero en acciones es no asustarse de ellas", "autor": "Peter Lynch" }, { "cita": "El precio es lo que pagas, el valor es lo que recibes", "autor": "Warren Buffett" }, { "cita": "No es necesario hacer cosas extraordinarias para conseguir resultados extraordinarios", "autor": "Warren Buffett" }, { "cita": "Alguien está sentado en la sombra hoy porque alguien plantó un árbol mucho tiempo atrás", "autor": "Warren Buffett" }, { "cita": "Únicamente cuando la marea baja, descubres quién ha estado nadando desnudo", "autor": "Warren Buffett" }, { "cita": "No tenemos que ser más inteligentes que el resto, tenemos que ser más disciplinados que el resto", "autor": "Warren Buffett" }, { "cita": "Si compras cosas que no necesitas, pronto tendrás que vender cosas que necesitas", "autor": "Warren Buffett" }, { "cita": "Nunca inviertas en un negocio que no puedas entender", "autor": "Warren Buffett" }, { "cita": "El tiempo es amigo de las empresas maravillosas y enemigo de las mediocres", "autor": "Warren Buffett" }, { "cita": "Nuestro periodo de espera favorito es para siempre", "autor": "Warren Buffett" }, { "cita": "Wall Street es el único lugar al que las personas van en un Rolls-Royce, para recibir asesoría de quienes toman el metro", "autor": "Warren Buffett" }, { "cita": "Llega un momento en el que debes empezar a hacer lo que realmente quieres. Busca un trabajo que te guste y saltarás de la cama cada mañana con fuerza", "autor": "Warren Buffett" }, { "cita": "Es siempre mejor pasar el tiempo con gente mejor que tú. Escoge asociados cuyo comportamiento es mejor que el tuyo e irás en esa dirección", "autor": "Warren Buffett" }, { "cita": "Toma 20 años en construir una reputación y 5 minutos en arruinarla. Si piensas sobre ello, harás las cosas de forma diferente", "autor": "Warren Buffett" }, { "cita": "No importa el talento o los esfuerzos, hay cosas que llevan tiempo. No puedes producir un bebé en un mes dejando embarazadas a 9 mujeres", "autor": "Warren Buffett" }, { "cita": "Las oportunidades aparecen pocas veces. Cuando llueva oro sal a la calle con un cesto grande y no con un dedal", "autor": "Warren Buffett" }, { "cita": "La gente siempre me pregunta dónde deberían trabajar y yo siempre les digo que vayan a trabajar con aquellos a los que más admiran", "autor": "Warren Buffett" }, { "cita": "¿Cuándo hay que vender una acción? Pues cuando tengamos una oportunidad mejor a la vista", "autor": "Francisco García Paramés" }, { "cita": "Nunca acudo a las OPV, me gusta estar en las empresas que pueden ser opadas por competidores, no en las salidas a bolsa", "autor": "Francisco García Paramés" }, { "cita": "Si en el mercado hay más tontos que papel, la bolsa va a subir, si hay más papel que tontos, la bolsa baja", "autor": "André Kostolany" }, { "cita": "No persiga nunca una acción, tenga paciencia que la próxima oportunidad va a llegar con toda seguridad", "autor": "André Kostolany" }, { "cita": "Lo que todos saben en la bolsa, no nos interesa a los especuladores", "autor": "André Kostolany" }, { "cita": "Las inversiones exitosas consisten en saber gestionar el riesgo, no en evitarlo.", "autor": "Benjamin Graham" }, { "cita": "Una gran compañía no es una buena inversión si pagas mucho por la acción", "autor": "Benjamin Graham" }, { "cita": "A veces es mejor pensar una hora sobre el dinero que dedicar una semana a trabajar para obtenerlo.", "autor": "André Kostolany" }, { "cita": "En la Bolsa, con frecuencia, hay que cerrar los ojos para ver mejor.", "autor": "André Kostolany" }, { "cita": "Si la inversión es entretenida, si te estás divirtiendo, es probable que no estés ganando dinero. Una buena inversión es aburrida.", "autor": "George Soros" }, { "cita": "Las burbujas del mercado de valores no crecen de la nada. Tienen una base sólida en la realidad, pero la realidad está distorsionada por un malentendido.", "autor": "George Soros" }, { "cita": "Nunca digas que no puedes permitirte algo. Esa es la aptitud de un hombre pobre. Pregúntate cómo permitírtelo.", "autor": "Robert Kiyosaki" }, { "cita": "Una diferencia importante es que los ricos compran los lujos al final, mientras que los pobres y la clase media tienden a comprar los lujos primero.", "autor": "Robert Kiyosaki" }, { "cita": "Mantén tus activos bajo mínimos, reduce los pasivos y, con mucha disciplina, ve construyendo una base de activos sólida.", "autor": "Robert Kiyosaki" }, { "cita": "No ahorres lo que queda después de gastar, sino gasta lo que queda después de ahorrar.", "autor": "Warren Buffett" }, { "cita": "El riesgo viene de no saber lo que estás haciendo.", "autor": "Warren Buffett" }, { "cita": "Sea temeroso cuando otros son codiciosos, y sea codicioso cuando otros son temerosos.", "autor": "Warren Buffett" }, { "cita": "No compres cosas que no necesitas, con dinero que no tienes, para impresionar a gente que no te importa.", "autor": "Dave Ramsey" } ];
+const quotesData = [ { "cita": "Los inversores conservadores duermen bien.", "autor": "Benjamin Graham" }, { "cita": "Nunca asciendas a alguien que no ha cometido errores, porque si lo haces, estás ascendiendo a alguien que nunca ha hecho nada.", "autor": "Benjamin Graham" }, { "cita": "Si se han hecho los deberes antes de comprar una acción, el momento de venderla es: normalmente, nunca.", "autor": "Benjamin Graham" }, { "cita": "Mientras que el entusiasmo é necesario para conseguir grandes logros en cualquier lugar, en Wall Street suele conducir al desastre.", "autor": "John Templeton" }, { "cita": "Sin tener fe en el futuro, nadie invertiría. Para ser inversor, debes creer en un mañana mejor.", "autor": "John Templeton" }, { "cita": "Las cuatro palabras más caras de nuestro lenguaje son: 'Esta vez es diferente'.", "autor": "John Templeton" }, { "cita": "Céntrate en el valor porque la mayoría de los inversores se fijan en perspectivas y tendencias.", "autor": "Peter Lynch" }, { "cita": "El éxito es un proceso de búsqueda continua de respuestas a nuevas preguntas.", "autor": "Peter Lynch" }, { "cita": "Conoce en lo que inviertes, y por qué.", "autor": "Peter Lynch" }, { "cita": "Cuando vendes en momentos de desesperación, siempre vendes barato.", "autor": "Peter Lynch" }, { "cita": "Una persona que posee una propiedad y tiene una participación en la empresa probablemente trabajará más duro, se sentirá más feliz y hará un mejor trabajo que otra que no tiene nada.", "autor": "Peter Lynch" }, { "cita": "El riesgo viene de no saber lo que se está haciendo.", "autor": "Warren Buffett" }, { "cita": "Cuesta 20 años construir una reputación y 5 minutos destruirla. Si piensas sobre ello, harás las cosas de manera diferente.", "autor": "Warren Buffett" }, { "cita": "En el mundo de los negocios, el espejo retrovisor está siempre más claro que el parabrisas.", "autor": "Warren Buffett" }, { "cita": "La inversión más importante que puedes hacer es en uno mismo.", "autor": "Warren Buffett" }, { "cita": "Sé temeroso cuando otros sean avariciosos, sé avaricioso cuando otros sean temerosos.", "autor": "Warren Buffett" }, { "cita": "Sé consciente de lo que no sabes. Siéntete a gusto entendiendo tus errores y debilidades.", "autor": "Charlie Munger" }, { "cita": "Para hacer dinero en los mercados, tienes que pensar diferente y ser humilde.", "autor": "Charlie Munger" }, { "cita": "El principal problema del inversor, e incluso su peor enemigo, es probablemente él mismo", "autor": "Benjamin Graham" }, { "cita": "Las personas que no pueden controlar sus emociones no son aptas para obtener beneficios mediante la inversión", "autor": "Benjamin Graham" }, { "cita": "Trato de comprar acciones en los negocios que son tan maravillosos que un tonto podría manejarlos. Tarde o temprano uno lo hará", "autor": "Warren Buffett" }, { "cita": "Un inversor debería actuar como si tuviera una tarjeta con solo 20 decisiones (de compra) para tomar a lo largo de su vida", "autor": "Warren Buffett" }, { "cita": "Regla número 1: nunca pierdas dinero. Regla número 2: nunca olvides la regla número 1", "autor": "Warren Buffett" }, { "cita": "Se gana dinero descontando lo obvio y apostando a lo inesperado", "autor": "George Soros" }, { "cita": "El problema no es lo que uno no sabe, sino lo que uno cree que sabe estando equivocado", "autor": "George Soros" }, { "cita": "Si invertir es entretenido, si te estás divirtiendo, probablemente no estés ganando dinero. Las buenas inversiones son aburridas", "autor": "George Soros" }, { "cita": "Se puede perder dinero a corto plazo, pero necesitas del largo plazo para ganar dinero", "autor": "Peter Lynch" }, { "cita": "La mejor empresa para comprar puede ser alguna que ya tienes en cartera", "autor": "Peter Lynch" }, { "cita": "La clave para ganar dinero con las acciones es no tenerles miedo", "autor": "Peter Lynch" }, { "cita": "Los mercados alcistas nacen en el pesimismo, crecen en el escepticismo, maduran en el optimismo y mueren en la euforia", "autor": "John Templeton" }, { "cita": "El momento de máximo pesimismo es el mejor para comprar y el momento de máximo optimismo es el mejor para vender", "autor": "John Templeton" }, { "cita": "Un inversor que tiene todas las respuestas ni siquiera entiende las preguntas", "autor": "John Templeton" }, { "cita": "La inversión es un negocio a largo plazo donde la paciencia marca la rentabilidad", "autor": "Francisco García Paramés" }, { "cita": "¿Cuándo vendemos un valor? Respondemos siempre: cuando haya una oportunidad mejor. Ese es nuestro objetivo permanente, mejorar la cartera cada día", "autor": "Francisco García Paramés" }, { "cita": "Lo que en la Bolsa saben todos, no me interesa", "autor": "André Kostolany" }, { "cita": "No sirve para nada proclamar la verdad en economía o recomendar cosas útiles. Es la mejor manera de hacerse enemigos", "autor": "André Kostolany" }, { "cita": "Un inversionista pierde la capacidad de raciocinio cuando gana los primeros diez mil dólares. A partir de entonces se convierte en un pelele fácilmente manipulable", "autor": "André Kostolany" }, { "cita": "Comprar títulos, acciones de empresas, tomarse unas pastillas para dormir durante 20/30 años y cuando uno despierta, ¡voilà! es millonario", "autor": "André Kostolany" }, { "cita": "No sé si los próximos 1.000 puntos del Dow Jones serán hacia arriba o hacia abajo, pero estoy seguro de que los próximos 10.000 serán hacia arriba", "autor": "Peter Lynch" }, { "cita": "El destino de un inversor lo marca su estómago , no su cerebro", "autor": "Peter Lynch" }, { "cita": "No siga mis pasos porque aun en el caso de que acierte al comprar usted no sabrá cuando vendo", "autor": "Peter Lynch" }, { "cita": "Calcule las 'ganancias del dueño' para conseguir una reflexión verdadera del valor", "autor": "Warren Buffett" }, { "cita": "Busque compañías con altos márgenes de beneficio", "autor": "Warren Buffett" }, { "cita": "Invierta siempre para el largo plazo", "autor": "Warren Buffett" }, { "cita": "El consejo de que 'usted nunca quiebra tomando un beneficio' es absurdo", "autor": "Warren Buffett" }, { "cita": "¿El negocio tiene una historia de funcionamiento constante?", "autor": "Warren Buffett" }, { "cita": "Recuerde que el mercado de valores es maníaco-depresivo", "autor": "Benjamin Graham" }, { "cita": "Compre un negocio, no alquile la acción", "autor": "Warren Buffett" }, { "cita": "Mientras más absurdo sea el comportamiento del mercado mejor será la oportunidad para el inversor metódico", "autor": "Benjamin Graham" }, { "cita": "Se puede perder dinero a corto plazo, pero usted sigue siendo un idiota", "autor": "Joel Greenblatt" }, { "cita": "Los mercados alcistas no tienen resistencia y los bajistas no tienen soporte", "autor": "Ed Downs" }, { "cita": "El pánico causa que vendas en el bajón, y la codicia causa que compres cerca a la cima", "autor": "Stan Weinstein" }, { "cita": "Las dos grandes fuerzas que mueven los mercados son la codicia y el miedo", "autor": "Anónimo" }, { "cita": "Todo lo que sube baja y todo lo que baja sube", "autor": "Anónimo" }, { "cita": "Si no sientes miedo en el momento de comprar es que estás comprando mal", "autor": "Anónimo" }, { "cita": "Que el último duro lo gane otro", "autor": "Anónimo" }, { "cita": "La clave para hacer dinero en acciones es no asustarse de ellas", "autor": "Peter Lynch" }, { "cita": "El precio es lo que pagas, el valor es lo que recibes", "autor": "Warren Buffett" }, { "cita": "No es necesario hacer cosas extraordinarias para conseguir resultados extraordinarios", "autor": "Warren Buffett" }, { "cita": "Alguien está sentado en la sombra hoy porque alguien plantó un árbol mucho tiempo atrás", "autor": "Warren Buffett" }, { "cita": "Únicamente cuando la marea baja, descubres quién ha estado nadando desnudo", "autor": "Warren Buffett" }, { "cita": "No tenemos que ser más inteligentes que el resto, tenemos que ser más disciplinados que el resto", "autor": "Warren Buffett" }, { "cita": "Si compras cosas que no necesitas, pronto tendrás que vender cosas que necesitas", "autor": "Warren Buffett" }, { "cita": "Nunca inviertas en un negocio que no puedas entender", "autor": "Warren Buffett" }, { "cita": "El tiempo es amigo de las empresas maravillosas y enemigo de las mediocres", "autor": "Warren Buffett" }, { "cita": "Nuestro periodo de espera favorito es para siempre", "autor": "Warren Buffett" }, { "cita": "Wall Street es el único lugar al que las personas van en un Rolls-Royce, para recibir asesoría de quienes toman el metro", "autor": "Warren Buffett" }, { "cita": "Llega un momento en el que debes empezar a hacer lo que realmente quieres. Busca un trabajo que te guste y saltarás de la cama cada mañana con fuerza", "autor": "Warren Buffett" }, { "cita": "Es siempre mejor pasar el tiempo con gente mejor que tú. Escoge asociados cuyo comportamiento es mejor que el tuyo e irás en esa dirección", "autor": "Warren Buffett" }, { "cita": "Toma 20 años en construir una reputación y 5 minutos en arruinarla. Si piensas sobre ello, harás las cosas de forma diferente", "autor": "Warren Buffett" }, { "cita": "No importa el talento o los esfuerzos, hay cosas que llevan tiempo. No puedes producir un bebé en un mes dejando embarazadas a 9 mujeres", "autor": "Warren Buffett" }, { "cita": "Las oportunidades aparecen pocas veces. Cuando llueva oro sal a la calle con un cesto grande y no con un dedal", "autor": "Warren Buffett" }, { "cita": "La gente siempre me pregunta dónde deberían trabajar y yo siempre les digo que vayan a trabajar con aquellos a los que más admiran", "autor": "Warren Buffett" }, { "cita": "¿Cuándo hay que vender una acción? Pues cuando tengamos una oportunidad mejor a la vista", "autor": "Francisco García Paramés" }, { "cita": "Nunca acudo a las OPV, me gusta estar en las empresas que pueden ser opadas por competidores, no en las salidas a bolsa", "autor": "Francisco García Paramés" }, { "cita": "Si en el mercado hay más tontos que papel, la bolsa va a subir, si hay más papel que tontos, la bolsa baja", "autor": "André Kostolany" }, { "cita": "No persiga nunca una acción, tenga paciencia que la próxima oportunidad va a llegar con toda seguridad", "autor": "André Kostolany" }, { "cita": "Lo que todos saben en la bolsa, no nos interesa a los especuladores", "autor": "André Kostolany" }, { "cita": "Las inversiones exitosas consisten en saber gestionar el riesgo, no en evitarlo.", "autor": "Benjamin Graham" }, { "cita": "Una gran compañía no es una buena inversión si pagas mucho por la acción", "autor": "Benjamin Graham" }, { "cita": "A veces es mejor pensar una hora sobre el dinero que dedicar una semana a trabajar para obtenerlo.", "autor": "André Kostolany" }, { "cita": "En la Bolsa, con frecuencia, hay que cerrar los ojos para ver mejor.", "autor": "André Kostolany" }, { "cita": "Si la inversión es entretenida, si te estás divirtiendo, es probable que no estés ganando dinero. Una buena inversión es aburrida.", "autor": "George Soros" }, { "cita": "Las burbujas del mercado de valores no crecen de la nada. Tienen una base sólida en la realidad, pero la realidad está distorsionada por un malentendido.", "autor": "George Soros" }, { "cita": "Nunca digas que no puedes permitirte algo. Esa es la aptitud de un hombre pobre. Pregúntate cómo permitírtelo.", "autor": "Robert Kiyosaki" }, { "cita": "Una diferencia importante es que los ricos compran los lujos al final, mientras que los pobres y la clase media tienden a comprar los lujos primero.", "autor": "Robert Kiyosaki" }, { "cita": "Mantén tus activos bajo mínimos, reduce los pasivos y, con mucha disciplina, ve construyendo una base de activos sólida.", "autor": "Robert Kiyosaki" }, { "cita": "No ahorres lo que queda después de gastar, sino gasta lo que queda después de ahorrar.", "autor": "Warren Buffett" }, { "cita": "El riesgo viene de no saber lo que estás haciendo.", "autor": "Warren Buffett" }, { "cita": "Sea temeroso cuando otros son codiciosos, y sea codicioso cuando otros son temerosos.", "autor": "Warren Buffett" }, { "cita": "No compres cosas que no necesitas, con dinero que no tienes, para impresionar a gente que no te importa.", "autor": "Dave Ramsey" } ];
 const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
 
 const getInitialDb = () => ({ 
@@ -909,6 +999,7 @@ let descriptionIndex = {};
 let globalSearchDebounceTimer = null;
 const originalButtonTexts = new Map();
 let conceptosChart = null, liquidAssetsChart = null, detailInvestmentChart = null, informesChart = null;
+let currentTourStep = 0; // NUEVA VARIABLE PARA EL TOUR
 
 const vList = {
     scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
@@ -921,6 +1012,192 @@ const calculatorState = {
     waitingForNewValue: true,
     targetInput: null,
 };
+
+// =================================================================================
+// 1.5 TOUR DE BIENVENIDA (ONBOARDING)
+// =================================================================================
+const tourSteps = [
+    {
+        element: 'button[data-page="movimientos-page"]',
+        page: 'movimientos-page',
+        title: '¡Bienvenido/a!',
+        content: 'Este es un tour rápido para mostrarte cómo funciona todo. Empecemos por la navegación principal. Aquí puedes ver tus Movimientos.',
+        position: 'top'
+    },
+    {
+        element: '#fab-add-movimiento',
+        page: 'movimientos-page',
+        title: 'Añadir Movimientos',
+        content: 'Usa este botón flotante para añadir nuevos gastos, ingresos o traspasos. Es el corazón de la aplicación. ¡Pruébalo después del tour!',
+        position: 'top-left'
+    },
+    {
+        element: 'button[data-page="panel-control-page"]',
+        page: 'panel-control-page',
+        title: 'El Panel de Control',
+        content: 'Aquí tienes una vista general de tus finanzas. De un vistazo verás tus ingresos, gastos y cómo se comparan con periodos anteriores.',
+        position: 'top'
+    },
+    {
+        element: '#kpi-container',
+        page: 'panel-control-page',
+        title: 'Indicadores Clave (KPIs)',
+        content: 'Estos son tus signos vitales financieros. Te muestran el resumen del periodo que hayas filtrado. ¡Rojo para gastos, verde para ingresos!',
+        position: 'bottom'
+    },
+    {
+        element: 'button[data-page="cuentas-page"]',
+        page: 'cuentas-page',
+        title: 'Tus Cuentas',
+        content: 'Esta sección agrupa tu dinero por "recipientes": tu banco, tu cartera, PayPal, etc. Es la foto de tu patrimonio.',
+        position: 'top'
+    },
+    {
+        element: '#ledger-toggle-btn',
+        page: 'cuentas-page',
+        title: 'Contabilidad Dual (A/B)',
+        content: '¡Función estrella! Pulsa aquí para cambiar entre tu contabilidad principal (A) y una secundaria (B). Ideal para separar finanzas personales de un negocio, o gastos compartidos.',
+        position: 'bottom'
+    },
+    {
+        element: 'button[data-action="help"]',
+        page: 'configuracion-page',
+        title: 'Ayuda y Configuración',
+        content: 'En la sección de Ajustes, encontrarás este botón de ayuda. Contiene una guía detallada (¡mucho más que este tour!) y te permite volver a empezar este recorrido cuando quieras.',
+        position: 'bottom-right'
+    },
+    {
+        element: '#app-root',
+        page: 'configuracion-page',
+        title: '¡Todo Listo!',
+        content: 'Has completado el tour. Ahora te toca a ti explorar y tomar el control de tus finanzas. ¡Empieza añadiendo tus cuentas y tu primer movimiento!',
+        position: 'center'
+    }
+];
+
+const startTour = async () => {
+    hideModal('generic-modal');
+    currentTourStep = 0;
+    const tourOverlay = select('onboarding-tour');
+    if (tourOverlay) tourOverlay.classList.add('onboarding-overlay--visible');
+    await showTourStep(currentTourStep);
+};
+
+const endTour = () => {
+    const tourOverlay = select('onboarding-tour');
+    if (tourOverlay) tourOverlay.classList.remove('onboarding-overlay--visible');
+    localStorage.setItem('tourCompleted', 'true');
+    const highlightBox = select('onboarding-highlight');
+    if (highlightBox) highlightBox.style.display = 'none';
+};
+
+const nextTourStep = async () => {
+    if (currentTourStep < tourSteps.length - 1) {
+        currentTourStep++;
+        await showTourStep(currentTourStep);
+    } else {
+        endTour();
+    }
+};
+
+const prevTourStep = async () => {
+    if (currentTourStep > 0) {
+        currentTourStep--;
+        await showTourStep(currentTourStep);
+    }
+};
+
+const showTourStep = async (stepIndex) => {
+    const step = tourSteps[stepIndex];
+    if (!step) return;
+
+    // Navegar a la página correcta si es necesario
+    const activePageId = document.querySelector('.view--active')?.id;
+    if (step.page && activePageId !== step.page) {
+        navigateTo(step.page, false);
+        // Esperar a que la navegación y el renderizado terminen
+        await wait(350);
+    }
+
+    const targetElement = select(step.element) || selectOne(step.element);
+    const highlightBox = select('onboarding-highlight');
+    const stepBox = select('onboarding-step-box');
+
+    if (!targetElement || !highlightBox || !stepBox) {
+        console.warn('Onboarding element not found:', step.element);
+        // Si no se encuentra un elemento, saltamos al siguiente o terminamos
+        await nextTourStep();
+        return;
+    }
+
+    // Actualizar contenido del pop-up
+    select('onboarding-title').textContent = step.title;
+    select('onboarding-content').textContent = step.content;
+
+    // Actualizar puntos de progreso
+    const dotsContainer = select('onboarding-dots');
+    dotsContainer.innerHTML = tourSteps.map((_, index) => 
+        `<div class="onboarding-step-box__dot ${index === stepIndex ? 'onboarding-step-box__dot--active' : ''}"></div>`
+    ).join('');
+
+    // Actualizar botones
+    select('onboarding-prev-btn').style.visibility = stepIndex === 0 ? 'hidden' : 'visible';
+    select('onboarding-next-btn').textContent = stepIndex === tourSteps.length - 1 ? 'Finalizar' : 'Siguiente';
+
+    // Posicionar el resaltador
+    const rect = targetElement.getBoundingClientRect();
+    highlightBox.style.display = 'block';
+    highlightBox.style.width = `${rect.width + 8}px`;
+    highlightBox.style.height = `${rect.height + 8}px`;
+    highlightBox.style.top = `${rect.top - 4}px`;
+    highlightBox.style.left = `${rect.left - 4}px`;
+    
+    // Posicionar el pop-up
+    const boxRect = stepBox.getBoundingClientRect();
+    const margin = 16;
+    
+    let top, left;
+
+    switch (step.position) {
+        case 'top':
+            top = rect.top - boxRect.height - margin;
+            left = rect.left + (rect.width / 2) - (boxRect.width / 2);
+            break;
+        case 'bottom':
+            top = rect.bottom + margin;
+            left = rect.left + (rect.width / 2) - (boxRect.width / 2);
+            break;
+        case 'left':
+            top = rect.top + (rect.height / 2) - (boxRect.height / 2);
+            left = rect.left - boxRect.width - margin;
+            break;
+        case 'right':
+            top = rect.top + (rect.height / 2) - (boxRect.height / 2);
+            left = rect.right + margin;
+            break;
+        case 'top-left':
+            top = rect.top - boxRect.height - margin;
+            left = rect.right - boxRect.width;
+            break;
+        case 'bottom-right':
+             top = rect.bottom + margin;
+             left = rect.left + rect.width - boxRect.width;
+             break;
+        case 'center':
+             top = (window.innerHeight / 2) - (boxRect.height / 2);
+             left = (window.innerWidth / 2) - (boxRect.width / 2);
+             highlightBox.style.display = 'none'; // No resaltar nada en el paso final
+             break;
+        default: // 'bottom' por defecto
+            top = rect.bottom + margin;
+            left = rect.left + (rect.width / 2) - (boxRect.width / 2);
+    }
+    
+    // Ajustar para que no se salga de la pantalla
+    stepBox.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - boxRect.height - margin))}px`;
+    stepBox.style.left = `${Math.max(margin, Math.min(left, window.innerWidth - boxRect.width - margin))}px`;
+};
+
 
 // =================================================================================
 // 2. FIREBASE & DATA HANDLING
@@ -1087,7 +1364,21 @@ const initApp = async () => {
     checkAuthState();
 };
 const checkAuthState = () => fbAuth.onAuthStateChanged((user) => { if (user) { currentUser = user; loadData(user.uid); } else { currentUser = null; if (unsubscribeFromDb) unsubscribeFromDb(); db = getInitialDb(); showLoginScreen(); } });
-const startMainApp = () => { select('login-screen')?.classList.remove('login-view--visible'); select('app-root')?.classList.add('app-layout--visible'); renderAll(); navigateTo('movimientos-page', true); };
+
+const startMainApp = async () => {
+    select('login-screen')?.classList.remove('login-view--visible');
+    select('app-root')?.classList.add('app-layout--visible');
+    renderAll();
+    navigateTo('movimientos-page', true);
+
+    // INICIAR TOUR SI ES LA PRIMERA VEZ
+    if (localStorage.getItem('tourCompleted') !== 'true') {
+        // Un pequeño retardo para asegurar que toda la UI está lista
+        await wait(1000);
+        startTour();
+    }
+};
+
 const showLoginScreen = () => { select('app-root')?.classList.remove('app-layout--visible'); select('login-screen')?.classList.add('login-view--visible'); };
 const handleLogin = (btn) => {
     const email = (select('login-email')).value.trim(), password = (select('login-password')).value, errEl = select('login-error'); clearAllErrors('login-form'); if(errEl) errEl.textContent = ''; let v = true;
@@ -2163,10 +2454,14 @@ const showHelpModal = () => {
             <span class="material-icons" style="font-size: 48px; color: var(--c-primary);">school</span>
             <h3>¡Bienvenido/a a tu Centro de Mando Financiero!</h3>
         </div>
-        <p>¡Hola! Nos alegra mucho tenerte aquí. Sabemos que el mundo de las finanzas personales puede parecer un laberinto, pero hemos diseñado esta aplicación para que sea tu mapa y tu brújula. Piensa en ella como tu copiloto financiero personal, siempre listo para ayudarte a entender, organizar y tomar el control de tu dinero de una forma clara y sencilla.</p>
-        <p>Vamos a dar un paseo juntos para que no se te escape ni un solo detalle.</p>
+        <p>Nos alegra tenerte aquí. Hemos diseñado esta aplicación para que sea tu mapa y brújula en el mundo de las finanzas personales, de una forma clara y sencilla.</p>
+        
+        <button class="btn btn--primary btn--full" data-action="start-onboarding-tour" style="margin: var(--sp-4) 0;">
+            <span class="material-icons">tour</span>
+            Iniciar Tour Guiado
+        </button>
 
-        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);">
+        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-2);">
             <span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">key</span>
             La Filosofía de la App: Conceptos Clave
         </h4>
@@ -2183,7 +2478,7 @@ const showHelpModal = () => {
         </h4>
         <p>Esta es una de las herramientas más potentes. Te permite llevar dos contabilidades completamente separadas e independientes dentro de la misma app.</p>
         <ul>
-            <li><strong>¿Cómo funciona?</strong> En <strong>Ajustes → Cuentas</strong>, puedes marcar cada cuenta para que pertenezca a la contabilidad "B". Por defecto, todas están en la "A".</li>
+            <li><strong>¿Cómo funciona?</strong> En <strong>Ajustes → Gestión de Cuentas/Conceptos → Cuentas</strong>, puedes marcar cada cuenta para que pertenezca a la contabilidad "B". Por defecto, todas están en la "A".</li>
             <li><strong>¿Cómo cambio de vista?</strong> Usa el botón <strong>A / B</strong> que ves arriba a la izquierda. La cabecera cambiará de color (azul para A, rojo para B) para que siempre sepas dónde estás.</li>
             <li><strong>¿Para qué sirve?</strong> ¡Las posibilidades son infinitas!
                 <ul>
@@ -2412,7 +2707,7 @@ const attachEventListeners = () => {
         }
 
         const modalOverlay = target.closest('.modal-overlay');
-        if (modalOverlay && target === modalOverlay && !modalOverlay.id.includes('calculator')) return hideModal(modalOverlay.id);
+        if (modalOverlay && target === modalOverlay && !modalOverlay.id.includes('calculator') && !modalOverlay.id.includes('onboarding')) return hideModal(modalOverlay.id);
         if (!actionTarget) return; 
         const {action, id, page, type, cuentaId, modalId} = (actionTarget).dataset, btn = actionTarget.closest('button');
         
@@ -2462,6 +2757,10 @@ const attachEventListeners = () => {
             'cancel-edit-cuenta': renderCuentasModalList,
             'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
             'duplicate-movement': () => handleDuplicateMovement(),
+            'start-onboarding-tour': startTour,
+            'end-tour': endTour,
+            'next-tour-step': nextTourStep,
+            'prev-tour-step': prevTourStep,
         };
         if (actions[action]) actions[action](e);
     });
@@ -2531,6 +2830,17 @@ const attachEventListeners = () => {
             e.preventDefault();
             e.stopPropagation();
             showGlobalSearchModal();
+        }
+        // Navegación del tour con flechas
+        const tourOverlay = select('onboarding-tour');
+        if(tourOverlay.classList.contains('onboarding-overlay--visible')) {
+            if(e.key === 'ArrowRight') {
+                nextTourStep();
+            } else if (e.key === 'ArrowLeft') {
+                prevTourStep();
+            } else if (e.key === 'Escape') {
+                endTour();
+            }
         }
     });
 };
@@ -2697,7 +3007,7 @@ const handleDuplicateMovement = () => {
     }
 };
 const handleDeleteAccount = (btn) => { showConfirmationModal('Esto eliminará tu cuenta y TODOS tus datos de forma PERMANENTE e IRREVERSIBLE. ¿Seguro que quieres continuar?', () => { showConfirmationModal('Confirmación final: ¿realmente quieres borrar tu cuenta y todos tus datos? No se podrá recuperar.', () => { const user = fbAuth.currentUser; if (user) { setButtonLoading(btn, true, 'Eliminando...'); user.delete().then(() => { showToast('Cuenta eliminada permanentemente.', 'danger'); }).catch(error => { setButtonLoading(btn, false); showToast(`Error: ${error.message}`, 'danger'); if (error.code === 'auth/requires-recent-login') { showToast('Por seguridad, vuelve a iniciar sesión antes de eliminar tu cuenta.', 'warning', 5000); fbAuth.signOut(); } }); } }, 'Eliminación Permanente') }, '¡Atención!') };
-const showManageInvestmentAccountsModal = () => { let html = `<form id="manage-investment-accounts-form"><p class="form-label" style="margin-bottom: var(--sp-3)">Selecciona las cuentas que quieres tratar como activos de inversión en tu portafolio.</p>`; (db.cuentas || []).sort((a,b)=>a.nombre.localeCompare(b.nombre)).forEach(c => { html += `<div class="form-switch-group modal__list-item" style="padding: var(--sp-2) 0;"><label for="is-investment-${c.id}">${c.nombre}</label><label class="form-switch"><input type="checkbox" id="is-investment-${c.id}" value="${c.id}" ${c.esInversion ? 'checked' : ''}><span class="slider"></span></label></div>`; }); html += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar</button></div></form>`; showGenericModal('Gestionar Activos de Portafolio', html); };
+const showManageInvestmentAccountsModal = () => { let html = `<form id="manage-investment-accounts-form"><p class="form-label" style="margin-bottom: var(--sp-3)">Selecciona las cuentas que quieres tratar como activos de inversión en tu portafolio.</p>`; (db.cuentas || []).sort((a,b)=>a.nombre.localeCompare(b.nombre)).forEach(c => { html += `<div class="form-switch-group modal__list-item" style="padding: var(--sp-2) 0;"><label for="is-investment-${c.id}" ${c.esInversion ? 'checked' : ''}><span class="slider"></span></label></div>`; }); html += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar</button></div></form>`; showGenericModal('Gestionar Activos de Portafolio', html); };
 const handleSaveInvestmentAccounts = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value)); db.cuentas.forEach(c => c.esInversion = selectedIds.has(c.id)); saveData(btn, () => { hideModal('generic-modal'); renderAll(); showToast('Portafolio actualizado.'); }); };
 const showValoracionModal = (cuentaId, valoracionId = null) => { hideModal('generic-modal'); const valoracion = valoracionId ? (db.inversiones_historial || []).find(v => v.id === valoracionId) : null; const cuenta = (db.cuentas || []).find(c => c.id === cuentaId); if (!cuenta && !valoracion) { showToast('No se encontró la cuenta.', 'danger'); return; } const targetCuentaId = valoracion ? valoracion.cuentaId : cuentaId; const fecha = valoracion ? new Date(valoracion.fecha) : new Date(); const fechaStr = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 16); let html = `<form id="form-valoracion" novalidate><input type="hidden" id="valoracion-id" value="${valoracion?.id || ''}"><input type="hidden" id="valoracion-cuenta-id" value="${targetCuentaId}"><div class="form-group"><label for="valoracion-cuenta-nombre" class="form-label">Activo</label><input type="text" id="valoracion-cuenta-nombre" class="form-input" value="${(db.cuentas || []).find(c => c.id === targetCuentaId)?.nombre || ''}" readonly></div><div class="form-group"><label for="valoracion-valor" class="form-label">Valor de Mercado Actual</label><input type="text" id="valoracion-valor" class="form-input input-amount-calculator" readonly required value="${valoracion ? (valoracion.valor / 100).toLocaleString('es-ES') : ''}"><span class="form-error" id="valoracion-valor-error"></span></div><div class="form-group"><label for="valoracion-fecha" class="form-label">Fecha de Valoración</label><input type="datetime-local" id="valoracion-fecha" class="form-input" value="${fechaStr}" required></div><div class="modal__actions"><button type="button" class="btn btn--danger" data-action="delete-valoracion" style="margin-right: auto; ${!valoracionId ? 'display:none;' : ''}">Borrar</button><button type="submit" class="btn btn--primary">Guardar Valoración</button></div></form>`; showGenericModal('Actualizar Valor de Activo', html); };
 const handleSaveValoracion = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); let valid = true; const valorStr = (form.querySelector('#valoracion-valor')).value.trim().replace(/\./g, '').replace(',', '.'); const valor = Math.round(parseFloat(valorStr) * 100); const fecha = (form.querySelector('#valoracion-fecha')).value; const cuentaId = (form.querySelector('#valoracion-cuenta-id')).value; if (isNaN(valor) || valor < 0) { valid = false; displayError('valoracion-valor', 'Valor inválido.'); } if (!valid) { setButtonLoading(btn, false); return; } const id = (form.querySelector('#valoracion-id')).value; if (id) { const v = (db.inversiones_historial || []).find(val => val.id === id); if (v) { v.valor = valor; v.fecha = new Date(fecha).toISOString(); } } else { if (!db.inversiones_historial) db.inversiones_historial = []; db.inversiones_historial.push({ id: generateId(), cuentaId, valor, fecha: new Date(fecha).toISOString() }); } saveData(btn, () => { hideModal('generic-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(cuentaId); else renderInversionesPage(); showToast('Valoración guardada.'); }); };
