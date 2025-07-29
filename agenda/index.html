@@ -19,6 +19,10 @@
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
 
+    <!-- Librería para el Tutorial Interactivo -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+
     <link rel="manifest" href='data:application/manifest+json,{"name":"Agenda aiDANaI","short_name":"aiDANaI","description":"Agenda aiDANaI: When the ideas become real","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","icons":[{"src":"aiDANaI.webp","sizes":"192x192","type":"image/webp"},{"src":"aiDANaI.webp","sizes":"512x512","type":"image/webp"},{"src":"aiDANaI.webp","sizes":"180x180","type":"image/webp","purpose":"apple touch icon"}]}'>
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="aiDANaI.webp">
@@ -94,7 +98,7 @@
         .calendar-container { flex-shrink: 0; padding: 8px 16px; border-bottom: 1px solid var(--outline); }
         .calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
         .calendar-title-container { position: relative; display: inline-flex; align-items: center; }
-        #calendar-title-btn { font-size: 18px; font-weight: 700; background: none; border: none; color: var(--on-background); padding: 4px 6px; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+        #calendar-title-btn { font-size: 16px; /* Modificado de 18px a 16px */ font-weight: 700; background: none; border: none; color: var(--on-background); padding: 4px 6px; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
         #calendar-title-btn:hover { background-color: var(--surface-variant); }
         .calendar-nav { display: flex; align-items: center; gap: 2px; }
         .icon-button { background: none; border: none; color: var(--secondary-color); cursor: pointer; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s; }
@@ -592,6 +596,7 @@
         // =================================================================================
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
         const DIAS_SEMANA_LARGOS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
         const DIAS_SEMANA_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
         const QUOTES = [ { text: "La única forma de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs" }, { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" }, { text: "Cree que puedes y ya estás a medio camino.", author: "Theodore Roosevelt" } ];
@@ -624,14 +629,14 @@
             else if (err.code == 'unimplemented') { console.warn("Persistencia no soportada en este navegador."); }
         });
 
-        const getInitialDb = () => ({ items: [], taskLists: [{id: 'default', name: 'General'}], config: { theme: 'dark' } });
+        const getInitialDb = () => ({ items: [], taskLists: [{id: 'default', name: 'General'}], config: { theme: 'dark', tutorialCompleted: false } });
 
-        const saveData = (successCallback = () => {}) => {
+        const saveData = (itemData, successCallback = () => {}) => {
             if (!currentUser) return;
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
                 fbDb.collection('users').doc(currentUser.uid).set({ db })
-                    .then(successCallback)
+                    .then(() => successCallback(itemData))
                     .catch(error => console.error("Error al guardar:", error));
             }, 500);
         };
@@ -644,7 +649,8 @@
                 if (doc.exists && doc.data().db) {
                     db = doc.data().db;
                     if (!db.items) { db.items = []; needsSave = true; }
-                    if (!db.config) { db.config = { theme: 'dark' }; needsSave = true; }
+                    if (!db.config) { db.config = { theme: 'dark', tutorialCompleted: false }; needsSave = true; }
+                    if (db.config.tutorialCompleted === undefined) { db.config.tutorialCompleted = false; needsSave = true; }
                     if (!db.taskLists || db.taskLists.length === 0) { db.taskLists = [{id: 'default', name: 'General'}]; needsSave = true; }
                 } else { db = getInitialDb(); needsSave = true; }
                 if (needsSave) saveData();
@@ -675,6 +681,11 @@
             gebi('app-root').classList.add('visible'); 
             switchView('today');
             scheduleAllNotifications();
+
+            // Iniciar tutorial si es la primera vez
+            if (!db.config.tutorialCompleted) {
+                startOnboardingTutorial();
+            }
         };
         
         const showLoginScreen = () => {
@@ -762,7 +773,7 @@
             const { calendar } = state;
             const { items } = db;
             const { currentMonth, currentYear, selectedDate, displayMode } = calendar;
-            gebi('calendar-title-btn').textContent = `${MESES[currentMonth]} ${currentYear}`;
+            gebi('calendar-title-btn').textContent = `${MESES_CORTOS[currentMonth]} ${currentYear}`;
             gebi('calendarView').dataset.displayMode = displayMode;
             qsa('.view-toggle .btn-toggle').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === displayMode));
             if (displayMode === 'month') {
@@ -924,7 +935,6 @@
             return item.type === 'task' ? createTaskItemNode(item) : createEventItemNode(item);
         }
 
-        // --- MODIFICADO: createEventItemNode ---
         function createEventItemNode(item) {
             const itemEl = document.createElement('div');
             itemEl.className = `list-item-swipe-container type-agenda ${item.isComplete ? 'completed' : ''}`;
@@ -947,7 +957,6 @@
             return itemEl;
         }
 
-        // --- MODIFICADO: createTaskItemNode ---
         function createTaskItemNode(item) {
             const itemEl = document.createElement('div');
             itemEl.dataset.id = item.localId;
@@ -1102,7 +1111,26 @@
             const index = db.items.findIndex(i => i.localId === itemData.localId);
             if (index > -1) db.items[index] = { ...db.items[index], ...itemData };
             else db.items.unshift(itemData);
-            saveData(() => { scheduleAllNotifications(); renderApp(); });
+            saveData(itemData, (savedItem) => { 
+                scheduleAllNotifications();
+                handlePostSaveNavigation(savedItem);
+            });
+        }
+        
+        function handlePostSaveNavigation(itemData) {
+            if (!itemData) return;
+            if (itemData.type === 'agenda' && itemData.dueDate) {
+                const itemDate = new Date(itemData.dueDate);
+                appState.calendar.selectedDate = dateToYYYYMMDD(itemDate);
+                appState.calendar.currentMonth = itemDate.getMonth();
+                appState.calendar.currentYear = itemDate.getFullYear();
+                switchView('calendar');
+            } else if (itemData.type === 'task') {
+                appState.tasks.selectedListId = itemData.listId || 'default';
+                switchView('tasks');
+            } else {
+                renderApp(); // Fallback to just re-render current view
+            }
         }
 
         function handleItemComplete(localId, isComplete) {
@@ -1110,7 +1138,7 @@
             if (!item) return;
             const index = db.items.findIndex(i => i.localId === localId);
             if (index > -1) { db.items[index] = { ...item, isComplete, completedAt: isComplete ? Date.now() : null }; }
-            saveData(() => { scheduleAllNotifications(); renderApp(); });
+            saveData(null, () => { scheduleAllNotifications(); renderApp(); });
         }
         
         function handleDeleteFromModal() { 
@@ -1119,13 +1147,13 @@
             if (item) { 
                 showCustomConfirm(`¿Eliminar este ítem permanentemente: "${item.description}"?`, () => {
                     db.items = db.items.filter(i => i.localId !== localId);
-                    saveData(() => { scheduleAllNotifications(); closeModal('add-item-modal'); renderApp(); });
+                    saveData(null, () => { scheduleAllNotifications(); closeModal('add-item-modal'); renderApp(); });
                 });
             } 
         }
 
         // =================================================================================
-        // 7. LÓGICA DE NUEVAS FUNCIONES (NLP, TAREAS)
+        // 7. LÓGICA DE NUEVAS FUNCIONES (NLP, TAREAS, TUTORIAL)
         // =================================================================================
         function handleQuickAddSubmit(e) {
             e.preventDefault();
@@ -1209,28 +1237,44 @@
             openModal('manage-lists-modal');
         }
 
-        function handleAddTaskList(e) {
-            e.preventDefault();
-            const input = gebi('new-list-name');
-            const name = input.value.trim();
-            if (name) { const newList = { id: uuid(), name }; db.taskLists.push(newList); saveData(() => { input.value = ''; openManageListsModal(); renderTaskListView(); }); }
-        }
-
-        function handleRenameTaskList(id, newName) { const list = db.taskLists.find(l => l.id === id); if (list && newName) { list.name = newName; saveData(() => { openManageListsModal(); renderTaskListView(); }); } }
-        function handleDeleteTaskList(id) { const listName = db.taskLists.find(l => l.id === id)?.name; showCustomConfirm(`¿Seguro que quieres eliminar la lista "${listName}" y TODAS sus tareas? Esta acción es irreversible.`, () => { db.taskLists = db.taskLists.filter(l => l.id !== id); db.items = db.items.filter(i => i.listId !== id); saveData(() => { if (appState.tasks.selectedListId === id) { appState.tasks.selectedListId = 'default'; } openManageListsModal(); renderTaskListView(); }); }); }
-        function renderSubtasks(subtasks, parentId) {
-            const container = gebi('subtasks-container');
-            container.innerHTML = '';
-            subtasks.forEach(subtask => {
-                const el = document.createElement('div');
-                el.className = 'subtask-item';
-                el.dataset.id = subtask.id;
-                el.innerHTML = `<input type="checkbox" ${subtask.isComplete ? 'checked' : ''}><input type="text" value="${subtask.description}"><button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button>`;
-                el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); };
-                container.appendChild(el);
-            });
-        }
+        function handleAddTaskList(e) { e.preventDefault(); const input = gebi('new-list-name'); const name = input.value.trim(); if (name) { const newList = { id: uuid(), name }; db.taskLists.push(newList); saveData(null, () => { input.value = ''; openManageListsModal(); renderTaskListView(); }); } }
+        function handleRenameTaskList(id, newName) { const list = db.taskLists.find(l => l.id === id); if (list && newName) { list.name = newName; saveData(null, () => { openManageListsModal(); renderTaskListView(); }); } }
+        function handleDeleteTaskList(id) { const listName = db.taskLists.find(l => l.id === id)?.name; showCustomConfirm(`¿Seguro que quieres eliminar la lista "${listName}" y TODAS sus tareas? Esta acción es irreversible.`, () => { db.taskLists = db.taskLists.filter(l => l.id !== id); db.items = db.items.filter(i => i.listId !== id); saveData(null, () => { if (appState.tasks.selectedListId === id) { appState.tasks.selectedListId = 'default'; } openManageListsModal(); renderTaskListView(); }); }); }
+        function renderSubtasks(subtasks, parentId) { const container = gebi('subtasks-container'); container.innerHTML = ''; subtasks.forEach(subtask => { const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = subtask.id; el.innerHTML = `<input type="checkbox" ${subtask.isComplete ? 'checked' : ''}><input type="text" value="${subtask.description}"><button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button>`; el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); }; container.appendChild(el); }); }
         function handleAddSubtask() { const i = gebi('new-subtask-input'); const d = i.value.trim(); if (d) { const c = gebi('subtasks-container'); const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = uuid(); el.innerHTML = `<input type="checkbox"><input type="text" value="${d}"><button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button>`; el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); }; c.appendChild(el); i.value = ''; i.focus(); } }
+        
+        function startOnboardingTutorial() {
+            // Creamos un ítem temporal para mostrar el gesto de swipe
+            const tasksList = gebi('today-tasks-list');
+            const tempItem = document.createElement('div');
+            tempItem.id = 'tutorial-temp-item';
+            // Usamos una versión simplificada de la estructura de un item
+            tempItem.className = 'list-item-swipe-container type-task';
+            tempItem.style.borderLeftColor = 'var(--accent-task)';
+            tempItem.innerHTML = `
+                <div class="item-icon item-checkbox"><span class="material-icons">radio_button_unchecked</span></div>
+                <div class="item-content"><div class="item-title">Esta es una tarea de ejemplo</div></div>`;
+            tasksList.prepend(tempItem);
+
+            const driverObj = driver.driver({
+                showProgress: true,
+                steps: [
+                    { element: '#today-greeting', popover: { title: '¡Bienvenido/a a Agenda aiDANaI!', description: 'Este es tu centro de mando. Permítenos mostrarte rápidamente cómo funciona.' } },
+                    { element: '#fab-add-item', popover: { title: 'Creación Rápida con IA', description: 'Usa este botón para añadir eventos y tareas usando lenguaje natural, como "Cena con amigos mañana a las 9". ¡La IA se encarga del resto!' } },
+                    { element: '#tutorial-temp-item', popover: { title: 'Gestos que Ahorran Tiempo', description: 'Desliza un ítem a la DERECHA para completarlo o editarlo, y a la IZQUIERDA para eliminarlo. ¡Así de fácil!' } },
+                    { element: '.bottom-nav', popover: { title: 'Navega por tu Agenda', description: 'Usa estos botones para cambiar entre la vista de Hoy, la Agenda completa, tus listas de Tareas y más.', side: "top", align: 'start' } }
+                ],
+                onDestroyStarted: () => {
+                    // Limpieza cuando el tour se cierra (completado o cancelado)
+                    tempItem.remove();
+                    if (!driverObj.isActivated()) {
+                        db.config.tutorialCompleted = true;
+                        saveData();
+                    }
+                }
+            });
+            driverObj.drive();
+        }
 
         // =================================================================================
         // 8. UTILIDADES Y AYUDANTES
@@ -1267,7 +1311,7 @@
                     else openAddItemModal(item);
                     cardEl.style.transform = 'translateX(0)';
                 } else if (e.deltaX < -threshold) {
-                    showCustomConfirm(`¿Eliminar "${item.description}"?`, () => { db.items = db.items.filter(i => i.localId !== id); saveData(() => { scheduleAllNotifications(); renderApp(); }); }, () => { cardEl.style.transform = 'translateX(0)'; });
+                    showCustomConfirm(`¿Eliminar "${item.description}"?`, () => { db.items = db.items.filter(i => i.localId !== id); saveData(null, () => { scheduleAllNotifications(); renderApp(); }); }, () => { cardEl.style.transform = 'translateX(0)'; });
                 } else {
                     cardEl.style.transform = 'translateX(0)';
                 }
