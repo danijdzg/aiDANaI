@@ -223,7 +223,7 @@
             pointer-events: none;
         }
         .list-item-swipe-container.swiping-right.type-task .item-card-swipe-background { background-color: var(--accent-complete); justify-content: flex-start; opacity: 1; }
-        .list-item-swipe-container.swiping-right.type-agenda .item-card-swipe-background { background-color: var(--accent-edit); justify-content: flex-start; opacity: 1; }
+        .list-item-swipe-container.swiping-right.type-agenda .item-card-swipe-background { background-color: var(--accent-complete); justify-content: flex-start; opacity: 1; }
         .list-item-swipe-container.swiping-left .item-card-swipe-background { background-color: var(--accent-delete); justify-content: flex-end; opacity: 1; }
         .list-item-swipe-container.swiping-right .item-card-swipe-background .material-icons:first-child,
         .list-item-swipe-container.swiping-left .item-card-swipe-background .material-icons:last-child {
@@ -276,7 +276,7 @@
         .form-group-datetime, #task-options-group { display: none; }
         .subtask-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
         .subtask-item input[type="checkbox"] { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--primary-color); }
-        .subtask-item input[type="text"] { flex-grow: 1; font-size: 14px; border: none; background: transparent; border-bottom: 1px solid var(--outline); border-radius: 0; padding: 4px 0; color: var(--on-surface); /* <<< CORRECCIÓN AÑADIDA AQUÍ */ }
+        .subtask-item input[type="text"] { flex-grow: 1; font-size: 14px; border: none; background: transparent; border-bottom: 1px solid var(--outline); border-radius: 0; padding: 4px 0; color: var(--on-surface); }
         .subtask-item input[type="text"]:focus { outline: none; border-bottom-color: var(--primary-color); }
         .subtask-item .delete-subtask-btn { color: var(--secondary-color); font-size: 20px; }
 
@@ -447,8 +447,8 @@
                            <ul>
                                <li>"<u>Reunión de marketing mañana a las 10:30</u>" <b>→</b> Crea un <b>Evento</b> para mañana a esa hora.</li>
                                <li>"<u>Llamar al dentista el viernes</u>" <b>→</b> Crea un <b>Evento</b> para el próximo viernes (sin hora).</li>
+                               <li>"<u>Revisión del coche el 24/08/2024</u>" <b>→</b> Crea un <b>Evento</b> en esa fecha específica.</li>
                                <li>"<u>Comprar leche, pan y huevos</u>" <b>→</b> Crea una <b>Tarea</b> sin fecha.</li>
-                               <li>"<u>Vacaciones en la playa del 15 al 22 de julio</u>" <b>→</b> La IA interpretará la fecha principal.</li>
                            </ul>
                            <p><b>Consejo Pro:</b> Si la IA interpreta algo y quieres ajustarlo, pulsa "Editar Detalles" antes de guardar para acceder al modo avanzado y tener control total sobre la fecha, hora, notificaciones y más.</p>
                        </div>
@@ -463,10 +463,10 @@
                               <li><span style="color: var(--accent-edit);"><b>TOCAR EL TEXTO</b></span> <span class="material-icons" style="vertical-align: middle;">touch_app</span> Abre la ventana de <b>edición avanzada</b> para modificar todos los detalles.</li>
                               <li><span style="color: var(--accent-delete);"><b>DESLIZAR A LA IZQUIERDA</b></span> <span class="material-icons" style="vertical-align: middle;">arrow_back</span> Muestra la opción de <b>eliminar</b>. ¡Úsalo con cuidado!</li>
                            </ul>
-                           <p><b>Acciones Específicas:</b></p>
+                           <p><b>Acciones Específicas al Deslizar a la Derecha <span class="material-icons" style="vertical-align: middle;">arrow_forward</span>:</b></p>
                            <ul>
-                              <li><b>Para TAREAS <span class="material-icons" style="vertical-align: middle;">task_alt</span>:</b> <span style="color: var(--accent-complete);"><b>DESLIZAR A LA DERECHA</b></span> <span class="material-icons" style="vertical-align: middle;">arrow_forward</span> o <b>TOCAR SU CÍRCULO</b> <span class="material-icons" style="vertical-align: middle;">radio_button_unchecked</span> la marca como <b>completada</b>. ¡La forma más rápida de tachar de tu lista!</li>
-                              <li><b>Para EVENTOS <span class="material-icons" style="vertical-align: middle;">event</span>:</b> <span style="color: var(--accent-edit);"><b>DESLIZAR A LA DERECHA</b></span> <span class="material-icons" style="vertical-align: middle;">arrow_forward</span> es un atajo rápido para <b>editar</b> el evento.</li>
+                              <li><b>Para TAREAS <span class="material-icons" style="vertical-align: middle;">task_alt</span>:</b> La marca como <b>completada</b>. ¡La forma más rápida de tachar de tu lista!</li>
+                              <li><b>Para EVENTOS <span class="material-icons" style="vertical-align: middle;">event</span>:</b> Lo marca como <b>completado</b>. Si es un evento recurrente, programará automáticamente la siguiente ocurrencia.</li>
                            </ul>
                        </div>
                    </details>
@@ -740,6 +740,13 @@
             initializeDatePicker();
             checkAuthState();
             updateSyncStatus();
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./service-worker.js')
+                        .then(registration => console.log('Service Worker registrado con éxito:', registration))
+                        .catch(error => console.log('Error en el registro del Service Worker:', error));
+                });
+            }
         }
 
         const checkAuthState = () => fbAuth.onAuthStateChanged(user => { 
@@ -882,7 +889,7 @@
             const todayStr = dateToYYYYMMDD(new Date());
 
             const dailyEventMarkers = new Map();
-            items.filter(it => it.type === 'agenda' && it.dueDate).forEach(it => {
+            items.filter(it => it.type === 'agenda' && it.dueDate && !it.isComplete).forEach(it => { // Show markers for not completed events
                 const dateStr = dateToYYYYMMDD(new Date(it.dueDate));
                 if (!dailyEventMarkers.has(dateStr)) dailyEventMarkers.set(dateStr, { hasImportant: false, hasNormal: false });
                 const marker = dailyEventMarkers.get(dateStr);
@@ -1027,7 +1034,7 @@
             itemEl.style.borderLeftColor = itemColor;
             const time = dateToHHMM(new Date(item.dueDate));
             itemEl.innerHTML = `
-                <div class="item-card-swipe-background"><span class="material-icons">edit</span><span class="material-icons">delete</span></div>
+                <div class="item-card-swipe-background"><span class="material-icons">check_circle</span><span class="material-icons">delete</span></div>
                 <div class="item-icon"><span class="material-icons" style="color: ${itemColor};">event</span></div>
                 <div class="item-content" data-action="edit">
                     <div class="item-title">${item.description}</div>
@@ -1227,7 +1234,6 @@
             scheduleAllNotifications();
             saveData().catch(error => {
                 showToast(`Error al guardar: "${itemData.description}"`, true);
-                // Rollback could be implemented here if needed
                 renderApp();
             });
         }
@@ -1252,25 +1258,48 @@
         }
 
         function handleItemComplete(localId, isComplete) {
-            const index = db.items.findIndex(i => i.localId === localId);
-            if (index === -1) return;
+            const itemIndex = db.items.findIndex(i => i.localId === localId);
+            if (itemIndex === -1) return;
+            const item = db.items[itemIndex];
+            
+            // Si se está marcando como NO completado (desmarcar)
+            if (!isComplete) {
+                const updatedItem = { ...item, isComplete: false, completedAt: null };
+                db.items[itemIndex] = updatedItem;
+            } 
+            // Si se está marcando COMO completado
+            else {
+                // Primero, marca el item actual como completado, sin importar si es recurrente o no.
+                const updatedItem = { ...item, isComplete: true, completedAt: Date.now() };
+                if (updatedItem.type === 'task' && updatedItem.subtasks) {
+                    updatedItem.subtasks.forEach(st => st.isComplete = true);
+                }
+                db.items[itemIndex] = updatedItem; // Actualiza el item original en su lugar.
 
-            const updatedItem = JSON.parse(JSON.stringify(db.items[index]));
-            
-            updatedItem.isComplete = isComplete;
-            updatedItem.completedAt = isComplete ? Date.now() : null;
-            
-             if (isComplete && updatedItem.type === 'task' && updatedItem.subtasks && updatedItem.subtasks.length > 0) {
-                updatedItem.subtasks.forEach(st => st.isComplete = true);
+                // Si es un evento recurrente, crea la SIGUIENTE instancia.
+                if (item.type === 'agenda' && item.recurrenceRule !== 'none') {
+                    const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule);
+                    if (nextDueDate) {
+                        const nextEvent = {
+                            ...item, // Copia las propiedades del original
+                            localId: uuid(), // Asigna un NUEVO ID
+                            dueDate: nextDueDate.toISOString(),
+                            isComplete: false, // El nuevo evento no está completo
+                            completedAt: null,
+                            notificationShown: false, // Resetea el estado de la notificación
+                            createdAt: Date.now()
+                        };
+                        // Añade el nuevo evento a la base de datos
+                        db.items.unshift(nextEvent);
+                        showToast(`Evento "${item.description}" completado y reprogramado.`);
+                    }
+                }
             }
-
-            db.items[index] = updatedItem;
+        
             renderApp();
             scheduleAllNotifications();
-
             saveData().catch(error => {
-                showToast(`Error al sincronizar: "${updatedItem.description}"`, true);
-                // Rollback could be implemented here
+                showToast(`Error al sincronizar.`, true);
                 renderApp();
             });
         }
@@ -1284,7 +1313,6 @@
              scheduleAllNotifications();
              saveData().catch(error => {
                  showToast(`Error al eliminar.`, true);
-                 // Rollback could be implemented here
                  renderApp();
              });
         }
@@ -1303,6 +1331,19 @@
         // =================================================================================
         // 7. LÓGICA DE NUEVAS FUNCIONES (NLP, TAREAS, TUTORIAL)
         // =================================================================================
+        
+        function calculateNextDueDate(currentDueDate, recurrenceRule) {
+            const nextDate = new Date(currentDueDate);
+            switch (recurrenceRule) {
+                case 'daily': nextDate.setDate(nextDate.getDate() + 1); break;
+                case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break;
+                case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break;
+                case 'yearly': nextDate.setFullYear(nextDate.getFullYear() + 1); break;
+                default: return null;
+            }
+            return nextDate;
+        }
+        
         function handleQuickAddSubmit(e) {
             e.preventDefault();
             const input = gebi('quick-add-input').value.trim();
@@ -1321,6 +1362,7 @@
             let cleanText = text.toLowerCase();
             let date = new Date();
             let dateFound = false;
+
             const timeRegex = /(?:a las|a la|)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?/i;
             const timeMatch = cleanText.match(timeRegex);
             if (timeMatch) {
@@ -1333,26 +1375,43 @@
                 cleanText = cleanText.replace(timeMatch[0], '').trim();
                 dateFound = true;
             }
-            const dateRegex = /(\d{1,2})(?:\s+de\s+|\s*\/\s*)(\w+)/i;
-            const dateMatch = dateRegex.exec(cleanText);
-            if (dateMatch) {
-                const day = parseInt(dateMatch[1], 10);
-                const monthStr = dateMatch[2].toLowerCase();
-                const monthIndex = MESES.findIndex(m => m.toLowerCase().startsWith(monthStr));
-                if (monthIndex > -1) { date.setMonth(monthIndex, day); dateFound = true; cleanText = cleanText.replace(dateMatch[0], '').trim(); }
-            } else if (/\bhoy\b/i.test(cleanText)) { dateFound = true; cleanText = cleanText.replace(/\bhoy\b/i, '').trim(); }
-            else if (/\bmañana\b/i.test(cleanText)) { date.setDate(date.getDate() + 1); dateFound = true; cleanText = cleanText.replace(/\bmañana\b/i, '').trim(); }
+
+            const numericDateRegex = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
+            const numericDateMatch = cleanText.match(numericDateRegex);
+
+            if (numericDateMatch) {
+                const day = parseInt(numericDateMatch[1], 10);
+                const month = parseInt(numericDateMatch[2], 10) - 1;
+                let year = numericDateMatch[3] ? parseInt(numericDateMatch[3], 10) : new Date().getFullYear();
+                
+                if (year < 100) { year += 2000; }
+
+                date.setFullYear(year, month, day);
+                dateFound = true;
+                cleanText = cleanText.replace(numericDateMatch[0], '').trim();
+            } 
             else {
-                for (let i = 0; i < DIAS_SEMANA_LARGOS.length; i++) {
-                    const dayName = DIAS_SEMANA_LARGOS[i];
-                    if (cleanText.includes(dayName)) {
-                        const currentDay = new Date().getDay();
-                        let dayDiff = i - currentDay;
-                        if (dayDiff <= 0) dayDiff += 7;
-                        date.setDate(date.getDate() + dayDiff);
-                        dateFound = true;
-                        cleanText = cleanText.replace(new RegExp(`\\b(el\\s+)?${dayName}\\b`, 'i'), '').trim();
-                        break;
+                const dateRegex = /(\d{1,2})(?:\s+de\s+|\s*\/\s*)(\w+)/i;
+                const dateMatch = dateRegex.exec(cleanText);
+                if (dateMatch) {
+                    const day = parseInt(dateMatch[1], 10);
+                    const monthStr = dateMatch[2].toLowerCase();
+                    const monthIndex = MESES.findIndex(m => m.toLowerCase().startsWith(monthStr));
+                    if (monthIndex > -1) { date.setMonth(monthIndex, day); dateFound = true; cleanText = cleanText.replace(dateMatch[0], '').trim(); }
+                } else if (/\bhoy\b/i.test(cleanText)) { dateFound = true; cleanText = cleanText.replace(/\bhoy\b/i, '').trim(); }
+                else if (/\bmañana\b/i.test(cleanText)) { date.setDate(date.getDate() + 1); dateFound = true; cleanText = cleanText.replace(/\bmañana\b/i, '').trim(); }
+                else {
+                    for (let i = 0; i < DIAS_SEMANA_LARGOS.length; i++) {
+                        const dayName = DIAS_SEMANA_LARGOS[i];
+                        if (cleanText.includes(dayName)) {
+                            const currentDay = new Date().getDay();
+                            let dayDiff = i - currentDay;
+                            if (dayDiff <= 0) dayDiff += 7;
+                            date.setDate(date.getDate() + dayDiff);
+                            dateFound = true;
+                            cleanText = cleanText.replace(new RegExp(`\\b(el\\s+)?${dayName}\\b`, 'i'), '').trim();
+                            break;
+                        }
                     }
                 }
             }
@@ -1426,7 +1485,6 @@
             renderApp();
             saveData().catch(error => {
                 showToast('Error al actualizar la subtarea.', true);
-                // Rollback could be implemented here
                 renderApp();
             });
         }
@@ -1437,7 +1495,7 @@
                 steps: [
                     { element: '#today-greeting', popover: { title: '¡Bienvenido/a a Agenda aiDANaI!', description: 'Este es tu centro de mando. Permítenos mostrarte rápidamente cómo funciona.' } },
                     { element: '#fab-add-item', popover: { title: 'Creación Rápida con IA', description: 'Usa este botón para añadir eventos y tareas usando lenguaje natural, como "Cena con amigos mañana a las 9". ¡La IA se encarga del resto!' } },
-                    { element: '#today-tasks-title', popover: { title: 'Gestos que Ahorran Tiempo', description: 'Desliza un ítem a la DERECHA para completarlo o editarlo, y a la IZQUIERDA para eliminarlo. ¡Así de fácil!' } },
+                    { element: '#today-tasks-title', popover: { title: 'Gestos que Ahorran Tiempo', description: 'Desliza un ítem a la DERECHA para completarlo, y a la IZQUIERDA para eliminarlo. ¡Así de fácil!' } },
                     { element: '.bottom-nav', popover: { title: 'Navega por tu Agenda', description: 'Usa estos botones para cambiar entre la vista de Hoy, la Agenda completa, tus listas de Tareas y más.', side: "top", align: 'start' } }
                 ],
                 onDestroyStarted: () => {
@@ -1481,9 +1539,13 @@
                 const id = cardEl.dataset.id;
                 const item = db.items.find(i => i.localId === id);
                 if (!item) { cardEl.style.transform = 'translateX(0)'; return; }
+                
                 if (e.deltaX > threshold) {
-                    if (item.type === 'task') handleItemComplete(id, !item.isComplete); 
-                    else openAddItemModal(item);
+                    if (item.type === 'task') {
+                        handleItemComplete(id, !item.isComplete); 
+                    } else if (item.type === 'agenda') {
+                        handleItemComplete(id, true);
+                    }
                     cardEl.style.transform = 'translateX(0)';
                 } else if (e.deltaX < -threshold) {
                     showCustomConfirm(`¿Eliminar "${item.description}"?`, () => { handleDeleteItem(id); }, () => { cardEl.style.transform = 'translateX(0)'; });
