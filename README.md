@@ -6,6 +6,9 @@ https://danijdzg.github.io/aiDANaI/cuentas/
 
 https://danijdzg.github.io/aiDANaI/agenda/
 
-La aplicación menu aiDANaI agrupa las otras dos aplicaciones Cuentas y Agenda
+https://danijdzg.github.io/aiDANaI/dani/
 
-Versión final 29/07/2025
+La aplicación menu aiDANaI agrupa las otras dos aplicaciones Cuentas y Agenda
+La aplicación dani pretende ser las tres aplicaciones juntas
+
+Versión final 31/07/2025
