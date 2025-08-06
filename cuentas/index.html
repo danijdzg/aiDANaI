@@ -943,10 +943,13 @@
                         <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                             <p style="font-size: var(--fs-sm); color: var(--c-on-surface-secondary); margin-bottom: var(--sp-4);">La importación de JSON reemplazará todos los datos actuales. Se recomienda exportar primero para tener una copia de seguridad.</p>
                             <div class="form-grid">
-                                <button data-action="export-data" class="btn btn--secondary" title="Exportar una copia de seguridad completa en formato JSON."><span class="material-icons" style="font-size: 16px;">save</span>Exportar JSON</button>
-                                <button data-action="import-data" class="btn btn--secondary" title="Importar desde un archivo de seguridad JSON."><span class="material-icons" style="font-size: 16px;">file_upload</span>Importar JSON</button>
-                            </div>
-                            <input type="file" id="import-file-input" class="hidden" accept=".json,application/json" />
+								<button data-action="export-data" class="btn btn--secondary" title="Exportar una copia de seguridad completa en formato JSON."><span class="material-icons" style="font-size: 16px;">save</span>Exportar JSON</button>
+								<button data-action="import-data" class="btn btn--secondary" title="Importar desde un archivo de seguridad JSON."><span class="material-icons" style="font-size: 16px;">file_upload</span>Importar JSON</button>
+								<button data-action="export-csv" class="btn btn--secondary" title="Exportar todos los movimientos a un fichero CSV."><span class="material-icons" style="font-size: 16px;">grid_on</span>Exportar CSV</button>
+								<button data-action="import-csv" class="btn btn--secondary" title="Importar movimientos desde un fichero CSV."><span class="material-icons" style="font-size: 16px;">upload_file</span>Importar CSV</button>
+							</div>
+								<input type="file" id="import-file-input" class="hidden" accept=".json,application/json" />
+								<input type="file" id="import-csv-input" class="hidden" accept=".csv,text/csv" />
                             <button data-action="clear-data" class="btn btn--danger btn--full" style="margin-top: var(--sp-4);">Borrar Todos los Datos</button>
                         </div>
                     </details>
@@ -1468,7 +1471,11 @@
                 currency: 'EUR'
             }).format(number);
         };
-        const showToast = (message, type = 'default', duration = 3000) => {
+        const toSentenceCase = (str) => {
+			if (!str || typeof str !== 'string') return '';
+			return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+		};
+		const showToast = (message, type = 'default', duration = 3000) => {
             const c = select('toast-container'); if (!c) return;
             const t = document.createElement('div');
             t.className = `toast toast--${type}`;
@@ -1991,17 +1998,106 @@
                     fecha_actual: new Date().toISOString()
                 };
         
-                const system_instruction = `Eres 'aiDANaI', un asistente financiero experto y amigable. Tu misión es analizar los datos financieros del usuario, que se te proporcionan en formato JSON, y responder a sus preguntas de forma clara y precisa.
+                const system_instruction = `Eres 'aiDANaI', un analista y educador financiero personal experto, amigable y proactivo. Tu misión es ayudar al usuario a entender profundamente sus finanzas y a tomar mejores decisiones, basándote en los datos que se te proporcionan en el JSON.
 
-**Instrucciones Clave:**
-1.  **Usa solo los datos proporcionados:** Basa TODAS tus respuestas exclusivamente en el JSON de financialContext. No inventes información ni uses conocimiento externo. Si no puedes responder con los datos, dilo claramente.
-2.  **Identifícate:** Preséntate como aiDANaI en el primer mensaje de la conversación si es relevante, luego sé más directo.
-3.  **Formato de Moneda:** Formatea todos los importes monetarios en euros (€), por ejemplo, 1.234,56 €. Los datos están en céntimos, así que divide por 100.
-4.  **Claridad y Concisión:** Da respuestas directas y fáciles de entender. Utiliza listas con asteriscos (*) o texto en negrita con dobles asteriscos (**) para estructurar la información si es necesario.
-5.  **Análisis Proactivo:** Si detectas algo interesante o una posible área de mejora en los datos (ej. un gasto elevado en una categoría), menciónalo de forma proactiva y útil.
-6.  **Cálculos:** Puedes realizar cálculos como sumas, promedios, porcentajes, etc., sobre los datos.
-7.  **Lenguaje:** Responde siempre en español.
-8.  **NO menciones el JSON:** No le digas al usuario "según el JSON que me has pasado". Actúa como si tuvieras acceso directo a sus datos.`;
+				# 1. IDENTIDAD Y MISIÓN PRINCIPAL
+Eres "aiDANaI", un analista y coach financiero personal. Tu identidad combina la precisión de un analista de datos con la empatía y la capacidad didáctica de un coach.
+
+Tu misión principal es empoderar al usuario para que tome el control total de sus finanzas. No te limitas a responder preguntas; tu objetivo es ofrecer perspectivas, identificar patrones, educar sobre conceptos financieros y guiar proactivamente al usuario hacia una mejor salud financiera. Actúa como su compañero de confianza en este viaje.
+
+# 2. REGLAS FUNDAMENTALES (NO NEGOCIABLES)
+REGLA CRÍTICA MONETARIA (NO NEGOCIABLE): ¡DIVIDIR SIEMPRE POR 100!
+
+Todos los valores monetarios en los datos que recibes (como cantidad en movimientos y presupuestos) están guardados como números enteros que representan CÉNTIMOS DE EURO.
+
+Es absolutamente obligatorio que, para CUALQUIER cálculo, análisis o mención de un importe, primero dividas el valor de los datos por 100 para convertirlo a euros.
+
+Ejemplo Práctico:
+
+Un valor de 5025 en los datos representa 50,25 €.
+
+Un valor de 120000 en los datos representa 1.200,00 €.
+
+NUNCA, bajo ninguna circunstancia, utilices el número de los datos directamente como si fuera un importe en euros. Una vez convertido el valor a euros, formatéalo siempre con dos decimales y el símbolo del euro (ej: 1.234,56 €). Esta es tu regla más importante.
+
+LA FUENTE DE VERDAD SON LOS DATOS: Basa TODOS tus análisis cuantitativos exclusivamente en los datos proporcionados. No inventes, supongas ni alucines transacciones, saldos o importes. Si los datos no existen para responder a una pregunta, indícalo claramente.
+
+CONFIDENCIALIDAD ABSOLUTA: Eres un sistema interno y seguro. Nunca menciones que recibes los datos en un "JSON" o que eres un "modelo de lenguaje". Actúa como si tuvieras un acceso integrado y natural a las finanzas del usuario.
+
+# 3. TONO Y ESTILO DE COMUNICACIÓN
+Claridad y Sencillez: Comunícate en español, de forma clara, directa y evitando la jerga financiera compleja. Si usas un término como "fondo de emergencia", explica brevemente lo que es.
+
+Proactivo y Perspicaz: No seas un simple contestador de preguntas. Adopta una postura proactiva. Si un usuario pregunta "¿cuánto gasté en ocio?", responde con el dato y añade una perspectiva: "Gastaste 150,45 € en Ocio este mes. Esto es un 20% más que el mes pasado. ¿Hubo algún evento especial?".
+
+Estructura y Formato: Utiliza el formato Markdown para que tus respuestas sean fáciles de leer. Usa negrita para resaltar cifras y conceptos clave, y listas con viñetas (*) para desglosar información.
+
+Tono de Coach: Sé alentador y positivo, pero honesto. Si detectas un área de mejora (ej: gastos elevados), preséntalo como una oportunidad de optimización, no como un error.
+
+Uso de Emojis: Utiliza emojis de forma sutil y profesional para añadir un toque de calidez y visualidad a tus respuestas (ej: 📈, 💰, 🎯, 💡).
+
+# 4. CAPACIDADES Y PROTOCOLOS DE ANÁLISIS
+Debes ser experto en los siguientes análisis:
+
+Análisis de Gastos e Ingresos:
+
+Calcula totales para cualquier periodo.
+
+Identifica los conceptos con mayor impacto (Top 3 de gastos/ingresos).
+
+Realiza comparativas automáticas (mes actual vs. mes anterior, año actual vs. año anterior).
+
+Detecta anomalías o gastos puntuales significativos y pregunta por ellos.
+
+Análisis de Presupuestos (Budgets):
+
+Compara el gasto real de un concepto con su presupuesto anual.
+
+Informa sobre el progreso (ej: "Has gastado el 60% de tu presupuesto de Supermercado y estamos a mitad de año. ¡Vas por buen camino!").
+
+Calcula el importe restante o el exceso sobre el presupuesto.
+
+Salud Financiera General:
+
+Tasa de Ahorro: Calcula la diferencia entre ingresos y gastos (Ahorro = Ingresos - Gastos) y exprésala como un porcentaje de los ingresos (Tasa de Ahorro = (Ahorro / Ingresos) * 100).
+
+Fondo de Emergencia: Si el usuario pregunta por ello, puedes estimar un fondo de emergencia (generalmente de 3 a 6 meses de gastos fijos) y comparar si alguna de sus cuentas de ahorro se acerca a esa cifra.
+
+# 5. PROTOCOLO DE CONSEJOS DE INVERSIÓN (SEGUIR ESTRICTAMENTE)
+Este es un protocolo de seguridad. Síguelo al pie de la letra.
+
+Paso 1: Detección de Intención: Si el usuario pregunta sobre "cómo invertir", "en qué invertir", "qué hacer con mis ahorros" o temas similares, NO respondas directamente con sugerencias.
+
+Paso 2: Calibración de Riesgo (Respuesta Obligatoria): Tu primera respuesta debe ser siempre iniciar un diálogo para entender su perfil de riesgo. Usa este texto exacto:
+
+"¡Claro que sí! Es una excelente pregunta. Antes de explorar opciones, es fundamental que reflexionemos sobre tu perfil como inversor, ya que es algo muy personal. ¿Con cuál de estos tres perfiles te identificas más?
+
+1. 🗿 Conservador: Tu prioridad es la seguridad y la preservación de tu capital. Prefieres rentabilidades modestas pero estables, y te sentirías muy incómodo con posibles pérdidas, aunque fueran temporales.
+
+2. ⚖️ Moderado: Buscas un equilibrio. Estás dispuesto a asumir un riesgo controlado para que tus ahorros crezcan por encima de la inflación, aceptando fluctuaciones a corto y medio plazo.
+
+3. 🚀 Agresivo: Tu objetivo es maximizar la rentabilidad a largo plazo. Entiendes que para ello debes asumir una volatilidad significativa, incluyendo la posibilidad de pérdidas importantes en el camino."
+
+Paso 3: Respuesta Educativa Adaptada: Una vez que el usuario responda con un número o perfil, adapta tus sugerencias educativas. Habla siempre de TIPOS de activos, NUNCA de empresas o productos específicos.
+
+Si es Conservador: Explica qué son las cuentas remuneradas, los depósitos a plazo o los fondos monetarios.
+
+Si es Moderado: Explica qué son los fondos de inversión indexados (hablando de diversificación en acciones y bonos) o los planes de pensiones.
+
+Si es Agresivo: Explica qué es la renta variable (acciones), los ETFs y la importancia de la diversificación y el horizonte a largo plazo.
+
+Paso 4: Descargo de Responsabilidad (Obligatorio): En CUALQUIER respuesta que contenga sugerencias o educación sobre inversión, DEBES incluir esta advertencia al final:
+
+💡 **Importante:** Recuerda que esta información es puramente educativa y no constituye un consejo financiero profesional. Las decisiones de inversión son personales y se recomienda consultarlas con un asesor certificado.
+
+# 6. LIMITACIONES Y RESPUESTAS SEGURAS
+No das consejos fiscales ni legales: Si te preguntan sobre impuestos, declara que no estás cualificado para dar ese tipo de asesoramiento.
+
+No predices el futuro: No hagas predicciones sobre el mercado de valores o la economía.
+
+Pide Clarificaciones: Si una pregunta es ambigua, pide al usuario que la aclare antes de responder.
+
+Tu objetivo final es convertirte en un compañero financiero indispensable, transformando datos en conocimiento y conocimiento en acción para el usuario.
+				`;
                 
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction: system_instruction });
 
@@ -2345,7 +2441,7 @@
                             <div class="transaction-card__indicator ${indicatorClass}"></div>
                             <div class="transaction-card__content">
                                 <div class="transaction-card__details">
-                                    <div class="transaction-card__row-1">${formattedDate} • ${concept?.nombre || 'S/C'}</div>
+                                    <div class="transaction-card__row-1">${formattedDate} • ${toSentenceCase(concept?.nombre || 'S/C')}</div>
                                     <div class="transaction-card__row-2">${cuenta?.nombre || '?'} — ${escapeHTML(m.descripcion)}</div>
                                 </div>
                                 <div class="transaction-card__figures">
@@ -2437,15 +2533,16 @@
             
             const saldos = getSaldos();
             const allAccounts = getVisibleAccounts();
-            const allAccountTypes = [...new Set(allAccounts.map((c) => (c.tipo || 'S/T').toUpperCase()))].sort();
+            const allAccountTypes = [...new Set(allAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
             
             pillsCont.innerHTML = allAccountTypes.map(t => `<button class="filter-pill ${!deselectedAccountTypesFilter.has(t) ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}">${t}</button>`).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
             
             const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
             
+            // Primero, calcular el balance total de solo las cuentas seleccionadas
             let totalSelectedBalance = 0;
             allAccounts.forEach((c) => {
-                const tipo = (c.tipo || 'S/T').toUpperCase();
+                const tipo = toSentenceCase(c.tipo || 'S/T');
                 if (filteredAccountTypes.has(tipo)) {
                     totalSelectedBalance += (saldos[c.id] || 0);
                 }
@@ -2453,22 +2550,33 @@
             animateCountUp(totalBalanceEl, totalSelectedBalance, 500);
         
             const accountsByType = allAccounts.reduce((acc, c) => {
-                const tipo = (c.tipo || 'S/T').toUpperCase();
+                const tipo = toSentenceCase(c.tipo || 'S/T');
                 if (!acc[tipo]) acc[tipo] = [];
                 acc[tipo].push(c);
                 return acc;
             }, {});
             
             resCont.innerHTML = Object.keys(accountsByType).sort().map(tipo => {
-                if (!filteredAccountTypes.has(tipo)) return '';
+                if (!filteredAccountTypes.has(tipo)) return ''; // Omitir tipos de cuenta deseleccionados
+                
                 const accountsInType = accountsByType[tipo];
-                let typeBalance = 0;
+                // Calcular el balance total para este tipo de cuenta específico
+                const typeBalance = accountsInType.reduce((sum, account) => sum + (saldos[account.id] || 0), 0);
+
                 const accountsHtml = accountsInType.sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
                     const balance = saldos[c.id] || 0;
-                    typeBalance += balance;
-                    let amountHTML = `<strong>${formatCurrency(balance)}</strong>`;
-                    if (tipo === 'PRÉSTAMO') amountHTML = `<strong class="text-warning">${formatCurrency(Math.abs(balance))}</strong>`;
+                    
+                    // Calcular el porcentaje de la cuenta individual con respecto al total de su tipo
+                    const accountPercentage = typeBalance !== 0 ? (Math.abs(balance) / Math.abs(typeBalance)) * 100 : 0;
+                    const accountPercentageText = balance !== 0 ? ` (${accountPercentage.toFixed(1)}%)` : '';
+
+                    let amountHTML = `<strong>${formatCurrency(balance)}</strong>${accountPercentageText}`;
+                    // Para préstamos, mostrar valor absoluto y mantener el texto de advertencia
+                    if (tipo === 'PRÉSTAMO') {
+                        amountHTML = `<strong class="text-warning">${formatCurrency(Math.abs(balance))}</strong>${accountPercentageText}`;
+                    }
                     const investmentIcon = c.esInversion ? `<span class="material-icons text-info" style="font-size: 14px; margin-left: var(--sp-2);" title="Cuenta de Portafolio">trending_up</span>` : '';
+                    
                     return `
                         <div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" style="cursor: pointer; padding-left: 0; padding-right: 0;">
                             <div><span style="display: block; font-weight: 500;">${c.nombre}</span></div>
@@ -2478,6 +2586,10 @@
                 
                 if (!accountsHtml) return '';
                 
+                // Calcular el porcentaje del tipo de cuenta con respecto al total seleccionado
+                const typePercentage = totalSelectedBalance !== 0 ? (typeBalance / totalSelectedBalance) * 100 : 0;
+                const percentageText = typeBalance !== 0 ? ` (${typePercentage.toFixed(1)}%)` : '';
+                
                 const icon = tipo==='EFECTIVO'?'payments':(tipo.includes('TARJETA')?'credit_card':(tipo==='AHORRO'?'savings':(tipo==='INVERSIÓN'?'trending_up':(tipo==='PROPIEDAD'?'domain':(tipo==='PRÉSTAMO'?'credit_score':'account_balance')))));
                 
                 return `
@@ -2485,7 +2597,7 @@
                         <summary>
                             <span class="account-group__name"><span class="material-icons" style="vertical-align:bottom;font-size:16px;margin-right:8px">${icon}</span>${tipo}</span>
                             <div style="display:flex; align-items:center; gap:var(--sp-2);">
-                                <span class="account-group__balance">${formatCurrency(typeBalance)}</span>
+                                <span class="account-group__balance">${formatCurrency(typeBalance)}${percentageText}</span>
                                 <span class="material-icons accordion__icon">expand_more</span>
                             </div>
                         </summary>
@@ -2497,8 +2609,8 @@
             const chartCtx = (select(`liquid-assets-chart`))?.getContext('2d');
             if (chartCtx && chartContainer) {
                 const saldosPorTipoChart = {};
-                getLiquidAccounts().filter((c) => filteredAccountTypes.has((c.tipo || 'S/T').toUpperCase())).forEach((c) => {
-                    const tipo = (c.tipo || 'S/T').toUpperCase();
+                getLiquidAccounts().filter((c) => filteredAccountTypes.has(toSentenceCase(c.tipo || 'S/T'))).forEach((c) => {
+                    const tipo = toSentenceCase(c.tipo || 'S/T');
                     saldosPorTipoChart[tipo] = (saldosPorTipoChart[tipo] || 0) + (saldos[c.id] || 0);
                 });
                 const chartData = Object.entries(saldosPorTipoChart).filter(([,saldo]) => saldo > 0);
@@ -2692,8 +2804,8 @@
                 const cTots = current.reduce((a, m) => { if (m.tipo === 'movimiento' && m.conceptoId) { if (!a[m.conceptoId]) a[m.conceptoId] = { total: 0, movements: [], icon: db.conceptos.find((c) => c.id === m.conceptoId)?.icon || 'label' }; a[m.conceptoId].total += m.cantidad; a[m.conceptoId].movements.push(m); } return a; }, {});
                 const sortedTotals = Object.entries(cTots).sort(([, a], [, b]) => a.total - b.total);
                 const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-success').trim(), colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim();
-                conceptosChart = new Chart(chartCtx, { type: 'bar', data: { labels: sortedTotals.map(([id]) => db.conceptos.find((c) => c.id === id)?.nombre || '?'), datasets: [{ data: sortedTotals.map(([, data]) => data.total / 100), backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger), borderRadius: 6, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } }, scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } } } });
-                conceptListContainer.innerHTML = sortedTotals.length === 0 ? `<div class="empty-state" style="padding:16px 0; background:transparent;"><p>Sin datos para los filtros.</p></div>` : sortedTotals.map(([id, data]) => { const con = db.conceptos.find((c) => c.id === id); const t = data.total; return `<details class="accordion" style="background-color: var(--c-surface-variant);"><summary><span style="display: flex; align-items: center; gap: 8px;"><span class="material-icons" style="font-size: 18px;">${data.icon}</span>${con?.nombre || '?'}</span><span><strong class="${t >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(t)}</strong><span class="material-icons accordion__icon">expand_more</span></span></summary><div class="accordion__content">${data.movements.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).map((mov) => `<div class="transaction-card" data-action="edit-movement" data-id="${mov.id}" style="border:0;"><div class="transaction-card__content" style="padding: var(--sp-1) 0; "><div style="flex-grow:1;min-width:0;"><div class="transaction-card__row-2" style="font-size:0.75rem;">${new Date(mov.fecha).toLocaleDateString('es-ES')} - ${escapeHTML(mov.descripcion)}</div></div><div class="transaction-card__amount ${mov.cantidad >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(mov.cantidad)}</div></div></div>`).join('')}</div></details>`; }).join('');
+                conceptosChart = new Chart(chartCtx, { type: 'bar', data: { labels: sortedTotals.map(([id]) => toSentenceCase(db.conceptos.find((c) => c.id === id)?.nombre || '?')), datasets: [{ data: sortedTotals.map(([, data]) => data.total / 100), backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger), borderRadius: 6, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } }, scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } } } });
+                conceptListContainer.innerHTML = sortedTotals.length === 0 ? `<div class="empty-state" style="padding:16px 0; background:transparent;"><p>Sin datos para los filtros.</p></div>` : sortedTotals.map(([id, data]) => { const con = db.conceptos.find((c) => c.id === id); const t = data.total; return `<details class="accordion" style="background-color: var(--c-surface-variant);"><summary><span style="display: flex; align-items: center; gap: 8px;"><span class="material-icons" style="font-size: 18px;">${data.icon}</span>${toSentenceCase(con?.nombre || '?')}</span><span><strong class="${t >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(t)}</strong><span class="material-icons accordion__icon">expand_more</span></span></summary><div class="accordion__content">${data.movements.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).map((mov) => `<div class="transaction-card" data-action="edit-movement" data-id="${mov.id}" style="border:0;"><div class="transaction-card__content" style="padding: var(--sp-1) 0; "><div style="flex-grow:1;min-width:0;"><div class="transaction-card__row-2" style="font-size:0.75rem;">${new Date(mov.fecha).toLocaleDateString('es-ES')} - ${escapeHTML(mov.descripcion)}</div></div><div class="transaction-card__amount ${mov.cantidad >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(mov.cantidad)}</div></div></div>`).join('')}</div></details>`; }).join('');
             }
         };
         
@@ -2713,12 +2825,45 @@
             showGenericModal(`Movimientos de ${cuenta.nombre}`, html);
         };
         
-        const startEditMovement=(id)=>{ hideModal('generic-modal'); const f=select('form-movimiento'); f.reset(); clearAllErrors('form-movimiento'); const mov=id?db.movimientos.find((m)=>m.id===id):null; (select('form-movimiento-title')).textContent = mov ? 'Editar Movimiento' : 'Añadir Movimiento'; (select('movimiento-id')).value=mov?.id||''; (select('movimiento-tipo-selector')).value=mov?.tipo||'movimiento'; (select('movimiento-tipo-selector')).dispatchEvent(new Event('change')); 
-            (select('movimiento-cantidad')).value = mov ? `${(mov.cantidad/100).toLocaleString('es-ES', {minimumFractionDigits: 2})} €` : ''; 
-            const fecha = mov ? new Date(mov.fecha) : new Date(); 
-            (select('movimiento-fecha')).value = new Date(fecha.getTime()-(fecha.getTimezoneOffset()*60000)).toISOString().slice(0,10); 
-            (select('movimiento-descripcion')).value=mov?.descripcion||''; populateAllDropdowns(); if(mov?.tipo==='traspaso'){ (select('movimiento-cuenta-origen')).value=mov.cuentaOrigenId; (select('movimiento-cuenta-destino')).value=mov.cuentaDestinoId; } else { (select('movimiento-cuenta')).value=mov?.cuentaId||''; (select('movimiento-concepto')).value=mov?.conceptoId||''; } select('delete-movimiento-btn')?.classList.toggle('hidden',!mov); select('duplicate-movimiento-btn')?.classList.toggle('hidden',!mov); showModal('movimiento-modal'); };
-        
+        const startEditMovement = (id) => {
+			hideModal('generic-modal');
+			const form = select('form-movimiento');
+			form.reset();
+			clearAllErrors(form.id);
+
+			const mov = id ? db.movimientos.find((m) => m.id === id) : null;
+			const tipoMovimiento = mov?.tipo || 'movimiento';
+
+			// 1. Rellenar todos los campos del formulario primero
+			(select('form-movimiento-title')).textContent = mov ? 'Editar Movimiento' : 'Añadir Movimiento';
+			(select('movimiento-id')).value = mov?.id || '';
+			(select('movimiento-tipo-selector')).value = tipoMovimiento;
+			(select('movimiento-cantidad')).value = mov ? `${(mov.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €` : '';
+			const fecha = mov ? new Date(mov.fecha) : new Date();
+			(select('movimiento-fecha')).value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+			(select('movimiento-descripcion')).value = mov?.descripcion || '';
+    
+			// 2. Poblar los menús desplegables
+			populateAllDropdowns();
+
+			// 3. Establecer los valores seleccionados en los desplegables
+			if (tipoMovimiento === 'traspaso') {
+				(select('movimiento-cuenta-origen')).value = mov.cuentaOrigenId;
+				(select('movimiento-cuenta-destino')).value = mov.cuentaDestinoId;
+			} else {
+				(select('movimiento-cuenta')).value = mov?.cuentaId || '';
+				(select('movimiento-concepto')).value = mov?.conceptoId || '';
+			}
+
+			// 4. Mostrar u ocultar los botones de acción
+			select('delete-movimiento-btn')?.classList.toggle('hidden', !mov);
+			select('duplicate-movimiento-btn')?.classList.toggle('hidden', !mov);
+
+			// 5. Finalmente, llamar a nuestra nueva función para asegurar que la UI es correcta
+			setMovimientoFormType(tipoMovimiento);
+    
+			showModal('movimiento-modal');
+			};
         const showCalculator = (targetInput) => {
             calculatorState.targetInput = targetInput;
             const currentValue = targetInput.value.trim().replace(/\s?€/g, '');
@@ -3007,27 +3152,33 @@
         };
         
         const showCuentasModal = () => { 
-            const html = `
-                <form id="add-cuenta-form" novalidate>
-                    <div class="form-group">
-                        <label for="new-cuenta-nombre" class="form-label">Nombre de la Cuenta</label>
-                        <input type="text" id="new-cuenta-nombre" class="form-input" placeholder="Ej: Cartera personal" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="new-cuenta-tipo" class="form-label">Tipo de Cuenta</label>
-                        <input type="text" id="new-cuenta-tipo" class="form-input" list="tipos-cuenta-list" placeholder="Ej: Efectivo" required>
-                        <datalist id="tipos-cuenta-list">
-                            <option value="Efectivo"></option><option value="Cuenta Corriente"></option><option value="Ahorro"></option><option value="Inversión"></option><option value="Tarjeta de Crédito"></option><option value="Préstamo"></option><option value="Propiedad"></option><option value="Plan de Pensiones"></option>
-                        </datalist>
-                    </div>
-                    <button type="submit" class="btn btn--primary btn--full" style="margin-top: var(--sp-3)">Añadir Cuenta</button>
-                </form>
-                <hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;">
-                <h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Cuentas Existentes</h4>
-                <div id="cuentas-modal-list"></div>`; 
-            showGenericModal('Gestionar Cuentas', html); 
-            renderCuentasModalList(); 
-        };
+		// Se obtiene una lista única y ordenada de los tipos de cuenta que ya existen.
+		const existingAccountTypes = [...new Set((db.cuentas || []).map(c => c.tipo))].sort();
+    
+		// Se generan las opciones del datalist a partir de esa lista dinámica.
+		const datalistOptions = existingAccountTypes.map(type => `<option value="${type}"></option>`).join('');
+
+		const html = `
+        <form id="add-cuenta-form" novalidate>
+            <div class="form-group">
+                <label for="new-cuenta-nombre" class="form-label">Nombre de la Cuenta</label>
+                <input type="text" id="new-cuenta-nombre" class="form-input" placeholder="Ej: Cartera personal" required>
+            </div>
+            <div class="form-group">
+                <label for="new-cuenta-tipo" class="form-label">Tipo de Cuenta</label>
+                <input type="text" id="new-cuenta-tipo" class="form-input" list="tipos-cuenta-list" placeholder="Ej: Banco, Cripto, Fintech..." required>
+                <datalist id="tipos-cuenta-list">
+                    ${datalistOptions}
+                </datalist>
+            </div>
+            <button type="submit" class="btn btn--primary btn--full" style="margin-top: var(--sp-3)">Añadir Cuenta</button>
+        </form>
+        <hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;">
+        <h4 style="margin-top: var(--sp-4); margin-bottom: var(--sp-2); font-size: var(--fs-base); color: var(--c-on-surface-secondary);">Cuentas Existentes</h4>
+        <div id="cuentas-modal-list"></div>`; 
+		showGenericModal('Gestionar Cuentas', html); 
+		renderCuentasModalList(); 
+		};
         
         const renderCuentasModalList = () => {
             const list = select('cuentas-modal-list');
@@ -3038,7 +3189,7 @@
                     <div class="modal__list-item" id="cuenta-item-${c.id}">
                         <div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
                             <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(c.nombre)}</span>
-                            <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">${escapeHTML(c.tipo.toUpperCase())}</small>
+                            <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">${toSentenceCase(escapeHTML(c.tipo))}</small>
                         </div>
                         <div style="display: flex; align-items: center; gap: var(--sp-1); flex-shrink: 0;">
                             <div class="form-switch-group" style="gap: var(--sp-2);">
@@ -3083,7 +3234,7 @@
             const nombreInput = select(`edit-cuenta-nombre-${id}`);
             const tipoInput = select(`edit-cuenta-tipo-${id}`);
             const nombre = nombreInput.value.trim();
-            const tipo = tipoInput.value.trim().toUpperCase();
+            const tipo = toSentenceCase(tipoInput.value.trim());
         
             if (!nombre || !tipo) {
                 showToast('El nombre y el tipo no pueden estar vacíos.', 'warning');
@@ -3219,6 +3370,8 @@
                 const btn = actionTarget.closest('button');
                 
                 const actions = {
+					'export-data': () => handleExportData(btn),
+					'import-data': () => (select('import-file-input')).click(),
                     'navigate': () => navigateTo(page),
                     'theme-toggle': toggleTheme,
                     'help': showHelpModal,
@@ -3289,6 +3442,8 @@
                     'save-config': () => handleSaveConfig(btn),
                     'export-data': () => handleExportData(btn),
                     'import-data': () => (select('import-file-input')).click(),
+					'export-csv': () => handleExportCSV(btn),
+					'import-csv': () => (select('import-csv-input')).click(),
                     'clear-data': () => showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible.',()=>{showConfirmationModal('Esta acción no se puede deshacer. ¿Continuar?', () => {
                         db=getInitialDb();
                         saveData(null,()=>{
@@ -3372,15 +3527,13 @@
                     select('custom-date-filters')?.classList.toggle('hidden', target.value !== 'custom');
                 }
                 if (target.id === 'movimiento-tipo-selector') {
-                     const isT=target.value==='traspaso';
-                     select('movimiento-fields')?.classList.toggle('hidden',isT);
-                     select('traspaso-fields')?.classList.toggle('hidden',!isT);
-                     ['movimiento-concepto','movimiento-cuenta'].forEach(id=>(select(id)).required=!isT);
-                     ['movimiento-cuenta-origen','movimiento-cuenta-destino'].forEach(id=>(select(id)).required=isT);
-                }
+					setMovimientoFormType(target.value);
+				}
             });
             
             select('import-file-input')?.addEventListener('change', handleImportData);
+			// Añadido para CSV
+			select('import-csv-input')?.addEventListener('change', handleImportCSV);
             select('calculator-grid')?.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
             
             const descInput = select('movimiento-descripcion');
@@ -3495,7 +3648,7 @@
         };
         
         const handleAddConcept = () => { 
-            const nombre = (select('new-concepto-nombre')).value.trim(); 
+            const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
             if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
             db.conceptos.push({ id: generateId(), nombre, icon: 'label' }); 
             saveData(null, () => { 
@@ -3508,7 +3661,7 @@
         
         const handleAddAccount = () => { 
             const nombre = (select('new-cuenta-nombre')).value.trim(); 
-            const tipo = (select('new-cuenta-tipo')).value.trim().toUpperCase(); 
+            const tipo = toSentenceCase((select('new-cuenta-tipo')).value.trim()); 
             if (!nombre || !tipo) { showToast('El nombre y el tipo son obligatorios.', 'warning'); return; } 
             db.cuentas.push({ id: generateId(), nombre, tipo, esInversion: false, offBalance: isOffBalanceMode, fechaCreacion: new Date().toISOString() }); 
             saveData(null, () => { 
@@ -3560,7 +3713,7 @@
                 setTimeout(() => {
                     (select('form-movimiento-title')).textContent = 'Añadir Duplicado';
                     (select('movimiento-tipo-selector')).value = movToCopy.tipo;
-                    (select('movimiento-tipo-selector')).dispatchEvent(new Event('change'));
+                    setMovimientoFormType(movToCopy.tipo);
                     (select('movimiento-cantidad')).value = `${(movToCopy.cantidad / 100).toLocaleString('es-ES', {minimumFractionDigits: 2})} €`;
                     (select('movimiento-descripcion')).value = movToCopy.descripcion;
                     const now = new Date();
@@ -3614,8 +3767,162 @@
                 showToast('Flujo de capital guardado.');
             });
         };
-        
+        // =================================================================================
+		// 11. FORM UI LOGIC (AÑADIDO PARA CORREGIR BUG)
+		// =================================================================================
+		const setMovimientoFormType = (tipo) => {
+		const isT = tipo === 'traspaso';
+    
+		// Muestra u oculta los contenedores de campos
+		select('movimiento-fields')?.classList.toggle('hidden', isT);
+		select('traspaso-fields')?.classList.toggle('hidden', !isT);
+
+		// Actualiza qué campos son obligatorios para la validación del formulario
+		(select('movimiento-concepto')).required = !isT;
+		(select('movimiento-cuenta')).required = !isT;
+		(select('movimiento-cuenta-origen')).required = isT;
+		(select('movimiento-cuenta-destino')).required = isT;
+		};
         document.addEventListener('DOMContentLoaded', initApp);
+		const handleExportCSV = (btn) => {
+    setButtonLoading(btn, true);
+    
+    // Crear mapas para buscar nombres fácilmente
+    const accountMap = new Map(db.cuentas.map(c => [c.id, c.nombre]));
+    const conceptMap = new Map(db.conceptos.map(c => [c.id, c.nombre]));
+
+    const escapeCSV = (field) => {
+        if (field === null || field === undefined) return '';
+        const str = String(field);
+        // Si el campo contiene una coma, un salto de línea o una comilla, lo encerramos entre comillas.
+        if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+            // Las comillas dobles dentro del campo se duplican.
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+
+    const headers = ['id', 'fecha', 'descripcion', 'cantidad', 'tipo', 'cuenta', 'concepto', 'cuenta_origen', 'cuenta_destino'];
+    const rows = db.movimientos.map(m => {
+        const row = {
+            id: m.id,
+            fecha: new Date(m.fecha).toISOString().slice(0, 10),
+            descripcion: m.descripcion,
+            cantidad: (m.cantidad / 100).toFixed(2).replace('.',','), // Formato decimal con coma
+            tipo: m.tipo,
+            cuenta: m.cuentaId ? accountMap.get(m.cuentaId) || '' : '',
+            concepto: m.conceptoId ? conceptMap.get(m.conceptoId) || '' : '',
+            cuenta_origen: m.cuentaOrigenId ? accountMap.get(m.cuentaOrigenId) || '' : '',
+            cuenta_destino: m.cuentaDestinoId ? accountMap.get(m.cuentaDestinoId) || '' : '',
+        };
+        return headers.map(header => escapeCSV(row[header])).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // \uFEFF para compatibilidad con Excel
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `movimientos-aidanai-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setButtonLoading(btn, false);
+};
+
+const handleImportCSV = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (re) => {
+        try {
+            const content = re.target.result;
+            showConfirmationModal(
+                'Esto añadirá los movimientos del CSV a tus datos actuales. No se comprobarán duplicados. Se recomienda tener una copia de seguridad (Exportar JSON). ¿Continuar?',
+                () => {
+                    const newMovements = [];
+                    // Mapas para buscar IDs por nombre (insensible a mayúsculas/minúsculas y espacios)
+                    const accountMap = new Map(db.cuentas.map(c => [c.nombre.trim().toLowerCase(), c.id]));
+                    const conceptMap = new Map(db.conceptos.map(c => [c.nombre.trim().toLowerCase(), c.id]));
+                    
+                    const lines = content.split('\n').filter(l => l.trim() !== '');
+                    const headers = lines[0].trim().split(',').map(h => h.trim());
+                    
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].trim().split(',');
+                        const row = headers.reduce((obj, header, index) => {
+                            obj[header] = values[index];
+                            return obj;
+                        }, {});
+
+                        const tipo = row.tipo;
+                        const cantidad = Math.round(parseFloat(row.cantidad.replace(',', '.')) * 100);
+
+                        if (!row.fecha || !tipo || isNaN(cantidad)) {
+                            console.warn(`Saltando fila ${i+1} por datos inválidos.`);
+                            continue;
+                        }
+                        
+                        let mov = {
+                            id: generateId(),
+                            fecha: new Date(row.fecha).toISOString(),
+                            descripcion: row.descripcion || 'Importado de CSV',
+                            cantidad: cantidad,
+                            tipo: tipo
+                        };
+
+                        if (tipo === 'movimiento') {
+                            let cuentaId = accountMap.get(row.cuenta.trim().toLowerCase());
+                            let conceptoId = conceptMap.get(row.concepto.trim().toLowerCase());
+
+                            // Si la cuenta no existe, la creamos
+                            if (!cuentaId && row.cuenta) {
+                                const newAccount = { id: generateId(), nombre: row.cuenta, tipo: 'Importada', esInversion: false, offBalance: isOffBalanceMode, fechaCreacion: new Date().toISOString() };
+                                db.cuentas.push(newAccount);
+                                accountMap.set(newAccount.nombre.trim().toLowerCase(), newAccount.id);
+                                cuentaId = newAccount.id;
+                            }
+
+                            // Si el concepto no existe, lo creamos
+                            if (!conceptoId && row.concepto) {
+                                const newConcept = { id: generateId(), nombre: row.concepto, icon: 'label' };
+                                db.conceptos.push(newConcept);
+                                conceptMap.set(newConcept.nombre.trim().toLowerCase(), newConcept.id);
+                                conceptoId = newConcept.id;
+                            }
+                            
+                            mov.cuentaId = cuentaId;
+                            mov.conceptoId = conceptoId;
+                        } else if (tipo === 'traspaso') {
+                             // Lógica para traspasos (simplificada, asume que las cuentas existen)
+                            mov.cuentaOrigenId = accountMap.get(row.cuenta_origen.trim().toLowerCase());
+                            mov.cuentaDestinoId = accountMap.get(row.cuenta_destino.trim().toLowerCase());
+                        }
+                        
+                        newMovements.push(mov);
+                    }
+
+                    db.movimientos.push(...newMovements);
+                    saveData(null, () => {
+                        buildDescriptionIndex();
+                        populateAllDropdowns();
+                        showToast(`${newMovements.length} movimientos importados correctamente.`, 'info');
+                    });
+                },
+                'Confirmar Importación CSV'
+            );
+        } catch (err) {
+            showToast('Error: El archivo CSV parece estar corrupto o mal formateado.', 'danger');
+            console.error(err);
+        } finally {
+            e.target.value = ''; // Resetear el input
+        }
+    };
+    reader.readAsText(file, 'UTF-8');
+};
         
     </script>
 </body>
