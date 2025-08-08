@@ -1230,6 +1230,8 @@
         let currentTourStep = 0;
         let genAI = null;
         let chatHistory = [];
+        // <<< MEJORA: Nueva variable para almacenar la posición de scroll
+        let lastScrollTop = null;
 
         const vList = {
             scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
@@ -1577,7 +1579,27 @@
         const select = (id) => document.getElementById(id);
         const selectAll = (s) => document.querySelectorAll(s);
         const selectOne = (s) => document.querySelector(s);
-        const vibrate = (d=10) => { if ('vibrate' in navigator) { try { navigator.vibrate(d); } catch (e) {} } };
+
+        // <<< MEJORA: Nueva función para retroalimentación táctil (Haptic Feedback)
+        const hapticFeedback = (type = 'light') => {
+            if ('vibrate' in navigator) {
+                try {
+                    let pattern;
+                    switch (type) {
+                        case 'light':   pattern = 10; break;
+                        case 'medium':  pattern = 25; break;
+                        case 'success': pattern = [15, 60, 15]; break;
+                        case 'warning': pattern = [30, 40, 30]; break;
+                        case 'error':   pattern = [50, 50, 50]; break;
+                        default:        pattern = 10;
+                    }
+                    navigator.vibrate(pattern);
+                } catch (e) {
+                    // Vibración podría ser bloqueada por el navegador, no hacer nada.
+                }
+            }
+        };
+
         const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
         const formatCurrency = (numInCents) => {
@@ -1595,6 +1617,9 @@
             t.textContent = message;
             c.appendChild(t);
             
+            if (type === 'danger' || type === 'error') hapticFeedback('error');
+            else if (type === 'warning') hapticFeedback('warning');
+
             const animation = t.animate([ { transform: 'translateY(20px) scale(0.95)', opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1 } ], { duration: 300, easing: 'ease-out' });
         
             animation.onfinish = () => { setTimeout(() => { t.animate([ { opacity: 1 }, { opacity: 0 } ], { duration: 300, easing: 'ease-in' }).onfinish = () => t.remove(); }, duration - 600); };
@@ -1689,7 +1714,7 @@
         // 5. NAVIGATION & UI CONTROL
         // =================================================================================
         const navigateTo = (pageId, isInitial = false) => {
-            if (!isInitial) vibrate();
+            if (!isInitial) hapticFeedback('light');
             
             const titleEl = select('top-bar-title'), actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento');
             const ledgerButtonHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar Contabilidad">${isOffBalanceMode ? 'B' : 'A'}</button>`;
@@ -1742,7 +1767,7 @@
             Chart.defaults.color = textColor; Chart.defaults.borderColor = gridColor;
         };
         const toggleTheme = () => { 
-            vibrate(); 
+            hapticFeedback('light'); 
             const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; 
             document.documentElement.setAttribute('data-theme', newTheme); 
             localStorage.setItem('theme', newTheme); 
@@ -1917,9 +1942,9 @@
             populate('informe-concepto', db.conceptos, 'nombre', 'id', true);
         };
         
-        const handleCreateBudgets = (btn) => { vibrate(); const year = parseInt((select('budget-year-selector')).value); if (!year) { showToast('Selecciona un año.', 'warning'); return; } if (btn) setButtonLoading(btn, true, 'Creando...'); const existingBudgets = new Set((db.presupuestos || []).filter((p) => p.ano === year).map((p) => p.conceptoId)); const newBudgets = []; db.conceptos.forEach((concepto) => { if (!existingBudgets.has(concepto.id)) { newBudgets.push({ id: generateId(), ano: year, conceptoId: concepto.id, cantidad: 0 }); } }); if (newBudgets.length > 0) { db.presupuestos.push(...newBudgets); saveData(null, () => { if (btn) setButtonLoading(btn, false); showToast(`Presupuestos para ${year} creados.`); renderBudgetTracking(); }); } else { if (btn) setButtonLoading(btn, false); showToast(`Todos los presupuestos para ${year} ya existían.`, 'info'); renderBudgetTracking(); } };
+        const handleCreateBudgets = (btn) => { hapticFeedback('medium'); const year = parseInt((select('budget-year-selector')).value); if (!year) { showToast('Selecciona un año.', 'warning'); return; } if (btn) setButtonLoading(btn, true, 'Creando...'); const existingBudgets = new Set((db.presupuestos || []).filter((p) => p.ano === year).map((p) => p.conceptoId)); const newBudgets = []; db.conceptos.forEach((concepto) => { if (!existingBudgets.has(concepto.id)) { newBudgets.push({ id: generateId(), ano: year, conceptoId: concepto.id, cantidad: 0 }); } }); if (newBudgets.length > 0) { db.presupuestos.push(...newBudgets); saveData(null, () => { if (btn) setButtonLoading(btn, false); hapticFeedback('success'); showToast(`Presupuestos para ${year} creados.`); renderBudgetTracking(); }); } else { if (btn) setButtonLoading(btn, false); showToast(`Todos los presupuestos para ${year} ya existían.`, 'info'); renderBudgetTracking(); } };
         
-        const handleUpdateBudgets = () => { vibrate(); const year = parseInt((select('budget-year-selector')).value); if(!year) { showToast('Selecciona un año.', 'warning'); return; } const budgetsToUpdate = (db.presupuestos || []).filter((p) => p.ano === year); let formHtml = `<form id="update-budgets-form" novalidate><p class="form-label" style="margin-bottom: var(--sp-3)">Introduce el límite anual. Usa <b>valores positivos para metas de ingreso</b> y <b>valores negativos para límites de gasto</b>.</p>`; const conceptsWithBudget = new Set(budgetsToUpdate.map((b) => b.conceptoId)); db.conceptos.filter((c) => conceptsWithBudget.has(c.id)).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { const budget = budgetsToUpdate.find((b) => b.conceptoId === c.id); const currentAmount = budget ? (budget.cantidad / 100).toFixed(2) : '0.00'; formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" value="${currentAmount.replace('.', ',')}"></div>`; }); const missingConcepts = db.conceptos.filter((c) => !conceptsWithBudget.has(c.id)); if(missingConcepts.length > 0) { formHtml += `<hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-bottom: var(--sp-2);">Añadir nuevos conceptos al presupuesto</h4>`; missingConcepts.sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" placeholder="0,00"></div>`; }); } formHtml += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Cambios</button></div></form>`; showGenericModal(`Gestionar Presupuestos de ${year}`, formHtml); setTimeout(() => { const modalForm = select('update-budgets-form'); if (modalForm) { modalForm.addEventListener('submit', (e) => { e.preventDefault(); const btn = modalForm.querySelector('button[type="submit"]'); setButtonLoading(btn, true, 'Guardando...'); const inputs = modalForm.querySelectorAll('input[data-concept-id]'); inputs.forEach((input) => { const conceptoId = (input).dataset.conceptId; const newAmountStr = (input).value.trim().replace(/\./g, '').replace(',', '.'); if (newAmountStr === '') return; const newAmountInCents = Math.round(parseFloat(newAmountStr) * 100); if (!isNaN(newAmountInCents)) { let budget = (db.presupuestos || []).find((b) => b.ano === year && b.conceptoId === conceptoId); if (budget) { budget.cantidad = newAmountInCents; } else { db.presupuestos.push({ id: generateId(), ano: year, conceptoId: conceptoId, cantidad: newAmountInCents }); } } }); saveData(btn, () => { hideModal('generic-modal'); showToast('Presupuestos actualizados.'); renderBudgetTracking(); }); }); } }, 0); };
+        const handleUpdateBudgets = () => { hapticFeedback('light'); const year = parseInt((select('budget-year-selector')).value); if(!year) { showToast('Selecciona un año.', 'warning'); return; } const budgetsToUpdate = (db.presupuestos || []).filter((p) => p.ano === year); let formHtml = `<form id="update-budgets-form" novalidate><p class="form-label" style="margin-bottom: var(--sp-3)">Introduce el límite anual. Usa <b>valores positivos para metas de ingreso</b> y <b>valores negativos para límites de gasto</b>.</p>`; const conceptsWithBudget = new Set(budgetsToUpdate.map((b) => b.conceptoId)); db.conceptos.filter((c) => conceptsWithBudget.has(c.id)).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { const budget = budgetsToUpdate.find((b) => b.conceptoId === c.id); const currentAmount = budget ? (budget.cantidad / 100).toFixed(2) : '0.00'; formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" value="${currentAmount.replace('.', ',')}"></div>`; }); const missingConcepts = db.conceptos.filter((c) => !conceptsWithBudget.has(c.id)); if(missingConcepts.length > 0) { formHtml += `<hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-bottom: var(--sp-2);">Añadir nuevos conceptos al presupuesto</h4>`; missingConcepts.sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" placeholder="0,00"></div>`; }); } formHtml += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Cambios</button></div></form>`; showGenericModal(`Gestionar Presupuestos de ${year}`, formHtml); setTimeout(() => { const modalForm = select('update-budgets-form'); if (modalForm) { modalForm.addEventListener('submit', (e) => { e.preventDefault(); const btn = modalForm.querySelector('button[type="submit"]'); setButtonLoading(btn, true, 'Guardando...'); const inputs = modalForm.querySelectorAll('input[data-concept-id]'); inputs.forEach((input) => { const conceptoId = (input).dataset.conceptId; const newAmountStr = (input).value.trim().replace(/\./g, '').replace(',', '.'); if (newAmountStr === '') return; const newAmountInCents = Math.round(parseFloat(newAmountStr) * 100); if (!isNaN(newAmountInCents)) { let budget = (db.presupuestos || []).find((b) => b.ano === year && b.conceptoId === conceptoId); if (budget) { budget.cantidad = newAmountInCents; } else { db.presupuestos.push({ id: generateId(), ano: year, conceptoId: conceptoId, cantidad: newAmountInCents }); } } }); saveData(btn, () => { hideModal('generic-modal'); hapticFeedback('success'); showToast('Presupuestos actualizados.'); renderBudgetTracking(); }); }); } }, 0); };
         
         const renderBudgetTracking = () => {
             const listContainer = select('budget-tracking-list'), placeholder = select('budget-init-placeholder'), yearSelector = select('budget-year-selector');
@@ -2443,7 +2468,30 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                     return m.descripcion.toLowerCase().includes(filterText) || concept.toLowerCase().includes(filterText) || acc.toLowerCase().includes(filterText);
                 }
                 return true;
-            }).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+            })
+            // <<< MEJORA: Lógica de ordenación avanzada para agrupar por día y ordenar cronológicamente por saldo.
+            .sort((a, b) => {
+                const dateA = new Date(a.fecha);
+                const dateB = new Date(b.fecha);
+
+                // Clonamos las fechas y ponemos la hora a cero para comparar solo el día
+                const dayA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate());
+                const dayB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate());
+
+                const dayDifference = dayB.getTime() - dayA.getTime();
+
+                if (dayDifference !== 0) {
+                    // 1. Criterio principal: Si los días son diferentes, ordenar por día (descendente)
+                    return dayDifference;
+                } else {
+                    // 2. Criterio secundario: Si es el mismo día, ordenar por el saldo post-movimiento (ascendente)
+                    // Esto aproxima el orden cronológico real de las transacciones dentro del día.
+                    // Para traspasos, usamos el saldo de la cuenta de origen como referencia.
+                    const balanceA = a.saldoPostMovimiento || 0;
+                    const balanceB = b.saldoPostMovimiento || 0;
+                    return balanceA - balanceB;
+                }
+            });
         
             if (filtered.length === 0) { listContainer.classList.add('hidden'); emptyEl.classList.remove('hidden'); vList.sizerEl.style.height = '0px'; vList.contentEl.innerHTML = ''; return; }
             listContainer.classList.remove('hidden'); emptyEl.classList.add('hidden');
@@ -2697,10 +2745,39 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
         // =================================================================================
         // 8. MODAL & FORM HANDLING
         // =================================================================================
-        const showModal=(id)=>{const m=select(id);if(m){m.classList.add('modal-overlay--active');if(!id.includes('calculator')){const f=m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');if(f)(f).focus();}}};
-        const hideModal=(id)=>{const m=select(id);if(m)m.classList.remove('modal-overlay--active');};
+        // <<< MEJORA: Modificada la función showModal para guardar la posición de scroll
+        const showModal=(id)=>{
+            const m = select(id);
+            if (m) {
+                const mainScroller = selectOne('.app-layout__main');
+                if (mainScroller) { 
+					lastScrollTop = mainScroller.scrollTop;
+				}
+				m.classList.add('modal-overlay--active');
+                if(!id.includes('calculator')){
+                    const f = m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                    if (f) (f).focus();
+                }
+            }
+        };
+
+        // <<< MEJORA: Modificada la función hideModal para restaurar la posición de scroll
+        const hideModal=(id)=>{
+            const m = select(id);
+            if(m) m.classList.remove('modal-overlay--active');
+
+            const mainScroller = selectOne('.app-layout__main');
+            if (mainScroller && lastScrollTop !== null) {
+                // Usamos requestAnimationFrame para asegurar que se aplica después del reflow del DOM
+                requestAnimationFrame(() => {
+				mainScroller.scrollTop = lastScrollTop;
+                    lastScrollTop = null;
+                });
+            }
+        };
+
         const showGenericModal=(title,html)=>{(select('generic-modal-title')).textContent=title;(select('generic-modal-body')).innerHTML=html;showModal('generic-modal');};
-        const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ vibrate(20); const id='confirmation-modal';document.getElementById(id)?.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{vibrate();onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
+        const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';document.getElementById(id)?.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
         
         const showAccountMovementsModal = (cId) => {
             const cuenta = getVisibleAccounts().find((c) => c.id === cId); if (!cuenta) return;
@@ -2712,7 +2789,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
         
         // <!-- CAMBIO CLAVE: Nueva función para controlar la interfaz del formulario de movimiento simplificado -->
         const setMovimientoFormType = (type) => {
-            vibrate();
+            hapticFeedback('light');
             const isTraspaso = type === 'traspaso';
 
             select('movimiento-fields').classList.toggle('hidden', isTraspaso);
@@ -2725,7 +2802,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
         };
 
         const startMovementForm = (id = null, isRecurrent = false) => {
-            vibrate();
+            hapticFeedback('medium');
             const form = select('form-movimiento');
             form.reset();
             clearAllErrors(form.id);
@@ -2811,12 +2888,12 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
         };
         
         const handleCalculatorInput = (key) => {
-            vibrate();
+            hapticFeedback('light');
             let { displayValue, waitingForNewValue } = calculatorState;
             displayValue = displayValue.replace(',', '.');
         
             switch(key) {
-                case 'done': hideCalculator(); break;
+                case 'done': hapticFeedback('medium'); hideCalculator(); break;
                 case 'comma': if (!displayValue.includes('.')) { displayValue += '.'; } break;
                 case 'clear': displayValue = '0'; waitingForNewValue = true; break;
                 case 'backspace': displayValue = displayValue.slice(0, -1) || '0'; break;
@@ -2841,7 +2918,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
         };
         
         const showGlobalSearchModal = () => {
-            vibrate();
+            hapticFeedback('medium');
             const modal = select('global-search-modal');
             showModal('global-search-modal');
             setTimeout(() => {
@@ -2976,7 +3053,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                 setButtonLoading(btn, true);
                 db.conceptos[conceptoIndex].nombre = nombre;
                 db.conceptos[conceptoIndex].icon = icon;
-                saveData(btn, () => { showToast('Concepto actualizado.'); renderConceptosModalList(); populateAllDropdowns(); updateDashboardData(); });
+                saveData(btn, () => { hapticFeedback('success'); showToast('Concepto actualizado.'); renderConceptosModalList(); populateAllDropdowns(); updateDashboardData(); });
             }
         };
         
@@ -3033,7 +3110,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                 setButtonLoading(btn, true);
                 db.cuentas[cuentaIndex].nombre = nombre;
                 db.cuentas[cuentaIndex].tipo = tipo;
-                saveData(btn, () => { showToast('Cuenta actualizada.'); renderCuentasModalList(); populateAllDropdowns(); renderCuentas(); updateDashboardData(); });
+                saveData(btn, () => { hapticFeedback('success'); showToast('Cuenta actualizada.'); renderCuentasModalList(); populateAllDropdowns(); renderCuentas(); updateDashboardData(); });
             }
         };
 
@@ -3053,7 +3130,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                     const nextDate = new Date(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
                     const frequencyMap = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
                     const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
-                    const icon = r.cantidad >= 0 ? 'south_west' : 'north_east';
+					const icon = r.cantidad >= 0 ? 'south_west' : 'north_east';
                     return `
                     <div class="modal__list-item" id="recurrente-item-${r.id}">
                         <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
@@ -3150,6 +3227,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
             db.config.dashboardWidgets = newWidgetOrder;
             saveData(btn, () => {
                 hideModal('dashboard-config-modal');
+                hapticFeedback('success');
                 showToast('Panel actualizado.');
                 updateDashboard();
             });
@@ -3181,7 +3259,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                     'help': showHelpModal,
                     'exit': handleExitApp,
                     'toggle-ledger': () => {
-                        vibrate();
+                        hapticFeedback('medium');
                         isOffBalanceMode = !isOffBalanceMode;
                         document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
                         const activePage = selectOne('.view--active')?.id || PAGE_IDS.MOVIMIENTOS;
@@ -3190,12 +3268,12 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                     },
                     'toggle-off-balance': () => {
                         const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return;
-                        vibrate();
+                        hapticFeedback('light');
                         const account = db.cuentas.find(c => c.id === checkbox.dataset.id);
                         if (account) { account.offBalance = checkbox.checked; saveData(null, () => { renderCuentas(); renderMovimientos(); updateDashboardData(); populateAllDropdowns(); }); }
                     },
-                    'apply-filters': () => { vibrate(); updateDashboardData(); },
-                    'apply-informe-filters': () => { vibrate(); renderInformesPage(); },
+                    'apply-filters': () => { hapticFeedback('light'); updateDashboardData(); },
+                    'apply-informe-filters': () => { hapticFeedback('light'); renderInformesPage(); },
                     'add-movement': () => startMovementForm(),
                     'edit-movement': () => startMovementForm(id, false),
                     'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
@@ -3206,16 +3284,16 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                         showConfirmationModal(message, () => {
                             if (isRecurrent) { db.recurrentes = db.recurrentes.filter(r => r.id !== idToDelete); } 
                             else { db.movimientos = db.movimientos.filter(m => m.id !== idToDelete); }
-                            saveData(null, () => { hideModal('movimiento-modal'); showToast('Operación eliminada.'); if(isRecurrent) { if(select('recurrentes-modal-list')) renderRecurrentesModalList(); } else { buildDescriptionIndex(); navigateTo(PAGE_IDS.MOVIMIENTOS); } });
+                            saveData(null, () => { hideModal('movimiento-modal'); hapticFeedback('success'); showToast('Operación eliminada.'); if(isRecurrent) { if(select('recurrentes-modal-list')) renderRecurrentesModalList(); } else { buildDescriptionIndex(); navigateTo(PAGE_IDS.MOVIMIENTOS); } });
                         });
                     },
                     'delete-concepto': () => { 
                         if(db.movimientos.some((m)=>m.conceptoId===id) || db.recurrentes.some((r)=>r.conceptoId===id)){showToast("Concepto en uso, no se puede borrar.","warning");return;} 
-                        showConfirmationModal('¿Seguro que quieres eliminar este concepto?',()=>{ db.conceptos=db.conceptos.filter((c)=>c.id!==id); saveData(null,()=>{ showToast("Concepto eliminado."); renderConceptosModalList(); populateAllDropdowns(); }); }); 
+                        showConfirmationModal('¿Seguro que quieres eliminar este concepto?',()=>{ db.conceptos=db.conceptos.filter((c)=>c.id!==id); saveData(null,()=>{ hapticFeedback('success'); showToast("Concepto eliminado."); renderConceptosModalList(); populateAllDropdowns(); }); }); 
                     },
                     'delete-cuenta': () => { 
                         if(db.movimientos.some(m => m.cuentaId===id||m.cuentaOrigenId===id||m.cuentaDestinoId===id) || db.recurrentes.some(r => r.cuentaId===id||r.cuentaOrigenId===id||r.cuentaDestinoId===id)){showToast("Cuenta con movimientos, no se puede borrar.","warning",3500);return;} 
-                        showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?',()=>{ db.cuentas=db.cuentas.filter((c)=>c.id!==id); saveData(null,()=>{ showToast("Cuenta eliminada."); renderCuentasModalList(); populateAllDropdowns(); renderCuentas(); }); }); 
+                        showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?',()=>{ db.cuentas=db.cuentas.filter((c)=>c.id!==id); saveData(null,()=>{ hapticFeedback('success'); showToast("Cuenta eliminada."); renderCuentasModalList(); populateAllDropdowns(); renderCuentas(); }); }); 
                     },
                     'close-modal': () => hideModal(modalId || target.closest('.modal-overlay').id),
                     'manage-conceptos': showConceptosModal,
@@ -3227,8 +3305,8 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                     'import-data': () => (select('import-file-input')).click(),
 					'export-csv': () => handleExportCSV(btn),
 					'import-csv': () => (select('import-csv-input')).click(),
-                    'clear-data': () => showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible.',()=>{showConfirmationModal('Esta acción no se puede deshacer. ¿Continuar?', () => { db=getInitialDb(); saveData(null,()=>{ buildDescriptionIndex(); navigateTo(PAGE_IDS.PANEL, true); showToast('Datos borrados.','danger'); }); }, 'Confirmación Final')}),
-                    'toggle-account-type-filter': () => { vibrate(); if(deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderCuentas(); },
+                    'clear-data': () => showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible.',()=>{showConfirmationModal('Esta acción no se puede deshacer. ¿Continuar?', () => { db=getInitialDb(); saveData(null,()=>{ buildDescriptionIndex(); navigateTo(PAGE_IDS.PANEL, true); hapticFeedback('error'); showToast('Datos borrados.','danger'); }); }, 'Confirmación Final')}),
+                    'toggle-account-type-filter': () => { hapticFeedback('light'); if(deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderCuentas(); },
                     'create-budgets': () => handleCreateBudgets(btn),
                     'update-budgets': handleUpdateBudgets,
                     'logout': () => showConfirmationModal('¿Seguro que quieres cerrar la sesión?', () => { fbAuth.signOut().then(() => { showToast('Sesión cerrada correctamente.'); }).catch(() => { showToast('Error al cerrar sesión.', 'danger'); }); }, 'Cerrar Sesión'),
@@ -3258,7 +3336,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                     'prev-tour-step': prevTourStep,
                     'configure-dashboard': showDashboardConfigModal,
                     'save-dashboard-config': () => handleSaveDashboardConfig(btn),
-                    'set-movimiento-type': () => setMovimientoFormType(type) // <!-- CAMBIO CLAVE: Handler para los botones de tipo -->
+                    'set-movimiento-type': () => setMovimientoFormType(type)
                 };
                 if (actions[action]) actions[action](e);
             });
@@ -3319,7 +3397,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
             suggestionsBox?.addEventListener('click', (e) => {
                 const item = e.target.closest('.suggestion-item');
                 if (item) {
-                    vibrate();
+                    hapticFeedback('light');
                     const { desc, conceptId, accountId, amount } = item.dataset;
                     select('movimiento-descripcion').value = desc;
                     select('movimiento-cantidad').value = `${(amount / 100).toLocaleString('es-ES',{minimumFractionDigits: 2})} €`;
@@ -3365,7 +3443,6 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
             return !!similarPastMovement;
         };
         
-        // <!-- CAMBIO CLAVE: Lógica de guardado adaptada al nuevo formulario simplificado -->
         const handleSaveMovement = (form) => {
             clearAllErrors(form.id);
             let isValid = true;
@@ -3385,7 +3462,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                 if (origen && destino && origen === destino) { displayError('movimiento-cuenta-destino', 'Las cuentas no pueden ser iguales.'); isValid = false; }
             }
 
-            if (!isValid) { showToast('Por favor, revisa los campos marcados en rojo.', 'warning'); return; }
+            if (!isValid) { hapticFeedback('error'); showToast('Por favor, revisa los campos marcados en rojo.', 'warning'); return; }
         
             const btn = form.querySelector('#save-movimiento-btn');
             const mode = select('movimiento-mode').value;
@@ -3435,6 +3512,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
 
                 saveData(btn, () => {
                     hideModal('movimiento-modal');
+                    hapticFeedback('success');
                     const message = mode === 'new' ? 'Movimiento añadido.' : 'Movimiento actualizado.';
                     const recurrentMessage = mode === 'new' ? 'Operación recurrente creada.' : 'Operación recurrente actualizada.';
                     showToast(isRecurrent ? recurrentMessage : message);
@@ -3472,7 +3550,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
             const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
             if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
             db.conceptos.push({ id: generateId(), nombre, icon: 'label' }); 
-            saveData(null, () => { showToast('Concepto añadido.'); (select('add-concepto-form')).reset(); renderConceptosModalList(); populateAllDropdowns(); }); 
+            saveData(null, () => { hapticFeedback('success'); showToast('Concepto añadido.'); (select('add-concepto-form')).reset(); renderConceptosModalList(); populateAllDropdowns(); }); 
         };
         
         const handleAddAccount = () => { 
@@ -3480,14 +3558,14 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
             const tipo = toSentenceCase((select('new-cuenta-tipo')).value.trim()); 
             if (!nombre || !tipo) { showToast('El nombre y el tipo son obligatorios.', 'warning'); return; } 
             db.cuentas.push({ id: generateId(), nombre, tipo, esInversion: false, offBalance: isOffBalanceMode, fechaCreacion: new Date().toISOString() }); 
-            saveData(null, () => { showToast('Cuenta añadida.'); (select('add-cuenta-form')).reset(); renderCuentasModalList(); populateAllDropdowns(); }); 
+            saveData(null, () => { hapticFeedback('success'); showToast('Cuenta añadida.'); (select('add-cuenta-form')).reset(); renderCuentasModalList(); populateAllDropdowns(); }); 
         };
         
-        const handleSaveConfig = (btn) => { db.config.skipIntro = (select('config-skip-intro')).checked; localStorage.setItem('skipIntro', String(db.config.skipIntro)); saveData(btn, () => showToast('Configuración guardada.')); };
+        const handleSaveConfig = (btn) => { db.config.skipIntro = (select('config-skip-intro')).checked; localStorage.setItem('skipIntro', String(db.config.skipIntro)); saveData(btn, () => { hapticFeedback('success'); showToast('Configuración guardada.'); }); };
         const handleExportData = (btn) => { setButtonLoading(btn, true); const exportObject = { metadata: { appName: "Cuentas Personales aiDANaI", version: "1.5.0", exportDate: new Date().toISOString() }, data: db }; const dataStr = JSON.stringify(exportObject, null, 2); const blob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `cuentas-backup-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); setButtonLoading(btn, false); };
-        const handleImportData = (e) => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = (re) => { try { let parsedData = JSON.parse(re.target.result); let dataToImport = (parsedData.metadata && parsedData.data) ? parsedData.data : parsedData; if (!Array.isArray(dataToImport.cuentas) || !Array.isArray(dataToImport.movimientos)) { throw new Error('Formato inválido'); } showConfirmationModal('La importación reemplazará TODOS tus datos actuales. ¿Continuar?', () => { db = dataToImport; saveData(null, () => { buildDescriptionIndex(); navigateTo(PAGE_IDS.PANEL, true); showToast('Datos importados correctamente.', 'info'); }); }); } catch (err) { showToast('Error: El archivo no es un JSON válido o está corrupto.', 'danger'); } finally { e.target.value = ''; } }; reader.readAsText(file); };
+        const handleImportData = (e) => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = (re) => { try { let parsedData = JSON.parse(re.target.result); let dataToImport = (parsedData.metadata && parsedData.data) ? parsedData.data : parsedData; if (!Array.isArray(dataToImport.cuentas) || !Array.isArray(dataToImport.movimientos)) { throw new Error('Formato inválido'); } showConfirmationModal('La importación reemplazará TODOS tus datos actuales. ¿Continuar?', () => { db = dataToImport; saveData(null, () => { buildDescriptionIndex(); navigateTo(PAGE_IDS.PANEL, true); hapticFeedback('success'); showToast('Datos importados correctamente.', 'info'); }); }); } catch (err) { showToast('Error: El archivo no es un JSON válido o está corrupto.', 'danger'); } finally { e.target.value = ''; } }; reader.readAsText(file); };
         const handleDuplicateMovement = () => {
-            vibrate();
+            hapticFeedback('light');
             const idToCopy = select('movimiento-id').value;
             const movToCopy = db.movimientos.find(m => m.id === idToCopy);
             if (movToCopy) {
@@ -3505,11 +3583,11 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
         };
         const handleDeleteAccount = (btn) => { showConfirmationModal('Esto eliminará tu cuenta y TODOS tus datos de forma PERMANENTE e IRREVERSIBLE. ¿Seguro que quieres continuar?', () => { showConfirmationModal('Confirmación final: ¿realmente quieres borrar tu cuenta y todos tus datos? No se podrá recuperar.', () => { const user = fbAuth.currentUser; if (user) { setButtonLoading(btn, true, 'Eliminando...'); user.delete().then(() => { showToast('Cuenta eliminada permanentemente.', 'danger'); }).catch(error => { setButtonLoading(btn, false); showToast(`Error: ${error.message}`, 'danger'); if (error.code === 'auth/requires-recent-login') { showToast('Por seguridad, vuelve a iniciar sesión antes de eliminar tu cuenta.', 'warning', 5000); fbAuth.signOut(); } }); } }, 'Eliminación Permanente') }, '¡Atención!') };
         const showManageInvestmentAccountsModal = () => { let html = `<form id="manage-investment-accounts-form"><p class="form-label" style="margin-bottom: var(--sp-3)">Selecciona las cuentas que quieres tratar como activos de inversión en tu portafolio.</p>`; (db.cuentas || []).sort((a,b)=>a.nombre.localeCompare(b.nombre)).forEach(c => { html += `<div class="form-switch-group modal__list-item" style="padding: var(--sp-2) 0;"><label for="is-investment-${c.id}">${c.nombre}</label><label class="form-switch"><input type="checkbox" id="is-investment-${c.id}" value="${c.id}" ${c.esInversion ? 'checked' : ''}><span class="slider"></span></label></div>`; }); html += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar</button></div></form>`; showGenericModal('Gestionar Activos de Portafolio', html); };
-        const handleSaveInvestmentAccounts = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value)); db.cuentas.forEach(c => c.esInversion = selectedIds.has(c.id)); saveData(btn, () => { hideModal('generic-modal'); renderInversionesPage(); showToast('Portafolio actualizado.'); }); };
+        const handleSaveInvestmentAccounts = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value)); db.cuentas.forEach(c => c.esInversion = selectedIds.has(c.id)); saveData(btn, () => { hideModal('generic-modal'); renderInversionesPage(); hapticFeedback('success'); showToast('Portafolio actualizado.'); }); };
         const showValoracionModal = (cuentaId, valoracionId = null) => { hideModal('generic-modal'); const valoracion = valoracionId ? (db.inversiones_historial || []).find(v => v.id === valoracionId) : null; const cuenta = (db.cuentas || []).find(c => c.id === cuentaId); if (!cuenta && !valoracion) { showToast('No se encontró la cuenta.', 'danger'); return; } const targetCuentaId = valoracion ? valoracion.cuentaId : cuentaId; const fecha = valoracion ? new Date(valoracion.fecha) : new Date(); const fechaStr = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 16); let html = `<form id="form-valoracion" novalidate><input type="hidden" id="valoracion-id" value="${valoracion?.id || ''}"><input type="hidden" id="valoracion-cuenta-id" value="${targetCuentaId}"><div class="form-group"><label for="valoracion-cuenta-nombre" class="form-label">Activo</label><input type="text" id="valoracion-cuenta-nombre" class="form-input" value="${(db.cuentas || []).find(c => c.id === targetCuentaId)?.nombre || ''}" readonly></div><div class="form-group"><label for="valoracion-valor" class="form-label">Valor de Mercado Actual</label><input type="text" id="valoracion-valor" class="form-input input-amount-calculator" readonly required value="${valoracion ? (valoracion.valor / 100).toLocaleString('es-ES') : ''}"><span class="form-error" id="valoracion-valor-error"></span></div><div class="form-group"><label for="valoracion-fecha" class="form-label">Fecha de Valoración</label><input type="datetime-local" id="valoracion-fecha" class="form-input" value="${fechaStr}" required></div><div class="modal__actions"><button type="button" class="btn btn--danger" data-action="delete-valoracion" style="margin-right: auto; ${!valoracionId ? 'display:none;' : ''}">Borrar</button><button type="submit" class="btn btn--primary">Guardar Valoración</button></div></form>`; showGenericModal('Actualizar Valor de Activo', html); };
-        const handleSaveValoracion = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); let valid = true; const valorStr = (form.querySelector('#valoracion-valor')).value.trim().replace(/\./g, '').replace(',', '.'); const valor = Math.round(parseFloat(valorStr) * 100); const fecha = (form.querySelector('#valoracion-fecha')).value; const cuentaId = (form.querySelector('#valoracion-cuenta-id')).value; if (isNaN(valor) || valor < 0) { valid = false; displayError('valoracion-valor', 'Valor inválido.'); } if (!valid) { setButtonLoading(btn, false); return; } const id = (form.querySelector('#valoracion-id')).value; if (id) { const v = (db.inversiones_historial || []).find(val => val.id === id); if (v) { v.valor = valor; v.fecha = new Date(fecha).toISOString(); } } else { if (!db.inversiones_historial) db.inversiones_historial = []; db.inversiones_historial.push({ id: generateId(), cuentaId, valor, fecha: new Date(fecha).toISOString() }); } saveData(btn, () => { hideModal('generic-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(cuentaId); else renderInversionesPage(); showToast('Valoración guardada.'); }); };
+        const handleSaveValoracion = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); let valid = true; const valorStr = (form.querySelector('#valoracion-valor')).value.trim().replace(/\./g, '').replace(',', '.'); const valor = Math.round(parseFloat(valorStr) * 100); const fecha = (form.querySelector('#valoracion-fecha')).value; const cuentaId = (form.querySelector('#valoracion-cuenta-id')).value; if (isNaN(valor) || valor < 0) { valid = false; displayError('valoracion-valor', 'Valor inválido.'); } if (!valid) { setButtonLoading(btn, false); return; } const id = (form.querySelector('#valoracion-id')).value; if (id) { const v = (db.inversiones_historial || []).find(val => val.id === id); if (v) { v.valor = valor; v.fecha = new Date(fecha).toISOString(); } } else { if (!db.inversiones_historial) db.inversiones_historial = []; db.inversiones_historial.push({ id: generateId(), cuentaId, valor, fecha: new Date(fecha).toISOString() }); } saveData(btn, () => { hideModal('generic-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(cuentaId); else renderInversionesPage(); hapticFeedback('success'); showToast('Valoración guardada.'); }); };
         const showAportacionModal = (cuentaId = null, aportacionId = null) => { hideModal('generic-modal'); const aportacion = aportacionId ? (db.inversion_cashflows || []).find(cf => cf.id === aportacionId) : null; const targetCuentaId = aportacion ? aportacion.cuentaId : cuentaId; const investmentAccounts = (db.cuentas || []).filter(c => c.esInversion); if (investmentAccounts.length === 0) { showToast('No hay cuentas de inversión.', 'info'); return; } const fecha = aportacion ? new Date(aportacion.fecha) : new Date(); const fechaStr = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 16); let html = `<form id="form-aportacion" novalidate><input type="hidden" id="aportacion-id" value="${aportacion?.id || ''}"><div class="form-group"><label for="aportacion-cuenta-id" class="form-label">Activo</label><select id="aportacion-cuenta-id" class="form-select">${investmentAccounts.map(c => `<option value="${c.id}" ${c.id === targetCuentaId ? 'selected' : ''}>${c.nombre}</option>`).join('')}</select></div><div class="form-group"><label for="aportacion-cantidad" class="form-label">Cantidad (negativo para retirar)</label><input type="text" id="aportacion-cantidad" class="form-input input-amount-calculator" readonly required value="${aportacion ? (aportacion.cantidad / 100).toLocaleString('es-ES') : ''}"><span class="form-error" id="aportacion-cantidad-error"></span></div><div class="form-group"><label for="aportacion-fecha" class="form-label">Fecha</label><input type="datetime-local" id="aportacion-fecha" class="form-input" value="${fechaStr}" required></div><div class="form-group"><label for="aportacion-notas" class="form-label">Notas (opcional)</label><input type="text" id="aportacion-notas" class="form-input" value="${aportacion?.notas || ''}"></div><div class="modal__actions"><button type="button" class="btn btn--danger" data-action="delete-aportacion" style="margin-right: auto; ${!aportacionId ? 'display:none;' : ''}">Borrar</button><button type="submit" class="btn btn--primary">Guardar Flujo</button></div></form>`; showGenericModal(aportacionId ? 'Editar Flujo de Capital' : 'Aportar o Retirar Capital', html); };
-        const handleSaveAportacion = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); let valid = true; const cantidadStr = (form.querySelector('#aportacion-cantidad')).value.trim().replace(/\./g, '').replace(',', '.'); const cantidad = Math.round(parseFloat(cantidadStr) * 100); const fecha = (form.querySelector('#aportacion-fecha')).value; const cuentaId = (form.querySelector('#aportacion-cuenta-id')).value; const notas = (form.querySelector('#aportacion-notas')).value.trim(); if (isNaN(cantidad)) { valid = false; displayError('aportacion-cantidad', 'Cantidad inválida.'); } if (!valid) { setButtonLoading(btn, false); return; } const id = (form.querySelector('#aportacion-id')).value; if (id) { const cf = (db.inversion_cashflows || []).find(c => c.id === id); if (cf) { Object.assign(cf, { cuentaId, cantidad, fecha: new Date(fecha).toISOString(), notas }); } } else { if (!db.inversion_cashflows) db.inversion_cashflows = []; db.inversion_cashflows.push({ id: generateId(), cuentaId, cantidad, fecha: new Date(fecha).toISOString(), notas }); } saveData(btn, () => { hideModal('generic-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(cuentaId); else renderInversionesPage(); showToast('Flujo de capital guardado.'); }); };
+        const handleSaveAportacion = (form) => { const btn = form.querySelector('button[type="submit"]'); setButtonLoading(btn, true); let valid = true; const cantidadStr = (form.querySelector('#aportacion-cantidad')).value.trim().replace(/\./g, '').replace(',', '.'); const cantidad = Math.round(parseFloat(cantidadStr) * 100); const fecha = (form.querySelector('#aportacion-fecha')).value; const cuentaId = (form.querySelector('#aportacion-cuenta-id')).value; const notas = (form.querySelector('#aportacion-notas')).value.trim(); if (isNaN(cantidad)) { valid = false; displayError('aportacion-cantidad', 'Cantidad inválida.'); } if (!valid) { setButtonLoading(btn, false); return; } const id = (form.querySelector('#aportacion-id')).value; if (id) { const cf = (db.inversion_cashflows || []).find(c => c.id === id); if (cf) { Object.assign(cf, { cuentaId, cantidad, fecha: new Date(fecha).toISOString(), notas }); } } else { if (!db.inversion_cashflows) db.inversion_cashflows = []; db.inversion_cashflows.push({ id: generateId(), cuentaId, cantidad, fecha: new Date(fecha).toISOString(), notas }); } saveData(btn, () => { hideModal('generic-modal'); if (!select('investment-detail-view')?.classList.contains('hidden')) renderInvestmentAccountDetail(cuentaId); else renderInversionesPage(); hapticFeedback('success'); showToast('Flujo de capital guardado.'); }); };
         const handleExportCSV = (btn) => { setButtonLoading(btn, true); const accountMap = new Map(db.cuentas.map(c => [c.id, c.nombre])); const conceptMap = new Map(db.conceptos.map(c => [c.id, c.nombre])); const escapeCSV = (field) => { if (field === null || field === undefined) return ''; const str = String(field); if (str.includes(',') || str.includes('\n') || str.includes('"')) { return `"${str.replace(/"/g, '""')}"`; } return str; }; const headers = ['id', 'fecha', 'descripcion', 'cantidad', 'tipo', 'cuenta', 'concepto', 'cuenta_origen', 'cuenta_destino']; const rows = db.movimientos.map(m => { const row = { id: m.id, fecha: new Date(m.fecha).toISOString().slice(0, 10), descripcion: m.descripcion, cantidad: (m.cantidad / 100).toFixed(2).replace('.',','), tipo: m.tipo, cuenta: m.cuentaId ? accountMap.get(m.cuentaId) || '' : '', concepto: m.conceptoId ? conceptMap.get(m.conceptoId) || '' : '', cuenta_origen: m.cuentaOrigenId ? accountMap.get(m.cuentaOrigenId) || '' : '', cuenta_destino: m.cuentaDestinoId ? accountMap.get(m.cuentaDestinoId) || '' : '', }; return headers.map(header => escapeCSV(row[header])).join(','); }); const csvContent = [headers.join(','), ...rows].join('\n'); const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `movimientos-aidanai-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); setButtonLoading(btn, false); };
         const handleImportCSV = (e) => {
             const file = e.target.files?.[0]; if (!file) return;
@@ -3533,7 +3611,7 @@ No das consejos fiscales ni legales. No predices el futuro del mercado. Si una p
                             newMovements.push(mov);
                         }
                         db.movimientos.push(...newMovements);
-                        saveData(null, () => { buildDescriptionIndex(); populateAllDropdowns(); showToast(`${newMovements.length} movimientos importados correctamente.`, 'info'); });
+                        saveData(null, () => { buildDescriptionIndex(); populateAllDropdowns(); hapticFeedback('success'); showToast(`${newMovements.length} movimientos importados correctamente.`, 'info'); });
                     }, 'Confirmar Importación CSV');
                 } catch (err) { showToast('Error: El archivo CSV parece estar corrupto o mal formateado.', 'danger'); console.error(err); } 
                 finally { e.target.value = ''; }
