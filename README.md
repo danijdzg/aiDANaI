@@ -1,4 +1,4 @@
-Hay tres aplicaciones individuales para Móvil/Pc: menu, cuentas y agenda
+Hay cuatro aplicaciones individuales para Móvil/Pc: menu, cuentas, agenda y gympadel 
 
 https://danijdzg.github.io/aiDANaI/menu/
 
@@ -6,9 +6,8 @@ https://danijdzg.github.io/aiDANaI/cuentas/
 
 https://danijdzg.github.io/aiDANaI/agenda/
 
-https://danijdzg.github.io/aiDANaI/dani/
+https://danijdzg.github.io/aiDANaI/gympadel/
 
-La aplicación menu aiDANaI agrupa las otras dos aplicaciones Cuentas y Agenda
-La aplicación dani pretende ser las tres aplicaciones juntas
+La aplicación menu aiDANaI agrupa las otras tres aplicaciones cuentas, agenda y gympadel 
 
 Versión final 31/07/2025
