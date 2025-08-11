@@ -884,18 +884,34 @@
         }
     }
     
-    async function actualizarEventoEnGoogle(item) {
+        async function actualizarEventoEnGoogle(item) {
         if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
+
+        // --- SOLUCIÓN ---
+        // 1. Crear un objeto Date para la fecha de inicio.
+        const startDate = new Date(item.dueDate);
+
+        // 2. Crear una fecha de finalización añadiendo 1 hora a la de inicio.
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 60 minutos * 60 segundos * 1000 ms
 
         const event = {
             'summary': item.description,
-            'start': { 'dateTime': item.dueDate, 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
-            'end': { 'dateTime': item.dueDate, 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
-             'reminders': {
+            'start': { 
+                'dateTime': startDate.toISOString(), 
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
+            },
+            'end': { 
+                // 3. Usar la nueva fecha de finalización.
+                'dateTime': endDate.toISOString(), 
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
+            },
+            'reminders': {
                 'useDefault': false,
                 'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : []
             },
-            ...(item.isImportant && { 'colorId': '11' })
+            // Buena práctica: si el evento deja de ser importante, se le quita el color.
+            // Google Calendar usará el color por defecto del calendario.
+            'colorId': item.isImportant ? '11' : null 
         };
 
         try {
@@ -905,23 +921,10 @@
                 'resource': event
             });
             console.log('Evento actualizado en Google');
+            showToast('Evento actualizado en Google Calendar.');
         } catch (error) {
             console.error('Error actualizando evento en Google:', error);
             showToast('Error al actualizar evento en Google.', true);
-        }
-    }
-
-    async function borrarEventoEnGoogle(item) {
-        if (!isGoogleSignedIn || !item.googleCalendarEventId) return;
-        try {
-            await gapi.client.calendar.events.delete({
-                'calendarId': 'primary',
-                'eventId': item.googleCalendarEventId
-            });
-            console.log('Evento borrado de Google');
-        } catch (error) {
-            console.error('Error borrando evento de Google:', error);
-            showToast('Error al borrar evento de Google.', true);
         }
     }
 
