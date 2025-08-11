@@ -10,4 +10,4 @@ https://danijdzg.github.io/aiDANaI/gympadel/
 
 La aplicación menu aiDANaI agrupa las otras tres aplicaciones cuentas, agenda y gympadel 
 
-Versión final 31/07/2025
+Versión final 11/08/2025
