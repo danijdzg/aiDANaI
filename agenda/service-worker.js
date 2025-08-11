@@ -5,7 +5,7 @@
 
 // Nombre de la caché. Es una buena práctica versionarla.
 // Si actualizas los archivos de tu app, cambia el número (p. ej., 'aidanai-cache-v2').
-const CACHE_NAME = 'aidanai-cache-v1';
+const CACHE_NAME = 'aidanai-cache-v2';
 
 // Lista de archivos fundamentales para que la aplicación funcione (el "App Shell").
 // Estos son los archivos que se guardarán para poder usarlos sin conexión.
@@ -21,7 +21,7 @@ const urlsToCache = [
   'https://fonts.googleapis.com/icon?family=Material+Icons',
   'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
   'https://cdn.jsdelivr.net/npm/flatpickr',
-  'https://npmcdn.com/flatpickr/dist/l10n/es.js',
+  'https://unpkg.com/flatpickr/dist/l10n/es.js'
   'https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js',
   'https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js',
@@ -92,7 +92,7 @@ self.addEventListener('fetch', event => {
 
   // No interceptamos peticiones que no sean GET (como POST) ni las de las APIs de Google/Firebase.
   // Es importante dejar que las peticiones a las APIs lleguen a la red para la sincronización de datos.
-  if (request.method !== 'GET' || request.url.includes('firestore.googleapis.com') || request.url.includes('google.com/js/api.js')) {
+	if (request.method !== 'GET' || request.url.includes('googleapis.com') || request.url.includes('google.com/js/api.js') || request.url.includes('apis.google.com')) {
     event.respondWith(fetch(request));
     return;
   }
