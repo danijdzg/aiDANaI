@@ -13,8 +13,8 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <!-- CORRECCIÓN: Se cambió de npmcdn.com a unpkg.com para evitar problemas de CORS con el Service Worker -->
     <script src="https://unpkg.com/flatpickr/dist/l10n/es.js"></script>
-
 
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
@@ -814,6 +814,19 @@
     let googleAuthInstance;
     let isGoogleSignedIn = false;
 
+    // CORRECCIÓN: La función showToast se mueve al ámbito global para ser accesible
+    // desde las funciones de la API de Google, especialmente en los bloques .catch de error.
+    function showToast(message, isError = false) {
+        const tc = document.getElementById('toast-container'); 
+        if (!tc) return; 
+        const t = document.createElement('div'); 
+        t.className = `toast`; 
+        if (isError) t.style.backgroundColor = 'var(--accent-delete)';
+        t.textContent = message; 
+        tc.appendChild(t); 
+        setTimeout(() => t.remove(), 3000); 
+    }
+
     function handleGoogleClientLoad() {
         gapi.load('client:auth2', initGoogleClient);
     }
@@ -829,6 +842,7 @@
             googleAuthInstance.isSignedIn.listen(updateGoogleSigninStatus);
             updateGoogleSigninStatus(googleAuthInstance.isSignedIn.get());
         }).catch(error => {
+            // Este error ahora será visible gracias a que showToast es global.
             console.error("Error initializing Google Client:", error);
             showToast("No se pudo conectar con Google Calendar.", true);
         });
@@ -836,7 +850,7 @@
 
     function updateGoogleSigninStatus(isSignedIn) {
         isGoogleSignedIn = isSignedIn;
-        const syncButton = gebi('google-sync-btn');
+        const syncButton = document.getElementById('google-sync-btn');
         if (isSignedIn) {
             syncButton.classList.add('connected');
             syncButton.title = 'Conectado a Google. Haz clic para salir.';
@@ -850,6 +864,14 @@
     }
 
     function handleGoogleAuthClick() {
+        // CORRECCIÓN: Se añade una guarda para evitar errores si se hace clic
+        // antes de que la instancia de la API de Google esté lista.
+        if (!googleAuthInstance) {
+            showToast("La API de Google aún no está lista. Inténtalo de nuevo.", true);
+            console.error("Se intentó usar googleAuthInstance pero no está inicializado.");
+            return;
+        }
+
         if(isGoogleSignedIn) {
             googleAuthInstance.signOut();
         } else {
@@ -860,10 +882,21 @@
     async function crearEventoEnGoogle(item) {
         if (!isGoogleSignedIn || item.type !== 'agenda') return null;
         
+        // CORRECCIÓN: Se asegura que el evento tenga una duración para evitar el error 400.
+        // Se establece una duración por defecto de 1 hora si no se especifica.
+        const startDate = new Date(item.dueDate);
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Duración de 1 hora.
+
         const event = {
             'summary': item.description,
-            'start': { 'dateTime': item.dueDate, 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
-            'end': { 'dateTime': item.dueDate, 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
+            'start': { 
+                'dateTime': startDate.toISOString(), 
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
+            },
+            'end': { 
+                'dateTime': endDate.toISOString(), 
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
+            },
             'reminders': {
                 'useDefault': false,
                 'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : []
@@ -884,50 +917,64 @@
             return null;
         }
     }
+    
     async function actualizarEventoEnGoogle(item) {
-    if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
+        if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
 
-    // --- SOLUCIÓN ---
-    // 1. Crear un objeto Date para la fecha de inicio.
-    const startDate = new Date(item.dueDate);
+        // CORRECCIÓN: Se asegura que el evento tenga una duración para evitar el error 400.
+        const startDate = new Date(item.dueDate);
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Duración de 1 hora.
 
-    // 2. Crear una fecha de finalización añadiendo 1 hora a la de inicio.
-    const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 60 minutos * 60 segundos * 1000 ms
+        const event = {
+            'summary': item.description,
+            'start': { 
+                'dateTime': startDate.toISOString(), 
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
+            },
+            'end': { 
+                'dateTime': endDate.toISOString(), 
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
+            },
+            'reminders': {
+                'useDefault': false,
+                'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : []
+            },
+            'colorId': item.isImportant ? '11' : null 
+        };
 
-    const event = {
-        'summary': item.description,
-        'start': { 
-            'dateTime': startDate.toISOString(), 
-            'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
-        },
-        'end': { 
-            // 3. Usar la nueva fecha de finalización.
-            'dateTime': endDate.toISOString(), 
-            'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
-        },
-        'reminders': {
-            'useDefault': false,
-            'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : []
-        },
-        // Buena práctica: si el evento deja de ser importante, se le quita el color.
-        // Google Calendar usará el color por defecto del calendario.
-        'colorId': item.isImportant ? '11' : null 
-    };
-
-    try {
-        await gapi.client.calendar.events.update({
-            'calendarId': 'primary',
-            'eventId': item.googleCalendarEventId,
-            'resource': event
-        });
-        console.log('Evento actualizado en Google');
-        showToast('Evento actualizado en Google Calendar.');
-    } catch (error) {
-        console.error('Error actualizando evento en Google:', error);
-        showToast('Error al actualizar evento en Google.', true);
+        try {
+            await gapi.client.calendar.events.update({
+                'calendarId': 'primary',
+                'eventId': item.googleCalendarEventId,
+                'resource': event
+            });
+            console.log('Evento actualizado en Google');
+            showToast('Evento actualizado en Google Calendar.');
+        } catch (error) {
+            console.error('Error actualizando evento en Google:', error);
+            showToast('Error al actualizar evento en Google.', true);
+        }
     }
-}
-        
+
+    async function borrarEventoEnGoogle(item) {
+        if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
+        try {
+            await gapi.client.calendar.events.delete({
+                'calendarId': 'primary',
+                'eventId': item.googleCalendarEventId
+            });
+            console.log('Evento eliminado de Google Calendar');
+        } catch (error) {
+            console.error('Error eliminando evento en Google:', error);
+            // Si el evento ya no existe en Google (404 o 410), no es un error crítico.
+            if (error.result && (error.result.error.code === 404 || error.result.error.code === 410)) {
+                 console.log("El evento ya no existía en Google Calendar. Sincronización correcta.");
+            } else {
+                showToast('Error al eliminar evento de Google.', true);
+                throw error; // Propagar el error para que el flujo principal lo maneje si es necesario
+            }
+        }
+    }
 
     // =================================================================================
     // CÓDIGO ORIGINAL DE LA APP
@@ -996,16 +1043,8 @@
             const timePart = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
             return timePart !== '00:00' ? `${datePart}, ${timePart}` : datePart;
         }
-        function showToast(message, isError = false) {
-            const tc = gebi('toast-container'); 
-            if (!tc) return; 
-            const t = document.createElement('div'); 
-            t.className = `toast`; 
-            if (isError) t.style.backgroundColor = 'var(--accent-delete)';
-            t.textContent = message; 
-            tc.appendChild(t); 
-            setTimeout(() => t.remove(), 3000); 
-        }
+        
+        // CORRECCIÓN: La función showToast se movió fuera de esta IIFE al ámbito global.
         
         document.addEventListener('DOMContentLoaded', initApp);
 
@@ -1571,7 +1610,6 @@
             gebi('reminder-time-group').style.display = (isAgenda && isNotificationEnabled) ? 'block' : 'none';
         }
 
-        // MODIFICADO: Convertida a async para esperar a Google
         async function handleItemFormSubmit(e) {
             e.preventDefault();
             const localId = gebi('item-local-id').value;
@@ -1592,7 +1630,7 @@
                 dueDate: gebi('item-type').value === 'agenda' ? flatpickrInstance.selectedDates[0]?.toISOString() : null,
                 listId: gebi('item-type').value === 'task' ? gebi('item-task-list').value : null,
                 subtasks: gebi('item-type').value === 'task' ? subtasks : [],
-                googleCalendarEventId: existingItem?.googleCalendarEventId || null // Mantenemos el ID de Google si ya existe
+                googleCalendarEventId: existingItem?.googleCalendarEventId || null
             };
 
             if (itemData.notificationEnabled) requestNotificationPermission();
@@ -1600,9 +1638,9 @@
 			const isNewItem = !existingItem;
             
             if (isGoogleSignedIn && itemData.type === 'agenda') {
-                if (itemData.googleCalendarEventId) { // Es una actualización
+                if (itemData.googleCalendarEventId) {
                     await actualizarEventoEnGoogle(itemData);
-                } else { // Es un nuevo evento
+                } else {
                     const googleId = await crearEventoEnGoogle(itemData);
                     if (googleId) {
                         itemData.googleCalendarEventId = googleId;
@@ -1697,40 +1735,33 @@
             const item = db.items[itemIndex];
 
             if (!isComplete) {
-                // Lógica para desmarcar un ítem como completado (esto no necesita interactuar con Google)
                 const updatedItem = { ...item, isComplete: false, completedAt: null };
                 db.items[itemIndex] = updatedItem;
             } else {
-                // Lógica para marcar un ítem como completado
                 showToast(`"${item.description}" completado.`);
 
-                // Si el evento estaba sincronizado con Google, lo borramos de allí.
                 if (isGoogleSignedIn && item.googleCalendarEventId && item.type === 'agenda') {
                     try {
                         await borrarEventoEnGoogle(item);
                         console.log("Evento completado y eliminado de Google Calendar.");
                     } catch (error) {
                         console.error("No se pudo eliminar el evento de Google, continuando localmente.", error);
-                        showToast("Error al borrar el evento de Google.", true);
                     }
                 }
 
                 const updatedItem = { ...item, isComplete: true, completedAt: Date.now() };
 
-                // Si es una tarea con subtareas, se marcan todas como completas
                 if (updatedItem.type === 'task' && updatedItem.subtasks) {
                     updatedItem.subtasks.forEach(st => st.isComplete = true);
                 }
 
                 db.items[itemIndex] = updatedItem;
 
-                // Si el evento era recurrente, se crea el siguiente
                 if (item.type === 'agenda' && item.recurrenceRule !== 'none') {
                     const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule);
                     if (nextDueDate) {
                         const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now() };
                         
-                        // Importante: El nuevo evento recurrente NO debe tener el ID de Google del anterior.
                         delete nextEvent.googleCalendarEventId; 
                         
                         db.items.unshift(nextEvent);
@@ -1738,17 +1769,15 @@
                     }
                 }
             }
-
-            // Estas llamadas deben estar fuera del bloque 'else' para que se ejecuten siempre
+            
             renderApp();
             scheduleAllNotifications();
             saveData().catch(error => { 
                 showToast(`Error al sincronizar.`, true); 
-                renderApp(); // Re-renderiza para revertir el estado si falla el guardado
+                renderApp();
             });
         }
                
-        // MODIFICADO: Convertida a async para esperar a Google
         async function handleDeleteItem(localId) {
             triggerHapticFeedback('medium');
             const itemEl = document.querySelector(`.list-item-swipe-container[data-id="${localId}"]`);
@@ -1756,9 +1785,12 @@
             if (index === -1) return;
             const itemToDelete = db.items[index];
             
-            // MODIFICADO: Borrar de Google ANTES de borrar localmente
             if (isGoogleSignedIn && itemToDelete.googleCalendarEventId) {
-                await borrarEventoEnGoogle(itemToDelete);
+                try {
+                    await borrarEventoEnGoogle(itemToDelete);
+                } catch(error) {
+                    console.error("No se pudo eliminar de Google, se procederá con la eliminación local.", error);
+                }
             }
             
             const performDeleteAndUpdate = () => {
@@ -1818,7 +1850,6 @@
             if (!input) return;
             let parsedData = parseNaturalLanguage(input);
 
-            // MODIFICADO: Para añadir a Google desde la creación rápida
             let itemToSave = { ...parsedData, localId: uuid(), isComplete: false, createdAt: Date.now(), listId: parsedData.type === 'task' ? appState.tasks.selectedListId : null };
 
             if (isGoogleSignedIn && itemToSave.type === 'agenda') {
@@ -1853,7 +1884,6 @@
                 cleanText = cleanText.replace(timeMatch[0], '').trim();
                 dateFound = true;
             } else {
-                // Si no hay hora, el evento es para todo el día, pero lo marcamos a medianoche para simplicidad.
                 date.setHours(0,0,0,0);
             }
             const numericDateRegex = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
@@ -1963,7 +1993,15 @@
             });
         }
         
+        // CORRECCIÓN: Se hace la carga de Driver.js más robusta, esperando a que
+        // la librería esté disponible antes de intentar usarla.
         function startOnboardingTutorial() {
+            if (typeof driver === 'undefined' || typeof driver.driver !== 'function') {
+                console.warn("Driver.js aún no se ha cargado, reintentando en 200ms...");
+                setTimeout(startOnboardingTutorial, 200);
+                return;
+            }
+
             const driverObj = driver.driver({
                 showProgress: true,
                 steps: [
