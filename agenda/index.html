@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Agenda aiDANaI</title>
 
+    <!-- Librerías de terceros -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,31 +14,18 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <!-- CORRECCIÓN: Se cambió de npmcdn.com a unpkg.com para evitar problemas de CORS con el Service Worker -->
     <script src="https://unpkg.com/flatpickr/dist/l10n/es.js"></script>
-
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
 
+    <!-- Configuración PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="aiDANaI.webp">
 
     <style>
-        * ... al final de tu CSS ... */
-#google-sync-btn.loading .material-icons {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-		/* ============================ */
+        /* ============================ */
         /* 1. VARIABLES Y ESTILO BASE   */
         /* ============================ */
         :root {
@@ -58,12 +46,12 @@
             --accent-delete: #E53935;
             --accent-complete: #43A047;
             --accent-edit: #1E88E5;
-            --accent-google: #4285F4; /* NUEVO */
+            --accent-google: #4285F4;
 
             --font-main: 'Archivo Narrow', 'Roboto', sans-serif;
             --shadow-layered: 0px 4px 8px rgba(26, 28, 32, 0.04), 0px 8px 24px rgba(26, 28, 32, 0.08);
             --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-            --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1); /* MODIFICADO: Nueva curva para transiciones suaves */
+            --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
         }
         
         [data-theme="dark"] {
@@ -85,6 +73,27 @@
         body { font-family: var(--font-main); background-color: var(--background); color: var(--on-background); line-height: 1.5; overflow: hidden; min-height: 100vh; min-height: -webkit-fill-available; height: 100vh; transition: background-color 0.3s, color 0.3s; font-size: 15px; }
         *:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; border-radius: 6px; }
         
+        #google-sync-btn.loading .material-icons {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+		
+        @keyframes fade-in-down {
+            from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .item-entering { animation: fade-in-down 0.4s var(--ease-out-quint) forwards; }
+        
+        @keyframes fade-out-up {
+            from { opacity: 1; transform: scale(1); max-height: 200px; margin-top: 6px; padding-top: 8px; padding-bottom: 8px; }
+            to { opacity: 0; transform: scale(0.95); max-height: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; border-width: 0; }
+        }
+        .item-exiting { overflow: hidden; animation: fade-out-up 0.35s var(--ease-in-out-circ) forwards; }
+
         /* ============================ */
         /* 2. VISTAS Y NAVEGACIÓN       */
         /* ============================ */
@@ -92,26 +101,9 @@
         #app-root.visible { display: flex; opacity: 1; }
         .main-content { flex: 1; display: flex; position: relative; overflow: hidden; }
 
-        .view {
-            display: none;
-            width: 100%;
-            flex-direction: column;
-            height: 100%;
-            overflow-y: auto;
-            padding: 16px;
-            position: absolute;
-            top: 0;
-            left: 0;
-            transition: transform 0.4s var(--ease-in-out-circ), opacity 0.4s var(--ease-in-out-circ);
-        }
-        .view.active {
-            display: flex;
-            z-index: 1;
-        }
-        .view.is-animating {
-            display: flex;
-        }
-
+        .view { display: none; width: 100%; flex-direction: column; height: 100%; overflow-y: auto; padding: 16px; position: absolute; top: 0; left: 0; transition: transform 0.4s var(--ease-in-out-circ), opacity 0.4s var(--ease-in-out-circ); }
+        .view.active { display: flex; z-index: 1; }
+        .view.is-animating { display: flex; }
         #calendarView { padding: 0; overflow-y: auto; } 
 
         @keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
@@ -131,7 +123,6 @@
         .nav-item:active { transform: scale(0.92); }
         .nav-item .material-icons { font-size: 24px; margin: 0; }
         .nav-label { display: none; }
-        /* NUEVO: Estilo para el botón de Google */
         #google-sync-btn.connected { color: var(--accent-google); }
 
         /* ============================ */
@@ -205,93 +196,27 @@
         /* ============================ */
         /* 5. COMPONENTES DE LISTA      */
         /* ============================ */
-        .list-item-swipe-container { 
-            display: flex; 
-            align-items: flex-start;
-            background: var(--surface); 
-            border-radius: 8px; 
-            margin-bottom: 6px; 
-            box-shadow: var(--shadow-layered); 
-            transition: transform 0.3s var(--ease-out-quint), opacity 0.3s, border-left-color 0.3s, background-color 0.1s;
-            user-select: none; 
-            position: relative; 
-            padding: 8px 10px;
-            border-left: 4px solid transparent; 
-        }
-        .list-item-swipe-container:active {
-            background-color: var(--surface-variant);
-            transform: scale(0.98);
-        }
-        
-        .list-item-swipe-container .item-icon {
-            color: var(--secondary-color);
-            margin-right: 8px;
-            padding-top: 2px;
-            font-size: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2;
-            position: relative;
-        }
-        .list-item-swipe-container .item-checkbox .material-icons {
-            font-size: 24px;
-            cursor: pointer;
-            transition: color 0.2s, transform 0.2s var(--ease-out-quint);
-            color: var(--secondary-color);
-        }
-        .list-item-swipe-container .item-checkbox:active .material-icons {
-            transform: scale(0.85);
-        }
-        .list-item-swipe-container.completed .item-checkbox .material-icons {
-            color: var(--accent-complete);
-        }
-        .list-item-swipe-container .item-content { 
-            flex: 1; 
-            cursor: pointer; 
-            min-width: 0; 
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            z-index: 2;
-            position: relative;
-        }
-
-        .item-card-swipe-background { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            border-radius: 8px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between; 
-            padding: 0 24px; 
-            color: white; 
-            opacity: 0; 
-            transition: opacity 0.2s; 
-            z-index: 1; 
-            pointer-events: none;
-        }
+        .list-item-swipe-container { display: flex; align-items: flex-start; background: var(--surface); border-radius: 8px; margin-bottom: 6px; box-shadow: var(--shadow-layered); transition: transform 0.3s var(--ease-out-quint), opacity 0.3s, border-left-color 0.3s, background-color 0.1s; user-select: none; position: relative; padding: 8px 10px; border-left: 4px solid transparent; }
+        .list-item-swipe-container:active { background-color: var(--surface-variant); transform: scale(0.98); }
+        .list-item-swipe-container .item-icon { color: var(--secondary-color); margin-right: 8px; padding-top: 2px; font-size: 22px; display: flex; align-items: center; justify-content: center; z-index: 2; position: relative; }
+        .list-item-swipe-container .item-checkbox .material-icons { font-size: 24px; cursor: pointer; transition: color 0.2s, transform 0.2s var(--ease-out-quint); color: var(--secondary-color); }
+        .list-item-swipe-container .item-checkbox:active .material-icons { transform: scale(0.85); }
+        .list-item-swipe-container.completed .item-checkbox .material-icons { color: var(--accent-complete); }
+        .list-item-swipe-container .item-content { flex: 1; cursor: pointer; min-width: 0; display: flex; flex-direction: column; justify-content: center; z-index: 2; position: relative; }
+        .item-card-swipe-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; color: white; opacity: 0; transition: opacity 0.2s; z-index: 1; pointer-events: none; }
         .list-item-swipe-container.swiping-right.type-task .item-card-swipe-background { background-color: var(--accent-complete); justify-content: flex-start; opacity: 1; }
         .list-item-swipe-container.swiping-right.type-agenda .item-card-swipe-background { background-color: var(--accent-complete); justify-content: flex-start; opacity: 1; }
         .list-item-swipe-container.swiping-left .item-card-swipe-background { background-color: var(--accent-delete); justify-content: flex-end; opacity: 1; }
         .list-item-swipe-container.swiping-right .item-card-swipe-background .material-icons:first-child,
-        .list-item-swipe-container.swiping-left .item-card-swipe-background .material-icons:last-child {
-            animation: bounceIn 0.3s ease-out;
-        }
+        .list-item-swipe-container.swiping-left .item-card-swipe-background .material-icons:last-child { animation: bounceIn 0.3s ease-out; }
         @keyframes bounceIn { 0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); } }
-
         .list-item-swipe-container.completed { opacity: 0.6; }
         .list-item-swipe-container.completed .item-title { text-decoration: line-through; text-decoration-color: var(--secondary-color); }
         .item-title { font-weight: 500; font-size: 14px; white-space: normal; word-break: break-word; line-height: 1.3; font-family: var(--font-main); }
         .event-time { font-size: 13px; font-weight: 700; color: var(--secondary-color); padding-top: 1px; }
         .event-meta-icon { font-size: 16px; color: var(--secondary-color); flex-shrink: 0; }
         .item-metadata-container { display: flex; align-items: center; gap: 8px; margin-top: 2px; color: var(--secondary-color); }
-        /* NUEVO: Icono de Google Calendar */
         .google-cal-icon { font-size: 14px !important; color: var(--accent-google) !important; }
-
         .task-progress-container { margin-top: 8px; }
         .progress-bar-wrapper { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary-color); }
         .progress-bar { flex-grow: 1; background: var(--outline); border-radius: 4px; height: 4px; overflow: hidden; }
@@ -302,44 +227,6 @@
         .subtask-list-view-item .material-icons { font-size: 18px; color: var(--secondary-color); transition: color 0.2s; }
         .subtask-list-view-item.completed { text-decoration: line-through; color: var(--secondary-color); }
         .subtask-list-view-item.completed .material-icons { color: var(--accent-complete); }
-		
-        @keyframes fade-in-down {
-            from {
-                opacity: 0;
-                transform: translateY(-20px) scale(0.95);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-        .list-item-swipe-container.item-entering {
-            animation: fade-in-down 0.4s var(--ease-out-quint) forwards;
-        }
-        @keyframes fade-out-up {
-            from {
-                opacity: 1;
-                transform: scale(1);
-                max-height: 200px;
-                margin-top: 6px;
-                padding-top: 8px;
-                padding-bottom: 8px;
-            }
-            to {
-                opacity: 0;
-                transform: scale(0.95);
-                max-height: 0;
-                margin-top: 0;
-                padding-top: 0;
-                padding-bottom: 0;
-                border-width: 0;
-            }
-        }
-        .list-item-swipe-container.item-exiting {
-            overflow: hidden;
-            animation: fade-out-up 0.35s var(--ease-in-out-circ) forwards;
-        }
-
         #quick-add-feedback { margin-top: -8px; margin-bottom: 8px; padding: 0 4px; min-height: 28px; transition: all 0.2s; }
         .feedback-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 16px; font-size: 13px; font-weight: 500; background-color: var(--surface-variant); color: var(--on-surface); animation: fade-in-down 0.3s var(--ease-out-quint); }
         .feedback-chip .material-icons { font-size: 18px; }
@@ -349,43 +236,10 @@
         /* ============================ */
         /* 6. MODALES Y OTROS           */
         /* ============================ */
-        .modal-overlay { 
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            right: 0; 
-            bottom: 0; 
-            background: rgba(0,0,0,0.3); 
-            backdrop-filter: blur(8px); 
-            -webkit-backdrop-filter: blur(8px); 
-            display: flex; 
-            align-items: flex-end; 
-            justify-content: center; 
-            z-index: 200; 
-            opacity: 0; 
-            pointer-events: none; 
-            transition: opacity 0.4s var(--ease-out-quint); 
-        }
-        .modal-overlay.active { 
-            opacity: 1; 
-            pointer-events: auto; 
-        }
-        .modal { 
-            background: var(--surface); 
-            border-radius: 24px 24px 0 0; 
-            padding: 16px 24px 24px 24px; 
-            width: 100%; 
-            max-width: 420px; 
-            max-height: 95vh; 
-            overflow-y: auto; 
-            box-shadow: var(--shadow-layered); 
-            transform: translateY(100%); 
-            transition: transform 0.4s var(--ease-out-quint);
-        }
-        .modal-overlay.active .modal { 
-            transform: translateY(0); 
-        }
-
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: flex-end; justify-content: center; z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.4s var(--ease-out-quint); }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal { background: var(--surface); border-radius: 24px 24px 0 0; padding: 16px 24px 24px 24px; width: 100%; max-width: 420px; max-height: 95vh; overflow-y: auto; box-shadow: var(--shadow-layered); transform: translateY(100%); transition: transform 0.4s var(--ease-out-quint); }
+        .modal-overlay.active .modal { transform: translateY(0); }
         .modal-grabber { width: 40px; height: 5px; background-color: var(--outline); border-radius: 2.5px; margin: 0 auto 16px; flex-shrink: 0; }
         .form-group { margin-bottom: 16px; }
         .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--secondary-color); }
@@ -410,7 +264,6 @@
         .subtask-item input[type="text"] { flex-grow: 1; font-size: 14px; border: none; background: transparent; border-bottom: 1px solid var(--outline); border-radius: 0; padding: 4px 0; color: var(--on-surface); }
         .subtask-item input[type="text"]:focus { outline: none; border-bottom-color: var(--primary-color); }
         .subtask-item .delete-subtask-btn { color: var(--secondary-color); font-size: 20px; }
-
         .empty-state { text-align: center; padding: 40px 24px; color: var(--secondary-color); }
         .empty-state .material-icons { font-size: 48px; margin-bottom: 8px; }
         .empty-state .btn { margin-top: 16px; }
@@ -439,7 +292,6 @@
         .completed-tasks-section summary .material-icons { transition: transform 0.2s; }
         .completed-tasks-section[open] > summary .material-icons { transform: rotate(180deg); }
         .completed-tasks-list { padding: 0 12px 12px 12px; }
-
         .help-section details { background: var(--surface); padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid var(--outline); }
         .help-section summary { font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; list-style: none; }
         .help-section summary::-webkit-details-marker { display: none; }
@@ -503,7 +355,6 @@
             <button class="nav-item" data-view="tasks" title="Tareas"><span class="material-icons">task_alt</span></button>
             <button class="nav-item" data-view="help" title="Ayuda"><span class="material-icons">help_outline</span></button>
             <button class="nav-item" id="nav-theme-btn" title="Cambiar Tema"><span class="material-icons">brightness_6</span></button>
-            <!-- NUEVO: Botón para Sincronización con Google -->
             <button class="nav-item" id="google-sync-btn" title="Conectando con Google..." disabled>    <span class="material-icons">sync</span></button>
             <button class="nav-item" data-action="logout" title="Salir de la App"><span class="material-icons">logout</span></button>
         </nav>
@@ -786,242 +637,53 @@
         </div>
     </div>
 
-    <!-- NUEVO: Script de la API de Google -->
+    <!-- Script de la API de Google -->
     <script async defer src="https://apis.google.com/js/api.js" onload="handleGoogleClientLoad()"></script>
     
-    <script>
-    // Al principio del script
-    const CONSTANTS = {
-        VIEWS: {
-            TODAY: 'today',
-            CALENDAR: 'calendar',
-            TASKS: 'tasks',
-            HELP: 'help',
-            SEARCH: 'search'
-        },
-        ITEM_TYPES: {
-            AGENDA: 'agenda',
-            TASK: 'task'
-        },
-        ANIMATION_CLASSES: {
-            ITEM_ENTERING: 'item-entering',
-            ITEM_EXITING: 'item-exiting'
-        }
-    };
-    
-    // =================================================================================
-    // NUEVO: GOOGLE CALENDAR API INTEGRATION
-    // =================================================================================
-    // PEGA AQUÍ TUS CREDENCIALES DE GOOGLE
-    const GOOGLE_CLIENT_ID = '364074046164-bb80vb1bodaaj7rc2i9e7520l9hp8klo.apps.googleusercontent.com';
-    const GOOGLE_API_KEY = 'AIzaSyD_EI1odi7jWdv7vSGkc58KCoSOJedt8uY';
-    // --- FIN DE LA SECCIÓN DE CREDENCIALES ---
+    <!-- SCRIPT PRINCIPAL DE LA APLICACIÓN -->
+    <script type="module">
+        // 1. IMPORTACIÓN DE FUNCIONES DE FIREBASE (SDK MODULAR)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getFirestore, enableIndexedDbPersistence, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
-    const GOOGLE_DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"];
-    const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.events";
-    
-    let googleAuthInstance;
-    let isGoogleSignedIn = false;
-
-    // CORRECCIÓN: La función showToast se mueve al ámbito global para ser accesible
-    // desde las funciones de la API de Google, especialmente en los bloques .catch de error.
-    function showToast(message, isError = false) {
-        const tc = document.getElementById('toast-container'); 
-        if (!tc) return; 
-        const t = document.createElement('div'); 
-        t.className = `toast`; 
-        if (isError) t.style.backgroundColor = 'var(--accent-delete)';
-        t.textContent = message; 
-        tc.appendChild(t); 
-        setTimeout(() => t.remove(), 3000); 
-    }
-
-    function handleGoogleClientLoad() {
-        gapi.load('client:auth2', initGoogleClient);
-    }
-
-    function initGoogleClient() {
-    // ---- INICIO DE LA MODIFICACIÓN ----
-    const syncButton = document.getElementById('google-sync-btn');
-    syncButton.classList.add('loading'); // Añade la clase para la animación de giro
-    
-    gapi.client.init({
-        apiKey: GOOGLE_API_KEY,
-        clientId: GOOGLE_CLIENT_ID,
-        discoveryDocs: GOOGLE_DISCOVERY_DOCS,
-        scope: GOOGLE_SCOPES
-    }).then(() => {
-        // Éxito en la inicialización
-        syncButton.classList.remove('loading'); // Quita la animación
-        syncButton.disabled = false; // Habilita el botón
-        
-        googleAuthInstance = gapi.auth2.getAuthInstance();
-        googleAuthInstance.isSignedIn.listen(updateGoogleSigninStatus);
-        updateGoogleSigninStatus(googleAuthInstance.isSignedIn.get());
-
-    }).catch(error => {
-        // Error en la inicialización
-        console.error("Error initializing Google Client:", error);
-        showToast("No se pudo conectar con Google Calendar.", true);
-
-        syncButton.classList.remove('loading'); // Quita la animación
-        syncButton.disabled = true; // Mantiene el botón deshabilitado
-        syncButton.title = 'Error al conectar con Google';
-        syncButton.querySelector('.material-icons').textContent = 'sync_problem'; // Cambia el icono a uno de error
-    });
-    // ---- FIN DE LA MODIFICACIÓN ----
-    }
-
-    function updateGoogleSigninStatus(isSignedIn) {
-        isGoogleSignedIn = isSignedIn;
-        const syncButton = document.getElementById('google-sync-btn');
-        if (isSignedIn) {
-            syncButton.classList.add('connected');
-            syncButton.title = 'Conectado a Google. Haz clic para salir.';
-            syncButton.querySelector('.material-icons').textContent = 'cloud_done';
-            showToast("Conectado a Google Calendar.");
-        } else {
-            syncButton.classList.remove('connected');
-            syncButton.title = 'Sincronizar con Google';
-            syncButton.querySelector('.material-icons').textContent = 'sync';
-        }
-    }
-
-    function handleGoogleAuthClick() {
-        // CORRECCIÓN: Se añade una guarda para evitar errores si se hace clic
-        // antes de que la instancia de la API de Google esté lista.
-        if (!googleAuthInstance) {
-            showToast("La API de Google aún no está lista. Inténtalo de nuevo.", true);
-            console.error("Se intentó usar googleAuthInstance pero no está inicializado.");
-            return;
-        }
-
-        if(isGoogleSignedIn) {
-            googleAuthInstance.signOut();
-        } else {
-            googleAuthInstance.signIn();
-        }
-    }
-
-    async function crearEventoEnGoogle(item) {
-        if (!isGoogleSignedIn || item.type !== 'agenda') return null;
-        
-        // CORRECCIÓN: Se asegura que el evento tenga una duración para evitar el error 400.
-        // Se establece una duración por defecto de 1 hora si no se especifica.
-        const startDate = new Date(item.dueDate);
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Duración de 1 hora.
-
-        const event = {
-            'summary': item.description,
-            'start': { 
-                'dateTime': startDate.toISOString(), 
-                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
-            },
-            'end': { 
-                'dateTime': endDate.toISOString(), 
-                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
-            },
-            'reminders': {
-                'useDefault': false,
-                'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : []
-            },
-            ...(item.isImportant && { 'colorId': '11' }) // 11 es el ID para el color rojo en Google Calendar
+        // =================================================================================
+        // CONFIGURACIÓN Y CONSTANTES GLOBALES
+        // =================================================================================
+        const CONSTANTS = {
+            VIEWS: { TODAY: 'today', CALENDAR: 'calendar', TASKS: 'tasks', HELP: 'help', SEARCH: 'search' },
+            ITEM_TYPES: { AGENDA: 'agenda', TASK: 'task' },
+            ANIMATION_CLASSES: { ITEM_ENTERING: 'item-entering', ITEM_EXITING: 'item-exiting' }
         };
-
-        try {
-            const response = await gapi.client.calendar.events.insert({
-                'calendarId': 'primary',
-                'resource': event
-            });
-            console.log('Evento creado en Google:', response.result);
-            return response.result.id; // Devuelve el ID del evento de Google
-        } catch (error) {
-            console.error('Error creando evento en Google:', error);
-            showToast('Error al crear evento en Google.', true);
-            return null;
-        }
-    }
-    
-    async function actualizarEventoEnGoogle(item) {
-        if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
-
-        // CORRECCIÓN: Se asegura que el evento tenga una duración para evitar el error 400.
-        const startDate = new Date(item.dueDate);
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Duración de 1 hora.
-
-        const event = {
-            'summary': item.description,
-            'start': { 
-                'dateTime': startDate.toISOString(), 
-                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
-            },
-            'end': { 
-                'dateTime': endDate.toISOString(), 
-                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone 
-            },
-            'reminders': {
-                'useDefault': false,
-                'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : []
-            },
-            'colorId': item.isImportant ? '11' : null 
-        };
-
-        try {
-            await gapi.client.calendar.events.update({
-                'calendarId': 'primary',
-                'eventId': item.googleCalendarEventId,
-                'resource': event
-            });
-            console.log('Evento actualizado en Google');
-            showToast('Evento actualizado en Google Calendar.');
-        } catch (error) {
-            console.error('Error actualizando evento en Google:', error);
-            showToast('Error al actualizar evento en Google.', true);
-        }
-    }
-
-    async function borrarEventoEnGoogle(item) {
-        if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
-        try {
-            await gapi.client.calendar.events.delete({
-                'calendarId': 'primary',
-                'eventId': item.googleCalendarEventId
-            });
-            console.log('Evento eliminado de Google Calendar');
-        } catch (error) {
-            console.error('Error eliminando evento en Google:', error);
-            // Si el evento ya no existe en Google (404 o 410), no es un error crítico.
-            if (error.result && (error.result.error.code === 404 || error.result.error.code === 410)) {
-                 console.log("El evento ya no existía en Google Calendar. Sincronización correcta.");
-            } else {
-                showToast('Error al eliminar evento de Google.', true);
-                throw error; // Propagar el error para que el flujo principal lo maneje si es necesario
-            }
-        }
-    }
-
-    // =================================================================================
-    // CÓDIGO ORIGINAL DE LA APP
-    // =================================================================================
-    (() => {
-        // 1. CONFIGURACIÓN GLOBAL Y CONSTANTES
+        const GOOGLE_CLIENT_ID = '364074046164-bb80vb1bodaaj7rc2i9e7520l9hp8klo.apps.googleusercontent.com';
+        const GOOGLE_API_KEY = 'AIzaSyD_EI1odi7jWdv7vSGkc58KCoSOJedt8uY';
+        const GOOGLE_DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"];
+        const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.events";
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
         const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
         const DIAS_SEMANA_LARGOS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
         const DIAS_SEMANA_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
         const QUOTES = [ { text: "La única forma de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs" }, { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" }, { text: "Cree que puedes y ya estás a medio camino.", author: "Theodore Roosevelt" } ];
-        
         const VIEW_ORDER = ['today', 'calendar', 'tasks', 'help'];
 
+        // =================================================================================
+        // ESTADO DE LA APLICACIÓN Y VARIABLES
+        // =================================================================================
+        let googleAuthInstance;
+        let isGoogleSignedIn = false;
         let flatpickrInstance = null;
-        let currentUser = null, unsubscribeFromDb = null, saveTimeout = null, db = {};
+        let currentUser = null, unsubscribeFromDb = null, saveTimeout = null;
+        let db = {};
         let activeTimers = {};
         const initialState = { currentView: 'today', lastView: 'today', calendar: { currentMonth: new Date().getMonth(), currentYear: new Date().getFullYear(), selectedDate: dateToYYYYMMDD(new Date()), displayMode: 'month' }, tasks: { selectedListId: 'default' } };
         let appState = {...initialState};
         let isAppInitialized = false;
         let isViewSwitching = false;
 
+        // =================================================================================
+        // FUNCIONES DE UTILIDAD
+        // =================================================================================
         const gebi = id => document.getElementById(id);
         const qsa = selector => document.querySelectorAll(selector);
         function dateToYYYYMMDD(date) { if (!date || isNaN(date.getTime())) return ''; return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`; }
@@ -1029,27 +691,8 @@
         function yyyymmddToDate(dateStr) { if (!dateStr) return new Date(); const parts = dateStr.split('-'); return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)); }
         function uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }); }
         const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-        
-        function triggerHapticFeedback(type = 'light') {
-            if ('vibrate' in navigator) {
-                switch (type) {
-                    case 'light': navigator.vibrate(10); break;
-                    case 'medium': navigator.vibrate(40); break;
-                    case 'success': navigator.vibrate([20, 50, 20]); break;
-                    default: navigator.vibrate(10);
-                }
-            }
-        }
-        
-        function debounce(func, delay = 250) {
-            let timeout;
-            return (...args) => {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => {
-                    func.apply(this, args);
-                }, delay);
-            };
-        }
+        function triggerHapticFeedback(type = 'light') { if ('vibrate' in navigator) { switch (type) { case 'light': navigator.vibrate(10); break; case 'medium': navigator.vibrate(40); break; case 'success': navigator.vibrate([20, 50, 20]); break; default: navigator.vibrate(10); } } }
+        function debounce(func, delay = 250) { let timeout; return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => { func.apply(this, args); }, delay); }; }
         function formatDateForFeedback(isoDate) {
             if (!isoDate) return '';
             const date = new Date(isoDate);
@@ -1057,26 +700,134 @@
             const tomorrow = new Date();
             tomorrow.setDate(now.getDate() + 1);
             let datePart;
-            if (date.toDateString() === now.toDateString()) {
-                datePart = 'Hoy';
-            } else if (date.toDateString() === tomorrow.toDateString()) {
-                datePart = 'Mañana';
-            } else {
-                datePart = date.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric' });
-            }
+            if (date.toDateString() === now.toDateString()) { datePart = 'Hoy'; } 
+            else if (date.toDateString() === tomorrow.toDateString()) { datePart = 'Mañana'; } 
+            else { datePart = date.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric' }); }
             const timePart = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
             return timePart !== '00:00' ? `${datePart}, ${timePart}` : datePart;
         }
+        function showToast(message, isError = false) {
+            const tc = gebi('toast-container'); 
+            if (!tc) return; 
+            const t = document.createElement('div'); 
+            t.className = `toast`; 
+            if (isError) t.style.backgroundColor = 'var(--accent-delete)';
+            t.textContent = message; 
+            tc.appendChild(t); 
+            setTimeout(() => t.remove(), 3000); 
+        }
         
-        // CORRECCIÓN: La función showToast se movió fuera de esta IIFE al ámbito global.
-        
-        document.addEventListener('DOMContentLoaded', initApp);
+        // =================================================================================
+        // INTEGRACIÓN CON API DE GOOGLE
+        // =================================================================================
+        window.handleGoogleClientLoad = function() { gapi.load('client:auth2', initGoogleClient); }
+        function initGoogleClient() {
+            const syncButton = gebi('google-sync-btn');
+            syncButton.classList.add('loading');
+            gapi.client.init({
+                apiKey: GOOGLE_API_KEY,
+                clientId: GOOGLE_CLIENT_ID,
+                discoveryDocs: GOOGLE_DISCOVERY_DOCS,
+                scope: GOOGLE_SCOPES
+            }).then(() => {
+                syncButton.classList.remove('loading');
+                syncButton.disabled = false;
+                googleAuthInstance = gapi.auth2.getAuthInstance();
+                googleAuthInstance.isSignedIn.listen(updateGoogleSigninStatus);
+                updateGoogleSigninStatus(googleAuthInstance.isSignedIn.get());
+            }).catch(error => {
+                console.error("Error initializing Google Client:", error);
+                showToast("No se pudo conectar con Google Calendar.", true);
+                syncButton.classList.remove('loading');
+                syncButton.disabled = true;
+                syncButton.title = 'Error al conectar con Google';
+                syncButton.querySelector('.material-icons').textContent = 'sync_problem';
+            });
+        }
+        function updateGoogleSigninStatus(isSignedIn) {
+            isGoogleSignedIn = isSignedIn;
+            const syncButton = gebi('google-sync-btn');
+            if (isSignedIn) {
+                syncButton.classList.add('connected');
+                syncButton.title = 'Conectado a Google. Haz clic para salir.';
+                syncButton.querySelector('.material-icons').textContent = 'cloud_done';
+                showToast("Conectado a Google Calendar.");
+            } else {
+                syncButton.classList.remove('connected');
+                syncButton.title = 'Sincronizar con Google';
+                syncButton.querySelector('.material-icons').textContent = 'sync';
+            }
+        }
+        function handleGoogleAuthClick() {
+            if (!googleAuthInstance) { showToast("La API de Google aún no está lista. Inténtalo de nuevo.", true); console.error("Se intentó usar googleAuthInstance pero no está inicializado."); return; }
+            if(isGoogleSignedIn) { googleAuthInstance.signOut(); } 
+            else { googleAuthInstance.signIn(); }
+        }
+        async function crearEventoEnGoogle(item) {
+            if (!isGoogleSignedIn || item.type !== 'agenda') return null;
+            const startDate = new Date(item.dueDate);
+            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+            const event = {
+                'summary': item.description,
+                'start': { 'dateTime': startDate.toISOString(), 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
+                'end': { 'dateTime': endDate.toISOString(), 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
+                'reminders': { 'useDefault': false, 'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : [] },
+                ...(item.isImportant && { 'colorId': '11' })
+            };
+            try {
+                const response = await gapi.client.calendar.events.insert({ 'calendarId': 'primary', 'resource': event });
+                console.log('Evento creado en Google:', response.result);
+                return response.result.id;
+            } catch (error) {
+                console.error('Error creando evento en Google:', error);
+                showToast('Error al crear evento en Google.', true);
+                return null;
+            }
+        }
+        async function actualizarEventoEnGoogle(item) {
+            if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
+            const startDate = new Date(item.dueDate);
+            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+            const event = {
+                'summary': item.description,
+                'start': { 'dateTime': startDate.toISOString(), 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
+                'end': { 'dateTime': endDate.toISOString(), 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone },
+                'reminders': { 'useDefault': false, 'overrides': item.notificationEnabled ? [{'method': 'popup', 'minutes': item.reminderMinutes}] : [] },
+                'colorId': item.isImportant ? '11' : null 
+            };
+            try {
+                await gapi.client.calendar.events.update({ 'calendarId': 'primary', 'eventId': item.googleCalendarEventId, 'resource': event });
+                console.log('Evento actualizado en Google');
+                showToast('Evento actualizado en Google Calendar.');
+            } catch (error) {
+                console.error('Error actualizando evento en Google:', error);
+                showToast('Error al actualizar evento en Google.', true);
+            }
+        }
+        async function borrarEventoEnGoogle(item) {
+            if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
+            try {
+                await gapi.client.calendar.events.delete({ 'calendarId': 'primary', 'eventId': item.googleCalendarEventId });
+                console.log('Evento eliminado de Google Calendar');
+            } catch (error) {
+                console.error('Error eliminando evento en Google:', error);
+                if (error.result && (error.result.error.code === 404 || error.result.error.code === 410)) {
+                     console.log("El evento ya no existía en Google Calendar. Sincronización correcta.");
+                } else {
+                    showToast('Error al eliminar evento de Google.', true);
+                    throw error;
+                }
+            }
+        }
 
-        // 2. FIREBASE Y MANEJO DE DATOS
-        firebase.initializeApp(firebaseConfig);
-        const fbAuth = firebase.auth(), fbDb = firebase.firestore();
+        // =================================================================================
+        // INICIALIZACIÓN DE FIREBASE Y MANEJO DE DATOS
+        // =================================================================================
+        const app = initializeApp(firebaseConfig);
+        const fbAuth = getAuth(app);
+        const fbDb = getFirestore(app);
 
-        fbDb.enablePersistence().catch(err => {
+        enableIndexedDbPersistence(fbDb).catch(err => {
             if (err.code == 'failed-precondition') console.warn("Persistencia falló: múltiples pestañas abiertas.");
             else if (err.code == 'unimplemented') console.warn("Persistencia no soportada en este navegador.");
         });
@@ -1087,25 +838,29 @@
             if (!currentUser) return reject(new Error("Usuario no autenticado."));
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
-                fbDb.collection('users').doc(currentUser.uid).set({ db })
+                const userDocRef = doc(fbDb, 'users', currentUser.uid);
+                setDoc(userDocRef, { db })
                     .then(() => { console.log("Sincronización con Firebase exitosa."); resolve(); })
                     .catch(error => { console.error("Error al guardar en Firestore:", error); reject(error); });
             }, 500);
         });
 
         const loadData = uid => {
-            const userDocRef = fbDb.collection('users').doc(uid);
+            const userDocRef = doc(fbDb, 'users', uid);
             if (unsubscribeFromDb) unsubscribeFromDb();
             
-            unsubscribeFromDb = userDocRef.onSnapshot(doc => {
+            unsubscribeFromDb = onSnapshot(userDocRef, docSnapshot => {
                 let needsSave = false;
-                if (doc.exists && doc.data().db) {
-                    db = doc.data().db;
+                if (docSnapshot.exists() && docSnapshot.data().db) {
+                    db = docSnapshot.data().db;
                     if (!db.items) { db.items = []; needsSave = true; }
                     if (!db.config) { db.config = { theme: 'dark', tutorialCompleted: false }; needsSave = true; }
                     if (db.config.tutorialCompleted === undefined) { db.config.tutorialCompleted = false; needsSave = true; }
                     if (!db.taskLists || db.taskLists.length === 0) { db.taskLists = [{id: 'default', name: 'General'}]; needsSave = true; }
-                } else { db = getInitialDb(); needsSave = true; }
+                } else { 
+                    db = getInitialDb(); 
+                    needsSave = true; 
+                }
                 
                 if (needsSave && currentUser) saveData().catch(err => showToast("No se pudo guardar la configuración inicial.", true));
 
@@ -1117,7 +872,9 @@
             });
         };
 
-        // 3. INICIALIZACIÓN DE LA APP Y AUTENTICACIÓN
+        // =================================================================================
+        // FLUJO DE INICIO Y AUTENTICACIÓN
+        // =================================================================================
         function initApp() {
             attachGlobalEventListeners();
             initializeDatePicker();
@@ -1132,7 +889,7 @@
             }
         }
 
-        const checkAuthState = () => fbAuth.onAuthStateChanged(user => { 
+        const checkAuthState = () => onAuthStateChanged(fbAuth, user => { 
             if (user) { 
                 currentUser = user; 
                 loadData(user.uid); 
@@ -1175,10 +932,12 @@
             }
         };
 
-        const handleLogin = () => fbAuth.signInWithEmailAndPassword(gebi('login-email').value, gebi('login-password').value).catch(handleAuthError);
-        const handleRegister = () => fbAuth.createUserWithEmailAndPassword(gebi('login-email').value, gebi('login-password').value).catch(handleAuthError);
+        const handleLogin = () => signInWithEmailAndPassword(fbAuth, gebi('login-email').value, gebi('login-password').value).catch(handleAuthError);
+        const handleRegister = () => createUserWithEmailAndPassword(fbAuth, gebi('login-email').value, gebi('login-password').value).catch(handleAuthError);
         
-        // 4. RENDERIZADO Y LÓGICA DE UI
+        // =================================================================================
+        // RENDERIZADO Y LÓGICA DE UI
+        // =================================================================================
         function renderApp() { 
             if (!db || !currentUser || !isAppInitialized) return;
             updateNav(appState.currentView); 
@@ -1460,7 +1219,9 @@
             return itemEl;
         }
         
-        // 5. MANEJADORES DE EVENTOS
+        // =================================================================================
+        // MANEJADORES DE EVENTOS
+        // =================================================================================
         function attachGlobalEventListeners() {
             const safeAddListener = (id, event, handler) => { const el = gebi(id); if (el) el.addEventListener(event, handler); };
             document.body.addEventListener('click', e => {
@@ -1472,7 +1233,7 @@
                 const action = actionTarget.dataset.action;
                 if (action === 'login') handleLogin();
                 if (action === 'register') handleRegister();
-                if (action === 'logout') { showCustomConfirm("¿Seguro que quieres cerrar sesión?", () => { fbAuth.signOut(); }); }
+                if (action === 'logout') { showCustomConfirm("¿Seguro que quieres cerrar sesión?", () => { signOut(fbAuth); }); }
                 if (action === 'toggle-subtask') {
                     const taskId = actionTarget.dataset.taskId;
                     const subtaskId = actionTarget.dataset.subtaskId;
@@ -1487,7 +1248,6 @@
             });
             qsa('.nav-item[data-view]').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
             safeAddListener('nav-theme-btn', 'click', handleThemeToggle);
-            // NUEVO: Listener para el botón de Google
             safeAddListener('google-sync-btn', 'click', handleGoogleAuthClick);
             safeAddListener('prev-nav-btn', 'click', () => { appState.calendar.displayMode === 'month' ? changeMonth(-1) : changeWeek(-1); });
             safeAddListener('next-nav-btn', 'click', () => { appState.calendar.displayMode === 'month' ? changeMonth(1) : changeWeek(1); });
@@ -1519,7 +1279,9 @@
             window.addEventListener('offline', updateSyncStatus);
         }
 
-        // 6. LÓGICA PRINCIPAL (CRUD Y ACCIONES CON UI OPTIMISTA)
+        // =================================================================================
+        // LÓGICA PRINCIPAL (CRUD, NAVEGACIÓN, ACCIONES)
+        // =================================================================================
         function handleQuickAddInput(e) {
             const text = e.target.value;
             const feedbackContainer = gebi('quick-add-feedback');
@@ -1586,16 +1348,10 @@
             }, { once: true });
         }
 
-
         function selectDate(dateStr) { appState.calendar.selectedDate = dateStr; renderApp(); }
         function changeMonth(delta) { const d = new Date(appState.calendar.currentYear, appState.calendar.currentMonth, 1); d.setMonth(d.getMonth() + delta); appState.calendar.currentMonth = d.getMonth(); appState.calendar.currentYear = d.getFullYear(); renderApp(); }
         function changeWeek(delta) { const d = yyyymmddToDate(appState.calendar.selectedDate); d.setDate(d.getDate() + (delta * 7)); appState.calendar.selectedDate = dateToYYYYMMDD(d); appState.calendar.currentMonth = d.getMonth(); appState.calendar.currentYear = d.getFullYear(); renderApp(); }
-        function goToToday() { const t = new Date(); appState.calendar = { ...appState.calendar, currentMonth: t.getMonth(), currentYear: t.getFullYear(), selectedDate: dateToYYYYMMDD(t), displayMode: 'month' };    if (appState.currentView === 'calendar') {
-        renderApp(); 
-    } else {
-        switchView('calendar');
-    }
-}
+        function goToToday() { const t = new Date(); appState.calendar = { ...appState.calendar, currentMonth: t.getMonth(), currentYear: t.getFullYear(), selectedDate: dateToYYYYMMDD(t), displayMode: 'month' }; if (appState.currentView === 'calendar') { renderApp(); } else { switchView('calendar'); } }
         function setCalendarDisplayMode(mode) { if (appState.calendar.displayMode === mode) return; appState.calendar.displayMode = mode; renderApp(); }
         function openModal(modalId) { gebi(modalId)?.classList.add('active'); if (modalId === 'quick-add-modal') { const i = gebi('quick-add-input'); i.value = ''; setTimeout(() => i.focus(), 100); } }
         function closeModal(modalId) { gebi(modalId)?.classList.remove('active'); }
@@ -1677,10 +1433,7 @@
         }
 
         function handleItemSave(itemData, isNewItem = false) {
-            if (!itemData.description) { 
-                showToast("La descripción no puede estar vacía.", true); 
-                return; 
-            }
+            if (!itemData.description) { showToast("La descripción no puede estar vacía.", true); return; }
             triggerHapticFeedback('medium');
             const index = db.items.findIndex(i => i.localId === itemData.localId);
             if (index > -1) {
@@ -1730,13 +1483,9 @@
             }
             return gebi(containerId);
         }
-
         
         function handlePostSaveNavigation(itemData) {
-            if (!itemData) {
-                renderApp();
-                return;
-            }
+            if (!itemData) { renderApp(); return; }
             if (itemData.type === 'agenda' && itemData.dueDate) {
                 const itemDate = new Date(itemData.dueDate);
                 appState.calendar.selectedDate = dateToYYYYMMDD(itemDate);
@@ -1752,10 +1501,10 @@
                 renderApp();
             }
         }
+
 		async function handleItemComplete(localId, isComplete) {
             const itemIndex = db.items.findIndex(i => i.localId === localId);
             if (itemIndex === -1) return;
-
             const item = db.items[itemIndex];
 
             if (!isComplete) {
@@ -1763,43 +1512,25 @@
                 db.items[itemIndex] = updatedItem;
             } else {
                 showToast(`"${item.description}" completado.`);
-
                 if (isGoogleSignedIn && item.googleCalendarEventId && item.type === 'agenda') {
-                    try {
-                        await borrarEventoEnGoogle(item);
-                        console.log("Evento completado y eliminado de Google Calendar.");
-                    } catch (error) {
-                        console.error("No se pudo eliminar el evento de Google, continuando localmente.", error);
-                    }
+                    try { await borrarEventoEnGoogle(item); console.log("Evento completado y eliminado de Google Calendar."); } 
+                    catch (error) { console.error("No se pudo eliminar el evento de Google, continuando localmente.", error); }
                 }
-
                 const updatedItem = { ...item, isComplete: true, completedAt: Date.now() };
-
-                if (updatedItem.type === 'task' && updatedItem.subtasks) {
-                    updatedItem.subtasks.forEach(st => st.isComplete = true);
-                }
-
+                if (updatedItem.type === 'task' && updatedItem.subtasks) { updatedItem.subtasks.forEach(st => st.isComplete = true); }
                 db.items[itemIndex] = updatedItem;
-
                 if (item.type === 'agenda' && item.recurrenceRule !== 'none') {
                     const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule);
                     if (nextDueDate) {
                         const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now() };
-                        
                         delete nextEvent.googleCalendarEventId; 
-                        
                         db.items.unshift(nextEvent);
                         showToast(`Evento "${item.description}" completado y reprogramado.`);
                     }
                 }
             }
-            
             renderApp();
-            scheduleAllNotifications();
-            saveData().catch(error => { 
-                showToast(`Error al sincronizar.`, true); 
-                renderApp();
-            });
+            saveDataAndSchedule();
         }
                
         async function handleDeleteItem(localId) {
@@ -1810,18 +1541,13 @@
             const itemToDelete = db.items[index];
             
             if (isGoogleSignedIn && itemToDelete.googleCalendarEventId) {
-                try {
-                    await borrarEventoEnGoogle(itemToDelete);
-                } catch(error) {
-                    console.error("No se pudo eliminar de Google, se procederá con la eliminación local.", error);
-                }
+                try { await borrarEventoEnGoogle(itemToDelete); } 
+                catch(error) { console.error("No se pudo eliminar de Google, se procederá con la eliminación local.", error); }
             }
             
             const performDeleteAndUpdate = () => {
                 db.items.splice(index, 1);
-                if (!itemEl) {
-                    renderApp();
-                }
+                if (!itemEl) { renderApp(); }
                 saveDataAndSchedule();
             };
 
@@ -1838,10 +1564,7 @@
         
         function saveDataAndSchedule() {
             scheduleAllNotifications();
-            saveData().catch(error => {
-                showToast(`Error al sincronizar.`, true);
-                renderApp();
-            });
+            saveData().catch(error => { showToast(`Error al sincronizar.`, true); renderApp(); });
         }
 
         function handleDeleteFromModal() { 
@@ -1855,7 +1578,9 @@
             } 
         }
 
-        // 7. LÓGICA DE NUEVAS FUNCIONES (NLP, TAREAS, TUTORIAL)
+        // =================================================================================
+        // LÓGICA DE FUNCIONES AVANZADAS (NLP, TAREAS, TUTORIAL, ETC.)
+        // =================================================================================
         function calculateNextDueDate(currentDueDate, recurrenceRule) {
             const nextDate = new Date(currentDueDate);
             switch (recurrenceRule) {
@@ -1873,16 +1598,11 @@
             const input = gebi('quick-add-input').value.trim();
             if (!input) return;
             let parsedData = parseNaturalLanguage(input);
-
             let itemToSave = { ...parsedData, localId: uuid(), isComplete: false, createdAt: Date.now(), listId: parsedData.type === 'task' ? appState.tasks.selectedListId : null };
-
             if (isGoogleSignedIn && itemToSave.type === 'agenda') {
                 const googleId = await crearEventoEnGoogle(itemToSave);
-                if (googleId) {
-                    itemToSave.googleCalendarEventId = googleId;
-                }
+                if (googleId) { itemToSave.googleCalendarEventId = googleId; }
             }
-
             handleItemSave(itemToSave, true); 
             closeModal('quick-add-modal');
         }
@@ -1935,7 +1655,7 @@
                     for (let i = 0; i < DIAS_SEMANA_LARGOS.length; i++) {
                         const dayName = DIAS_SEMANA_LARGOS[i];
                         if (cleanText.includes(dayName)) {
-                            const currentDay = (new Date().getDay() + 6) % 7; // Lunes = 0
+                            const currentDay = (new Date().getDay() + 6) % 7;
                             const targetDay = i;
                             let dayDiff = targetDay - currentDay;
                             if (dayDiff <= 0) dayDiff += 7;
@@ -2004,28 +1724,19 @@
             updatedTask.subtasks[subtaskIndex].isComplete = !updatedTask.subtasks[subtaskIndex].isComplete;
             const allSubtasksComplete = updatedTask.subtasks.every(st => st.isComplete);
             updatedTask.isComplete = allSubtasksComplete;
-            if (allSubtasksComplete) {
-                if (!updatedTask.completedAt) updatedTask.completedAt = Date.now();
-            } else {
-                updatedTask.completedAt = null;
-            }
+            if (allSubtasksComplete) { if (!updatedTask.completedAt) updatedTask.completedAt = Date.now(); } 
+            else { updatedTask.completedAt = null; }
             db.items[taskIndex] = updatedTask;
             renderApp();
-            saveData().catch(error => {
-                showToast('Error al actualizar la subtarea.', true);
-                renderApp();
-            });
+            saveData().catch(error => { showToast('Error al actualizar la subtarea.', true); renderApp(); });
         }
         
-        // CORRECCIÓN: Se hace la carga de Driver.js más robusta, esperando a que
-        // la librería esté disponible antes de intentar usarla.
         function startOnboardingTutorial() {
             if (typeof driver === 'undefined' || typeof driver.driver !== 'function') {
                 console.warn("Driver.js aún no se ha cargado, reintentando en 200ms...");
                 setTimeout(startOnboardingTutorial, 200);
                 return;
             }
-
             const driverObj = driver.driver({
                 showProgress: true,
                 steps: [
@@ -2044,7 +1755,6 @@
             driverObj.drive();
         }
 
-        // 8. UTILIDADES Y AYUDANTES
         function initializeDatePicker() { flatpickr.localize(flatpickr.l10ns.es); flatpickrInstance = flatpickr("#item-datetime", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true, minuteIncrement: 15 }); }
         function applyTheme(theme) { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); }
         function handleThemeToggle() { const n = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; db.config.theme = n; applyTheme(n); saveData().catch(err => showToast("No se pudo guardar el tema.", true)); }
@@ -2116,12 +1826,19 @@
             if (!indicator.hasChildNodes()) indicator.appendChild(icon);
         }
 
-        // 9. NOTIFICACIONES
+        // =================================================================================
+        // NOTIFICACIONES
+        // =================================================================================
         async function requestNotificationPermission() { if (!("Notification" in window)) { showToast("Este navegador no soporta notificaciones.", true); return 'denied'; } const p = await Notification.requestPermission(); if (p === 'granted') { showToast("¡Permiso de notificaciones concedido!"); } else { showToast("Permiso de notificaciones denegado.", true); } return p; }
         function showNotification(item) { if (Notification.permission !== "granted") return; const b = `Tu evento "${item.description}" es ahora.`; new Notification('Recordatorio de Agenda', { body: b, icon: './aiDANaI.webp', badge: './aiDANaI.webp' }); const i = db.items.findIndex(x => x.localId === item.localId); if (i > -1) { db.items[i].notificationShown = true; saveData().catch(err => showToast("Error al guardar estado de notificación", true)); } }
         function scheduleNotification(item) { if (activeTimers[item.localId]) clearTimeout(activeTimers[item.localId]); if (!item.notificationEnabled || item.isComplete || !item.dueDate || item.notificationShown) return; const o = (parseInt(item.reminderMinutes, 10) || 0) * 60 * 1000; const d = new Date(item.dueDate).getTime() - o - Date.now(); if (d > 0) activeTimers[item.localId] = setTimeout(() => { showNotification(item); }, d); }
         function scheduleAllNotifications() { if (!db.items) return; Object.values(activeTimers).forEach(clearTimeout); activeTimers = {}; db.items.forEach(scheduleNotification); }
-    })();
+        
+        // =================================================================================
+        // PUNTO DE ENTRADA DE LA APLICACIÓN
+        // =================================================================================
+        document.addEventListener('DOMContentLoaded', initApp);
+
     </script>
 </body>
 </html>
