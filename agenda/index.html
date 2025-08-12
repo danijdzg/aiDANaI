@@ -28,7 +28,16 @@
     <link rel="apple-touch-icon" href="aiDANaI.webp">
 
     <style>
-        /* ============================ */
+        * ... al final de tu CSS ... */
+#google-sync-btn.loading .material-icons {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+		/* ============================ */
         /* 1. VARIABLES Y ESTILO BASE   */
         /* ============================ */
         :root {
@@ -495,7 +504,7 @@
             <button class="nav-item" data-view="help" title="Ayuda"><span class="material-icons">help_outline</span></button>
             <button class="nav-item" id="nav-theme-btn" title="Cambiar Tema"><span class="material-icons">brightness_6</span></button>
             <!-- NUEVO: Botón para Sincronización con Google -->
-            <button class="nav-item" id="google-sync-btn" title="Sincronizar con Google"><span class="material-icons">sync</span></button>
+            <button class="nav-item" id="google-sync-btn" title="Conectando con Google..." disabled>    <span class="material-icons">sync</span></button>
             <button class="nav-item" data-action="logout" title="Salir de la App"><span class="material-icons">logout</span></button>
         </nav>
 
@@ -832,20 +841,35 @@
     }
 
     function initGoogleClient() {
-        gapi.client.init({
-            apiKey: GOOGLE_API_KEY,
-            clientId: GOOGLE_CLIENT_ID,
-            discoveryDocs: GOOGLE_DISCOVERY_DOCS,
-            scope: GOOGLE_SCOPES
-        }).then(() => {
-            googleAuthInstance = gapi.auth2.getAuthInstance();
-            googleAuthInstance.isSignedIn.listen(updateGoogleSigninStatus);
-            updateGoogleSigninStatus(googleAuthInstance.isSignedIn.get());
-        }).catch(error => {
-            // Este error ahora será visible gracias a que showToast es global.
-            console.error("Error initializing Google Client:", error);
-            showToast("No se pudo conectar con Google Calendar.", true);
-        });
+    // ---- INICIO DE LA MODIFICACIÓN ----
+    const syncButton = document.getElementById('google-sync-btn');
+    syncButton.classList.add('loading'); // Añade la clase para la animación de giro
+    
+    gapi.client.init({
+        apiKey: GOOGLE_API_KEY,
+        clientId: GOOGLE_CLIENT_ID,
+        discoveryDocs: GOOGLE_DISCOVERY_DOCS,
+        scope: GOOGLE_SCOPES
+    }).then(() => {
+        // Éxito en la inicialización
+        syncButton.classList.remove('loading'); // Quita la animación
+        syncButton.disabled = false; // Habilita el botón
+        
+        googleAuthInstance = gapi.auth2.getAuthInstance();
+        googleAuthInstance.isSignedIn.listen(updateGoogleSigninStatus);
+        updateGoogleSigninStatus(googleAuthInstance.isSignedIn.get());
+
+    }).catch(error => {
+        // Error en la inicialización
+        console.error("Error initializing Google Client:", error);
+        showToast("No se pudo conectar con Google Calendar.", true);
+
+        syncButton.classList.remove('loading'); // Quita la animación
+        syncButton.disabled = true; // Mantiene el botón deshabilitado
+        syncButton.title = 'Error al conectar con Google';
+        syncButton.querySelector('.material-icons').textContent = 'sync_problem'; // Cambia el icono a uno de error
+    });
+    // ---- FIN DE LA MODIFICACIÓN ----
     }
 
     function updateGoogleSigninStatus(isSignedIn) {
