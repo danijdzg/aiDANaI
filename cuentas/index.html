@@ -3651,7 +3651,7 @@ const handleCsvFileSelect = (event) => {
         const text = e.target.result;
         const lines = text.split('\n').filter(line => line.trim() !== '');
         // Simple CSV parsing, might need a more robust library for complex cases
-        csvWizardState.headers = lines.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.trim().replace(/"/g, ''));
+        csvWizardState.headers = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.trim().replace(/"/g, ''));
         csvWizardState.rows = lines.slice(1).map(line => line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/"/g, '')));
         select('csv-wizard-next-1').disabled = false;
     };
@@ -3909,7 +3909,116 @@ const handleExportData = async (btn) => {
         setButtonLoading(btn, false);
     }
 };
-const handleImportData = (e) => { showToast('Función de importación en desarrollo. Úsala con precaución.', 'info'); };
+const handleImportData = (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+            try {
+                const dataToImport = JSON.parse(event.target.result);
+
+                // --- Validación Básica del Archivo JSON ---
+                if (!dataToImport.cuentas || !dataToImport.conceptos || !dataToImport.movimientos) {
+                    showToast("Error: El archivo no parece ser una copia de seguridad válida.", "danger", 5000);
+                    e.target.value = ''; // Resetea el input
+                    return;
+                }
+
+                // --- Pedir Confirmación al Usuario (Paso 1) ---
+                const countMovimientos = dataToImport.movimientos?.length || 0;
+                const countCuentas = dataToImport.cuentas?.length || 0;
+                const confirmationMessage = `Vas a reemplazar TODOS tus datos actuales con el contenido del archivo. Se importarán ${countCuentas} cuentas y ${countMovimientos} movimientos. ¿Estás seguro?`;
+                
+                showConfirmationModal(confirmationMessage, () => {
+                    // --- Pedir Confirmación Final (Paso 2) ---
+                    showConfirmationModal('Esta es tu última oportunidad. La acción es irreversible. ¿Continuar con la importación?', async () => {
+                        const importBtn = select('button[data-action="import-data"]');
+                        setButtonLoading(importBtn, true, 'Importando...');
+                        showToast('Iniciando importación... No cierres la página.', 'info', 10000);
+
+                        try {
+                            const user = currentUser;
+                            if (!user) throw new Error("No hay usuario autenticado.");
+
+                            const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+
+                            // --- BORRADO DE DATOS ANTIGUOS ---
+                            for (const collectionName of collectionsToClear) {
+                                const snapshot = await fbDb.collection('users').doc(user.uid).collection(collectionName).get();
+                                if (snapshot.empty) continue;
+                                
+                                let batch = fbDb.batch();
+                                let operations = 0;
+                                snapshot.docs.forEach(doc => {
+                                    batch.delete(doc.ref);
+                                    operations++;
+                                    if (operations >= 450) {
+                                        batch.commit();
+                                        batch = fbDb.batch();
+                                        operations = 0;
+                                    }
+                                });
+                                if (operations > 0) {
+                                    await batch.commit();
+                                }
+                            }
+                            
+                            // --- ESCRITURA DE DATOS NUEVOS ---
+                            for (const collectionName of Object.keys(dataToImport)) {
+                                const items = dataToImport[collectionName];
+                                if (Array.isArray(items)) { // Para las colecciones
+                                    let batch = fbDb.batch();
+                                    let operations = 0;
+                                    for (const item of items) {
+                                        if(item.id) {
+                                            const docRef = fbDb.collection('users').doc(user.uid).collection(collectionName).doc(item.id);
+                                            batch.set(docRef, item);
+                                            operations++;
+                                            if (operations >= 450) {
+                                                await batch.commit();
+                                                batch = fbDb.batch();
+                                                operations = 0;
+                                            }
+                                        }
+                                    }
+                                    if (operations > 0) {
+                                        await batch.commit();
+                                    }
+                                } else if (collectionName === 'config') { // Para el objeto de configuración
+                                    await fbDb.collection('users').doc(user.uid).set({ config: items }, { merge: true });
+                                }
+                            }
+
+                            hapticFeedback('success');
+                            showToast('¡Importación completada con éxito! La aplicación se recargará.', 'info', 5000);
+                            
+                            setTimeout(() => {
+                                location.reload();
+                            }, 3000);
+
+                        } catch (error) {
+                            console.error("Error durante la importación:", error);
+                            showToast("Error crítico durante la importación. Revisa la consola.", "danger", 5000);
+                            setButtonLoading(importBtn, false);
+                        }
+                    }, 'Confirmación Final');
+                });
+
+            } catch (error) {
+                console.error("Error al parsear JSON:", error);
+                showToast("El archivo seleccionado no es un JSON válido.", "danger");
+            } finally {
+                e.target.value = ''; 
+            }
+        };
+
+        reader.readAsText(file);
+    };
+
 const handleDuplicateMovement = () => { /* Logic omitted for brevity, but would re-open the form with current data */ };
 const handleDeleteAccount = (btn) => { showToast('La eliminación de la cuenta debe hacerse desde la consola de Firebase por seguridad.', 'warning', 5000); };
 const handleSaveInvestmentAccounts = async (form, btn) => {
