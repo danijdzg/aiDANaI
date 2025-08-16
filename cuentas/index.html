@@ -2075,7 +2075,7 @@
                 [...data].sort((a,b) => (a[nameKey]||"").localeCompare(b[nameKey]||"")).forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
                 el.innerHTML = opts; el.value = Array.from(el.options).some(o=>o.value===currentVal) ? currentVal : (el.options[0]?.value || "");
             };
-            populate('movimiento-cuenta', visibleAccounts.filter(c => !c.esInversion), 'nombre', 'id', false, true); 
+            populate('movimiento-cuenta', visibleAccounts, 'nombre', 'id', false, true);
             populate('movimiento-cuenta-origen', db.cuentas, 'nombre', 'id', false, true); 
             populate('movimiento-cuenta-destino', db.cuentas, 'nombre', 'id', false, true); 
             populate('filter-cuenta', visibleAccounts, 'nombre', 'id', true); 
@@ -2444,11 +2444,11 @@
                         <div class="transaction-card__content">
                             <div class="transaction-card__details">
                                 <div class="transaction-card__row-1">${formattedDate} • ${toSentenceCase(concept?.nombre || 'S/C')}</div>
-                                <div class="transaction-card__row-2">${escapeHTML(cuenta?.nombre || 'S/C')} - ${escapeHTML(m.descripcion)}</div>
+                                <div class="transaction-card__row-2">${escapeHTML(m.descripcion)}</div>
                             </div>
                             <div class="transaction-card__figures">
                                 <div class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</div>
-                                <div class="transaction-card__balance">${formatCurrency(m.runningBalance)}</div>
+                                <div class="transaction-card__balance">${escapeHTML(cuenta?.nombre || 'S/C')}</div>
                             </div>
                         </div>
                     </div>`;
@@ -3026,44 +3026,76 @@
             calculatorState.targetInput = null;
         };
         
-        const updateCalculatorDisplay = () => {
-            const display = select('calculator-display');
-            if (display) { display.textContent = calculatorState.displayValue.replace('.', ','); }
-            if (calculatorState.targetInput) {
-                const formattedValue = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(calculatorState.displayValue.replace(',', '.')));
-                calculatorState.targetInput.value = `${formattedValue} €`;
-            }
-        };
-        
+                
         const handleCalculatorInput = (key) => {
-            hapticFeedback('light');
-            let { displayValue, waitingForNewValue } = calculatorState;
-            displayValue = displayValue.replace(',', '.');
-        
-            switch(key) {
-                case 'done': hapticFeedback('medium'); hideCalculator(); break;
-                case 'comma': if (!displayValue.includes('.')) { displayValue += '.'; } break;
-                case 'clear': displayValue = '0'; waitingForNewValue = true; break;
-                case 'backspace': displayValue = displayValue.slice(0, -1) || '0'; break;
-                case 'sign': if (displayValue !== '0') { displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; } break;
-                default: if (waitingForNewValue || displayValue === '0') { if(key === ',') { displayValue = '0.'; } else { displayValue = key; } waitingForNewValue = false; } else { displayValue += key; } break;
-            }
-            
-            calculatorState.displayValue = displayValue.replace('.', ',');
-            calculatorState.waitingForNewValue = waitingForNewValue;
-            
-            const displayEl = select('calculator-display');
-            if(displayEl) displayEl.textContent = calculatorState.displayValue;
+    hapticFeedback('light');
+    let { displayValue, waitingForNewValue } = calculatorState;
+
+    // Normaliza a formato con punto para la lógica interna
+    displayValue = displayValue.replace(',', '.');
+
+    switch(key) {
+        case 'done': 
+            hapticFeedback('medium'); 
+            // Antes de cerrar, nos aseguramos que el valor final se actualice correctamente
             if (calculatorState.targetInput) {
-                const numValue = parseFloat(calculatorState.displayValue.replace(',', '.'));
-                if (!isNaN(numValue)) {
-                    const formatted = new Intl.NumberFormat('es-ES', { useGrouping: true, minimumFractionDigits: 0, maximumFractionDigits: 2}).format(numValue);
-                    calculatorState.targetInput.value = `${formatted} €`;
-                } else {
-                    calculatorState.targetInput.value = `0,00 €`;
-                }
+                const finalValue = parseFloat(displayValue) || 0;
+                calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
-        };
+            hideCalculator(); 
+            return; // Salimos para no ejecutar el update de abajo
+        case 'comma': 
+            if (!displayValue.includes('.')) { 
+                displayValue += '.'; 
+            } 
+            waitingForNewValue = false;
+            break;
+        case 'clear': 
+            displayValue = '0'; 
+            waitingForNewValue = true; 
+            break;
+        case 'backspace': 
+            displayValue = displayValue.slice(0, -1) || '0'; 
+            break;
+        case 'sign': 
+            if (displayValue !== '0') { 
+                displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
+            } 
+            break;
+        default: // Números 0-9
+            if (waitingForNewValue || displayValue === '0') { 
+                displayValue = key; 
+                waitingForNewValue = false; 
+            } else { 
+                displayValue += key; 
+            } 
+            break;
+    }
+    
+    calculatorState.displayValue = displayValue.replace('.', ',');
+    calculatorState.waitingForNewValue = waitingForNewValue;
+    updateCalculatorDisplay(); // Llama a la función de actualización
+};
+
+// REEMPLAZAR updateCalculatorDisplay
+const updateCalculatorDisplay = () => {
+    const display = select('calculator-display');
+    if (display) { 
+        // Mostramos el valor con coma en la pantalla de la calculadora
+        display.textContent = calculatorState.displayValue; 
+    }
+    if (calculatorState.targetInput) {
+        // Y también actualizamos el campo del formulario, pero sin el símbolo de €
+        // para que parseCurrencyString funcione de forma fiable.
+        const numValue = parseFloat(calculatorState.displayValue.replace(',', '.')) || 0;
+        calculatorState.targetInput.value = numValue.toLocaleString('es-ES', { 
+            useGrouping: false, // Evita los puntos de miles
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        });
+    }
+};
+
         
         const showGlobalSearchModal = () => {
             hapticFeedback('medium');
