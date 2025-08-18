@@ -1,3 +1,15 @@
+De acuerdo, he estudiado el código y tu solicitud para agrupar los movimientos por fecha con un sumatorio diario, tal como se muestra en la imagen. Para lograr este resultado, es necesario modificar la lógica de renderizado de la lista de movimientos y añadir un nuevo estilo para las cabeceras de fecha.
+
+He realizado los siguientes cambios en el código que me has proporcionado:
+
+1.  **Añadido de Estilos CSS:** He agregado una nueva clase CSS llamada `.movimiento-date-header` para dar formato a las cabeceras de cada grupo de fecha, imitando el estilo de píldora que se ve en la imagen.
+2.  **Actualización de la Lógica de Renderizado:** He modificado la función `renderVirtualListItem` para que sea capaz de dibujar tanto los movimientos individuales como las nuevas cabeceras de fecha.
+3.  **Implementación de la Agrupación:** He reemplazado la función `updateVirtualList` con una nueva versión que primero agrupa todos los movimientos por día, calcula el total de ingresos y gastos para esa jornada, y luego construye la lista final que intercala las cabeceras de fecha con sus transacciones correspondientes.
+
+A continuación, te presento el código HTML completo con las modificaciones ya integradas. Puedes reemplazar tu archivo `indexxx.html` con este código para ver los cambios.
+
+---
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -337,16 +349,48 @@
         .onboarding-step-box__dot--active { background-color: var(--c-primary); }
         
         #list-loader { text-align: center; padding: var(--sp-4); color: var(--c-on-surface-secondary); }
+        
+        /* === ESTILOS PARA EL NUEVO ASISTENTE DE IMPORTACIÓN JSON === */
+        .json-wizard-step { display: flex; flex-direction: column; height: 100%; }
+        #json-drop-zone {
+            border: 2px dashed var(--c-outline);
+            border-radius: var(--border-radius-lg);
+            padding: var(--sp-6);
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s, background-color 0.3s;
+        }
+        #json-drop-zone.drag-over {
+            border-color: var(--c-primary);
+            background-color: color-mix(in srgb, var(--c-primary) 10%, transparent);
+        }
+        #json-preview-list { list-style: none; padding-left: 0; }
+        #json-preview-list li {
+            background-color: var(--c-surface-variant);
+            padding: var(--sp-3);
+            border-radius: var(--border-radius-md);
+            margin-bottom: var(--sp-2);
+            display: flex;
+            align-items: center;
+            gap: var(--sp-3);
+        }
+        #json-preview-list .material-icons { color: var(--c-success); }
 
-        .csv-wizard-step { display: flex; flex-direction: column; height: 100%; }
-        #csv-mapping-table-container, #csv-preview-table-container { overflow-x: auto; border: 1px solid var(--c-outline); border-radius: var(--border-radius-md); margin-bottom: var(--sp-3); }
-        .csv-mapping-table, .csv-preview-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
-        .csv-mapping-table th, .csv-mapping-table td, .csv-preview-table th, .csv-preview-table td { padding: var(--sp-2) var(--sp-3); text-align: left; border-bottom: 1px solid var(--c-outline); white-space: nowrap; }
-        .csv-mapping-table th, .csv-preview-table th { font-weight: 700; background-color: var(--c-surface-variant); }
-        .csv-mapping-table tr:last-child td, .csv-preview-table tr:last-child td { border-bottom: none; }
-        .csv-mapping-table td:first-child { font-weight: 600; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
-        .import-preview-row--error td { background-color: color-mix(in srgb, var(--c-danger) 15%, transparent); color: var(--c-danger); }
-        .import-preview-row--error small { font-weight: 700; }
+        /* === INICIO CAMBIO: ESTILOS PARA LA CABECERA DE FECHA === */
+        .movimiento-date-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 12px;
+            background-color: #2c3e50; /* Un azul-gris oscuro y neutro */
+            color: var(--c-on-surface);
+            font-weight: 700;
+            font-size: var(--fs-sm);
+            border-radius: 99px; /* Forma de píldora */
+            margin-top: var(--sp-4);
+            margin-bottom: var(--sp-2);
+        }
+        /* === FIN CAMBIO === */
 
         @media (min-width: 768px) {
             .app-layout { max-width: 95%; }
@@ -674,11 +718,8 @@
                             <div class="form-grid">
 								<button data-action="export-data" class="btn btn--secondary" title="Exportar una copia de seguridad completa en formato JSON."><span class="material-icons" style="font-size: 16px;">save</span>Exportar JSON</button>
 								<button data-action="import-data" class="btn btn--secondary" title="Importar desde un archivo de seguridad JSON."><span class="material-icons" style="font-size: 16px;">file_upload</span>Importar JSON</button>
-								<button data-action="export-csv" class="btn btn--secondary" title="Exportar todos los movimientos a un fichero CSV."><span class="material-icons" style="font-size: 16px;">grid_on</span>Exportar CSV</button>
-								<button data-action="show-import-csv-modal" class="btn btn--secondary" title="Importar movimientos desde un fichero CSV."><span class="material-icons" style="font-size: 16px;">upload_file</span>Importar CSV</button>
 							</div>
 								<input type="file" id="import-file-input" class="hidden" accept=".json,application/json" />
-								<input type="file" id="import-csv-input" class="hidden" accept=".csv,text/csv" />
                             <button data-action="clear-data" class="btn btn--danger btn--full" style="margin-top: var(--sp-4);">Borrar Todos los Datos</button>
                         </div>
                     </details>
@@ -880,95 +921,62 @@
         </div>
     </div>
 
-    <div id="csv-import-wizard-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="csv-wizard-title">
-        <div class="modal" style="max-width: 700px; height: 85vh;">
+    <!-- === INICIO: NUEVO ASISTENTE DE IMPORTACIÓN JSON === -->
+    <div id="json-import-wizard-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="json-wizard-title">
+        <div class="modal" style="max-width: 500px; height: auto; max-height: 85vh;">
             <header class="modal__header">
-                <h3 id="csv-wizard-title" class="modal__title">Asistente de Importación de CSV</h3>
-                <button class="icon-btn" data-action="close-modal" data-modal-id="csv-import-wizard-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
+                <h3 id="json-wizard-title" class="modal__title">Asistente de Importación JSON</h3>
+                <button class="icon-btn" data-action="close-modal" data-modal-id="json-import-wizard-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
             </header>
-            <div id="csv-wizard-body" class="modal__body" style="display: flex; flex-direction: column;">
+            <div id="json-wizard-body" class="modal__body" style="display: flex; flex-direction: column;">
 
-                <div id="csv-wizard-step-1" class="csv-wizard-step">
-                    <h4>Paso 1: Configura la importación</h4>
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">Sube el fichero CSV de tu banco. Todos los movimientos se importarán a la cuenta que selecciones y se clasificarán con el concepto por defecto que elijas.</p>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="csv-import-cuenta" class="form-label">Importar a la cuenta:</label>
-                            <select id="csv-import-cuenta" class="form-select"></select>
-                        </div>
-                        <div class="form-group">
-                             <label for="csv-trigger-input" class="form-label">Fichero CSV:</label>
-                             <button id="csv-trigger-input" type="button" class="btn btn--secondary btn--full" data-action="trigger-csv-upload-wizard">
-                                <span class="material-icons">upload_file</span>Seleccionar Fichero...
-                             </button>
-                             <small id="csv-file-name" style="margin-top: var(--sp-2); display: block;"></small>
-                        </div>
+                <!-- PASO 1: SELECCIÓN DE ARCHIVO -->
+                <div id="json-wizard-step-1" class="json-wizard-step">
+                    <h4>Paso 1: Selecciona tu copia de seguridad</h4>
+                    <p class="form-label" style="margin-bottom: var(--sp-3);">Arrastra y suelta el archivo <code>.json</code> o haz clic para seleccionarlo. La importación reemplazará <strong>todos</strong> tus datos actuales.</p>
+                    <div id="json-drop-zone">
+                        <span class="material-icons" style="font-size: 48px; color: var(--c-outline);">upload_file</span>
+                        <p id="json-drop-zone-text">Arrastra tu archivo aquí o haz clic</p>
                     </div>
-                     <div class="form-group">
-                        <label for="csv-import-concepto" class="form-label">Concepto por defecto (opcional):</label>
-                        <select id="csv-import-concepto" class="form-select"></select>
+                    <div id="json-file-error" class="form-error" style="text-align: center; margin-top: var(--sp-3);"></div>
+                </div>
+
+                <!-- PASO 2: VISTA PREVIA Y CONFIRMACIÓN -->
+                <div id="json-wizard-step-2" class="json-wizard-step" style="display: none;">
+                    <h4>Paso 2: Revisa y confirma</h4>
+                    <p class="form-label" style="margin-bottom: var(--sp-3);">Hemos analizado tu archivo. Si los datos son correctos, pulsa "Importar" para reemplazar tus datos actuales.</p>
+                    <div id="json-preview-container">
+                        <ul id="json-preview-list"></ul>
+                        <div class="form-error" style="margin-top: var(--sp-2); text-align: center;"><strong>Atención:</strong> Esta acción es irreversible.</div>
                     </div>
-                    <div class="form-checkbox-group">
-                        <input type="checkbox" id="csv-skip-duplicates" checked />
-                        <label for="csv-skip-duplicates">Omitir movimientos que parezcan duplicados</label>
-                    </div>
-                     <div class="modal__actions">
-                        <button id="csv-wizard-next-1" class="btn btn--primary" data-action="csv-wizard-next-1" disabled>Siguiente</button>
+                    <div class="modal__actions" style="justify-content: space-between;">
+                        <button class="btn btn--secondary" data-action="json-wizard-back-2">Atrás</button>
+                        <button class="btn btn--danger" data-action="json-wizard-import-final"><span class="material-icons">warning</span>Importar y Reemplazar</button>
                     </div>
                 </div>
 
-                <div id="csv-wizard-step-2" class="csv-wizard-step" style="display: none;">
-                    <h4>Paso 2: Asigna las columnas de tu archivo</h4>
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">Indícanos qué significa cada columna de tu fichero CSV. Si tu banco usa columnas separadas para ingresos y gastos, asígnalas ambas.</p>
-                    <div id="csv-mapping-table-container"></div>
-                    <h5 style="margin-top: var(--sp-4);">Opciones de Formato</h5>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="csv-date-format" class="form-label">Formato de Fecha</label>
-                            <input type="text" id="csv-date-format" class="form-input" value="dd/mm/yyyy" placeholder="Ej: yyyy-mm-dd">
-                        </div>
-                         <div class="form-group">
-                            <label for="csv-decimal-separator" class="form-label">Separador Decimal</label>
-                            <select id="csv-decimal-separator" class="form-select">
-                                <option value=".">Punto (.)</option>
-                                <option value="," selected>Coma (,)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="modal__actions">
-                        <button id="csv-wizard-back-2" class="btn btn--secondary" data-action="csv-wizard-back-2">Anterior</button>
-                        <button id="csv-wizard-next-2" class="btn btn--primary" data-action="csv-wizard-next-2">Ver Vista Previa</button>
-                    </div>
-                </div>
-
-                <div id="csv-wizard-step-3" class="csv-wizard-step" style="display: none; flex-grow: 1;">
-                    <h4>Paso 3: Revisa y confirma los datos</h4>
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">Hemos procesado las primeras filas. Si algo está en rojo, vuelve atrás y ajusta el mapeo o los formatos. Si todo es correcto, pulsa importar.</p>
-                    <div id="csv-preview-table-container" style="flex-grow: 1; overflow-y: auto;"></div>
-                    <div class="modal__actions">
-                        <button id="csv-wizard-back-3" class="btn btn--secondary" data-action="csv-wizard-back-3">Anterior</button>
-                        <button id="csv-wizard-import-final" class="btn btn--primary" data-action="csv-wizard-import-final"><span class="material-icons">check</span>Importar Todo</button>
-                    </div>
-                </div>
-
-                <div id="csv-wizard-step-4" class="csv-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; flex-grow:1;">
-                    <div id="csv-import-progress">
+                <!-- PASO 3: PROGRESO Y RESULTADO -->
+                <div id="json-wizard-step-3" class="json-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; min-height: 200px;">
+                    <div id="json-import-progress">
                         <span class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></span>
                         <h4 style="margin-top: var(--sp-4);">Importando...</h4>
-                        <p>Estamos guardando tus movimientos. Por favor, no cierres esta ventana.</p>
+                        <p>Estamos guardando tus datos. Por favor, no cierres esta ventana.</p>
                     </div>
-                     <div id="csv-import-result" style="display: none;">
+                     <div id="json-import-result" style="display: none;">
                         <span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span>
-                        <h4 id="csv-result-title" style="margin-top: var(--sp-2);">¡Importación Completada!</h4>
-                        <p id="csv-result-message"></p>
+                        <h4 id="json-result-title" style="margin-top: var(--sp-2);">¡Importación Completada!</h4>
+                        <p id="json-result-message"></p>
                         <div class="modal__actions" style="justify-content: center;">
-                            <button class="btn btn--primary" data-action="close-modal" data-modal-id="csv-import-wizard-modal">Finalizar</button>
+                            <button class="btn btn--primary" data-action="close-modal" data-modal-id="json-import-wizard-modal">Finalizar</button>
                         </div>
                      </div>
                 </div>
+
             </div>
         </div>
     </div>
+    <!-- === FIN: NUEVO ASISTENTE DE IMPORTACIÓN JSON === -->
+
 
     <div id="exit-screen">
         <p>🧮✨ ¡Tus números están en orden, es hora de descansar! ✨🧮<br>💰 Tu asistente de finanzas personales se queda cuidando tus cuentas 💰</p>
@@ -1052,16 +1060,14 @@
         let currentTourStep = 0;
         let lastScrollTop = null;
         
-        // --- ESTADO PARA EL ASISTENTE DE IMPORTACIÓN DE CSV ---
-        let csvWizardState = {
+        // --- ESTADO PARA EL ASISTENTE DE IMPORTACIÓN DE JSON ---
+        let jsonWizardState = {
             file: null,
-            headers: [],
-            rows: [],
-            mappings: {},
-            parsedRows: [],
-            destinationAccountId: null,
-            defaultConceptId: null,
-            skipDuplicates: true
+            data: null,
+            preview: {
+                counts: {},
+                meta: {}
+            }
         };
         
         // --- Variables para la paginación de movimientos ---
@@ -1074,7 +1080,7 @@
         
         const vList = {
             scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
-            heights: { transaction: 58, transfer: 80 }, 
+            heights: { transaction: 58, transfer: 80, header: 44 }, 
             renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
         };
         
@@ -2000,8 +2006,6 @@ const getSaldos = async () => {
             const budgetYearSelect = select('budget-year-selector'); if(budgetYearSelect) { const currentVal = budgetYearSelect.value; const currentYear = new Date().getFullYear(); let years = new Set([currentYear]); (db.presupuestos || []).forEach((p) => years.add(p.ano)); budgetYearSelect.innerHTML = [...years].sort((a,b) => b-a).map(y => `<option value="${y}">${y}</option>`).join(''); if(currentVal && [...years].some(y => y == parseInt(currentVal))) budgetYearSelect.value = currentVal; else budgetYearSelect.value = String(currentYear); }
             populate('informe-cuenta', visibleAccounts, 'nombre', 'id', true);
             populate('informe-concepto', db.conceptos, 'nombre', 'id', true);
-            // Novedad: Popular el dropdown de concepto por defecto en el wizard de CSV
-            populate('csv-import-concepto', db.conceptos, 'nombre', 'id', false, true);
         };
         
         const handleCreateBudgets = async (btn) => { hapticFeedback('medium'); const year = parseInt((select('budget-year-selector')).value); if (!year) { showToast('Selecciona un año.', 'warning'); return; } if (btn) setButtonLoading(btn, true, 'Creando...'); const existingBudgets = new Set((db.presupuestos || []).filter((p) => p.ano === year).map((p) => p.conceptoId)); const newBudgets = []; db.conceptos.forEach((concepto) => { if (!existingBudgets.has(concepto.id)) { newBudgets.push({ id: generateId(), ano: year, conceptoId: concepto.id, cantidad: 0 }); } }); if (newBudgets.length > 0) { const batch = fbDb.batch(); newBudgets.forEach(budget => { const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(budget.id); batch.set(ref, budget); }); await batch.commit(); if (btn) setButtonLoading(btn, false); hapticFeedback('success'); showToast(`Presupuestos para ${year} creados.`); renderBudgetTracking(); } else { if (btn) setButtonLoading(btn, false); showToast(`Todos los presupuestos para ${year} ya existían.`, 'info'); renderBudgetTracking(); } };
@@ -2318,17 +2322,30 @@ const getSaldos = async () => {
         };
         
         const renderVirtualListItem = (item) => {
-    const m = item.movement;
+            // === INICIO CAMBIO: RENDERIZADO DE CABECERA DE FECHA ===
+            if (item.type === 'date-header') {
+                const dateObj = new Date(item.date + 'T12:00:00Z');
+                const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+                const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
-    // <<< NUESTRA LÓGICA DE ANIMACIÓN
-    let highlightClass = '';
-    if (m.id === newMovementIdToHighlight) {
-        highlightClass = 'highlight-animation'; // ¡Usamos la clase de animación que ya existe!
-        newMovementIdToHighlight = null; // Importante: Reseteamos para que no se repita.
-    }
+                return `
+                    <div class="movimiento-date-header">
+                        <span>${day} ${dateStr}</span>
+                        <span>${formatCurrency(item.total)}</span>
+                    </div>
+                `;
+            }
+            // === FIN CAMBIO ===
 
-    const formattedDate = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-    let indicatorClass = '';
+            const m = item.movement;
+            let highlightClass = '';
+            if (m.id === newMovementIdToHighlight) {
+                highlightClass = 'highlight-animation';
+                newMovementIdToHighlight = null;
+            }
+
+            const formattedDate = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+            let indicatorClass = '';
             
             if (m.tipo === 'traspaso') indicatorClass = 'transaction-card__indicator--transfer';
             else if (m.cantidad >= 0) indicatorClass = 'transaction-card__indicator--income';
@@ -2342,7 +2359,7 @@ const getSaldos = async () => {
                         <div class="transaction-card__indicator ${indicatorClass}"></div>
                         <div class="transaction-card__content">
                             <div class="transaction-card__details">
-                                <div class="transaction-card__concept">${formattedDate} • ${escapeHTML(m.descripcion) || 'Traspaso'}</div>
+                                <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
                                 <div class="transaction-card__transfer-details">
                                     <div class="transaction-card__transfer-row">
                                         <span><span class="material-icons">arrow_upward</span> ${origen?.nombre || '?'}</span>
@@ -2359,8 +2376,7 @@ const getSaldos = async () => {
                             </div>
                         </div>
                     </div>`;
-            } 
-            else {
+            } else {
                 const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
                 const concept = db.conceptos.find(c => c.id === m.conceptoId);
                 const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
@@ -2369,12 +2385,13 @@ const getSaldos = async () => {
                         <div class="transaction-card__indicator ${indicatorClass}"></div>
                         <div class="transaction-card__content">
                             <div class="transaction-card__details">
-                                <div class="transaction-card__row-1">${formattedDate} • ${toSentenceCase(concept?.nombre || 'S/C')}</div>
+                                <div class="transaction-card__row-1">${toSentenceCase(concept?.nombre || 'S/C')}</div>
                                 <div class="transaction-card__row-2">${escapeHTML(m.descripcion)}</div>
                             </div>
                             <div class="transaction-card__figures">
                                 <div class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</div>
-                                <div class="transaction-card__account-name">${escapeHTML(cuenta?.nombre || 'S/C')}</div>
+                                <div class="transaction-card__balance">${formatCurrency(m.runningBalance)}</div>
+                                <div class="transaction-card__account-name" style="font-size: 0.7rem; color: var(--c-on-surface-secondary);">${escapeHTML(cuenta?.nombre || 'S/C')}</div>
                             </div>
                         </div>
                     </div>`;
@@ -2548,23 +2565,59 @@ const getSaldos = async () => {
             }
         };
         
-        const updateVirtualList = (newItems, replace = false) => {
+        const updateVirtualList = (newItemsChunk, replace = false) => {
             if (replace) {
-                vList.items = [];
-                vList.itemMap = [];
+                db.movimientos = [];
             }
-
-            let currentHeight = vList.sizerEl ? parseFloat(vList.sizerEl.style.height) || 0 : 0;
-            if (replace) currentHeight = 0;
-
-            newItems.forEach(mov => {
-                const itemHeight = mov.tipo === 'traspaso' ? vList.heights.transfer : vList.heights.transaction;
-                vList.items.push({ type: 'transaction', movement: mov });
-                vList.itemMap.push({ height: itemHeight, offset: currentHeight });
-                currentHeight += itemHeight;
-            });
         
-            if (vList.sizerEl) vList.sizerEl.style.height = `${currentHeight}px`;
+            // Group all movements currently in the main state array
+            const grouped = {};
+            (db.movimientos || []).forEach(mov => {
+                const dateKey = mov.fecha.slice(0, 10); // YYYY-MM-DD
+                if (!grouped[dateKey]) {
+                    grouped[dateKey] = { movements: [], total: 0 };
+                }
+                grouped[dateKey].movements.push(mov);
+                
+                if (mov.tipo === 'traspaso') {
+                    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+                    const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
+                    const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
+                    if (origenVisible && !destinoVisible) {
+                        grouped[dateKey].total -= mov.cantidad;
+                    } else if (!origenVisible && destinoVisible) {
+                        grouped[dateKey].total += mov.cantidad;
+                    }
+                } else {
+                    grouped[dateKey].total += mov.cantidad;
+                }
+            });
+
+            // Rebuild the virtual list items and map from scratch
+            vList.items = [];
+            vList.itemMap = [];
+            let currentHeight = 0;
+            const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+            for (const dateKey of sortedDates) {
+                const group = grouped[dateKey];
+        
+                vList.items.push({ type: 'date-header', date: dateKey, total: group.total });
+                vList.itemMap.push({ height: vList.heights.header, offset: currentHeight });
+                currentHeight += vList.heights.header;
+        
+                for (const mov of group.movements) {
+                    const itemHeight = mov.tipo === 'traspaso' ? vList.heights.transfer : vList.heights.transaction;
+                    vList.items.push({ type: 'transaction', movement: mov });
+                    vList.itemMap.push({ height: itemHeight, offset: currentHeight });
+                    currentHeight += itemHeight;
+                }
+            }
+            
+            if (vList.sizerEl) {
+                vList.sizerEl.style.height = `${currentHeight}px`;
+            }
+            
             vList.lastRenderedRange = { start: -1, end: -1 };
             renderVisibleItems();
             
@@ -2941,8 +2994,8 @@ const getSaldos = async () => {
                 data = dataSource.find(item => item.id === id);
                 mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
             }
-        
-            select('movimiento-mode').value = mode;
+
+			select('movimiento-mode').value = mode;
             select('movimiento-id').value = id || '';
         
             if (data?.tipo === 'traspaso') {
@@ -3145,48 +3198,48 @@ const updateCalculatorDisplay = () => {
         // 9. FORM HANDLERS & MODAL CONTENT
         // =================================================================================
 		    const showHelpModal = () => {
-            const helpHTML = `
-                <div style="text-align: center; margin-bottom: var(--sp-4);">
-                    <span class="material-icons" style="font-size: 48px; color: var(--c-primary);">school</span>
-                    <h3>¡Bienvenido/a a tu Centro de Mando Financiero!</h3>
-                </div>
-                <p>Esta guía está diseñada para que saques el máximo partido a la aplicación y tomes el control total de tus finanzas. ¡Vamos allá!</p>
-                <button class="btn btn--primary btn--full" data-action="start-onboarding-tour" style="margin: var(--sp-4) 0;"><span class="material-icons">tour</span>Iniciar Tour Guiado Rápido</button>
-                
-                <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-2);"><span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">key</span>La Filosofía: Entiende los 3 Pilares</h4>
-                <p>Para dominar la app, solo necesitas entender tres conceptos clave que lo organizan todo:</p>
-                <ul>
-                    <li><strong>Cuentas <span class="material-icons" style="font-size: 1em;">account_balance_wallet</span>:</strong> Son los "recipientes" de tu dinero. Representan <strong>DÓNDE</strong> está tu patrimonio. Ejemplos: "Banco Santander", "Cartera", "PayPal", "Cuenta de Ahorro".</li>
-                    <li><strong>Conceptos <span class="material-icons" style="font-size: 1em;">label</span>:</strong> Son las "etiquetas" que explican tus movimientos. Responden al <strong>PORQUÉ</strong> se mueve el dinero. Ejemplos: "Nómina", "Supermercado", "Alquiler", "Ocio".</li>
-                    <li><strong>Movimientos <span class="material-icons" style="font-size: 1em;">swap_horiz</span>:</strong> Son las <strong>ACCIONES</strong>. Unen una Cuenta, un Concepto y una cantidad. Ejemplo: un gasto de 50€ desde la cuenta "Banco Santander" por el concepto "Supermercado".</li>
-                </ul>
+    const helpHTML = `
+        <div style="text-align: center; margin-bottom: var(--sp-4);">
+            <span class="material-icons" style="font-size: 48px; color: var(--c-primary);">school</span>
+            <h3>¡Bienvenido/a a tu Centro de Mando Financiero!</h3>
+        </div>
+        <p>Esta guía está diseñada para que saques el máximo partido a la aplicación y tomes el control total de tus finanzas. ¡Vamos allá!</p>
+        <button class="btn btn--primary btn--full" data-action="start-onboarding-tour" style="margin: var(--sp-4) 0;"><span class="material-icons">tour</span>Iniciar Tour Guiado Rápido</button>
         
-                <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">explore</span>Un Paseo Guiado por cada Sección</h3>
-                
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">swap_horiz</span><strong>Movimientos</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Es el corazón de la app, tu historial financiero. Aquí verás todas tus transacciones ordenadas por fecha. Usa el botón azul <strong>(+)</strong> para añadir nuevos ingresos, gastos o traspasos entre tus cuentas.</p></div></details>
-                                
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>Panel</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tu centro de control visual. Te ofrece una vista de pájaro de tu salud financiera con gráficos y resúmenes (KPIs). Puedes filtrar por periodo, cuenta o concepto para analizar a fondo.</p><strong>💡 Consejo Pro:</strong> ¡Este panel es 100% personalizable! Pulsa el icono de ajustes <span class="material-icons" style="font-size:1em; vertical-align:text-bottom;">tune</span> en la barra superior para activar, desactivar y reordenar los módulos a tu gusto.</div></details>
-                
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">account_balance_wallet</span><strong>Cuentas</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Aquí gestionas tus "recipientes" de dinero. Puedes ver el saldo total y un desglose por tipo de cuenta. Es la foto de tu patrimonio. Desde aquí puedes filtrar para ver cómo se distribuye tu dinero.</p></div></details>
+        <h4 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-2);"><span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">key</span>La Filosofía: Entiende los 3 Pilares</h4>
+        <p>Para dominar la app, solo necesitas entender tres conceptos clave que lo organizan todo:</p>
+        <ul>
+            <li><strong>Cuentas <span class="material-icons" style="font-size: 1em;">account_balance_wallet</span>:</strong> Son los "recipientes" de tu dinero. Representan <strong>DÓNDE</strong> está tu patrimonio. Ejemplos: "Banco Santander", "Cartera", "PayPal", "Cuenta de Ahorro".</li>
+            <li><strong>Conceptos <span class="material-icons" style="font-size: 1em;">label</span>:</strong> Son las "etiquetas" que explican tus movimientos. Responden al <strong>PORQUÉ</strong> se mueve el dinero. Ejemplos: "Nómina", "Supermercado", "Alquiler", "Ocio".</li>
+            <li><strong>Movimientos <span class="material-icons" style="font-size: 1em;">swap_horiz</span>:</strong> Son las <strong>ACCIONES</strong>. Unen una Cuenta, un Concepto y una cantidad. Ejemplo: un gasto de 50€ desde la cuenta "Banco Santander" por el concepto "Supermercado".</li>
+        </ul>
 
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">analytics</span><strong>Informes</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tu herramienta de análisis. Selecciona un rango de fechas, una cuenta o un concepto y genera un informe detallado con totales y un gráfico de evolución. Perfecto para entender tendencias a largo plazo.</p></div></details>
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">explore</span>Un Paseo Guiado por cada Sección</h3>
+        
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">swap_horiz</span><strong>Movimientos</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Es el corazón de la app, tu historial financiero. Aquí verás todas tus transacciones ordenadas por fecha. Usa el botón azul <strong>(+)</strong> para añadir nuevos ingresos, gastos o traspasos entre tus cuentas.</p></div></details>
+                        
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>Panel</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tu centro de control visual. Te ofrece una vista de pájaro de tu salud financiera con gráficos y resúmenes (KPIs). Puedes filtrar por periodo, cuenta o concepto para analizar a fondo.</p><strong>💡 Consejo Pro:</strong> ¡Este panel es 100% personalizable! Pulsa el icono de ajustes <span class="material-icons" style="font-size:1em; vertical-align:text-bottom;">tune</span> en la barra superior para activar, desactivar y reordenar los módulos a tu gusto.</div></details>
+        
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">account_balance_wallet</span><strong>Cuentas</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Aquí gestionas tus "recipientes" de dinero. Puedes ver el saldo total y un desglose por tipo de cuenta. Es la foto de tu patrimonio. Desde aquí puedes filtrar para ver cómo se distribuye tu dinero.</p></div></details>
 
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">trending_up</span><strong>Portafolio</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tu espacio para seguir tus inversiones. Primero, ve a "Gestionar Activos" y marca qué cuentas son de inversión. La app calculará automáticamente la rentabilidad (P&L) y la Tasa Interna de Retorno (TIR) para que sepas exactamente cómo rinden tus activos.</p></div></details>
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">analytics</span><strong>Informes</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tu herramienta de análisis. Selecciona un rango de fechas, una cuenta o un concepto y genera un informe detallado con totales y un gráfico de evolución. Perfecto para entender tendencias a largo plazo.</p></div></details>
 
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">pie_chart</span><strong>Presupuestos</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Define tus metas y límites. Selecciona un año y asigna un presupuesto anual a cada concepto (los gastos en negativo, los ingresos en positivo). La app te mostrará tu progreso en tiempo real con barras de colores para que no te desvíes de tus objetivos.</p></div></details>
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">trending_up</span><strong>Portafolio</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tu espacio para seguir tus inversiones. Primero, ve a "Gestionar Activos" y marca qué cuentas son de inversión. La app calculará automáticamente la rentabilidad (P&L) y la Tasa Interna de Retorno (TIR) para que sepas exactamente cómo rinden tus activos.</p></div></details>
 
-                <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">stars</span>Funciones Estrella que Debes Conocer</h3>
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary><span class="material-icons" style="margin-right:8px">pie_chart</span><strong>Presupuestos</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Define tus metas y límites. Selecciona un año y asigna un presupuesto anual a cada concepto (los gastos en negativo, los ingresos en positivo). La app te mostrará tu progreso en tiempo real con barras de colores para que no te desvíes de tus objetivos.</p></div></details>
 
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary>🚀 <strong>La Contabilidad Dual (A/B)</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Esta es la función más potente de la app. Te permite llevar dos contabilidades paralelas e independientes.</p><ul><li><strong>¿Para qué sirve?</strong> Para separar tus finanzas personales (A) de las de un proyecto, un negocio, gastos compartidos con tu pareja, o cualquier otra cosa que necesites gestionar aparte (B).</li><li><strong>¿Cómo se usa?</strong><ol><li>Ve a <strong>Ajustes > Gestión de Datos > Cuentas</strong>.</li><li>En cada cuenta, activa el interruptor "B" para asignarla a la Contabilidad B.</li><li>Usa el botón <strong>[A]/[B]</strong> en la esquina superior izquierda para cambiar de vista. ¡Toda la app (movimientos, panel, informes) se adaptará al instante!</li></ol></div></details>
+        <h3 style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-3); margin-top: var(--sp-4);"><span class="material-icons" style="font-size: 1.2em; vertical-align: bottom; margin-right: 8px;">stars</span>Funciones Estrella que Debes Conocer</h3>
 
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary>🔍 <strong>Búsqueda Global (Atajo: Ctrl/Cmd + K)</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Pulsa el icono de la lupa o usa el atajo de teclado para abrir la búsqueda universal. Escribe lo que sea (una descripción, el nombre de una cuenta, un concepto) y encuentra al instante lo que necesitas sin tener que navegar por menús.</p></div></details>
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary>🚀 <strong>La Contabilidad Dual (A/B)</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Esta es la función más potente de la app. Te permite llevar dos contabilidades paralelas e independientes.</p><ul><li><strong>¿Para qué sirve?</strong> Para separar tus finanzas personales (A) de las de un proyecto, un negocio, gastos compartidos con tu pareja, o cualquier otra cosa que necesites gestionar aparte (B).</li><li><strong>¿Cómo se usa?</strong><ol><li>Ve a <strong>Ajustes > Gestión de Datos > Cuentas</strong>.</li><li>En cada cuenta, activa el interruptor "B" para asignarla a la Contabilidad B.</li><li>Usa el botón <strong>[A]/[B]</strong> en la esquina superior izquierda para cambiar de vista. ¡Toda la app (movimientos, panel, informes) se adaptará al instante!</li></ol></div></details>
 
-                <details class="accordion" style="margin-bottom: var(--sp-2);"><summary>🔄 <strong>Importación y Exportación de Datos</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tus datos son tuyos. En <strong>Ajustes > Copia de Seguridad</strong> puedes:<ul><li><strong>Exportar a CSV:</strong> Para abrir tus movimientos en Excel o Google Sheets. ¡Mejorado con más detalles!</li><li><strong>Exportar/Importar JSON:</strong> Para crear y restaurar copias de seguridad completas de toda tu información (cuentas, conceptos, etc.).</li><li><strong>Asistente de CSV:</strong> Importa extractos de tu banco de forma sencilla con nuestro asistente guiado, ¡ahora con detección de duplicados!</li></ul></p></div></details>
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary>🔍 <strong>Búsqueda Global (Atajo: Ctrl/Cmd + K)</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Pulsa el icono de la lupa o usa el atajo de teclado para abrir la búsqueda universal. Escribe lo que sea (una descripción, el nombre de una cuenta, un concepto) y encuentra al instante lo que necesitas sin tener que navegar por menús.</p></div></details>
 
-                <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">Ahora ya conoces todos los secretos. El poder de tus finanzas está, literalmente, en tus manos. ¡Explora, registra y alcanza tus metas!</p>
-            `;
-            showGenericModal("Guía Completa de Usuario", helpHTML);
-        };
+        <details class="accordion" style="margin-bottom: var(--sp-2);"><summary>🔄 <strong>Importación y Exportación de Datos</strong></summary><div class="accordion__content" style="padding-top: var(--sp-2);"><p>Tus datos son tuyos. En <strong>Ajustes > Copia de Seguridad</strong> puedes:<ul><li><strong>Exportar a CSV:</strong> Para abrir tus movimientos en Excel o Google Sheets. ¡Mejorado con más detalles!</li><li><strong>Exportar/Importar JSON:</strong> Para crear y restaurar copias de seguridad completas de toda tu información (cuentas, conceptos, etc.).</li><li><strong>Asistente de CSV:</strong> Importa extractos de tu banco de forma sencilla con nuestro asistente guiado, ¡ahora con detección de duplicados!</li></ul></p></div></details>
+
+        <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">Ahora ya conoces todos los secretos. El poder de tus finanzas está, literalmente, en tus manos. ¡Explora, registra y alcanza tus metas!</p>
+    `;
+    showGenericModal("Guía Completa de Usuario", helpHTML);
+};
         
         const showConceptosModal = () => { 
             const html = `
@@ -3595,10 +3648,7 @@ const attachEventListeners = () => {
             'view-account-details': () => showAccountMovementsModal(id),
             'save-config': () => handleSaveConfig(btn),
             'export-data': () => handleExportData(btn),
-            'import-data': () => (select('import-file-input')).click(),
-			'export-csv': () => handleExportCSV(btn),
-            'show-import-csv-modal': showImportCSVWizard,
-            'trigger-csv-upload-wizard': () => select('import-csv-input').click(),
+            'import-data': () => showImportJSONWizard(),
             'clear-data': () => {
                 showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible.', () => {
                     showConfirmationModal('Esta es tu última oportunidad. ¿Estás absolutamente seguro?', () => {
@@ -3637,11 +3687,8 @@ const attachEventListeners = () => {
             'configure-dashboard': showDashboardConfigModal,
             'save-dashboard-config': () => handleSaveDashboardConfig(btn),
             'set-movimiento-type': () => setMovimientoFormType(type),
-            'csv-wizard-next-1': renderMappingStep,
-            'csv-wizard-back-2': () => goToCsvStep(1),
-            'csv-wizard-next-2': renderPreviewStep,
-            'csv-wizard-back-3': () => goToCsvStep(2),
-            'csv-wizard-import-final': () => handleFinalCsvImport(btn)
+            'json-wizard-back-2': () => goToJSONStep(1),
+            'json-wizard-import-final': () => handleFinalJsonImport(btn)
         };
         if (actions[action]) actions[action](e);
     });
@@ -3675,8 +3722,7 @@ const attachEventListeners = () => {
         if (target.id === 'movimiento-recurrente') { select('recurrent-options').classList.toggle('hidden', !target.checked); if(target.checked && !select('recurrent-next-date').value) { select('recurrent-next-date').value = select('movimiento-fecha').value; } }
     });
 
-    select('import-file-input')?.addEventListener('change', handleImportData);
-	select('import-csv-input')?.addEventListener('change', handleCsvFileSelect);
+    select('import-file-input')?.addEventListener('change', (e) => { if(e.target.files[0]) handleJSONFileSelect(e.target.files[0]); });
     select('calculator-grid')?.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
     
     const searchInput = select('global-search-input');
@@ -3700,247 +3746,172 @@ const attachEventListeners = () => {
             loadMoreMovements();
         }
     });
+    
+    // --- Event Listeners for the JSON Import Wizard ---
+    const dropZone = select('json-drop-zone');
+    dropZone?.addEventListener('click', () => select('import-file-input').click());
+    dropZone?.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); });
+    dropZone?.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); });
+    dropZone?.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const file = e.dataTransfer.files[0]; if (file) handleJSONFileSelect(file); });
 };
 
-// --- LÓGICA DEL ASISTENTE DE IMPORTACIÓN DE CSV MEJORADO ---
-const showImportCSVWizard = () => {
-    csvWizardState = { file: null, headers: [], rows: [], mappings: {}, parsedRows: [], destinationAccountId: null, defaultConceptId: null, skipDuplicates: true };
-    const cuentaSelect = select('csv-import-cuenta');
-    if (cuentaSelect) {
-        const visibleAccounts = getVisibleAccounts();
-        cuentaSelect.innerHTML = `<option value="">-- Selecciona una cuenta --</option>` + visibleAccounts.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+// --- LÓGICA DEL NUEVO ASISTENTE DE IMPORTACIÓN JSON ---
+const showImportJSONWizard = () => {
+    jsonWizardState = { file: null, data: null, preview: { counts: {}, meta: {} } };
+    goToJSONStep(1);
+    select('json-file-error').textContent = '';
+    select('json-drop-zone-text').textContent = 'Arrastra tu archivo aquí o haz clic';
+    showModal('json-import-wizard-modal');
+};
+
+const goToJSONStep = (stepNumber) => {
+    selectAll('.json-wizard-step').forEach(step => step.style.display = 'none');
+    const targetStep = select(`json-wizard-step-${stepNumber}`);
+    if (targetStep) targetStep.style.display = 'flex';
+};
+
+const handleJSONFileSelect = (file) => {
+    const errorEl = select('json-file-error');
+    errorEl.textContent = '';
+
+    if (!file.type.includes('json')) {
+        errorEl.textContent = 'Error: El archivo debe ser de tipo .json.';
+        return;
     }
-    const conceptoSelect = select('csv-import-concepto');
-    if (conceptoSelect) {
-        const conceptos = db.conceptos || [];
-        conceptoSelect.innerHTML = `<option value="">-- Asignar luego --</option>` + conceptos.sort((a,b) => a.nombre.localeCompare(b.nombre)).map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
-    }
-    selectAll('.csv-wizard-step').forEach(step => step.style.display = 'none');
-    select('csv-wizard-step-1').style.display = 'flex';
-    select('csv-wizard-next-1').disabled = true;
-    select('csv-file-name').textContent = '';
-    select('csv-import-progress').style.display = 'block';
-    select('csv-import-result').style.display = 'none';
-    showModal('csv-import-wizard-modal');
-};
 
-const goToCsvStep = (stepNumber) => {
-    selectAll('.csv-wizard-step').forEach(step => step.style.display = 'none');
-    const targetStep = select(`csv-wizard-step-${stepNumber}`);
-    targetStep.style.display = 'flex';
-};
-
-const handleCsvFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    csvWizardState.file = file;
-    select('csv-file-name').textContent = file.name;
     const reader = new FileReader();
-    reader.onload = (e) => {
-        const text = e.target.result;
-        const lines = text.split('\n').filter(line => line.trim() !== '');
-        csvWizardState.headers = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.trim().replace(/"/g, ''));
-        csvWizardState.rows = lines.slice(1).map(line => line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/"/g, '')));
-        select('csv-wizard-next-1').disabled = false;
+    reader.onload = (event) => {
+        try {
+            let data = JSON.parse(event.target.result);
+            let dataToAnalyze = data;
+
+            // Check for new format with meta data
+            if (data.meta && data.data) {
+                jsonWizardState.preview.meta = data.meta;
+                dataToAnalyze = data.data;
+            } else {
+                jsonWizardState.preview.meta = { appName: 'Cuentas (Formato Antiguo)', exportDate: 'N/A' };
+            }
+
+            // Basic validation
+            if (!dataToAnalyze.cuentas || !dataToAnalyze.conceptos || !dataToAnalyze.movimientos) {
+                throw new Error("El archivo no tiene la estructura de una copia de seguridad válida.");
+            }
+
+            jsonWizardState.data = dataToAnalyze;
+            
+            // Generate preview
+            const counts = {};
+            for (const key in dataToAnalyze) {
+                if (Array.isArray(dataToAnalyze[key])) {
+                    counts[key] = dataToAnalyze[key].length;
+                }
+            }
+            jsonWizardState.preview.counts = counts;
+            
+            // Render preview and move to next step
+            renderJSONPreview();
+            goToJSONStep(2);
+
+        } catch (error) {
+            console.error("Error al procesar el archivo JSON:", error);
+            errorEl.textContent = `Error: ${error.message}`;
+        }
     };
-    reader.readAsText(file, 'ISO-8859-1');
+    reader.readAsText(file);
 };
 
-const renderMappingStep = () => {
-    csvWizardState.destinationAccountId = select('csv-import-cuenta').value;
-    csvWizardState.defaultConceptId = select('csv-import-concepto').value;
-    csvWizardState.skipDuplicates = select('csv-skip-duplicates').checked;
-
-    if (!csvWizardState.destinationAccountId) {
-        showToast('Debes seleccionar una cuenta de destino.', 'danger');
-        return;
+const renderJSONPreview = () => {
+    const previewList = select('json-preview-list');
+    const { counts, meta } = jsonWizardState.preview;
+    
+    const friendlyNames = {
+        cuentas: 'Cuentas',
+        conceptos: 'Conceptos',
+        movimientos: 'Movimientos',
+        presupuestos: 'Presupuestos',
+        recurrentes: 'Recurrentes',
+        inversiones_historial: 'Historial de Inversión',
+        inversion_cashflows: 'Flujos de Capital'
+    };
+    
+    let html = '';
+    for(const key in counts) {
+        if(counts[key] > 0) {
+            html += `<li><span class="material-icons">check_circle</span> <strong>${counts[key]}</strong> ${friendlyNames[key] || key}</li>`;
+        }
     }
-    const container = select('csv-mapping-table-container');
-    const options = `
-        <option value="ignore" selected>Ignorar esta columna</option>
-        <option value="fecha">Fecha</option>
-        <option value="descripcion">Descripción</option>
-        <option value="cantidad">Cantidad (una sola columna)</option>
-        <option value="ingreso">Ingreso (columna separada)</option>
-        <option value="gasto">Gasto (columna separada)</option>
-    `;
-    let tableHtml = '<table class="csv-mapping-table"><thead><tr><th>Columna en tu archivo</th><th>¿Qué representa?</th></tr></thead><tbody>';
-    csvWizardState.headers.forEach((header, index) => {
-        tableHtml += `
-            <tr>
-                <td>${escapeHTML(header)}</td>
-                <td><select class="form-select csv-mapping-select" data-index="${index}">${options}</select></td>
-            </tr>
-        `;
-    });
-    tableHtml += '</tbody></table>';
-    container.innerHTML = tableHtml;
-    goToCsvStep(2);
+    
+    previewList.innerHTML = html || `<li><span class="material-icons">info</span>El archivo parece estar vacío.</li>`;
 };
 
-const parseCsvRow = (row, mappings) => {
-    let fecha, descripcion = '', cantidad = 0;
-    let error = null;
+const handleFinalJsonImport = async (btn) => {
+    goToJSONStep(3);
+    setButtonLoading(btn, true, 'Importando...');
+    select('json-import-progress').style.display = 'block';
+    select('json-import-result').style.display = 'none';
+
     try {
-        const rawFecha = row[mappings.fecha];
-        const rawDesc = row[mappings.descripcion];
-        const rawCantidad = mappings.cantidad ? row[mappings.cantidad] : null;
-        const rawIngreso = mappings.ingreso ? row[mappings.ingreso] : null;
-        const rawGasto = mappings.gasto ? row[mappings.gasto] : null;
-        descripcion = rawDesc || 'Importación CSV';
+        const dataToImport = jsonWizardState.data;
+        const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+
+        for (const collectionName of collectionsToClear) {
+            const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
+            if (snapshot.empty) continue;
+            let batch = fbDb.batch();
+            let count = 0;
+            for (const doc of snapshot.docs) {
+                batch.delete(doc.ref);
+                count++;
+                if (count >= 450) {
+                    await batch.commit();
+                    batch = fbDb.batch();
+                    count = 0;
+                }
+            }
+            if(count > 0) await batch.commit();
+        }
         
-        const decimalSeparator = select('csv-decimal-separator').value;
-        const cleanAndParse = (val) => {
-            if (!val) return 0;
-            let cleanVal = val.replace(/[^\d,\.-]/g, ''); // Keep numbers, comma, dot, minus
-            if (decimalSeparator === ',') {
-                cleanVal = cleanVal.replace(/\./g, '').replace(',', '.');
-            } else {
-                cleanVal = cleanVal.replace(/,/g, '');
+        for (const collectionName of Object.keys(dataToImport)) {
+            const items = dataToImport[collectionName];
+            if (Array.isArray(items) && items.length > 0) {
+                let batch = fbDb.batch();
+                let count = 0;
+                for (const item of items) {
+                    if (item.id) {
+                        const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
+                        batch.set(docRef, item);
+                        count++;
+                        if (count >= 450) {
+                            await batch.commit();
+                            batch = fbDb.batch();
+                            count = 0;
+                        }
+                    }
+                }
+                if(count > 0) await batch.commit();
+            } else if (collectionName === 'config') {
+                await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
             }
-            return parseFloat(cleanVal);
-        };
-
-        if (rawCantidad) {
-            cantidad = cleanAndParse(rawCantidad);
-        } else if (rawIngreso || rawGasto) {
-            cantidad = cleanAndParse(rawIngreso) - cleanAndParse(rawGasto);
         }
+        
+        select('json-import-progress').style.display = 'none';
+        select('json-import-result').style.display = 'block';
+        select('json-result-message').textContent = `Se han importado los datos correctamente. La aplicación se recargará.`;
+        hapticFeedback('success');
+        
+        setTimeout(() => location.reload(), 4000);
 
-        if (isNaN(cantidad)) throw new Error('Cantidad inválida');
-
-        // Date parsing
-        const format = select('csv-date-format').value.toLowerCase();
-        const parts = rawFecha.split(/[\/\-\.]/);
-        const formatParts = format.split(/[\/\-\.]/);
-        const dayIndex = formatParts.indexOf('dd');
-        const monthIndex = formatParts.indexOf('mm');
-        const yearIndex = formatParts.indexOf('yyyy');
-        const day = parseInt(parts[dayIndex]);
-        const month = parseInt(parts[monthIndex]) - 1;
-        const yearPart = parts[yearIndex];
-        const year = yearPart.length === 2 ? 2000 + parseInt(yearPart) : parseInt(yearPart);
-
-        fecha = new Date(year, month, day, 12); // Add hours to avoid timezone issues
-        if (isNaN(fecha.getTime())) throw new Error('Fecha inválida');
-    } catch (e) {
-        error = e.message;
-    }
-    
-    const data = { 
-        fecha: fecha ? fecha.toISOString() : null, 
-        descripcion, 
-        cantidad: Math.round(cantidad * 100), 
-        cuentaId: csvWizardState.destinationAccountId, 
-        tipo: 'movimiento', 
-        conceptoId: csvWizardState.defaultConceptId || null 
-    };
-
-    return {
-        success: !error,
-        error: error,
-        original: row.join(', '),
-        parsed: { fecha: fecha ? fecha.toLocaleDateString('es-ES') : 'Error', descripcion, cantidad: formatCurrency(data.cantidad) },
-        data: data
-    };
-};
-
-
-const renderPreviewStep = () => {
-    const selects = selectAll('.csv-mapping-select');
-    let tempMappings = {};
-    selects.forEach(select => { if(select.value !== 'ignore') { tempMappings[select.value] = select.dataset.index; } });
-    csvWizardState.mappings = tempMappings;
-    if (!csvWizardState.mappings.fecha || !csvWizardState.mappings.descripcion || (!csvWizardState.mappings.cantidad && (!csvWizardState.mappings.ingreso && !csvWizardState.mappings.gasto))) {
-        showToast('Debes asignar al menos Fecha, Descripción y una columna de Cantidad.', 'danger');
-        return;
-    }
-    csvWizardState.parsedRows = csvWizardState.rows.slice(0, 10).map(row => parseCsvRow(row, csvWizardState.mappings));
-    const container = select('csv-preview-table-container');
-    let tableHtml = '<table class="csv-preview-table"><thead><tr><th>Fecha Procesada</th><th>Descripción</th><th>Cantidad</th><th>Resultado</th></tr></thead><tbody>';
-    csvWizardState.parsedRows.forEach(pRow => {
-        const rowClass = pRow.success ? '' : 'import-preview-row--error';
-        const resultCell = pRow.success ? '<span class="text-positive">OK</span>' : `<span class="text-negative">Error <small>(${pRow.error})</small></span>`;
-        tableHtml += `<tr class="${rowClass}"><td>${pRow.parsed.fecha}</td><td>${escapeHTML(pRow.parsed.descripcion)}</td><td>${pRow.parsed.cantidad}</td><td>${resultCell}</td></tr>`;
-    });
-    tableHtml += '</tbody></table>';
-    container.innerHTML = tableHtml;
-    goToCsvStep(3);
-};
-
-const handleFinalCsvImport = async (btn) => {
-    setButtonLoading(btn, true);
-    goToCsvStep(4);
-    
-    // Preparar para la detección de duplicados si está activada
-    const existingMovementsSet = new Set();
-    if (csvWizardState.skipDuplicates) {
-        const querySnapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-                                    .where('cuentaId', '==', csvWizardState.destinationAccountId)
-                                    .get();
-        querySnapshot.forEach(doc => {
-            const mov = doc.data();
-            const dateKey = new Date(mov.fecha).toISOString().slice(0, 10);
-            const key = `${dateKey}_${mov.cantidad}_${mov.descripcion.toLowerCase()}`;
-            existingMovementsSet.add(key);
-        });
-    }
-
-    const allParsedRows = csvWizardState.rows.map(row => parseCsvRow(row, csvWizardState.mappings));
-    let validRows = allParsedRows.filter(pRow => pRow.success);
-    let skippedCount = 0;
-
-    if (csvWizardState.skipDuplicates) {
-        const uniqueRows = [];
-        validRows.forEach(pRow => {
-            const dateKey = new Date(pRow.data.fecha).toISOString().slice(0, 10);
-            const key = `${dateKey}_${pRow.data.cantidad}_${pRow.data.descripcion.toLowerCase()}`;
-            if (!existingMovementsSet.has(key)) {
-                uniqueRows.push(pRow);
-                existingMovementsSet.add(key); // Añadir al set para evitar duplicados del propio archivo
-            } else {
-                skippedCount++;
-            }
-        });
-        validRows = uniqueRows;
-    }
-    
-    if (validRows.length === 0) {
-        select('csv-import-progress').style.display = 'none';
-        select('csv-import-result').style.display = 'block';
-        select('csv-result-title').textContent = 'Importación Finalizada';
-        let message = 'No se importaron nuevos movimientos. ';
-        if (skippedCount > 0) {
-            message += `${skippedCount} movimiento(s) se omitieron por ser duplicados.`;
-        } else {
-            message += 'No se pudo procesar ninguna fila con éxito.';
-        }
-        select('csv-result-message').textContent = message;
+    } catch (error) {
+        console.error("Error durante la importación final:", error);
+        showToast("Error crítico durante la importación.", "danger", 5000);
+        select('json-result-title').textContent = '¡Error en la Importación!';
+        select('json-result-message').textContent = `Ocurrió un error. Por favor, revisa la consola e inténtalo de nuevo.`;
+        select('json-import-progress').style.display = 'none';
+        select('json-import-result').style.display = 'block';
+        select('json-import-result .material-icons').style.color = 'var(--c-danger)';
         setButtonLoading(btn, false);
-        return;
     }
-
-    let batch = fbDb.batch();
-    let operations = 0;
-    for (const pRow of validRows) {
-        const newId = generateId();
-        const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newId);
-        batch.set(movRef, { ...pRow.data, id: newId });
-        operations++;
-        if (operations >= 450) {
-            await batch.commit();
-            batch = fbDb.batch();
-            operations = 0;
-        }
-    }
-    if (operations > 0) {
-        await batch.commit();
-    }
-    setButtonLoading(btn, false);
-    select('csv-import-progress').style.display = 'none';
-    select('csv-import-result').style.display = 'block';
-    select('csv-result-message').textContent = `Se han importado ${validRows.length} movimientos nuevos. ${skippedCount > 0 ? `${skippedCount} se omitieron por ser duplicados.` : ''}`;
-    loadInitialMovements();
 };
 
 const highlightFormFields = (fieldIds) => {
@@ -4079,84 +4050,6 @@ const handleExportData = async (btn) => {
     }
 };
 
-// MEJORA: Importación JSON compatible con el formato antiguo y el nuevo con metadatos.
-const handleImportData = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        try {
-            let dataToImport = JSON.parse(event.target.result);
-            
-            // Compatibilidad hacia atrás: si tiene el nuevo formato con "meta", usamos el sub-objeto "data".
-            if (dataToImport.meta && dataToImport.data) {
-                dataToImport = dataToImport.data;
-            }
-
-            if (!dataToImport.cuentas || !dataToImport.conceptos || !dataToImport.movimientos) {
-                showToast("Error: El archivo no parece ser una copia de seguridad válida.", "danger", 5000);
-                e.target.value = '';
-                return;
-            }
-
-            const countMovimientos = dataToImport.movimientos?.length || 0;
-            const countCuentas = dataToImport.cuentas?.length || 0;
-            const confirmationMessage = `Vas a reemplazar TODOS tus datos actuales con el contenido del archivo. Se importarán ${countCuentas} cuentas y ${countMovimientos} movimientos. ¿Estás seguro?`;
-            
-            showConfirmationModal(confirmationMessage, () => {
-                showConfirmationModal('Esta es tu última oportunidad. La acción es irreversible. ¿Continuar?', async () => {
-                    const importBtn = select('button[data-action="import-data"]');
-                    setButtonLoading(importBtn, true, 'Importando...');
-                    showToast('Iniciando importación... No cierres la página.', 'info', 10000);
-
-                    try {
-                        const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
-                        for (const collectionName of collectionsToClear) {
-                            const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
-                            if (snapshot.empty) continue;
-                            const batch = fbDb.batch();
-                            snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                            await batch.commit();
-                        }
-                        
-                        for (const collectionName of Object.keys(dataToImport)) {
-                            const items = dataToImport[collectionName];
-                            if (Array.isArray(items)) {
-                                const batch = fbDb.batch();
-                                for (const item of items) {
-                                    if(item.id) {
-                                        const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
-                                        batch.set(docRef, item);
-                                    }
-                                }
-                                await batch.commit();
-                            } else if (collectionName === 'config') {
-                                await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
-                            }
-                        }
-                        hapticFeedback('success');
-                        showToast('¡Importación completada! La aplicación se recargará.', 'info', 5000);
-                        setTimeout(() => location.reload(), 3000);
-
-                    } catch (error) {
-                        console.error("Error durante la importación:", error);
-                        showToast("Error crítico durante la importación. Revisa la consola.", "danger", 5000);
-                        setButtonLoading(importBtn, false);
-                    }
-                }, 'Confirmación Final');
-            });
-        } catch (error) {
-            console.error("Error al parsear JSON:", error);
-            showToast("El archivo seleccionado no es un JSON válido.", "danger");
-        } finally {
-            e.target.value = ''; 
-        }
-    };
-    reader.readAsText(file);
-};
-
-
 const handleSaveInvestmentAccounts = async (form, btn) => {
     setButtonLoading(btn, true);
     const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value));
@@ -4172,52 +4065,77 @@ const handleSaveInvestmentAccounts = async (form, btn) => {
     showToast('Portafolio actualizado.');
 };
 const handleSaveValoracion = async (form, btn) => { /* Logic omitted for brevity */ };
+const showAportacionModal = (cuentaId = null, aportacionId = null) => {
+    const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
+    if (investmentAccounts.length === 0) {
+        showToast('Primero debes marcar al menos una cuenta como activo de inversión.', 'warning');
+        return;
+    }
+
+    let aportacion = null;
+    if (aportacionId) {
+        aportacion = (db.inversion_cashflows || []).find(cf => cf.id === aportacionId);
+    }
+    
+    const isEditMode = !!aportacion;
+    const title = isEditMode ? 'Editar Aportación/Retiro' : 'Registrar Aportación/Retiro';
+
+    const fecha = aportacion ? new Date(aportacion.fecha) : new Date();
+    const fechaISO = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+    
+    const accountsOptions = investmentAccounts
+        .map(c => `<option value="${c.id}" ${ (cuentaId === c.id || aportacion?.cuentaId === c.id) ? 'selected' : ''}>${escapeHTML(c.nombre)}</option>`)
+        .join('');
+
+    let formHtml = `
+    <form id="form-aportacion" novalidate>
+        <input type="hidden" id="aportacion-id" value="${aportacionId || ''}">
+        <input type="hidden" id="aportacion-cuenta-id" value="${cuentaId || aportacion?.cuentaId || ''}">
+
+        <p class="form-label" style="margin-bottom: var(--sp-3);">
+            Registra una entrada (aportación, positivo) o salida (retiro, negativo) de capital en uno de tus activos. Esto es crucial para calcular correctamente la rentabilidad (TIR).
+        </p>
+
+        <div class="form-group">
+            <label for="aportacion-cuenta" class="form-label">Activo de Inversión</label>
+            <select id="aportacion-cuenta" class="form-select" ${isEditMode ? 'disabled' : ''}>
+                ${accountsOptions}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="aportacion-cantidad" class="form-label">Cantidad (retiro en negativo)</label>
+            <input type="text" id="aportacion-cantidad" class="form-input input-amount-calculator" readonly required placeholder="Ej: -250,50 para un retiro">
+        </div>
+
+        <div class="form-group">
+            <label for="aportacion-fecha" class="form-label">Fecha</label>
+            <input type="date" id="aportacion-fecha" class="form-input" value="${fechaISO}" required>
+        </div>
+
+        <div class="form-group">
+            <label for="aportacion-notas" class="form-label">Notas (Opcional)</label>
+            <input type="text" id="aportacion-notas" class="form-input" value="${escapeHTML(aportacion?.notas || '')}" placeholder="Ej: Aportación periódica">
+        </div>
+
+        <div class="modal__actions">
+            ${isEditMode ? `<button type="button" class="icon-btn btn--danger" data-action="delete-aportacion" title="Eliminar"><span class="material-icons">delete</span></button>` : '<div></div>'}
+            <button type="submit" class="btn btn--primary">Guardar Cambios</button>
+        </div>
+    </form>`;
+
+    showGenericModal(title, formHtml);
+
+    // Rellenamos el campo de cantidad después de que el modal sea visible
+    setTimeout(() => {
+        const cantidadInput = select('aportacion-cantidad');
+        if (cantidadInput && aportacion) {
+             cantidadInput.value = (aportacion.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+    }, 50);
+};
 const handleSaveAportacion = async (form, btn) => { /* Logic omitted for brevity */ };
 
-// MEJORA: Exportación CSV enriquecida
-const handleExportCSV = async (btn) => { 
-    setButtonLoading(btn, true, 'Exportando...');
-    try {
-        const allMovements = await fetchAllMovementsForBalances();
-        if (allMovements.length === 0) {
-            showToast("No hay movimientos para exportar.", "info");
-            return;
-        }
-
-        const escapeCsvField = (field) => `"${String(field || '').replace(/"/g, '""')}"`;
-        const header = ["ID Movimiento", "Fecha", "Tipo", "Descripción", "Cantidad", "Moneda", "Concepto", "Cuenta", "Cuenta Origen", "Cuenta Destino"].map(escapeCsvField).join(',') + '\n';
-        
-        const rows = allMovements.sort((a,b) => new Date(a.fecha) - new Date(b.fecha)).map(m => {
-            const fecha = new Date(m.fecha).toLocaleDateString('es-ES');
-            const cantidad = (m.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
-            const tipo = m.tipo === 'traspaso' ? 'Traspaso' : (m.cantidad >= 0 ? 'Ingreso' : 'Gasto');
-            const concepto = db.conceptos.find(c => c.id === m.conceptoId)?.nombre || '';
-            const cuenta = db.cuentas.find(c => c.id === m.cuentaId)?.nombre || '';
-            const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || '';
-            const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '';
-            
-            return [m.id, fecha, tipo, m.descripcion, cantidad, "EUR", concepto, cuenta, origen, destino].map(escapeCsvField).join(',');
-        }).join('\n');
-
-        const csvContent = header + rows;
-        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'movimientos_cuentas_aidanai.csv';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast("Exportación CSV completada.", "info");
-
-    } catch (error) {
-        console.error("Error al exportar a CSV:", error);
-        showToast("Error durante la exportación a CSV.", "danger");
-    } finally {
-        setButtonLoading(btn, false);
-    }
-};
 
 async function migrateDataToSubcollections() {
     if (!currentUser) { console.error("No hay usuario logueado."); return; }
