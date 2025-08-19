@@ -1043,8 +1043,7 @@
 		let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), deselectedAccountTypesFilter = new Set();
         let isOffBalanceMode = false;
         let descriptionIndex = {};
-		let finalBalances = {};
-        let globalSearchDebounceTimer = null;
+		let globalSearchDebounceTimer = null;
 		let newMovementIdToHighlight = null;
         const originalButtonTexts = new Map();
         let conceptosChart = null, liquidAssetsChart = null, detailInvestmentChart = null, informesChart = null;
@@ -1070,10 +1069,10 @@
         let runningBalancesCache = null; // Caché para los saldos corrientes.
         
         const vList = {
-            scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
-            heights: { transaction: 58, transfer: 80, header: 44 }, 
-            renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
-        };
+			scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
+			heights: {}, 
+			renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
+		};
         
         const calculatorState = {
             displayValue: '0',
@@ -1306,61 +1305,6 @@
             }
         }
         
-		async function calculateAndStoreFinalBalances() {
-            if (!currentUser) {
-                finalBalances = {};
-                return;
-            }
-
-            // [OPTIMIZACIÓN] Se mantiene la función para cálculos globales si fuera necesario, pero se evita en el renderizado normal.
-            const allMovements = await fetchAllMovementsForBalances();
-            const allAccounts = db.cuentas || []; // Usamos todas las cuentas, no solo las visibles
-            
-            const saldos = allAccounts.reduce((acc, c) => ({ ...acc, [c.id]: 0 }), {});
-
-            allMovements.forEach((m) => {
-                if (m.tipo === 'traspaso') {
-                    if (saldos.hasOwnProperty(m.cuentaOrigenId)) {
-                        saldos[m.cuentaOrigenId] -= m.cantidad;
-                    }
-                    if (saldos.hasOwnProperty(m.cuentaDestinoId)) {
-                        saldos[m.cuentaDestinoId] += m.cantidad;
-                    }
-                } else {
-                    if (saldos.hasOwnProperty(m.cuentaId)) {
-                        saldos[m.cuentaId] += m.cantidad;
-                    }
-                }
-            });
-   
-               /**
- * Función de ayuda para ser llamada desde la consola del navegador.
- * Fuerza el recálculo de todos los saldos y refresca la vista actual.
- */
-async function forceUpdateBalances() {
-    console.log("🔵 Iniciando recálculo manual de saldos...");
-    
-    // 1. Ejecuta nuestra función principal para obtener los saldos correctos.
-    await calculateAndStoreFinalBalances();
-    
-    console.log("🟢 ¡Saldos recalculados y almacenados con éxito!", finalBalances);
-
-    // 2. Refresca la vista que el usuario está viendo en este momento.
-    const activePage = document.querySelector('.view--active')?.id;
-    if (activePage) {
-        console.log(`🔵 Refrescando la vista activa: ${activePage}...`);
-        navigateTo(activePage, false); // El 'false' evita que se sienta como una recarga completa
-        console.log("🟢 Vista actual refrescada con los nuevos saldos.");
-    }
-}
-
-// 3. Hacemos que la función esté disponible en la consola.
-window.forceUpdateBalances = forceUpdateBalances;
-
-console.log("✅ Función de ayuda 'forceUpdateBalances()' añadida. Escribe 'forceUpdateBalances()' y pulsa Enter para ejecutar.");
-    finalBalances = saldos; // Guardamos el resultado en nuestro "almacén" global
-    console.log("Saldos finales reales calculados y almacenados.");
-}
 /**
  * Script de migración de un solo uso para calcular y guardar el saldo inicial
  * en cada documento de cuenta. EJECUTAR UNA SOLA VEZ DESDE LA CONSOLA.
@@ -1566,13 +1510,7 @@ async function migrateBalancesToAccounts() {
 		const measureListItemHeights = () => {
     const container = select('movimientos-list-container');
     if (!container) return;
-		/**
-         * Divide un array en trozos de un tamaño específico.
-         * @param {Array} array - El array a dividir.
-         * @param {number} size - El tamaño máximo de cada trozo.
-         * @returns {Array<Array>} Un array de arrays (trozos).
-         */
-        const chunkArray = (array, size) => {
+		const chunkArray = (array, size) => {
             const chunks = [];
             for (let i = 0; i < array.length; i += size) {
                 chunks.push(array.slice(i, i + size));
@@ -1580,47 +1518,7 @@ async function migrateBalancesToAccounts() {
             return chunks;
         };
 
-        /**
-         * Ejecuta múltiples consultas 'in' para superar el límite de 10 elementos de Firestore.
-         * @param {firebase.firestore.Query} baseQuery - La consulta base sin el filtro 'in'.
-         * @param {string} field - El campo por el que filtrar (ej. 'cuentaId').
-         * @param {Array<string>} ids - El array de IDs (puede tener más de 10).
-         * @returns {Promise<Array<Object>>} Una promesa que resuelve a un array con todos los documentos encontrados.
-         */
-        const fetchMovementsInChunks = async (baseQuery, field, ids) => {
-            if (ids.length === 0) {
-                return [];
-            }
-            // Dividimos el array de IDs en trozos de 10
-            const idChunks = chunkArray(ids, 10);
-            
-            // Creamos una promesa de consulta para cada trozo
-            const queryPromises = idChunks.map(chunk => {
-                return baseQuery.where(field, 'in', chunk).get();
-            });
-
-            // Esperamos a que todas las consultas se completen
-            const querySnapshots = await Promise.all(queryPromises);
-
-            // Unimos los resultados de todas las consultas en un solo array
-            let movements = [];
-            querySnapshots.forEach(snapshot => {
-                snapshot.forEach(doc => {
-                    movements.push({ id: doc.id, ...doc.data() });
-                });
-            });
-
-            return movements;
-        };
-
-        /**
-         * Ejecuta múltiples consultas 'in' para superar el límite de 10 elementos de Firestore.
-         * @param {firebase.firestore.Query} baseQuery - La consulta base sin el filtro 'in'.
-         * @param {string} field - El campo por el que filtrar (ej. 'cuentaId').
-         * @param {Array<string>} ids - El array de IDs (puede tener más de 10).
-         * @returns {Promise<Array<Object>>} Una promesa que resuelve a un array con todos los documentos encontrados.
-         */
-        
+                
     // Crear un movimiento de transacción falso
     const tempTransaction = document.createElement('div');
     tempTransaction.style.position = 'absolute';
@@ -4212,49 +4110,43 @@ async function migrateBalancesToAccounts() {
         window.migrateDataToSubcollections = migrateDataToSubcollections;
 
         document.addEventListener('DOMContentLoaded', initApp);
-	// =================================================================================
-// 10.5. FUNCIONES DE AYUDA PARA CONSULTAS AVANZADAS (AÑADIDO PARA CORRECCIÓN)
-// =================================================================================
+		
+		// =================================================================================
+        // FUNCIONES DE AYUDA PARA CONSULTAS AVANZADAS (CÓDIGO ESENCIAL)
+        // =================================================================================
 
-/**
- * Divide un array en trozos de un tamaño específico.
- * @param {Array} array - El array a dividir.
- * @param {number} size - El tamaño máximo de cada trozo.
- * @returns {Array<Array>} Un array de arrays (trozos).
- */
+        /**
+         * Ejecuta múltiples consultas 'in' para superar el límite de 10 elementos de Firestore.
+         * @param {firebase.firestore.Query} baseQuery - La consulta base sin el filtro 'in'.
+         * @param {string} field - El campo por el que filtrar (ej. 'cuentaId').
+         * @param {Array<string>} ids - El array de IDs (puede tener más de 10).
+         * @returns {Promise<Array<Object>>} Una promesa que resuelve a un array con todos los documentos encontrados.
+         */
+        const fetchMovementsInChunks = async (baseQuery, field, ids) => {
+            if (ids.length === 0) {
+                return [];
+            }
+            // Dividimos el array de IDs en trozos de 10
+            const idChunks = chunkArray(ids, 10);
+            
+            // Creamos una promesa de consulta para cada trozo
+            const queryPromises = idChunks.map(chunk => {
+                return baseQuery.where(field, 'in', chunk).get();
+            });
 
-/**
- * Ejecuta múltiples consultas 'in' para superar el límite de 10 elementos de Firestore.
- * @param {firebase.firestore.Query} baseQuery - La consulta base sin el filtro 'in'.
- * @param {string} field - El campo por el que filtrar (ej. 'cuentaId').
- * @param {Array<string>} ids - El array de IDs (puede tener más de 10).
- * @returns {Promise<Array<Object>>} Una promesa que resuelve a un array con todos los documentos encontrados.
- */
-const fetchMovementsInChunks = async (baseQuery, field, ids) => {
-    if (ids.length === 0) {
-        return [];
-    }
-    // Dividimos el array de IDs en trozos de 10
-    const idChunks = chunkArray(ids, 10);
-    
-    // Creamos una promesa de consulta para cada trozo
-    const queryPromises = idChunks.map(chunk => {
-        return baseQuery.where(field, 'in', chunk).get();
-    });
+            // Esperamos a que todas las consultas se completen
+            const querySnapshots = await Promise.all(queryPromises);
 
-    // Esperamos a que todas las consultas se completen
-    const querySnapshots = await Promise.all(queryPromises);
+            // Unimos los resultados de todas las consultas en un solo array
+            let movements = [];
+            querySnapshots.forEach(snapshot => {
+                snapshot.forEach(doc => {
+                    movements.push({ id: doc.id, ...doc.data() });
+                });
+            });
 
-    // Unimos los resultados de todas las consultas en un solo array
-    let movements = [];
-    querySnapshots.forEach(snapshot => {
-        snapshot.forEach(doc => {
-            movements.push({ id: doc.id, ...doc.data() });
-        });
-    });
-
-    return movements;
-};	
+            return movements;
+        };
     </script>
 </body>
 </html>
