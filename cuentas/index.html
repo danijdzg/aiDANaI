@@ -1027,6 +1027,7 @@ body[data-theme="neon"] {
         let descriptionIndex = {};
 		let globalSearchDebounceTimer = null;
 		let newMovementIdToHighlight = null;
+		let unsubscribeRecientesListener = null
         const originalButtonTexts = new Map();
         let conceptosChart = null, liquidAssetsChart = null, detailInvestmentChart = null, informesChart = null;
         let currentTourStep = 0;
@@ -2802,22 +2803,76 @@ async function migrateBalancesToAccounts() {
         // Ahora, esta función solo se encarga de OBTENER los datos y guardarlos en el caché.
         // =================================================================================
         const renderInicioRecientesView = async () => {
-            const recientesContainer = select('inicio-view-recientes');
-            if (!recientesContainer) return;
-            
-            recientesContainer.innerHTML = `<div class="skeleton" style="height: 200px;"></div>`;
+    const recientesContainer = select('inicio-view-recientes');
+    if (!recientesContainer) return;
+    
+    // Si ya existe un listener anterior, lo desconectamos para evitar fugas de memoria.
+    if (unsubscribeRecientesListener) {
+        unsubscribeRecientesListener();
+    }
 
-            const RECIENTES_COUNT = 30;
-            let query = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').orderBy('fecha', 'desc').limit(RECIENTES_COUNT);
-            const snapshot = await query.get();
-            const allRecentMovs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    recientesContainer.innerHTML = `<div class="skeleton" style="height: 200px;"></div>`;
 
-            // 1. Filtra los movimientos y guarda el resultado en el caché global.
-            recentMovementsCache = filterMovementsByLedger(allRecentMovs);
-            
-            // 2. Llama a la función helper para que pinte el HTML a partir del caché.
-            await _renderRecientesFromCache();
-        };
+    const RECIENTES_COUNT = 30;
+    const query = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
+        .orderBy('fecha', 'desc')
+        .limit(RECIENTES_COUNT);
+
+    // Aquí está la magia: .onSnapshot en lugar de .get()
+    unsubscribeRecientesListener = query.onSnapshot(async (snapshot) => {
+        console.log("¡Listener de Recientes ACTIVADO! Firebase notificó un cambio.");
+
+        const allRecentMovs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Filtramos los movimientos por la contabilidad activa (A o B)
+        recentMovementsCache = filterMovementsByLedger(allRecentMovs);
+        
+        // El resto es igual: procesamos y renderizamos la lista con los datos frescos.
+        // Forzamos el recálculo de saldos con los datos más frescos.
+        await processMovementsForRunningBalance(recentMovementsCache, true);
+
+        const movsToDisplay = recentMovementsCache;
+        
+        if (movsToDisplay.length === 0) {
+            recientesContainer.innerHTML = `<div class="empty-state" style="border: none; background: transparent;"><p>No hay movimientos recientes en esta contabilidad.</p></div>`;
+            return;
+        }
+
+        const grouped = {};
+        const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+        movsToDisplay.forEach(mov => {
+            const dateKey = mov.fecha.slice(0, 10);
+            if (!grouped[dateKey]) grouped[dateKey] = { movements: [], total: 0 };
+            grouped[dateKey].movements.push(mov);
+            // ... (resto de la lógica de agrupación que ya tenías)
+            if (mov.tipo === 'traspaso') {
+                const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
+                const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
+                if (origenVisible && !destinoVisible) { grouped[dateKey].total -= mov.cantidad; }
+                else if (!origenVisible && destinoVisible) { grouped[dateKey].total += mov.cantidad; }
+            } else {
+                grouped[dateKey].total += mov.cantidad;
+            }
+        });
+
+        let html = '';
+        const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+        for (const dateKey of sortedDates) {
+            const group = grouped[dateKey];
+            html += renderVirtualListItem({ type: 'date-header', date: dateKey, total: group.total });
+            group.movements.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+            for (const mov of group.movements) {
+                html += renderVirtualListItem({ type: 'transaction', movement: mov });
+            }
+        }
+        html += `<div style="text-align: center; margin-top: var(--sp-4);"><button class="btn btn--secondary" data-action="navigate" data-page="${PAGE_IDS.MOVIMIENTOS_FULL}">Ver todos los movimientos</button></div>`;
+        recientesContainer.innerHTML = html;
+
+    }, (error) => {
+        console.error("Error en el listener de movimientos recientes:", error);
+        recientesContainer.innerHTML = `<p class="text-danger">Error al cargar movimientos.</p>`;
+    });
+};
                 const renderPatrimonioPage = async () => {
             const container = select(PAGE_IDS.PATRIMONIO);
             if(!container) return;
@@ -3867,19 +3922,12 @@ async function migrateBalancesToAccounts() {
 
                                 if (doc.exists) {
                                     const movToDelete = doc.data();
-                                    const updateLocally = (cuentaId, amount) => {
-                                        const cuenta = db.cuentas.find(c => c.id === cuentaId);
-                                        if(cuenta) cuenta.saldo = (cuenta.saldo || 0) + amount;
-                                    };
                                     if (movToDelete.tipo === 'traspaso') {
                                         await updateAccountBalance(movToDelete.cuentaOrigenId, movToDelete.cantidad);
                                         await updateAccountBalance(movToDelete.cuentaDestinoId, -movToDelete.cantidad);
-                                        updateLocally(movToDelete.cuentaOrigenId, movToDelete.cantidad);
-                                        updateLocally(movToDelete.cuentaDestinoId, -movToDelete.cantidad);
-                                    } else {
+                                                                            } else {
                                         await updateAccountBalance(movToDelete.cuentaId, -movToDelete.cantidad);
-                                        updateLocally(movToDelete.cuentaId, -movToDelete.cantidad);
-                                    }
+                                                                            }
                                     recentMovementsCache = recentMovementsCache.filter(m => m.id !== idToDelete);
                                 }
                             }
@@ -3965,13 +4013,26 @@ async function migrateBalancesToAccounts() {
                     'save-dashboard-config': () => handleSaveDashboardConfig(btn),
                     'set-movimiento-type': () => setMovimientoFormType(type),
                     'set-inicio-view': () => {
+						hapticFeedback('light'); // Añadimos feedback para una mejor UX
                         const isResumen = view === 'resumen';
                         selectAll('#inicio-view-switcher .filter-pill').forEach(pill => pill.classList.remove('filter-pill--active'));
                         actionTarget.classList.add('filter-pill--active');
                         select('inicio-view-resumen').classList.toggle('hidden', !isResumen);
                         select('inicio-view-recientes').classList.toggle('hidden', isResumen);
-                    },
-                    'recalculate-balances': () => {
+						// =================================================================
+    // === INICIO DE LA SOLUCIÓN DEFINITIVA ===
+    // =================================================================
+    // Si la vista que estamos mostrando es la de "Resumen",
+    // debemos forzar una actualización completa de sus datos.
+    if (isResumen) {
+        console.log("Cambiando a la vista Resumen, se fuerza la actualización de datos.");
+        updateDashboardData();
+    }
+    // =================================================================
+    // === FIN DE LA SOLUCIÓN DEFINITIVA ===
+    // =================================================================
+},
+                       'recalculate-balances': () => {
                         showConfirmationModal(
                             'Esta acción leerá todo tu historial de transacciones para recalcular y corregir el saldo de cada una de tus cuentas. Es útil si sospechas que hay errores en los saldos. ¿Quieres continuar?',
                             () => recalculateAllAccountBalances(actionTarget.closest('button')),
@@ -4204,7 +4265,7 @@ async function migrateBalancesToAccounts() {
             showToast('Datos duplicados. Ajusta y guarda.', 'info');
         };
 
-                    const handleSaveMovement = async (form, btn) => {
+            const handleSaveMovement = async (form, btn) => {
             clearAllErrors(form.id);
             let isValid = true;
             const type = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
@@ -4307,13 +4368,7 @@ async function migrateBalancesToAccounts() {
                     ...updatePromises
                 ]);
                 
-                Object.entries(finalUpdates).forEach(([cuentaId, amount]) => {
-                    const cuenta = db.cuentas.find(c => c.id === cuentaId);
-                    if (cuenta) {
-                        cuenta.saldo = (cuenta.saldo || 0) + amount;
-                    }
-                });
-            }
+                }
             
             if (mode.includes('new') && !isRecurrent) {
                 newMovementIdToHighlight = movementId;
@@ -4325,28 +4380,31 @@ async function migrateBalancesToAccounts() {
             showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
 
             if (!isRecurrent) {
-                const currentPage = select('.view--active')?.id;
-                if(currentPage === PAGE_IDS.INICIO) {
-                    // 3. Ahora 'saldosPrevios' es accesible aquí sin problemas.
-                    if (newMovementData.tipo === 'traspaso') {
-                        newMovementData.runningBalanceOrigen = saldosPrevios.origen;
-                        newMovementData.runningBalanceDestino = saldosPrevios.destino;
-                    } else {
-                        newMovementData.runningBalance = saldosPrevios.cuenta;
-                    }
-                    
-                    recentMovementsCache.unshift(newMovementData);
-                    if (recentMovementsCache.length > 30) {
-                        recentMovementsCache.pop();
-                    }
-                    await _renderRecientesFromCache(); 
-                    updateDashboardData();
-                }
-                else if (currentPage === PAGE_IDS.MOVIMIENTOS_FULL) {
-                    loadInitialMovements();
-                }
+        const currentPage = select('.view--active')?.id;
+        if(currentPage === PAGE_IDS.INICIO) {
+            // Ya no llamamos a renderInicioRecientesView().
+            // El listener que acabamos de crear se activará solo cuando Firebase
+            // confirme que el nuevo dato está listo para ser leído.
+
+            // Solo nos aseguramos de que la vista correcta esté visible.
+            select('inicio-view-recientes').classList.remove('hidden');
+            select('inicio-view-resumen').classList.add('hidden');
+            const recientesPill = select('button[data-view="recientes"]');
+            const resumenPill = select('button[data-view="resumen"]');
+            if (recientesPill && resumenPill) {
+                recientesPill.classList.add('filter-pill--active');
+                resumenPill.classList.remove('filter-pill--active');
             }
-        };
+            
+            // La actualización de los KPIs sí la podemos forzar, ya que es un cálculo diferente.
+            updateDashboardData();
+            
+        } else if (currentPage === PAGE_IDS.MOVIMIENTOS_FULL) {
+            // La vista de historial completo sí necesita una recarga total.
+            loadInitialMovements();
+        }
+    }
+};
 
         const handleAddConcept = async (btn) => { 
             const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
