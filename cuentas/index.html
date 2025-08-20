@@ -649,6 +649,10 @@ body[data-theme="neon"] {
                                 <button data-action="manage-conceptos" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">category</span>Conceptos</button>
                                 <button data-action="manage-recurrentes" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">event_repeat</span>Recurrentes</button>
                             </div>
+								<button data-action="recalculate-balances" class="btn btn--primary btn--full" style="margin-top: var(--sp-4);">
+    <span class="material-icons" style="font-size: 16px;">calculate</span>
+    Recalcular Saldos de Cuentas
+</button>
                         </div>
                     </details>
                 </div>
@@ -1045,6 +1049,7 @@ body[data-theme="neon"] {
         let allMovementsLoaded = false; 
         
         let runningBalancesCache = null; // Caché para los saldos corrientes.
+		let recentMovementsCache = [];
         
         const vList = {
 			scrollerEl: null, sizerEl: null, contentEl: null, items: [], itemMap: [], 
@@ -1483,12 +1488,12 @@ async function migrateBalancesToAccounts() {
     const container = select('movimientos-list-container');
     if (!container) return;
 		const chunkArray = (array, size) => {
-            const chunks = [];
-            for (let i = 0; i < array.length; i += size) {
-                chunks.push(array.slice(i, i + size));
-            }
-            return chunks;
-        };
+    const chunks = [];
+    for (let i = 0; i < array.length; i += size) {
+        chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+};
 
                 
     // Crear un movimiento de transacción falso
@@ -1891,11 +1896,17 @@ async function migrateBalancesToAccounts() {
             const irrGlobal = calculateIRR(allIrrCashflows); return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto, pnlPorcentual, irr: irrGlobal };
         };
 
-        const processMovementsForRunningBalance = async (movements) => {
-            if (!runningBalancesCache) {
+                const processMovementsForRunningBalance = async (movements, forceRecalculate = false) => {
+            // =================================================================================
+            // INICIO DE LA CORRECCIÓN: La condición ahora también comprueba si se debe forzar el recálculo.
+            // =================================================================================
+            if (!runningBalancesCache || forceRecalculate) {
                 const saldosVisibles = await getSaldos();
                 runningBalancesCache = { ...saldosVisibles };
             }
+            // =================================================================================
+            // FIN DE LA CORRECCIÓN
+            // =================================================================================
 
             for (const mov of movements) {
                 if (mov.tipo === 'traspaso') {
@@ -1909,6 +1920,7 @@ async function migrateBalancesToAccounts() {
                     mov.runningBalanceOrigen = runningBalancesCache[mov.cuentaOrigenId];
                     mov.runningBalanceDestino = runningBalancesCache[mov.cuentaDestinoId];
 
+                    // Deshacemos la operación para el cálculo inverso
                     runningBalancesCache[mov.cuentaOrigenId] += mov.cantidad;
                     runningBalancesCache[mov.cuentaDestinoId] -= mov.cantidad;
 
@@ -1918,6 +1930,7 @@ async function migrateBalancesToAccounts() {
                     }
 
                     mov.runningBalance = runningBalancesCache[mov.cuentaId];
+                    // Deshacemos la operación para el cálculo inverso
                     runningBalancesCache[mov.cuentaId] -= mov.cantidad;
                 }
             }
@@ -2448,14 +2461,7 @@ async function migrateBalancesToAccounts() {
             });
         };
 
-        const chunkArray = (array, size) => {
-            const chunks = [];
-            for (let i = 0; i < array.length; i += size) {
-                chunks.push(array.slice(i, i + size));
-            }
-            return chunks;
-        };
-		async function fetchMovementsPage(startAfterDoc = null) {
+        	async function fetchMovementsPage(startAfterDoc = null) {
             if (!currentUser) return [];
             try {
                 let query = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
@@ -2741,9 +2747,63 @@ async function migrateBalancesToAccounts() {
             // =================================================================================
         };
 
-            const renderInicioRecientesView = async () => {
+            // NUEVA FUNCIÓN HELPER PARA RENDERIZAR
+        // Esta función solo se encarga de pintar el HTML a partir de una lista de movimientos.
+        // =================================================================================
+        const _renderRecientesFromCache = async () => {
             const recientesContainer = select('inicio-view-recientes');
-            if(!recientesContainer) return;
+            if (!recientesContainer) return;
+            
+            // Usamos la variable global 'recentMovementsCache' como fuente de verdad.
+            const movsToDisplay = recentMovementsCache;
+            
+            if (movsToDisplay.length === 0) {
+                recientesContainer.innerHTML = `<div class="empty-state" style="border: none; background: transparent;"><p>No hay movimientos recientes en esta contabilidad.</p></div>`;
+                return;
+            }
+
+            // Forzamos el recálculo de saldos con los datos más frescos.
+            await processMovementsForRunningBalance(movsToDisplay, true);
+
+            const grouped = {};
+            const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+            movsToDisplay.forEach(mov => {
+                const dateKey = mov.fecha.slice(0, 10);
+                if (!grouped[dateKey]) {
+                    grouped[dateKey] = { movements: [], total: 0 };
+                }
+                grouped[dateKey].movements.push(mov);
+                if (mov.tipo === 'traspaso') {
+                    const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
+                    const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
+                    if (origenVisible && !destinoVisible) { grouped[dateKey].total -= mov.cantidad; }
+                    else if (!origenVisible && destinoVisible) { grouped[dateKey].total += mov.cantidad; }
+                } else {
+                    grouped[dateKey].total += mov.cantidad;
+                }
+            });
+
+            let html = '';
+            const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+            for (const dateKey of sortedDates) {
+                const group = grouped[dateKey];
+                html += renderVirtualListItem({ type: 'date-header', date: dateKey, total: group.total });
+                group.movements.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+                for (const mov of group.movements) {
+                    html += renderVirtualListItem({ type: 'transaction', movement: mov });
+                }
+            }
+            html += `<div style="text-align: center; margin-top: var(--sp-4);"><button class="btn btn--secondary" data-action="navigate" data-page="${PAGE_IDS.MOVIMIENTOS_FULL}">Ver todos los movimientos</button></div>`;
+            recientesContainer.innerHTML = html;
+        };
+        
+        // =================================================================================
+        // FUNCIÓN MODIFICADA
+        // Ahora, esta función solo se encarga de OBTENER los datos y guardarlos en el caché.
+        // =================================================================================
+        const renderInicioRecientesView = async () => {
+            const recientesContainer = select('inicio-view-recientes');
+            if (!recientesContainer) return;
             
             recientesContainer.innerHTML = `<div class="skeleton" style="height: 200px;"></div>`;
 
@@ -2752,65 +2812,12 @@ async function migrateBalancesToAccounts() {
             const snapshot = await query.get();
             const allRecentMovs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const filteredMovs = filterMovementsByLedger(allRecentMovs);
+            // 1. Filtra los movimientos y guarda el resultado en el caché global.
+            recentMovementsCache = filterMovementsByLedger(allRecentMovs);
             
-            if (filteredMovs.length === 0) {
-                 recientesContainer.innerHTML = `<div class="empty-state" style="border: none; background: transparent;"><p>No hay movimientos recientes en esta contabilidad.</p></div>`;
-            } else {
-                await processMovementsForRunningBalance([...filteredMovs].reverse()); // Se necesita una copia para no mutar el original
-                const movsToDisplay = filteredMovs; // Ya están del más nuevo al más viejo
-
-                // =================================================================================
-                // INICIO CORRECCIÓN: Lógica de agrupación por fecha añadida
-                // =================================================================================
-                const grouped = {};
-                const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-
-                movsToDisplay.forEach(mov => {
-                    const dateKey = mov.fecha.slice(0, 10);
-                    if (!grouped[dateKey]) {
-                        grouped[dateKey] = { movements: [], total: 0 };
-                    }
-                    grouped[dateKey].movements.push(mov);
-                    
-                    if (mov.tipo === 'traspaso') {
-                        const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
-                        const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-                        if (origenVisible && !destinoVisible) {
-                            grouped[dateKey].total -= mov.cantidad;
-                        } else if (!origenVisible && destinoVisible) {
-                            grouped[dateKey].total += mov.cantidad;
-                        }
-                    } else {
-                        grouped[dateKey].total += mov.cantidad;
-                    }
-                });
-
-                let html = '';
-                const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a)); // Ordena las fechas de más nueva a más vieja
-
-                for (const dateKey of sortedDates) {
-                    const group = grouped[dateKey];
-                    // Renderiza la cabecera de la fecha
-                    html += renderVirtualListItem({
-                        type: 'date-header',
-                        date: dateKey,
-                        total: group.total
-                    });
-                    // Renderiza los movimientos de esa fecha
-                    for (const mov of group.movements) {
-                        html += renderVirtualListItem({ type: 'transaction', movement: mov });
-                    }
-                }
-                // =================================================================================
-                // FIN CORRECCIÓN
-                // =================================================================================
-                
-                html += `<div style="text-align: center; margin-top: var(--sp-4);"><button class="btn btn--secondary" data-action="navigate" data-page="${PAGE_IDS.MOVIMIENTOS_FULL}">Ver todos los movimientos</button></div>`;
-                recientesContainer.innerHTML = html;
-            }
+            // 2. Llama a la función helper para que pinte el HTML a partir del caché.
+            await _renderRecientesFromCache();
         };
-
                 const renderPatrimonioPage = async () => {
             const container = select(PAGE_IDS.PATRIMONIO);
             if(!container) return;
@@ -2854,7 +2861,7 @@ async function migrateBalancesToAccounts() {
                 </div>
                 <div class="accordion-wrapper">
                     <details class="accordion" open>
-                        <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">account_balance_wallet</span>Cuentas Corrientes</h3><span class="material-icons accordion__icon">expand_more</span></summary>
+                        <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">account_balance_wallet</span>Cuentas</h3><span class="material-icons accordion__icon">expand_more</span></summary>
                         <div class="accordion__content" style="padding: 0;" id="patrimonio-cuentas-container"></div>
                     </details>
                     <details class="accordion" open>
@@ -3185,7 +3192,7 @@ async function migrateBalancesToAccounts() {
             select('mov-type-btn-traspaso').classList.toggle('filter-pill--active', isTraspaso);
         };
 
-        const startMovementForm = (id = null, isRecurrent = false) => {
+                const startMovementForm = (id = null, isRecurrent = false) => {
             hapticFeedback('medium');
             const form = select('form-movimiento');
             form.reset();
@@ -3197,13 +3204,28 @@ async function migrateBalancesToAccounts() {
             let data = null;
             let mode = 'new';
             const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
-            const dataSource = isRecurrent ? db.recurrentes : db.movimientos;
-        
+            
+            // =================================================================================
+            // INICIO DE LA CORRECCIÓN
+            // Ahora buscamos en la fuente de datos correcta y añadimos un fallback a la caché.
+            // =================================================================================
             if (id) {
+                const dataSource = isRecurrent ? db.recurrentes : db.movimientos;
                 data = dataSource.find(item => item.id === id);
-                mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
-            }
 
+                // Si no lo encontramos en la fuente principal Y NO es recurrente, buscamos en la caché de recientes.
+                if (!data && !isRecurrent) {
+                    data = recentMovementsCache.find(item => item.id === id);
+                }
+                
+                if (data) { // Solo cambiamos el modo si encontramos datos
+                   mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
+                }
+            }
+            // =================================================================================
+            // FIN DE LA CORRECCIÓN
+            // =================================================================================
+        
 			select('movimiento-mode').value = mode;
             select('movimiento-id').value = id || '';
         
@@ -3211,7 +3233,7 @@ async function migrateBalancesToAccounts() {
                 setMovimientoFormType('traspaso');
             }
         
-            select('form-movimiento-title').textContent = id ? (data?.tipo === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento') : 'Añadir Movimiento';
+            select('form-movimiento-title').textContent = id && data ? (data?.tipo === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento') : 'Añadir Movimiento';
             select('movimiento-cantidad').value = data ? `${(data.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2 })}` : '';
             
             const fecha = data?.fecha ? new Date(data.fecha) : new Date();
@@ -3228,7 +3250,7 @@ async function migrateBalancesToAccounts() {
         
             const recurrenteCheckbox = select('movimiento-recurrente');
             const recurrentOptions = select('recurrent-options');
-            if (mode === 'edit-recurrent') {
+            if (mode === 'edit-recurrent' && data) { // Añadido chequeo de 'data'
                 recurrenteCheckbox.checked = true;
                 select('recurrent-frequency').value = data.frequency;
                 select('recurrent-next-date').value = data.nextDate;
@@ -3239,12 +3261,14 @@ async function migrateBalancesToAccounts() {
                 recurrentOptions.classList.add('hidden');
             }
             
-            select('delete-movimiento-btn').classList.toggle('hidden', !id);
+            select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
             select('delete-movimiento-btn').dataset.isRecurrent = isRecurrent;
-            select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single'));
+            select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
             
             showModal('movimiento-modal');
         };
+
+		
         
         const showCalculator = (targetInput) => {
             calculatorState.targetInput = targetInput;
@@ -3680,7 +3704,7 @@ async function migrateBalancesToAccounts() {
         // =================================================================================
         // 10. EVENT LISTENERS & HANDLERS
         // =================================================================================
-        const attachEventListeners = () => {
+		           const attachEventListeners = () => {
 
             const handleDeleteAllData = async (btn) => {
                 if (!currentUser) return;
@@ -3742,25 +3766,25 @@ async function migrateBalancesToAccounts() {
                     }
                 }, '¿Eliminar Cuenta Permanentemente?');
             };
+            
 			document.body.addEventListener('change', e => {
-    if (e.target.name === 'theme-option') {
-        const newTheme = e.target.value;
-        document.body.dataset.theme = newTheme;
-        localStorage.setItem('appTheme', newTheme);
-        hapticFeedback('light');
+                if (e.target.name === 'theme-option') {
+                    const newTheme = e.target.value;
+                    document.body.dataset.theme = newTheme;
+                    localStorage.setItem('appTheme', newTheme);
+                    hapticFeedback('light');
 
-        // Actualiza los gráficos para que tomen los nuevos colores del tema
-        if (conceptosChart) conceptosChart.destroy();
-        if (liquidAssetsChart) liquidAssetsChart.destroy();
-        if (informesChart) informesChart.destroy();
-        
-        const activePageId = document.querySelector('.view--active')?.id;
-        if (activePageId) {
-            // Forzar un re-renderizado de la vista activa para que los gráficos se actualicen
-            navigateTo(activePageId, true);
-        }
-    }
-});
+                    if (conceptosChart) conceptosChart.destroy();
+                    if (liquidAssetsChart) liquidAssetsChart.destroy();
+                    if (informesChart) informesChart.destroy();
+                    
+                    const activePageId = document.querySelector('.view--active')?.id;
+                    if (activePageId) {
+                        navigateTo(activePageId, true);
+                    }
+                }
+            });
+            
             document.body.addEventListener('click', async (e) => {
                 const target = e.target;
                 const actionTarget = target.closest('[data-action]');
@@ -3777,7 +3801,7 @@ async function migrateBalancesToAccounts() {
                 const { action, id, page, type, modalId, view } = actionTarget.dataset;
                 const btn = actionTarget.closest('button');
                 
-                const actions = {
+                                 const actions = {
                     'navigate': () => navigateTo(page),
                     'help': showHelpModal,
                     'exit': handleExitApp,
@@ -3797,10 +3821,36 @@ async function migrateBalancesToAccounts() {
                     'apply-filters': () => { hapticFeedback('light'); updateDashboardData(); },
                     'apply-informe-filters': () => { hapticFeedback('light'); renderInformesPage(); },
                     'add-movement': () => startMovementForm(),
-                    'edit-movement': () => {
+                    'edit-movement': async () => {
                         if (select('generic-modal')?.classList.contains('modal-overlay--active')) {
                             hideModal('generic-modal');
                         }
+                        
+                        let movementData = db.movimientos.find(m => m.id === id);
+                        if (!movementData) {
+                            movementData = recentMovementsCache.find(m => m.id === id);
+                        }
+
+                        if (!movementData && id) {
+                            try {
+                                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id);
+                                const doc = await movRef.get();
+                                if (doc.exists) {
+                                    movementData = { id: doc.id, ...doc.data() };
+                                    if (!db.movimientos.some(m => m.id === id)) {
+                                        db.movimientos.push(movementData);
+                                    }
+                                } else {
+                                    showToast('Error: No se encontró el movimiento.', 'danger');
+                                    return;
+                                }
+                            } catch (error) {
+                                console.error("Error al obtener el movimiento:", error);
+                                showToast('No se pudo cargar el movimiento para editar.', 'danger');
+                                return;
+                            }
+                        }
+                        
                         startMovementForm(id, false);
                     },			
                     'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
@@ -3817,19 +3867,32 @@ async function migrateBalancesToAccounts() {
 
                                 if (doc.exists) {
                                     const movToDelete = doc.data();
+                                    const updateLocally = (cuentaId, amount) => {
+                                        const cuenta = db.cuentas.find(c => c.id === cuentaId);
+                                        if(cuenta) cuenta.saldo = (cuenta.saldo || 0) + amount;
+                                    };
                                     if (movToDelete.tipo === 'traspaso') {
-                                        await updateAccountBalance(movToDelete.cuentaOrigenId, movToDelete.cantidad); // Devuelve al origen
-                                        await updateAccountBalance(movToDelete.cuentaDestinoId, -movToDelete.cantidad); // Saca del destino
+                                        await updateAccountBalance(movToDelete.cuentaOrigenId, movToDelete.cantidad);
+                                        await updateAccountBalance(movToDelete.cuentaDestinoId, -movToDelete.cantidad);
+                                        updateLocally(movToDelete.cuentaOrigenId, movToDelete.cantidad);
+                                        updateLocally(movToDelete.cuentaDestinoId, -movToDelete.cantidad);
                                     } else {
                                         await updateAccountBalance(movToDelete.cuentaId, -movToDelete.cantidad);
+                                        updateLocally(movToDelete.cuentaId, -movToDelete.cantidad);
                                     }
+                                    recentMovementsCache = recentMovementsCache.filter(m => m.id !== idToDelete);
                                 }
                             }
                             await deleteDoc(collection, idToDelete);
                             hideModal('movimiento-modal');
                             hapticFeedback('success');
                             showToast('Operación eliminada.');
-                            if (collection === 'movimientos') {
+                            
+                            const currentPage = select('.view--active')?.id;
+                            if (currentPage === PAGE_IDS.INICIO) {
+                                _renderRecientesFromCache();
+                                updateDashboardData();
+                            } else if (currentPage === PAGE_IDS.MOVIMIENTOS_FULL) {
                                 loadInitialMovements();
                             }
                         });
@@ -3874,10 +3937,6 @@ async function migrateBalancesToAccounts() {
                         } else { 
                             deselectedAccountTypesFilter.add(type); 
                         } 
-                        // ANTES:
-                        // renderCuentas('patrimonio-cuentas-container'); 
-
-                        // AHORA (CORRECCIÓN):
                         renderPatrimonioPage();
                     },
                     'create-budgets': () => handleCreateBudgets(btn),
@@ -3912,10 +3971,17 @@ async function migrateBalancesToAccounts() {
                         select('inicio-view-resumen').classList.toggle('hidden', !isResumen);
                         select('inicio-view-recientes').classList.toggle('hidden', isResumen);
                     },
+                    'recalculate-balances': () => {
+                        showConfirmationModal(
+                            'Esta acción leerá todo tu historial de transacciones para recalcular y corregir el saldo de cada una de tus cuentas. Es útil si sospechas que hay errores en los saldos. ¿Quieres continuar?',
+                            () => recalculateAllAccountBalances(actionTarget.closest('button')),
+                            'Confirmar Recálculo de Saldos'
+                        );
+                    },
                     'json-wizard-back-2': () => goToJSONStep(1),
                     'json-wizard-import-final': () => handleFinalJsonImport(btn),
                     'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns()
-                };
+                };    
                 if (actions[action]) actions[action](e);
             });
 
@@ -3977,6 +4043,11 @@ async function migrateBalancesToAccounts() {
             dropZone?.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); });
             dropZone?.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); });
             dropZone?.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const file = e.dataTransfer.files[0]; if (file) handleJSONFileSelect(file); });
+        
+        // =================================================================================
+        // INICIO DE LA CORRECCIÓN: Se añaden las llaves y paréntesis de cierre que faltaban
+        // para la función attachEventListeners completa.
+        // =================================================================================
         };
 
         const showImportJSONWizard = () => {
@@ -4133,7 +4204,7 @@ async function migrateBalancesToAccounts() {
             showToast('Datos duplicados. Ajusta y guarda.', 'info');
         };
 
-        const handleSaveMovement = async (form, btn) => {
+                    const handleSaveMovement = async (form, btn) => {
             clearAllErrors(form.id);
             let isValid = true;
             const type = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
@@ -4182,6 +4253,12 @@ async function migrateBalancesToAccounts() {
             if (newMovementData.tipo === 'traspaso') { newMovementData.cantidad = Math.abs(newMovementData.cantidad); }
 
             const isRecurrent = select('movimiento-recurrente').checked;
+            
+            // =================================================================================
+            // INICIO DE LA CORRECCIÓN
+            // 1. Declaramos 'saldosPrevios' aquí, en el ámbito superior de la función.
+            // =================================================================================
+            let saldosPrevios = {};
 
             if (isRecurrent) {
                 const recurrentData = { ...newMovementData, frequency: select('recurrent-frequency').value, nextDate: select('recurrent-next-date').value, endDate: select('recurrent-end-date').value || null };
@@ -4189,24 +4266,33 @@ async function migrateBalancesToAccounts() {
             } else {
                 let balanceUpdates = [];
 
-               if (oldMovementData) { // Estamos EDITANDO un movimiento existente
-                    // 1. Revertimos el impacto del movimiento antiguo
+               if (oldMovementData) { 
                     if (oldMovementData.tipo === 'traspaso') {
-                        balanceUpdates.push({ cuentaId: oldMovementData.cuentaOrigenId, amount: oldMovementData.cantidad }); // Devuelve el dinero al origen
-                        balanceUpdates.push({ cuentaId: oldMovementData.cuentaDestinoId, amount: -oldMovementData.cantidad }); // Quita el dinero del destino
+                        balanceUpdates.push({ cuentaId: oldMovementData.cuentaOrigenId, amount: oldMovementData.cantidad }); 
+                        balanceUpdates.push({ cuentaId: oldMovementData.cuentaDestinoId, amount: -oldMovementData.cantidad });
                     } else {
                         balanceUpdates.push({ cuentaId: oldMovementData.cuentaId, amount: -oldMovementData.cantidad });
                     }
                 }
                 
-                // 2. Aplicamos el impacto del movimiento nuevo (o actualizado)
                 if (newMovementData.tipo === 'traspaso') {
-                    balanceUpdates.push({ cuentaId: newMovementData.cuentaOrigenId, amount: -newMovementData.cantidad }); // Sale del origen
-                    balanceUpdates.push({ cuentaId: newMovementData.cuentaDestinoId, amount: newMovementData.cantidad }); // Entra al destino
+                    balanceUpdates.push({ cuentaId: newMovementData.cuentaOrigenId, amount: -newMovementData.cantidad });
+                    balanceUpdates.push({ cuentaId: newMovementData.cuentaDestinoId, amount: newMovementData.cantidad });
                 } else {
                     balanceUpdates.push({ cuentaId: newMovementData.cuentaId, amount: newMovementData.cantidad });
                 }
 
+                // 2. Asignamos valores a la variable ya declarada. No usamos 'const' aquí.
+                if (newMovementData.tipo === 'traspaso') {
+                    const cuentaOrigen = db.cuentas.find(c => c.id === newMovementData.cuentaOrigenId);
+                    const cuentaDestino = db.cuentas.find(c => c.id === newMovementData.cuentaDestinoId);
+                    saldosPrevios.origen = cuentaOrigen?.saldo || 0;
+                    saldosPrevios.destino = cuentaDestino?.saldo || 0;
+                } else {
+                    const cuenta = db.cuentas.find(c => c.id === newMovementData.cuentaId);
+                    saldosPrevios.cuenta = cuenta?.saldo || 0;
+                }
+                
                 const finalUpdates = balanceUpdates.reduce((acc, up) => {
                     if (up.cuentaId) {
                         acc[up.cuentaId] = (acc[up.cuentaId] || 0) + up.amount;
@@ -4220,6 +4306,13 @@ async function migrateBalancesToAccounts() {
                     saveDoc('movimientos', movementId, newMovementData),
                     ...updatePromises
                 ]);
+                
+                Object.entries(finalUpdates).forEach(([cuentaId, amount]) => {
+                    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+                    if (cuenta) {
+                        cuenta.saldo = (cuenta.saldo || 0) + amount;
+                    }
+                });
             }
             
             if (mode.includes('new') && !isRecurrent) {
@@ -4230,10 +4323,28 @@ async function migrateBalancesToAccounts() {
             hideModal('movimiento-modal');
             hapticFeedback('success');
             showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+
             if (!isRecurrent) {
                 const currentPage = select('.view--active')?.id;
-                if(currentPage === PAGE_IDS.INICIO) renderInicioPage();
-                else if (currentPage === PAGE_IDS.MOVIMIENTOS_FULL) loadInitialMovements();
+                if(currentPage === PAGE_IDS.INICIO) {
+                    // 3. Ahora 'saldosPrevios' es accesible aquí sin problemas.
+                    if (newMovementData.tipo === 'traspaso') {
+                        newMovementData.runningBalanceOrigen = saldosPrevios.origen;
+                        newMovementData.runningBalanceDestino = saldosPrevios.destino;
+                    } else {
+                        newMovementData.runningBalance = saldosPrevios.cuenta;
+                    }
+                    
+                    recentMovementsCache.unshift(newMovementData);
+                    if (recentMovementsCache.length > 30) {
+                        recentMovementsCache.pop();
+                    }
+                    await _renderRecientesFromCache(); 
+                    updateDashboardData();
+                }
+                else if (currentPage === PAGE_IDS.MOVIMIENTOS_FULL) {
+                    loadInitialMovements();
+                }
             }
         };
 
@@ -4265,7 +4376,7 @@ async function migrateBalancesToAccounts() {
             hapticFeedback('success'); showToast('Configuración guardada.'); 
         };
 
-        const handleExportData = async (btn) => {
+                 const handleExportData = async (btn) => {
             if (!currentUser) { showToast("No hay usuario autenticado.", "danger"); return; }
             setButtonLoading(btn, true, 'Exportando...');
             try {
@@ -4286,7 +4397,7 @@ async function migrateBalancesToAccounts() {
                     },
                     data: dataPayload
                 };
-
+                
                 const jsonString = JSON.stringify(exportObject, null, 2);
                 const blob = new Blob([jsonString], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
@@ -4305,6 +4416,66 @@ async function migrateBalancesToAccounts() {
                 setButtonLoading(btn, false);
             }
         };
+
+        const recalculateAllAccountBalances = async (btn) => {
+            if (!currentUser) {
+                showToast("Debes iniciar sesión para realizar esta acción.", "danger");
+                return;
+            }
+
+            setButtonLoading(btn, true, 'Auditando...');
+            showToast("Iniciando recálculo de saldos... Esto puede tardar un momento.", 'info', 4000);
+
+            try {
+                const userRef = fbDb.collection('users').doc(currentUser.uid);
+                const cuentasRef = userRef.collection('cuentas');
+                const movimientosRef = userRef.collection('movimientos');
+
+                const cuentasSnapshot = await cuentasRef.get();
+                const newBalances = {};
+                cuentasSnapshot.forEach(doc => {
+                    newBalances[doc.id] = 0;
+                });
+
+                const movimientosSnapshot = await movimientosRef.get();
+                console.log(`Procesando ${movimientosSnapshot.size} movimientos para el recálculo.`);
+
+                movimientosSnapshot.forEach(doc => {
+                    const mov = doc.data();
+                    if (mov.tipo === 'traspaso') {
+                        if (newBalances.hasOwnProperty(mov.cuentaOrigenId)) {
+                            newBalances[mov.cuentaOrigenId] -= mov.cantidad;
+                        }
+                        if (newBalances.hasOwnProperty(mov.cuentaDestinoId)) {
+                            newBalances[mov.cuentaDestinoId] += mov.cantidad;
+                        }
+                    } else { // tipo 'movimiento'
+                        if (newBalances.hasOwnProperty(mov.cuentaId)) {
+                            newBalances[mov.cuentaId] += mov.cantidad;
+                        }
+                    }
+                });
+
+                const batch = fbDb.batch();
+                for (const cuentaId in newBalances) {
+                    const cuentaRef = cuentasRef.doc(cuentaId);
+                    batch.update(cuentaRef, { saldo: newBalances[cuentaId] });
+                }
+                
+                await batch.commit();
+
+                hapticFeedback('success');
+                showToast("¡Auditoría completada! Todos los saldos han sido recalculados y actualizados.", "info", 5000);
+                
+                loadCoreData(currentUser.uid);
+
+            } catch (error) {
+                console.error("Error crítico durante el recálculo de saldos:", error);
+                showToast("Ocurrió un error grave durante el recálculo. Revisa la consola.", "danger");
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        };    
 
         const handleSaveInvestmentAccounts = async (form, btn) => {
             setButtonLoading(btn, true);
