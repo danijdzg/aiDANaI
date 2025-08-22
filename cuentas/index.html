@@ -3929,189 +3929,193 @@ const renderInicioRecientesView = async () => {
                 const { action, id, page, type, modalId, view } = actionTarget.dataset;
                 const btn = actionTarget.closest('button');
                 
-                                 const actions = {
-                    'navigate': () => navigateTo(page),
-                    'help': showHelpModal,
-                    'exit': handleExitApp,
-					'show-csv-converter': showCsvConverterModal, // <-- AÑADE ESTA LÍNEA
-                    // ... muchas otras acciones
-                    'toggle-ledger': async () => {
-                        hapticFeedback('medium');
-                        isOffBalanceMode = !isOffBalanceMode;
-                        document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
-                        const activePage = selectOne('.view--active')?.id || PAGE_IDS.INICIO;
-                        navigateTo(activePage, false);
-                        showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info');
-                    },
-                    'toggle-off-balance': async () => {
-                        const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return;
-                        hapticFeedback('light');
-                        await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked });
-                    },
-                    'apply-filters': () => { hapticFeedback('light'); updateDashboardData(); },
-                    'apply-informe-filters': () => { hapticFeedback('light'); renderInformesPage(); },
-                    'add-movement': () => startMovementForm(),
-                    'edit-movement': async () => {
-                        if (select('generic-modal')?.classList.contains('modal-overlay--active')) {
-                            hideModal('generic-modal');
-                        }
-                        
-                        let movementData = db.movimientos.find(m => m.id === id);
-                        if (!movementData) {
-                            movementData = recentMovementsCache.find(m => m.id === id);
-                        }
+                const actions = {
+    'navigate': () => navigateTo(page),
+    'help': showHelpModal,
+    'exit': handleExitApp,
+    'show-csv-converter': showCsvConverterModal,
+    'toggle-ledger': async () => {
+        hapticFeedback('medium');
+        isOffBalanceMode = !isOffBalanceMode;
+        document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
+        const activePage = selectOne('.view--active')?.id || PAGE_IDS.INICIO;
+        navigateTo(activePage, false);
+        showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info');
+    },
+    'toggle-off-balance': async () => {
+        const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return;
+        hapticFeedback('light');
+        await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked });
+    },
+    'apply-filters': () => { hapticFeedback('light'); updateDashboardData(); },
+    'apply-informe-filters': () => { hapticFeedback('light'); renderInformesPage(); },
+    'add-movement': () => startMovementForm(),
+    'edit-movement': async () => {
+        if (select('generic-modal')?.classList.contains('modal-overlay--active')) {
+            hideModal('generic-modal');
+        }
+        
+        let movementData = db.movimientos.find(m => m.id === id);
+        if (!movementData) {
+            movementData = recentMovementsCache.find(m => m.id === id);
+        }
 
-                        if (!movementData && id) {
-                            try {
-                                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id);
-                                const doc = await movRef.get();
-                                if (doc.exists) {
-                                    movementData = { id: doc.id, ...doc.data() };
-                                    if (!db.movimientos.some(m => m.id === id)) {
-                                        db.movimientos.push(movementData);
-                                    }
-                                } else {
-                                    showToast('Error: No se encontró el movimiento.', 'danger');
-                                    return;
-                                }
-                            } catch (error) {
-                                console.error("Error al obtener el movimiento:", error);
-                                showToast('No se pudo cargar el movimiento para editar.', 'danger');
-                                return;
-                            }
-                        }
-                        
-                        startMovementForm(id, false);
-                    },			
-                    'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
-                    'delete-movement-from-modal': () => {
-                        const isRecurrent = (actionTarget.dataset.isRecurrent === 'true');
-                        const idToDelete = select('movimiento-id').value;
-                        const collection = isRecurrent ? 'recurrentes' : 'movimientos';
-                        const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?';
-                        
-                        showConfirmationModal(message, async () => {
-                            if (!isRecurrent) {
-                                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(idToDelete);
-                                const doc = await movRef.get();
+        if (!movementData && id) {
+            try {
+                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id);
+                const doc = await movRef.get();
+                if (doc.exists) {
+                    movementData = { id: doc.id, ...doc.data() };
+                    if (!db.movimientos.some(m => m.id === id)) {
+                        db.movimientos.push(movementData);
+                    }
+                } else {
+                    showToast('Error: No se encontró el movimiento.', 'danger');
+                    return;
+                }
+            } catch (error) {
+                console.error("Error al obtener el movimiento:", error);
+                showToast('No se pudo cargar el movimiento para editar.', 'danger');
+                return;
+            }
+        }
+        
+        startMovementForm(id, false);
+    },			
+    'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
+    'delete-movement-from-modal': () => {
+        const isRecurrent = (actionTarget.dataset.isRecurrent === 'true');
+        const idToDelete = select('movimiento-id').value;
+        const collection = isRecurrent ? 'recurrentes' : 'movimientos';
+        const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?';
+        
+        showConfirmationModal(message, async () => {
+            if (!isRecurrent) {
+                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(idToDelete);
+                const doc = await movRef.get();
 
-                                if (doc.exists) {
-                                    const movToDelete = doc.data();
-                                    if (movToDelete.tipo === 'traspaso') {
-                                        await updateAccountBalance(movToDelete.cuentaOrigenId, movToDelete.cantidad);
-                                        await updateAccountBalance(movToDelete.cuentaDestinoId, -movToDelete.cantidad);
-                                                                            } else {
-                                        await updateAccountBalance(movToDelete.cuentaId, -movToDelete.cantidad);
-                                                                            }
-                                    recentMovementsCache = recentMovementsCache.filter(m => m.id !== idToDelete);
-                                }
-                            }
-                            await deleteDoc(collection, idToDelete);
-                            hideModal('movimiento-modal');
-                            hapticFeedback('success');
-                            showToast('Operación eliminada.');
-                            
-                            const currentPage = select('.view--active')?.id;
-                            if (currentPage === PAGE_IDS.INICIO) {
-                                _renderRecientesFromCache();
-                                updateDashboardData();
-                            } else if (currentPage === PAGE_IDS.MOVIMIENTOS_FULL) {
-                                loadInitialMovements();
-                            }
-                        });
-                    },
-                    'delete-concepto': async () => { 
-                        const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get();
-                        if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; }
-                        showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => { 
-                            await deleteDoc('conceptos', id);
-                            hapticFeedback('success'); 
-                            showToast("Concepto eliminado.");
-                        }); 
-                    },
-                    'delete-cuenta': async () => { 
-                        const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get();
-                        if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; }
-                        showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => {
-                            await deleteDoc('cuentas', id);
-                            hapticFeedback('success');
-                            showToast("Cuenta eliminada.");
-                        });
-                    },
-                    'close-modal': () => hideModal(modalId || target.closest('.modal-overlay').id),
-                    'manage-conceptos': showConceptosModal,
-                    'manage-cuentas': showCuentasModal,
-                    'manage-recurrentes': showRecurrentesModal,
-                    'view-account-details': () => showAccountMovementsModal(id),
-                    'save-config': () => handleSaveConfig(btn),
-                    'export-data': () => handleExportData(btn),
-                    'import-data': () => showImportJSONWizard(),
-                    'clear-data': () => {
-                        showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible.', () => {
-                            showConfirmationModal('Esta es tu última oportunidad. ¿Estás absolutamente seguro?', () => {
-                                handleDeleteAllData(actionTarget.closest('button'));
-                            }, 'Confirmación Final');
-                        });
-                    },
-                    'toggle-account-type-filter': () => { 
-                        hapticFeedback('light'); 
-                        if(deselectedAccountTypesFilter.has(type)) { 
-                            deselectedAccountTypesFilter.delete(type); 
-                        } else { 
-                            deselectedAccountTypesFilter.add(type); 
-                        } 
-                        renderPatrimonioPage();
-                    },
-                    'create-budgets': () => handleCreateBudgets(btn),
-                    'update-budgets': handleUpdateBudgets,
-                    'logout': () => showConfirmationModal('¿Seguro que quieres cerrar la sesión?', () => { fbAuth.signOut().then(() => { showToast('Sesión cerrada correctamente.'); }).catch(() => { showToast('Error al cerrar sesión.', 'danger'); }); }, 'Cerrar Sesión'),
-                    'delete-account': () => handleDeleteAccount(actionTarget.closest('button')),
-                    'view-investment-detail': () => renderInvestmentAccountDetail(id),
-                    'manage-investment-accounts': showManageInvestmentAccountsModal,
-                    'add-aportacion': () => showAportacionModal(),
-                    'global-search': showGlobalSearchModal,
-                    'search-result-movimiento': () => { hideModal('global-search-modal'); startMovementForm(id, false); },
-                    'search-result-cuenta': () => { hideModal('global-search-modal'); showCuentasModal(); setTimeout(() => select(`cuenta-item-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200); },
-                    'search-result-concepto': () => { hideModal('global-search-modal'); showConceptosModal(); setTimeout(() => select(`concepto-item-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200); },
-                    'edit-concepto': () => showConceptoEditForm(id),
-                    'cancel-edit-concepto': renderConceptosModalList,
-                    'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
-                    'edit-cuenta': () => showAccountEditForm(id),
-                    'cancel-edit-cuenta': renderCuentasModalList,
-                    'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
-                    'duplicate-movement': () => handleDuplicateMovement(),
-                    'start-onboarding-tour': startTour,
-                    'end-tour': endTour,
-                    'next-tour-step': nextTourStep,
-                    'prev-tour-step': prevTourStep,
-                    'configure-dashboard': showDashboardConfigModal,
-                    'save-dashboard-config': () => handleSaveDashboardConfig(btn),
-                    'set-movimiento-type': () => setMovimientoFormType(type),
-                    'set-inicio-view': () => {
-						hapticFeedback('light');
-						const isResumen = view === 'resumen';
-						selectAll('#inicio-view-switcher .filter-pill').forEach(pill => pill.classList.remove('filter-pill--active'));
-						actionTarget.classList.add('filter-pill--active');
-						select('inicio-view-resumen').classList.toggle('hidden', !isResumen);
-						select('inicio-view-recientes').classList.toggle('hidden', isResumen);
-    
-					// Esta parte ahora funcionará porque los dropdowns ya están cargados.
-					if (isResumen) {
-						updateDashboardData();
-					}
-					},
-                       'recalculate-balances': () => {
-                        showConfirmationModal(
-                            'Esta acción leerá todo tu historial de transacciones para recalcular y corregir el saldo de cada una de tus cuentas. Es útil si sospechas que hay errores en los saldos. ¿Quieres continuar?',
-                            () => recalculateAllAccountBalances(actionTarget.closest('button')),
-                            'Confirmar Recálculo de Saldos'
-                        );
-                    },
-                    'json-wizard-back-2': () => goToJSONStep(1),
-                    'json-wizard-import-final': () => handleFinalJsonImport(btn),
-                    'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns()
-                };    
-                if (actions[action]) actions[action](e);
+                if (doc.exists) {
+                    const movToDelete = doc.data();
+                    if (movToDelete.tipo === 'traspaso') {
+                        await updateAccountBalance(movToDelete.cuentaOrigenId, movToDelete.cantidad);
+                        await updateAccountBalance(movToDelete.cuentaDestinoId, -movToDelete.cantidad);
+                                                            } else {
+                        await updateAccountBalance(movToDelete.cuentaId, -movToDelete.cantidad);
+                                                            }
+                    recentMovementsCache = recentMovementsCache.filter(m => m.id !== idToDelete);
+                }
+            }
+            await deleteDoc(collection, idToDelete);
+            hideModal('movimiento-modal');
+            hapticFeedback('success');
+            showToast('Operación eliminada.');
+            
+            const currentPage = select('.view--active')?.id;
+            if (currentPage === PAGE_IDS.INICIO) {
+                _renderRecientesFromCache();
+                updateDashboardData();
+            } else if (currentPage === PAGE_IDS.MOVIMIENTOS_FULL) {
+                loadInitialMovements();
+            }
+        });
+    },
+    'delete-concepto': async () => { 
+        const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get();
+        if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; }
+        showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => { 
+            await deleteDoc('conceptos', id);
+            hapticFeedback('success'); 
+            showToast("Concepto eliminado.");
+        }); 
+    },
+    'delete-cuenta': async () => { 
+        const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get();
+        if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; }
+        showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => {
+            await deleteDoc('cuentas', id);
+            hapticFeedback('success');
+            showToast("Cuenta eliminada.");
+        });
+    },
+    'close-modal': () => {
+        if ((modalId === 'generic-modal' || target.closest('.modal-overlay')?.id === 'generic-modal') && detailInvestmentChart) {
+            detailInvestmentChart.destroy();
+            detailInvestmentChart = null;
+        }
+        hideModal(modalId || target.closest('.modal-overlay').id);
+    },
+    'manage-conceptos': showConceptosModal,
+    'manage-cuentas': showCuentasModal,
+    'manage-recurrentes': showRecurrentesModal,
+    'view-account-details': () => showAccountMovementsModal(id),
+    'save-config': () => handleSaveConfig(btn),
+    'export-data': () => handleExportData(btn),
+    'import-data': () => showImportJSONWizard(),
+    'clear-data': () => {
+        showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible.', () => {
+            showConfirmationModal('Esta es tu última oportunidad. ¿Estás absolutamente seguro?', () => {
+                handleDeleteAllData(actionTarget.closest('button'));
+            }, 'Confirmación Final');
+        });
+    },
+    'toggle-account-type-filter': () => { 
+        hapticFeedback('light'); 
+        if(deselectedAccountTypesFilter.has(type)) { 
+            deselectedAccountTypesFilter.delete(type); 
+        } else { 
+            deselectedAccountTypesFilter.add(type); 
+        } 
+        renderPatrimonioPage();
+    },
+    'create-budgets': () => handleCreateBudgets(btn),
+    'update-budgets': handleUpdateBudgets,
+    'logout': () => showConfirmationModal('¿Seguro que quieres cerrar la sesión?', () => { fbAuth.signOut().then(() => { showToast('Sesión cerrada correctamente.'); }).catch(() => { showToast('Error al cerrar sesión.', 'danger'); }); }, 'Cerrar Sesión'),
+    'delete-account': () => handleDeleteAccount(actionTarget.closest('button')),
+    'view-investment-detail': () => renderInvestmentAccountDetail(id),
+    'manage-investment-accounts': showManageInvestmentAccountsModal,
+    'add-aportacion': () => showAportacionModal(),
+    'global-search': showGlobalSearchModal,
+    'search-result-movimiento': () => { hideModal('global-search-modal'); startMovementForm(id, false); },
+    'search-result-cuenta': () => { hideModal('global-search-modal'); showCuentasModal(); setTimeout(() => select(`cuenta-item-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200); },
+    'search-result-concepto': () => { hideModal('global-search-modal'); showConceptosModal(); setTimeout(() => select(`concepto-item-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200); },
+    'edit-concepto': () => showConceptoEditForm(id),
+    'cancel-edit-concepto': renderConceptosModalList,
+    'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
+    'edit-cuenta': () => showAccountEditForm(id),
+    'cancel-edit-cuenta': renderCuentasModalList,
+    'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
+    'duplicate-movement': () => handleDuplicateMovement(),
+    'start-onboarding-tour': startTour,
+    'end-tour': endTour,
+    'next-tour-step': nextTourStep,
+    'prev-tour-step': prevTourStep,
+    'configure-dashboard': showDashboardConfigModal,
+    'save-dashboard-config': () => handleSaveDashboardConfig(btn),
+    'set-movimiento-type': () => setMovimientoFormType(type),
+    'set-inicio-view': () => {
+        hapticFeedback('light');
+        const isResumen = view === 'resumen';
+        selectAll('#inicio-view-switcher .filter-pill').forEach(pill => pill.classList.remove('filter-pill--active'));
+        actionTarget.classList.add('filter-pill--active');
+        select('inicio-view-resumen').classList.toggle('hidden', !isResumen);
+        select('inicio-view-recientes').classList.toggle('hidden', isResumen);
+
+        if (isResumen) {
+            updateDashboardData();
+        }
+    },
+    'recalculate-balances': () => {
+        showConfirmationModal(
+            'Esta acción leerá todo tu historial de transacciones para recalcular y corregir el saldo de cada una de tus cuentas. Es útil si sospechas que hay errores en los saldos. ¿Quieres continuar?',
+            () => recalculateAllAccountBalances(actionTarget.closest('button')),
+            'Confirmar Recálculo de Saldos'
+        );
+    },
+    'json-wizard-back-2': () => goToJSONStep(1),
+    'json-wizard-import-final': () => handleFinalJsonImport(btn),
+    'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns()
+};    
+if (actions[action]) actions[action](e);
             });
 
             document.body.addEventListener('submit', (e) => {
@@ -4443,11 +4447,24 @@ const renderInicioRecientesView = async () => {
             }
             
             setButtonLoading(btn, false);
-            hideModal('movimiento-modal');
-            hapticFeedback('success');
-            showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+			hideModal('movimiento-modal');
+			hapticFeedback('success');
+			showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
 
-            if (!isRecurrent) {
+			// =================================================================================
+			// INICIO CORRECCIÓN 3: Forzar recálculo de saldos tras una edición
+			// =================================================================================
+			if (mode.includes('edit')) {
+			// Reordenamos la caché local por si la fecha cambió
+			db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+			// Forzamos un recálculo completo de los saldos corrientes
+			await processMovementsForRunningBalance(db.movimientos, true);
+			}
+			// =================================================================================
+			// FIN CORRECCIÓN 3
+			// =================================================================================
+
+		if (!isRecurrent) {
         const currentPage = select('.view--active')?.id;
         if(currentPage === PAGE_IDS.INICIO) {
             // Ya no llamamos a renderInicioRecientesView().
@@ -5018,4 +5035,3 @@ const renderInicioRecientesView = async () => {
     </script>
 </body>
 </html>
-	

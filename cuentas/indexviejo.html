@@ -519,6 +519,77 @@ body[data-theme="magma"] {
 }
 
 /* === FIN: DEFINICIÓN DE NUEVOS TEMAS === */
+/* === ESTILOS PARA EL CONVERSOR CSV A JSON === */
+        .csv-converter-modal .upload-area {
+            border: 2px dashed var(--c-outline);
+            border-radius: var(--border-radius-lg);
+            padding: 2.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s, background-color 0.3s;
+            margin-bottom: 1.5rem;
+        }
+        .csv-converter-modal .upload-area.drag-over {
+            border-color: var(--c-primary);
+            background-color: color-mix(in srgb, var(--c-primary) 10%, transparent);
+        }
+        .csv-converter-modal .upload-area p {
+            margin: 0;
+            color: var(--c-on-surface-tertiary);
+        }
+        .csv-converter-modal .upload-area strong {
+            color: var(--c-primary);
+        }
+        .csv-converter-modal #file-name {
+            font-weight: 600;
+            color: var(--c-success);
+            margin-top: 1rem;
+            display: block;
+            min-height: 24px;
+        }
+        .csv-converter-modal .results-log {
+            margin-top: 2rem;
+            background-color: var(--c-surface-variant);
+            border: 1px solid var(--c-outline);
+            border-radius: var(--border-radius-md);
+            padding: 1.5rem;
+            display: none;
+        }
+        .csv-converter-modal .results-log h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--c-on-surface-secondary);
+        }
+        .csv-converter-modal .results-log ul {
+            list-style: none;
+            padding: 0;
+        }
+        .csv-converter-modal .results-log li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--c-outline);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .csv-converter-modal .results-log li:last-child {
+            border-bottom: none;
+        }
+        .csv-converter-modal .results-log li .label {
+            color: var(--c-on-surface-tertiary);
+        }
+        .csv-converter-modal .results-log li .value {
+            font-weight: 700;
+            color: var(--c-on-surface);
+            padding: 0.1rem 0.5rem;
+            border-radius: 6px;
+        }
+        .csv-converter-modal .results-log .value.success { background-color: color-mix(in srgb, var(--c-success) 20%, transparent); }
+        .csv-converter-modal .results-log .value.warning { background-color: color-mix(in srgb, var(--c-warning) 20%, transparent); }
+        .csv-converter-modal .results-log .value.danger { background-color: color-mix(in srgb, var(--c-danger) 20%, transparent); }
+        .csv-converter-modal #download-container {
+            margin-top: 1.5rem;
+            display: none;
+        }
     </style>
 </head>
 <body data-ledger-mode="A">
@@ -654,10 +725,12 @@ body[data-theme="magma"] {
                     <details class="accordion">
                         <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">edit_note</span>Gestión de Datos</h3><span class="material-icons accordion__icon">expand_more</span></summary>
                         <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                             <div class="form-grid">
+                             <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
                                 <button data-action="manage-cuentas" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">account_balance</span>Cuentas</button>
                                 <button data-action="manage-conceptos" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">category</span>Conceptos</button>
                                 <button data-action="manage-recurrentes" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">event_repeat</span>Recurrentes</button>
+                                <!-- BOTÓN NUEVO AÑADIDO AQUÍ -->
+                                <button data-action="show-csv-converter" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">transform</span>Convertir CSV a JSON</button>
                             </div>
 								<button data-action="recalculate-balances" class="btn btn--primary btn--full" style="margin-top: var(--sp-4);">
     <span class="material-icons" style="font-size: 16px;">calculate</span>
@@ -3860,6 +3933,8 @@ const renderInicioRecientesView = async () => {
                     'navigate': () => navigateTo(page),
                     'help': showHelpModal,
                     'exit': handleExitApp,
+					'show-csv-converter': showCsvConverterModal, // <-- AÑADE ESTA LÍNEA
+                    // ... muchas otras acciones
                     'toggle-ledger': async () => {
                         hapticFeedback('medium');
                         isOffBalanceMode = !isOffBalanceMode;
@@ -4467,7 +4542,258 @@ const renderInicioRecientesView = async () => {
                 setButtonLoading(btn, false);
             }
         };
+        // =================================================================================
+        // 11. CONVERSOR DE CSV A JSON (BLOQUE ÚNICO Y FINAL)
+        // =================================================================================
 
+        // --- INICIO: Funciones de Ayuda para el Conversor CSV ---
+        // Se definen aquí, en el ámbito principal del script, para evitar errores de anidamiento.
+
+        const csv_parseDate = (dateString) => {
+            if (!dateString) return null;
+            const parts = dateString.split('/');
+            if (parts.length !== 3) return null;
+            const year = parseInt(parts[2], 10), month = parseInt(parts[1], 10) - 1, day = parseInt(parts[0], 10);
+            if (isNaN(year) || isNaN(month) || isNaN(day) || year < 1970) return null;
+            return new Date(Date.UTC(year, month, day, 12, 0, 0));
+        };
+
+        const csv_parseCurrency = (currencyString) => {
+            if (!currencyString) return 0;
+            const number = parseFloat(currencyString.replace('€', '').trim().replace(/\./g, '').replace(',', '.'));
+            return Math.round(number * 100);
+        };
+
+        const csv_inferType = (name) => {
+            const upperName = name.toUpperCase();
+            if (upperName.includes('TARJETA')) return { tipo: 'Tarjeta', esInversion: false };
+            if (upperName.includes('EFECTIVO')) return { tipo: 'Efectivo', esInversion: false };
+            if (upperName.includes('PENSIÓN')) return { tipo: 'Pensión', esInversion: true };
+            if (upperName.includes('LETRAS')) return { tipo: 'Renta Fija', esInversion: true };
+            if (upperName.includes('FONDO')) return { tipo: 'Fondos', esInversion: true };
+            if (['TRADEREPUBLIC', 'MYINVESTOR', 'DEGIRO', 'INTERACTIVEBROKERS', 'INDEXACAPITAL', 'COINBASE', 'CRIPTAN', 'KRAKEN', 'BIT2ME', 'N26', 'FREEDOM24'].some(b => upperName.includes(b))) return { tipo: 'Broker', esInversion: true };
+            if (['CIVISLEND', 'HOUSERS', 'HAUSERA', 'URBANITAE', 'MINTOS'].some(p => upperName.includes(p))) return { tipo: 'Crowdlending', esInversion: true };
+            if (['NARANJA', 'AHORRO'].some(t => upperName.includes(t))) return { tipo: 'Ahorro', esInversion: false };
+            return { tipo: 'Banco', esInversion: false };
+        };
+
+        const csv_processFile = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const csvData = event.target.result;
+                        const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== '');
+                        if (lines.length <= 1) {
+                            showToast("El archivo CSV está vacío o no tiene datos.", "warning");
+                            return resolve(null);
+                        }
+                        lines.shift();
+
+                        let rowCount = 0, initialCount = 0;
+                        const cuentasMap = new Map(), conceptosMap = new Map();
+                        const movimientos = [], potentialTransfers = [];
+                        
+                        for (const line of lines) {
+                            rowCount++;
+                            const columns = line.split(';').map(c => c.trim());
+                            if (columns.length < 5) continue;
+                            
+                            const [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion] = columns;
+                            const conceptoLimpio = conceptoStr.trim().toUpperCase().replace(/\s*;-$/, '');
+                            const fecha = csv_parseDate(fechaStr);
+                            if (!fecha) continue;
+
+                            const offBalance = cuentaStr.startsWith('N-');
+                            const nombreCuentaLimpio = cuentaStr.replace(/^(D-|N-)/, '');
+                            const cantidad = csv_parseCurrency(importeStr);
+
+                            if (!cuentasMap.has(nombreCuentaLimpio)) {
+                                const { tipo, esInversion } = csv_inferType(nombreCuentaLimpio);
+                                cuentasMap.set(nombreCuentaLimpio, { id: generateId(), nombre: nombreCuentaLimpio, tipo, saldo: 0, esInversion, offBalance, fechaCreacion: new Date(Date.UTC(2025, 0, 1)).toISOString() });
+                            }
+
+                            if (conceptoLimpio === 'INICIAL') {
+                                initialCount++;
+                                const conceptoInicialKey = 'SALDO INICIAL';
+                                if (!conceptosMap.has(conceptoInicialKey)) conceptosMap.set(conceptoInicialKey, { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
+                                movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion: descripcion || 'Existencia Inicial', tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptosMap.get(conceptoInicialKey).id, cuentaOrigenId: null, cuentaDestinoId: null });
+                                continue;
+                            }
+
+                            if (conceptoLimpio !== 'TRASPASO' && !conceptosMap.has(conceptoLimpio)) {
+                                conceptosMap.set(conceptoLimpio, { id: generateId(), nombre: toSentenceCase(conceptoLimpio), icon: 'label' });
+                            }
+                            
+                            if (conceptoLimpio === 'TRASPASO') {
+                                potentialTransfers.push({ fecha, nombreCuenta: nombreCuentaLimpio, cantidad, descripcion, originalRow: rowCount });
+                            } else {
+                                movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion, tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptosMap.get(conceptoLimpio).id, cuentaOrigenId: null, cuentaDestinoId: null });
+                            }
+                        }
+
+                        let matchedTransfersCount = 0;
+                        const unmatchedTransfers = [];
+                        potentialTransfers.sort((a,b) => a.fecha - b.fecha || a.cantidad - b.cantidad);
+                        while (potentialTransfers.length > 0) {
+                            const transfer = potentialTransfers.shift();
+                            let foundMatch = false;
+                            for (let i = 0; i < potentialTransfers.length; i++) {
+                                const potentialMatch = potentialTransfers[i];
+                                if (transfer.fecha.getTime() === potentialMatch.fecha.getTime() && transfer.cantidad === -potentialMatch.cantidad) {
+                                    const origen = transfer.cantidad < 0 ? transfer : potentialMatch;
+                                    const destino = transfer.cantidad > 0 ? transfer : potentialMatch;
+                                    movimientos.push({ id: generateId(), fecha: origen.fecha.toISOString(), cantidad: Math.abs(origen.cantidad), descripcion: origen.descripcion || 'Traspaso', tipo: 'traspaso', cuentaOrigenId: cuentasMap.get(origen.nombreCuenta).id, cuentaDestinoId: cuentasMap.get(destino.nombreCuenta).id, cuentaId: null, conceptoId: null });
+                                    potentialTransfers.splice(i, 1);
+                                    foundMatch = true;
+                                    matchedTransfersCount++;
+                                    break;
+                                }
+                            }
+                            if (!foundMatch) unmatchedTransfers.push(transfer);
+                        }
+
+                        const finalJSON = { meta: { appName: "Cuentas aiDANaI", version: "2.0.0", exportDate: new Date().toISOString() }, data: { cuentas: Array.from(cuentasMap.values()), conceptos: Array.from(conceptosMap.values()), movimientos, presupuestos: [], recurrentes: [], inversiones_historial: [], inversion_cashflows: [], config: { skipIntro: false, dashboardWidgets: ["kpi-summary", "concept-totals"] } } };
+                        
+                        const totalMovements = movimientos.filter(m => m.tipo === 'movimiento' && m.conceptoId !== conceptosMap.get('SALDO INICIAL')?.id).length;
+
+                        select('log-rows').textContent = rowCount;
+                        select('log-accounts').textContent = cuentasMap.size;
+                        select('log-concepts').textContent = conceptosMap.size;
+                        select('log-movements').textContent = totalMovements;
+                        select('log-transfers').textContent = matchedTransfersCount;
+                        select('log-initials').textContent = initialCount;
+                        select('log-unmatched').textContent = unmatchedTransfers.length;
+                        select('log-unmatched').className = unmatchedTransfers.length > 0 ? 'value danger' : 'value success';
+                        select('csv-results-log').style.display = 'block';
+                        select('csv-download-container').style.display = 'block';
+                        
+                        resolve(finalJSON);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+                reader.readAsText(file, 'UTF-8');
+            });
+        };
+
+        // --- FIN: Funciones de Ayuda ---
+
+        /**
+         * Muestra el modal del conversor y adjunta los event listeners.
+         */
+        const showCsvConverterModal = () => {
+            const converterHTML = `
+            <div class="csv-converter-modal">
+                <p class="form-label" style="margin-bottom: var(--sp-3);">
+                    Herramienta para migrar datos desde un archivo CSV. Columnas requeridas: 
+                    <code>Fecha; Cuenta; Concepto; Importe; Descripción</code>.
+                </p>
+                <section>
+                    <div id="csv-upload-area" class="upload-area">
+                        <p>Arrastra tu archivo <code>.csv</code> aquí o <strong>haz clic para seleccionarlo</strong>.</p>
+                        <span id="file-name"></span>
+                    </div>
+                    <input type="file" id="csv-file-input" accept=".csv" class="hidden">
+                    <button id="csv-convert-btn" class="btn btn--primary" disabled>Convertir a JSON</button>
+                </section>
+                <section id="csv-results-log" class="results-log">
+                    <h2>Resultados del Procesamiento</h2>
+                    <ul>
+                        <li><span class="label">Filas leídas del CSV</span><span id="log-rows" class="value">0</span></li>
+                        <li><span class="label">Cuentas únicas creadas</span><span id="log-accounts" class="value">0</span></li>
+                        <li><span class="label">Conceptos únicos creados</span><span id="log-concepts" class="value">0</span></li>
+                        <li><span class="label">Movimientos (Ingreso/Gasto)</span><span id="log-movements" class="value">0</span></li>
+                        <li><span class="label">Transferencias identificadas</span><span id="log-transfers" class="value">0</span></li>
+                        <li><span class="label">Movimientos 'INICIAL' procesados</span><span id="log-initials" class="value">0</span></li>
+                        <li><span class="label">Transferencias sin pareja</span><span id="log-unmatched" class="value">0</span></li>
+                    </ul>
+                    <div id="csv-download-container" style="display: none; margin-top: 1.5rem;">
+                        <button id="csv-download-btn" class="btn btn--primary">Descargar Archivo JSON</button>
+                    </div>
+                </section>
+            </div>`;
+
+            showGenericModal('Convertidor de CSV a JSON', converterHTML);
+
+            setTimeout(() => {
+                const uploadArea = select('csv-upload-area');
+                const fileInput = select('csv-file-input');
+                const convertBtn = select('csv-convert-btn');
+                
+                if(!uploadArea || !fileInput || !convertBtn) return;
+                
+                let csvFile = null;
+                let processedJSON = null;
+                
+                const handleFileSelection = (file) => {
+                    const fileNameDisplay = select('file-name');
+                    if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) {
+                        csvFile = file;
+                        fileNameDisplay.textContent = `Archivo seleccionado: ${file.name}`;
+                        convertBtn.disabled = false;
+                        select('csv-results-log').style.display = 'none';
+                        select('csv-download-container').style.display = 'none';
+                    } else {
+                        csvFile = null;
+                        fileNameDisplay.textContent = 'Por favor, selecciona un archivo .csv válido.';
+                        convertBtn.disabled = true;
+                    }
+                };
+
+                uploadArea.addEventListener('click', () => fileInput.click());
+                fileInput.addEventListener('change', () => handleFileSelection(fileInput.files[0]));
+                
+                const activateUploadArea = (e) => { e.preventDefault(); uploadArea.classList.add('drag-over'); };
+                const deactivateUploadArea = (e) => { e.preventDefault(); uploadArea.classList.remove('drag-over'); };
+                const handleFileDrop = (e) => {
+                    deactivateUploadArea(e);
+                    if (e.dataTransfer.files.length > 0) handleFileSelection(e.dataTransfer.files[0]);
+                };
+
+                uploadArea.addEventListener('dragenter', activateUploadArea);
+                uploadArea.addEventListener('dragover', activateUploadArea);
+                uploadArea.addEventListener('dragleave', deactivateUploadArea);
+                uploadArea.addEventListener('drop', handleFileDrop);
+
+                convertBtn.addEventListener('click', async () => {
+                    if (!csvFile) return;
+                    try {
+                        setButtonLoading(convertBtn, true, 'Procesando...');
+                        // Llama a la función de ayuda que está en el ámbito principal
+                        processedJSON = await csv_processFile(csvFile);
+                        if(processedJSON) {
+                            showToast("Archivo procesado con éxito.", "info");
+                        }
+                    } catch (error) {
+                        console.error("Error al procesar CSV:", error);
+                        showToast("Ocurrió un error al procesar el archivo.", "danger");
+                        processedJSON = null;
+                    } finally {
+                        setButtonLoading(convertBtn, false);
+                    }
+                });
+                
+                select('csv-download-btn').addEventListener('click', () => {
+                    if (!processedJSON) {
+                        showToast("No hay datos procesados para descargar.", "warning");
+                        return;
+                    }
+                    const jsonString = JSON.stringify(processedJSON, null, 2);
+                    const blob = new Blob([jsonString], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const dateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                    a.download = `cuentas_aidanai_import_${dateSuffix}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+            }, 0);
+        };
         const recalculateAllAccountBalances = async (btn) => {
             if (!currentUser) {
                 showToast("Debes iniciar sesión para realizar esta acción.", "danger");
