@@ -14,7 +14,8 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/flatpickr/dist/l10n/es.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
-    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+    <!-- CAMBIO REALIZADO 1/2: Se añade el atributo 'onload' para llamar a una función cuando el script esté listo. -->
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js" onload="onDriverJsLoaded()"></script>
     <!-- Configuración PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
@@ -539,6 +540,8 @@ let appState = { currentView: 'today', lastView: 'today', calendar: { currentMon
 let flatpickrInstance = null, currentUser = null, unsubscribeFromDb = null, saveTimeout = null;
 let db = {}; let activeTimers = {}; let newlyCreatedItemId = null; let originalButtonTexts = new Map();
 let isGoogleSignedIn = false, isAppInitialized = false, isViewSwitching = false, isSyncingWithGoogle = false;
+// CAMBIO REALIZADO 2/2: Se añade la variable de estado 'isTutorialReady'
+let isTutorialReady = false;
 
 const gebi = id => document.getElementById(id);
 const qsa = selector => document.querySelectorAll(selector);
@@ -595,7 +598,24 @@ function initApp() {
     }
 }
 const checkAuthState = () => onAuthStateChanged(fbAuth, user => { if (user) { currentUser = user; loadData(user.uid); } else { currentUser = null; isAppInitialized = false; if (unsubscribeFromDb) unsubscribeFromDb(); db = getInitialDb(); showLoginScreen(); } });
-const startMainApp = () => { if (isAppInitialized) return; isAppInitialized = true; applyTheme(db.config.theme || 'cyberpunk-night'); gebi('login-screen').classList.remove('login-view--visible'); const appRoot = gebi('app-root'); appRoot.classList.add('visible'); updateNav(appState.currentView); appRoot.querySelector('.view.active')?.classList.remove('active'); appRoot.querySelector(`#${appState.currentView}View`).classList.add('active'); renderThemeSelector(); scheduleAllNotifications(); if (!db.config.tutorialCompleted) { startOnboardingTutorial(); } };
+const startMainApp = () => {
+    if (isAppInitialized) return;
+    isAppInitialized = true;
+    applyTheme(db.config.theme || 'cyberpunk-night');
+    gebi('login-screen').classList.remove('login-view--visible');
+    const appRoot = gebi('app-root');
+    appRoot.classList.add('visible');
+    updateNav(appState.currentView);
+    appRoot.querySelector('.view.active')?.classList.remove('active');
+    appRoot.querySelector(`#${appState.currentView}View`).classList.add('active');
+    renderThemeSelector();
+    scheduleAllNotifications();
+    // CAMBIO REALIZADO: La llamada al tutorial ya no se hace aquí directamente.
+    // Se gestionará en el callback 'onDriverJsLoaded' para asegurar que el script ha cargado.
+    if (!db.config.tutorialCompleted && isTutorialReady) {
+        startOnboardingTutorial();
+    }
+};
 const showLoginScreen = () => { applyTheme(localStorage.getItem('theme') || 'cyberpunk-night'); gebi('app-root').classList.remove('visible'); gebi('login-screen').classList.add('login-view--visible'); const emailInput = gebi('login-email'); const passwordInput = gebi('login-password'); if (emailInput) emailInput.value = ''; if (passwordInput) passwordInput.value = ''; clearAllErrors('login-form'); };
 const handleAuthError = (error, submitterBtn) => { clearAllErrors('login-form'); setButtonLoading(submitterBtn, false); triggerHapticFeedback('medium'); const loginErrorEl = gebi('login-error'); switch (error.code) { case 'auth/user-not-found': case 'auth/wrong-password': case 'auth/invalid-credential': loginErrorEl.textContent = 'Error: Credenciales incorrectas.'; displayError('login-email', ''); displayError('login-password', ''); break; case 'auth/invalid-email': displayError('login-email', 'Formato de correo no válido.'); break; case 'auth/email-already-in-use': displayError('login-email', 'El correo ya está registrado.'); break; case 'auth/weak-password': displayError('login-password', 'La contraseña debe tener al menos 6 caracteres.'); break; default: loginErrorEl.textContent = 'Ocurrió un error. Inténtalo de nuevo.'; console.error("Error de autenticación no manejado:", error); break; } };
 const handleLogin = async (btn) => { clearAllErrors('login-form'); const email = (gebi('login-email')).value.trim(); const password = (gebi('login-password')).value; let isValid = true; if (!email) { displayError('login-email', 'El correo es obligatorio.'); isValid = false; } if (!password) { displayError('login-password', 'La contraseña es obligatoria.'); isValid = false; } if (!isValid) { triggerHapticFeedback('error'); gebi('login-error').textContent = 'Por favor, revisa los campos marcados.'; return; } setButtonLoading(btn, true, 'Iniciando...'); try { await signInWithEmailAndPassword(fbAuth, email, password); showToast(`¡Bienvenido/a de nuevo!`); } catch (error) { handleAuthError(error, btn); } finally { setButtonLoading(btn, false); } };
@@ -646,33 +666,47 @@ function handleDeleteTaskList(id) { const listName = db.taskLists.find(l => l.id
 function renderSubtasksInModal(subtasks = []) { const container = gebi('subtasks-container'); container.innerHTML = ''; subtasks.forEach(subtask => { const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = subtask.id; el.innerHTML = ` <input type="checkbox" ${subtask.isComplete ? 'checked' : ''}> <input type="text" value="${subtask.description}"> <button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button> `; el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); }; container.appendChild(el); }); }
 function handleAddSubtask() { const input = gebi('new-subtask-input'); const description = input.value.trim(); if (description) { const container = gebi('subtasks-container'); const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = uuid(); el.innerHTML = ` <input type="checkbox"> <input type="text" value="${description}"> <button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button> `; el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); }; container.appendChild(el); input.value = ''; input.focus(); } }
 function handleSubtaskToggle(taskId, subtaskId) { const taskIndex = db.items.findIndex(i => i.localId === taskId); if (taskIndex === -1) return; const updatedTask = JSON.parse(JSON.stringify(db.items[taskIndex])); const subtaskIndex = updatedTask.subtasks.findIndex(st => st.id === subtaskId); if (subtaskIndex === -1) return; updatedTask.subtasks[subtaskIndex].isComplete = !updatedTask.subtasks[subtaskIndex].isComplete; const allSubtasksComplete = updatedTask.subtasks.every(st => st.isComplete); updatedTask.isComplete = allSubtasksComplete; if (allSubtasksComplete) { if (!updatedTask.completedAt) updatedTask.completedAt = Date.now(); } else { updatedTask.completedAt = null; } updatedTask.updatedAt = Date.now(); db.items[taskIndex] = updatedTask; renderApp(); saveData().catch(error => { showToast('Error al actualizar la subtarea.', true); renderApp(); }); }
-function startOnboardingTutorial() { 
-    // Espera a que el objeto 'driver' esté disponible globalmente.
+
+// CAMBIO REALIZADO: Esta es la nueva función que se ejecutará cuando driver.js cargue.
+// Se asigna a 'window' para que sea accesible globalmente desde el HTML.
+window.onDriverJsLoaded = function() {
+    console.log("Driver.js ha cargado exitosamente.");
+    isTutorialReady = true;
+    // Si la app ya está inicializada y el tutorial no se ha completado, lo lanzamos.
+    if (isAppInitialized && !db.config.tutorialCompleted) {
+        startOnboardingTutorial();
+    }
+}
+
+function startOnboardingTutorial() {
+    // CAMBIO REALIZADO: Se elimina el 'setTimeout' y la comprobación de reintento.
+    // Ahora tenemos la garantía de que la función 'driver' existe.
     if (typeof driver !== 'function') {
-        setTimeout(startOnboardingTutorial, 200); // Reintenta después de un corto tiempo
+        console.error("Se intentó iniciar el tutorial, pero Driver.js no está disponible.");
         return;
     }
-    const driverObj = driver.driver({ 
-        showProgress: true, 
-        steps: [ 
-            { element: '#today-greeting', popover: { title: '¡Bienvenido/a a Agenda aiDANaI!', description: 'Este es tu centro de mando. Permítenos mostrarte rápidamente cómo funciona.' } }, 
-            { element: '#fab-add-item', popover: { title: 'Creación Rápida con IA', description: 'Usa este botón para añadir eventos y tareas usando lenguaje natural, como "Cena con amigos mañana a las 9". ¡La IA se encarga del resto!' } }, 
-            { element: '#todayView', popover: { title: 'Gestos que Ahorran Tiempo', description: 'En cualquier lista, desliza un ítem a la DERECHA para completarlo, y a la IZQUIERDA para eliminarlo. ¡Así de fácil!' } }, 
-            { element: '.bottom-nav', popover: { title: 'Navega por tu Agenda', description: 'Usa estos botones para cambiar entre la vista de Hoy, la Agenda completa, tus listas de Tareas y más.', side: "top", align: 'start' } } 
-        ], 
-        onDestroyStarted: async () => { 
-            if (!driverObj.isActivated()) { 
-                db.config.tutorialCompleted = true; 
-                try { 
-                    await saveData(); 
-                } catch (err) { 
-                    showToast("Error al guardar el estado del tutorial.", true); 
-                } 
-            } 
-        } 
-    }); 
-    driverObj.drive(); 
+    const driverObj = driver.driver({
+        showProgress: true,
+        steps: [
+            { element: '#today-greeting', popover: { title: '¡Bienvenido/a a Agenda aiDANaI!', description: 'Este es tu centro de mando. Permítenos mostrarte rápidamente cómo funciona.' } },
+            { element: '#fab-add-item', popover: { title: 'Creación Rápida con IA', description: 'Usa este botón para añadir eventos y tareas usando lenguaje natural, como "Cena con amigos mañana a las 9". ¡La IA se encarga del resto!' } },
+            { element: '#todayView', popover: { title: 'Gestos que Ahorran Tiempo', description: 'En cualquier lista, desliza un ítem a la DERECHA para completarlo, y a la IZQUIERDA para eliminarlo. ¡Así de fácil!' } },
+            { element: '.bottom-nav', popover: { title: 'Navega por tu Agenda', description: 'Usa estos botones para cambiar entre la vista de Hoy, la Agenda completa, tus listas de Tareas y más.', side: "top", align: 'start' } }
+        ],
+        onDestroyStarted: async () => {
+            if (!driverObj.isActivated()) {
+                db.config.tutorialCompleted = true;
+                try {
+                    await saveData();
+                } catch (err) {
+                    showToast("Error al guardar el estado del tutorial.", true);
+                }
+            }
+        }
+    });
+    driverObj.drive();
 }
+
 function initializeDatePicker() { flatpickr.localize(flatpickr.l10ns.es); flatpickrInstance = flatpickr("#item-datetime", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true, minuteIncrement: 15 }); }
 function openDatePickerModal() { openModal('date-picker-modal'); const monthSelect = gebi('month-select'); monthSelect.innerHTML = MESES.map((mes, i) => `<option value="${i}">${mes}</option>`).join(''); monthSelect.value = appState.calendar.currentMonth; gebi('year-select').value = appState.calendar.currentYear; }
 function handleDateSelectionFromPicker(e) { e.preventDefault(); appState.calendar.currentMonth = parseInt(gebi('month-select').value, 10); appState.calendar.currentYear = parseInt(gebi('year-select').value, 10); appState.calendar.selectedDate = dateToYYYYMMDD(new Date(appState.calendar.currentYear, appState.calendar.currentMonth, 1)); appState.calendar.displayMode = 'month'; switchView('calendar'); closeModal('date-picker-modal'); }
