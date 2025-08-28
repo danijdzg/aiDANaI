@@ -2928,8 +2928,10 @@ window.addEventListener('offline', () => {
             
             buildDescriptionIndex(); 
         };
-
-                const renderCuentas = async (targetContainerId) => {
+		// =================================================================================
+        // INICIO DE LA VERSIÓN MEJORADA DE renderCuentas
+        // =================================================================================
+        const renderCuentas = async (targetContainerId, totalPatrimonio = 0) => { // CAMBIO: Aceptamos el total del patrimonio
             const container = select(targetContainerId);
             if (!container) return;
             
@@ -2951,12 +2953,25 @@ window.addEventListener('offline', () => {
                 const accountsInType = accountsByType[tipo];
                 const typeBalance = accountsInType.reduce((sum, account) => sum + (saldos[account.id] || 0), 0);
 
+                // AÑADIDO: Cálculo del porcentaje global para el tipo de cuenta
+                const porcentajeGlobal = totalPatrimonio > 0 ? (typeBalance / totalPatrimonio) * 100 : 0;
+
                 const accountsHtml = accountsInType.sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
                     const balance = saldos[c.id] || 0;
+                    
+                    // AÑADIDO: Cálculo del porcentaje local para la cuenta individual
+                    const porcentajeGrupo = typeBalance > 0 ? (balance / typeBalance) * 100 : 0;
+                    
                     const investmentIcon = c.esInversion ? `<span class="material-icons text-info" style="font-size: 14px; margin-left: var(--sp-2);" title="Cuenta de Portafolio">trending_up</span>` : '';
+                    
+                    // CAMBIO: Se añade el span con el porcentaje del grupo
                     return `
                         <div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" style="cursor: pointer; padding-left: 0; padding-right: 0;">
-                            <div><span style="display: block; font-weight: 500;">${c.nombre}</span></div>
+                            <div>
+                                <span style="display: block; font-weight: 500;">${c.nombre}</span>
+                                <!-- AÑADIDO: Span para mostrar el porcentaje del grupo -->
+                                <small style="color: var(--c-on-surface-secondary); font-weight: 500;">${porcentajeGrupo.toFixed(1)}% del total de ${tipo}</small>
+                            </div>
                             <div style="display: flex; align-items: center; gap: var(--sp-2);">${formatCurrency(balance)}${investmentIcon}<span class="material-icons" style="font-size: 18px; color: var(--c-on-surface-secondary);">chevron_right</span></div>
                         </div>`;
                 }).join('');
@@ -2965,11 +2980,14 @@ window.addEventListener('offline', () => {
                 
                 const icon = tipo==='EFECTIVO'?'payments':(tipo.includes('TARJETA')?'credit_card':(tipo==='AHORRO'?'savings':(tipo==='INVERSIÓN'?'trending_up':(tipo==='PROPIEDAD'?'domain':(tipo==='PRÉSTAMO'?'credit_score':'account_balance')))));
                 
+                // CAMBIO: Se añade el span con el porcentaje global en el resumen del grupo
                 return `
                     <details class="accordion">
                         <summary>
                             <span class="account-group__name"><span class="material-icons" style="vertical-align:bottom;font-size:16px;margin-right:8px">${icon}</span>${tipo}</span>
                             <div style="display:flex; align-items:center; gap:var(--sp-2);">
+                                <!-- AÑADIDO: Span para mostrar el porcentaje global -->
+                                <small style="color: var(--c-on-surface-tertiary); font-weight: 600; margin-right: var(--sp-2);">${porcentajeGlobal.toFixed(1)}%</small>
                                 <span class="account-group__balance">${formatCurrency(typeBalance)}</span>
                                 <span class="material-icons accordion__icon">expand_more</span>
                             </div>
@@ -2980,6 +2998,10 @@ window.addEventListener('offline', () => {
 
             container.innerHTML = `<div class="accordion-wrapper">${resumenHTML}</div>`;
         };
+        // =================================================================================
+        // FIN DE LA VERSIÓN MEJORADA
+        // =================================================================================
+                
         
         const loadConfig = () => { 
             (select('config-skip-intro')).checked = !!db.config?.skipIntro; 
@@ -3238,7 +3260,7 @@ const renderInicioRecientesView = async () => {
             
             animateCountUp(select('patrimonio-total-balance'), totalFiltrado);
             
-            renderCuentas('patrimonio-cuentas-container');
+            renderCuentas('patrimonio-cuentas-container', totalFiltrado);
             renderInversionesPage('patrimonio-inversiones-container');
             
             // Lógica del gráfico, ahora dentro de la función principal de la página
