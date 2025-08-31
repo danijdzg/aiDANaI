@@ -14,7 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/flatpickr/dist/l10n/es.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
-    <!-- CAMBIO REALIZADO 1/2: Se añade el atributo 'onload' para llamar a una función cuando el script esté listo. -->
+    <!-- CARGA ROBUSTA DE SCRIPT: Se usa 'onload' para garantizar que el script esté listo antes de usarse. -->
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js" onload="onDriverJsLoaded()"></script>
     <!-- Configuración PWA -->
     <link rel="manifest" href="manifest.json">
@@ -540,7 +540,6 @@ let appState = { currentView: 'today', lastView: 'today', calendar: { currentMon
 let flatpickrInstance = null, currentUser = null, unsubscribeFromDb = null, saveTimeout = null;
 let db = {}; let activeTimers = {}; let newlyCreatedItemId = null; let originalButtonTexts = new Map();
 let isGoogleSignedIn = false, isAppInitialized = false, isViewSwitching = false, isSyncingWithGoogle = false;
-// CAMBIO REALIZADO 2/2: Se añade la variable de estado 'isTutorialReady'
 let isTutorialReady = false;
 
 const gebi = id => document.getElementById(id);
@@ -610,8 +609,6 @@ const startMainApp = () => {
     appRoot.querySelector(`#${appState.currentView}View`).classList.add('active');
     renderThemeSelector();
     scheduleAllNotifications();
-    // CAMBIO REALIZADO: La llamada al tutorial ya no se hace aquí directamente.
-    // Se gestionará en el callback 'onDriverJsLoaded' para asegurar que el script ha cargado.
     if (!db.config.tutorialCompleted && isTutorialReady) {
         startOnboardingTutorial();
     }
@@ -650,7 +647,61 @@ function toggleModalOptionsVisibility() { const isAgenda = gebi('item-type').val
 async function handleItemFormSubmit(e) { e.preventDefault(); if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } const localId = gebi('item-local-id').value; const existingItem = db.items.find(i => i.localId === localId); const subtasks = Array.from(qsa('#subtasks-container .subtask-item')).map(el => ({ id: el.dataset.id, description: el.querySelector('input[type="text"]').value, isComplete: el.querySelector('input[type="checkbox"]').checked })); let itemData = { localId, type: gebi('item-type').value, description: gebi('item-description').value.trim(), isComplete: existingItem?.isComplete || false, createdAt: existingItem?.createdAt || Date.now(), updatedAt: Date.now(), isAllDay: gebi('item-type').value === 'agenda' ? gebi('item-all-day').checked : false, isImportant: gebi('item-type').value === 'agenda' ? gebi('item-important').checked : false, notificationEnabled: gebi('item-type').value === 'agenda' ? gebi('item-notification-enabled').checked : false, reminderMinutes: gebi('item-type').value === 'agenda' && gebi('item-notification-enabled').checked ? parseInt(gebi('item-reminder').value, 10) : 0, notificationShown: (existingItem && existingItem.dueDate === flatpickrInstance.selectedDates[0]?.toISOString()) ? existingItem.notificationShown : false, recurrenceRule: gebi('item-type').value === 'agenda' ? gebi('item-recurrence').value : 'none', dueDate: gebi('item-type').value === 'agenda' ? flatpickrInstance.selectedDates[0]?.toISOString() : null, listId: gebi('item-type').value === 'task' ? gebi('item-task-list').value : null, subtasks: gebi('item-type').value === 'task' ? subtasks : [], googleCalendarEventId: existingItem?.googleCalendarEventId || null, parentId: existingItem?.parentId || null }; if (itemData.description.trim() === "") { showToast("La descripción no puede estar vacía.", true); return; } if (itemData.notificationEnabled) requestNotificationPermission(); const isNewItem = !existingItem; if (isGoogleSignedIn && itemData.type === 'agenda') { showToast("Sincronizando con Google...", false); isSyncingWithGoogle = true; try { if (itemData.googleCalendarEventId) { await actualizarEventoEnGoogle(itemData); } else { const googleId = await crearEventoEnGoogle(itemData); if (googleId) itemData.googleCalendarEventId = googleId; } } catch (err) { console.error("Falló la sincronización con Google, guardando localmente:", err); showToast("Falló la sincronización. El ítem se ha guardado localmente.", true); } finally { isSyncingWithGoogle = false; } } handleItemSave(itemData, isNewItem); closeModal('add-item-modal'); }
 function handleItemSave(itemData, isNewItem = false) { triggerHapticFeedback('medium'); const index = db.items.findIndex(i => i.localId === itemData.localId); if (index > -1) { db.items[index] = { ...db.items[index], ...itemData }; } else { db.items.unshift(itemData); } if (isNewItem) { newlyCreatedItemId = itemData.localId; } handlePostSaveNavigation(itemData); saveDataAndSchedule(); }
 function handlePostSaveNavigation(itemData) { if (!itemData) { renderApp(); return; } if (itemData.type === 'agenda' && itemData.dueDate) { const itemDate = new Date(itemData.dueDate); appState.calendar.selectedDate = dateToYYYYMMDD(itemDate); appState.calendar.currentMonth = itemDate.getMonth(); appState.calendar.currentYear = itemDate.getFullYear(); if (appState.currentView !== 'calendar') { switchView('calendar'); } else { renderApp(); } } else if (itemData.type === 'task') { appState.tasks.selectedListId = itemData.listId || 'default'; if (appState.currentView !== 'tasks') { switchView('tasks'); } else { renderApp(); } } else { renderApp(); } }
-async function handleItemComplete(localId, isComplete) { if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } const itemIndex = db.items.findIndex(i => i.localId === localId); if (itemIndex === -1) return; const item = { ...db.items[itemIndex] }; try { if (isComplete) { if (isGoogleSignedIn && item.googleCalendarEventId && item.type === 'agenda') { isSyncingWithGoogle = true; await borrarEventoEnGoogle(item); } showToast(`"${item.description}" completado.`); const updatedItem = { ...item, isComplete: true, completedAt: Date.now(), updatedAt: Date.now() }; if (updatedItem.type === 'task' && updatedItem.subtasks) { updatedItem.subtasks.forEach(st => st.isComplete = true); } db.items[itemIndex] = updatedItem; if (item.type === 'agenda' && item.recurrenceRule !== 'none') { const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule); if (nextDueDate) { const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now(), updatedAt: Date.now(), googleCalendarEventId: null, parentId: item.localId }; delete nextEvent.googleCalendarEventId; db.items.unshift(nextEvent); showToast(`Evento reprogramado para la próxima ocurrencia.`); } } } else { if (item.recurrenceRule !== 'none') { const childItemIndex = db.items.findIndex(i => i.parentId === localId); if (childItemIndex > -1) { db.items.splice(childItemIndex, 1); } } const updatedItem = { ...item, isComplete: false, completedAt: null, updatedAt: Date.now() }; db.items[itemIndex] = updatedItem; } renderApp(); saveDataAndSchedule(); } catch (error) { showToast("Error al sincronizar con Google. La operación local se ha completado.", true); console.error("Error in handleItemComplete:", error); renderApp(); } finally { if (isSyncingWithGoogle) { isSyncingWithGoogle = false; } } }
+async function handleItemComplete(localId, isComplete) {
+    if (isSyncingWithGoogle) {
+        showToast("Sincronización en curso, por favor espera.", true);
+        return;
+    }
+    const itemIndex = db.items.findIndex(i => i.localId === localId);
+    if (itemIndex === -1) return;
+
+    const item = { ...db.items[itemIndex] };
+    
+    try {
+        if (isComplete) {
+            if (isGoogleSignedIn && item.type === 'agenda' && item.googleCalendarEventId) {
+                await marcarEventoComoCompletadoEnGoogle(item);
+            }
+            showToast(`"${item.description}" completado.`);
+            
+            const updatedItem = { ...item, isComplete: true, completedAt: Date.now(), updatedAt: Date.now() };
+            if (updatedItem.type === 'task' && updatedItem.subtasks) {
+                updatedItem.subtasks.forEach(st => st.isComplete = true);
+            }
+            db.items[itemIndex] = updatedItem;
+
+            if (item.type === 'agenda' && item.recurrenceRule !== 'none') {
+                const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule);
+                if (nextDueDate) {
+                    const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now(), updatedAt: Date.now(), googleCalendarEventId: null, parentId: item.localId };
+                    delete nextEvent.googleCalendarEventId;
+                    db.items.unshift(nextEvent);
+                    showToast(`Evento reprogramado para la próxima ocurrencia.`);
+                }
+            }
+        } else {
+            if (isGoogleSignedIn && item.type === 'agenda' && item.googleCalendarEventId) {
+                await restaurarEventoEnGoogle(item);
+            }
+            if (item.recurrenceRule !== 'none') {
+                const childItemIndex = db.items.findIndex(i => i.parentId === localId);
+                if (childItemIndex > -1) {
+                    db.items.splice(childItemIndex, 1);
+                }
+            }
+            const updatedItem = { ...item, isComplete: false, completedAt: null, updatedAt: Date.now() };
+            db.items[itemIndex] = updatedItem;
+        }
+
+        renderApp();
+        saveDataAndSchedule();
+    } catch (error) {
+        showToast("Error al sincronizar con Google. La operación local se ha completado.", true);
+        console.error("Error in handleItemComplete:", error);
+        renderApp();
+        saveDataAndSchedule();
+    }
+}
 async function handleDeleteItem(localId) { if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } triggerHapticFeedback('medium'); const itemEl = document.querySelector(`.list-item-swipe-container[data-id="${localId}"]`); const index = db.items.findIndex(i => i.localId === localId); if (index === -1) return; const itemToDelete = { ...db.items[index] }; try { if (isGoogleSignedIn && itemToDelete.googleCalendarEventId) { isSyncingWithGoogle = true; await borrarEventoEnGoogle(itemToDelete); } const performDeleteAndUpdate = () => { const finalChildIndex = db.items.findIndex(i => i.parentId === localId); if (finalChildIndex > -1) db.items.splice(finalChildIndex, 1); const finalParentIndex = db.items.findIndex(i => i.localId === localId); if (finalParentIndex > -1) db.items.splice(finalParentIndex, 1); saveDataAndSchedule(); if (!itemEl) renderApp(); }; if (itemEl) { itemEl.classList.add('item-exiting'); itemEl.addEventListener('animationend', performDeleteAndUpdate, { once: true }); } else { performDeleteAndUpdate(); renderApp(); } } catch (error) { showToast("Error al eliminar evento de Google. Inténtalo de nuevo.", true); if (itemEl) itemEl.style.transform = 'translateX(0)'; } finally { if (isSyncingWithGoogle) isSyncingWithGoogle = false; } }
 function saveDataAndSchedule() { scheduleAllNotifications(); saveData().catch(error => { showToast(`Error al sincronizar con Firebase.`, true); renderApp(); }); }
 function handleDeleteFromModal() { const localId = gebi('item-local-id').value; const item = db.items.find(i => i.localId === localId); if (item) { showCustomConfirm(`¿Eliminar este ítem permanentemente: "${item.description}"?`, () => { closeModal('add-item-modal'); handleDeleteItem(localId); }); } }
@@ -667,20 +718,15 @@ function renderSubtasksInModal(subtasks = []) { const container = gebi('subtasks
 function handleAddSubtask() { const input = gebi('new-subtask-input'); const description = input.value.trim(); if (description) { const container = gebi('subtasks-container'); const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = uuid(); el.innerHTML = ` <input type="checkbox"> <input type="text" value="${description}"> <button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button> `; el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); }; container.appendChild(el); input.value = ''; input.focus(); } }
 function handleSubtaskToggle(taskId, subtaskId) { const taskIndex = db.items.findIndex(i => i.localId === taskId); if (taskIndex === -1) return; const updatedTask = JSON.parse(JSON.stringify(db.items[taskIndex])); const subtaskIndex = updatedTask.subtasks.findIndex(st => st.id === subtaskId); if (subtaskIndex === -1) return; updatedTask.subtasks[subtaskIndex].isComplete = !updatedTask.subtasks[subtaskIndex].isComplete; const allSubtasksComplete = updatedTask.subtasks.every(st => st.isComplete); updatedTask.isComplete = allSubtasksComplete; if (allSubtasksComplete) { if (!updatedTask.completedAt) updatedTask.completedAt = Date.now(); } else { updatedTask.completedAt = null; } updatedTask.updatedAt = Date.now(); db.items[taskIndex] = updatedTask; renderApp(); saveData().catch(error => { showToast('Error al actualizar la subtarea.', true); renderApp(); }); }
 
-// CAMBIO REALIZADO: Esta es la nueva función que se ejecutará cuando driver.js cargue.
-// Se asigna a 'window' para que sea accesible globalmente desde el HTML.
 window.onDriverJsLoaded = function() {
     console.log("Driver.js ha cargado exitosamente.");
     isTutorialReady = true;
-    // Si la app ya está inicializada y el tutorial no se ha completado, lo lanzamos.
     if (isAppInitialized && !db.config.tutorialCompleted) {
         startOnboardingTutorial();
     }
 }
 
 function startOnboardingTutorial() {
-    // CAMBIO REALIZADO: Se elimina el 'setTimeout' y la comprobación de reintento.
-    // Ahora tenemos la garantía de que la función 'driver' existe.
     if (typeof driver !== 'function') {
         console.error("Se intentó iniciar el tutorial, pero Driver.js no está disponible.");
         return;
@@ -722,13 +768,12 @@ function scheduleNotification(item) { if (activeTimers[item.localId]) { clearTim
 function scheduleAllNotifications() { if (!db.items) return; Object.values(activeTimers).forEach(clearTimeout); activeTimers = {}; db.items.forEach(scheduleNotification); }
 
 
-// --- SECCIÓN DE GOOGLE CALENDAR (VERSIÓN ACTUALIZADA CON GIS) ---
+// --- SECCIÓN DE GOOGLE CALENDAR (VERSIÓN FUSIONADA Y MEJORADA) ---
 
 let gapiIniciado = false;
 let gisIniciado = false;
 let tokenClient;
 
-// Carga el script de Google Identity Services (GIS) para la autenticación
 function loadGisScript() {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
@@ -738,7 +783,6 @@ function loadGisScript() {
     document.body.appendChild(script);
 }
 
-// Carga el script de la Google API (GAPI) para las llamadas a Calendar
 function loadGapiScript() {
     const script = document.createElement('script');
     script.src = 'https://apis.google.com/js/api.js';
@@ -748,7 +792,6 @@ function loadGapiScript() {
     document.body.appendChild(script);
 }
 
-// Se ejecuta cuando el script GAPI (api.js) ha cargado
 function initializeGapiClient() {
     gapi.load('client', () => {
         gapi.client.init({
@@ -764,7 +807,6 @@ function initializeGapiClient() {
     });
 }
 
-// Se ejecuta cuando el script GIS (gsi/client) ha cargado
 function initializeGisClient() {
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
@@ -789,7 +831,6 @@ function initializeGisClient() {
     checkReadyStateAndEnableButton();
 }
 
-// Habilita el botón de sincronización solo cuando ambas bibliotecas están listas
 function checkReadyStateAndEnableButton() {
     if (gapiIniciado && gisIniciado) {
         const syncButton = gebi('google-sync-btn');
@@ -801,7 +842,6 @@ function checkReadyStateAndEnableButton() {
     }
 }
 
-// Gestiona el clic en el botón: pide el token si no está conectado, o sincroniza si ya lo está
 function handleGoogleAuthClick() {
     if (!gisIniciado || !gapiIniciado) {
         showToast("Las bibliotecas de Google aún no están listas.", true);
@@ -809,15 +849,12 @@ function handleGoogleAuthClick() {
     }
     
     if (gapi.client.getToken() === null) {
-        // Si no hay token, solicita uno. El usuario verá el pop-up de Google.
         tokenClient.requestAccessToken({ prompt: 'consent' });
     } else {
-        // Si ya hay un token, simplemente sincroniza.
         syncWithGoogleCalendar();
     }
 }
 
-// Actualiza el estado visual del botón de sincronización
 function updateGoogleSigninStatus(isSignedIn) { 
     isGoogleSignedIn = isSignedIn;
     const syncButton = gebi('google-sync-btn');
@@ -837,8 +874,202 @@ function buildGoogleEventResource(item) { const resource = { 'summary': item.des
 async function crearEventoEnGoogle(item) { if (!isGoogleSignedIn || item.type !== 'agenda') return null; const eventResource = buildGoogleEventResource(item); try { const response = await gapi.client.calendar.events.insert({ 'calendarId': 'primary', 'resource': eventResource }); return response.result.id; } catch (error) { console.error('Error creando evento en Google:', error); throw error; } }
 async function actualizarEventoEnGoogle(item) { if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return; const eventResource = buildGoogleEventResource(item); try { await gapi.client.calendar.events.update({ 'calendarId': 'primary', 'eventId': item.googleCalendarEventId, 'resource': eventResource }); } catch (error) { console.error('Error actualizando evento en Google:', error); throw error; } }
 async function borrarEventoEnGoogle(item) { if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return; try { await gapi.client.calendar.events.delete({ 'calendarId': 'primary', 'eventId': item.googleCalendarEventId }); } catch (error) { console.error('Error eliminando evento en Google:', error); if (error.result && (error.result.error.code === 404 || error.result.error.code === 410)) { console.log("El evento ya no existía en Google Calendar."); } else { throw error; } } }
-function convertGoogleEventToAidanaiItem(googleEvent) { const dueDateISO = googleEvent.start?.dateTime || googleEvent.start?.date; if (!dueDateISO) return null; const isAllDay = !!googleEvent.start.date; const dueDate = new Date(dueDateISO); if (isAllDay) { dueDate.setMinutes(dueDate.getMinutes() + dueDate.getTimezoneOffset()); } return { localId: uuid(), googleCalendarEventId: googleEvent.id, type: CONSTANTS.ITEM_TYPES.AGENDA, description: googleEvent.summary || 'Sin Título', dueDate: dueDate.toISOString(), isAllDay: isAllDay, isComplete: false, createdAt: new Date(googleEvent.created).getTime(), updatedAt: new Date(googleEvent.updated).getTime(), isImportant: googleEvent.colorId === '11', notificationEnabled: !isAllDay && googleEvent.reminders?.useDefault === false && googleEvent.reminders?.overrides?.length > 0, reminderMinutes: googleEvent.reminders?.overrides?.[0]?.minutes || 0, recurrenceRule: 'none', notificationShown: false, }; }
-async function syncWithGoogleCalendar(forceFullSync = false) { if (isSyncingWithGoogle) { showToast("Sincronización ya en curso."); return; } if (!isGoogleSignedIn || !currentUser) return; const syncButton = gebi('google-sync-btn'); isSyncingWithGoogle = true; syncButton.classList.add('loading'); showToast("Sincronizando con Google Calendar..."); try { const syncToken = forceFullSync ? null : db.config.googleSyncToken; let request; if (syncToken) { console.log("Realizando sincronización incremental..."); request = gapi.client.calendar.events.list({ calendarId: 'primary', syncToken: syncToken }); } else { console.log("Realizando sincronización completa..."); const timeMin = new Date(); timeMin.setMonth(timeMin.getMonth() - 1); request = gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: timeMin.toISOString(), showDeleted: true, singleEvents: true, maxResults: 2500 }); } const response = await request; const googleEvents = response.result.items; let changesMade = false; for (const googleEvent of googleEvents) { const existingItemIndex = db.items.findIndex(i => i.googleCalendarEventId === googleEvent.id); if (googleEvent.status === 'cancelled') { if (existingItemIndex > -1) { db.items.splice(existingItemIndex, 1); changesMade = true; console.log(`Evento eliminado desde Google: ${googleEvent.summary}`); } } else { const newItem = convertGoogleEventToAidanaiItem(googleEvent); if (!newItem) continue; if (existingItemIndex > -1) { db.items[existingItemIndex] = { ...db.items[existingItemIndex], ...newItem, localId: db.items[existingItemIndex].localId }; console.log(`Evento actualizado desde Google: ${newItem.description}`); } else { db.items.unshift(newItem); console.log(`Evento añadido desde Google: ${newItem.description}`); } changesMade = true; } } const localOnlyEvents = db.items.filter(item => item.type === 'agenda' && !item.isComplete && !item.googleCalendarEventId); if (localOnlyEvents.length > 0) { console.log(`Subiendo ${localOnlyEvents.length} eventos locales a Google...`); for (const localEvent of localOnlyEvents) { const newGoogleId = await crearEventoEnGoogle(localEvent); if (newGoogleId) { const eventIndex = db.items.findIndex(i => i.localId === localEvent.localId); if (eventIndex > -1) { db.items[eventIndex].googleCalendarEventId = newGoogleId; db.items[eventIndex].updatedAt = Date.now(); changesMade = true; } } } } const newSyncToken = response.result.nextSyncToken; if (newSyncToken) { db.config.googleSyncToken = newSyncToken; } if (changesMade) { showToast("Sincronización completada. Datos actualizados.", false); await saveData(); renderApp(); } else { showToast("Tus datos ya estaban sincronizados.", false); } } catch (error) { if (error.result && error.result.error.code === 410) { console.warn("Sync token inválido. Realizando sincronización completa."); showToast("La sesión de Google requiere una resincronización completa.", true); db.config.googleSyncToken = null; await saveData(); syncWithGoogleCalendar(true); } else { showToast("Ocurrió un error durante la sincronización.", true); console.error("Error en syncWithGoogleCalendar:", error); } } finally { isSyncingWithGoogle = false; syncButton.classList.remove('loading'); } }
+
+async function marcarEventoComoCompletadoEnGoogle(item) {
+    if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
+    
+    // Color gris para "completado" en Google Calendar es el ID 8
+    const resource = {
+        summary: `[✓] ${item.description.replace('[✓] ', '')}`,
+        colorId: '8' 
+    };
+
+    try {
+        await gapi.client.calendar.events.patch({
+            calendarId: 'primary',
+            eventId: item.googleCalendarEventId,
+            resource: resource
+        });
+        console.log(`Evento "${item.description}" marcado como completado en Google.`);
+    } catch (error) {
+        console.error('Error marcando evento como completado en Google:', error);
+        throw error;
+    }
+}
+
+async function restaurarEventoEnGoogle(item) {
+    if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
+
+    const resource = {
+        summary: item.description.replace('[✓] ', ''),
+        // Restaura el color original o lo deja por defecto si no tenía uno.
+        colorId: item.isImportant ? '11' : null 
+    };
+
+    try {
+        await gapi.client.calendar.events.patch({
+            calendarId: 'primary',
+            eventId: item.googleCalendarEventId,
+            resource: resource
+        });
+        console.log(`Evento "${item.description}" restaurado en Google.`);
+    } catch (error) {
+        console.error('Error restaurando evento en Google:', error);
+        throw error;
+    }
+}
+
+function convertGoogleEventToAidanaiItem(googleEvent) {
+    const dueDateISO = googleEvent.start?.dateTime || googleEvent.start?.date;
+    if (!dueDateISO) return null;
+
+    const isAllDay = !!googleEvent.start.date;
+    const dueDate = new Date(dueDateISO);
+    if (isAllDay) {
+        dueDate.setMinutes(dueDate.getMinutes() + dueDate.getTimezoneOffset());
+    }
+
+    const isCompletedByUs = googleEvent.summary?.startsWith('[✓]') || googleEvent.colorId === '8';
+
+    return {
+        localId: uuid(),
+        googleCalendarEventId: googleEvent.id,
+        recurringEventId: googleEvent.recurringEventId || null,
+        type: CONSTANTS.ITEM_TYPES.AGENDA,
+        description: googleEvent.summary || 'Sin Título',
+        dueDate: dueDate.toISOString(),
+        isAllDay: isAllDay,
+        isComplete: isCompletedByUs,
+        createdAt: new Date(googleEvent.created).getTime(),
+        updatedAt: new Date(googleEvent.updated).getTime(),
+        isImportant: googleEvent.colorId === '11',
+        notificationEnabled: !isAllDay && googleEvent.reminders?.useDefault === false && googleEvent.reminders?.overrides?.length > 0,
+        reminderMinutes: googleEvent.reminders?.overrides?.[0]?.minutes || 0,
+        recurrenceRule: 'none',
+        notificationShown: false,
+    };
+}
+
+async function syncWithGoogleCalendar(forceFullSync = false) {
+    if (isSyncingWithGoogle) {
+        showToast("Sincronización ya en curso.");
+        return;
+    }
+    if (!isGoogleSignedIn || !currentUser) return;
+
+    const syncButton = gebi('google-sync-btn');
+    isSyncingWithGoogle = true;
+    syncButton.classList.add('loading');
+    showToast("Sincronizando con Google Calendar...");
+
+    try {
+        const syncToken = forceFullSync ? null : db.config.googleSyncToken;
+        let request;
+
+        if (syncToken) {
+            console.log("Realizando sincronización incremental...");
+            request = gapi.client.calendar.events.list({ calendarId: 'primary', syncToken: syncToken });
+        } else {
+            console.log("Realizando sincronización completa...");
+            const timeMin = new Date();
+            timeMin.setFullYear(timeMin.getFullYear() - 2); // Ventana de 2 años hacia atrás
+            const timeMax = new Date();
+            timeMax.setFullYear(timeMax.getFullYear() + 2); // Ventana de 2 años hacia adelante
+
+            request = gapi.client.calendar.events.list({
+                calendarId: 'primary',
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString(),
+                showDeleted: true,
+                singleEvents: true, // Crucial: expande eventos recurrentes en instancias individuales
+                maxResults: 2500
+            });
+        }
+
+        const response = await request;
+        const googleEvents = response.result.items;
+        let changesMade = false;
+        
+        // Primero, manejamos los eventos eliminados en Google
+        const googleDeletedEventIds = new Set(googleEvents.filter(e => e.status === 'cancelled').map(e => e.id));
+        const initialItemCount = db.items.length;
+        db.items = db.items.filter(item => {
+            if (item.googleCalendarEventId && googleDeletedEventIds.has(item.googleCalendarEventId)) {
+                console.log(`Evento eliminado desde Google: ${item.description}`);
+                return false; // Elimina el item
+            }
+            return true; // Conserva el item
+        });
+        if(db.items.length < initialItemCount) changesMade = true;
+
+        // Luego, actualizamos o añadimos eventos desde Google
+        for (const googleEvent of googleEvents) {
+            if (googleEvent.status === 'cancelled') continue;
+
+            const existingItem = db.items.find(i => i.googleCalendarEventId === googleEvent.id);
+            const newItemData = convertGoogleEventToAidanaiItem(googleEvent);
+            if (!newItemData) continue;
+
+            if (existingItem) {
+                // Actualiza el item existente con los datos de Google, pero conservando el localId
+                const index = db.items.findIndex(i => i.localId === existingItem.localId);
+                db.items[index] = { ...existingItem, ...newItemData };
+            } else {
+                db.items.unshift(newItemData);
+            }
+            changesMade = true;
+        }
+
+        // Finalmente, subimos los eventos que solo existen localmente
+        const localOnlyEvents = db.items.filter(item => item.type === 'agenda' && !item.googleCalendarEventId);
+        if (localOnlyEvents.length > 0) {
+            console.log(`Subiendo ${localOnlyEvents.length} eventos locales a Google...`);
+            for (const localEvent of localOnlyEvents) {
+                try {
+                    const newGoogleId = await crearEventoEnGoogle(localEvent);
+                    if (newGoogleId) {
+                        const eventIndex = db.items.findIndex(i => i.localId === localEvent.localId);
+                        if (eventIndex > -1) {
+                            db.items[eventIndex].googleCalendarEventId = newGoogleId;
+                            db.items[eventIndex].updatedAt = Date.now();
+                            changesMade = true;
+                        }
+                    }
+                } catch(err) {
+                     console.error(`No se pudo subir el evento local "${localEvent.description}" a Google.`, err);
+                }
+            }
+        }
+        
+        const newSyncToken = response.result.nextSyncToken;
+        if (newSyncToken) {
+            db.config.googleSyncToken = newSyncToken;
+        }
+
+        if (changesMade) {
+            showToast("Sincronización completada. Datos actualizados.", false);
+            await saveData();
+            renderApp();
+        } else {
+            showToast("Tus datos ya estaban sincronizados.", false);
+        }
+
+    } catch (error) {
+        if (error.result && error.result.error.code === 410) {
+            console.warn("Sync token inválido. Realizando sincronización completa.");
+            showToast("La sesión de Google requiere una resincronización completa.", true);
+            db.config.googleSyncToken = null;
+            await saveData();
+            syncWithGoogleCalendar(true); 
+        } else {
+            showToast("Ocurrió un error durante la sincronización.", true);
+            console.error("Error en syncWithGoogleCalendar:", error);
+        }
+    } finally {
+        isSyncingWithGoogle = false;
+        syncButton.classList.remove('loading');
+    }
+}
 
 document.addEventListener('DOMContentLoaded', initApp);
 
