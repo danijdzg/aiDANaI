@@ -300,10 +300,39 @@
         .calculator-btn.btn-confirm { background-color: var(--c-primary); color: var(--c-white); font-weight: 500; }
         .calculator-btn.zero { grid-column: span 2; }
         .material-icons.backspace-icon { font-size: 1.5rem; }
-        
-        body[data-ledger-mode="A"] .top-bar { background-color: color-mix(in srgb, var(--c-primary) 10%, rgba(0,0,0,0.7)); }
+        /*
+ * === ESTILOS PARA EL BOTÓN DE CAMBIO DE CONTABILIDAD (A/B) ===
+ * Hacemos que el botón adopte el color del tema principal según el modo de contabilidad.
+ */
+body[data-ledger-mode="A"] #ledger-toggle-btn {
+    background-color: var(--c-primary);
+    border-color: var(--c-primary);
+    color: var(--c-white);
+    box-shadow: var(--shadow-sm); /* Un toque de sombra para que destaque */
+}
+
+body[data-ledger-mode="A"] #ledger-toggle-btn:hover {
+    background-color: var(--c-primary-hover);
+    border-color: var(--c-primary-hover);
+    box-shadow: var(--shadow-md);
+}
+
+body[data-ledger-mode="B"] #ledger-toggle-btn {
+    background-color: var(--c-danger);
+    border-color: var(--c-danger);
+    color: var(--c-white);
+    box-shadow: var(--shadow-sm); /* Un toque de sombra para que destaque */
+}
+
+body[data-ledger-mode="B"] #ledger-toggle-btn:hover {
+    /* Puedes ajustar este color para un hover del rojo si lo deseas, por ejemplo, un rojo un poco más oscuro */
+    background-color: color-mix(in srgb, var(--c-danger) 85%, black); 
+    border-color: color-mix(in srgb, var(--c-danger) 85%, black);
+    box-shadow: var(--glow-red); /* Utiliza el glow-red para mantener la consistencia */
+}
+        body[data-ledger-mode="A"] .top-bar { background-color: #002D5B; } /* Azul oscuro */
         body[data-ledger-mode="A"] .top-bar, body[data-ledger-mode="A"] .top-bar .btn { color: var(--c-white); }
-        body[data-ledger-mode="B"] .top-bar { background-color: color-mix(in srgb, var(--c-danger) 10%, rgba(0,0,0,0.7)); }
+        body[data-ledger-mode="B"] .top-bar { background-color: #5B0000; } /* Rojo oscuro */
         body[data-ledger-mode="B"] .top-bar, body[data-ledger-mode="B"] .top-bar .btn { color: var(--c-white); }
         body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
         #ledger-toggle-btn { font-weight: 700; padding: 6px 10px; font-size: 0.8rem; min-width: 40px; text-align: center; }
@@ -1308,7 +1337,7 @@ body[data-theme="quartz"] .starry-background { display: none; }
 		};
         
         const calculatorState = {
-            displayValue: '0',
+            displayValue: '0', // Always use period for decimal internally
             waitingForNewValue: true,
             targetInput: null,
         };
@@ -1731,17 +1760,22 @@ async function migrateBalancesToAccounts() {
                 return false;
             }
         
+            // CAMBIO 1: Obtenemos la fecha actual en UTC y la ponemos a medianoche para una comparación justa.
             const now = new Date();
+            const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
             let movementsCreated = 0;
             const batch = fbDb.batch();
             let hasChangesInBatch = false;
 
             for (const r of db.recurrentes) {
-                let nextDate = new Date(r.nextDate);
-                let currentRecurrenceNextDate = r.nextDate; // Keep track of the updated nextDate for this recurrence
+                // CAMBIO 2: Aseguramos que la fecha de la recurrencia se interprete como UTC.
+                let nextDate = parseDateStringAsUTC(r.nextDate);
+                let currentRecurrenceNextDate = r.nextDate; 
         
-                while (nextDate <= now) {
-                    const endDate = r.endDate ? new Date(r.endDate) : null;
+                // CAMBIO 3: La comparación ahora es entre dos fechas UTC, mucho más fiable.
+                while (nextDate <= todayUTC) {
+                    const endDate = r.endDate ? parseDateStringAsUTC(r.endDate) : null;
                     if (endDate && nextDate > endDate) {
                         const recRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(r.id);
                         batch.delete(recRef);
@@ -1751,7 +1785,8 @@ async function migrateBalancesToAccounts() {
         
                     const newMovement = {
                         id: generateId(),
-                        fecha: nextDate.toISOString(),
+                        // CAMBIO 4: Guardamos la fecha del movimiento como un string ISO completo desde la fecha UTC.
+                        fecha: nextDate.toISOString(), 
                         cantidad: r.cantidad,
                         descripcion: r.descripcion,
                         tipo: r.tipo,
@@ -1789,7 +1824,6 @@ async function migrateBalancesToAccounts() {
 
             return false;
         };
-
 
         // =================================================================================
 		// 3. UI UTILITIES & HELPERS
@@ -1890,15 +1924,22 @@ async function migrateBalancesToAccounts() {
             const c = select('toast-container'); if (!c) return;
             const t = document.createElement('div');
             t.className = `toast toast--${type}`;
-            t.textContent = message;
-            c.appendChild(t);
-            
-            if (type === 'danger' || type === 'error') hapticFeedback('error');
-            else if (type === 'warning') hapticFeedback('warning');
+            c.appendChild(t); // Append first to make it visible and get computed style
 
-            const animation = t.animate([ { transform: 'translateY(20px) scale(0.95)', opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1 } ], { duration: 300, easing: 'ease-out' });
+            // Animate in
+            const fadeIn = t.animate([ { transform: 'translateY(20px) scale(0.95)', opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1 } ], { duration: 300, easing: 'ease-out' });
         
-            animation.onfinish = () => { setTimeout(() => { t.animate([ { opacity: 1 }, { opacity: 0 } ], { duration: 300, easing: 'ease-in' }).onfinish = () => t.remove(); }, duration - 600); };
+            fadeIn.onfinish = () => {
+                t.textContent = message; // Set text after visible to avoid FOUC
+                t.classList.add(`toast--${type}`); // Apply type classes after appending
+                if (type === 'danger' || type === 'error') hapticFeedback('error');
+                else if (type === 'warning') hapticFeedback('warning');
+
+                // Animate out after duration
+                setTimeout(() => {
+                    t.animate([ { opacity: 1 }, { opacity: 0 } ], { duration: 300, easing: 'ease-in' }).onfinish = () => t.remove();
+                }, duration - 600); // 600ms = 300ms fadeIn + 300ms fadeOut
+            };
         };
         const setButtonLoading = (btn, isLoading, text = 'Cargando...') => {
             if (!btn) return;
@@ -2243,7 +2284,10 @@ window.addEventListener('offline', () => {
             // FIN DE LA CORRECCIÓN
             // =================================================================================
 
-            for (const mov of movements) {
+            // Sort movements by date descending for backwards calculation
+            const sortedMovements = [...movements].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+            for (const mov of sortedMovements) {
                 if (mov.tipo === 'traspaso') {
                     if (!runningBalancesCache.hasOwnProperty(mov.cuentaOrigenId)) {
                         runningBalancesCache[mov.cuentaOrigenId] = 0;
@@ -2252,10 +2296,11 @@ window.addEventListener('offline', () => {
                         runningBalancesCache[mov.cuentaDestinoId] = 0;
                     }
 
+                    // Before modifying balances, capture the 'running' balance at this point in time
                     mov.runningBalanceOrigen = runningBalancesCache[mov.cuentaOrigenId];
                     mov.runningBalanceDestino = runningBalancesCache[mov.cuentaDestinoId];
 
-                    // Deshacemos la operación para el cálculo inverso
+                    // Now, adjust the balances backwards
                     runningBalancesCache[mov.cuentaOrigenId] += mov.cantidad;
                     runningBalancesCache[mov.cuentaDestinoId] -= mov.cantidad;
 
@@ -2264,8 +2309,9 @@ window.addEventListener('offline', () => {
                         runningBalancesCache[mov.cuentaId] = 0;
                     }
 
+                    // Capture the 'running' balance at this point in time
                     mov.runningBalance = runningBalancesCache[mov.cuentaId];
-                    // Deshacemos la operación para el cálculo inverso
+                    // Adjust the balance backwards
                     runningBalancesCache[mov.cuentaId] -= mov.cantidad;
                 }
             }
@@ -2318,7 +2364,7 @@ window.addEventListener('offline', () => {
         
         const handleCreateBudgets = async (btn) => { hapticFeedback('medium'); const year = parseInt((select('budget-year-selector')).value); if (!year) { showToast('Selecciona un año.', 'warning'); return; } if (btn) setButtonLoading(btn, true, 'Creando...'); const existingBudgets = new Set((db.presupuestos || []).filter((p) => p.ano === year).map((p) => p.conceptoId)); const newBudgets = []; db.conceptos.forEach((concepto) => { if (!existingBudgets.has(concepto.id)) { newBudgets.push({ id: generateId(), ano: year, conceptoId: concepto.id, cantidad: 0 }); } }); if (newBudgets.length > 0) { const batch = fbDb.batch(); newBudgets.forEach(budget => { const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(budget.id); batch.set(ref, budget); }); await batch.commit(); if (btn) setButtonLoading(btn, false); hapticFeedback('success'); showToast(`Presupuestos para ${year} creados.`); renderBudgetTracking(); } else { if (btn) setButtonLoading(btn, false); showToast(`Todos los presupuestos para ${year} ya existían.`, 'info'); renderBudgetTracking(); } };
         
-        const handleUpdateBudgets = () => { hapticFeedback('light'); const year = parseInt((select('budget-year-selector')).value); if(!year) { showToast('Selecciona un año.', 'warning'); return; } const budgetsToUpdate = (db.presupuestos || []).filter((p) => p.ano === year); let formHtml = `<form id="update-budgets-form" novalidate><p class="form-label" style="margin-bottom: var(--sp-3)">Introduce el límite anual. Usa <b>valores positivos para metas de ingreso</b> y <b>valores negativos para límites de gasto</b>.</p>`; const conceptsWithBudget = new Set(budgetsToUpdate.map((b) => b.conceptoId)); db.conceptos.filter((c) => conceptsWithBudget.has(c.id)).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { const budget = budgetsToUpdate.find((b) => b.conceptoId === c.id); const currentAmount = budget ? (budget.cantidad / 100).toFixed(2) : '0.00'; formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" value="${currentAmount.replace('.', ',')}"></div>`; }); const missingConcepts = db.conceptos.filter((c) => !conceptsWithBudget.has(c.id)); if(missingConcepts.length > 0) { formHtml += `<hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-bottom: var(--sp-2);">Añadir nuevos conceptos al presupuesto</h4>`; missingConcepts.sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" placeholder="0,00"></div>`; }); } formHtml += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Cambios</button></div></form>`; showGenericModal(`Gestionar Presupuestos de ${year}`, formHtml); setTimeout(() => { const modalForm = select('update-budgets-form'); if (modalForm) { modalForm.addEventListener('submit', async (e) => { e.preventDefault(); const btn = modalForm.querySelector('button[type="submit"]'); setButtonLoading(btn, true, 'Guardando...'); const inputs = modalForm.querySelectorAll('input[data-concept-id]'); const batch = fbDb.batch(); inputs.forEach((input) => { const conceptoId = (input).dataset.conceptId; const amountValue = parseCurrencyString((input).value); if (isNaN(amountValue)) return; const newAmountInCents = Math.round(amountValue * 100); let budget = (db.presupuestos || []).find((b) => b.ano === year && b.conceptoId === conceptoId); if (budget) { const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(budget.id); batch.update(ref, { cantidad: newAmountInCents }); } else { const newId = generateId(); const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(newId); batch.set(ref, { id: newId, ano: year, conceptoId: conceptoId, cantidad: newAmountInCents }); } }); await batch.commit(); setButtonLoading(btn, false); hideModal('generic-modal'); hapticFeedback('success'); showToast('Presupuestos actualizados.'); renderBudgetTracking(); }); } }, 0); };
+        const handleUpdateBudgets = () => { hapticFeedback('light'); const year = parseInt((select('budget-year-selector')).value); if(!year) { showToast('Selecciona un año.', 'warning'); return; } const budgetsToUpdate = (db.presupuestos || []).filter((p) => p.ano === year); let formHtml = `<form id="update-budgets-form" novalidate><p class="form-label" style="margin-bottom: var(--sp-3)">Introduce el límite anual. Usa <b>valores positivos para metas de ingreso</b> y <b>valores negativos para límites de gasto</b>.</p>`; const conceptsWithBudget = new Set(budgetsToUpdate.map((b) => b.conceptoId)); db.conceptos.filter((c) => conceptsWithBudget.has(c.id)).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { const budget = budgetsToUpdate.find((b) => b.ano === year && b.conceptoId === c.id); const currentAmount = budget ? (budget.cantidad / 100).toFixed(2) : '0.00'; formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" value="${currentAmount.replace('.', ',')}"></div>`; }); const missingConcepts = db.conceptos.filter((c) => !conceptsWithBudget.has(c.id)); if(missingConcepts.length > 0) { formHtml += `<hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-bottom: var(--sp-2);">Añadir nuevos conceptos al presupuesto</h4>`; missingConcepts.sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" placeholder="0,00"></div>`; }); } formHtml += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Cambios</button></div></form>`; showGenericModal(`Gestionar Presupuestos de ${year}`, formHtml); setTimeout(() => { const modalForm = select('update-budgets-form'); if (modalForm) { modalForm.addEventListener('submit', async (e) => { e.preventDefault(); const btn = modalForm.querySelector('button[type="submit"]'); setButtonLoading(btn, true, 'Guardando...'); const inputs = modalForm.querySelectorAll('input[data-concept-id]'); const batch = fbDb.batch(); inputs.forEach((input) => { const conceptoId = (input).dataset.conceptId; const amountValue = parseCurrencyString((input).value); if (isNaN(amountValue)) return; const newAmountInCents = Math.round(amountValue * 100); let budget = (db.presupuestos || []).find((b) => b.ano === year && b.conceptoId === conceptoId); if (budget) { const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(budget.id); batch.update(ref, { cantidad: newAmountInCents }); } else { const newId = generateId(); const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(newId); batch.set(ref, { id: newId, ano: year, conceptoId: conceptoId, cantidad: newAmountInCents }); } }); await batch.commit(); setButtonLoading(btn, false); hideModal('generic-modal'); hapticFeedback('success'); showToast('Presupuestos actualizados.'); renderBudgetTracking(); }); } }, 0); };
         
         const renderBudgetTracking = async () => {
             const listContainer = select('budget-tracking-list'), placeholder = select('budget-init-placeholder'), yearSelector = select('budget-year-selector');
@@ -3030,8 +3076,9 @@ window.addEventListener('offline', () => {
         </div>
 
         <div id="inicio-view-recientes"></div>
-
-        <div id="inicio-view-resumen" class="hidden">
+		 <div id="pending-recurrents-container"></div>
+		 </div>
+		 <div id="inicio-view-resumen" class="hidden">
             <div class="card card--no-bg" id="dashboard-filters-widget">
                 <div class="accordion-wrapper">
                     <details class="accordion">
@@ -3078,7 +3125,7 @@ window.addEventListener('offline', () => {
     
     // 3. Disparamos el evento 'change' para asegurar que el filtro de fecha personalizado se muestre u oculte correctamente.
     select('filter-periodo')?.dispatchEvent(new Event('change')); 
-    
+    renderPendingRecurrents();
     // 4. Finalmente, renderizamos el contenido de las subvistas.
     renderInicioResumenView();
     renderInicioRecientesView();
@@ -3124,7 +3171,7 @@ window.addEventListener('offline', () => {
             }
 
             // Forzamos el recálculo de saldos con los datos más frescos.
-            await processMovementsForRunningBalance(movsToDisplay, true);
+            await processMovementsForRunningBalance(movsToDisplay, true); // <--- CORRECCIÓN APLICADA AQUÍ
 
             const grouped = {};
             const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
@@ -3149,7 +3196,8 @@ window.addEventListener('offline', () => {
             for (const dateKey of sortedDates) {
                 const group = grouped[dateKey];
                 html += renderVirtualListItem({ type: 'date-header', date: dateKey, total: group.total });
-                group.movements.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+                // Sort movements within each group by date (and then by ID for stable order if dates are identical)
+                group.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || a.id.localeCompare(b.id));
                 for (const mov of group.movements) {
                     html += renderVirtualListItem({ type: 'transaction', movement: mov });
                 }
@@ -3157,7 +3205,66 @@ window.addEventListener('offline', () => {
             html += `<div style="text-align: center; margin-top: var(--sp-4);"><button class="btn btn--secondary" data-action="navigate" data-page="${PAGE_IDS.MOVIMIENTOS_FULL}">Ver todos los movimientos</button></div>`;
             recientesContainer.innerHTML = html;
         };
-        
+		 const renderPendingRecurrents = () => {
+            const container = select('pending-recurrents-container');
+            if (!container || !db.recurrentes) return;
+
+            const now = new Date();
+            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            const limitDate = new Date(today);
+            limitDate.setDate(limitDate.getDate() + 30); // Mostramos los de los próximos 30 días
+
+            const pending = db.recurrentes
+                .filter(r => {
+                    const nextDate = parseDateStringAsUTC(r.nextDate);
+                    return nextDate > today && nextDate <= limitDate;
+                })
+                .sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+
+            if (pending.length === 0) {
+                container.innerHTML = ''; // No muestra nada si no hay pendientes
+                return;
+            }
+
+            const itemsHTML = pending.map(r => {
+                const nextDate = new Date(r.nextDate + 'T12:00:00Z');
+                const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+                const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+                
+                return `
+                <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-info) 8%, transparent);">
+                    <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
+                    <div class="transaction-card__content">
+                        <div class="transaction-card__details">
+                            <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                            <div class="transaction-card__row-2" style="font-weight: 600;">Próximo: ${formattedDate}</div>
+                        </div>
+                        <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                            <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+                            <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">
+                                <span class="material-icons" style="font-size: 14px;">check</span>Añadir
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="card card--no-bg accordion-wrapper" style="margin-top: var(--sp-4);">
+                    <details class="accordion" open>
+                        <summary>
+                            <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);">
+                                <span class="material-icons">event_upcoming</span>
+                                Operaciones Programadas
+                            </h3>
+                            <span class="material-icons accordion__icon">expand_more</span>
+                        </summary>
+                        <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);">${itemsHTML}</div>
+                    </details>
+                </div>
+            `;
+        };
 // =================================================================================
 // FUNCIÓN MODIFICADA
 // Ahora, esta función solo se encarga de OBTENER los datos y guardarlos en el caché.
@@ -3284,8 +3391,7 @@ const renderInicioRecientesView = async () => {
                         },
                         options: {
                             responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } }, datalabels: { formatter: (v,c)=>{ let s=c.chart.data.datasets.data.reduce((a,b)=>a+b,0); return s > 0 ? (v*100/s).toFixed(0)+"%" : "0%"; }, color: '#fff', textStrokeColor: getComputedStyle(document.body).getPropertyValue('--c-background'),
-                                    textStrokeWidth: 2, font: { weight: 'bold', size: 10 } } }
+                            plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } }, datalabels: { formatter: (v,c)=>{ let s=c.chart.data.datasets.data.reduce((a,b)=>a+b,0); return s > 0 ? (v*100/s).toFixed(0)+"%" : "0%"; }, color: '#fff', font: { weight: 'bold', size: 10 } } }
                         }
                     });
                 } else {
@@ -3658,39 +3764,88 @@ const renderInicioRecientesView = async () => {
             showModal('movimiento-modal');
         };
 
-		
-        
+									   
+        let calculatorKeyboardHandler = null; // Declare in global scope
+
         const showCalculator = (targetInput) => {
             calculatorState.targetInput = targetInput;
-            const currentValue = targetInput.value.trim().replace(/\s?€/g, '');
-            if (currentValue && !isNaN(parseFloat(currentValue.replace(',', '.')))) {
-                calculatorState.displayValue = currentValue.replace('.', '');
+            const currentValue = targetInput.value.trim();
+            const parsedValue = parseCurrencyString(currentValue);
+
+            if (!isNaN(parsedValue)) {
+                calculatorState.displayValue = String(parsedValue); // Store with dot internally
             } else {
                 calculatorState.displayValue = '0';
             }
             calculatorState.waitingForNewValue = true;
             updateCalculatorDisplay();
+
+            // === INICIO DEL CAMBIO ===
+            // 1. Definimos la función que manejará las pulsaciones del teclado
+            calculatorKeyboardHandler = (e) => {
+                // Evita que el evento se propague si ya ha sido manejado por otro sitio
+                if (e.defaultPrevented) return;
+
+                const key = e.key; // La tecla que se ha pulsado
+
+                // Mapeamos las teclas del teclado a las acciones de la calculadora
+                if (key >= '0' && key <= '9') {
+                    handleCalculatorInput(key);
+                    e.preventDefault(); // Evita el comportamiento por defecto de la tecla (ej. scroll)
+                } else if (key === '.' || key === ',') {
+                    handleCalculatorInput('comma');
+                    e.preventDefault();
+                } else if (key === 'Backspace') {
+                    handleCalculatorInput('backspace');
+                    e.preventDefault();
+                } else if (key === 'Enter') {
+                    handleCalculatorInput('done');
+                    e.preventDefault();
+                } else if (key === 'Escape') {
+                    hideCalculator(); // Cierra la calculadora con la tecla Escape
+                    e.preventDefault();
+                } else if (key === '-') {
+                    handleCalculatorInput('sign'); // Para el signo +/-
+                    e.preventDefault();
+                } else if (key.toUpperCase() === 'C') { // Para la tecla 'C' de borrar
+                    handleCalculatorInput('clear');
+                    e.preventDefault();
+                }
+            };
+            // 2. Añadimos el "escuchador de eventos" al documento entero
+            // Esto asegura que la calculadora capture las teclas sin importar dónde esté el foco
+            document.addEventListener('keydown', calculatorKeyboardHandler);
+            // === FIN DEL CAMBIO ===
+
             showModal('calculator-modal');
         };
         
         const hideCalculator = () => {
             hideModal('calculator-modal');
             calculatorState.targetInput = null;
+
+            // === INICIO DEL CAMBIO ===
+            // Eliminamos el escuchador de eventos del teclado cuando la calculadora se cierra
+            if (calculatorKeyboardHandler) {
+                document.removeEventListener('keydown', calculatorKeyboardHandler);
+                calculatorKeyboardHandler = null; // Limpiamos la variable
+            }
+            // === FIN DEL CAMBIO ===
         };
         
                 
         const handleCalculatorInput = (key) => {
             hapticFeedback('light');
             let { displayValue, waitingForNewValue } = calculatorState;
-
-            displayValue = displayValue.replace(',', '.');
-
+			// Removed: let calculatorKeyboardHandler = null; // This was redeclaring the global variable
+            
             switch(key) {
                 case 'done': 
                     hapticFeedback('medium'); 
                     if (calculatorState.targetInput) {
                         const finalValue = parseFloat(displayValue) || 0;
-                        calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        // Format with comma for Spanish locale in the input field
+                        calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
                     }
                     hideCalculator(); 
                     return;
@@ -3705,7 +3860,11 @@ const renderInicioRecientesView = async () => {
                     waitingForNewValue = true; 
                     break;
                 case 'backspace': 
-                    displayValue = displayValue.slice(0, -1) || '0'; 
+                    displayValue = displayValue.slice(0, -1);
+                    if (displayValue === '' || displayValue === '-') { // Handle case where only '-' is left
+                        displayValue = '0';
+                        waitingForNewValue = true;
+                    }
                     break;
                 case 'sign': 
                     if (displayValue !== '0') { 
@@ -3713,16 +3872,20 @@ const renderInicioRecientesView = async () => {
                     } 
                     break;
                 default:
-                    if (waitingForNewValue || displayValue === '0') { 
+                    if (waitingForNewValue || displayValue === '0' && key !== '0') { 
                         displayValue = key; 
                         waitingForNewValue = false; 
-                    } else { 
+                    } else if (displayValue === '0' && key === '0') {
+                        // If current display is '0' and user types '0', keep it '0'
+                        displayValue = '0';
+                    }
+                    else { 
                         displayValue += key; 
                     } 
                     break;
             }
             
-            calculatorState.displayValue = displayValue.replace('.', ',');
+            calculatorState.displayValue = displayValue; // Still with dot internally
             calculatorState.waitingForNewValue = waitingForNewValue;
             updateCalculatorDisplay();
         };
@@ -3730,10 +3893,15 @@ const renderInicioRecientesView = async () => {
         const updateCalculatorDisplay = () => {
             const display = select('calculator-display');
             if (display) { 
-                display.textContent = calculatorState.displayValue; 
+                // Display with comma for UI
+                display.textContent = parseFloat(calculatorState.displayValue).toLocaleString('es-ES', { 
+                    minimumFractionDigits: calculatorState.displayValue.includes('.') ? calculatorState.displayValue.split('.')[1].length : 0,
+                    maximumFractionDigits: 20 // Allow many decimal places for calculator display
+                }); 
             }
             if (calculatorState.targetInput) {
-                const numValue = parseFloat(calculatorState.displayValue.replace(',', '.')) || 0;
+                const numValue = parseFloat(calculatorState.displayValue) || 0;
+                // Update target input value with comma, formatted to 2 decimal places and no grouping
                 calculatorState.targetInput.value = numValue.toLocaleString('es-ES', { 
                     useGrouping: false,
                     minimumFractionDigits: 2, 
@@ -4262,6 +4430,64 @@ const renderInicioRecientesView = async () => {
                 const btn = actionTarget.closest('button');
                 
                 const actions = {
+				'confirm-recurrent': async () => {
+                const actionTarget = event.target.closest('[data-action]');
+                if (!actionTarget) return;
+                const { id } = actionTarget.dataset;
+                const btn = actionTarget.closest('button');
+
+                if (!id) return;
+                setButtonLoading(btn, true);
+
+                const recurrente = db.recurrentes.find(r => r.id === id);
+                if (!recurrente) {
+                    showToast('Error: No se encontró la operación recurrente.', 'danger');
+                    setButtonLoading(btn, false);
+                    return;
+                }
+
+                // 1. Crear el nuevo movimiento real
+                const nextDate = parseDateStringAsUTC(recurrente.nextDate);
+                const newMovement = {
+                    id: generateId(),
+                    fecha: nextDate.toISOString(),
+                    cantidad: recurrente.cantidad,
+                    descripcion: recurrente.descripcion,
+                    tipo: recurrente.tipo,
+                    cuentaId: recurrente.cuentaId,
+                    conceptoId: recurrente.conceptoId,
+                    cuentaOrigenId: recurrente.cuentaOrigenId,
+                    cuentaDestinoId: recurrente.cuentaDestinoId,
+                    sourceRecurrenceId: recurrente.id
+                };
+
+                // 2. Calcular la siguiente fecha de ejecución para la plantilla
+                const newNextDate = calculateNextDueDate(nextDate, recurrente.frequency);
+                const newNextDateString = newNextDate.toISOString().slice(0, 10);
+
+                // 3. Crear un lote para actualizar la base de datos atómicamente
+                const batch = fbDb.batch();
+                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovement.id);
+                const recRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(id);
+
+                batch.set(movRef, newMovement);
+                batch.update(recRef, { nextDate: newNextDateString });
+                
+                // 4. Actualizar saldos de cuentas
+                if (newMovement.tipo === 'traspaso') {
+                    await updateAccountBalance(newMovement.cuentaOrigenId, -newMovement.cantidad);
+                    await updateAccountBalance(newMovement.cuentaDestinoId, newMovement.cantidad);
+                } else {
+                    await updateAccountBalance(newMovement.cuentaId, newMovement.cantidad);
+                }
+                
+                await batch.commit();
+                
+                // 5. Actualizar la UI
+                hapticFeedback('success');
+                showToast('Movimiento programado añadido.');
+                select(`pending-recurrente-${id}`)?.remove(); // Elimina el elemento de la lista
+            },
     'navigate': () => navigateTo(page),
     'help': showHelpModal,
     'exit': handleExitApp,
@@ -4479,7 +4705,8 @@ if (actions[action]) actions[action](e);
                 if(id && select(`${id}-error`)) clearError(id);
             });
 
-            document.body.addEventListener('focusin', (e) => { if (e.target.matches('.input-amount-calculator')) { e.preventDefault(); showCalculator(e.target); } });
+            // Reverted: Removed e.preventDefault() here
+            document.body.addEventListener('focusin', (e) => { if (e.target.matches('.input-amount-calculator')) { showCalculator(e.target); } });
             
             document.addEventListener('change', e => {
                 const target = e.target;
@@ -4659,8 +4886,6 @@ if (actions[action]) actions[action](e);
                 showToast("Error crítico durante la importación.", "danger", 5000);
                 select('json-result-title').textContent = '¡Error en la Importación!';
                 select('json-result-message').textContent = `Ocurrió un error. Por favor, revisa la consola e inténtalo de nuevo.`;
-                select('json-import-progress').style.display = 'none';
-                select('json-import-result').style.display = 'block';
                 select('json-import-result .material-icons').style.color = 'var(--c-danger)';
                 setButtonLoading(btn, false);
             }
@@ -5087,7 +5312,7 @@ if (actions[action]) actions[action](e);
                         <span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span>
                         <h4 id="csv-result-title" style="margin-top: var(--sp-2);"></h4>
                         <p id="csv-result-message"></p>
-                        <div class="modal__actions" style="justify-content: center;">
+                        <div class="modal__actions" style="justify: center;">
                             <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">Finalizar</button>
                         </div>
                      </div>
@@ -5458,4 +5683,3 @@ if (actions[action]) actions[action](e);
     </script>
 </body>
 </html>
-	
