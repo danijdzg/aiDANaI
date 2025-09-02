@@ -14,7 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/flatpickr/dist/l10n/es.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
-    <!-- CARGA ROBUSTA DE SCRIPT: Se usa 'onload' para garantizar que el script esté listo antes de usarse. -->
+    <!-- CAMBIO REALIZADO 1/2: Se añade el atributo 'onload' para llamar a una función cuando el script esté listo. -->
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js" onload="onDriverJsLoaded()"></script>
     <!-- Configuración PWA -->
     <link rel="manifest" href="manifest.json">
@@ -515,9 +515,8 @@
     <div id="custom-confirm-modal" class="modal-overlay"> <div class="modal"> <div class="modal-grabber"></div> <p id="confirm-message" style="margin-bottom: 24px; text-align: center; font-size: 16px;"></p> <div class="form-actions" style="justify-content: center; gap: 16px;"> <button type="button" class="btn btn-secondary" id="confirm-cancel-btn">Cancelar</button> <button type="button" class="btn btn-primary" id="confirm-ok-btn">Confirmar</button> </div> </div> </div>
     
     <script type="module">
-        
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js"; // CAMBIO: Usar browserLocalPersistence
 import { getFirestore, enableIndexedDbPersistence, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
 // --- CONFIGURACIÓN REQUERIDA ---
@@ -558,7 +557,8 @@ const clearAllErrors = (formId) => { const form = gebi(formId); if (!form) retur
 const app = initializeApp(firebaseConfig);
 const fbAuth = getAuth(app);
 const fbDb = getFirestore(app);
-setPersistence(fbAuth, browserSessionPersistence);
+// CAMBIO: Se usa browserLocalPersistence para que el usuario no tenga que loguearse en cada visita.
+setPersistence(fbAuth, browserLocalPersistence);
 enableIndexedDbPersistence(fbDb).catch(err => { if (err.code == 'failed-precondition') { console.warn("Persistencia offline falló: Múltiples pestañas abiertas."); } else if (err.code == 'unimplemented') { console.warn("Persistencia offline no soportada en este navegador."); } });
 const getInitialDb = () => ({ items: [], taskLists: [{ id: 'default', name: 'General' }], config: { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null } });
 const saveData = () => new Promise((resolve, reject) => { if (!currentUser) { return reject(new Error("Usuario no autenticado. No se puede guardar.")); } clearTimeout(saveTimeout); saveTimeout = setTimeout(() => { const userDocRef = doc(fbDb, 'users', currentUser.uid); setDoc(userDocRef, { db }).then(() => { console.log("Sincronización con Firebase exitosa."); resolve(); }).catch(error => { console.error("Error al guardar en Firestore:", error); reject(error); }); }, 500); });
@@ -621,13 +621,13 @@ const handleRegister = async (btn) => { clearAllErrors('login-form'); const emai
 function renderApp() { if (!db || !currentUser || !isAppInitialized) return; updateNav(appState.currentView); renderCurrentView(); }
 function renderCurrentView() { const { currentView } = appState; if (currentView === 'today') renderTodayView(); if (currentView === 'calendar') renderCalendarView(); if (currentView === 'tasks') renderTaskListView(); if (currentView === 'search') renderSearchView(gebi('search-input').value); }
 function updateNav(currentView) { qsa('.nav-item[data-view]').forEach(item => { item.classList.toggle('active', item.dataset.view === currentView); }); }
-function renderTodayView() { const hours = new Date().getHours(); const greeting = hours < 12 ? "Buenos días" : hours < 20 ? "Buenas tardes" : "Buenas noches"; gebi('today-greeting').textContent = greeting; const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999); const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1); const tomorrowEnd = new Date(todayEnd); tomorrowEnd.setDate(tomorrowEnd.getDate() + 1); const todayEvents = db.items.filter(i => i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= todayStart && new Date(i.dueDate) <= todayEnd).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)); const pendingTasks = db.items.filter(i => i.type === 'task' && !i.isComplete).sort((a,b) => a.createdAt - b.createdAt); const tomorrowEvents = db.items.filter(i => i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= tomorrowStart && new Date(i.dueDate) <= tomorrowEnd).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)); const renderListWithEmptyState = (containerId, emptyStateId, titleId, items) => { const container = gebi(containerId); const emptyState = gebi(emptyStateId); const title = gebi(titleId); container.innerHTML = ''; if (items.length > 0) { items.forEach(item => container.appendChild(createUniversalListItemNode(item))); emptyState.style.display = 'none'; title.style.display = 'flex'; } else { emptyState.style.display = 'block'; title.style.display = 'none'; } }; renderListWithEmptyState('today-events-list', 'empty-today-events', 'today-events-title', todayEvents); renderListWithEmptyState('today-tasks-list', 'empty-today-tasks', 'today-tasks-title', pendingTasks); renderListWithEmptyState('tomorrow-events-list', 'empty-tomorrow-events', 'tomorrow-events-title', tomorrowEvents); }
+function renderTodayView() { const hours = new Date().getHours(); const greeting = hours < 12 ? "Buenos días" : hours < 20 ? "Buenas tardes" : "Buenas noches"; gebi('today-greeting').textContent = greeting; const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999); const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1); const tomorrowEnd = new Date(todayEnd); tomorrowEnd.setDate(tomorrowEnd.getDate() + 1); const todayEvents = db.items.filter(i => !i.isDeleted && i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= todayStart && new Date(i.dueDate) <= todayEnd).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)); const pendingTasks = db.items.filter(i => !i.isDeleted && i.type === 'task' && !i.isComplete).sort((a,b) => a.createdAt - b.createdAt); const tomorrowEvents = db.items.filter(i => !i.isDeleted && i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= tomorrowStart && new Date(i.dueDate) <= tomorrowEnd).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)); const renderListWithEmptyState = (containerId, emptyStateId, titleId, items) => { const container = gebi(containerId); const emptyState = gebi(emptyStateId); const title = gebi(titleId); container.innerHTML = ''; if (items.length > 0) { items.forEach(item => container.appendChild(createUniversalListItemNode(item))); emptyState.style.display = 'none'; title.style.display = 'flex'; } else { emptyState.style.display = 'block'; title.style.display = 'none'; } }; renderListWithEmptyState('today-events-list', 'empty-today-events', 'today-events-title', todayEvents); renderListWithEmptyState('today-tasks-list', 'empty-today-tasks', 'today-tasks-title', pendingTasks); renderListWithEmptyState('tomorrow-events-list', 'empty-tomorrow-events', 'tomorrow-events-title', tomorrowEvents); }
 function renderCalendarView() { const { calendar } = appState; const { items } = db; const { currentMonth, currentYear, selectedDate, displayMode } = calendar; gebi('calendar-title-btn').textContent = `${MESES_CORTOS[currentMonth]} ${currentYear}`; gebi('calendarView').dataset.displayMode = displayMode; qsa('.view-toggle .btn-toggle').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === displayMode)); if (displayMode === 'month') { renderMonthGrid(currentMonth, currentYear, selectedDate, items); renderAgendaFromSelectedDay(items, selectedDate); } else { renderWeekGrid(currentMonth, currentYear, selectedDate, items); } }
-function renderMonthGrid(currentMonth, currentYear, selectedDate, items) { const weekdaysContainer = gebi('calendarWeekdays'); if (weekdaysContainer.innerHTML.length < 5) { weekdaysContainer.innerHTML = DIAS_SEMANA_CORTOS.map((day) => `<div class="weekday">${day}</div>`).join(''); } const calendarDays = gebi('calendarDays'); calendarDays.innerHTML = ''; const firstDayOfMonth = new Date(currentYear, currentMonth, 1); const offset = (firstDayOfMonth.getDay() + 6) % 7; const startDate = new Date(firstDayOfMonth); startDate.setDate(startDate.getDate() - offset); const todayStr = dateToYYYYMMDD(new Date()); const dailyEventMarkers = new Map(); items.filter(it => it.type === 'agenda' && it.dueDate && !it.isComplete).forEach(it => { const dateStr = dateToYYYYMMDD(new Date(it.dueDate)); if (!dailyEventMarkers.has(dateStr)) dailyEventMarkers.set(dateStr, { hasImportant: false, hasNormal: false }); const marker = dailyEventMarkers.get(dateStr); if (it.isImportant) marker.hasImportant = true; else marker.hasNormal = true; }); for (let i = 0; i < 42; i++) { const cellDate = new Date(startDate); cellDate.setDate(startDate.getDate() + i); const dateStr = dateToYYYYMMDD(cellDate); const dayEl = document.createElement('div'); dayEl.className = 'calendar-day'; dayEl.dataset.date = dateStr; if (cellDate.getMonth() !== currentMonth) { dayEl.classList.add('other-month'); } if (dateStr === todayStr) { dayEl.classList.add('today'); } if (dateStr === selectedDate) { dayEl.classList.add('selected'); } let dotsHtml = ''; if (dailyEventMarkers.has(dateStr)) { const markers = dailyEventMarkers.get(dateStr); dotsHtml = `<div class="event-dots-container">${markers.hasImportant ? '<span class="event-dot important"></span>' : ''}${markers.hasNormal ? '<span class="event-dot normal"></span>' : ''}</div>`; } dayEl.innerHTML = `<span class="day-number">${cellDate.getDate()}</span>${dotsHtml}`; dayEl.dataset.action = 'selectDate'; calendarDays.appendChild(dayEl); } }
-function renderWeekGrid(currentMonth, currentYear, selectedDateStr, items) { const weeklyViewContainer = gebi('weekly-view-container'); weeklyViewContainer.innerHTML = ''; const selectedDate = yyyymmddToDate(selectedDateStr); const startOfWeek = new Date(selectedDate); startOfWeek.setDate(selectedDate.getDate() - ((selectedDate.getDay() + 6) % 7)); for (let i = 0; i < 7; i++) { const day = new Date(startOfWeek); day.setDate(startOfWeek.getDate() + i); const dayStr = dateToYYYYMMDD(day); const eventsForDay = items.filter(item => item.type === 'agenda' && !item.isComplete && item.dueDate && dateToYYYYMMDD(new Date(item.dueDate)) === dayStr ).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); const daySection = document.createElement('div'); daySection.className = 'weekly-day-section'; daySection.innerHTML = ` <div class="weekly-day-header"> <span class="material-icons">${dayStr === dateToYYYYMMDD(new Date()) ? 'today' : 'event'}</span> ${DIAS_SEMANA_LARGOS[day.getDay() === 0 ? 6 : day.getDay() - 1]} ${day.getDate()} de ${MESES[day.getMonth()]} </div> <div class="weekly-day-events" id="weekly-events-${dayStr}"></div> `; weeklyViewContainer.appendChild(daySection); const eventsListContainer = gebi(`weekly-events-${dayStr}`); if (eventsForDay.length > 0) { eventsForDay.forEach(item => eventsListContainer.appendChild(createUniversalListItemNode(item))); } else { eventsListContainer.innerHTML = `<div class="empty-state"><p>Nada programado.</p></div>`; } } }
-function renderAgendaFromSelectedDay(items, selectedDateStr) { const agendaList = gebi('agendaList'); agendaList.innerHTML = ''; if (!selectedDateStr) return; const selectedDate = yyyymmddToDate(selectedDateStr); selectedDate.setHours(0, 0, 0, 0); const itemsForDayAndBeyond = items.filter(item => item.type === 'agenda' && !item.isComplete && item.dueDate && new Date(item.dueDate) >= selectedDate ).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); if (itemsForDayAndBeyond.length === 0) { agendaList.innerHTML = `<div class="empty-state" style="padding-top: 24px;"><span class="material-icons">event_available</span><div>Nada programado a partir de este día.</div></div>`; return; } let lastHeaderDate = null; itemsForDayAndBeyond.forEach(item => { const itemDate = new Date(item.dueDate); const itemDateStr = dateToYYYYMMDD(itemDate); if (itemDateStr !== lastHeaderDate) { const header = document.createElement('div'); header.className = 'agenda-date-header'; header.textContent = itemDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); agendaList.appendChild(header); lastHeaderDate = itemDateStr; } agendaList.appendChild(createUniversalListItemNode(item)); }); }
-function renderTaskListView() { const filter = gebi('task-list-filter'); filter.innerHTML = db.taskLists.map(list => `<option value="${list.id}">${list.name}</option>`).join(''); filter.value = appState.tasks.selectedListId; const tasksContainer = gebi('tasks-content'); tasksContainer.innerHTML = ''; const listId = appState.tasks.selectedListId; const pendingTasks = db.items.filter(i => i.type === 'task' && !i.isComplete && (i.listId || 'default') === listId).sort((a, b) => a.createdAt - b.createdAt); const completedTasks = db.items.filter(i => i.type === 'task' && i.isComplete && (i.listId || 'default') === listId).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0)); if (pendingTasks.length > 0) { const title = document.createElement('h3'); title.className = 'section-title'; title.textContent = 'Tareas Pendientes'; tasksContainer.appendChild(title); pendingTasks.forEach(item => tasksContainer.appendChild(createUniversalListItemNode(item))); } if (completedTasks.length > 0) { const details = document.createElement('details'); details.className = 'completed-tasks-section'; const summary = document.createElement('summary'); summary.innerHTML = `<h3 class="section-title">Tareas Completadas (${completedTasks.length})</h3><span class="material-icons">expand_more</span>`; const completedList = document.createElement('div'); completedList.className = 'completed-tasks-list'; completedTasks.slice(0, 20).forEach(item => completedList.appendChild(createUniversalListItemNode(item))); details.appendChild(summary); details.appendChild(completedList); tasksContainer.appendChild(details); } const isAllEmpty = pendingTasks.length === 0 && completedTasks.length === 0; gebi('emptyTasks').style.display = isAllEmpty ? 'block' : 'none'; }
-function renderSearchView(query) { const resultsList = gebi('searchResultsList'); resultsList.innerHTML = ''; const emptyState = gebi('emptySearch'); const lowerCaseQuery = query.toLowerCase(); const results = db.items.filter(item => item.description.toLowerCase().includes(lowerCaseQuery)); if (results.length > 0) { emptyState.style.display = 'none'; results.sort((a,b) => (a.createdAt < b.createdAt) ? 1 : -1).forEach(item => resultsList.appendChild(createUniversalListItemNode(item))); } else { emptyState.style.display = 'block'; } }
+function renderMonthGrid(currentMonth, currentYear, selectedDate, items) { const weekdaysContainer = gebi('calendarWeekdays'); if (weekdaysContainer.innerHTML.length < 5) { weekdaysContainer.innerHTML = DIAS_SEMANA_CORTOS.map((day) => `<div class="weekday">${day}</div>`).join(''); } const calendarDays = gebi('calendarDays'); calendarDays.innerHTML = ''; const firstDayOfMonth = new Date(currentYear, currentMonth, 1); const offset = (firstDayOfMonth.getDay() + 6) % 7; const startDate = new Date(firstDayOfMonth); startDate.setDate(startDate.getDate() - offset); const todayStr = dateToYYYYMMDD(new Date()); const dailyEventMarkers = new Map(); items.filter(it => !it.isDeleted && it.type === 'agenda' && it.dueDate && !it.isComplete).forEach(it => { const dateStr = dateToYYYYMMDD(new Date(it.dueDate)); if (!dailyEventMarkers.has(dateStr)) dailyEventMarkers.set(dateStr, { hasImportant: false, hasNormal: false }); const marker = dailyEventMarkers.get(dateStr); if (it.isImportant) marker.hasImportant = true; else marker.hasNormal = true; }); for (let i = 0; i < 42; i++) { const cellDate = new Date(startDate); cellDate.setDate(startDate.getDate() + i); const dateStr = dateToYYYYMMDD(cellDate); const dayEl = document.createElement('div'); dayEl.className = 'calendar-day'; dayEl.dataset.date = dateStr; if (cellDate.getMonth() !== currentMonth) { dayEl.classList.add('other-month'); } if (dateStr === todayStr) { dayEl.classList.add('today'); } if (dateStr === selectedDate) { dayEl.classList.add('selected'); } let dotsHtml = ''; if (dailyEventMarkers.has(dateStr)) { const markers = dailyEventMarkers.get(dateStr); dotsHtml = `<div class="event-dots-container">${markers.hasImportant ? '<span class="event-dot important"></span>' : ''}${markers.hasNormal ? '<span class="event-dot normal"></span>' : ''}</div>`; } dayEl.innerHTML = `<span class="day-number">${cellDate.getDate()}</span>${dotsHtml}`; dayEl.dataset.action = 'selectDate'; calendarDays.appendChild(dayEl); } }
+function renderWeekGrid(currentMonth, currentYear, selectedDateStr, items) { const weeklyViewContainer = gebi('weekly-view-container'); weeklyViewContainer.innerHTML = ''; const selectedDate = yyyymmddToDate(selectedDateStr); const startOfWeek = new Date(selectedDate); startOfWeek.setDate(selectedDate.getDate() - ((selectedDate.getDay() + 6) % 7)); for (let i = 0; i < 7; i++) { const day = new Date(startOfWeek); day.setDate(startOfWeek.getDate() + i); const dayStr = dateToYYYYMMDD(day); const eventsForDay = items.filter(item => !item.isDeleted && item.type === 'agenda' && !item.isComplete && item.dueDate && dateToYYYYMMDD(new Date(item.dueDate)) === dayStr ).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); const daySection = document.createElement('div'); daySection.className = 'weekly-day-section'; daySection.innerHTML = ` <div class="weekly-day-header"> <span class="material-icons">${dayStr === dateToYYYYMMDD(new Date()) ? 'today' : 'event'}</span> ${DIAS_SEMANA_LARGOS[day.getDay() === 0 ? 6 : day.getDay() - 1]} ${day.getDate()} de ${MESES[day.getMonth()]} </div> <div class="weekly-day-events" id="weekly-events-${dayStr}"></div> `; weeklyViewContainer.appendChild(daySection); const eventsListContainer = gebi(`weekly-events-${dayStr}`); if (eventsForDay.length > 0) { eventsForDay.forEach(item => eventsListContainer.appendChild(createUniversalListItemNode(item))); } else { eventsListContainer.innerHTML = `<div class="empty-state"><p>Nada programado.</p></div>`; } } }
+function renderAgendaFromSelectedDay(items, selectedDateStr) { const agendaList = gebi('agendaList'); agendaList.innerHTML = ''; if (!selectedDateStr) return; const selectedDate = yyyymmddToDate(selectedDateStr); selectedDate.setHours(0, 0, 0, 0); const itemsForDayAndBeyond = items.filter(item => !item.isDeleted && item.type === 'agenda' && !item.isComplete && item.dueDate && new Date(item.dueDate) >= selectedDate ).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); if (itemsForDayAndBeyond.length === 0) { agendaList.innerHTML = `<div class="empty-state" style="padding-top: 24px;"><span class="material-icons">event_available</span><div>Nada programado a partir de este día.</div></div>`; return; } let lastHeaderDate = null; itemsForDayAndBeyond.forEach(item => { const itemDate = new Date(item.dueDate); const itemDateStr = dateToYYYYMMDD(itemDate); if (itemDateStr !== lastHeaderDate) { const header = document.createElement('div'); header.className = 'agenda-date-header'; header.textContent = itemDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); agendaList.appendChild(header); lastHeaderDate = itemDateStr; } agendaList.appendChild(createUniversalListItemNode(item)); }); }
+function renderTaskListView() { const filter = gebi('task-list-filter'); filter.innerHTML = db.taskLists.map(list => `<option value="${list.id}">${list.name}</option>`).join(''); filter.value = appState.tasks.selectedListId; const tasksContainer = gebi('tasks-content'); tasksContainer.innerHTML = ''; const listId = appState.tasks.selectedListId; const pendingTasks = db.items.filter(i => !i.isDeleted && i.type === 'task' && !i.isComplete && (i.listId || 'default') === listId).sort((a, b) => a.createdAt - b.createdAt); const completedTasks = db.items.filter(i => !i.isDeleted && i.type === 'task' && i.isComplete && (i.listId || 'default') === listId).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0)); if (pendingTasks.length > 0) { const title = document.createElement('h3'); title.className = 'section-title'; title.textContent = 'Tareas Pendientes'; tasksContainer.appendChild(title); pendingTasks.forEach(item => tasksContainer.appendChild(createUniversalListItemNode(item))); } if (completedTasks.length > 0) { const details = document.createElement('details'); details.className = 'completed-tasks-section'; const summary = document.createElement('summary'); summary.innerHTML = `<h3 class="section-title">Tareas Completadas (${completedTasks.length})</h3><span class="material-icons">expand_more</span>`; const completedList = document.createElement('div'); completedList.className = 'completed-tasks-list'; completedTasks.slice(0, 20).forEach(item => completedList.appendChild(createUniversalListItemNode(item))); details.appendChild(summary); details.appendChild(completedList); tasksContainer.appendChild(details); } const isAllEmpty = pendingTasks.length === 0 && completedTasks.length === 0; gebi('emptyTasks').style.display = isAllEmpty ? 'block' : 'none'; }
+function renderSearchView(query) { const resultsList = gebi('searchResultsList'); resultsList.innerHTML = ''; const emptyState = gebi('emptySearch'); const lowerCaseQuery = query.toLowerCase(); const results = db.items.filter(item => !item.isDeleted && item.description.toLowerCase().includes(lowerCaseQuery)); if (results.length > 0) { emptyState.style.display = 'none'; results.sort((a,b) => (a.createdAt < b.createdAt) ? 1 : -1).forEach(item => resultsList.appendChild(createUniversalListItemNode(item))); } else { emptyState.style.display = 'block'; } }
 function createUniversalListItemNode(item) { const node = item.type === 'task' ? createTaskItemNode(item) : createEventItemNode(item); if (newlyCreatedItemId && item.localId === newlyCreatedItemId) { node.classList.add(CONSTANTS.ANIMATION_CLASSES.ITEM_ENTERING); node.addEventListener('animationend', () => { node.classList.remove(CONSTANTS.ANIMATION_CLASSES.ITEM_ENTERING); }, { once: true }); newlyCreatedItemId = null; } return node; }
 function createEventItemNode(item) { const itemEl = document.createElement('div'); itemEl.className = `list-item-swipe-container type-agenda ${item.isComplete ? 'completed' : ''}`; itemEl.dataset.id = item.localId; const itemColor = item.isImportant ? 'var(--accent-event-important)' : 'var(--accent-event-normal)'; itemEl.style.borderLeftColor = itemColor; const time = item.isAllDay ? 'Todo el día' : (item.dueDate ? dateToHHMM(new Date(item.dueDate)) : ''); const hasGoogleId = !!item.googleCalendarEventId; const syncStatusIconHtml = hasGoogleId ? `<span class="material-icons event-meta-icon google-cal-icon" title="Sincronizado con Google Calendar">event_available</span>` : `<span class="material-icons event-meta-icon aidanai-only-icon" title="Guardado solo en aiDANaI (no en Google Calendar)">cloud_done</span>`; itemEl.innerHTML = ` <div class="item-card-swipe-background"><span class="material-icons">check_circle</span><span class="material-icons">delete</span></div> <div class="item-icon"><span class="material-icons" style="color: ${itemColor};">event</span></div> <div class="item-content" data-action="edit-item"> <div class="item-title">${item.description}</div> <div class="item-metadata-container"> <span class="event-time">${time}</span> ${syncStatusIconHtml} ${item.recurrenceRule !== 'none' ? '<span class="material-icons event-meta-icon">repeat</span>' : ''} </div> </div> `; attachSwipeListeners(itemEl); return itemEl; }
 function createTaskItemNode(item) { const itemEl = document.createElement('div'); itemEl.dataset.id = item.localId; itemEl.className = `list-item-swipe-container type-task ${item.isComplete ? 'completed' : ''}`; itemEl.style.borderLeftColor = 'var(--accent-task)'; let progressHtml = ''; if (item.subtasks && item.subtasks.length > 0) { const completedCount = item.subtasks.filter(st => st.isComplete).length; const progressPercent = (completedCount / item.subtasks.length) * 100; const subtasksListViewHtml = item.subtasks.map(st => ` <div class="subtask-list-view-item ${st.isComplete ? 'completed' : ''}" data-action="toggle-subtask" data-task-id="${item.localId}" data-subtask-id="${st.id}"> <span class="material-icons">${st.isComplete ? 'check_circle' : 'radio_button_unchecked'}</span> <span>${st.description}</span> </div> `).join(''); progressHtml = ` <div class="task-progress-container"> <div class="progress-bar-wrapper"> <span>${completedCount} de ${item.subtasks.length}</span> <div class="progress-bar"> <div class="progress-bar-fill" style="width: ${progressPercent}%;"></div> </div> </div> <div class="subtasks-list-view">${subtasksListViewHtml}</div> </div>`; } const titleAndMetaHtml = ` <div style="display: flex; flex-direction: column; align-items: flex-start; width: 100%;"> <div class="item-title" data-action="edit-item">${item.description}</div> <div class="item-metadata-container" style="margin-top: 4px;"> <span class="material-icons event-meta-icon aidanai-only-icon" title="Guardado en tu cuenta de aiDANaI">cloud_done</span> </div> </div> `; itemEl.innerHTML = ` <div class="item-card-swipe-background"><span class="material-icons">check_circle</span><span class="material-icons">delete</span></div> <div class="item-icon item-checkbox" data-action="complete-item"> <span class="material-icons">${item.isComplete ? 'check_circle' : 'radio_button_unchecked'}</span> </div> <div class="item-content"> ${titleAndMetaHtml} ${progressHtml} </div>`; attachSwipeListeners(itemEl); return itemEl; }
@@ -644,71 +644,17 @@ function openModal(modalId) { gebi(modalId)?.classList.add('active'); if (modalI
 function closeModal(modalId) { gebi(modalId)?.classList.remove('active'); }
 function openAddItemModal(itemToEdit = null) { const form = gebi('add-item-form'); form.reset(); closeModal('quick-add-modal'); gebi('delete-item-btn').style.display = itemToEdit ? 'block' : 'none'; const localId = itemToEdit?.localId || uuid(); gebi('item-local-id').value = localId; const itemData = itemToEdit || parseNaturalLanguage(gebi('quick-add-input').value); const defaultType = appState.currentView === 'tasks' ? 'task' : 'agenda'; gebi('item-type').value = itemData?.type || defaultType; gebi('item-description').value = itemData?.description || ''; const taskListSelect = gebi('item-task-list'); taskListSelect.innerHTML = db.taskLists.map(list => `<option value="${list.id}">${list.name}</option>`).join(''); taskListSelect.value = itemData?.listId || appState.tasks.selectedListId; renderSubtasksInModal(itemData?.subtasks || []); const dateToShow = itemData?.dueDate ? new Date(itemData.dueDate) : yyyymmddToDate(appState.calendar.selectedDate); flatpickrInstance.setDate(dateToShow, false); gebi('item-all-day').checked = itemData?.isAllDay || false; gebi('item-important').checked = itemData?.isImportant || false; gebi('item-notification-enabled').checked = itemData?.notificationEnabled || false; gebi('item-recurrence').value = itemData?.recurrenceRule || 'none'; gebi('item-reminder').value = itemData?.reminderMinutes || '0'; toggleModalOptionsVisibility(); openModal('add-item-modal'); gebi('item-description').focus(); }
 function toggleModalOptionsVisibility() { const isAgenda = gebi('item-type').value === 'agenda'; const isAllDay = gebi('item-all-day').checked; const isNotificationEnabled = gebi('item-notification-enabled').checked && !isAllDay; gebi('datetime-notification-group').style.display = isAgenda ? 'block' : 'none'; gebi('task-options-group').style.display = isAgenda ? 'none' : 'block'; flatpickrInstance.set('enableTime', !isAllDay); gebi('item-notification-enabled').disabled = isAllDay; if (isAllDay) { gebi('item-notification-enabled').checked = false; } gebi('reminder-time-group').style.display = (isAgenda && isNotificationEnabled) ? 'block' : 'none'; }
-async function handleItemFormSubmit(e) { e.preventDefault(); if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } const localId = gebi('item-local-id').value; const existingItem = db.items.find(i => i.localId === localId); const subtasks = Array.from(qsa('#subtasks-container .subtask-item')).map(el => ({ id: el.dataset.id, description: el.querySelector('input[type="text"]').value, isComplete: el.querySelector('input[type="checkbox"]').checked })); let itemData = { localId, type: gebi('item-type').value, description: gebi('item-description').value.trim(), isComplete: existingItem?.isComplete || false, createdAt: existingItem?.createdAt || Date.now(), updatedAt: Date.now(), isAllDay: gebi('item-type').value === 'agenda' ? gebi('item-all-day').checked : false, isImportant: gebi('item-type').value === 'agenda' ? gebi('item-important').checked : false, notificationEnabled: gebi('item-type').value === 'agenda' ? gebi('item-notification-enabled').checked : false, reminderMinutes: gebi('item-type').value === 'agenda' && gebi('item-notification-enabled').checked ? parseInt(gebi('item-reminder').value, 10) : 0, notificationShown: (existingItem && existingItem.dueDate === flatpickrInstance.selectedDates[0]?.toISOString()) ? existingItem.notificationShown : false, recurrenceRule: gebi('item-type').value === 'agenda' ? gebi('item-recurrence').value : 'none', dueDate: gebi('item-type').value === 'agenda' ? flatpickrInstance.selectedDates[0]?.toISOString() : null, listId: gebi('item-type').value === 'task' ? gebi('item-task-list').value : null, subtasks: gebi('item-type').value === 'task' ? subtasks : [], googleCalendarEventId: existingItem?.googleCalendarEventId || null, parentId: existingItem?.parentId || null }; if (itemData.description.trim() === "") { showToast("La descripción no puede estar vacía.", true); return; } if (itemData.notificationEnabled) requestNotificationPermission(); const isNewItem = !existingItem; if (isGoogleSignedIn && itemData.type === 'agenda') { showToast("Sincronizando con Google...", false); isSyncingWithGoogle = true; try { if (itemData.googleCalendarEventId) { await actualizarEventoEnGoogle(itemData); } else { const googleId = await crearEventoEnGoogle(itemData); if (googleId) itemData.googleCalendarEventId = googleId; } } catch (err) { console.error("Falló la sincronización con Google, guardando localmente:", err); showToast("Falló la sincronización. El ítem se ha guardado localmente.", true); } finally { isSyncingWithGoogle = false; } } handleItemSave(itemData, isNewItem); closeModal('add-item-modal'); }
+async function handleItemFormSubmit(e) { e.preventDefault(); if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } const localId = gebi('item-local-id').value; const existingItem = db.items.find(i => i.localId === localId); const subtasks = Array.from(qsa('#subtasks-container .subtask-item')).map(el => ({ id: el.dataset.id, description: el.querySelector('input[type="text"]').value, isComplete: el.querySelector('input[type="checkbox"]').checked })); let itemData = { localId, type: gebi('item-type').value, description: gebi('item-description').value.trim(), isComplete: existingItem?.isComplete || false, createdAt: existingItem?.createdAt || Date.now(), updatedAt: Date.now(), isAllDay: gebi('item-type').value === 'agenda' ? gebi('item-all-day').checked : false, isImportant: gebi('item-type').value === 'agenda' ? gebi('item-important').checked : false, notificationEnabled: gebi('item-type').value === 'agenda' ? gebi('item-notification-enabled').checked : false, reminderMinutes: gebi('item-type').value === 'agenda' && gebi('item-notification-enabled').checked ? parseInt(gebi('item-reminder').value, 10) : 0, notificationShown: (existingItem && existingItem.dueDate === flatpickrInstance.selectedDates[0]?.toISOString()) ? existingItem.notificationShown : false, recurrenceRule: gebi('item-type').value === 'agenda' ? gebi('item-recurrence').value : 'none', dueDate: gebi('item-type').value === 'agenda' ? flatpickrInstance.selectedDates[0]?.toISOString() : null, listId: gebi('item-type').value === 'task' ? gebi('item-task-list').value : null, subtasks: gebi('item-type').value === 'task' ? subtasks : [], googleCalendarEventId: existingItem?.googleCalendarEventId || null, parentId: existingItem?.parentId || null, isDeleted: false }; if (itemData.description.trim() === "") { showToast("La descripción no puede estar vacía.", true); return; } if (itemData.notificationEnabled) requestNotificationPermission(); const isNewItem = !existingItem; handleItemSave(itemData, isNewItem); closeModal('add-item-modal'); if (isGoogleSignedIn && itemData.type === 'agenda') { syncWithGoogleCalendar(); } }
 function handleItemSave(itemData, isNewItem = false) { triggerHapticFeedback('medium'); const index = db.items.findIndex(i => i.localId === itemData.localId); if (index > -1) { db.items[index] = { ...db.items[index], ...itemData }; } else { db.items.unshift(itemData); } if (isNewItem) { newlyCreatedItemId = itemData.localId; } handlePostSaveNavigation(itemData); saveDataAndSchedule(); }
 function handlePostSaveNavigation(itemData) { if (!itemData) { renderApp(); return; } if (itemData.type === 'agenda' && itemData.dueDate) { const itemDate = new Date(itemData.dueDate); appState.calendar.selectedDate = dateToYYYYMMDD(itemDate); appState.calendar.currentMonth = itemDate.getMonth(); appState.calendar.currentYear = itemDate.getFullYear(); if (appState.currentView !== 'calendar') { switchView('calendar'); } else { renderApp(); } } else if (itemData.type === 'task') { appState.tasks.selectedListId = itemData.listId || 'default'; if (appState.currentView !== 'tasks') { switchView('tasks'); } else { renderApp(); } } else { renderApp(); } }
-async function handleItemComplete(localId, isComplete) {
-    if (isSyncingWithGoogle) {
-        showToast("Sincronización en curso, por favor espera.", true);
-        return;
-    }
-    const itemIndex = db.items.findIndex(i => i.localId === localId);
-    if (itemIndex === -1) return;
-
-    const item = { ...db.items[itemIndex] };
-    
-    try {
-        if (isComplete) {
-            if (isGoogleSignedIn && item.type === 'agenda' && item.googleCalendarEventId) {
-                await marcarEventoComoCompletadoEnGoogle(item);
-            }
-            showToast(`"${item.description}" completado.`);
-            
-            const updatedItem = { ...item, isComplete: true, completedAt: Date.now(), updatedAt: Date.now() };
-            if (updatedItem.type === 'task' && updatedItem.subtasks) {
-                updatedItem.subtasks.forEach(st => st.isComplete = true);
-            }
-            db.items[itemIndex] = updatedItem;
-
-            if (item.type === 'agenda' && item.recurrenceRule !== 'none') {
-                const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule);
-                if (nextDueDate) {
-                    const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now(), updatedAt: Date.now(), googleCalendarEventId: null, parentId: item.localId };
-                    delete nextEvent.googleCalendarEventId;
-                    db.items.unshift(nextEvent);
-                    showToast(`Evento reprogramado para la próxima ocurrencia.`);
-                }
-            }
-        } else {
-            if (isGoogleSignedIn && item.type === 'agenda' && item.googleCalendarEventId) {
-                await restaurarEventoEnGoogle(item);
-            }
-            if (item.recurrenceRule !== 'none') {
-                const childItemIndex = db.items.findIndex(i => i.parentId === localId);
-                if (childItemIndex > -1) {
-                    db.items.splice(childItemIndex, 1);
-                }
-            }
-            const updatedItem = { ...item, isComplete: false, completedAt: null, updatedAt: Date.now() };
-            db.items[itemIndex] = updatedItem;
-        }
-
-        renderApp();
-        saveDataAndSchedule();
-    } catch (error) {
-        showToast("Error al sincronizar con Google. La operación local se ha completado.", true);
-        console.error("Error in handleItemComplete:", error);
-        renderApp();
-        saveDataAndSchedule();
-    }
-}
-async function handleDeleteItem(localId) { if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } triggerHapticFeedback('medium'); const itemEl = document.querySelector(`.list-item-swipe-container[data-id="${localId}"]`); const index = db.items.findIndex(i => i.localId === localId); if (index === -1) return; const itemToDelete = { ...db.items[index] }; try { if (isGoogleSignedIn && itemToDelete.googleCalendarEventId) { isSyncingWithGoogle = true; await borrarEventoEnGoogle(itemToDelete); } const performDeleteAndUpdate = () => { const finalChildIndex = db.items.findIndex(i => i.parentId === localId); if (finalChildIndex > -1) db.items.splice(finalChildIndex, 1); const finalParentIndex = db.items.findIndex(i => i.localId === localId); if (finalParentIndex > -1) db.items.splice(finalParentIndex, 1); saveDataAndSchedule(); if (!itemEl) renderApp(); }; if (itemEl) { itemEl.classList.add('item-exiting'); itemEl.addEventListener('animationend', performDeleteAndUpdate, { once: true }); } else { performDeleteAndUpdate(); renderApp(); } } catch (error) { showToast("Error al eliminar evento de Google. Inténtalo de nuevo.", true); if (itemEl) itemEl.style.transform = 'translateX(0)'; } finally { if (isSyncingWithGoogle) isSyncingWithGoogle = false; } }
+async function handleItemComplete(localId, isComplete) { if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } const itemIndex = db.items.findIndex(i => i.localId === localId); if (itemIndex === -1) return; const item = { ...db.items[itemIndex] }; try { if (isComplete) { if (isGoogleSignedIn && item.googleCalendarEventId && item.type === 'agenda') { await borrarEventoEnGoogle(item); } showToast(`"${item.description}" completado.`); const updatedItem = { ...item, isComplete: true, completedAt: Date.now(), updatedAt: Date.now() }; if (updatedItem.type === 'task' && updatedItem.subtasks) { updatedItem.subtasks.forEach(st => st.isComplete = true); } db.items[itemIndex] = updatedItem; if (item.type === 'agenda' && item.recurrenceRule !== 'none') { const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule); if (nextDueDate) { const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now(), updatedAt: Date.now(), googleCalendarEventId: null, parentId: item.localId }; delete nextEvent.googleCalendarEventId; db.items.unshift(nextEvent); showToast(`Evento reprogramado para la próxima ocurrencia.`); } } } else { if (item.recurrenceRule !== 'none') { const childItemIndex = db.items.findIndex(i => i.parentId === localId); if (childItemIndex > -1) { db.items.splice(childItemIndex, 1); } } const updatedItem = { ...item, isComplete: false, completedAt: null, updatedAt: Date.now() }; db.items[itemIndex] = updatedItem; } renderApp(); saveDataAndSchedule(); if (isGoogleSignedIn && item.type === 'agenda') { syncWithGoogleCalendar(); } } catch (error) { showToast("Error al sincronizar con Google. La operación local se ha completado.", true); console.error("Error in handleItemComplete:", error); renderApp(); } }
+async function handleDeleteItem(localId) { triggerHapticFeedback('medium'); const itemEl = document.querySelector(`.list-item-swipe-container[data-id="${localId}"]`); const index = db.items.findIndex(i => i.localId === localId); if (index === -1) return; const itemToDelete = db.items[index]; const performDelete = () => { if (itemToDelete.type === 'agenda' && itemToDelete.googleCalendarEventId && isGoogleSignedIn) { console.log('Soft deleting item for Google Sync:', itemToDelete.description); itemToDelete.isDeleted = true; itemToDelete.updatedAt = Date.now(); syncWithGoogleCalendar(); } else { db.items.splice(index, 1); } saveDataAndSchedule(); if (!itemEl) { renderApp(); } }; if (itemEl) { itemEl.classList.add('item-exiting'); itemEl.addEventListener('animationend', () => { if (!itemToDelete.isDeleted) { renderApp(); } }, { once: true }); } performDelete(); }
 function saveDataAndSchedule() { scheduleAllNotifications(); saveData().catch(error => { showToast(`Error al sincronizar con Firebase.`, true); renderApp(); }); }
 function handleDeleteFromModal() { const localId = gebi('item-local-id').value; const item = db.items.find(i => i.localId === localId); if (item) { showCustomConfirm(`¿Eliminar este ítem permanentemente: "${item.description}"?`, () => { closeModal('add-item-modal'); handleDeleteItem(localId); }); } }
 function calculateNextDueDate(currentDueDate, recurrenceRule) { const nextDate = new Date(currentDueDate); switch (recurrenceRule) { case 'daily': nextDate.setDate(nextDate.getDate() + 1); break; case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break; case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break; case 'yearly': nextDate.setFullYear(nextDate.getFullYear() + 1); break; default: return null; } return nextDate; }
-async function handleQuickAddSubmit(e) { e.preventDefault(); if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } const input = gebi('quick-add-input').value.trim(); if (!input) return; let parsedData = parseNaturalLanguage(input); let itemToSave = { ...parsedData, localId: uuid(), isComplete: false, createdAt: Date.now(), updatedAt: Date.now(), listId: parsedData.type === 'task' ? appState.tasks.selectedListId : null, }; if (isGoogleSignedIn && itemToSave.type === 'agenda') { showToast("Sincronizando con Google...", false); isSyncingWithGoogle = true; try { const googleId = await crearEventoEnGoogle(itemToSave); if (googleId) itemToSave.googleCalendarEventId = googleId; } catch (err) { console.error("Falló la creación rápida en Google, guardando localmente:", err); showToast("Falló la sincronización. El ítem se ha guardado localmente.", true); } finally { isSyncingWithGoogle = false; } } handleItemSave(itemToSave, true); closeModal('quick-add-modal'); }
+async function handleQuickAddSubmit(e) { e.preventDefault(); const input = gebi('quick-add-input').value.trim(); if (!input) return; let parsedData = parseNaturalLanguage(input); let itemToSave = { ...parsedData, localId: uuid(), isComplete: false, createdAt: Date.now(), updatedAt: Date.now(), listId: parsedData.type === 'task' ? appState.tasks.selectedListId : null, isDeleted: false }; handleItemSave(itemToSave, true); closeModal('quick-add-modal'); if (isGoogleSignedIn && itemToSave.type === 'agenda') { syncWithGoogleCalendar(); } }
 function openAdvancedFromQuickAdd() { const itemToEdit = parseNaturalLanguage(gebi('quick-add-input').value); openAddItemModal(itemToEdit); }
-function parseNaturalLanguage(text) { let cleanText = text.toLowerCase(); let date = new Date(); let dateFound = false; let isAllDay = true; const timeRegex = /(?:a las|a la|)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?/i; const timeMatch = cleanText.match(timeRegex); if (timeMatch) { isAllDay = false; let hour = parseInt(timeMatch[1], 10); const minute = parseInt(timeMatch[2], 10) || 0; const period = timeMatch[3] ? timeMatch[3].toLowerCase() : ''; if ((period.includes('pm') || period.includes('tarde') || period.includes('noche')) && hour < 12) { hour += 12; } if ((period.includes('am') || period.includes('mañana')) && hour === 12) { hour = 0; } date.setHours(hour, minute, 0, 0); cleanText = cleanText.replace(timeMatch[0], '').trim(); dateFound = true; } else { date.setHours(0,0,0,0); } const numericDateRegex = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/; const numericDateMatch = cleanText.match(numericDateRegex); if (numericDateMatch) { const day = parseInt(numericDateMatch[1], 10); const month = parseInt(numericDateMatch[2], 10) - 1; let year = numericDateMatch[3] ? parseInt(numericDateMatch[3], 10) : new Date().getFullYear(); if (year < 100) { year += 2000; } date.setFullYear(year, month, day); dateFound = true; cleanText = cleanText.replace(numericDateMatch[0], '').trim(); } else { const dateRegex = /(\d{1,2})(?:\s+de\s+|\s*\/\s*)(\w+)/i; const dateMatch = dateRegex.exec(cleanText); if (dateMatch) { const day = parseInt(dateMatch[1], 10); const monthStr = dateMatch[2].toLowerCase(); const monthIndex = MESES.findIndex(m => m.toLowerCase().startsWith(monthStr)); if (monthIndex > -1) { date.setMonth(monthIndex, day); dateFound = true; cleanText = cleanText.replace(dateMatch[0], '').trim(); } } else if (/\bhoy\b/i.test(cleanText)) { dateFound = true; cleanText = cleanText.replace(/\bhoy\b/i, '').trim(); } else if (/\bmañana\b/i.test(cleanText)) { date.setDate(date.getDate() + 1); dateFound = true; cleanText = cleanText.replace(/\bmañana\b/i, '').trim(); } else { for (let i = 0; i < DIAS_SEMANA_LARGOS.length; i++) { const dayName = DIAS_SEMANA_LARGOS[i]; if (cleanText.includes(dayName)) { const currentDay = (new Date().getDay() + 6) % 7; const targetDay = i; let dayDiff = targetDay - currentDay; if (dayDiff <= 0) dayDiff += 7; date.setDate(date.getDate() + dayDiff); dateFound = true; cleanText = cleanText.replace(new RegExp(`\\b(el\\s+)?${dayName}\\b`, 'i'), '').trim(); break; } } } } const description = cleanText.charAt(0).toUpperCase() + cleanText.slice(1); return { type: dateFound ? 'agenda' : 'task', description: description.replace(/,$/, '').trim(), dueDate: dateFound ? date.toISOString() : null, isAllDay: dateFound ? isAllDay : false }; }
+function parseNaturalLanguage(text) { let cleanText = text.toLowerCase(); let date = new Date(); let dateFound = false; let isAllDay = true; const timeRegex = /(?:a las|a la|)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?/i; const timeMatch = cleanText.match(timeRegex); if (timeMatch) { isAllDay = false; let hour = parseInt(timeMatch[1], 10); const minute = parseInt(timeMatch[2], 10) || 0; const period = timeMatch[3] ? timeMatch[3].toLowerCase() : ''; if ((period.includes('pm') || period.includes('tarde') || period.includes('noche')) && hour < 12) { hour += 12; } if ((period.includes('am') || period.includes('mañana')) && hour === 12) { hour = 0; } date.setHours(hour, minute, 0, 0); cleanText = cleanText.replace(timeMatch[0], '').trim(); dateFound = true; } else { date.setHours(0,0,0,0); } const numericDateRegex = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/; const numericDateMatch = cleanText.match(numericDateRegex); if (numericDateMatch) { const day = parseInt(numericDateMatch[1], 10); const month = parseInt(numericDateMatch[2], 10) - 1; let year = numericDateMatch[3] ? parseInt(numericDateMatch[3], 10) : new Date().getFullYear(); if (year < 100) { year += 2000; } date.setFullYear(year, month, day); dateFound = true; cleanText = cleanText.replace(numericDateMatch[0], '').trim(); } else { const dateRegex = /(\d{1,2})(?:\s+de\s+|\s*\/\s*)(\w+)/i; const dateRegexExec = dateRegex.exec(cleanText); if (dateRegexExec) { const day = parseInt(dateRegexExec[1], 10); const monthStr = dateRegexExec[2].toLowerCase(); const monthIndex = MESES.findIndex(m => m.toLowerCase().startsWith(monthStr)); if (monthIndex > -1) { date.setMonth(monthIndex, day); dateFound = true; cleanText = cleanText.replace(dateRegexExec[0], '').trim(); } } else if (/\bhoy\b/i.test(cleanText)) { dateFound = true; cleanText = cleanText.replace(/\bhoy\b/i, '').trim(); } else if (/\bmañana\b/i.test(cleanText)) { date.setDate(date.getDate() + 1); dateFound = true; cleanText = cleanText.replace(/\bmañana\b/i, '').trim(); } else { for (let i = 0; i < DIAS_SEMANA_LARGOS.length; i++) { const dayName = DIAS_SEMANA_LARGOS[i]; if (cleanText.includes(dayName)) { const currentDay = (new Date().getDay() + 6) % 7; const targetDay = i; let dayDiff = targetDay - currentDay; if (dayDiff <= 0) dayDiff += 7; date.setDate(date.getDate() + dayDiff); dateFound = true; cleanText = cleanText.replace(new RegExp(`\\b(el\\s+)?${dayName}\\b`, 'i'), '').trim(); break; } } } } const description = cleanText.charAt(0).toUpperCase() + cleanText.slice(1); return { type: dateFound ? 'agenda' : 'task', description: description.replace(/,$/, '').trim(), dueDate: dateFound ? date.toISOString() : null, isAllDay: dateFound ? isAllDay : false }; }
 function handleTaskListFilterChange(e) { appState.tasks.selectedListId = e.target.value; renderTaskListView(); }
 function openManageListsModal() { const editor = gebi('task-lists-editor'); editor.innerHTML = ''; db.taskLists.forEach(list => { const el = document.createElement('div'); el.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;'; const input = document.createElement('input'); input.type = 'text'; input.value = list.name; input.className = 'form-input'; input.onchange = () => handleRenameTaskList(list.id, input.value); if(list.id === 'default') input.disabled = true; el.appendChild(input); if (list.id !== 'default') { const deleteBtn = document.createElement('button'); deleteBtn.className = 'icon-button'; deleteBtn.innerHTML = '<span class="material-icons">delete</span>'; deleteBtn.onclick = () => handleDeleteTaskList(list.id); el.appendChild(deleteBtn); } editor.appendChild(el); }); openModal('manage-lists-modal'); }
 function handleAddTaskList(e) { e.preventDefault(); const input = gebi('new-list-name'); const name = input.value.trim(); if (name) { const newList = { id: uuid(), name }; db.taskLists.push(newList); saveData().then(() => { input.value = ''; openManageListsModal(); renderTaskListView(); }).catch(err => showToast("Error al añadir lista", true)); } }
@@ -768,284 +714,136 @@ function scheduleNotification(item) { if (activeTimers[item.localId]) { clearTim
 function scheduleAllNotifications() { if (!db.items) return; Object.values(activeTimers).forEach(clearTimeout); activeTimers = {}; db.items.forEach(scheduleNotification); }
 
 
-// --- SECCIÓN DE GOOGLE CALENDAR (VERSIÓN FUSIONADA Y MEJORADA) ---
+// --- SECCIÓN DE GOOGLE CALENDAR (VERSIÓN ACTUALIZADA Y CORREGIDA) ---
 
 let gapiIniciado = false;
 let gisIniciado = false;
 let tokenClient;
 
-function loadGisScript() {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeGisClient;
-    document.body.appendChild(script);
-}
-
-function loadGapiScript() {
-    const script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/api.js';
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeGapiClient;
-    document.body.appendChild(script);
-}
-
-function initializeGapiClient() {
-    gapi.load('client', () => {
-        gapi.client.init({
-            apiKey: GOOGLE_API_KEY,
-            discoveryDocs: GOOGLE_DISCOVERY_DOCS,
-        }).then(() => {
-            gapiIniciado = true;
-            checkReadyStateAndEnableButton();
-        }).catch(error => {
-            console.error("Error initializing GAPI client:", error);
-            showToast("No se pudo iniciar la API de Google Calendar.", true);
-        });
-    });
-}
-
-function initializeGisClient() {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: GOOGLE_SCOPES,
-        callback: async (tokenResponse) => {
-            if (tokenResponse && tokenResponse.access_token) {
-                gapi.client.setToken(tokenResponse);
-                isGoogleSignedIn = true;
-                updateGoogleSigninStatus(true);
-                await syncWithGoogleCalendar();
-            } else {
-                console.error("Respuesta de token inválida:", tokenResponse);
-                showToast("Fallo al obtener el permiso de Google.", true);
-            }
-        },
-        error_callback: (error) => {
-            console.error("Error en el flujo de autenticación:", error);
-            showToast("Ocurrió un error al conectar con Google.", true);
-        }
-    });
-    gisIniciado = true;
-    checkReadyStateAndEnableButton();
-}
-
-function checkReadyStateAndEnableButton() {
-    if (gapiIniciado && gisIniciado) {
-        const syncButton = gebi('google-sync-btn');
-        if (syncButton) {
-            syncButton.disabled = false;
-            syncButton.classList.remove('loading');
-            console.log("Bibliotecas de Google listas para usarse.");
-        }
-    }
-}
-
-function handleGoogleAuthClick() {
-    if (!gisIniciado || !gapiIniciado) {
-        showToast("Las bibliotecas de Google aún no están listas.", true);
-        return;
-    }
-    
-    if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-    } else {
-        syncWithGoogleCalendar();
-    }
-}
-
-function updateGoogleSigninStatus(isSignedIn) { 
-    isGoogleSignedIn = isSignedIn;
-    const syncButton = gebi('google-sync-btn');
-    if (isSignedIn) {
-        syncButton.classList.add('connected');
-        syncButton.title = 'Conectado. Haz clic para sincronizar manualmente.';
-        syncButton.querySelector('.material-icons').textContent = 'cloud_done';
-    } else {
-        syncButton.classList.remove('connected');
-        syncButton.title = 'Sincronizar con Google';
-        syncButton.querySelector('.material-icons').textContent = 'sync';
-        gapi.client.setToken(null);
-    }
-}
+function loadGisScript() { const script = document.createElement('script'); script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.defer = true; script.onload = initializeGisClient; document.body.appendChild(script); }
+function loadGapiScript() { const script = document.createElement('script'); script.src = 'https://apis.google.com/js/api.js'; script.async = true; script.defer = true; script.onload = initializeGapiClient; document.body.appendChild(script); }
+function initializeGapiClient() { gapi.load('client', () => { gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: GOOGLE_DISCOVERY_DOCS, }).then(() => { gapiIniciado = true; checkReadyStateAndEnableButton(); }).catch(error => { console.error("Error initializing GAPI client:", error); showToast("No se pudo iniciar la API de Google Calendar.", true); }); }); }
+function initializeGisClient() { tokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: GOOGLE_SCOPES, callback: async (tokenResponse) => { if (tokenResponse && tokenResponse.access_token) { gapi.client.setToken(tokenResponse); isGoogleSignedIn = true; updateGoogleSigninStatus(true); await syncWithGoogleCalendar(); } else { console.error("Respuesta de token inválida:", tokenResponse); showToast("Fallo al obtener el permiso de Google.", true); } }, error_callback: (error) => { console.error("Error en el flujo de autenticación:", error); showToast("Ocurrió un error al conectar con Google.", true); } }); gisIniciado = true; checkReadyStateAndEnableButton(); }
+function checkReadyStateAndEnableButton() { if (gapiIniciado && gisIniciado) { const syncButton = gebi('google-sync-btn'); if (syncButton) { syncButton.disabled = false; syncButton.classList.remove('loading'); console.log("Bibliotecas de Google listas para usarse."); } } }
+function handleGoogleAuthClick() { if (!gisIniciado || !gapiIniciado) { showToast("Las bibliotecas de Google aún no están listas.", true); return; } if (gapi.client.getToken() === null) { tokenClient.requestAccessToken({ prompt: 'consent' }); } else { syncWithGoogleCalendar(); } }
+function updateGoogleSigninStatus(isSignedIn) { isGoogleSignedIn = isSignedIn; const syncButton = gebi('google-sync-btn'); if (isSignedIn) { syncButton.classList.add('connected'); syncButton.title = 'Conectado. Haz clic para sincronizar manualmente.'; syncButton.querySelector('.material-icons').textContent = 'cloud_done'; } else { syncButton.classList.remove('connected'); syncButton.title = 'Sincronizar con Google'; syncButton.querySelector('.material-icons').textContent = 'sync'; gapi.client.setToken(null); } }
 
 function buildGoogleEventResource(item) { const resource = { 'summary': item.description, 'reminders': { 'useDefault': false, 'overrides': (item.notificationEnabled && !item.isAllDay) ? [{ 'method': 'popup', 'minutes': item.reminderMinutes }] : [] }, 'colorId': item.isImportant ? '11' : null }; if (item.isAllDay) { const startDate = new Date(item.dueDate); startDate.setHours(0, 0, 0, 0); const endDate = new Date(startDate); endDate.setDate(startDate.getDate() + 1); resource.start = { 'date': dateToYYYYMMDD(startDate) }; resource.end = { 'date': dateToYYYYMMDD(endDate) }; } else { const startDate = new Date(item.dueDate); const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); resource.start = { 'dateTime': startDate.toISOString(), 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone }; resource.end = { 'dateTime': endDate.toISOString(), 'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone }; } if (item.recurrenceRule && item.recurrenceRule !== 'none') { const recurrenceMap = { 'daily': 'DAILY', 'weekly': 'WEEKLY', 'monthly': 'MONTHLY', 'yearly': 'YEARLY' }; resource.recurrence = [`RRULE:FREQ=${recurrenceMap[item.recurrenceRule]}`]; } return resource; }
 async function crearEventoEnGoogle(item) { if (!isGoogleSignedIn || item.type !== 'agenda') return null; const eventResource = buildGoogleEventResource(item); try { const response = await gapi.client.calendar.events.insert({ 'calendarId': 'primary', 'resource': eventResource }); return response.result.id; } catch (error) { console.error('Error creando evento en Google:', error); throw error; } }
 async function actualizarEventoEnGoogle(item) { if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return; const eventResource = buildGoogleEventResource(item); try { await gapi.client.calendar.events.update({ 'calendarId': 'primary', 'eventId': item.googleCalendarEventId, 'resource': eventResource }); } catch (error) { console.error('Error actualizando evento en Google:', error); throw error; } }
 async function borrarEventoEnGoogle(item) { if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return; try { await gapi.client.calendar.events.delete({ 'calendarId': 'primary', 'eventId': item.googleCalendarEventId }); } catch (error) { console.error('Error eliminando evento en Google:', error); if (error.result && (error.result.error.code === 404 || error.result.error.code === 410)) { console.log("El evento ya no existía en Google Calendar."); } else { throw error; } } }
-
-async function marcarEventoComoCompletadoEnGoogle(item) {
-    if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
-    
-    // Color gris para "completado" en Google Calendar es el ID 8
-    const resource = {
-        summary: `[✓] ${item.description.replace('[✓] ', '')}`,
-        colorId: '8' 
-    };
-
-    try {
-        await gapi.client.calendar.events.patch({
-            calendarId: 'primary',
-            eventId: item.googleCalendarEventId,
-            resource: resource
-        });
-        console.log(`Evento "${item.description}" marcado como completado en Google.`);
-    } catch (error) {
-        console.error('Error marcando evento como completado en Google:', error);
-        throw error;
-    }
-}
-
-async function restaurarEventoEnGoogle(item) {
-    if (!isGoogleSignedIn || !item.googleCalendarEventId || item.type !== 'agenda') return;
-
-    const resource = {
-        summary: item.description.replace('[✓] ', ''),
-        // Restaura el color original o lo deja por defecto si no tenía uno.
-        colorId: item.isImportant ? '11' : null 
-    };
-
-    try {
-        await gapi.client.calendar.events.patch({
-            calendarId: 'primary',
-            eventId: item.googleCalendarEventId,
-            resource: resource
-        });
-        console.log(`Evento "${item.description}" restaurado en Google.`);
-    } catch (error) {
-        console.error('Error restaurando evento en Google:', error);
-        throw error;
-    }
-}
-
-function convertGoogleEventToAidanaiItem(googleEvent) {
-    const dueDateISO = googleEvent.start?.dateTime || googleEvent.start?.date;
-    if (!dueDateISO) return null;
-
-    const isAllDay = !!googleEvent.start.date;
-    const dueDate = new Date(dueDateISO);
-    if (isAllDay) {
-        dueDate.setMinutes(dueDate.getMinutes() + dueDate.getTimezoneOffset());
-    }
-
-    const isCompletedByUs = googleEvent.summary?.startsWith('[✓]') || googleEvent.colorId === '8';
-
-    return {
-        localId: uuid(),
-        googleCalendarEventId: googleEvent.id,
-        recurringEventId: googleEvent.recurringEventId || null,
-        type: CONSTANTS.ITEM_TYPES.AGENDA,
-        description: googleEvent.summary || 'Sin Título',
-        dueDate: dueDate.toISOString(),
-        isAllDay: isAllDay,
-        isComplete: isCompletedByUs,
-        createdAt: new Date(googleEvent.created).getTime(),
-        updatedAt: new Date(googleEvent.updated).getTime(),
-        isImportant: googleEvent.colorId === '11',
-        notificationEnabled: !isAllDay && googleEvent.reminders?.useDefault === false && googleEvent.reminders?.overrides?.length > 0,
-        reminderMinutes: googleEvent.reminders?.overrides?.[0]?.minutes || 0,
-        recurrenceRule: 'none',
-        notificationShown: false,
-    };
-}
+function convertGoogleEventToAidanaiItem(googleEvent, existingItem = {}) { const dueDateISO = googleEvent.start?.dateTime || googleEvent.start?.date; if (!dueDateISO) return null; const isAllDay = !!googleEvent.start.date; const dueDate = new Date(dueDateISO); if (isAllDay) { dueDate.setMinutes(dueDate.getMinutes() + dueDate.getTimezoneOffset()); } return { ...existingItem, localId: existingItem.localId || uuid(), googleCalendarEventId: googleEvent.id, type: CONSTANTS.ITEM_TYPES.AGENDA, description: googleEvent.summary || 'Sin Título', dueDate: dueDate.toISOString(), isAllDay: isAllDay, isComplete: false, createdAt: existingItem.createdAt || new Date(googleEvent.created).getTime(), updatedAt: new Date(googleEvent.updated).getTime(), isImportant: googleEvent.colorId === '11', notificationEnabled: !isAllDay && googleEvent.reminders?.useDefault === false && googleEvent.reminders?.overrides?.length > 0, reminderMinutes: googleEvent.reminders?.overrides?.[0]?.minutes || 0, recurrenceRule: 'none', notificationShown: false, isDeleted: false, }; }
 
 async function syncWithGoogleCalendar(forceFullSync = false) {
-    if (isSyncingWithGoogle) {
-        showToast("Sincronización ya en curso.");
-        return;
-    }
+    if (isSyncingWithGoogle) { showToast("Sincronización ya en curso."); return; }
     if (!isGoogleSignedIn || !currentUser) return;
 
     const syncButton = gebi('google-sync-btn');
     isSyncingWithGoogle = true;
     syncButton.classList.add('loading');
     showToast("Sincronizando con Google Calendar...");
+    let changesMade = false;
 
     try {
-        const syncToken = forceFullSync ? null : db.config.googleSyncToken;
-        let request;
+        // =================================================================================
+        // PASO 1: PUSH DE CAMBIOS LOCALES PENDIENTES A GOOGLE
+        // =================================================================================
 
-        if (syncToken) {
-            console.log("Realizando sincronización incremental...");
-            request = gapi.client.calendar.events.list({ calendarId: 'primary', syncToken: syncToken });
-        } else {
-            console.log("Realizando sincronización completa...");
-            const timeMin = new Date();
-            timeMin.setFullYear(timeMin.getFullYear() - 2); // Ventana de 2 años hacia atrás
-            const timeMax = new Date();
-            timeMax.setFullYear(timeMax.getFullYear() + 2); // Ventana de 2 años hacia adelante
-
-            request = gapi.client.calendar.events.list({
-                calendarId: 'primary',
-                timeMin: timeMin.toISOString(),
-                timeMax: timeMax.toISOString(),
-                showDeleted: true,
-                singleEvents: true, // Crucial: expande eventos recurrentes en instancias individuales
-                maxResults: 2500
-            });
-        }
-
-        const response = await request;
-        const googleEvents = response.result.items;
-        let changesMade = false;
-        
-        // Primero, manejamos los eventos eliminados en Google
-        const googleDeletedEventIds = new Set(googleEvents.filter(e => e.status === 'cancelled').map(e => e.id));
-        const initialItemCount = db.items.length;
-        db.items = db.items.filter(item => {
-            if (item.googleCalendarEventId && googleDeletedEventIds.has(item.googleCalendarEventId)) {
-                console.log(`Evento eliminado desde Google: ${item.description}`);
-                return false; // Elimina el item
+        // 1.1: Procesar eliminaciones pendientes (Soft Deletes)
+        const itemsToDeleteLocally = db.items.filter(i => i.isDeleted && i.googleCalendarEventId);
+        if (itemsToDeleteLocally.length > 0) {
+            console.log(`Enviando ${itemsToDeleteLocally.length} eliminaciones a Google...`);
+            for (const item of itemsToDeleteLocally) {
+                await borrarEventoEnGoogle(item);
             }
-            return true; // Conserva el item
-        });
-        if(db.items.length < initialItemCount) changesMade = true;
-
-        // Luego, actualizamos o añadimos eventos desde Google
-        for (const googleEvent of googleEvents) {
-            if (googleEvent.status === 'cancelled') continue;
-
-            const existingItem = db.items.find(i => i.googleCalendarEventId === googleEvent.id);
-            const newItemData = convertGoogleEventToAidanaiItem(googleEvent);
-            if (!newItemData) continue;
-
-            if (existingItem) {
-                // Actualiza el item existente con los datos de Google, pero conservando el localId
-                const index = db.items.findIndex(i => i.localId === existingItem.localId);
-                db.items[index] = { ...existingItem, ...newItemData };
-            } else {
-                db.items.unshift(newItemData);
-            }
+            // Eliminar permanentemente de la DB local después de sincronizar la eliminación
+            db.items = db.items.filter(i => !i.isDeleted);
             changesMade = true;
         }
-
-        // Finalmente, subimos los eventos que solo existen localmente
-        const localOnlyEvents = db.items.filter(item => item.type === 'agenda' && !item.googleCalendarEventId);
-        if (localOnlyEvents.length > 0) {
-            console.log(`Subiendo ${localOnlyEvents.length} eventos locales a Google...`);
-            for (const localEvent of localOnlyEvents) {
-                try {
-                    const newGoogleId = await crearEventoEnGoogle(localEvent);
-                    if (newGoogleId) {
-                        const eventIndex = db.items.findIndex(i => i.localId === localEvent.localId);
-                        if (eventIndex > -1) {
-                            db.items[eventIndex].googleCalendarEventId = newGoogleId;
-                            db.items[eventIndex].updatedAt = Date.now();
-                            changesMade = true;
-                        }
-                    }
-                } catch(err) {
-                     console.error(`No se pudo subir el evento local "${localEvent.description}" a Google.`, err);
+        
+        // 1.2: Procesar creaciones pendientes (eventos locales sin ID de Google)
+        const itemsToCreateInGoogle = db.items.filter(i => i.type === 'agenda' && !i.googleCalendarEventId && !i.isDeleted && !i.isComplete);
+        if (itemsToCreateInGoogle.length > 0) {
+            console.log(`Subiendo ${itemsToCreateInGoogle.length} nuevos eventos locales a Google...`);
+            for (const item of itemsToCreateInGoogle) {
+                const newGoogleId = await crearEventoEnGoogle(item);
+                if (newGoogleId) {
+                    item.googleCalendarEventId = newGoogleId;
+                    item.updatedAt = Date.now(); // Actualizar timestamp para evitar conflictos
+                    changesMade = true;
                 }
             }
         }
+
+        // =================================================================================
+        // PASO 2: PULL DE CAMBIOS DESDE GOOGLE Y RECONCILIACIÓN
+        // =================================================================================
+
+        const syncToken = forceFullSync ? null : db.config.googleSyncToken;
+        let request;
+        if (syncToken) {
+            console.log("Realizando sincronización incremental desde Google...");
+            request = gapi.client.calendar.events.list({ calendarId: 'primary', syncToken: syncToken });
+        } else {
+            console.log("Realizando sincronización completa desde Google...");
+            const timeMin = new Date();
+            timeMin.setMonth(timeMin.getMonth() - 1);
+            request = gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: timeMin.toISOString(), showDeleted: true, singleEvents: true, maxResults: 2500 });
+        }
         
+        const response = await request;
+        const googleEvents = response.result.items;
+        const localItemsByGoogleId = new Map(db.items.map(i => [i.googleCalendarEventId, i]));
+
+        for (const googleEvent of googleEvents) {
+            const localItem = localItemsByGoogleId.get(googleEvent.id);
+
+            // Caso 1: Evento eliminado en Google
+            if (googleEvent.status === 'cancelled') {
+                if (localItem) {
+                    const index = db.items.findIndex(i => i.localId === localItem.localId);
+                    db.items.splice(index, 1);
+                    changesMade = true;
+                    console.log(`Evento eliminado desde Google: ${localItem.description}`);
+                }
+                continue;
+            }
+
+            const googleUpdatedTime = new Date(googleEvent.updated).getTime();
+
+            // Caso 2: Evento nuevo desde Google
+            if (!localItem) {
+                const newItem = convertGoogleEventToAidanaiItem(googleEvent);
+                if (newItem) {
+                    db.items.unshift(newItem);
+                    changesMade = true;
+                    console.log(`Evento añadido desde Google: ${newItem.description}`);
+                }
+                continue;
+            }
+
+            // Caso 3: Evento existente, reconciliar por fecha de actualización
+            if (googleUpdatedTime > localItem.updatedAt) {
+                // Google es más reciente, actualizar local
+                const updatedItem = convertGoogleEventToAidanaiItem(googleEvent, localItem);
+                const index = db.items.findIndex(i => i.localId === localItem.localId);
+                db.items[index] = updatedItem;
+                changesMade = true;
+                console.log(`Evento actualizado desde Google (remoto es más nuevo): ${updatedItem.description}`);
+
+            } else if (localItem.updatedAt > googleUpdatedTime) {
+                // Local es más reciente, actualizar Google
+                await actualizarEventoEnGoogle(localItem);
+                console.log(`Evento actualizado hacia Google (local es más nuevo): ${localItem.description}`);
+                // No se marca 'changesMade' porque el cambio ya era local
+            }
+        }
+
         const newSyncToken = response.result.nextSyncToken;
         if (newSyncToken) {
             db.config.googleSyncToken = newSyncToken;
         }
-
+        
         if (changesMade) {
             showToast("Sincronización completada. Datos actualizados.", false);
             await saveData();
@@ -1053,14 +851,13 @@ async function syncWithGoogleCalendar(forceFullSync = false) {
         } else {
             showToast("Tus datos ya estaban sincronizados.", false);
         }
-
     } catch (error) {
         if (error.result && error.result.error.code === 410) {
             console.warn("Sync token inválido. Realizando sincronización completa.");
             showToast("La sesión de Google requiere una resincronización completa.", true);
             db.config.googleSyncToken = null;
             await saveData();
-            syncWithGoogleCalendar(true); 
+            syncWithGoogleCalendar(true); // Reintentar con sincronización completa
         } else {
             showToast("Ocurrió un error durante la sincronización.", true);
             console.error("Error en syncWithGoogleCalendar:", error);
@@ -1071,7 +868,8 @@ async function syncWithGoogleCalendar(forceFullSync = false) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', initApp);
+document.addEventListener('DOMContentLoaded', initApp);     
+
 
     </script>
 </body>
