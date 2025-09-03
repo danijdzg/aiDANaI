@@ -30,7 +30,6 @@
     <!-- 1. Cargar la librería principal Chart.js PRIMERO. -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- 2. Cargar las dependencias (date-fns es para el adaptador de fecha). -->
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/cdn.min.js"></script>
     <!-- 3. Cargar el adaptador, que depende de Chart.js y date-fns. -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <!-- 4. Cargar cualquier plugin, que depende de Chart.js. -->
@@ -1228,6 +1227,7 @@ body[data-theme="quartz"] .starry-background { display: none; }
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
     
     <script type="module">
+	import { addDays, addWeeks, addMonths, addYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm'
         // =================================================================================
         // MIGRATION SCRIPT HELPER
         // =================================================================================
@@ -1299,6 +1299,7 @@ body[data-theme="quartz"] .starry-background { display: none; }
         });
         // --- ESTADO GLOBAL Y DE PAGINACIÓN ---
 		let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), deselectedAccountTypesFilter = new Set();
+		let intelligentIndex = new Map();
 		// Cerca de tus otras variables globales, como currentUser, db, etc.
 		let syncState = 'synced'; // Posibles estados: 'synced', 'syncing', 'error'	
         let isOffBalanceMode = false;
@@ -1716,9 +1717,7 @@ async function migrateBalancesToAccounts() {
                 showToast("Error al cargar la configuración.", "danger");
             });
             unsubscribeListeners.push(unsubConfig);
-
-            await processRecurringMovements(); // Procesar recurrentes al cargar
-            
+			                        
             buildDescriptionIndex();
             startMainApp();
         };
@@ -1742,10 +1741,11 @@ async function migrateBalancesToAccounts() {
         // 2.5. LÓGICA DE MOVIMIENTOS RECURRENTES
         // =================================================================================
         const calculateNextDueDate = (currentDueDate, frequency) => {
-            const { addDays, addWeeks, addMonths, addYears } = dateFns;
             const d = new Date(currentDueDate);
             d.setHours(12, 0, 0, 0); 
         
+            // Ya no necesitamos la línea "const { ... } = window.dateFns;"
+            // Las funciones 'addDays', etc., están directamente disponibles gracias al 'import'.
             switch (frequency) {
                 case 'daily': return addDays(d, 1);
                 case 'weekly': return addWeeks(d, 1);
@@ -1754,72 +1754,7 @@ async function migrateBalancesToAccounts() {
                 default: return d;
             }
         };
-
-        const processRecurringMovements = async () => {
-             if (!currentUser || !db.recurrentes || db.recurrentes.length === 0) {
-                return false;
-            }
         
-            const now = new Date();
-            let movementsCreated = 0;
-            const batch = fbDb.batch();
-            let hasChangesInBatch = false;
-
-            for (const r of db.recurrentes) {
-                let nextDate = new Date(r.nextDate);
-                let currentRecurrenceNextDate = r.nextDate; // Keep track of the updated nextDate for this recurrence
-        
-                while (nextDate <= now) {
-                    const endDate = r.endDate ? new Date(r.endDate) : null;
-                    if (endDate && nextDate > endDate) {
-                        const recRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(r.id);
-                        batch.delete(recRef);
-                        hasChangesInBatch = true;
-                        break; 
-                    }
-        
-                    const newMovement = {
-                        id: generateId(),
-                        fecha: nextDate.toISOString(),
-                        cantidad: r.cantidad,
-                        descripcion: r.descripcion,
-                        tipo: r.tipo,
-                        cuentaId: r.cuentaId,
-                        conceptoId: r.conceptoId,
-                        cuentaOrigenId: r.cuentaOrigenId,
-                        cuentaDestinoId: r.cuentaDestinoId,
-                        sourceRecurrenceId: r.id
-                    };
-                    const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovement.id);
-                    batch.set(movRef, newMovement);
-                    movementsCreated++;
-                    hasChangesInBatch = true;
-        
-                    const newNextDate = calculateNextDueDate(nextDate, r.frequency);
-                    currentRecurrenceNextDate = newNextDate.toISOString().slice(0, 10);
-                    nextDate = newNextDate;
-                }
-
-                if (currentRecurrenceNextDate !== r.nextDate) {
-                    const recRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(r.id);
-                    batch.update(recRef, { nextDate: currentRecurrenceNextDate });
-                    hasChangesInBatch = true;
-                }
-            }
-        
-            if (hasChangesInBatch) {
-                await batch.commit();
-            }
-
-            if (movementsCreated > 0) {
-                showToast(`${movementsCreated} movimiento(s) recurrente(s) ha(n) sido añadido(s).`, 'info', 4000);
-                return true;
-            }
-
-            return false;
-        };
-
-
         // =================================================================================
 		// 3. UI UTILITIES & HELPERS
 		// =================================================================================
@@ -2029,7 +1964,7 @@ window.addEventListener('offline', () => {
     // ===== LÍNEA A AÑADIR =====
     updateSyncStatusIcon(); // Inicializa el icono de sincronización
     // ============================
-
+	buildIntelligentIndex();
     navigateTo(PAGE_IDS.INICIO, true);
 
     if (localStorage.getItem('tourCompleted') !== 'true') {
@@ -2140,7 +2075,35 @@ window.addEventListener('offline', () => {
         // =================================================================================
         // 6. CORE LOGIC & CALCULATIONS (REFACTORIZADO PARA CONSULTAS EFICIENTES)
         // =================================================================================
-        const getVisibleAccounts = () => (db.cuentas || []).filter(c => !!c.offBalance === isOffBalanceMode);
+		 // ... Pega la nueva función aquí ...
+
+        /**
+         * Construye un índice en memoria para sugerencias inteligentes.
+         * Recorre los movimientos de más reciente a más antiguo y guarda la primera
+         * asociación que encuentra para cada descripción.
+         */
+        const buildIntelligentIndex = (movementsSource = db.movimientos) => {
+            intelligentIndex.clear(); 
+            if (!movementsSource || movementsSource.length === 0) return;
+
+            const sortedMovements = [...movementsSource].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+            for (const mov of sortedMovements) {
+                if (mov.tipo === 'movimiento' && mov.descripcion) {
+                    const key = mov.descripcion.trim().toLowerCase();
+                    if (!intelligentIndex.has(key)) {
+                        intelligentIndex.set(key, {
+                            conceptoId: mov.conceptoId,
+                            cuentaId: mov.cuentaId
+                        });
+                    }
+                }
+            }
+            console.log(`Índice inteligente actualizado con ${intelligentIndex.size} entradas.`);
+        };
+		
+		
+		const getVisibleAccounts = () => (db.cuentas || []).filter(c => !!c.offBalance === isOffBalanceMode);
         const getLiquidAccounts = () => getVisibleAccounts().filter((c) => !['PROPIEDAD', 'PRÉSTAMO'].includes((c.tipo || '').trim().toUpperCase()));
         
         async function fetchAllMovementsForBalances() {
@@ -3070,9 +3033,13 @@ window.addEventListener('offline', () => {
             <button class="filter-pill" data-action="set-inicio-view" data-view="resumen">Resumen</button>
         </div>
 
+        <!-- El contenedor de recurrentes ahora está aquí arriba -->
+        <div id="pending-recurrents-container"></div>
+
+        <!-- El contenedor de movimientos recientes viene después -->
         <div id="inicio-view-recientes"></div>
 
-        <div id="inicio-view-resumen" class="hidden">
+		<div id="inicio-view-resumen" class="hidden">
             <div class="card card--no-bg" id="dashboard-filters-widget">
                 <div class="accordion-wrapper">
                     <details class="accordion">
@@ -3119,7 +3086,7 @@ window.addEventListener('offline', () => {
     
     // 3. Disparamos el evento 'change' para asegurar que el filtro de fecha personalizado se muestre u oculte correctamente.
     select('filter-periodo')?.dispatchEvent(new Event('change')); 
-    
+    renderPendingRecurrents();
     // 4. Finalmente, renderizamos el contenido de las subvistas.
     renderInicioResumenView();
     renderInicioRecientesView();
@@ -3199,40 +3166,114 @@ window.addEventListener('offline', () => {
             html += `<div style="text-align: center; margin-top: var(--sp-4);"><button class="btn btn--secondary" data-action="navigate" data-page="${PAGE_IDS.MOVIMIENTOS_FULL}">Ver todos los movimientos</button></div>`;
             recientesContainer.innerHTML = html;
         };
-        
+		 const renderPendingRecurrents = () => {
+            const container = select('pending-recurrents-container');
+            if (!container || !db.recurrentes) return;
+
+            const now = new Date();
+            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            
+            // =================================================================================
+            // INICIO DEL CAMBIO: La lógica del filtro es ahora la inversa.
+            // Buscamos todas las plantillas cuya próxima fecha de ejecución es HOY o ANTERIOR.
+            // =================================================================================
+            const pending = db.recurrentes
+            .filter(r => {
+                const nextDate = parseDateStringAsUTC(r.nextDate);
+                const normalizedNextDate = new Date(Date.UTC(nextDate.getUTCFullYear(), nextDate.getUTCMonth(), nextDate.getUTCDate()));
+
+                // La nueva condición: muestra todo lo que esté vencido.
+                return normalizedNextDate <= today;
+            })
+            .sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+            // =================================================================================
+            // FIN DEL CAMBIO
+            // =================================================================================
+
+            if (pending.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const itemsHTML = pending.map(r => {
+                const nextDate = new Date(r.nextDate + 'T12:00:00Z');
+                const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }); // Año completo para mayor claridad
+                const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+                
+                // Pequeño cambio en el texto para reflejar que está "pendiente"
+                const dateText = `Pendiente desde: ${formattedDate}`;
+
+                return `
+                <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
+                    <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
+                    <div class="transaction-card__content">
+                        <div class="transaction-card__details">
+                            <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                            <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">${dateText}</div>
+                        </div>
+                        <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                            <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+                            <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">
+                                <span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="card card--no-bg accordion-wrapper" style="margin-top: var(--sp-4);">
+                    <details class="accordion" open>
+                        <summary>
+                            <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);">
+                                <span class="material-icons">event_repeat</span>
+                                Operaciones Recurrentes Pendientes
+                            </h3>
+                            <span class="material-icons accordion__icon">expand_more</span>
+                        </summary>
+                        <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);">${itemsHTML}</div>
+                    </details>
+                </div>
+            `;
+        };
 // =================================================================================
 // FUNCIÓN MODIFICADA
 // Ahora, esta función solo se encarga de OBTENER los datos y guardarlos en el caché.
 // =================================================================================
 const renderInicioRecientesView = async () => {
-    const recientesContainer = select('inicio-view-recientes');
-    if (!recientesContainer) return;
-    
-    if (unsubscribeRecientesListener) {
-        unsubscribeRecientesListener();
-    }
+            const recientesContainer = select('inicio-view-recientes');
+            if (!recientesContainer) return;
+            
+            if (unsubscribeRecientesListener) {
+                unsubscribeRecientesListener();
+            }
 
-    recientesContainer.innerHTML = `<div class="skeleton" style="height: 200px;"></div>`;
+            recientesContainer.innerHTML = `<div class="skeleton" style="height: 200px;"></div>`;
 
-    const RECIENTES_COUNT = 30;
-    const query = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-        .orderBy('fecha', 'desc')
-        .limit(RECIENTES_COUNT);
+            const RECIENTES_COUNT = 30;
+            const query = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
+                .orderBy('fecha', 'desc')
+                .limit(RECIENTES_COUNT);
 
-    unsubscribeRecientesListener = query.onSnapshot(async (snapshot) => {
-        const allRecentMovs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            unsubscribeRecientesListener = query.onSnapshot(async (snapshot) => {
+                const allRecentMovs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Filtramos y actualizamos la caché global
-        recentMovementsCache = filterMovementsByLedger(allRecentMovs);
-        
-        // Llamamos a la nueva función que renderiza desde la caché
-        _renderRecientesFromCache();
+                recentMovementsCache = filterMovementsByLedger(allRecentMovs);
+                
+                // === INICIO DE LA CORRECCIÓN ===
+                // Aquí, después de actualizar la caché, reconstruimos el índice de inteligencia
+                // usando la caché como fuente de datos.
+                buildIntelligentIndex(recentMovementsCache);
+                // === FIN DE LA CORRECCIÓN ===
+                
+                _renderRecientesFromCache();
 
-    }, (error) => {
-        console.error("Error en el listener de movimientos recientes:", error);
-        recientesContainer.innerHTML = `<p class="text-danger">Error al cargar movimientos.</p>`;
-    });
-};
+            }, (error) => {
+                console.error("Error en el listener de movimientos recientes:", error);
+                recientesContainer.innerHTML = `<p class="text-danger">Error al cargar movimientos.</p>`;
+            });
+        };
                 const renderPatrimonioPage = async () => {
             const container = select(PAGE_IDS.PATRIMONIO);
             if(!container) return;
@@ -3305,7 +3346,6 @@ const renderInicioRecientesView = async () => {
             renderCuentas('patrimonio-cuentas-container', totalFiltrado);
             renderInversionesPage('patrimonio-inversiones-container');
             
-            // Lógica del gráfico, ahora dentro de la función principal de la página
             const chartContainer = select(`liquid-assets-chart-container`);
             const chartCtx = (select(`liquid-assets-chart`))?.getContext('2d');
             if (chartCtx && chartContainer) {
@@ -3326,7 +3366,20 @@ const renderInicioRecientesView = async () => {
                         },
                         options: {
                             responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } }, datalabels: { formatter: (v,c)=>{ let s=c.chart.data.datasets.data.reduce((a,b)=>a+b,0); return s > 0 ? (v*100/s).toFixed(0)+"%" : "0%"; }, color: '#fff', font: { weight: 'bold', size: 10 } } }
+                            plugins: { 
+                                legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } }, 
+                                // =================================================================================
+                                // INICIO DE LA CORRECCIÓN
+                                // =================================================================================
+                                datalabels: { 
+                                    formatter: (v,c)=>{ let s=c.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return s > 0 ? (v*100/s).toFixed(0)+"%" : "0%"; }, 
+                                    color: '#fff', 
+                                    font: { weight: 'bold', size: 10 } 
+                                }
+                                // =================================================================================
+                                // FIN DE LA CORRECCIÓN
+                                // =================================================================================
+                            }
                         }
                     });
                 } else {
@@ -3498,6 +3551,41 @@ const renderInicioRecientesView = async () => {
         // =================================================================================
         // 8. MODAL & FORM HANDLING
         // =================================================================================
+		let suggestionDebounceTimer = null;
+        const handleDescriptionSuggestion = () => {
+            clearTimeout(suggestionDebounceTimer);
+            suggestionDebounceTimer = setTimeout(() => {
+                const descriptionInput = select('movimiento-descripcion');
+                const conceptoSelect = select('movimiento-concepto');
+                const cuentaSelect = select('movimiento-cuenta');
+
+                if (!descriptionInput || !conceptoSelect || !cuentaSelect) return;
+
+                const query = descriptionInput.value.trim().toLowerCase();
+
+                // No hacemos nada si el texto es muy corto
+                if (query.length < 4) return;
+
+                // Buscamos una coincidencia exacta en nuestro índice
+                const suggestion = intelligentIndex.get(query);
+
+                if (suggestion) {
+                    // Si encontramos una, aplicamos los valores a los desplegables
+                    if (suggestion.conceptoId) {
+                        conceptoSelect.value = suggestion.conceptoId;
+                        // Aplicamos el feedback visual
+                        conceptoSelect.parentElement.classList.add('field-highlighted');
+                        setTimeout(() => conceptoSelect.parentElement.classList.remove('field-highlighted'), 1000);
+                    }
+                    if (suggestion.cuentaId) {
+                        cuentaSelect.value = suggestion.cuentaId;
+                        // Aplicamos el feedback visual
+                        cuentaSelect.parentElement.classList.add('field-highlighted');
+                        setTimeout(() => cuentaSelect.parentElement.classList.remove('field-highlighted'), 1000);
+                    }
+                }
+            }, 350); // Un pequeño retardo (debounce) para no ejecutar en cada tecla
+        };
         const showModal=(id)=>{
             const m = select(id);
             if (m) {
@@ -3856,50 +3944,71 @@ const renderInicioRecientesView = async () => {
             }, 100);
         };
         
+        // =================================================================================
+        // INICIO: BÚSQUEDA GLOBAL MEJORADA
+        // =================================================================================
         const performGlobalSearch = (query) => {
             const resultsContainer = select('global-search-results');
             if (!query || query.trim().length < 2) {
                 resultsContainer.innerHTML = `<div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">manage_search</span><h3>Encuéntralo todo</h3><p>Busca movimientos, cuentas o conceptos. <br>Atajo: <strong>Cmd/Ctrl + K</strong></p></div>`;
                 return;
             }
-        
-            query = query.toLowerCase();
+
+            const queryLower = query.toLowerCase();
             let resultsHtml = '';
             const MAX_RESULTS_PER_GROUP = 5;
-        
+
+            // --- Búsqueda en Movimientos (Mejorada) ---
             const movs = (db.movimientos || [])
-                .filter(m => {
-                    const concept = db.conceptos.find(c => c.id === m.conceptoId)?.nombre.toLowerCase() || '';
-                    const desc = m.descripcion.toLowerCase();
-                    return desc.includes(query) || concept.includes(query);
+                .map(m => {
+                    // 1. Construir un texto de búsqueda completo para cada movimiento
+                    const concepto = db.conceptos.find(c => c.id === m.conceptoId)?.nombre || '';
+                    let cuentaInfo = '';
+                    if (m.tipo === 'traspaso') {
+                        const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || '';
+                        const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '';
+                        cuentaInfo = `${origen} ${destino}`;
+                    } else {
+                        cuentaInfo = db.cuentas.find(c => c.id === m.cuentaId)?.nombre || '';
+                    }
+                    const fecha = new Date(m.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+                    const importe = (m.cantidad / 100).toLocaleString('es-ES');
+
+                    const searchableText = `${m.descripcion} ${concepto} ${cuentaInfo} ${fecha} ${importe}`.toLowerCase();
+                    
+                    // 2. Devolvemos el movimiento y su texto de búsqueda
+                    return { movement: m, text: searchableText };
                 })
-                .sort((a,b) => new Date(b.fecha) - new Date(a.fecha))
-                .slice(0, MAX_RESULTS_PER_GROUP);
-        
+                .filter(item => item.text.includes(queryLower)) // 3. Filtramos por el texto completo
+                .sort((a, b) => new Date(b.movement.fecha) - new Date(a.movement.fecha))
+                .slice(0, MAX_RESULTS_PER_GROUP)
+                .map(item => item.movement); // 4. Nos quedamos solo con los objetos de movimiento
+
             if (movs.length > 0) {
                 resultsHtml += `<div class="search-result-group__title">Movimientos (recientes)</div>`;
                 movs.forEach(m => {
-                    const concept = db.conceptos.find(c => c.id === m.conceptoId)?.nombre || '';
+                    const concepto = db.conceptos.find(c => c.id === m.conceptoId)?.nombre || '';
                     const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
                     resultsHtml += `
                         <button class="search-result-item" data-action="search-result-movimiento" data-id="${m.id}">
                             <span class="material-icons search-result-item__icon">receipt_long</span>
                             <div class="search-result-item__details" style="flex-grow: 1;">
                                 <p>${escapeHTML(m.descripcion)}</p>
-                                <small>${new Date(m.fecha).toLocaleDateString('es-ES')} • ${escapeHTML(concept)}</small>
+                                <small>${new Date(m.fecha).toLocaleDateString('es-ES')} • ${escapeHTML(concepto)}</small>
                             </div>
                             <strong class="${amountClass}">${formatCurrency(m.cantidad)}</strong>
                         </button>`;
                 });
             }
         
-            const cuentas = (db.cuentas || []).filter(c => c.nombre.toLowerCase().includes(query) || c.tipo.toLowerCase().includes(query)).slice(0, MAX_RESULTS_PER_GROUP);
+            // --- Búsqueda en Cuentas y Conceptos (sin cambios) ---
+            const cuentas = (db.cuentas || []).filter(c => c.nombre.toLowerCase().includes(queryLower) || c.tipo.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
             if (cuentas.length > 0) {
                 resultsHtml += `<div class="search-result-group__title">Cuentas</div>`;
                 cuentas.forEach(c => { resultsHtml += `<button class="search-result-item" data-action="search-result-cuenta" data-id="${c.id}"><span class="material-icons search-result-item__icon">account_balance_wallet</span><div class="search-result-item__details"><p>${escapeHTML(c.nombre)}</p><small>${escapeHTML(c.tipo)}</small></div></button>`; });
             }
         
-            const conceptos = (db.conceptos || []).filter(c => c.nombre.toLowerCase().includes(query)).slice(0, MAX_RESULTS_PER_GROUP);
+            const conceptos = (db.conceptos || []).filter(c => c.nombre.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
             if (conceptos.length > 0) {
                 resultsHtml += `<div class="search-result-group__title">Conceptos</div>`;
                 conceptos.forEach(c => { resultsHtml += `<button class="search-result-item" data-action="search-result-concepto" data-id="${c.id}"><span class="material-icons search-result-item__icon">label</span><div class="search-result-item__details"><p>${escapeHTML(c.nombre)}</p></div></button>`; });
@@ -3910,6 +4019,10 @@ const renderInicioRecientesView = async () => {
             }
             resultsContainer.innerHTML = resultsHtml;
         };
+        // =================================================================================
+        // FIN: BÚSQUEDA GLOBAL MEJORADA
+        // =================================================================================
+
         
         // =================================================================================
         // 9. FORM HANDLERS & MODAL CONTENT
@@ -4365,6 +4478,76 @@ const renderInicioRecientesView = async () => {
                 const btn = actionTarget.closest('button');
                 
                 const actions = {
+				'confirm-recurrent': async (event) => {
+    const actionTarget = event.target.closest('[data-action]');
+    if (!actionTarget) return;
+
+    const { id } = actionTarget.dataset;
+    const btn = actionTarget.closest('button');
+    if (!id || !btn) return;
+
+    try {
+        setButtonLoading(btn, true);
+
+        const recurrente = db.recurrentes.find(r => r.id === id);
+        if (!recurrente) {
+            showToast('Error: No se encontró la operación recurrente.', 'danger');
+            return;
+        }
+
+        const fechaDeEjecucion = parseDateStringAsUTC(recurrente.nextDate);
+        const newMovement = {
+            id: generateId(),
+            fecha: fechaDeEjecucion.toISOString(),
+            cantidad: recurrente.cantidad,
+            descripcion: recurrente.descripcion,
+            tipo: recurrente.tipo,
+            cuentaId: recurrente.cuentaId,
+            conceptoId: recurrente.conceptoId,
+            cuentaOrigenId: recurrente.cuentaOrigenId,
+            cuentaDestinoId: recurrente.cuentaDestinoId,
+            sourceRecurrenceId: recurrente.id
+        };
+
+        const newNextDate = calculateNextDueDate(fechaDeEjecucion, recurrente.frequency);
+        const newNextDateString = newNextDate.toISOString().slice(0, 10);
+
+        const batch = fbDb.batch();
+        const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovement.id);
+        const recRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(id);
+
+        batch.set(movRef, newMovement);
+        batch.update(recRef, { nextDate: newNextDateString });
+        
+        if (newMovement.tipo === 'traspaso') {
+            await updateAccountBalance(newMovement.cuentaOrigenId, -newMovement.cantidad);
+            await updateAccountBalance(newMovement.cuentaDestinoId, newMovement.cantidad);
+        } else {
+            await updateAccountBalance(newMovement.cuentaId, newMovement.cantidad);
+        }
+        
+        await batch.commit();
+        
+        hapticFeedback('success');
+        showToast('Movimiento programado añadido.');
+        
+        const pendingItem = select(`pending-recurrente-${id}`);
+        if(pendingItem) {
+            pendingItem.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+            pendingItem.style.opacity = '0';
+            pendingItem.style.transform = 'scale(0.95)';
+            setTimeout(() => pendingItem.remove(), 300);
+        }
+
+    } catch (error) {
+        console.error("Error al confirmar el movimiento recurrente:", error);
+        showToast("No se pudo añadir el movimiento. Revisa tu conexión.", "danger");
+
+    } finally {
+        setButtonLoading(btn, false);
+    }
+},
+
     'navigate': () => navigateTo(page),
     'help': showHelpModal,
     'exit': handleExitApp,
@@ -4580,6 +4763,9 @@ if (actions[action]) actions[action](e);
             document.body.addEventListener('input', (e) => {
                 const id=(e.target).id;
                 if(id && select(`${id}-error`)) clearError(id);
+				if (id === 'movimiento-descripcion') {
+                    handleDescriptionSuggestion();
+                }
             });
 
             // Reverted: Removed e.preventDefault() here
@@ -4893,6 +5079,7 @@ if (actions[action]) actions[action](e);
 			hideModal('movimiento-modal');
 			hapticFeedback('success');
 			showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+			buildIntelligentIndex();
 
 			// =================================================================================
 			// INICIO CORRECCIÓN 3: Forzar recálculo de saldos tras una edición
