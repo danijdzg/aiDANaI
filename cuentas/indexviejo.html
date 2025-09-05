@@ -3424,57 +3424,269 @@ window.addEventListener('offline', () => {
         
         const handleUpdateBudgets = () => { hapticFeedback('light'); const year = parseInt((select('budget-year-selector')).value); if(!year) { showToast('Selecciona un año.', 'warning'); return; } const budgetsToUpdate = (db.presupuestos || []).filter((p) => p.ano === year); let formHtml = `<form id="update-budgets-form" novalidate><p class="form-label" style="margin-bottom: var(--sp-3)">Introduce el límite anual. Usa <b>valores positivos para metas de ingreso</b> y <b>valores negativos para límites de gasto</b>.</p>`; const conceptsWithBudget = new Set(budgetsToUpdate.map((b) => b.conceptoId)); db.conceptos.filter((c) => conceptsWithBudget.has(c.id)).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { const budget = budgetsToUpdate.find((b) => b.ano === year && b.conceptoId === c.id); const currentAmount = budget ? (budget.cantidad / 100).toFixed(2) : '0.00'; formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" value="${currentAmount.replace('.', ',')}"></div>`; }); const missingConcepts = db.conceptos.filter((c) => !conceptsWithBudget.has(c.id)); if(missingConcepts.length > 0) { formHtml += `<hr style="margin: var(--sp-4) 0; border-color: var(--c-outline); opacity: 0.5;"><h4 style="margin-bottom: var(--sp-2);">Añadir nuevos conceptos al presupuesto</h4>`; missingConcepts.sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach((c) => { formHtml += `<div class="form-group"><label for="budget-input-${c.id}" class="form-label" style="font-weight: 600;">${c.nombre}</label><input type="text" id="budget-input-${c.id}" data-concept-id="${c.id}" class="form-input" inputmode="decimal" placeholder="0,00"></div>`; }); } formHtml += `<div class="modal__actions"><button type="submit" class="btn btn--primary btn--full">Guardar Cambios</button></div></form>`; showGenericModal(`Gestionar Presupuestos de ${year}`, formHtml); setTimeout(() => { const modalForm = select('update-budgets-form'); if (modalForm) { modalForm.addEventListener('submit', async (e) => { e.preventDefault(); const btn = modalForm.querySelector('button[type="submit"]'); setButtonLoading(btn, true, 'Guardando...'); const inputs = modalForm.querySelectorAll('input[data-concept-id]'); const batch = fbDb.batch(); inputs.forEach((input) => { const conceptoId = (input).dataset.conceptId; const amountValue = parseCurrencyString((input).value); if (isNaN(amountValue)) return; const newAmountInCents = Math.round(amountValue * 100); let budget = (db.presupuestos || []).find((b) => b.ano === year && b.conceptoId === conceptoId); if (budget) { const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(budget.id); batch.update(ref, { cantidad: newAmountInCents }); } else { const newId = generateId(); const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(newId); batch.set(ref, { id: newId, ano: year, conceptoId: conceptoId, cantidad: newAmountInCents }); } }); await batch.commit(); setButtonLoading(btn, false); hideModal('generic-modal'); hapticFeedback('success'); showToast('Presupuestos actualizados.'); renderBudgetTracking(); }); } }, 0); };
         
-        const renderBudgetTracking = async () => {
-            const listContainer = select('budget-tracking-list'), placeholder = select('budget-init-placeholder'), yearSelector = select('budget-year-selector');
-            if (!listContainer || !placeholder || !yearSelector) return;
-            const year = parseInt((yearSelector).value, 10);
-            if (!year) { listContainer.classList.add('hidden'); placeholder.classList.add('hidden'); return; }
-            const yearBudgets = (db.presupuestos || []).filter((b) => b.ano === year);
-            if (yearBudgets.length === 0) { listContainer.innerHTML = ''; listContainer.classList.add('hidden'); placeholder.classList.remove('hidden'); (select('budget-placeholder-title')).textContent = `Crear Presupuestos ${year}`; (select('budget-placeholder-text')).textContent = `Aún no se han creado los presupuestos para el año ${year}.`; return; }
-            listContainer.classList.remove('hidden'); placeholder.classList.add('hidden');
+        // =================================================================================
+        // INICIO: REEMPLAZO COMPLETO DE LA LÓGICA DE PRESUPUESTOS
+        // =================================================================================
+
+        /**
+         * Renderiza un gráfico de medidor (gauge) en un canvas.
+         * @param {string} canvasId - El ID del elemento canvas.
+         * @param {number} percentageConsumed - El porcentaje del presupuesto ya gastado.
+         * @param {number} yearProgressPercentage - El porcentaje del año que ha transcurrido.
+         */
+        const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) => {
+            const ctx = select(canvasId)?.getContext('2d');
+            if (!ctx) return;
+
+            const isOverBudget = percentageConsumed > 100;
+            const isAheadOfPace = percentageConsumed > yearProgressPercentage;
             
-            const visibleAccountIds = getVisibleAccounts().map(c => c.id);
-            if (visibleAccountIds.length === 0) {
-                listContainer.innerHTML = `<div class="card"><div class="card__content" style="padding: 0 var(--sp-4) var(--sp-2) var(--sp-4);"><p class='form-label' style='text-align: center; padding: var(--sp-4) 0;'>No hay cuentas en esta vista para calcular el presupuesto.</p></div></div>`;
+            // Colores dinámicos
+            const spentColor = isAheadOfPace ? 'var(--c-danger)' : 'var(--c-primary)';
+            const safeColor = 'rgba(48, 209, 88, 0.3)'; // Verde tenue
+            const remainingColor = 'var(--c-surface-variant)';
+
+            const data = {
+                labels: ['Gastado', 'Ritmo OK', 'Restante'],
+                datasets: [{
+                    data: [
+                        Math.min(percentageConsumed, 100),
+                        Math.max(0, 100 - Math.min(percentageConsumed, 100))
+                    ],
+                    backgroundColor: [spentColor, remainingColor],
+                    borderColor: 'var(--c-surface)',
+                    borderWidth: 2,
+                }]
+            };
+            
+            // El "pin" o marcador del ritmo del año
+            const paceLinePlugin = {
+                id: 'paceLine',
+                afterDraw: chart => {
+                    const { ctx, chartArea } = chart;
+                    const angle = Math.PI + (Math.PI * yearProgressPercentage / 100);
+                    const cx = (chartArea.left + chartArea.right) / 2;
+                    const cy = (chartArea.top + chartArea.bottom) / 2 + 15; // Ajuste para centrar mejor
+                    const radius = chart.outerRadius;
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.lineTo(cx + radius * Math.sin(angle), cy + radius * Math.cos(angle));
+                    ctx.strokeStyle = 'var(--c-success)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            };
+
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    rotation: -90,
+                    circumference: 180,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false },
+                        datalabels: { display: false }
+                    }
+                },
+                plugins: [paceLinePlugin]
+            });
+        };
+
+        /**
+         * Renderiza el gráfico de tendencia de gasto mensual.
+         * @param {object} monthlyData - Datos de gasto agrupados por mes.
+         * @param {number} averageBudget - El presupuesto anual dividido por 12.
+         */
+        const renderBudgetTrendChart = (monthlyData, averageBudget) => {
+            const ctx = select('budget-trend-chart')?.getContext('2d');
+            if (!ctx) return;
+            if (window.budgetTrendChartInstance) window.budgetTrendChartInstance.destroy();
+
+            const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            const data = labels.map((_, i) => (monthlyData[i] || 0) / 100);
+            
+            window.budgetTrendChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Gasto Mensual',
+                            data: data,
+                            backgroundColor: 'var(--c-primary-hover)',
+                            borderRadius: 4,
+                        },
+                        {
+                            type: 'line',
+                            label: 'Promedio Mensual',
+                            data: Array(12).fill(averageBudget / 100),
+                            borderColor: 'var(--c-danger)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { callback: value => `€${value}` } },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false },
+                        datalabels: { display: false }
+                    }
+                }
+            });
+        };
+
+        /**
+         * Lógica principal que calcula y renderiza todo el dashboard de análisis de presupuesto.
+         * REEMPLAZA a la antigua `renderBudgetTracking`.
+         */
+        const renderBudgetTracking = async () => {
+            const dashboardContainer = select('annual-budget-dashboard');
+            const placeholder = select('budget-init-placeholder');
+            const yearSelector = select('budget-year-selector');
+            if (!dashboardContainer || !placeholder || !yearSelector) return;
+            
+            const year = parseInt(yearSelector.value, 10);
+            const yearBudgets = (db.presupuestos || []).filter(b => b.ano === year && b.cantidad < 0); // Solo presupuestos de gasto
+
+            if (yearBudgets.length === 0) {
+                dashboardContainer.classList.add('hidden');
+                placeholder.classList.remove('hidden');
+                select('budget-placeholder-title').textContent = `Crear Presupuestos ${year}`;
+                select('budget-placeholder-text').textContent = `Aún no se han creado los presupuestos para el año ${year}.`;
                 return;
             }
+            
+            dashboardContainer.classList.remove('hidden');
+            placeholder.classList.add('hidden');
 
+            const { percentage: yearProgress, daysPassed, daysRemaining, totalDaysInYear } = getYearProgress();
+            
+            // Obtener todos los movimientos del año para los cálculos
             const startDate = new Date(year, 0, 1);
             const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
             let baseQuery = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-				.where('fecha', '>=', startDate.toISOString())
-				.where('fecha', '<=', endDate.toISOString())
-				.where('tipo', '==', 'movimiento');
+                .where('fecha', '>=', startDate.toISOString())
+                .where('fecha', '<=', endDate.toISOString())
+                .where('tipo', '==', 'movimiento');
             
-            const visibleMovements = await fetchMovementsInChunks(baseQuery, 'cuentaId', visibleAccountIds);
-        
-            let html = '';
-            yearBudgets.sort((a,b) => (db.conceptos.find((c) => c.id === a.conceptoId)?.nombre || '').localeCompare(db.conceptos.find((c) => c.id === b.conceptoId)?.nombre || '')).forEach((budget) => {
-                const concepto = db.conceptos.find((c) => c.id === budget.conceptoId); if (!concepto || budget.cantidad === 0) return;
-                const isIncomeBudget = budget.cantidad > 0;
-                const actualAmount = visibleMovements.filter((m) => m.conceptoId === budget.conceptoId).reduce((sum, m) => sum + m.cantidad, 0);
-                const budgetLimit = Math.abs(budget.cantidad), actualValue = isIncomeBudget ? actualAmount : Math.abs(actualAmount);
-                const difference = isIncomeBudget ? (actualAmount - budgetLimit) : (budgetLimit - actualValue); const differenceClass = difference >= 0 ? 'text-positive' : 'text-negative';
-                const progressValue = actualValue, progressMax = budgetLimit; let progressClass = ''; const percentage = progressMax > 0 ? (progressValue / progressMax) * 100 : 0;
-                if (percentage > 100) progressClass = 'budget-item__progress--danger'; else if (percentage >= 85) progressClass = 'budget-item__progress--warning';
+            const visibleAccountIds = getVisibleAccounts().map(c => c.id);
+            const movements = await fetchMovementsInChunks(baseQuery, 'cuentaId', visibleAccountIds);
+            
+            let totalBudgeted = 0;
+            let totalActualSpent = 0;
+            const monthlyData = {};
+
+            const budgetDetails = yearBudgets.map(budget => {
+                const actualSpent = Math.abs(movements
+                    .filter(m => m.conceptoId === budget.conceptoId && m.cantidad < 0)
+                    .reduce((sum, m) => sum + m.cantidad, 0));
+
+                const budgetLimit = Math.abs(budget.cantidad);
+                totalBudgeted += budgetLimit;
+                totalActualSpent += actualSpent;
+
+                // Cálculos de Proyección
+                const averageDailySpent = (daysPassed > 0) ? actualSpent / daysPassed : 0;
+                const projectedAnnualSpent = averageDailySpent * totalDaysInYear;
+                const percentageConsumed = (budgetLimit > 0) ? (actualSpent / budgetLimit) * 100 : 0;
                 
-                html += `
-<div class="budget-track-item">
-    <div class="budget-track-item__main">
-        <div class="budget-track-item__concept-name">${concepto.nombre}</div>
-        <progress class="budget-item__progress ${progressClass}" value="${progressValue}" max="${progressMax}"></progress>
-    </div>
-    <div class="budget-track-item__figures">
-        <div class="budget-track-item__amount">
-            <strong>${formatCurrency(actualValue)}</strong> / ${formatCurrency(budgetLimit)}
-        </div>
-        <div class="budget-track-item__difference ${differenceClass}">
-            ${difference >= 0 ? 'Sobrante' : 'Excedido'}: ${formatCurrency(Math.abs(difference))}
-        </div>
-    </div>
-</div>`;
+                // Lógica de estado
+                let status = { text: 'A buen ritmo', icon: 'check_circle', color: 'text-positive' };
+                if (projectedAnnualSpent > budgetLimit * 1.15) {
+                    status = { text: 'Excedido', icon: 'cancel', color: 'text-danger' };
+                } else if (projectedAnnualSpent > budgetLimit) {
+                    status = { text: 'En riesgo', icon: 'warning', color: 'text-warning' };
+                }
+
+                const remainingBudget = budgetLimit - actualSpent;
+                const dailyLimitForRestOfYear = (daysRemaining > 0) ? remainingBudget / daysRemaining : 0;
+                
+                return { ...budget, actualSpent, budgetLimit, projectedAnnualSpent, percentageConsumed, status, dailyLimitForRestOfYear };
             });
-            listContainer.innerHTML = `<div class="card"><div class="card__content" style="padding: 0 var(--sp-4) var(--sp-2) var(--sp-4);">${html || `<p class='form-label' style='text-align: center; padding: var(--sp-4) 0;'>No hay presupuestos para mostrar en esta vista.</p>`}</div></div>`;
+
+            // Agrupar gastos por mes para el gráfico de tendencia
+            movements.forEach(mov => {
+                if(mov.cantidad < 0) {
+                    const month = new Date(mov.fecha).getMonth(); // 0 = Ene, 11 = Dic
+                    monthlyData[month] = (monthlyData[month] || 0) + Math.abs(mov.cantidad);
+                }
+            });
+
+            // Renderizar KPIs Globales
+            const kpiContainer = select('budget-kpi-container');
+            const totalProjected = budgetDetails.reduce((sum, b) => sum + b.projectedAnnualSpent, 0);
+            const projectedDeficit = totalProjected - totalBudgeted;
+            kpiContainer.innerHTML = `
+                <div class="kpi-item"><h4 class="kpi-item__label">Gasto Total Presupuestado</h4><strong class="kpi-item__value">${formatCurrency(totalBudgeted)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Gasto Total Proyectado</h4><strong class="kpi-item__value ${projectedDeficit > 0 ? 'text-danger' : 'text-positive'}">${formatCurrency(totalProjected)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Déficit/Ahorro Proyectado</h4><strong class="kpi-item__value ${projectedDeficit > 0 ? 'text-danger' : 'text-positive'}">${formatCurrency(-projectedDeficit)}</strong></div>
+            `;
+
+            // Renderizar Gráfico de Tendencia
+            renderBudgetTrendChart(monthlyData, totalBudgeted / 12);
+
+            // Renderizar Lista Detallada
+            const listContainer = select('budget-details-list');
+            listContainer.innerHTML = budgetDetails
+                .sort((a, b) => b.projectedAnnualSpent / b.budgetLimit - a.projectedAnnualSpent / a.budgetLimit) // Ordenar por los más desviados primero
+                .map(b => {
+                    const concepto = db.conceptos.find(c => c.id === b.conceptoId);
+                    return `
+                    <div class="card" style="margin-bottom: var(--sp-3);">
+                        <div class="card__content" style="padding: var(--sp-3);">
+                            <div style="display: grid; grid-template-columns: 80px 1fr; gap: var(--sp-4); align-items: center;">
+                                <!-- Columna del Medidor -->
+                                <div style="position: relative; width: 80px; height: 55px;">
+                                    <canvas id="gauge-chart-${b.id}"></canvas>
+                                    <div style="position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: var(--fs-lg);">
+                                        ${b.percentageConsumed.toFixed(0)}<span style="font-size: 0.7em;">%</span>
+                                    </div>
+                                </div>
+                                <!-- Columna de Detalles -->
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--sp-2);">
+                                        <h4 style="font-size: var(--fs-base); font-weight: 700;">${concepto?.nombre || 'S/N'}</h4>
+                                        <span class="${b.status.color}" style="font-weight: 600; font-size: var(--fs-xs); display:flex; align-items:center; gap: 4px;">
+                                            <span class="material-icons" style="font-size: 14px;">${b.status.icon}</span> ${b.status.text}
+                                        </span>
+                                    </div>
+                                    <div style="font-size: var(--fs-sm);">
+                                        <strong>Gastado:</strong> ${formatCurrency(b.actualSpent)} de ${formatCurrency(b.budgetLimit)}
+                                    </div>
+                                    <div style="font-size: var(--fs-sm); font-weight: 600;">
+                                        <strong>Proyección:</strong> <span class="${b.projectedAnnualSpent > b.budgetLimit ? 'text-danger' : 'text-positive'}">${formatCurrency(b.projectedAnnualSpent)}</span>
+                                    </div>
+                                    <div style="font-size: var(--fs-xs); color: var(--c-on-surface-secondary); margin-top: var(--sp-1);">
+                                        Para cumplir: <strong>${formatCurrency(b.dailyLimitForRestOfYear)} / día</strong> restantes.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+            // IMPRTANTE: Renderizar los medidores después de que el HTML esté en el DOM
+            setTimeout(() => {
+                budgetDetails.forEach(b => {
+                    renderGaugeChart(`gauge-chart-${b.id}`, b.percentageConsumed, yearProgress);
+                });
+            }, 50);
         };
 
         // =================================================================================
@@ -4539,8 +4751,8 @@ const renderInicioRecientesView = async () => {
             container.innerHTML = `
                 <div class="accordion-wrapper">
                     <details class="accordion">
-                        <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">pie_chart</span>Presupuestos</h3><span class="material-icons accordion__icon">expand_more</span></summary>
                         <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);" id="analisis-presupuestos-container">
+                            <!-- Controles para seleccionar el año -->
                             <div id="budget-controls" style="display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap;">
                                 <select id="budget-year-selector" class="form-select" style="flex-basis: 120px; flex-grow: 1;"></select>
                                 <button data-action="update-budgets" class="btn btn--secondary" title="Editar presupuestos del año seleccionado">
@@ -4548,12 +4760,32 @@ const renderInicioRecientesView = async () => {
                                     <span>Editar Año</span>
                                 </button>
                             </div>
-                            <div id="budget-tracking-list"></div>
+                            
+                            <!-- Placeholder para cuando no hay presupuestos creados -->
                             <div id="budget-init-placeholder" class="empty-state hidden" style="background: transparent; padding: var(--sp-2) 0; border: none;">
                                 <span class="material-icons">auto_fix_high</span>
                                 <h3 id="budget-placeholder-title">Crear Presupuestos</h3>
                                 <p id="budget-placeholder-text">Aún no se han creado los presupuestos para el año seleccionado.</p>
                                 <button data-action="create-budgets" class="btn btn--primary" style="margin-top: var(--sp-3);">Crear Ahora</button>
+                            </div>
+
+                            <!-- CONTENEDOR DEL NUEVO DASHBOARD ANUAL -->
+                            <div id="annual-budget-dashboard" class="hidden">
+                                <!-- 1. KPIs de Proyección Anual -->
+                                <h3 class="card__title" style="font-size: var(--fs-base); padding: 0 0 var(--sp-2) 0;">Proyección a Fin de Año</h3>
+                                <div id="budget-kpi-container" class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));"></div>
+
+                                <!-- 2. Gráfico de Tendencia Mensual -->
+                                <div class="card" style="margin-top: var(--sp-4);">
+                                    <h3 class="card__title"><span class="material-icons">bar_chart</span>Tendencia de Gasto Mensual</h3>
+                                    <div class="card__content">
+                                        <div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 3. Lista Detallada de Presupuestos (Mejorada) -->
+                                <h3 class="card__title" style="font-size: var(--fs-base); padding: var(--sp-4) 0 var(--sp-2) 0;">Análisis por Categoría</h3>
+                                <div id="budget-details-list"></div>
                             </div>
                         </div>
                     </details>
