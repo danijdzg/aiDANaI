@@ -8,7 +8,9 @@ https://danijdzg.github.io/aiDANaI/agenda/
 
 https://danijdzg.github.io/aiDANaI/gympadel/
 
-https://danijdzg.github.io/aiDANaI/dani/
+https://danijdzg.github.io/aiDANaI/dani/agenda/
+
+https://danijdzg.github.io/aiDANaI/dani/cuentas/
 
 https://danijdzg.github.io/supuestosA2/
 
