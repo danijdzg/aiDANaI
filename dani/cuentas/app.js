@@ -727,6 +727,7 @@ import { addDays, addWeeks, addMonths, addYears } from 'https://cdn.jsdelivr.net
             displayValue: '0', // Always use period for decimal internally
             waitingForNewValue: true,
             targetInput: null,
+            isVisible: false, 
         };
 
         let activeMovementFilter = null;
@@ -1920,7 +1921,7 @@ window.addEventListener('offline', () => {
                 const amountValue = parseCurrencyString(input.value);
                 
                 if (isNaN(amountValue)) continue;
-
+	
                 const newAmountInCents = Math.round(amountValue * 100);
                 let budget = (db.presupuestos || []).find(b => b.ano === year && b.conceptoId === conceptoId);
                 
@@ -2790,7 +2791,6 @@ const renderInicioRecientesView = async () => {
                             data: sortedTotals.map(([, data]) => data.total / 100), 
                             backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger), 
                             borderRadius: 6, 
-                            // Store concept IDs for click handling
                             conceptIds: sortedTotals.map(([id]) => id)
                         }] 
                     }, 
@@ -3123,7 +3123,6 @@ const renderInicioRecientesView = async () => {
             buildDescriptionIndex(); 
         };
         
-        // ... (The rest of the JS code from the file, including all event listeners, modals, form handlers, etc.)
-        // Ensure to include the entire script logic here.
-        
         document.addEventListener('DOMContentLoaded', initApp);
+
+				
