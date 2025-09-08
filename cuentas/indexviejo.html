@@ -4133,11 +4133,13 @@ window.addEventListener('offline', () => {
     `).join('');
 };
 // =================================================================================
-// INICIO: VERSIÓN CORREGIDA DE renderInversionesPage
+// INICIO: VERSIÓN FINAL (SIN LEYENDA) DE renderInversionesPage
 // =================================================================================
 const renderInversionesPage = async (targetContainerId) => {
     const container = select(targetContainerId);
     if (!container) return;
+
+    const CHART_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
 
     if (!db.cuentas || !dataLoaded.inversiones) {
         container.innerHTML = `<div class="skeleton" style="height: 250px; border-radius: var(--border-radius-lg);"></div>`;
@@ -4161,13 +4163,30 @@ const renderInversionesPage = async (targetContainerId) => {
 
     const allInvestmentTypes = [...new Set(allAssetsData.map(asset => toSentenceCase(asset.cuenta.tipo || 'S/T')))].sort();
     
-    const pillsHTML = allInvestmentTypes.map(t => 
-        `<button class="filter-pill ${!deselectedInvestmentTypesFilter.has(t) ? 'filter-pill--active' : ''}" data-action="toggle-investment-type-filter" data-type="${t}">${t}</button>`
-    ).join('');
-
     const displayAssetsData = allAssetsData.filter(asset => 
         !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.cuenta.tipo || 'S/T'))
     );
+
+    const chartLabels = Object.keys(displayAssetsData.reduce((acc, { cuenta }) => {
+        const tipo = toSentenceCase(cuenta.tipo || 'Sin Categoría');
+        acc[tipo] = true;
+        return acc;
+    }, {})).sort();
+    
+    const colorMap = {};
+    chartLabels.forEach((label, index) => {
+        colorMap[label] = CHART_COLORS[index % CHART_COLORS.length];
+    });
+
+    const pillsHTML = allInvestmentTypes.map(t => {
+        const isActive = !deselectedInvestmentTypesFilter.has(t);
+        const color = colorMap[t];
+        let style = '';
+        if (isActive && color) {
+            style = `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF; box-shadow: 0 0 8px ${color}70;"`;
+        }
+        return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-investment-type-filter" data-type="${t}" ${style}>${t}</button>`;
+    }).join('');
 
     const displayPerformance = displayAssetsData.reduce((acc, asset) => {
         acc.valorActual += asset.performance.valorActual;
@@ -4192,72 +4211,32 @@ const renderInversionesPage = async (targetContainerId) => {
 
     const assetCardsHTML = displayAssetsData.map(({ cuenta, performance }) => {
         const pnlClass = performance.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-        return `
-            <div class="investment-asset-card" data-id="${cuenta.id}">
-                <div class="investment-asset-card__header">
-                    <div style="cursor: pointer;" data-action="view-investment-detail" data-id="${cuenta.id}">
-                        <h3 class="investment-asset-card__name">${escapeHTML(cuenta.nombre)}</h3>
-                        <small style="color: var(--c-on-surface-secondary);">${escapeHTML(cuenta.tipo)}</small>
-                    </div>
-                    <div>
-                        <div class="investment-asset-card__value">${formatCurrency(performance.valorActual)}</div>
-                        <div class="investment-asset-card__pnl ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)} (${performance.pnlPorcentual.toFixed(2)}%)</div>
-                    </div>
-                </div>
-            </div>`;
+        return `<div class="investment-asset-card" data-id="${cuenta.id}"><div class="investment-asset-card__header"><div style="cursor: pointer;" data-action="view-investment-detail" data-id="${cuenta.id}"><h3 class="investment-asset-card__name">${escapeHTML(cuenta.nombre)}</h3><small style="color: var(--c-on-surface-secondary);">${escapeHTML(cuenta.tipo)}</small></div><div><div class="investment-asset-card__value">${formatCurrency(performance.valorActual)}</div><div class="investment-asset-card__pnl ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)} (${performance.pnlPorcentual.toFixed(2)}%)</div></div></div></div>`;
     }).join('');
 
-    // --- RENDERIZADO DEL NUEVO HTML CON EL ORDEN CORREGIDO ---
     container.innerHTML = `
-        <!-- CAMBIO: Los filtros ahora están PRIMERO -->
         <div class="card card--no-bg accordion-wrapper">
              <details class="accordion" open>
                 <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">filter_alt</span>Filtros</h3>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">pie_chart</span>Asignación y Filtros</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
                 <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div class="filter-pills">${pillsHTML}</div>
-                </div>
-            </details>
-        </div>
-
-        <!-- CAMBIO: El gráfico ahora está DESPUÉS de los filtros -->
-        <div class="card card--no-bg accordion-wrapper">
-             <details class="accordion" open>
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">pie_chart</span>Asignación de Activos</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                    <div class="filter-pills" style="margin-bottom: var(--sp-5);">${pillsHTML}</div>
                     <div class="chart-container" style="height: 220px; margin-bottom: 0;"><canvas id="asset-allocation-chart"></canvas></div>
                 </div>
             </details>
         </div>
 
         <div id="investment-global-kpis" style="margin-top: var(--sp-4);">
-             <div style="display: flex; align-items: center; margin-bottom: var(--sp-2);">
-                <h3 class="card__title" style="padding:0; margin:0; font-size: var(--fs-base);">Métricas del Portafolio (Filtrado)</h3>
-            </div>
-            <div class="kpi-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--sp-3);">
-                <div class="kpi-item"><h4 class="kpi-item__label">Valor Total</h4><strong class="kpi-item__value">${formatCurrency(displayPerformance.valorActual)}</strong></div>
-                <div class="kpi-item"><h4 class="kpi-item__label">Capital Total</h4><strong class="kpi-item__value">${formatCurrency(displayPerformance.capitalInvertido)}</strong></div>
-            </div>
-            <div class="kpi-grid" style="grid-template-columns: 1fr 1fr 1fr;">
-                <div class="kpi-item"><h4 class="kpi-item__label">P&L (€)</h4><strong class="kpi-item__value ${pnlClassDisplay}">${displayPerformance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(displayPerformance.pnlAbsoluto)}</strong></div>
-                <div class="kpi-item"><h4 class="kpi-item__label">P&L (%)</h4><strong class="kpi-item__value ${pnlClassDisplay}">${displayPerformance.pnlPorcentual.toFixed(2)}%</strong></div>
-                <div class="kpi-item"><h4 class="kpi-item__label">TIR Anualizada</h4><strong class="kpi-item__value ${irrClassDisplay}">${(displayPerformance.irr * 100).toFixed(2)}%</strong></div>
-            </div>
+            <div style="display: flex; align-items: center; margin-bottom: var(--sp-2);"><h3 class="card__title" style="padding:0; margin:0; font-size: var(--fs-base);">Métricas del Portafolio (Filtrado)</h3></div>
+            <div class="kpi-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--sp-3);"><div class="kpi-item"><h4 class="kpi-item__label">Valor Total</h4><strong class="kpi-item__value">${formatCurrency(displayPerformance.valorActual)}</strong></div><div class="kpi-item"><h4 class="kpi-item__label">Capital Total</h4><strong class="kpi-item__value">${formatCurrency(displayPerformance.capitalInvertido)}</strong></div></div>
+            <div class="kpi-grid" style="grid-template-columns: 1fr 1fr 1fr;"><div class="kpi-item"><h4 class="kpi-item__label">P&L (€)</h4><strong class="kpi-item__value ${pnlClassDisplay}">${displayPerformance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(displayPerformance.pnlAbsoluto)}</strong></div><div class="kpi-item"><h4 class="kpi-item__label">P&L (%)</h4><strong class="kpi-item__value ${pnlClassDisplay}">${displayPerformance.pnlPorcentual.toFixed(2)}%</strong></div><div class="kpi-item"><h4 class="kpi-item__label">TIR Anualizada</h4><strong class="kpi-item__value ${irrClassDisplay}">${(displayPerformance.irr * 100).toFixed(2)}%</strong></div></div>
         </div>
         
         <div id="investment-assets-list" style="margin-top: var(--sp-4);">${assetCardsHTML}</div>
         
-        <div class="card card--no-bg" style="padding:0; margin-top: var(--sp-4);">
-             <div class="form-grid">
-                <button class="btn btn--secondary" data-action="manage-investment-accounts"><span class="material-icons" style="font-size:16px;">checklist</span>Gestionar Activos</button>
-                <button class="btn btn--secondary" data-action="add-aportacion"><span class="material-icons" style="font-size:16px;">add_card</span>Aportar/Retirar</button>
-            </div>
-        </div>
+        <div class="card card--no-bg" style="padding:0; margin-top: var(--sp-4);"><div class="form-grid"><button class="btn btn--secondary" data-action="manage-investment-accounts"><span class="material-icons" style="font-size:16px;">checklist</span>Gestionar Activos</button><button class="btn btn--secondary" data-action="add-aportacion"><span class="material-icons" style="font-size:16px;">add_card</span>Aportar/Retirar</button></div></div>
     `;
     
     setTimeout(() => {
@@ -4265,7 +4244,6 @@ const renderInversionesPage = async (targetContainerId) => {
         if (allocationCtx) {
             if (assetAllocationChart) assetAllocationChart.destroy();
             
-            // CAMBIO: Usar los datos FILTRADOS (displayAssetsData) en lugar de los datos completos (allAssetsData)
             const allocationData = displayAssetsData.reduce((acc, { cuenta, performance }) => {
                 const tipo = toSentenceCase(cuenta.tipo || 'Sin Categoría');
                 if (!acc[tipo]) acc[tipo] = 0;
@@ -4273,8 +4251,7 @@ const renderInversionesPage = async (targetContainerId) => {
                 return acc;
             }, {});
 
-            const chartLabels = Object.keys(allocationData);
-            const chartValues = Object.values(allocationData);
+            const chartValues = chartLabels.map(label => allocationData[label] || 0);
             
             if (chartLabels.length > 0) {
                 assetAllocationChart = new Chart(allocationCtx, {
@@ -4283,7 +4260,7 @@ const renderInversionesPage = async (targetContainerId) => {
                         labels: chartLabels,
                         datasets: [{
                             data: chartValues.map(v => v / 100),
-                            backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'],
+                            backgroundColor: chartLabels.map(label => colorMap[label]),
                             borderColor: getComputedStyle(document.body).getPropertyValue('--c-surface'),
                             borderWidth: 4
                         }]
@@ -4307,14 +4284,11 @@ const renderInversionesPage = async (targetContainerId) => {
                             event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
                         },
                         plugins: {
+                            // ===== INICIO DEL CAMBIO =====
                             legend: {
-                                display: true,
-                                position: 'bottom',
-                                labels: {
-                                    boxWidth: 12,
-                                    padding: 15
-                                }
+                                display: false // ¡Adiós, leyenda!
                             },
+                            // ===== FIN DEL CAMBIO =====
                             tooltip: {
                                 callbacks: {
                                     label: function(context) {
@@ -4341,9 +4315,6 @@ const renderInversionesPage = async (targetContainerId) => {
         }
     }, 50);
 };
-// =================================================================================
-// FIN: VERSIÓN CORREGIDA DE renderInversionesPage
-// =================================================================================
 
         const renderInformesPage = async () => {
             const resultsContainer = select('informe-results-container');
@@ -5217,101 +5188,143 @@ const renderInicioRecientesView = async () => {
                 recientesContainer.innerHTML = `<p class="text-danger">Error al cargar movimientos.</p>`;
             });
         };
-        const renderPatrimonioPage = async () => {
-            const container = select(PAGE_IDS.PATRIMONIO);
-            if(!container) return;
+        // =================================================================================
+// INICIO: VERSIÓN CORREGIDA Y MEJORADA DE renderPatrimonioPage
+// =================================================================================
+const renderPatrimonioPage = async () => {
+    const container = select(PAGE_IDS.PATRIMONIO);
+    if (!container) return;
 
-            const visibleAccounts = getVisibleAccounts();
-            const saldos = await getSaldos();
-            
-            const allAccountTypes = [...new Set(visibleAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
-            const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
-            
-            const totalFiltrado = visibleAccounts.reduce((sum, c) => {
-                const tipo = toSentenceCase(c.tipo || 'S/T');
-                if (filteredAccountTypes.has(tipo)) {
-                    return sum + (saldos[c.id] || 0);
+    // --- Definimos la paleta de colores para reutilizarla ---
+    const CHART_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
+
+    const visibleAccounts = getVisibleAccounts();
+    const saldos = await getSaldos();
+    
+    const allAccountTypes = [...new Set(visibleAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
+    const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
+    
+    const totalFiltrado = visibleAccounts.reduce((sum, c) => {
+        const tipo = toSentenceCase(c.tipo || 'S/T');
+        if (filteredAccountTypes.has(tipo)) {
+            return sum + (saldos[c.id] || 0);
+        }
+        return sum;
+    }, 0);
+
+    // --- Lógica para crear el mapa de colores ---
+    // 1. Calculamos los datos que irán en el gráfico
+    const saldosPorTipoChart = {};
+    getLiquidAccounts().filter(c => filteredAccountTypes.has(toSentenceCase(c.tipo || 'S/T'))).forEach((c) => {
+        const tipo = toSentenceCase(c.tipo || 'S/T');
+        if ((saldos[c.id] || 0) > 0) { // Solo incluimos valores positivos en el gráfico
+             saldosPorTipoChart[tipo] = (saldosPorTipoChart[tipo] || 0) + saldos[c.id];
+        }
+    });
+
+    // 2. Obtenemos las etiquetas (tipos de cuenta) del gráfico
+    const chartLabels = Object.keys(saldosPorTipoChart).sort();
+    
+    // 3. Creamos el mapa que asocia cada tipo con un color
+    const colorMap = {};
+    chartLabels.forEach((label, index) => {
+        colorMap[label] = CHART_COLORS[index % CHART_COLORS.length];
+    });
+
+    // 4. Generamos los botones de filtro usando el mapa de colores
+    const pillsHTML = allAccountTypes.map(t => {
+        const isActive = !deselectedAccountTypesFilter.has(t);
+        const color = colorMap[t];
+        let style = '';
+        if (isActive && color) {
+            style = `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF; box-shadow: 0 0 8px ${color}70;"`;
+        }
+        return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}" ${style}>${t}</button>`;
+    }).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
+
+
+    // El resto del renderizado del HTML es el mismo
+    container.innerHTML = `
+        <div class="patrimonio-header-grid">
+            <div class="patrimonio-header-grid__kpi">
+                <h4 class="kpi-item__label">Patrimonio Neto (Seleccionado)</h4>
+                <strong id="patrimonio-total-balance" class="kpi-item__value" style="font-size: 2rem; line-height: 1.1;"></strong>
+            </div>
+            <div class="patrimonio-header-grid__filters">
+                 <h4 class="kpi-item__label">Filtros por tipo de cuenta</h4>
+                 <div id="filter-account-types-pills" class="filter-pills" style="margin-bottom: 0;">${pillsHTML}</div>
+            </div>
+        </div>
+        <div class="card card--no-bg accordion-wrapper">
+            <div id="liquid-assets-chart-container" class="hidden" style="margin-bottom: 0;">
+                 <details class="accordion" open>
+                    <summary>
+                        <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">donut_small</span>Distribución de Activos Líquidos</h3>
+                        <span class="material-icons accordion__icon">expand_more</span>
+                    </summary>
+                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                        <div class="chart-container" style="height: 200px; margin-bottom: 0;">
+                            <canvas id="liquid-assets-chart"></canvas>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </div>
+        <div class="accordion-wrapper">
+            <details class="accordion" open>
+                <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">account_balance_wallet</span>Cuentas</h3><span class="material-icons accordion__icon">expand_more</span></summary>
+                <div class="accordion__content" style="padding: 0;" id="patrimonio-cuentas-container"></div>
+            </details>
+        </div>`;
+    
+    animateCountUp(select('patrimonio-total-balance'), totalFiltrado);
+    renderCuentas('patrimonio-cuentas-container', visibleAccounts, totalFiltrado);
+    
+    const chartContainer = select(`liquid-assets-chart-container`);
+    const chartCanvas = select(`liquid-assets-chart`);
+    const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
+    if (chartCtx && chartContainer) {
+        if (liquidAssetsChart) liquidAssetsChart.destroy();
+        
+        // Usamos los datos ya calculados para el gráfico
+        const chartData = Object.entries(saldosPorTipoChart);
+
+        if (chartData.length > 0) {
+            chartContainer.classList.remove('hidden');
+            liquidAssetsChart = new Chart(chartCtx, {
+                type: 'pie',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{ 
+                        data: chartLabels.map(label => saldosPorTipoChart[label] / 100),
+                        // Asignamos los colores desde nuestro mapa
+                        backgroundColor: chartLabels.map(label => colorMap[label]), 
+                        borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'), 
+                        borderWidth: 4 
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        // ===== INICIO DEL CAMBIO =====
+                        legend: { 
+                            display: false // Ocultamos la leyenda
+                        }, 
+                        // ===== FIN DEL CAMBIO =====
+                        datalabels: { 
+                            formatter: (v,c)=>{ let s=c.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return s > 0 ? (v*100/s).toFixed(0)+"%" : "0%"; }, 
+                            color: '#fff', 
+                            font: { weight: 'bold', size: 10 } 
+                        } 
+                    } 
                 }
-                return sum;
-            }, 0);
-
-            const pillsHTML = allAccountTypes.map(t => `<button class="filter-pill ${!deselectedAccountTypesFilter.has(t) ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}">${t}</button>`).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
-
-            // =========================================================================
-            // INICIO DE LA MODIFICACIÓN: Nuevo HTML para el encabezado condensado
-            // =========================================================================
-            container.innerHTML = `
-                <!-- NUEVO CONTENEDOR FLEXIBLE PARA PANTALLAS GRANDES -->
-                <div class="patrimonio-header-grid">
-                    <!-- Columna 1: Patrimonio Neto -->
-                    <div class="patrimonio-header-grid__kpi">
-                        <h4 class="kpi-item__label">Patrimonio Neto (Seleccionado)</h4>
-                        <strong id="patrimonio-total-balance" class="kpi-item__value" style="font-size: 2rem; line-height: 1.1;"></strong>
-                    </div>
-
-                    <!-- Columna 2: Filtros -->
-                    <div class="patrimonio-header-grid__filters">
-                         <h4 class="kpi-item__label">Filtros por tipo de cuenta</h4>
-                         <div id="filter-account-types-pills" class="filter-pills" style="margin-bottom: 0;">${pillsHTML}</div>
-                    </div>
-                </div>
-
-                <!-- Gráfico de Distribución (sin cambios) -->
-                <div class="card card--no-bg accordion-wrapper">
-                    <div id="liquid-assets-chart-container" class="hidden" style="margin-bottom: 0;">
-                         <details class="accordion" open>
-                            <summary>
-                                <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">donut_small</span>Distribución de Activos Líquidos</h3>
-                                <span class="material-icons accordion__icon">expand_more</span>
-                            </summary>
-                            <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                                <div class="chart-container" style="height: 200px; margin-bottom: 0;">
-                                    <canvas id="liquid-assets-chart"></canvas>
-                                </div>
-                            </div>
-                        </details>
-                    </div>
-                </div>
-                
-                <!-- Lista de Cuentas (sin cambios) -->
-                <div class="accordion-wrapper">
-                    <details class="accordion" open>
-                        <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">account_balance_wallet</span>Cuentas</h3><span class="material-icons accordion__icon">expand_more</span></summary>
-                        <div class="accordion__content" style="padding: 0;" id="patrimonio-cuentas-container"></div>
-                    </details>
-                </div>`;
-            
-            animateCountUp(select('patrimonio-total-balance'), totalFiltrado);
-            
-            renderCuentas('patrimonio-cuentas-container', visibleAccounts, totalFiltrado);
-            
-            // Lógica del gráfico (sin cambios)
-            const chartContainer = select(`liquid-assets-chart-container`);
-            const chartCanvas = select(`liquid-assets-chart`);
-            const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
-            if (chartCtx && chartContainer) {
-                if(liquidAssetsChart) liquidAssetsChart.destroy();
-                const saldosPorTipoChart = {};
-                getLiquidAccounts().filter((c) => filteredAccountTypes.has(toSentenceCase(c.tipo || 'S/T'))).forEach((c) => {
-                    const tipo = toSentenceCase(c.tipo || 'S/T');
-                    saldosPorTipoChart[tipo] = (saldosPorTipoChart[tipo] || 0) + (saldos[c.id] || 0);
-                });
-                const chartData = Object.entries(saldosPorTipoChart).filter(([,saldo]) => saldo > 0);
-                if (chartData.length > 0) {
-                    chartContainer.classList.remove('hidden');
-                    liquidAssetsChart = new Chart(chartCtx, {
-                        type: 'pie',
-                        data: {
-                            labels: chartData.map(([tipo]) => tipo),
-                            datasets: [{ data: chartData.map(([, saldo]) => saldo / 100), backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4'], borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'), borderWidth: 4 }]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } }, datalabels: { formatter: (v,c)=>{ let s=c.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return s > 0 ? (v*100/s).toFixed(0)+"%" : "0%"; }, color: '#fff', font: { weight: 'bold', size: 10 } } } }
-                    });
-                } else {
-                    chartContainer.classList.add('hidden');
-                }
-            }
-        };
+            });
+        } else {
+            chartContainer.classList.add('hidden');
+        }
+    }
+};
         
 				const renderAnalisisPage = () => {
             const container = select(PAGE_IDS.ANALISIS);

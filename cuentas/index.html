@@ -27,7 +27,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-	
+	<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0"></script>
     <style>
         /* ================================================================= */
         /* === ESTILOS BASE: TEMA ÚNICO "AMOLED FUTURISTA" === */
@@ -5188,50 +5188,45 @@ const renderInicioRecientesView = async () => {
                 recientesContainer.innerHTML = `<p class="text-danger">Error al cargar movimientos.</p>`;
             });
         };
-        // =================================================================================
-// INICIO: VERSIÓN CORREGIDA Y MEJORADA DE renderPatrimonioPage
+ // =================================================================================
+// INICIO: VERSIÓN FINAL Y 100% INTERACTIVA DE renderPatrimonioPage
 // =================================================================================
 const renderPatrimonioPage = async () => {
     const container = select(PAGE_IDS.PATRIMONIO);
     if (!container) return;
 
-    // --- Definimos la paleta de colores para reutilizarla ---
-    const CHART_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
-
+    const BASE_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
     const visibleAccounts = getVisibleAccounts();
     const saldos = await getSaldos();
     
     const allAccountTypes = [...new Set(visibleAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
     const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
-    
-    const totalFiltrado = visibleAccounts.reduce((sum, c) => {
-        const tipo = toSentenceCase(c.tipo || 'S/T');
-        if (filteredAccountTypes.has(tipo)) {
-            return sum + (saldos[c.id] || 0);
-        }
-        return sum;
-    }, 0);
 
-    // --- Lógica para crear el mapa de colores ---
-    // 1. Calculamos los datos que irán en el gráfico
-    const saldosPorTipoChart = {};
-    getLiquidAccounts().filter(c => filteredAccountTypes.has(toSentenceCase(c.tipo || 'S/T'))).forEach((c) => {
-        const tipo = toSentenceCase(c.tipo || 'S/T');
-        if ((saldos[c.id] || 0) > 0) { // Solo incluimos valores positivos en el gráfico
-             saldosPorTipoChart[tipo] = (saldosPorTipoChart[tipo] || 0) + saldos[c.id];
-        }
-    });
-
-    // 2. Obtenemos las etiquetas (tipos de cuenta) del gráfico
-    const chartLabels = Object.keys(saldosPorTipoChart).sort();
-    
-    // 3. Creamos el mapa que asocia cada tipo con un color
     const colorMap = {};
-    chartLabels.forEach((label, index) => {
-        colorMap[label] = CHART_COLORS[index % CHART_COLORS.length];
+    allAccountTypes.forEach((tipo, index) => {
+        colorMap[tipo] = BASE_COLORS[index % BASE_COLORS.length];
     });
 
-    // 4. Generamos los botones de filtro usando el mapa de colores
+    // <-- ¡AQUÍ ESTÁ LA CORRECCIÓN CLAVE! -->
+    // 1. Filtramos las cuentas ANTES de preparar los datos para el gráfico.
+    const filteredAccountsForChart = visibleAccounts.filter(c => {
+        const tipo = toSentenceCase(c.tipo || 'S/T');
+        return filteredAccountTypes.has(tipo);
+    });
+
+    // 2. Ahora, construimos los datos del árbol usando solo las cuentas filtradas.
+    const treeData = [];
+    filteredAccountsForChart.forEach(c => { // Usamos la nueva lista filtrada
+        const saldo = saldos[c.id] || 0;
+        if (saldo > 0) {
+            treeData.push({
+                tipo: toSentenceCase(c.tipo || 'S/T'),
+                nombre: c.nombre,
+                saldo: saldo / 100
+            });
+        }
+    });
+    
     const pillsHTML = allAccountTypes.map(t => {
         const isActive = !deselectedAccountTypesFilter.has(t);
         const color = colorMap[t];
@@ -5241,9 +5236,10 @@ const renderPatrimonioPage = async () => {
         }
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
+    
+    const totalFiltrado = filteredAccountsForChart.reduce((sum, c) => sum + (saldos[c.id] || 0), 0);
 
-
-    // El resto del renderizado del HTML es el mismo
+    // El resto del código HTML y de renderizado permanece igual.
     container.innerHTML = `
         <div class="patrimonio-header-grid">
             <div class="patrimonio-header-grid__kpi">
@@ -5259,11 +5255,11 @@ const renderPatrimonioPage = async () => {
             <div id="liquid-assets-chart-container" class="hidden" style="margin-bottom: 0;">
                  <details class="accordion" open>
                     <summary>
-                        <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">donut_small</span>Distribución de Activos Líquidos</h3>
+                        <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">data_usage</span>Estructura del Patrimonio</h3>
                         <span class="material-icons accordion__icon">expand_more</span>
                     </summary>
                     <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                        <div class="chart-container" style="height: 200px; margin-bottom: 0;">
+                        <div class="chart-container" style="height: 250px; margin-bottom: 0;">
                             <canvas id="liquid-assets-chart"></canvas>
                         </div>
                     </div>
@@ -5278,46 +5274,65 @@ const renderPatrimonioPage = async () => {
         </div>`;
     
     animateCountUp(select('patrimonio-total-balance'), totalFiltrado);
-    renderCuentas('patrimonio-cuentas-container', visibleAccounts, totalFiltrado);
+    // 3. El listado de cuentas también usará la lista filtrada para mayor eficiencia.
+    renderCuentas('patrimonio-cuentas-container', filteredAccountsForChart, totalFiltrado);
     
     const chartContainer = select(`liquid-assets-chart-container`);
     const chartCanvas = select(`liquid-assets-chart`);
     const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
+
     if (chartCtx && chartContainer) {
         if (liquidAssetsChart) liquidAssetsChart.destroy();
         
-        // Usamos los datos ya calculados para el gráfico
-        const chartData = Object.entries(saldosPorTipoChart);
-
-        if (chartData.length > 0) {
+        if (treeData.length > 0) {
             chartContainer.classList.remove('hidden');
             liquidAssetsChart = new Chart(chartCtx, {
-                type: 'pie',
+                type: 'treemap',
                 data: {
-                    labels: chartLabels,
-                    datasets: [{ 
-                        data: chartLabels.map(label => saldosPorTipoChart[label] / 100),
-                        // Asignamos los colores desde nuestro mapa
-                        backgroundColor: chartLabels.map(label => colorMap[label]), 
-                        borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'), 
-                        borderWidth: 4 
+                    datasets: [{
+                        tree: treeData,
+                        key: 'saldo',
+                        groups: ['tipo', 'nombre'],
+                        spacing: 0.5,
+                        borderWidth: 1.5,
+                        borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'),
+                        backgroundColor: (ctx) => {
+                            if (ctx.type === 'data') {
+                                const node = ctx.raw._data;
+                                const baseColor = colorMap[node.tipo];
+                                return baseColor ? `${baseColor}B3` : 'grey';
+                            }
+                            return 'transparent';
+                        },
+                        labels: {
+                            display: true,
+                            color: '#FFFFFF',
+                            font: { size: 10, weight: '600' },
+                            align: 'center',
+                            position: 'middle'
+                        }
                     }]
                 },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false, 
-                    plugins: { 
-                        // ===== INICIO DEL CAMBIO =====
-                        legend: { 
-                            display: false // Ocultamos la leyenda
-                        }, 
-                        // ===== FIN DEL CAMBIO =====
-                        datalabels: { 
-                            formatter: (v,c)=>{ let s=c.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return s > 0 ? (v*100/s).toFixed(0)+"%" : "0%"; }, 
-                            color: '#fff', 
-                            font: { weight: 'bold', size: 10 } 
-                        } 
-                    } 
+                options: {
+                    sunburst: true,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const node = context.raw._data;
+                                    const value = formatCurrency(context.raw.v * 100);
+                                    if (node && node.nombre) {
+                                        return `${node.nombre}: ${value}`;
+                                    }
+                                    return `${context.raw.g}: ${value}`;
+                                }
+                            }
+                        },
+                        datalabels: { display: false }
+                    }
                 }
             });
         } else {
@@ -5325,7 +5340,9 @@ const renderPatrimonioPage = async () => {
         }
     }
 };
-        
+// =================================================================================
+// FIN: VERSIÓN FINAL Y 100% INTERACTIVA
+// =================================================================================
 				const renderAnalisisPage = () => {
             const container = select(PAGE_IDS.ANALISIS);
             if(!container) return;
@@ -6443,7 +6460,43 @@ const renderPatrimonioPage = async () => {
         setButtonLoading(btn, false);
     }
 },
-                    'skip-recurrent': async (event) => { /* ... */ },
+                    'skip-recurrent': async (event) => {
+    const actionTarget = event.target.closest('[data-action]');
+    if (!actionTarget) return;
+    const { id } = actionTarget.dataset;
+    
+    const recurrente = db.recurrentes.find(r => r.id === id);
+    if (!recurrente) {
+        showToast('Error: No se encontró la operación recurrente.', 'danger');
+        return;
+    }
+
+    try {
+        const fechaDeEjecucion = parseDateStringAsUTC(recurrente.nextDate);
+        const newNextDate = calculateNextDueDate(fechaDeEjecucion, recurrente.frequency);
+        const newNextDateString = newNextDate.toISOString().slice(0, 10);
+        
+        // Simplemente actualizamos la fecha de la próxima ejecución, sin crear movimiento
+        await saveDoc('recurrentes', id, { nextDate: newNextDateString });
+
+        hapticFeedback('success');
+        showToast('Operación omitida. Programada para la siguiente fecha.');
+        
+        // Animación para eliminar el elemento de la lista de pendientes
+        const pendingItem = select(`pending-recurrente-${id}`);
+        if(pendingItem) {
+            pendingItem.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+            pendingItem.style.opacity = '0';
+            pendingItem.style.transform = 'scale(0.95)';
+            setTimeout(() => pendingItem.remove(), 300);
+        }
+
+    } catch (error) {
+        console.error("Error al omitir el movimiento recurrente:", error);
+        showToast("No se pudo omitir la operación. Revisa tu conexión.", "danger");
+    }
+},
+
 					'navigate': () => navigateTo(page),
                     'help': showHelpModal,
                     'exit': handleExitApp,
