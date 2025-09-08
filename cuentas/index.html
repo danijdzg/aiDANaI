@@ -5035,12 +5035,17 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
                             <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
                             <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">${dateText}</div>
                         </div>
-                        <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                            <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
-                            <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">
-                                <span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
-                            </button>
-                        </div>
+                        <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+							<strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+    
+						<div style="display: flex; align-items: center; gap: 8px;">
+							<button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
+							<span class="material-icons" style="font-size: 14px;">skip_next</span>No añadir
+							</button>
+							<button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
+							<span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
+							</button>
+						</div>
                     </div>
                 </div>
                 `;
@@ -6291,6 +6296,51 @@ const renderInicioRecientesView = async () => {
         setButtonLoading(btn, false);
     }
 },
+	'skip-recurrent': async (event) => {
+    const actionTarget = event.target.closest('[data-action]');
+    if (!actionTarget) return;
+
+    const { id } = actionTarget.dataset;
+    const btn = actionTarget.closest('button');
+    if (!id || !btn) return;
+
+    setButtonLoading(btn, true);
+
+    try {
+        const recurrente = db.recurrentes.find(r => r.id === id);
+        if (!recurrente) {
+            showToast('Error: No se encontró la operación recurrente.', 'danger');
+            return;
+        }
+
+        // 1. Calcula la siguiente fecha de ejecución sin crear el movimiento.
+        const fechaActualOmitida = parseDateStringAsUTC(recurrente.nextDate);
+        const newNextDate = calculateNextDueDate(fechaActualOmitida, recurrente.frequency);
+        const newNextDateString = newNextDate.toISOString().slice(0, 10);
+
+        // 2. Actualiza únicamente el documento recurrente con la nueva fecha.
+        await saveDoc('recurrentes', id, { nextDate: newNextDateString });
+
+        hapticFeedback('success');
+        showToast('Operación omitida. Se programó para la siguiente fecha.');
+
+        // 3. Elimina el elemento de la lista de pendientes con una animación.
+        const pendingItem = select(`pending-recurrente-${id}`);
+        if (pendingItem) {
+            pendingItem.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+            pendingItem.style.opacity = '0';
+            pendingItem.style.transform = 'scale(0.95)';
+            setTimeout(() => pendingItem.remove(), 300);
+        }
+    } catch (error) {
+        console.error("Error al omitir el movimiento recurrente:", error);
+        showToast("No se pudo omitir el movimiento. Revisa tu conexión.", "danger");
+    } finally {
+        setButtonLoading(btn, false);
+    }
+},
+// === FIN DEL CÓDIGO A AÑADIR ===
+// =================================================================
 
     'navigate': () => navigateTo(page),
     'help': showHelpModal,
