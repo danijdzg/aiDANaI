@@ -2393,32 +2393,32 @@ body[data-theme="quartz"] .starry-background { display: none; }
         const DESCRIPTION_SUGGESTION_LIMIT = 5; 
         
         // =================================================================================
-        // 2.1. HELPERS DE SEGURIDAD PARA EL PIN
-        // =================================================================================
+// 2.1. HELPERS DE SEGURIDAD PARA EL PIN
+// =================================================================================
 
-        /**
-         * Convierte un PIN en un hash SHA-256 seguro para su almacenamiento.
-         * @param {string} pin - El PIN de 4 dígitos.
-         * @returns {Promise<string>} El hash en formato hexadecimal.
-         */
-        const hashPin = async (pin) => {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(pin);
-            const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        };
+/**
+ * Convierte un PIN en un hash SHA-256 seguro para su almacenamiento.
+ * @param {string} pin - El PIN de 4 dígitos.
+ * @returns {Promise<string>} El hash en formato hexadecimal.
+ */
+const hashPin = async (pin) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(pin);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
 
-        /**
-         * Verifica si un PIN introducido coincide con un hash almacenado.
-         * @param {string} pin - El PIN introducido por el usuario.
-         * @param {string} storedHash - El hash guardado en localStorage.
-         * @returns {Promise<boolean>} True si coinciden, false si no.
-         */
-        const verifyPin = async (pin, storedHash) => {
-            const newHash = await hashPin(pin);
-            return newHash === storedHash;
-        };
+/**
+ * Verifica si un PIN introducido coincide con un hash almacenado.
+ * @param {string} pin - El PIN introducido por el usuario.
+ * @param {string} storedHash - El hash guardado en localStorage.
+ * @returns {Promise<boolean>} True si coinciden, false si no.
+ */
+const verifyPin = async (pin, storedHash) => {
+    const newHash = await hashPin(pin);
+    return newHash === storedHash;
+};
 
 		// Añade esta nueva función en tu sección de UI UTILITIES & HELPERS
 
@@ -2982,37 +2982,53 @@ async function migrateBalancesToAccounts() {
         }
         // ================== FIN CAMBIO ===================================================
 
-        const checkAuthState = () => {
-            // Primero, revisamos si hay un PIN configurado para este dispositivo
-            const storedPinHash = localStorage.getItem('pinUserHash');
-            const storedEmail = localStorage.getItem('pinUserEmail');
+    const checkAuthState = () => {
+    // 1. Revisa si hay un PIN configurado en este dispositivo
+    const storedPinHash = localStorage.getItem('pinUserHash');
+    const storedEmail = localStorage.getItem('pinUserEmail');
+    const pinLoginCount = parseInt(localStorage.getItem('pinLoginCount') || '0', 10);
 
-            if (storedPinHash && storedEmail) {
-                // Si hay PIN, mostramos la pantalla de PIN en lugar de esperar a Firebase
-                showPinLoginScreen(storedEmail);
+    // 2. Lógica de seguridad: Pide la contraseña cada ~30 inicios
+    // Se usa un número aleatorio entre 30 y 34 para que no sea predecible.
+    const securityCheckTrigger = 30 + Math.floor(Math.random() * 5);
+
+    // Mantenemos el listener de Firebase activo en segundo plano para que la sesión no expire
+    // y para tener el `currentUser` listo.
+    fbAuth.onAuthStateChanged((user) => {
+        currentUser = user;
+    });
+
+    if (storedPinHash && storedEmail && pinLoginCount < securityCheckTrigger) {
+        // CASO A: Hay un PIN válido y el contador no ha llegado al límite.
+        // Mostramos la pantalla de PIN. La app esperará la interacción del usuario.
+        showPinLoginScreen(storedEmail);
+    } else {
+        // CASO B: No hay PIN, o el contador de seguridad se ha alcanzado.
+        // Forzamos el login completo.
+        if (pinLoginCount >= securityCheckTrigger) {
+            showToast('Por seguridad, introduce tu contraseña de nuevo.', 'info', 4000);
+        }
+        
+        // Limpiamos cualquier credencial de PIN antigua
+        localStorage.removeItem('pinUserHash');
+        localStorage.removeItem('pinUserEmail');
+        localStorage.removeItem('pinLoginCount');
+
+        // Procedemos con el flujo de autenticación normal de Firebase
+        fbAuth.onAuthStateChanged((user) => {
+            if (user) {
+                currentUser = user;
+                loadCoreData(user.uid);
+            } else {
+                currentUser = null;
+                unsubscribeListeners.forEach(unsub => unsub());
+                unsubscribeListeners = [];
+                db = getInitialDb();
+                showLoginScreen();
             }
-
-            // El listener de Firebase sigue funcionando en segundo plano
-            fbAuth.onAuthStateChanged((user) => {
-                if (user) {
-                    currentUser = user;
-                    // Si el usuario ya está logueado y no había PIN, cargamos la app
-                    // Si había PIN y ya lo introdujo, esta parte se ejecutará igualmente para cargar los datos
-                    if (!storedPinHash) {
-                         loadCoreData(user.uid);
-                    }
-                } else {
-                    currentUser = null;
-                    unsubscribeListeners.forEach(unsub => unsub());
-                    unsubscribeListeners = [];
-                    db = getInitialDb();
-                    // Si no hay PIN configurado, mostramos el login normal
-                    if (!storedPinHash) {
-                        showLoginScreen();
-                    }
-                }
-            });
-        };
+        });
+    }
+};
 
         // =================================================================================
         // 2.5. LÓGICA DE MOVIMIENTOS RECURRENTES
@@ -3316,66 +3332,53 @@ window.addEventListener('offline', () => {
     };
 
     const handlePinLogin = async (pin) => {
-        const errorEl = select('pin-login-error');
-        const storedPinHash = localStorage.getItem('pinUserHash');
-        
-        const isValid = await verifyPin(pin, storedPinHash);
-        
-        if (isValid) {
-            if (errorEl) errorEl.textContent = '';
-            hapticFeedback('success');
-            if (currentUser) {
-                loadCoreData(currentUser.uid);
-            } else {
-                showToast('Tu sesión ha expirado, por favor inicia sesión de nuevo.', 'warning');
-                handleForgotPin();
-            }
+    const errorEl = select('pin-login-error');
+    errorEl.textContent = '';
+    
+    const storedPinHash = localStorage.getItem('pinUserHash');
+    const isValid = await verifyPin(pin, storedPinHash);
+
+    if (isValid) {
+        hapticFeedback('success');
+
+        // 1. Incrementa el contador de inicios de sesión con PIN
+        let count = parseInt(localStorage.getItem('pinLoginCount') || '0', 10);
+        count++;
+        localStorage.setItem('pinLoginCount', count.toString());
+
+        // 2. Comprueba si la sesión de Firebase sigue activa
+        if (currentUser) {
+            // La sesión está activa, carga los datos y empieza la app
+            loadCoreData(currentUser.uid);
         } else {
-            if (errorEl) errorEl.textContent = 'PIN incorrecto. Inténtalo de nuevo.';
-            hapticFeedback('error');
-            selectAll('.pin-input').forEach(input => input.value = '');
-            const firstPinInput = select('#pin-input-0');
-            if (firstPinInput) firstPinInput.focus();
+            // La sesión de Firebase ha expirado. Forzamos el login completo.
+            showToast('Tu sesión ha expirado, por favor inicia sesión de nuevo.', 'warning');
+            handleForgotPin(); // Esta función ya limpia el PIN y muestra el login
         }
-    };
+    } else {
+        hapticFeedback('error');
+        errorEl.textContent = 'PIN incorrecto. Inténtalo de nuevo.';
+        
+        // Limpia los campos de PIN para un nuevo intento
+        selectAll('.pin-input').forEach(input => input.value = '');
+        select('#pin-input-0').focus();
+    }
+};
 
-    const handleForgotPin = () => {
-        showConfirmationModal('Esto eliminará tu PIN guardado en este dispositivo y deberás iniciar sesión con tu contraseña. ¿Continuar?', () => {
-            localStorage.removeItem('pinUserHash');
-            localStorage.removeItem('pinUserEmail');
-            const pinLoginScreen = select('pin-login-screen');
-            if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
-            showLoginScreen();
-            showToast('PIN eliminado. Por favor, inicia sesión.', 'info');
-        }, '¿Olvidaste tu PIN?');
-    };
+// Lógica para el enlace "¿Olvidaste tu PIN?" o "Iniciar con contraseña"
+const handleForgotPin = () => {
+    showConfirmationModal('Esto eliminará tu PIN guardado en este dispositivo y deberás iniciar sesión con tu contraseña. ¿Continuar?', () => {
+        localStorage.removeItem('pinUserHash');
+        localStorage.removeItem('pinUserEmail');
+        localStorage.removeItem('pinLoginCount');
+        select('pin-login-screen').classList.remove('login-view--visible');
+        showLoginScreen();
+        showToast('PIN eliminado. Por favor, inicia sesión.', 'info');
+    }, '¿Olvidaste tu PIN?');
+};
 
-    const showPinSetupModal = () => {
-        const hasPin = !!localStorage.getItem('pinUserHash');
-        const title = hasPin ? 'Cambiar PIN de Acceso' : 'Configurar PIN de Acceso';
-        const buttonText = hasPin ? 'Cambiar PIN' : 'Guardar PIN';
-        const html = `
-            <p class="form-label" style="margin-bottom: var(--sp-3);">
-                Introduce un PIN de 4 dígitos. Lo usarás para acceder rápidamente a tu cuenta en este dispositivo.
-            </p>
-            <form id="setup-pin-form">
-                <div class="form-group">
-                    <label for="new-pin" class="form-label">Nuevo PIN de 4 dígitos</label>
-                    <input type="password" id="new-pin" class="form-input" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required>
-                </div>
-                <div class="form-group">
-                    <label for="confirm-pin" class="form-label">Confirma el nuevo PIN</label>
-                    <input type="password" id="confirm-pin" class="form-input" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required>
-                </div>
-                <div class="modal__actions" style="flex-direction: column; align-items: stretch; gap: 1rem;">
-                     <button type="submit" class="btn btn--primary">${buttonText}</button>
-                     ${hasPin ? '<button type="button" class="btn btn--danger" data-action="remove-pin">Eliminar PIN</button>' : ''}
-                </div>
-            </form>
-        `;
-        showGenericModal(title, html);
-    };
 
+    
         const handleLogin = (btn) => {
             const email = (select('login-email')).value.trim(), password = (select('login-password')).value, errEl = select('login-error'); clearAllErrors('login-form'); if(errEl) errEl.textContent = ''; let v = true;
             if (!email) { displayError('login-email', 'El correo es obligatorio.'); v = false; }
@@ -6149,7 +6152,32 @@ const renderPatrimonioPage = async () => {
             showGenericModal('Gestionar Movimientos Recurrentes', html);
             renderRecurrentesModalList();
         };
-
+		const showPinSetupModal = () => {
+    const hasPin = !!localStorage.getItem('pinUserHash');
+    const title = hasPin ? 'Cambiar PIN de Acceso' : 'Configurar PIN de Acceso';
+    const buttonText = hasPin ? 'Cambiar PIN' : 'Guardar PIN';
+    const html = `
+        <p class="form-label" style="margin-bottom: var(--sp-3);">
+            Introduce un PIN de 4 dígitos. Lo usarás para acceder rápidamente a tu cuenta en este dispositivo.
+        </p>
+        <form id="setup-pin-form">
+            <div class="form-group">
+                <label for="new-pin" class="form-label">Nuevo PIN de 4 dígitos</label>
+                <input type="password" id="new-pin" class="form-input" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required>
+            </div>
+            <div class="form-group">
+                <label for="confirm-pin" class="form-label">Confirma el nuevo PIN</label>
+                <input type="password" id="confirm-pin" class="form-input" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required>
+            </div>
+            <div class="modal__actions" style="flex-direction: column; align-items: stretch; gap: 1rem;">
+                 <button type="submit" class="btn btn--primary">${buttonText}</button>
+                 ${hasPin ? '<button type="button" class="btn btn--danger" data-action="remove-pin">Eliminar PIN</button>' : ''}
+            </div>
+        </form>
+    `;
+    showGenericModal(title, html);
+};
+		
         const renderRecurrentesModalList = () => {
             const list = select('recurrentes-modal-list');
             if (!list) return;
@@ -6730,6 +6758,7 @@ const renderPatrimonioPage = async () => {
                         showConfirmationModal('¿Seguro que quieres eliminar el PIN de este dispositivo?', () => {
                             localStorage.removeItem('pinUserHash');
                             localStorage.removeItem('pinUserEmail');
+							localStorage.removeItem('pinLoginCount');
                             hideModal('generic-modal');
                             showToast('PIN eliminado.', 'info');
                             const btnText = select('setup-pin-btn-text');
@@ -6745,37 +6774,56 @@ const renderPatrimonioPage = async () => {
                 const target = e.target;
                 const submitter = e.submitter;
                 const handlers = {
-                    'login-form': () => handleLogin(submitter),
-                    'form-movimiento':() => handleSaveMovement(target, submitter),
-                    'add-concepto-form':() => handleAddConcept(submitter),
-                    'add-cuenta-form':() => handleAddAccount(submitter),
-                    'manage-investment-accounts-form':() => handleSaveInvestmentAccounts(target, submitter),
-                    'form-aportacion': () => handleSaveAportacion(target, submitter),
-                    'form-valoracion': () => handleSaveValoracion(target, submitter),
-                    'setup-pin-form': async () => {
-                        const newPin = select('new-pin').value;
-                        const confirmPin = select('confirm-pin').value;
-                    
-                        if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
-                            showToast('El PIN debe ser de 4 dígitos numéricos.', 'warning');
-                            return;
-                        }
-                        if (newPin !== confirmPin) {
-                            showToast('Los PINs no coinciden.', 'warning');
-                            return;
-                        }
-                    
-                        const hashedPin = await hashPin(newPin);
-                        localStorage.setItem('pinUserHash', hashedPin);
-                        localStorage.setItem('pinUserEmail', currentUser.email);
-                        
-                        hideModal('generic-modal');
-                        showToast('¡PIN configurado con éxito!', 'info');
-                        const btnText = select('setup-pin-btn-text');
-                        if (btnText) btnText.textContent = 'Cambiar PIN de Acceso';
-                    },
-                };
-                if(handlers[target.id]) handlers[target.id]();
+    'login-form': () => handleLogin(submitter),
+    'form-movimiento': () => handleSaveMovement(target, submitter),
+    'add-concepto-form': () => handleAddConcept(submitter),
+    'add-cuenta-form': () => handleAddAccount(submitter),
+    'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter),
+    'form-aportacion': () => handleSaveAportacion(target, submitter),
+    'form-valoracion': () => handleSaveValoracion(target, submitter),
+
+    // ======================= INICIO DEL CÓDIGO A AÑADIR =======================
+    'setup-pin-form': async () => {
+    const newPin = select('new-pin').value;
+    const confirmPin = select('confirm-pin').value;
+
+    if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+        showToast('El PIN debe ser de 4 dígitos numéricos.', 'warning');
+        return;
+    }
+    if (newPin !== confirmPin) {
+        showToast('Los PINs no coinciden.', 'warning');
+        return;
+    }
+
+    const btn = target.querySelector('button[type="submit"]');
+    setButtonLoading(btn, true, 'Guardando...');
+
+    try {
+        // 1. Hashea el PIN para guardarlo de forma segura
+        const hashedPin = await hashPin(newPin);
+
+        // 2. Guarda el hash, el email del usuario y el contador de logins
+        localStorage.setItem('pinUserHash', hashedPin);
+        localStorage.setItem('pinUserEmail', currentUser.email);
+        localStorage.setItem('pinLoginCount', '0'); // Inicia el contador
+
+        // 3. Proporciona feedback al usuario
+        hideModal('generic-modal');
+        showToast('¡PIN configurado con éxito!', 'info');
+        const btnText = select('setup-pin-btn-text');
+        if (btnText) btnText.textContent = 'Cambiar/Eliminar PIN';
+
+    } catch (error) {
+        console.error("Error al guardar el PIN:", error);
+        showToast('No se pudo guardar el PIN.', 'danger');
+    } finally {
+        setButtonLoading(btn, false);
+    }
+},
+    // ======================= FIN DEL CÓDIGO A AÑADIR =======================
+};
+if (handlers[target.id]) handlers[target.id]();
             });
 
             document.body.addEventListener('input', (e) => {
