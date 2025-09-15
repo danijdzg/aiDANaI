@@ -260,7 +260,17 @@ body {
         #virtual-list-sizer { position: relative; width: 100%; }
         #virtual-list-content { position: absolute; top: 0; left: 0; width: 100%; }
 
-        .transaction-card { display: flex; align-items: flex-start; padding: var(--sp-2) 0; cursor: pointer; border-bottom: 1px solid var(--c-outline); line-height: 1.25; min-height: 0; transition: background-color 0.2s; user-select: none; }
+        .transaction-card {
+    display: flex;
+    align-items: flex-start;
+    padding: var(--sp-2) 0;
+    cursor: pointer;
+    border-bottom: 1px solid var(--c-outline);
+    line-height: 1.25;
+    min-height: 64px; /* <--- AÑADE ESTA LÍNEA */
+    transition: background-color 0.2s;
+    user-select: none;
+}
         .transaction-card:hover { background-color: var(--c-surface-variant); }
         .transaction-card:last-child { border-bottom: none; }
         .transaction-card__indicator { flex-shrink: 0; width: 3px; align-self: stretch; border-radius: 99px; margin-right: var(--sp-2); }
@@ -2241,83 +2251,18 @@ async function loadCoreData(uid) {
 			return chunks;
 		};
 		const measureListItemHeights = () => {
-			const container = select('movimientos-list-container');
-			if (!container) return;
-
-            const tempTransaction = document.createElement('div');
-            tempTransaction.className = 'transaction-card';
-            tempTransaction.style.position = 'absolute';
-            tempTransaction.style.visibility = 'hidden';
-            tempTransaction.innerHTML = `
-                <div class="transaction-card__indicator transaction-card__indicator--expense"></div>
-                <div class="transaction-card__content">
-                    <div class="transaction-card__details">
-                        <div class="transaction-card__row-1">Medición de Altura</div>
-                        <div class="transaction-card__row-2">Esto es solo para medir</div>
-                    </div>
-                    <div class="transaction-card__figures">
-                        <div class="transaction-card__amount">1,00 €</div>
-                        <div class="transaction-card__balance">1,00 €</div>
-                    </div>
-                </div>`;
-            container.appendChild(tempTransaction);
-            vList.heights.transaction = tempTransaction.offsetHeight;
-            container.removeChild(tempTransaction);
-
-            const tempTransfer = document.createElement('div');
-            tempTransfer.className = 'transaction-card';
-            tempTransfer.style.position = 'absolute';
-            tempTransfer.style.visibility = 'hidden';
-            tempTransfer.innerHTML = `
-                <div class="transaction-card__indicator transaction-card__indicator--transfer"></div>
-                <div class="transaction-card__content">
-                     <div class="transaction-card__details">
-                        <div class="transaction-card__concept">Medición Traspaso</div>
-                        <div class="transaction-card__description">Fecha</div>
-                        <div class="transaction-card__transfer-details">
-                            <div class="transaction-card__transfer-row"><span>Origen</span></div>
-                            <div class="transaction-card__transfer-row"><span>Destino</span></div>
-                        </div>
-                    </div>
-                </div>`;
-            container.appendChild(tempTransfer);
-            vList.heights.transfer = tempTransfer.offsetHeight;
-            container.removeChild(tempTransfer);
-
-            const tempHeader = document.createElement('div');
-            tempHeader.className = 'movimiento-date-header';
-            tempHeader.style.position = 'absolute';
-            tempHeader.style.visibility = 'hidden';
-            tempHeader.innerHTML = `<span>FECHA</span><span>TOTAL</span>`;
-            container.appendChild(tempHeader);
-            vList.heights.header = tempHeader.offsetHeight;
-            container.removeChild(tempHeader);
-			/* === INICIO: CÓDIGO AÑADIDO === */
-            // Medimos la altura de la cabecera para la nueva sección de pendientes
-            const tempPendingHeader = document.createElement('div');
-            tempPendingHeader.className = 'movimiento-date-header'; // Reutilizamos un estilo similar
-            tempPendingHeader.style.cssText = 'position:absolute; visibility:hidden; background-color: var(--c-warning); color: var(--c-black);';
-            tempPendingHeader.innerHTML = `<span><span class="material-icons" style="font-size:16px;vertical-align:bottom;">update</span> RECURRENTES PENDIENTES</span>`;
-            container.appendChild(tempPendingHeader);
-            vList.heights.pendingHeader = tempPendingHeader.offsetHeight;
-            container.removeChild(tempPendingHeader);
-
-            // Medimos la altura de una tarjeta de un movimiento pendiente
-            const tempPendingItem = document.createElement('div');
-            tempPendingItem.className = 'transaction-card';
-            tempPendingItem.style.cssText = 'position:absolute; visibility:hidden;';
-            tempPendingItem.innerHTML = `
-                <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
-                <div class="transaction-card__content">
-                    <div class="transaction-card__details"><div class="transaction-card__row-1">Recurrente de prueba</div><div class="transaction-card__row-2">Pendiente</div></div>
-                    <div class="transaction-card__figures" style="gap: 8px;"><strong class="transaction-card__amount">1,00 €</strong><div><button class="btn btn--secondary" style="padding: 4px 8px;"></button><button class="btn btn--primary" style="padding: 4px 8px;"></button></div></div>
-                </div>`;
-            container.appendChild(tempPendingItem);
-            vList.heights.pendingItem = tempPendingItem.offsetHeight;
-            container.removeChild(tempPendingItem);
-            /* === FIN: CÓDIGO AÑADIDO === */
-            console.log('Alturas de elementos medidas (CORREGIDO):', vList.heights);
-        };
+    // Ya no medimos nada. Usamos valores fijos basados en el CSS.
+    // Es un "contrato" entre nuestro estilo y nuestro código.
+    vList.heights = {
+        transaction: 64, // Coincide con el min-height que pusimos en el CSS
+        transfer: 76,    // Valor estimado para traspasos, puedes ajustarlo
+        header: 40,      // Valor estimado para cabeceras
+        pendingHeader: 40, // Valor estimado
+        pendingItem: 72    // Valor estimado
+    };
+    
+    console.log('Alturas de elementos definidas (Robusto):', vList.heights);
+};
         const hapticFeedback = (type = 'light') => {
             if ('vibrate' in navigator) {
                 try {
@@ -7559,73 +7504,78 @@ const handleSaveAndNewMovement = async (form, btn) => {
 
             const isRecurrent = select('movimiento-recurrente').checked;
             
-            const batch = fbDb.batch();
-            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovementData.id);
-            batch.set(movRef, newMovementData);
-            
-            const cuentaDestino = db.cuentas.find(c => c.id === newMovementData.cuentaDestinoId);
-            const cuentaOrigen = db.cuentas.find(c => c.id === newMovementData.cuentaOrigenId);
-            const cuentaMovimiento = db.cuentas.find(c => c.id === newMovementData.cuentaId);
-
-            if ((newMovementData.tipo === 'traspaso' && cuentaDestino && cuentaDestino.esInversion) || (newMovementData.tipo === 'movimiento' && newMovementData.cantidad > 0 && cuentaMovimiento && cuentaMovimiento.esInversion)) {
-                const newCashflowId = generateId();
-                const cashflowRef = fbDb.collection('users').doc(currentUser.uid).collection('inversion_cashflows').doc(newCashflowId);
-                batch.set(cashflowRef, {
-                    id: newCashflowId,
-                    cuentaId: newMovementData.tipo === 'traspaso' ? newMovementData.cuentaDestinoId : newMovementData.cuentaId,
-                    cantidad: newMovementData.cantidad,
-                    fecha: newMovementData.fecha,
-                    notas: 'Aportación automática',
-                    sourceMovementId: newMovementData.id
-                });
+           try {
+    await fbDb.runTransaction(async (transaction) => {
+        // 1. Preparamos las referencias a los documentos que vamos a tocar.
+        const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovementData.id);
+        
+        let oldMovementData = null;
+        if (mode.includes('edit')) {
+            const oldDoc = await transaction.get(movRef);
+            if (oldDoc.exists) {
+                oldMovementData = oldDoc.data();
             }
+        }
 
-            if ((newMovementData.tipo === 'traspaso' && cuentaOrigen && cuentaOrigen.esInversion) || (newMovementData.tipo === 'movimiento' && newMovementData.cantidad < 0 && cuentaMovimiento && cuentaMovimiento.esInversion)) {
-                const newCashflowId = generateId();
-                const cashflowRef = fbDb.collection('users').doc(currentUser.uid).collection('inversion_cashflows').doc(newCashflowId);
-                batch.set(cashflowRef, {
-                    id: newCashflowId,
-                    cuentaId: newMovementData.tipo === 'traspaso' ? newMovementData.cuentaOrigenId : newMovementData.cuentaId,
-                    cantidad: newMovementData.cantidad,
-                    fecha: newMovementData.fecha,
-                    notas: 'Retiro automático',
-                    sourceMovementId: newMovementData.id
-                });
-            }
-
-            if (isRecurrent) {
-                const recurrentData = { ...newMovementData, frequency: select('recurrent-frequency').value, nextDate: select('recurrent-next-date').value, endDate: select('recurrent-end-date').value || null };
-                await saveDoc('recurrentes', movementId, recurrentData);
+        // 2. Calculamos los cambios de saldo necesarios.
+        let balanceUpdates = [];
+        if (oldMovementData) { // Si estamos editando, primero revertimos el saldo antiguo.
+            if (oldMovementData.tipo === 'traspaso') {
+                balanceUpdates.push({ cuentaId: oldMovementData.cuentaOrigenId, amount: oldMovementData.cantidad }); 
+                balanceUpdates.push({ cuentaId: oldMovementData.cuentaDestinoId, amount: -oldMovementData.cantidad });
             } else {
-                let balanceUpdates = [];
-                if (oldMovementData) { 
-                    if (oldMovementData.tipo === 'traspaso') {
-                        balanceUpdates.push({ cuentaId: oldMovementData.cuentaOrigenId, amount: oldMovementData.cantidad }); 
-                        balanceUpdates.push({ cuentaId: oldMovementData.cuentaDestinoId, amount: -oldMovementData.cantidad });
-                    } else {
-                        balanceUpdates.push({ cuentaId: oldMovementData.cuentaId, amount: -oldMovementData.cantidad });
-                    }
-                }
-                
-                if (newMovementData.tipo === 'traspaso') {
-                    balanceUpdates.push({ cuentaId: newMovementData.cuentaOrigenId, amount: -newMovementData.cantidad });
-                    balanceUpdates.push({ cuentaId: newMovementData.cuentaDestinoId, amount: newMovementData.cantidad });
-                } else {
-                    balanceUpdates.push({ cuentaId: newMovementData.cuentaId, amount: newMovementData.cantidad });
-                }
-                
-                const finalUpdates = balanceUpdates.reduce((acc, up) => {
-                    if (up.cuentaId) { acc[up.cuentaId] = (acc[up.cuentaId] || 0) + up.amount; }
-                    return acc;
-                }, {});
-
-                const updatePromises = Object.entries(finalUpdates).map(([cuentaId, amount]) => updateAccountBalance(cuentaId, amount));
-                
-                await Promise.all([
-                    batch.commit(),
-                    ...updatePromises
-                ]);
+                balanceUpdates.push({ cuentaId: oldMovementData.cuentaId, amount: -oldMovementData.cantidad });
             }
+        }
+        
+        // Ahora aplicamos el nuevo saldo.
+        if (newMovementData.tipo === 'traspaso') {
+            balanceUpdates.push({ cuentaId: newMovementData.cuentaOrigenId, amount: -newMovementData.cantidad });
+            balanceUpdates.push({ cuentaId: newMovementData.cuentaDestinoId, amount: newMovementData.cantidad });
+        } else {
+            balanceUpdates.push({ cuentaId: newMovementData.cuentaId, amount: newMovementData.cantidad });
+        }
+        
+        // Agrupamos todos los cambios por cuenta.
+        const finalUpdates = balanceUpdates.reduce((acc, up) => {
+            if (up.cuentaId) { acc[up.cuentaId] = (acc[up.cuentaId] || 0) + up.amount; }
+            return acc;
+        }, {});
+
+        // 3. Dentro de la transacción, leemos el saldo actual y aplicamos el cambio.
+        for (const cuentaId in finalUpdates) {
+            const amount = finalUpdates[cuentaId];
+            if (amount !== 0) {
+                const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId);
+                transaction.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(amount) });
+            }
+        }
+        
+        // 4. Finalmente, escribimos el movimiento.
+        transaction.set(movRef, newMovementData);
+    });
+
+    // Si llegamos aquí, la transacción fue un éxito.
+    if (mode.includes('new')) {
+        newMovementIdToHighlight = movementId;
+    }
+    
+    setButtonLoading(btn, false);
+    hideModal('movimiento-modal');
+    hapticFeedback('success');
+    showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+    buildIntelligentIndex();
+    
+    const movimientosPage = select(PAGE_IDS.MOVIMIENTOS);
+    if (movimientosPage && movimientosPage.classList.contains('view--active')) {
+        await loadInitialMovements();
+    }
+    
+} catch (error) {
+    console.error("Error en la transacción de guardado:", error);
+    showToast("Error al guardar. No se realizaron cambios.", "danger");
+    setButtonLoading(btn, false);
+}
             
             if (mode.includes('new') && !isRecurrent) {
                 newMovementIdToHighlight = movementId; // <-- ¡LÍNEA AÑADIDA!
