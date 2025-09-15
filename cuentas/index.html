@@ -1211,6 +1211,40 @@ body[data-theme="aurora"] .starry-background {
 /* === FIN: Iconos del encabezado Vistosos y con Colores Vivos    === */
 /* ================================================================= */
  
+/* ================================================================= */
+/* === INICIO: AJUSTES DE RESPONSIVIDAD PARA ENCABEZADO PEQUEÑO   === */
+/* ================================================================= */
+@media (max-width: 380px) {
+    /* Hacemos la fuente del título de la página un poco más pequeña */
+    #page-title-display {
+        font-size: var(--fs-sm); /* Usamos un tamaño de fuente predefinido más pequeño */
+    }
+
+    /* Reducimos ligeramente el espacio entre el botón A/B y el título */
+    .top-bar__left-group {
+        gap: var(--sp-2); 
+    }
+
+    /* Hacemos los botones de iconos de acción más pequeños */
+    .top-bar .top-bar__actions .icon-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    /* Y también los propios iconos dentro de los botones */
+    .top-bar .top-bar__actions .icon-btn .material-icons {
+        font-size: 20px;
+    }
+
+    /* Reducimos el espacio entre los iconos de acción */
+    .top-bar__actions {
+        gap: 0;
+    }
+}
+/* ================================================================= */
+/* === FIN: AJUSTES DE RESPONSIVIDAD PARA ENCABEZADO PEQUEÑO      === */
+/* ================================================================= */ 
+ 
     </style>
 	
 	
@@ -2037,11 +2071,24 @@ async function migrateBalancesToAccounts() {
 
             const userRef = fbDb.collection('users').doc(uid);
 
-            const collectionsToLoadInitially = ['cuentas', 'conceptos'];
+            const collectionsToLoadInitially = ['cuentas', 'conceptos', 'recurrentes'];
 
             collectionsToLoadInitially.forEach(collectionName => {
                 const unsubscribe = userRef.collection(collectionName).onSnapshot(snapshot => {
                     db[collectionName] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    // Si se actualizan los recurrentes, y estamos en la página de movimientos,
+                    // forzamos una recarga de la lista para que aparezcan/desaparezcan los pendientes.
+                    if (collectionName === 'recurrentes') {
+                        dataLoaded.recurrentes = true; // Marcamos que ya están cargados
+                        const activePage = document.querySelector('.view--active');
+                        if (activePage && (activePage.id === PAGE_IDS.MOVIMIENTOS)) {
+                            loadInitialMovements();
+                        }
+                        if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) {
+                            renderPlanificacionPage();
+                        }
+                    }
                     
                     populateAllDropdowns();
                     
@@ -2073,20 +2120,7 @@ async function migrateBalancesToAccounts() {
             startMainApp();
         };
 
-        async function loadRecurrentes() {
-            if (dataLoaded.recurrentes || !currentUser) return;
-            console.log("Lazy loading: Cargando recurrentes...");
-            const unsub = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').onSnapshot(snapshot => {
-                db.recurrentes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const activePage = document.querySelector('.view--active');
-                if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
-                    renderPlanificacionPage();
-                }
-            }, err => console.error("Error al cargar recurrentes:", err));
-            unsubscribeListeners.push(unsub);
-            dataLoaded.recurrentes = true;
-        }
-
+        
         async function loadPresupuestos() {
             if (dataLoaded.presupuestos || !currentUser) return;
             console.log("Lazy loading: Cargando presupuestos...");
@@ -2224,7 +2258,30 @@ async function migrateBalancesToAccounts() {
             container.appendChild(tempHeader);
             vList.heights.header = tempHeader.offsetHeight;
             container.removeChild(tempHeader);
+			/* === INICIO: CÓDIGO AÑADIDO === */
+            // Medimos la altura de la cabecera para la nueva sección de pendientes
+            const tempPendingHeader = document.createElement('div');
+            tempPendingHeader.className = 'movimiento-date-header'; // Reutilizamos un estilo similar
+            tempPendingHeader.style.cssText = 'position:absolute; visibility:hidden; background-color: var(--c-warning); color: var(--c-black);';
+            tempPendingHeader.innerHTML = `<span><span class="material-icons" style="font-size:16px;vertical-align:bottom;">update</span> RECURRENTES PENDIENTES</span>`;
+            container.appendChild(tempPendingHeader);
+            vList.heights.pendingHeader = tempPendingHeader.offsetHeight;
+            container.removeChild(tempPendingHeader);
 
+            // Medimos la altura de una tarjeta de un movimiento pendiente
+            const tempPendingItem = document.createElement('div');
+            tempPendingItem.className = 'transaction-card';
+            tempPendingItem.style.cssText = 'position:absolute; visibility:hidden;';
+            tempPendingItem.innerHTML = `
+                <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
+                <div class="transaction-card__content">
+                    <div class="transaction-card__details"><div class="transaction-card__row-1">Recurrente de prueba</div><div class="transaction-card__row-2">Pendiente</div></div>
+                    <div class="transaction-card__figures" style="gap: 8px;"><strong class="transaction-card__amount">1,00 €</strong><div><button class="btn btn--secondary" style="padding: 4px 8px;"></button><button class="btn btn--primary" style="padding: 4px 8px;"></button></div></div>
+                </div>`;
+            container.appendChild(tempPendingItem);
+            vList.heights.pendingItem = tempPendingItem.offsetHeight;
+            container.removeChild(tempPendingItem);
+            /* === FIN: CÓDIGO AÑADIDO === */
             console.log('Alturas de elementos medidas (CORREGIDO):', vList.heights);
         };
         const hapticFeedback = (type = 'light') => {
@@ -2584,7 +2641,6 @@ window.addEventListener('offline', () => {
                 <button data-action="exit" class="icon-btn" title="Salir" aria-label="Salir de la aplicación"><span class="material-icons">exit_to_app</span></button>`;
             
             if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
-            if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.recurrentes) await loadRecurrentes();
             if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
 
             const pageRenderers = {
@@ -3524,6 +3580,48 @@ const renderInversionesPage = async (targetContainerId) => {
         };
         
         const renderVirtualListItem = (item) => {
+			/* === INICIO: CÓDIGO AÑADIDO === */
+            // Caso para renderizar la cabecera de la sección de pendientes
+            if (item.type === 'pending-header') {
+                return `
+                    <div class="movimiento-date-header" style="background-color: var(--c-warning); color: var(--c-black); font-weight: 800; letter-spacing: 0.5px;">
+                        <span>
+                            <span class="material-icons" style="font-size: 16px; vertical-align: bottom; margin-right: 4px;">update</span>
+                            RECURRENTES PENDIENTES (${item.count})
+                        </span>
+                    </div>`;
+            }
+
+            // Caso para renderizar cada item de movimiento recurrente pendiente
+            if (item.type === 'pending-item') {
+                const r = item.recurrent;
+                const nextDate = new Date(r.nextDate + 'T12:00:00Z');
+                const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+                const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+
+                return `
+                <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
+                    <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
+                    <div class="transaction-card__content">
+                        <div class="transaction-card__details">
+                            <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                            <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">Pendiente desde: ${formattedDate}</div>
+                        </div>
+                        <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                            <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
+                                    <span class="material-icons" style="font-size: 14px;">skip_next</span>No añadir
+                                </button>
+                                <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
+                                    <span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            /* === FIN: CÓDIGO AÑADIDO === */
             if (item.type === 'date-header') {
                 const dateObj = new Date(item.date + 'T12:00:00Z');
                 const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
@@ -3658,6 +3756,8 @@ const renderInversionesPage = async (targetContainerId) => {
             vList.lastRenderedRange = { start: startIndex, end: endIndex };
         };
         
+        // REEMPLAZAR la función loadInitialMovements existente por esta:
+
         const loadInitialMovements = async () => {
             const emptyEl = select('empty-movimientos'), listContainer = select('movimientos-list-container');
             if (!vList.scrollerEl) {
@@ -3667,19 +3767,22 @@ const renderInversionesPage = async (targetContainerId) => {
             }
             if (!listContainer || !emptyEl || !vList.sizerEl || !vList.contentEl) return;
             
+            // Preparamos la vista para la carga
             listContainer.classList.remove('hidden');
             emptyEl.classList.add('hidden');
             
+            // Reseteo completo del estado de la lista y la paginación
             lastVisibleMovementDoc = null;
             allMovementsLoaded = false;
             isLoadingMoreMovements = false;
-            runningBalancesCache = null;
+            runningBalancesCache = null; // Importantísimo para recalcular saldos correctamente
 			db.movimientos = [];
             vList.items = [];
             vList.itemMap = [];
             vList.sizerEl.style.height = '0px';
-            vList.contentEl.innerHTML = '';
+            vList.contentEl.innerHTML = '<div class="skeleton" style="height: 300px; width: 100%;"></div>'; // Mostramos un esqueleto mientras carga
 
+            // Iniciamos la carga del primer bloque de datos
             await loadMoreMovements(true);
         };
 
@@ -3728,60 +3831,65 @@ const renderInversionesPage = async (targetContainerId) => {
             }
         }
 const loadMoreMovements = async (isInitial = false) => {
-    if (isLoadingMoreMovements || allMovementsLoaded) {
-        return;
-    }
+    if (isLoadingMoreMovements || allMovementsLoaded) return;
 
     isLoadingMoreMovements = true;
     const loader = select('list-loader');
     if (loader) loader.classList.remove('hidden');
 
     try {
+        // Obtenemos las cuentas visibles para filtrar
         const visibleAccountIds = getVisibleAccounts().map(c => c.id);
-        if (visibleAccountIds.length === 0) {
+        if (visibleAccountIds.length === 0 && isInitial) {
             allMovementsLoaded = true;
-            db.movimientos = [];
-            vList.items = [];
-            vList.itemMap = [];
-            vList.sizerEl.style.height = '0px';
-            vList.contentEl.innerHTML = '';
-            select('movimientos-list-container')?.classList.add('hidden');
-            select('empty-movimientos')?.classList.remove('hidden');
+            updateVirtualList([]); // Llama a la actualización con una lista vacía
             return;
         }
 
+        let newMovementsChunk = [];
+        
+        // Si es la carga inicial, primero buscamos los recurrentes pendientes
+        if (isInitial) {
+            const now = new Date();
+            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            const pendingRecurrents = (db.recurrentes || [])
+                .filter(r => {
+                    const nextDate = parseDateStringAsUTC(r.nextDate);
+                    return nextDate && new Date(Date.UTC(nextDate.getUTCFullYear(), nextDate.getUTCMonth(), nextDate.getUTCDate())) <= today;
+                })
+                .sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+            
+            // Si hay pendientes, los añadimos como los primeros items a mostrar
+            if (pendingRecurrents.length > 0) {
+                newMovementsChunk.push({ type: 'pending-header', count: pendingRecurrents.length });
+                pendingRecurrents.forEach(recurrent => {
+                    newMovementsChunk.push({ type: 'pending-item', recurrent: recurrent });
+                });
+            }
+        }
+
+        // Ahora, procedemos a buscar el historial de movimientos en Firestore
         let fetchedFilteredCount = 0;
-        let processedFilteredMovements = [];
+        let processedHistoricalMovements = [];
 
+        // Hacemos bucles de búsqueda hasta tener suficientes movimientos del historial o hasta que no haya más
         while (fetchedFilteredCount < MOVEMENTS_PAGE_SIZE && !allMovementsLoaded) {
-            const newRawMovs = await fetchMovementsPage(lastVisibleMovementDoc);
+            const rawMovsFromDB = await fetchMovementsPage(lastVisibleMovementDoc);
+            if (rawMovsFromDB.length === 0) break;
 
-            if (newRawMovs.length === 0) {
-                allMovementsLoaded = true;
-                break;
-            }
-
-            const filteredBatch = filterMovementsByLedger(newRawMovs);
-            processedFilteredMovements.push(...filteredBatch);
+            const filteredBatch = filterMovementsByLedger(rawMovsFromDB);
+            processedHistoricalMovements.push(...filteredBatch);
             fetchedFilteredCount += filteredBatch.length;
+        }
 
-            lastVisibleMovementDoc = newRawMovs[newRawMovs.length - 1];
-
-            if (newRawMovs.length < MOVEMENTS_PAGE_SIZE) {
-                allMovementsLoaded = true;
-            }
+        // Si hemos obtenido movimientos del historial, los añadimos a nuestro caché global
+        if (processedHistoricalMovements.length > 0) {
+            await processMovementsForRunningBalance(processedHistoricalMovements, isInitial);
+            db.movimientos = [...db.movimientos, ...processedHistoricalMovements];
         }
         
-        if (processedFilteredMovements.length > 0) {
-            await processMovementsForRunningBalance(processedFilteredMovements);
-            db.movimientos = [...db.movimientos, ...processedFilteredMovements];
-            updateVirtualList(processedFilteredMovements, false);
-        } else if (isInitial && db.movimientos.length === 0 && allMovementsLoaded) {
-            const listContainer = select('movimientos-list-container');
-            const emptyMovimientos = select('empty-movimientos');
-            if(listContainer) listContainer.classList.add('hidden');
-            if(emptyMovimientos) emptyMovimientos.classList.remove('hidden');
-        }
+        // Finalmente, llamamos a updateVirtualList una sola vez para que renderice todo en el orden correcto
+        updateVirtualList(db.movimientos);
 
     } catch (error) {
         console.error("Error al cargar más movimientos:", error);
@@ -3792,45 +3900,56 @@ const loadMoreMovements = async (isInitial = false) => {
     }
 };
            
-        const updateVirtualList = (newItemsChunk, replace = false) => {
-            if (replace) {
-                db.movimientos = [];
+        const updateVirtualList = (historicalMovements) => {
+            if (!vList.sizerEl) return;
+            
+            vList.items = [];
+            vList.itemMap = [];
+            let currentHeight = 0;
+
+            // --- Lógica Centralizada de Construcción de Lista ---
+
+            // 1. Añadir los recurrentes pendientes (si existen)
+            const now = new Date();
+            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            const pendingRecurrents = (db.recurrentes || []).filter(r => {
+                const nextDate = parseDateStringAsUTC(r.nextDate);
+                return nextDate && new Date(Date.UTC(nextDate.getUTCFullYear(), nextDate.getUTCMonth(), nextDate.getUTCDate())) <= today;
+            }).sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+
+            if (pendingRecurrents.length > 0) {
+                vList.items.push({ type: 'pending-header', count: pendingRecurrents.length });
+                vList.itemMap.push({ height: vList.heights.pendingHeader, offset: currentHeight });
+                currentHeight += vList.heights.pendingHeader;
+                pendingRecurrents.forEach(recurrent => {
+                    vList.items.push({ type: 'pending-item', recurrent: recurrent });
+                    vList.itemMap.push({ height: vList.heights.pendingItem, offset: currentHeight });
+                    currentHeight += vList.heights.pendingItem;
+                });
             }
-        
+
+            // 2. Agrupar y añadir el historial de movimientos
             const grouped = {};
-            (db.movimientos || []).forEach(mov => {
+            (historicalMovements || []).forEach(mov => {
+                // ... (la lógica de agrupación no cambia, puedes copiarla de tu versión anterior)
                 const dateKey = mov.fecha.slice(0, 10);
-                if (!grouped[dateKey]) {
-                    grouped[dateKey] = { movements: [], total: 0 };
-                }
+                if (!grouped[dateKey]) grouped[dateKey] = { movements: [], total: 0 };
                 grouped[dateKey].movements.push(mov);
-                
+                const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
                 if (mov.tipo === 'traspaso') {
-                    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-                    const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
-                    const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-                    if (origenVisible && !destinoVisible) {
-                        grouped[dateKey].total -= mov.cantidad;
-                    } else if (!origenVisible && destinoVisible) {
-                        grouped[dateKey].total += mov.cantidad;
-                    }
+                    if (visibleAccountIds.has(mov.cuentaOrigenId) && !visibleAccountIds.has(mov.cuentaDestinoId)) grouped[dateKey].total -= mov.cantidad;
+                    else if (!visibleAccountIds.has(mov.cuentaOrigenId) && visibleAccountIds.has(mov.cuentaDestinoId)) grouped[dateKey].total += mov.cantidad;
                 } else {
                     grouped[dateKey].total += mov.cantidad;
                 }
             });
 
-            vList.items = [];
-            vList.itemMap = [];
-            let currentHeight = 0;
             const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-
             for (const dateKey of sortedDates) {
                 const group = grouped[dateKey];
-        
                 vList.items.push({ type: 'date-header', date: dateKey, total: group.total });
                 vList.itemMap.push({ height: vList.heights.header, offset: currentHeight });
                 currentHeight += vList.heights.header;
-        
                 for (const mov of group.movements) {
                     const itemHeight = mov.tipo === 'traspaso' ? vList.heights.transfer : vList.heights.transaction;
                     vList.items.push({ type: 'transaction', movement: mov });
@@ -3839,14 +3958,21 @@ const loadMoreMovements = async (isInitial = false) => {
                 }
             }
             
-            if (vList.sizerEl) {
-                vList.sizerEl.style.height = `${currentHeight}px`;
-            }
-            
+            // 3. Renderizar y actualizar
+            vList.sizerEl.style.height = `${currentHeight}px`;
             vList.lastRenderedRange = { start: -1, end: -1 };
             renderVisibleItems();
+
+            // Si al final de todo no hay NADA que mostrar, enseñamos el estado vacío
+            if (vList.items.length === 0) {
+                select('movimientos-list-container')?.classList.add('hidden');
+                select('empty-movimientos')?.classList.remove('hidden');
+            } else {
+                select('movimientos-list-container')?.classList.remove('hidden');
+                select('empty-movimientos')?.classList.add('hidden');
+            }
             
-            buildIntelligentIndex(); 
+            buildIntelligentIndex(historicalMovements);
         };
 		const getYearProgress = () => {
     const now = new Date();
@@ -4463,7 +4589,7 @@ const renderPlanificacionPage = () => {
 
     container.innerHTML = `
         <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion" open>
+            <details class="accordion">
                 <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">request_quote</span>Presupuestos Anuales</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
