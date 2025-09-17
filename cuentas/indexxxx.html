@@ -1817,6 +1817,7 @@ body[data-theme="aurora"] .starry-background {
     'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto total.', icon: 'show_chart' },
     'concept-totals': { title: 'Totales por Concepto', description: 'Gráfico y lista detallada de gastos/ingresos por concepto.', icon: 'bar_chart' },
     'kpi-summary': { title: 'Resumen de KPIs (Simple)', description: 'Ingresos, gastos y saldo neto del periodo.', icon: 'summarize' }
+    // La línea del informe personalizado ha sido eliminada
 };
 
 const DEFAULT_DASHBOARD_WIDGETS = ['kpi-summary-expanded', 'kpi-summary', 'concept-totals', 'net-worth-trend', 'action-center'];
@@ -2603,7 +2604,12 @@ const navigateTo = async (pageId, isInitial = false) => {
     if (conceptosChart) { conceptosChart.destroy(); conceptosChart = null; }
     if (liquidAssetsChart) { liquidAssetsChart.destroy(); liquidAssetsChart = null; }
     if (detailInvestmentChart) { detailInvestmentChart.destroy(); detailInvestmentChart = null; }
+    
+    // AQUÍ ESTÁ LA CORRECCIÓN CLAVE:
+    // Unificamos y corregimos la limpieza de los gráficos de informes.
     if (informesChart) { informesChart.destroy(); informesChart = null; }
+    if (informeActivoChart) { informeActivoChart.destroy(); informeActivoChart = null; }
+
     if (assetAllocationChart) { assetAllocationChart.destroy(); assetAllocationChart = null; }
     if (budgetTrendChart) { budgetTrendChart.destroy(); budgetTrendChart = null; }
     // --- FIN DE LA LÓGICA DE LIMPIEZA DE GRÁFICOS ---
@@ -3461,19 +3467,19 @@ const renderInversionesPage = async (targetContainerId) => {
     }, 50);
 };
 
-     // REEMPLAZA ESTA FUNCIÓN COMPLETA
+// CÓDIGO CORREGIDO Y MEJORADO
 const renderInformesPage = () => {
     const container = select(PAGE_IDS.INFORMES);
     if (!container) return;
 
-    // Destruye el gráfico global si existía para evitar conflictos
-    if (informesChart) {
-        informesChart.destroy();
-        informesChart = null;
-    }
-     if (informeActivoChart) {
+    // Limpieza robusta de cualquier gráfico que pudiera haber quedado activo
+    if (informeActivoChart) {
         informeActivoChart.destroy();
         informeActivoChart = null;
+    }
+     if (informesChart) {
+        informesChart.destroy();
+        informesChart = null;
     }
 
     const informesDisponibles = {
@@ -3481,22 +3487,43 @@ const renderInformesPage = () => {
         'flujo_caja': { title: 'Análisis de Flujo de Caja', icon: 'swap_horiz' },
         'asignacion_activos': { title: 'Asignación de Activos y Rebalanceo', icon: 'pie_chart' },
         'crecimiento_patrimonial': { title: 'Análisis de Crecimiento Patrimonial', icon: 'waterfall_chart' },
-        'rendimiento_inversiones': { title: 'Scorecard de Rendimiento de Inversiones', icon: 'military_tech' },
-        'proyeccion_fi': { title: 'Proyección de Independencia Financiera (FIRE)', icon: 'rocket_launch' },
-        'solvencia_liquidez': { title: 'Informe de Solvencia y Liquidez (Prueba de Estrés)', icon: 'health_and_safety' }
+        'rendimiento_inversiones': { title: 'Scorecard de Rendimiento de Inversiones', icon: 'military_tech' }
     };
 
     let informesHtml = '<div class="accordion-wrapper">';
+
+    // Primero, el informe personalizado que ya tienes
+    const informeGuardado = db.config?.savedReports?.main;
+    const tituloInforme = informeGuardado?.title || "Mi Informe Personalizado";
+    informesHtml += `
+        <details class="accordion informe-acordeon" id="acordeon-personalizado" open>
+            <summary>
+                <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-primary); flex-grow: 1;">
+                    <span class="material-icons" style="margin-right: 12px;">insights</span>
+                    <span id="informe-widget-title">${escapeHTML(tituloInforme)}</span>
+                </h3>
+                <button data-action="show-informe-builder" class="btn btn--secondary" style="margin-right: 16px;">
+                    <span class="material-icons" style="font-size: 16px;">edit</span>
+                    <span>Configurar</span>
+                </button>
+                <span class="material-icons accordion__icon">expand_more</span>
+            </summary>
+            <div class="accordion__content" id="informe-widget-content"></div>
+        </details>
+    `;
+
+    informesHtml += `<h3 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2); padding-left: var(--sp-2);">Informes Predefinidos</h3>`;
+
+    // Ahora, los informes predefinidos con el data-action añadido
     for (const [id, data] of Object.entries(informesDisponibles)) {
         informesHtml += `
             <details class="accordion informe-acordeon" id="acordeon-${id}">
+                {/* ESTA ES LA LÍNEA CLAVE: El data-action que dispara la carga del informe */}
                 <summary data-action="render-informe" data-informe-id="${id}">
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons" style="margin-right: 12px;">${data.icon}</span>${data.title}</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
-                <div class="accordion__content" id="informe-container-${id}">
-                    <!-- El contenido del informe se cargará aquí dinámicamente -->
-                </div>
+                <div class="accordion__content" id="informe-container-${id}"></div>
             </details>
         `;
     }
@@ -3504,8 +3531,17 @@ const renderInformesPage = () => {
 
     container.innerHTML = informesHtml;
 
-    // Por defecto, renderizamos el primer informe al cargar la página
-    setTimeout(() => renderInformeDetallado('resumen_ejecutivo'), 50);
+    // Renderizamos el informe personalizado por defecto
+    setTimeout(() => {
+        if(informeGuardado) {
+            renderInformeWidgetContent();
+        } else {
+             select('informe-widget-content').innerHTML = `
+                <div class="empty-state" style="background:transparent; border:none; padding: var(--sp-4) 0;">
+                    <p>Aún no has configurado tu informe. Haz clic en "Configurar" para empezar.</p>
+                </div>`;
+        }
+    }, 50);
 };
         
         const renderVirtualListItem = (item) => {
@@ -4219,57 +4255,54 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
 let informeActivoChart = null;
 
 /**
-     * Función principal que actúa como un router para renderizar el informe solicitado.
-     * @param {string} informeId - El ID del informe a mostrar (ej. 'resumen_ejecutivo').
-     */
-    async function renderInformeDetallado(informeId) {
-        const container = select(`informe-container-${informeId}`);
-        if (!container) return;
+ * Función principal que actúa como un router para renderizar el informe solicitado.
+ * @param {string} informeId - El ID del informe a mostrar (ej. 'resumen_ejecutivo').
+ */
+async function renderInformeDetallado(informeId) {
+    const container = select(`informe-container-${informeId}`);
+    if (!container) return;
 
-        // Limpia cualquier gráfico anterior para evitar errores
-        if (informeActivoChart) {
-            informeActivoChart.destroy();
-            informeActivoChart = null;
-        }
-
-        const detailsElement = container.closest('details');
-        if (detailsElement && !detailsElement.open) {
-            document.querySelectorAll('.informe-acordeon').forEach(ac => {
-                if (ac !== detailsElement) ac.open = false;
-            });
-            detailsElement.open = true;
-        }
-        
-        container.innerHTML = `<div class="skeleton" style="height: 200px; border-radius: var(--border-radius-lg);"></div>`;
-
-        try {
-            // Router que llama a la función de renderizado específica
-            const reportRenderers = {
-                'resumen_ejecutivo': renderInformeResumenEjecutivo,
-                'flujo_caja': renderInformeFlujoCaja,
-                'asignacion_activos': renderInformeAsignacionActivos,
-                'crecimiento_patrimonial': renderInformeCrecimientoPatrimonial,
-                'rendimiento_inversiones': renderInformeRendimientoInversiones,
-                'proyeccion_fi': renderInformeProyeccionFI,
-                'solvencia_liquidez': renderInformeSolvenciaLiquidez
-            };
-
-            if (reportRenderers[informeId]) {
-                await reportRenderers[informeId](container);
-            } else {
-                container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Este informe está en construcción.</p></div>`;
-            }
-        } catch (error) {
-            console.error(`Error al renderizar el informe '${informeId}':`, error);
-            container.innerHTML = `<div class="empty-state text-danger" style="padding: var(--sp-4) 0; border: none; background: transparent;"><span class="material-icons">error_outline</span><h3>Error al generar el informe</h3><p>No se pudieron cargar los datos. Por favor, inténtalo de nuevo.</p></div>`;
-        }
+    // Limpia cualquier gráfico anterior para evitar errores
+    if (informeActivoChart) {
+        informeActivoChart.destroy();
+        informeActivoChart = null;
     }
+
+    // Asegurarse de que el acordeón clicado está abierto
+    const detailsElement = container.closest('details');
+    if (detailsElement && !detailsElement.open) {
+        detailsElement.open = true;
+    }
+    
+    // Muestra un esqueleto de carga mientras se obtienen los datos
+    container.innerHTML = `<div class="skeleton" style="height: 200px; border-radius: var(--border-radius-lg);"></div>`;
+
+    try {
+        // Router que llama a la función de renderizado específica
+        const reportRenderers = {
+            'resumen_ejecutivo': renderInformeResumenEjecutivo,
+            'flujo_caja': renderInformeFlujoCaja,
+            'asignacion_activos': renderInformeAsignacionActivos,
+            'crecimiento_patrimonial': renderInformeCrecimientoPatrimonial,
+            'rendimiento_inversiones': renderInformeRendimientoInversiones,
+        };
+
+        if (reportRenderers[informeId]) {
+            await reportRenderers[informeId](container);
+        } else {
+            container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Este informe está en construcción.</p></div>`;
+        }
+    } catch (error) {
+        console.error(`Error al renderizar el informe '${informeId}':`, error);
+        container.innerHTML = `<div class="empty-state text-danger" style="padding: var(--sp-4) 0; border: none; background: transparent;"><span class="material-icons">error_outline</span><h3>Error al generar el informe</h3><p>No se pudieron cargar los datos. Por favor, inténtalo de nuevo.</p></div>`;
+    }
+}
 
 /**
  * Renderiza el informe: Resumen Ejecutivo.
  */
 async function renderInformeResumenEjecutivo(container) {
-    const { current } = await getFilteredMovements(false); // Usamos datos del mes actual por defecto
+    const { current } = await getFilteredMovements(false);
     const saldos = await getSaldos();
     const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
     const { ingresos, gastos, saldoNeto } = current.reduce((acc, mov) => {
@@ -4281,36 +4314,24 @@ async function renderInformeResumenEjecutivo(container) {
     const tasaAhorro = ingresos > 0 ? (saldoNeto / ingresos) * 100 : 0;
 
     container.innerHTML = `
-        <p class="form-label" style="margin-bottom: var(--sp-3);">Vista de 360° de tu situación financiera actual (últimos 30 días).</p>
+        <p class="form-label" style="margin-bottom: var(--sp-3);">Vista de 360° de tu situación financiera para el periodo seleccionado en el panel de Inicio.</p>
         <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-            <div class="kpi-item">
-                <h4 class="kpi-item__label">Patrimonio Neto Total</h4>
-                <strong class="kpi-item__value">${formatCurrency(patrimonioNeto)}</strong>
-            </div>
-            <div class="kpi-item">
-                <h4 class="kpi-item__label">Flujo de Caja Neto</h4>
-                <strong class="kpi-item__value ${saldoNeto >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(saldoNeto)}</strong>
-            </div>
-            <div class="kpi-item">
-                <h4 class="kpi-item__label">Tasa de Ahorro</h4>
-                <strong class="kpi-item__value ${tasaAhorro >= 10 ? 'text-positive' : (tasaAhorro >= 0 ? 'text-warning' : 'text-negative')}">${tasaAhorro.toFixed(1)}%</strong>
-            </div>
-        </div>
-    `;
+            <div class="kpi-item"><h4 class="kpi-item__label">Patrimonio Neto Total</h4><strong class="kpi-item__value">${formatCurrency(patrimonioNeto)}</strong></div>
+            <div class="kpi-item"><h4 class="kpi-item__label">Flujo de Caja Neto</h4><strong class="kpi-item__value ${saldoNeto >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(saldoNeto)}</strong></div>
+            <div class="kpi-item"><h4 class="kpi-item__label">Tasa de Ahorro</h4><strong class="kpi-item__value ${tasaAhorro >= 10 ? 'text-positive' : 'text-warning'}">${tasaAhorro.toFixed(1)}%</strong></div>
+        </div>`;
 }
 
 /**
  * Renderiza el informe: Análisis de Flujo de Caja.
  */
 async function renderInformeFlujoCaja(container) {
-    // Obtenemos los movimientos de los últimos 12 meses para el gráfico
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
 
-    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-        .where('fecha', '>=', twelveMonthsAgo.toISOString()).get();
-    const movements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('fecha', '>=', twelveMonthsAgo.toISOString()).get();
+    const movements = snapshot.docs.map(doc => doc.data());
 
     const monthlyData = {};
     for (let i = 0; i < 12; i++) {
@@ -4334,12 +4355,7 @@ async function renderInformeFlujoCaja(container) {
     const ingresosData = sortedKeys.map(key => monthlyData[key].ingresos / 100);
     const gastosData = sortedKeys.map(key => Math.abs(monthlyData[key].gastos / 100));
 
-    container.innerHTML = `
-        <p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de ingresos vs. gastos de los últimos 12 meses.</p>
-        <div class="chart-container" style="height: 250px;">
-            <canvas id="flujo-caja-chart"></canvas>
-        </div>
-    `;
+    container.innerHTML = `<p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de ingresos vs. gastos de los últimos 12 meses.</p><div class="chart-container" style="height: 250px;"><canvas id="flujo-caja-chart"></canvas></div>`;
 
     const ctx = select('flujo-caja-chart').getContext('2d');
     informeActivoChart = new Chart(ctx, {
@@ -4347,27 +4363,17 @@ async function renderInformeFlujoCaja(container) {
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: 'Ingresos',
-                    data: ingresosData,
-                    backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success').trim(),
-                },
-                {
-                    label: 'Gastos',
-                    data: gastosData,
-                    backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim(),
-                }
+                { label: 'Ingresos', data: ingresosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success').trim() },
+                { label: 'Gastos', data: gastosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim() }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true } },
-            plugins: { legend: { position: 'top' }, datalabels: { display: false } }
-        }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' }, datalabels: { display: false } } }
     });
 }
 
+/**
+ * Renderiza el informe: Asignación de Activos.
+ */
 async function renderInformeAsignacionActivos(container) {
         const getAssetClass = (tipo) => {
             const t = (tipo || '').toUpperCase();
@@ -7102,19 +7108,20 @@ const setMovimientoFormType = (type) => {
                 const btn = actionTarget.closest('button');
 
                 const actions = {
-					 'render-informe': () => {
-        const summaryElement = actionTarget.closest('[data-informe-id]');
-        if (summaryElement) {
-            const informeId = summaryElement.dataset.informeId;
-            // Cerramos otros acordeones antes de abrir y renderizar el nuevo
-            document.querySelectorAll('.informe-acordeon').forEach(ac => {
-                if (ac.id !== `acordeon-${informeId}`) {
-                    ac.open = false;
-                }
-            });
-            renderInformeDetallado(informeId);
-        }
-    },
+		'render-informe': () => {
+    const summaryElement = actionTarget.closest('[data-informe-id]');
+    if (summaryElement) {
+        const informeId = summaryElement.dataset.informeId;
+        // Cerramos otros acordeones para mantener la interfaz limpia
+        document.querySelectorAll('.informe-acordeon').forEach(ac => {
+            if (ac.id !== `acordeon-${informeId}`) {
+                ac.open = false;
+            }
+        });
+        // Llamamos a nuestra nueva función directora
+        renderInformeDetallado(informeId);
+    }
+},
 					 'show-informe-builder': showInformeBuilderModal,
                     'save-informe': () => handleSaveInforme(btn),
                     'show-help-topic': () => {
