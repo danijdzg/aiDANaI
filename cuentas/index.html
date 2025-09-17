@@ -1373,6 +1373,10 @@ body[data-theme="aurora"] .starry-background {
                 <span class="material-icons">edit_calendar</span>
                 <span class="bottom-nav__label">Planificación</span>
             </button>
+			<button data-action="navigate" data-page="informes-page" class="bottom-nav__item">
+            <span class="material-icons">assessment</span>
+            <span class="bottom-nav__label">Informes</span>
+			</button>
             <button data-action="navigate" data-page="patrimonio-page" class="bottom-nav__item">
                 <span class="material-icons">account_balance</span>
                 <span class="bottom-nav__label">Patrimonio</span>
@@ -1418,7 +1422,10 @@ body[data-theme="aurora"] .starry-background {
             <section id="planificacion-page" class="view">
                 <!-- El contenido se renderizará aquí vía JS (renderPlanificacionPage) -->
             </section>
-            
+            <section id="informes-page" class="view">
+            <!-- El contenido se renderizará aquí vía JS (renderInformesPage) -->
+			</section>
+			
             <section id="patrimonio-page" class="view">
                 <!-- El contenido se renderizará aquí vía JS (renderPatrimonioPage) -->
             </section>
@@ -1791,12 +1798,13 @@ body[data-theme="aurora"] .starry-background {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const PAGE_IDS = {
-            INICIO: 'inicio-page',
-            MOVIMIENTOS: 'movimientos-page',
-            PLANIFICACION: 'planificacion-page',
-            PATRIMONIO: 'patrimonio-page',
-            CONFIGURACION: 'configuracion-page',
-        };
+        INICIO: 'inicio-page',
+        MOVIMIENTOS: 'movimientos-page',
+        PLANIFICACION: 'planificacion-page',
+        INFORMES: 'informes-page', // <-- LÍNEA AÑADIDA
+        PATRIMONIO: 'patrimonio-page',
+        CONFIGURACION: 'configuracion-page',
+    };
 		
 		const THEMES = {
     'default': { name: 'Amoled Circuit', icon: 'memory' },
@@ -1808,11 +1816,11 @@ body[data-theme="aurora"] .starry-background {
     'kpi-summary-expanded': { title: 'Centro de Operaciones (Avanzado)', description: 'Visión completa con 5 KPIs: Saldo, Ahorro, Patrimonio, P&L y Presupuesto.', icon: 'query_stats' },
     'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto total.', icon: 'show_chart' },
     'concept-totals': { title: 'Totales por Concepto', description: 'Gráfico y lista detallada de gastos/ingresos por concepto.', icon: 'bar_chart' },
-    'informe-personalizado': { title: 'Mi Informe Personalizado', description: 'Un gráfico y tabla con las métricas y filtros que tú elijas.', icon: 'insights' },
     'kpi-summary': { title: 'Resumen de KPIs (Simple)', description: 'Ingresos, gastos y saldo neto del periodo.', icon: 'summarize' }
+    // La línea del informe personalizado ha sido eliminada
 };
 
-const DEFAULT_DASHBOARD_WIDGETS = ['action-center', 'kpi-summary-expanded', 'net-worth-trend', 'concept-totals'];
+const DEFAULT_DASHBOARD_WIDGETS = ['kpi-summary-expanded', 'kpi-summary', 'concept-totals', 'net-worth-trend', 'action-center'];
         const getInitialDb = () => ({
     cuentas: [], 
     conceptos: [], 
@@ -1905,8 +1913,8 @@ const longPressState = {
 // === FIN: CÓDIGO AÑADIDO (Paso 1) ===
 // =================================================================
 
-
-
+		let isDashboardRendering = false;
+		let dashboardUpdateDebounceTimer = null;
 		let lastActionForUndo = null;
 
 
@@ -2109,7 +2117,7 @@ async function loadCoreData(uid) {
             
             populateAllDropdowns();
             
-            if (select(PAGE_IDS.INICIO)?.classList.contains('view--active')) updateDashboardData();
+            if (select(PAGE_IDS.INICIO)?.classList.contains('view--active')) scheduleDashboardUpdate();
             if (select(PAGE_IDS.PATRIMONIO)?.classList.contains('view--active')) renderPatrimonioPage();
 
         }, error => console.error(`Error escuchando ${collectionName}: `, error));
@@ -2145,7 +2153,7 @@ async function loadCoreData(uid) {
             // Si el usuario está en la página de Inicio, la actualizamos inmediatamente.
             const activePage = document.querySelector('.view--active');
             if (activePage && activePage.id === PAGE_IDS.INICIO) {
-                updateDashboardData();
+                scheduleDashboardUpdate();
             }
         }, error => console.error("Error escuchando movimientos recientes: ", error));
     // ===================================================================
@@ -2591,8 +2599,20 @@ const navigateTo = async (pageId, isInitial = false) => {
     const oldActiveView = document.querySelector('.view--active');
     const oldViewId = oldActiveView ? oldActiveView.id : null;
 
-    // --- Lógica de limpieza de gráficos (la que ya tienes) ---
-    // ... tu código de destrucción de gráficos va aquí ...
+    // --- INICIO DE LA LÓGICA DE LIMPIEZA DE GRÁFICOS ---
+    if (netWorthChart) { netWorthChart.destroy(); netWorthChart = null; }
+    if (conceptosChart) { conceptosChart.destroy(); conceptosChart = null; }
+    if (liquidAssetsChart) { liquidAssetsChart.destroy(); liquidAssetsChart = null; }
+    if (detailInvestmentChart) { detailInvestmentChart.destroy(); detailInvestmentChart = null; }
+    
+    // AQUÍ ESTÁ LA CORRECCIÓN CLAVE:
+    // Unificamos y corregimos la limpieza de los gráficos de informes.
+    if (informesChart) { informesChart.destroy(); informesChart = null; }
+    if (informeActivoChart) { informeActivoChart.destroy(); informeActivoChart = null; }
+
+    if (assetAllocationChart) { assetAllocationChart.destroy(); assetAllocationChart = null; }
+    if (budgetTrendChart) { budgetTrendChart.destroy(); budgetTrendChart = null; }
+    // --- FIN DE LA LÓGICA DE LIMPIEZA DE GRÁFICOS ---
 
     // ============================================================
     // === INICIO: GESTIÓN INTELIGENTE DEL LISTENER DE RECIENTES ===
@@ -2617,7 +2637,7 @@ const navigateTo = async (pageId, isInitial = false) => {
                 recentMovementsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 const activePage = document.querySelector('.view--active');
                 if (activePage && activePage.id === PAGE_IDS.INICIO) {
-                    updateDashboardData();
+                    scheduleDashboardUpdate();
                 }
             }, error => console.error("Error al reconectar listener de recientes:", error));
     }
@@ -2643,6 +2663,7 @@ const navigateTo = async (pageId, isInitial = false) => {
         [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderInicioPage, actions: standardActions },
         [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: loadInitialMovements, actions: standardActions },
         [PAGE_IDS.PLANIFICACION]: { title: 'Planificación', render: renderPlanificacionPage, actions: standardActions },
+		[PAGE_IDS.INFORMES]: { title: 'Informes', render: renderInformesPage, actions: standardActions },
         [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: standardActions },
         [PAGE_IDS.CONFIGURACION]: { title: 'Ajustes', render: loadConfig, actions: standardActions },
     };
@@ -3446,131 +3467,82 @@ const renderInversionesPage = async (targetContainerId) => {
     }, 50);
 };
 
-        const renderInformesPage = async () => {
-            const resultsContainer = select('informe-results-container');
-            const emptyState = select('empty-informes');
-            const kpiContainer = select('informe-kpi-container');
-            const chartCanvas = select('informes-chart');
-            const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
-        
-            if (!resultsContainer || !emptyState || !chartCtx || !kpiContainer) return;
-            if (informesChart) { informesChart.destroy(); }
-            
-            const fechaInicioEl = select('informe-fecha-inicio');
-            const fechaFinEl = select('informe-fecha-fin');
-            const fechaInicioVal = fechaInicioEl ? fechaInicioEl.value : null;
-            const fechaFinVal = fechaFinEl ? fechaFinEl.value : null;
-            
-            const cuentaIdEl = select('filter-cuenta-informe');
-            const conceptoIdEl = select('filter-concepto-informe');
-            const cuentaId = cuentaIdEl ? cuentaIdEl.value : null;
-            const conceptoId = conceptoIdEl ? conceptoIdEl.value : null;
-        
-            if (!fechaInicioVal || !fechaFinVal) {
-                resultsContainer.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-                return;
-            }
-        
-            const fechaInicio = parseDateStringAsUTC(fechaInicioVal);
-            const fechaFin = parseDateStringAsUTC(fechaFinVal);
-            
-            const visibleAccountIds = getVisibleAccounts().map(c => c.id);
-            if (visibleAccountIds.length === 0) {
-                showToast('No hay cuentas seleccionadas en esta contabilidad.', 'info');
-                resultsContainer.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-                const p = emptyState.querySelector('p');
-                if (p) p.textContent = "No hay cuentas visibles para generar el informe.";
-                return;
-            }
-        
-            let baseQuery = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-                .where('fecha', '>=', fechaInicio.toISOString())
-                .where('fecha', '<=', fechaFin.toISOString())
-                .where('tipo', '==', 'movimiento');
+// CÓDIGO CORREGIDO Y MEJORADO
+const renderInformesPage = () => {
+    const container = select(PAGE_IDS.INFORMES);
+    if (!container) return;
 
-            if (conceptoId) {
-                baseQuery = baseQuery.where('conceptoId', '==', conceptoId);
-            }
-            
-            const accountIdsToQuery = cuentaId ? [cuentaId] : visibleAccountIds;
-            const movimientos = await fetchMovementsInChunks(baseQuery, 'cuentaId', accountIdsToQuery);
-            
-            if (movimientos.length === 0) {
-                showToast('No se encontraron movimientos para los filtros seleccionados.', 'info');
-                resultsContainer.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-                const p = emptyState.querySelector('p');
-                if (p) p.textContent = "No hay datos para este informe. Prueba a cambiar los filtros.";
-                return;
-            }
-            
-        
-            resultsContainer.classList.remove('hidden');
-            emptyState.classList.add('hidden');
-            
-            const datosAgrupados = movimientos.reduce((acc, mov) => {
-                const fecha = new Date(mov.fecha);
-                const clave = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-                if (!acc[clave]) {
-                    acc[clave] = { ingresos: 0, gastos: 0 };
-                }
+    // Limpieza robusta de cualquier gráfico que pudiera haber quedado activo
+    if (informeActivoChart) {
+        informeActivoChart.destroy();
+        informeActivoChart = null;
+    }
+     if (informesChart) {
+        informesChart.destroy();
+        informesChart = null;
+    }
 
-                if (mov.tipo === 'movimiento') {
-                    if (mov.cantidad > 0) {
-                        acc[clave].ingresos += mov.cantidad;
-                    } else {
-                        acc[clave].gastos += mov.cantidad;
-                    }
-                } else if (mov.tipo === 'traspaso') {
-                    if (cuentaId) { 
-                        if (mov.cuentaDestinoId === cuentaId) {
-                            acc[clave].ingresos += mov.cantidad;
-                        }
-                        if (mov.cuentaOrigenId === cuentaId) {
-                            acc[clave].gastos -= mov.cantidad;
-                        }
-                    }
-                }
-                return acc;
-            }, {});
-        
-            const etiquetas = Object.keys(datosAgrupados).sort();
-            const datosIngresos = etiquetas.map(clave => datosAgrupados[clave].ingresos / 100);
-            const datosGastos = etiquetas.map(clave => Math.abs(datosAgrupados[clave].gastos / 100));
-        
-            const etiquetasFormateadas = etiquetas.map(clave => {
-                const [year, month] = clave.split('-');
-                return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
-            });
-            
-            const totalIngresos = datosIngresos.reduce((sum, val) => sum + (val * 100), 0);
-            const totalGastos = datosGastos.reduce((sum, val) => sum + (val * 100), 0);
-            const neto = totalIngresos - totalGastos;
-            
-            kpiContainer.innerHTML = `
-                <div class="kpi-item"><h4 class="kpi-item__label">Total Ingresos</h4><strong class="kpi-item__value text-positive">${formatCurrency(totalIngresos)}</strong></div>
-                <div class="kpi-item"><h4 class="kpi-item__label">Total Gastos</h4><strong class="kpi-item__value text-negative">${formatCurrency(-totalGastos)}</strong></div>
-                <div class="kpi-item"><h4 class="kpi-item__label">Resultado Neto</h4><strong class="kpi-item__value ${neto >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(neto)}</strong></div>
-            `;
-        
-            informesChart = new Chart(chartCtx, {
-                type: 'line',
-                data: {
-                    labels: etiquetasFormateadas,
-                    datasets: [
-                        { label: 'Ingresos', data: datosIngresos, borderColor: getComputedStyle(document.body).getPropertyValue('--c-success'), backgroundColor: 'rgba(48, 209, 88, 0.2)', fill: true, tension: 0.3, pointBackgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success') },
-                        { label: 'Gastos', data: datosGastos, borderColor: getComputedStyle(document.body).getPropertyValue('--c-danger'), backgroundColor: 'rgba(255, 59, 48, 0.2)', fill: true, tension: 0.3, pointBackgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger') }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true, ticks: { callback: (value) => formatCurrency(value * 100).replace(/\s/g, '') } } },
-                    plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label || ''}: ${formatCurrency(c.parsed.y * 100)}` } }, datalabels: { display: false } }
-                }
-            });
-        };
+    const informesDisponibles = {
+        'resumen_ejecutivo': { title: 'Resumen Ejecutivo (Dashboard)', icon: 'insights' },
+        'flujo_caja': { title: 'Análisis de Flujo de Caja', icon: 'swap_horiz' },
+        'asignacion_activos': { title: 'Asignación de Activos y Rebalanceo', icon: 'pie_chart' },
+        'crecimiento_patrimonial': { title: 'Análisis de Crecimiento Patrimonial', icon: 'waterfall_chart' },
+        'rendimiento_inversiones': { title: 'Scorecard de Rendimiento de Inversiones', icon: 'military_tech' }
+    };
+
+    let informesHtml = '<div class="accordion-wrapper">';
+
+    // Primero, el informe personalizado que ya tienes
+    const informeGuardado = db.config?.savedReports?.main;
+    const tituloInforme = informeGuardado?.title || "Mi Informe Personalizado";
+    informesHtml += `
+        <details class="accordion informe-acordeon" id="acordeon-personalizado" open>
+            <summary>
+                <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-primary); flex-grow: 1;">
+                    <span class="material-icons" style="margin-right: 12px;">insights</span>
+                    <span id="informe-widget-title">${escapeHTML(tituloInforme)}</span>
+                </h3>
+                <button data-action="show-informe-builder" class="btn btn--secondary" style="margin-right: 16px;">
+                    <span class="material-icons" style="font-size: 16px;">edit</span>
+                    <span>Configurar</span>
+                </button>
+                <span class="material-icons accordion__icon">expand_more</span>
+            </summary>
+            <div class="accordion__content" id="informe-widget-content"></div>
+        </details>
+    `;
+
+    informesHtml += `<h3 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2); padding-left: var(--sp-2);">Informes Predefinidos</h3>`;
+
+    // Ahora, los informes predefinidos con el data-action añadido
+    for (const [id, data] of Object.entries(informesDisponibles)) {
+        informesHtml += `
+            <details class="accordion informe-acordeon" id="acordeon-${id}">
+                {/* ESTA ES LA LÍNEA CLAVE: El data-action que dispara la carga del informe */}
+                <summary data-action="render-informe" data-informe-id="${id}">
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons" style="margin-right: 12px;">${data.icon}</span>${data.title}</h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" id="informe-container-${id}"></div>
+            </details>
+        `;
+    }
+    informesHtml += '</div>';
+
+    container.innerHTML = informesHtml;
+
+    // Renderizamos el informe personalizado por defecto
+    setTimeout(() => {
+        if(informeGuardado) {
+            renderInformeWidgetContent();
+        } else {
+             select('informe-widget-content').innerHTML = `
+                <div class="empty-state" style="background:transparent; border:none; padding: var(--sp-4) 0;">
+                    <p>Aún no has configurado tu informe. Haz clic en "Configurar" para empezar.</p>
+                </div>`;
+        }
+    }, 50);
+};
         
         const renderVirtualListItem = (item) => {
 			/* === INICIO: CÓDIGO AÑADIDO === */
@@ -4135,8 +4107,8 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
         
         hapticFeedback('light');
         
-        showDrillDownModal(`Movimientos de ${monthName} ${year}`, movementsOfMonth);
-    },
+         showDrillDownModal(`Movimientos de ${monthName} ${year}`, movementsOfMonth);
+		},
     onHover: (event, chartElement) => {
         event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
     }
@@ -4224,46 +4196,46 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
     }
 
     container.innerHTML = `
-        <div class="card card--no-bg" id="dashboard-filters-widget">
-            <div class="accordion-wrapper">
-                <details class="accordion" open> <!-- <<<<<<<<<<<<<<< CAMBIO AQUÍ -->
-                    <summary>
-                        <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">filter_list</span>Filtros del Panel</h3>
-                        <span class="material-icons accordion__icon">expand_more</span>
-                    </summary>
-                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                        <div class="form-group">
-                            <label for="filter-periodo" class="form-label">Periodo</label>
-                            <select id="filter-periodo" class="form-select">
-                                <option value="mes-actual" selected>Este Mes</option>
-                                <option value="año-actual">Este Año</option>
-                                <option value="custom">Personalizado</option>
-                            </select>
-                        </div>
-                        <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap;">
+            <div class="card card--no-bg" id="dashboard-filters-widget" style="flex: 1; min-width: 250px;">
+                <div class="accordion-wrapper">
+                    <details class="accordion" open>
+                        <summary>
+                            <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">filter_list</span>Filtros del Panel</h3>
+                            <span class="material-icons accordion__icon">expand_more</span>
+                        </summary>
+                        <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                             <div class="form-group">
-                                <label for="filter-fecha-inicio" class="form-label">Desde</label>
-                                <input type="date" id="filter-fecha-inicio" class="form-input">
+                                <label for="filter-periodo" class="form-label">Periodo</label>
+                                <select id="filter-periodo" class="form-select">
+                                    <option value="mes-actual" selected>Este Mes</option>
+                                    <option value="año-actual">Este Año</option>
+                                    <option value="custom">Personalizado</option>
+                                </select>
                             </div>
-                            <div class="form-group">
-                                <label for="filter-fecha-fin" class="form-label">Hasta</label>
-                                <input type="date" id="filter-fecha-fin" class="form-input">
+                            <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr;">
+                                <div class="form-group">
+                                    <label for="filter-fecha-inicio" class="form-label">Desde</label>
+                                    <input type="date" id="filter-fecha-inicio" class="form-input">
+                                </div>
+                                <div class="form-group">
+                                    <label for="filter-fecha-fin" class="form-label">Hasta</label>
+                                    <input type="date" id="filter-fecha-fin" class="form-input">
+                                </div>
                             </div>
+                            <button data-action="apply-filters" class="btn btn--primary btn--full">Aplicar Filtros</button>
                         </div>
-                        <button data-action="apply-filters" class="btn btn--primary btn--full">Aplicar Filtros</button>
-                    </div>
-                </details>
+                    </details>
+                </div>
             </div>
-        </div>
-
-        <div style="display: flex; justify-content: space-between; align-items: center; margin: var(--sp-4) 0 var(--sp-2) 0;">
-            <h3 style="color: var(--c-on-surface-secondary); font-size: var(--fs-base); font-weight: 700;">Resumen del Panel</h3>
-            <button data-action="configure-dashboard" class="icon-btn" title="Personalizar Panel">
-                <span class="material-icons">dashboard_customize</span>
+            
+            <button data-action="configure-dashboard" class="btn btn--secondary" title="Personalizar Panel">
+                <span class="material-icons" style="font-size: 1.2em;">dashboard_customize</span>
+                <span>Personalizar Panel</span>
             </button>
         </div>
 
-        <div id="resumen-content-container">
+        <div id="resumen-content-container" style="margin-top: var(--sp-4);">
             <!-- El contenido se renderizará aquí vía JS -->
         </div>
     `;
@@ -4274,11 +4246,293 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
     if (filterPeriodo) filterPeriodo.dispatchEvent(new Event('change')); 
     renderInicioResumenView();
 };
-   // PEGA este bloque de código junto a tus otras funciones de renderizado (ej. renderDashboardKpiSummary)
+   
+ // =================================================================
+// === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES (v2.0) ===
+// =================================================================
+
+// Esta variable global evitará errores de "Canvas en uso"
+let informeActivoChart = null;
 
 /**
- * Renderiza el esqueleto del nuevo widget "Centro de Acciones".
+ * Función principal que actúa como un router para renderizar el informe solicitado.
+ * @param {string} informeId - El ID del informe a mostrar (ej. 'resumen_ejecutivo').
  */
+async function renderInformeDetallado(informeId) {
+    const container = select(`informe-container-${informeId}`);
+    if (!container) return;
+
+    // Limpia cualquier gráfico anterior para evitar errores
+    if (informeActivoChart) {
+        informeActivoChart.destroy();
+        informeActivoChart = null;
+    }
+
+    // Asegurarse de que el acordeón clicado está abierto
+    const detailsElement = container.closest('details');
+    if (detailsElement && !detailsElement.open) {
+        detailsElement.open = true;
+    }
+    
+    // Muestra un esqueleto de carga mientras se obtienen los datos
+    container.innerHTML = `<div class="skeleton" style="height: 200px; border-radius: var(--border-radius-lg);"></div>`;
+
+    try {
+        // Router que llama a la función de renderizado específica
+        const reportRenderers = {
+            'resumen_ejecutivo': renderInformeResumenEjecutivo,
+            'flujo_caja': renderInformeFlujoCaja,
+            'asignacion_activos': renderInformeAsignacionActivos,
+            'crecimiento_patrimonial': renderInformeCrecimientoPatrimonial,
+            'rendimiento_inversiones': renderInformeRendimientoInversiones,
+        };
+
+        if (reportRenderers[informeId]) {
+            await reportRenderers[informeId](container);
+        } else {
+            container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Este informe está en construcción.</p></div>`;
+        }
+    } catch (error) {
+        console.error(`Error al renderizar el informe '${informeId}':`, error);
+        container.innerHTML = `<div class="empty-state text-danger" style="padding: var(--sp-4) 0; border: none; background: transparent;"><span class="material-icons">error_outline</span><h3>Error al generar el informe</h3><p>No se pudieron cargar los datos. Por favor, inténtalo de nuevo.</p></div>`;
+    }
+}
+
+/**
+ * Renderiza el informe: Resumen Ejecutivo.
+ */
+async function renderInformeResumenEjecutivo(container) {
+    const { current } = await getFilteredMovements(false);
+    const saldos = await getSaldos();
+    const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+    const { ingresos, gastos, saldoNeto } = current.reduce((acc, mov) => {
+        acc.saldoNeto += mov.cantidad;
+        if (mov.cantidad > 0) acc.ingresos += mov.cantidad;
+        else acc.gastos += mov.cantidad;
+        return acc;
+    }, { ingresos: 0, gastos: 0, saldoNeto: 0 });
+    const tasaAhorro = ingresos > 0 ? (saldoNeto / ingresos) * 100 : 0;
+
+    container.innerHTML = `
+        <p class="form-label" style="margin-bottom: var(--sp-3);">Vista de 360° de tu situación financiera para el periodo seleccionado en el panel de Inicio.</p>
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+            <div class="kpi-item"><h4 class="kpi-item__label">Patrimonio Neto Total</h4><strong class="kpi-item__value">${formatCurrency(patrimonioNeto)}</strong></div>
+            <div class="kpi-item"><h4 class="kpi-item__label">Flujo de Caja Neto</h4><strong class="kpi-item__value ${saldoNeto >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(saldoNeto)}</strong></div>
+            <div class="kpi-item"><h4 class="kpi-item__label">Tasa de Ahorro</h4><strong class="kpi-item__value ${tasaAhorro >= 10 ? 'text-positive' : 'text-warning'}">${tasaAhorro.toFixed(1)}%</strong></div>
+        </div>`;
+}
+
+/**
+ * Renderiza el informe: Análisis de Flujo de Caja.
+ */
+async function renderInformeFlujoCaja(container) {
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+    twelveMonthsAgo.setDate(1);
+
+    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('fecha', '>=', twelveMonthsAgo.toISOString()).get();
+    const movements = snapshot.docs.map(doc => doc.data());
+
+    const monthlyData = {};
+    for (let i = 0; i < 12; i++) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[key] = { ingresos: 0, gastos: 0 };
+    }
+
+    movements.forEach(mov => {
+        const d = new Date(mov.fecha);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (monthlyData[key]) {
+            if (mov.cantidad > 0) monthlyData[key].ingresos += mov.cantidad;
+            else monthlyData[key].gastos += mov.cantidad;
+        }
+    });
+
+    const sortedKeys = Object.keys(monthlyData).sort();
+    const labels = sortedKeys.map(key => new Date(key + '-02').toLocaleString('es-ES', { month: 'short', year: '2-digit' }));
+    const ingresosData = sortedKeys.map(key => monthlyData[key].ingresos / 100);
+    const gastosData = sortedKeys.map(key => Math.abs(monthlyData[key].gastos / 100));
+
+    container.innerHTML = `<p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de ingresos vs. gastos de los últimos 12 meses.</p><div class="chart-container" style="height: 250px;"><canvas id="flujo-caja-chart"></canvas></div>`;
+
+    const ctx = select('flujo-caja-chart').getContext('2d');
+    informeActivoChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'Ingresos', data: ingresosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success').trim() },
+                { label: 'Gastos', data: gastosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim() }
+            ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' }, datalabels: { display: false } } }
+    });
+}
+
+/**
+ * Renderiza el informe: Asignación de Activos.
+ */
+async function renderInformeAsignacionActivos(container) {
+        const getAssetClass = (tipo) => {
+            const t = (tipo || '').toUpperCase();
+            if (['RENTA FIJA', 'LETRAS', 'BONOS'].some(term => t.includes(term))) return 'Renta Fija';
+            if (['RENTA VARIABLE', 'ACCIONES', 'FONDOS', 'INDEXADO', 'BROKER'].some(term => t.includes(term))) return 'Renta Variable';
+            if (['PROPIEDAD', 'INMOBILIARIO'].some(term => t.includes(term))) return 'Inmobiliario';
+            if (['CRIPTO', 'BITCOIN'].some(term => t.includes(term))) return 'Criptoactivos';
+            if (['BANCO', 'AHORRO', 'EFECTIVO'].some(term => t.includes(term))) return 'Liquidez';
+            return 'Otros';
+        };
+
+        const saldos = await getSaldos();
+        const assetAllocation = getVisibleAccounts().reduce((acc, cuenta) => {
+            if (cuenta.tipo.toUpperCase() !== 'PRÉSTAMO' && cuenta.tipo.toUpperCase() !== 'TARJETA DE CRÉDITO') {
+                const assetClass = getAssetClass(cuenta.tipo);
+                acc[assetClass] = (acc[assetClass] || 0) + (saldos[cuenta.id] || 0);
+            }
+            return acc;
+        }, {});
+
+        const labels = Object.keys(assetAllocation);
+        const data = Object.values(assetAllocation).map(v => v / 100);
+
+        container.innerHTML = `
+            <p class="form-label" style="margin-bottom: var(--sp-3);">Distribución de tu patrimonio por clase de activo. Úsalo para gestionar riesgos y alinear tus inversiones con tu estrategia.</p>
+            <div class="chart-container" style="height: 280px;">
+                <canvas id="asignacion-activos-chart"></canvas>
+            </div>
+            <!-- Aquí iría la tabla de rebalanceo en una futura iteración -->
+        `;
+
+        const ctx = select('asignacion-activos-chart').getContext('2d');
+        informeActivoChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data, backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6'] }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, datalabels: { formatter: (val, ctx) => { const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0); return (val * 100 / sum).toFixed(1) + '%'; }, color: '#fff' } } }
+        });
+    }
+
+    /**
+     * Renderiza el informe: Crecimiento Patrimonial.
+     */
+    async function renderInformeCrecimientoPatrimonial(container) {
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        
+        const allMovements = await fetchAllMovementsForHistory();
+        const saldosActuales = await getSaldos();
+        const patrimonioActual = Object.values(saldosActuales).reduce((sum, s) => sum + s, 0);
+
+        let patrimonioInicial = patrimonioActual;
+        const movementsLastYear = allMovements.filter(m => new Date(m.fecha) >= oneYearAgo);
+        
+        movementsLastYear.forEach(mov => {
+            if (mov.tipo === 'traspaso') {
+                patrimonioInicial += saldosActuales.hasOwnProperty(mov.cuentaOrigenId) ? mov.cantidad : 0;
+                patrimonioInicial -= saldosActuales.hasOwnProperty(mov.cuentaDestinoId) ? mov.cantidad : 0;
+            } else {
+                patrimonioInicial -= saldosActuales.hasOwnProperty(mov.cuentaId) ? mov.cantidad : 0;
+            }
+        });
+        
+        const aportacionesNetas = movementsLastYear.reduce((sum, mov) => sum + mov.cantidad, 0);
+        const rendimientoMercado = patrimonioActual - patrimonioInicial - aportacionesNetas;
+
+        container.innerHTML = `
+            <p class="form-label" style="margin-bottom: var(--sp-3);">Desglose de cómo ha cambiado tu patrimonio en los últimos 12 meses.</p>
+            <div class="kpi-grid">
+                <div class="kpi-item"><h4 class="kpi-item__label">Patrimonio Inicial</h4><strong class="kpi-item__value">${formatCurrency(patrimonioInicial)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Ahorro Neto (Aportado)</h4><strong class="kpi-item__value text-positive">${formatCurrency(aportacionesNetas)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Rendimiento Inversiones</h4><strong class="kpi-item__value ${rendimientoMercado >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(rendimientoMercado)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Patrimonio Final</h4><strong class="kpi-item__value">${formatCurrency(patrimonioActual)}</strong></div>
+            </div>
+        `;
+    }
+
+    /**
+     * Renderiza el informe: Scorecard de Rendimiento de Inversiones.
+     */
+    async function renderInformeRendimientoInversiones(container) {
+        const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
+        if (investmentAccounts.length === 0) {
+            container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>No has marcado ninguna cuenta como "inversión". Puedes hacerlo en Ajustes.</p></div>`;
+            return;
+        }
+
+        const performanceData = await Promise.all(investmentAccounts.map(c => calculatePortfolioPerformance(c.id)));
+        
+        let tableHtml = `
+            <p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de rendimiento de tus activos de inversión.</p>
+            <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead><tr><th>Activo</th><th>Valor Actual</th><th>P&L (€)</th><th>P&L (%)</th><th>TIR Anual</th></tr></thead>
+                <tbody>`;
+
+        investmentAccounts.forEach((cuenta, index) => {
+            const perf = performanceData[index];
+            const pnlClass = perf.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
+            const tirClass = perf.irr >= 0.05 ? 'text-positive' : (perf.irr >= 0 ? 'text-warning' : 'text-negative');
+            tableHtml += `
+                <tr>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${cuenta.nombre}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${formatCurrency(perf.valorActual)}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);" class="${pnlClass}">${formatCurrency(perf.pnlAbsoluto)}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);" class="${pnlClass}">${perf.pnlPorcentual.toFixed(2)}%</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);" class="${tirClass}">${(perf.irr * 100).toFixed(2)}%</td>
+                </tr>
+            `;
+        });
+
+        tableHtml += `</tbody></table></div>`;
+        container.innerHTML = tableHtml;
+    }
+
+    /**
+     * Renderiza el informe: Proyección de Independencia Financiera (FIRE).
+     */
+    async function renderInformeProyeccionFI(container) {
+        // ... (Implementación de la Proyección FIRE - esta es más compleja y podría ser una futura mejora)
+        container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Informe de Proyección FIRE en desarrollo. ¡Próximamente!</p></div>`;
+    }
+
+    /**
+     * Renderiza el informe: Solvencia y Liquidez.
+     */
+    async function renderInformeSolvenciaLiquidez(container) {
+        const saldos = await getSaldos();
+        const liquidAccounts = getVisibleAccounts().filter(c => ['BANCO', 'AHORRO', 'EFECTIVO'].includes((c.tipo || '').toUpperCase()));
+        const debtAccounts = getVisibleAccounts().filter(c => ['PRÉSTAMO', 'TARJETA DE CRÉDITO'].includes((c.tipo || '').toUpperCase()));
+
+        const liquidezTotal = liquidAccounts.reduce((sum, c) => sum + (saldos[c.id] || 0), 0);
+        const deudaTotal = Math.abs(debtAccounts.reduce((sum, c) => sum + (saldos[c.id] || 0), 0));
+        const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+
+        const { current } = await getFilteredMovements(false);
+        const gastosMensuales = Math.abs(current.reduce((sum, mov) => mov.cantidad < 0 ? sum + mov.cantidad : sum, 0));
+        const mesesDeCobertura = gastosMensuales > 0 ? liquidezTotal / gastosMensuales : Infinity;
+        
+        container.innerHTML = `
+            <p class="form-label" style="margin-bottom: var(--sp-3);">Análisis de tu capacidad para afrontar imprevistos y tu nivel de endeudamiento.</p>
+            <div class="kpi-grid">
+                <div class="kpi-item">
+                    <h4 class="kpi-item__label">Colchón de Emergencia</h4>
+                    <strong class="kpi-item__value ${mesesDeCobertura >= 3 ? 'text-positive' : 'text-warning'}">${mesesDeCobertura === Infinity ? '∞' : mesesDeCobertura.toFixed(1)} meses</strong>
+                    <div class="kpi-item__comparison">Gastos cubiertos con tu liquidez</div>
+                </div>
+                <div class="kpi-item">
+                    <h4 class="kpi-item__label">Ratio Endeudamiento</h4>
+                    <strong class="kpi-item__value ${deudaTotal / patrimonioNeto < 0.4 ? 'text-positive' : 'text-warning'}">${(patrimonioNeto > 0 ? (deudaTotal / patrimonioNeto) * 100 : 0).toFixed(1)}%</strong>
+                    <div class="kpi-item__comparison">Deuda total vs. Patrimonio</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // =================================================================
+    // === FIN: SECCIÓN DE INFORMES CORREGIDA Y AMPLIADA (v3.0)       ===
+    // =================================================================
+   
 const renderDashboardActionCenter = () => {
     return `
     <div class="card" id="action-center-widget">
@@ -4382,10 +4636,13 @@ const renderDashboardExpandedKpiSummary = () => {
         <div class="card__content">
             <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
                 
-                <!-- === ELEMENTO ELIMINADO: Saldo Neto Periodo ya no está aquí === -->
-
                 <div class="kpi-item">
-                    <h4 class="kpi-item__label">Tasa de Ahorro</h4>
+                    <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <span>Tasa de Ahorro</span>
+                        <button class="icon-btn" data-action="show-help-topic" data-topic="tasa-ahorro" style="width: 20px; height: 20px;">
+                            <span class="material-icons" style="font-size: 16px;">help_outline</span>
+                        </button>
+                    </h4>
                     <div style="position: relative; height: 60px; margin: auto;">
                          <canvas id="kpi-savings-rate-chart"></canvas>
                          <div id="kpi-tasa-ahorro-value" class="kpi-item__value skeleton" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%);">0%</div>
@@ -4394,19 +4651,34 @@ const renderDashboardExpandedKpiSummary = () => {
                 </div>
 
                 <div class="kpi-item">
-                    <h4 class="kpi-item__label">Patrimonio Neto Total</h4>
+                    <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <span>Patrimonio Neto Total</span>
+                        <button class="icon-btn" data-action="show-help-topic" data-topic="patrimonio-neto" style="width: 20px; height: 20px;">
+                            <span class="material-icons" style="font-size: 16px;">help_outline</span>
+                        </button>
+                    </h4>
                     <strong id="kpi-patrimonio-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
                     <div class="kpi-item__comparison">Vista global actual</div>
                 </div>
                 
                 <div class="kpi-item">
-                    <h4 class="kpi-item__label">P&L Inversión Periodo</h4>
+                    <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <span>P&L Inversión Periodo</span>
+                         <button class="icon-btn" data-action="show-help-topic" data-topic="pnl-inversion" style="width: 20px; height: 20px;">
+                            <span class="material-icons" style="font-size: 16px;">help_outline</span>
+                        </button>
+                    </h4>
                     <strong id="kpi-pnl-inversion-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
                     <div id="kpi-pnl-inversion-comparison" class="kpi-item__comparison">Flujo de caja neto</div>
                 </div>
 
                 <div class="kpi-item" style="grid-column: 1 / -1;">
-                    <h4 class="kpi-item__label">Progreso Presupuesto (Gastos del Periodo)</h4>
+                     <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <span>Progreso Presupuesto (Gastos del Periodo)</span>
+                        <button class="icon-btn" data-action="show-help-topic" data-topic="progreso-presupuesto" style="width: 20px; height: 20px;">
+                            <span class="material-icons" style="font-size: 16px;">help_outline</span>
+                        </button>
+                    </h4>
                     <div class="budget-item__progress" style="margin: 8px 0;">
                         <progress id="kpi-presupuesto-progress" max="100" value="0" style="width: 100%; height: 8px;" class="budget-item__progress"></progress>
                     </div>
@@ -4417,8 +4689,7 @@ const renderDashboardExpandedKpiSummary = () => {
         </div>
     </div>`;
 };
-		
-                const renderDashboardConceptTotals = () => {
+           const renderDashboardConceptTotals = () => {
             // Generamos 3 filas de esqueleto para la lista
             const skeletonRows = Array(3).fill('<div class="skeleton" style="height: 48px; margin-bottom: var(--sp-2); border-radius: 8px;"></div>').join('');
             
@@ -4440,7 +4711,8 @@ const renderDashboardExpandedKpiSummary = () => {
                     </div>
                 </div>`;
         };
-    const renderInicioResumenView = () => {
+
+   const renderInicioResumenView = () => {
     const resumenContentContainer = select('resumen-content-container');
     if (!resumenContentContainer) return;
 
@@ -4458,14 +4730,11 @@ const renderDashboardExpandedKpiSummary = () => {
                 return renderDashboardKpiSummary(); 
             case 'concept-totals':
                 return renderDashboardConceptTotals();
-            case 'informe-personalizado':
-                return renderDashboardInformeWidget();
-            default:
                 return '';
         }
     }).join('<div style="height: var(--sp-4);"></div>');
     
-    updateDashboardData();
+    scheduleDashboardUpdate();
 };
 		
         const _renderRecientesFromCache = async () => {
@@ -4735,6 +5004,7 @@ const renderPatrimonioPage = async () => {
     }
 };
 
+
 const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICACION);
     if(!container) return;
@@ -4905,11 +5175,14 @@ const resampleDataWeekly = (dailyData) => {
 const updateNetWorthChart = async (saldos) => {
     const netWorthCanvas = select('net-worth-chart');
     if (!netWorthCanvas) return;
-
-    const chartContainer = netWorthCanvas.closest('.chart-container');
-    if (netWorthChart) netWorthChart.destroy();
-
+	const chartContainer = netWorthCanvas.closest('.chart-container');
+    if (netWorthChart) {
+        netWorthChart.destroy();
+        netWorthChart = null; // Buena práctica para limpiar la referencia
+    }
+    
     const allMovements = await fetchAllMovementsForHistory();
+    // ... (el resto del código de la función, desde aquí, no cambia) ...
     const visibleAccountIds = new Set(Object.keys(saldos));
     const cuentas = db.cuentas.filter(c => visibleAccountIds.has(c.id));
 
@@ -4920,20 +5193,19 @@ const updateNetWorthChart = async (saldos) => {
         }
         return;
     }
+	if(chartContainer) chartContainer.classList.remove('skeleton');
 
-    // 1. Calcular los totales actuales por componente
     const currentComponentTotals = { 'Líquido': 0, 'Inversión': 0, 'Propiedades': 0, 'Deuda': 0 };
     cuentas.forEach(c => {
         const component = getNetWorthComponent(c.tipo);
         const balance = c.saldo || 0;
         if (component === 'Deuda') {
-            currentComponentTotals.Deuda += Math.abs(balance); // La deuda se suma como un valor positivo para el apilado
+            currentComponentTotals.Deuda += Math.abs(balance);
         } else {
             currentComponentTotals[component] += balance;
         }
     });
 
-    // 2. Calcular hacia atrás
     let runningComponentTotals = { ...currentComponentTotals };
     const dailyData = {};
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -4957,15 +5229,13 @@ const updateNetWorthChart = async (saldos) => {
             const origenComp = origen ? getNetWorthComponent(origen.tipo) : null;
             const destinoComp = destino ? getNetWorthComponent(destino.tipo) : null;
 
-            if (origen && !destino) { // Dinero que sale del ecosistema
+            if (origen && !destino) {
                 componentChange = origenComp;
                 changeAmount = -mov.cantidad;
-            } else if (!origen && destino) { // Dinero que entra al ecosistema
+            } else if (!origen && destino) {
                 componentChange = destinoComp;
                 changeAmount = mov.cantidad;
             } else if (origen && destino && origenComp !== destinoComp) {
-                // Traspaso entre componentes (ej. de Líquido a Inversión)
-                // Revertimos la operación:
                 runningComponentTotals[origenComp] += origenComp === 'Deuda' ? -mov.cantidad : mov.cantidad;
                 runningComponentTotals[destinoComp] += destinoComp === 'Deuda' ? mov.cantidad : -mov.cantidad;
             }
@@ -4979,19 +5249,17 @@ const updateNetWorthChart = async (saldos) => {
         dailyData[dateKey] = { ...runningComponentTotals };
     }
     
-    // 3. Suavizar los datos a puntos semanales
     const weeklyData = resampleDataWeekly(dailyData);
     const sortedDates = Object.keys(weeklyData).sort();
 
     if(chartContainer) chartContainer.classList.remove('skeleton');
 
-    // 4. Preparar los datasets para Chart.js
     const datasets = Object.keys(NET_WORTH_COMPONENT_COLORS).map(component => ({
         label: component,
         data: sortedDates.map(date => (weeklyData[date][component] || 0) / 100),
         fill: true,
         backgroundColor: NET_WORTH_COMPONENT_COLORS[component],
-        borderColor: NET_WORTH_COMPONENT_COLORS[component].replace('0.7', '1'), // Color más opaco para el borde
+        borderColor: NET_WORTH_COMPONENT_COLORS[component].replace('0.7', '1'),
         pointRadius: 0,
         borderWidth: 1.5,
     }));
@@ -5008,12 +5276,12 @@ const updateNetWorthChart = async (saldos) => {
             maintainAspectRatio: false,
             scales: {
                 y: {
-                    stacked: true, // ¡La magia del apilado!
+                    stacked: true,
                     ticks: { callback: v => formatCurrency(v * 100).replace(/\s/g,'') }
                 },
                 x: {
                     type: 'time',
-                    time: { unit: 'month', tooltipFormat: 'DD MMM YYYY', displayFormats: { month: 'MMM yy' } },
+                    time: { unit: 'month', tooltipFormat: 'dd MMM yyyy', displayFormats: { month: 'MMM yy' } },
                     ticks: { autoSkip: true, maxTicksLimit: 6 },
                     grid: { display: false }
                 }
@@ -5033,7 +5301,6 @@ const updateNetWorthChart = async (saldos) => {
                             const value = context.parsed.y;
                             return ` ${label}: ${formatCurrency(value * 100)}`;
                         },
-                        // Footer para mostrar el total
                         footer: (tooltipItems) => {
                             let sum = 0;
                             tooltipItems.forEach(function(tooltipItem) {
@@ -5050,227 +5317,241 @@ const updateNetWorthChart = async (saldos) => {
             },
         }
     });
-}; // <-- HASTA AQUÍ
+};
 
-// =============================================================
-// === REEMPLAZA TU FUNCIÓN updateDashboardData ENTERA POR ESTA ===
-// =============================================================
+const scheduleDashboardUpdate = () => {
+    // El jefe de obra solo trabaja si la página "Inicio" está abierta.
+    const activePage = document.querySelector('.view--active');
+    if (!activePage || activePage.id !== PAGE_IDS.INICIO) {
+        return;
+    }
+      
+    clearTimeout(dashboardUpdateDebounceTimer);
+        
+    dashboardUpdateDebounceTimer = setTimeout(updateDashboardData, 50);
+};
+
 const updateDashboardData = async () => {
-    // Fase 1: Obtener todos los datos necesarios
-    const { current, previous, label } = await getFilteredMovements(true);
-    const saldos = await getSaldos();
-    if (!dataLoaded.presupuestos) await loadPresupuestos();
-    if (!dataLoaded.inversiones) await loadInversiones();
+    // Si el "portero" dice que ya hay alguien pintando, nos vamos.
+    if (isDashboardRendering) return;
 
-    updateNetWorthChart(saldos);
+    // El "portero" cierra la puerta. ¡Ahora estamos trabajando!
+    isDashboardRendering = true;
 
-    const visibleAccountIds = new Set(Object.keys(saldos));
-    const investmentAccountIds = new Set(getVisibleAccounts().filter(c => c.esInversion).map(c => c.id));
+    try {
+        // --- TODO EL CÓDIGO ORIGINAL DE LA FUNCIÓN VA AQUÍ DENTRO ---
+        const { current, previous, label } = await getFilteredMovements(true);
+        const saldos = await getSaldos();
+        if (!dataLoaded.presupuestos) await loadPresupuestos();
+        if (!dataLoaded.inversiones) await loadInversiones();
 
-    // Fase 2: Lógica de cálculo (sin cambios aquí)
-    const calculateTotals = (movs) => {
-        let ingresos = 0, gastos = 0, saldoNeto = 0;
-        movs.forEach(m => {
-            if (m.tipo === 'movimiento') {
-                saldoNeto += m.cantidad;
-                if (m.cantidad > 0) ingresos += m.cantidad;
-                else gastos += m.cantidad;
-            } else if (m.tipo === 'traspaso') {
-                const origenVisible = visibleAccountIds.has(m.cuentaOrigenId);
-                const destinoVisible = visibleAccountIds.has(m.cuentaDestinoId);
-                if (origenVisible && !destinoVisible) {
-                    saldoNeto -= m.cantidad;
-                    gastos -= m.cantidad;
-                } else if (!origenVisible && destinoVisible) {
+        updateNetWorthChart(saldos);
+
+        const visibleAccountIds = new Set(Object.keys(saldos));
+        const investmentAccountIds = new Set(getVisibleAccounts().filter(c => c.esInversion).map(c => c.id));
+
+        const calculateTotals = (movs) => {
+            let ingresos = 0, gastos = 0, saldoNeto = 0;
+            movs.forEach(m => {
+                if (m.tipo === 'movimiento') {
                     saldoNeto += m.cantidad;
-                    ingresos += m.cantidad;
+                    if (m.cantidad > 0) ingresos += m.cantidad;
+                    else gastos += m.cantidad;
+                } else if (m.tipo === 'traspaso') {
+                    const origenVisible = visibleAccountIds.has(m.cuentaOrigenId);
+                    const destinoVisible = visibleAccountIds.has(m.cuentaDestinoId);
+                    if (origenVisible && !destinoVisible) {
+                        saldoNeto -= m.cantidad;
+                        gastos -= m.cantidad;
+                    } else if (!origenVisible && destinoVisible) {
+                        saldoNeto += m.cantidad;
+                        ingresos += m.cantidad;
+                    }
+                }
+            });
+            return { ingresos, gastos, saldoNeto };
+        };
+        const currentTotals = calculateTotals(current);
+        const previousTotals = calculateTotals(previous);
+        const saldoNetoActual = currentTotals.saldoNeto;
+        const saldoNetoAnterior = previousTotals.saldoNeto;
+        const tasaAhorroActual = currentTotals.ingresos > 0 ? (saldoNetoActual / currentTotals.ingresos) * 100 : (saldoNetoActual < 0 ? -100 : 0);
+        const tasaAhorroAnterior = previousTotals.ingresos > 0 ? (previousTotals.saldoNeto / previousTotals.ingresos) * 100 : 0;
+        const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+        const pnlInversionActual = current.reduce((sum, mov) => (mov.tipo === 'movimiento' && investmentAccountIds.has(mov.cuentaId) ? sum + mov.cantidad : sum), 0);
+        const now = new Date();
+        const expenseBudgets = (db.presupuestos || []).filter(b => b.ano === now.getFullYear() && b.cantidad < 0);
+        let totalBudgetedExpense = 0;
+        let actualExpenseForBudget = Math.abs(currentTotals.gastos);
+        if (expenseBudgets.length > 0) {
+            const periodFilter = select('filter-periodo').value;
+            const totalAnnualBudget = expenseBudgets.reduce((sum, b) => sum + Math.abs(b.cantidad), 0);
+            if (periodFilter === 'mes-actual') totalBudgetedExpense = totalAnnualBudget / 12;
+            else if (periodFilter === 'año-actual') totalBudgetedExpense = totalAnnualBudget;
+            else {
+                const sDateEl = select('filter-fecha-inicio'), eDateEl = select('filter-fecha-fin');
+                if (sDateEl?.value && eDateEl?.value) {
+                    const diffDays = (new Date(eDateEl.value) - new Date(sDateEl.value)) / 86400000 + 1;
+                    totalBudgetedExpense = (totalAnnualBudget / (now.getFullYear() % 4 === 0 ? 366 : 365)) * diffDays;
                 }
             }
-        });
-        return { ingresos, gastos, saldoNeto };
-    };
-    const currentTotals = calculateTotals(current);
-    const previousTotals = calculateTotals(previous);
-    const saldoNetoActual = currentTotals.saldoNeto;
-    const saldoNetoAnterior = previousTotals.saldoNeto;
-    const tasaAhorroActual = currentTotals.ingresos > 0 ? (saldoNetoActual / currentTotals.ingresos) * 100 : (saldoNetoActual < 0 ? -100 : 0);
-    const tasaAhorroAnterior = previousTotals.ingresos > 0 ? (previousTotals.saldoNeto / previousTotals.ingresos) * 100 : 0;
-    const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
-    const pnlInversionActual = current.reduce((sum, mov) => (mov.tipo === 'movimiento' && investmentAccountIds.has(mov.cuentaId) ? sum + mov.cantidad : sum), 0);
-    const now = new Date();
-    const expenseBudgets = (db.presupuestos || []).filter(b => b.ano === now.getFullYear() && b.cantidad < 0);
-    let totalBudgetedExpense = 0;
-    let actualExpenseForBudget = Math.abs(currentTotals.gastos);
-    if (expenseBudgets.length > 0) {
-        const periodFilter = select('filter-periodo').value;
-        const totalAnnualBudget = expenseBudgets.reduce((sum, b) => sum + Math.abs(b.cantidad), 0);
-        if (periodFilter === 'mes-actual') totalBudgetedExpense = totalAnnualBudget / 12;
-        else if (periodFilter === 'año-actual') totalBudgetedExpense = totalAnnualBudget;
-        else {
-            const sDateEl = select('filter-fecha-inicio'), eDateEl = select('filter-fecha-fin');
-            if (sDateEl?.value && eDateEl?.value) {
-                const diffDays = (new Date(eDateEl.value) - new Date(sDateEl.value)) / 86400000 + 1;
-                totalBudgetedExpense = (totalAnnualBudget / (now.getFullYear() % 4 === 0 ? 366 : 365)) * diffDays;
+        }
+        
+        const getComparisonHTML = (currentVal, prevVal, comparisonLabel, lowerIsBetter = false) => {
+            if (!comparisonLabel || prevVal === 0 || Math.abs(prevVal) < 1) return '';
+            const isImprovement = lowerIsBetter ? (currentVal < prevVal) : (currentVal > prevVal);
+            const diff = (currentVal - prevVal) / Math.abs(prevVal) * 100;
+            const diffClass = isImprovement ? 'text-positive' : 'text-negative';
+            const icon = isImprovement ? 'arrow_upward' : 'arrow_downward';
+            return `<span class="${diffClass}"><span class="material-icons" style="font-size: 12px; vertical-align: middle;">${icon}</span> ${Math.abs(diff).toFixed(0)}%</span> <span style="color:var(--c-on-surface-secondary)">${comparisonLabel}</span>`;
+        };
+        if (select('kpi-ingresos-value')) {
+            selectAll('#kpi-container .skeleton').forEach(el => el.classList.remove('skeleton'));
+            animateCountUp(select('kpi-ingresos-value'), currentTotals.ingresos);
+            select('kpi-ingresos-comparison').innerHTML = getComparisonHTML(currentTotals.ingresos, previousTotals.ingresos, label);
+            animateCountUp(select('kpi-gastos-value'), currentTotals.gastos);
+            select('kpi-gastos-comparison').innerHTML = getComparisonHTML(Math.abs(currentTotals.gastos), Math.abs(previousTotals.gastos), label, true);
+        }
+        const saldoNetoEl = select('kpi-saldo-neto-value');
+        if (saldoNetoEl) {
+            saldoNetoEl.className = `kpi-item__value ${saldoNetoActual >= 0 ? 'text-positive' : 'text-negative'}`;
+            animateCountUp(saldoNetoEl, saldoNetoActual);
+            select('kpi-saldo-neto-comparison').innerHTML = getComparisonHTML(saldoNetoActual, saldoNetoAnterior, label);
+        }
+        if (select('kpi-ampliado-widget')) {
+            selectAll('#kpi-ampliado-widget .skeleton').forEach(el => el.classList.remove('skeleton'));
+            const kpiTasaAhorroValueEl = select('kpi-tasa-ahorro-value');
+            kpiTasaAhorroValueEl.textContent = `${tasaAhorroActual.toFixed(1)}%`;
+            kpiTasaAhorroValueEl.className = `kpi-item__value ${tasaAhorroActual >= 0 ? 'text-positive' : 'text-negative'}`;
+            renderSavingsRateGauge('kpi-savings-rate-chart', tasaAhorroActual);
+            select('kpi-tasa-ahorro-comparison').innerHTML = getComparisonHTML(tasaAhorroActual, tasaAhorroAnterior, label.replace('vs', ''));
+            animateCountUp(select('kpi-patrimonio-neto-value'), patrimonioNeto);
+            const kpiPnlEl = select('kpi-pnl-inversion-value');
+            kpiPnlEl.className = `kpi-item__value ${pnlInversionActual >= 0 ? 'text-positive' : 'text-negative'}`;
+            if (investmentAccountIds.size > 0) animateCountUp(kpiPnlEl, pnlInversionActual); else kpiPnlEl.textContent = 'N/A';
+            const progressEl = select('kpi-presupuesto-progress'), progressTextEl = select('kpi-presupuesto-text');
+            progressTextEl.classList.remove('skeleton');
+            if (totalBudgetedExpense > 0) {
+                const percentage = (actualExpenseForBudget / totalBudgetedExpense) * 100;
+                progressEl.value = Math.min(percentage, 100);
+                progressTextEl.innerHTML = `Gastado <strong>${formatCurrency(actualExpenseForBudget)}</strong> de un límite de <strong>${formatCurrency(totalBudgetedExpense)}</strong> (${percentage.toFixed(0)}%)`;
+                progressEl.className = 'budget-item__progress';
+                if (percentage > 100) progressEl.classList.add('budget-item__progress--danger');
+                else if (percentage > 85) progressEl.classList.add('budget-item__progress--warning');
+            } else {
+                progressEl.value = 0;
+                progressTextEl.textContent = 'No hay presupuestos de gasto definidos para este año.';
             }
         }
-    }
-
-    // Fase 3: Rellenar los widgets (sin cambios aquí)
-    const getComparisonHTML = (currentVal, prevVal, comparisonLabel, lowerIsBetter = false) => {
-        if (!comparisonLabel || prevVal === 0 || Math.abs(prevVal) < 1) return '';
-        const isImprovement = lowerIsBetter ? (currentVal < prevVal) : (currentVal > prevVal);
-        const diff = (currentVal - prevVal) / Math.abs(prevVal) * 100;
-        const diffClass = isImprovement ? 'text-positive' : 'text-negative';
-        const icon = isImprovement ? 'arrow_upward' : 'arrow_downward';
-        return `<span class="${diffClass}"><span class="material-icons" style="font-size: 12px; vertical-align: middle;">${icon}</span> ${Math.abs(diff).toFixed(0)}%</span> <span style="color:var(--c-on-surface-secondary)">${comparisonLabel}</span>`;
-    };
-    if (select('kpi-ingresos-value')) {
-        selectAll('#kpi-container .skeleton').forEach(el => el.classList.remove('skeleton'));
-        animateCountUp(select('kpi-ingresos-value'), currentTotals.ingresos);
-        select('kpi-ingresos-comparison').innerHTML = getComparisonHTML(currentTotals.ingresos, previousTotals.ingresos, label);
-        animateCountUp(select('kpi-gastos-value'), currentTotals.gastos);
-        select('kpi-gastos-comparison').innerHTML = getComparisonHTML(Math.abs(currentTotals.gastos), Math.abs(previousTotals.gastos), label, true);
-    }
-    const saldoNetoEl = select('kpi-saldo-neto-value');
-    if (saldoNetoEl) {
-        saldoNetoEl.className = `kpi-item__value ${saldoNetoActual >= 0 ? 'text-positive' : 'text-negative'}`;
-        animateCountUp(saldoNetoEl, saldoNetoActual);
-        select('kpi-saldo-neto-comparison').innerHTML = getComparisonHTML(saldoNetoActual, saldoNetoAnterior, label);
-    }
-    if (select('kpi-ampliado-widget')) {
-        selectAll('#kpi-ampliado-widget .skeleton').forEach(el => el.classList.remove('skeleton'));
-        const kpiTasaAhorroValueEl = select('kpi-tasa-ahorro-value');
-        kpiTasaAhorroValueEl.textContent = `${tasaAhorroActual.toFixed(1)}%`;
-        kpiTasaAhorroValueEl.className = `kpi-item__value ${tasaAhorroActual >= 0 ? 'text-positive' : 'text-negative'}`;
-        renderSavingsRateGauge('kpi-savings-rate-chart', tasaAhorroActual);
-        select('kpi-tasa-ahorro-comparison').innerHTML = getComparisonHTML(tasaAhorroActual, tasaAhorroAnterior, label.replace('vs', ''));
-        animateCountUp(select('kpi-patrimonio-neto-value'), patrimonioNeto);
-        const kpiPnlEl = select('kpi-pnl-inversion-value');
-        kpiPnlEl.className = `kpi-item__value ${pnlInversionActual >= 0 ? 'text-positive' : 'text-negative'}`;
-        if (investmentAccountIds.size > 0) animateCountUp(kpiPnlEl, pnlInversionActual); else kpiPnlEl.textContent = 'N/A';
-        const progressEl = select('kpi-presupuesto-progress'), progressTextEl = select('kpi-presupuesto-text');
-        progressTextEl.classList.remove('skeleton');
-        if (totalBudgetedExpense > 0) {
-            const percentage = (actualExpenseForBudget / totalBudgetedExpense) * 100;
-            progressEl.value = Math.min(percentage, 100);
-            progressTextEl.innerHTML = `Gastado <strong>${formatCurrency(actualExpenseForBudget)}</strong> de un límite de <strong>${formatCurrency(totalBudgetedExpense)}</strong> (${percentage.toFixed(0)}%)`;
-            progressEl.className = 'budget-item__progress';
-            if (percentage > 100) progressEl.classList.add('budget-item__progress--danger');
-            else if (percentage > 85) progressEl.classList.add('budget-item__progress--warning');
-        } else {
-            progressEl.value = 0;
-            progressTextEl.textContent = 'No hay presupuestos de gasto definidos para este año.';
+        const actionCenterContainer = select('action-center-content');
+        if (actionCenterContainer) {
+            let actionItems = [];
+            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+            const pendingRecurrents = (db.recurrentes || []).filter(r => new Date(r.nextDate) <= today);
+            pendingRecurrents.forEach(r => actionItems.push({ urgency: 3, type: 'pending', data: r, subtitle: `Vencido desde el ${new Date(r.nextDate).toLocaleDateString()}` }));
+            (db.recurrentes || []).filter(r => { const nextDate = new Date(r.nextDate); return nextDate > today && nextDate <= nextWeek; }).slice(0, 3).forEach(r => actionItems.push({ urgency: 2, type: 'upcoming', data: r, subtitle: `Vence el ${new Date(r.nextDate).toLocaleDateString()}` }));
+            actionItems.sort((a, b) => b.urgency - a.urgency || new Date(a.data.nextDate) - new Date(b.data.nextDate));
+            if (actionItems.length === 0) {
+                actionCenterContainer.innerHTML = `<div class="empty-state" style="padding: var(--sp-2) 0; background: transparent; border: none;"><span class="material-icons text-positive">task_alt</span><p style="color: var(--c-on-surface-secondary);">¡Todo en orden!</p></div>`;
+            } else {
+                actionCenterContainer.innerHTML = actionItems.map(item => { const r = item.data; const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative'; const actionButtons = item.type === 'pending' ? `<div style="display: flex; gap: var(--sp-2);"><button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Omitir</button><button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Añadir</button></div>` : ''; return `<div class="modal__list-item" style="padding: var(--sp-2) 0;"><div><strong style="font-size: var(--fs-sm);">${r.descripcion}</strong><small style="display: block; color: var(--c-on-surface-secondary);">${item.subtitle}</small></div><div style="text-align: right;"><strong class="${amountClass}" style="font-size: var(--fs-base);">${formatCurrency(r.cantidad)}</strong>${actionButtons}</div></div>`; }).join('');
+            }
         }
-    }
-    const actionCenterContainer = select('action-center-content');
-    if (actionCenterContainer) {
-        let actionItems = [];
-        const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-        const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-        const pendingRecurrents = (db.recurrentes || []).filter(r => new Date(r.nextDate) <= today);
-        pendingRecurrents.forEach(r => actionItems.push({ urgency: 3, type: 'pending', data: r, subtitle: `Vencido desde el ${new Date(r.nextDate).toLocaleDateString()}` }));
-        (db.recurrentes || []).filter(r => { const nextDate = new Date(r.nextDate); return nextDate > today && nextDate <= nextWeek; }).slice(0, 3).forEach(r => actionItems.push({ urgency: 2, type: 'upcoming', data: r, subtitle: `Vence el ${new Date(r.nextDate).toLocaleDateString()}` }));
-        actionItems.sort((a, b) => b.urgency - a.urgency || new Date(a.data.nextDate) - new Date(b.data.nextDate));
-        if (actionItems.length === 0) {
-            actionCenterContainer.innerHTML = `<div class="empty-state" style="padding: var(--sp-2) 0; background: transparent; border: none;"><span class="material-icons text-positive">task_alt</span><p style="color: var(--c-on-surface-secondary);">¡Todo en orden!</p></div>`;
-        } else {
-            actionCenterContainer.innerHTML = actionItems.map(item => { const r = item.data; const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative'; const actionButtons = item.type === 'pending' ? `<div style="display: flex; gap: var(--sp-2);"><button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Omitir</button><button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Añadir</button></div>` : ''; return `<div class="modal__list-item" style="padding: var(--sp-2) 0;"><div><strong style="font-size: var(--fs-sm);">${r.descripcion}</strong><small style="display: block; color: var(--c-on-surface-secondary);">${item.subtitle}</small></div><div style="text-align: right;"><strong class="${amountClass}" style="font-size: var(--fs-base);">${formatCurrency(r.cantidad)}</strong>${actionButtons}</div></div>`; }).join('');
-        }
-    }
-    
-    // --- INICIO DE LA SECCIÓN CORREGIDA ---
-    const conceptListContainer = select('concepto-totals-list');
-    const chartCanvas = select('conceptos-chart');
-    
-    // La corrección está aquí: TODA la lógica del gráfico y la lista va DENTRO del `if`.
-    if (conceptListContainer && chartCanvas) {
-        const chartCtx = chartCanvas.getContext('2d');
-        const chartContainer = chartCanvas.closest('.chart-container');
-        if(chartContainer) chartContainer.classList.remove('skeleton');
-        if (conceptosChart) conceptosChart.destroy();
         
-        const cTots = current.reduce((a, m) => { if (m.tipo === 'movimiento' && m.conceptoId) { if (!a[m.conceptoId]) { const con = db.conceptos.find((c) => c.id === m.conceptoId); a[m.conceptoId] = { total: 0, movements: [], icon: (con && con.icon) || 'label' }; } a[m.conceptoId].total += m.cantidad; a[m.conceptoId].movements.push(m); } return a; }, {});
-        const sortedTotals = Object.entries(cTots).sort(([, a], [, b]) => a.total - b.total);
-        const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-chart-positive').trim();
-        const colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim();
+        const conceptListContainer = select('concepto-totals-list');
+        const chartCanvas = select('conceptos-chart');
         
-        conceptosChart = new Chart(chartCtx, {
-            type: 'bar',
-            data: {
-                labels: sortedTotals.map(([id]) => { const con = db.conceptos.find((c) => c.id === id); return toSentenceCase((con && con.nombre) || '?') }),
-                datasets: [{
-                    data: sortedTotals.map(([, data]) => data.total / 100),
-                    backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger),
-                    borderRadius: 6,
-                }]
-            },
-            options: { // Las opciones ahora incluyen el onClick para el drill-down
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (context) => `Total: ${formatCurrency(context.parsed.y * 100)}` } } },
-                scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } },
-                onClick: (event, elements) => {
-                    if (elements.length === 0) return;
-                    const index = elements[0].index;
-                    const [conceptoId, data] = sortedTotals[index];
-                    const concepto = db.conceptos.find(c => c.id === conceptoId);
-                    const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Desconocido';
-                    hapticFeedback('light');
-                    showDrillDownModal(`Movimientos de: ${conceptoNombre}`, data.movements);
+        if (conceptListContainer && chartCanvas) {
+            const chartCtx = chartCanvas.getContext('2d');
+            const chartContainer = chartCanvas.closest('.chart-container');
+            if(chartContainer) chartContainer.classList.remove('skeleton');
+            if (conceptosChart) conceptosChart.destroy();
+            
+            const cTots = current.reduce((a, m) => { if (m.tipo === 'movimiento' && m.conceptoId) { if (!a[m.conceptoId]) { const con = db.conceptos.find((c) => c.id === m.conceptoId); a[m.conceptoId] = { total: 0, movements: [], icon: (con && con.icon) || 'label' }; } a[m.conceptoId].total += m.cantidad; a[m.conceptoId].movements.push(m); } return a; }, {});
+            const sortedTotals = Object.entries(cTots).sort(([, a], [, b]) => a.total - b.total);
+            const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-chart-positive').trim();
+            const colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim();
+            
+            conceptosChart = new Chart(chartCtx, {
+                type: 'bar',
+                data: {
+                    labels: sortedTotals.map(([id]) => { const con = db.conceptos.find((c) => c.id === id); return toSentenceCase((con && con.nombre) || '?') }),
+                    datasets: [{
+                        data: sortedTotals.map(([, data]) => data.total / 100),
+                        backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger),
+                        borderRadius: 6,
+                    }]
                 },
-                onHover: (event, chartElement) => {
-                    event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (context) => `Total: ${formatCurrency(context.parsed.y * 100)}` } } },
+                    scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } },
+                    onClick: (event, elements) => {
+                        if (elements.length === 0) return;
+                        const index = elements[0].index;
+                        const [conceptoId, data] = sortedTotals[index];
+                        const concepto = db.conceptos.find(c => c.id === conceptoId);
+                        const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Desconocido';
+                        hapticFeedback('light');
+                        showDrillDownModal(`Movimientos de: ${conceptoNombre}`, data.movements);
+                    },
+                    onHover: (event, chartElement) => {
+                        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                    }
                 }
-            }
-        });
+            });
 
-        // Y ahora, la lógica para rellenar la lista de conceptos
-        conceptListContainer.innerHTML = (sortedTotals.length === 0)
-        ? `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>Sin datos para los filtros.</p></div>`
-        : sortedTotals.map(([id, data]) => {
-            const con = db.conceptos.find((c) => c.id === id);
-            const t = data.total;
-            return `<details class="accordion" style="background-color: var(--c-surface-variant);">
-                <summary>
-                    <span style="display: flex; align-items: center; gap: 8px;">
-                        <span class="material-icons" style="font-size: 18px;">${data.icon}</span>${toSentenceCase((con && con.nombre) || '?')}
-                    </span>
-                    <span>
-                        <strong class="${t >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(t)}</strong>
-                        <span class="material-icons accordion__icon">expand_more</span>
-                    </span>
-                </summary>
-                <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);">
-                    ${data.movements.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-                    .map(mov => {
-                        const cuenta = db.cuentas.find(c => c.id === mov.cuentaId);
-                        const concepto = db.conceptos.find(c => c.id === mov.conceptoId);
-                        const amountClass = mov.cantidad >= 0 ? 'text-positive' : 'text-negative';
-                        const indicatorClass = mov.cantidad >= 0 ? 'transaction-card__indicator--income' : 'transaction-card__indicator--expense';
+            conceptListContainer.innerHTML = (sortedTotals.length === 0)
+            ? `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>Sin datos para los filtros.</p></div>`
+            : sortedTotals.map(([id, data]) => {
+                const con = db.conceptos.find((c) => c.id === id);
+                const t = data.total;
+                return `<details class="accordion" style="background-color: var(--c-surface-variant);">
+                    <summary>
+                        <span style="display: flex; align-items: center; gap: 8px;">
+                            <span class="material-icons" style="font-size: 18px;">${data.icon}</span>${toSentenceCase((con && con.nombre) || '?')}
+                        </span>
+                        <span>
+                            <strong class="${t >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(t)}</strong>
+                            <span class="material-icons accordion__icon">expand_more</span>
+                        </span>
+                    </summary>
+                    <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);">
+                        ${data.movements.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+                        .map(mov => {
+                            const cuenta = db.cuentas.find(c => c.id === mov.cuentaId);
+                            const concepto = db.conceptos.find(c => c.id === mov.conceptoId);
+                            const amountClass = mov.cantidad >= 0 ? 'text-positive' : 'text-negative';
+                            const indicatorClass = mov.cantidad >= 0 ? 'transaction-card__indicator--income' : 'transaction-card__indicator--expense';
 
-                        return `
-                        <div class="transaction-card" data-action="edit-movement-from-list" data-id="${mov.id}" style="cursor: pointer;">
-                            <div class="transaction-card__indicator ${indicatorClass}"></div>
-                            <div class="transaction-card__content">
-                                <div class="transaction-card__details">
-                                    <div class="transaction-card__row-1">${toSentenceCase((concepto && concepto.nombre) || 'S/C')}</div>
-                                    <div class="transaction-card__row-2">${new Date(mov.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} • ${escapeHTML(mov.descripcion)}</div>
+                            return `
+                            <div class="transaction-card" data-action="edit-movement-from-list" data-id="${mov.id}" style="cursor: pointer;">
+                                <div class="transaction-card__indicator ${indicatorClass}"></div>
+                                <div class="transaction-card__content">
+                                    <div class="transaction-card__details">
+                                        <div class="transaction-card__row-1">${toSentenceCase((concepto && concepto.nombre) || 'S/C')}</div>
+                                        <div class="transaction-card__row-2">${new Date(mov.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} • ${escapeHTML(mov.descripcion)}</div>
+                                    </div>
+                                    <div class="transaction-card__figures">
+                                        <div class="transaction-card__amount ${amountClass}">${formatCurrency(mov.cantidad)}</div>
+                                        <div class="transaction-card__row-2" style="text-align: right;">${(cuenta && escapeHTML(cuenta.nombre)) || 'S/C'}</div>
+                                    </div>
                                 </div>
-                                <div class="transaction-card__figures">
-                                    <div class="transaction-card__amount ${amountClass}">${formatCurrency(mov.cantidad)}</div>
-                                    <div class="transaction-card__row-2" style="text-align: right;">${(cuenta && escapeHTML(cuenta.nombre)) || 'S/C'}</div>
-                                </div>
-                            </div>
-                        </div>`;
-                    }).join('')}
-                </div>
-            </details>`;
-        }).join('');
-    }
-    // --- FIN DE LA SECCIÓN CORREGIDA ---
-
-    if (select('informe-personalizado-widget')) {
-        await renderInformeWidgetContent();
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </details>`;
+            }).join('');
+        }
+        
+        if (select('informe-personalizado-widget')) {
+            await renderInformeWidgetContent();
+        }
+    } finally {
+        // Al final, haya habido error o no, el "portero" abre la puerta.
+        isDashboardRendering = false;
     }
 };
 
@@ -6526,7 +6807,7 @@ const setMovimientoFormType = (type) => {
         <p>Esto lleva tus finanzas al siguiente nivel. En <strong>Ajustes > Gestión de Datos > Cuentas</strong>, puedes marcar una cuenta como "de inversión". Al hacerlo, la app desbloquea métricas profesionales en la pestaña de <strong>Patrimonio</strong>:</p>
         <ul>
             <li><strong>P&L (Ganancias y Pérdidas):</strong> Te dice, sin rodeos, cuánto dinero has ganado o perdido, tanto en euros como en porcentaje.</li>
-            <li><strong>TIR (Tasa Interna de Retorno):</strong> El indicador definitivo para saber si tu inversión es un cohete 🚀 o una tortuga 🐢. Te dice la rentabilidad <strong>anualizada</strong> real, teniendo en cuenta no solo el valor final, sino <strong>cuándo y cuánto dinero</strong> has ido metiendo o sacando. ¡Es lo que usan los profesionales!</li>
+            <li><strong>TIR (Tasa Interna de Retorno):</strong> El indicador definitivo para saber si tu inversión es un cohete 🚀 o una tortuga 🐢. Te dice la rentabilidad <strong>anualizada</strong> real, teniendo en cuenta no solo el valor final, sino <strong>cuándo y cuánto dinero</strong> has ido metiendo o sacando a lo largo del tiempo. ¡Es lo que usan los profesionales!</li>
         </ul>
     </div>
 </details>
@@ -6827,29 +7108,81 @@ const setMovimientoFormType = (type) => {
                 const btn = actionTarget.closest('button');
 
                 const actions = {
+		'render-informe': () => {
+    const summaryElement = actionTarget.closest('[data-informe-id]');
+    if (summaryElement) {
+        const informeId = summaryElement.dataset.informeId;
+        // Cerramos otros acordeones para mantener la interfaz limpia
+        document.querySelectorAll('.informe-acordeon').forEach(ac => {
+            if (ac.id !== `acordeon-${informeId}`) {
+                ac.open = false;
+            }
+        });
+        // Llamamos a nuestra nueva función directora
+        renderInformeDetallado(informeId);
+    }
+},
 					 'show-informe-builder': showInformeBuilderModal,
                     'save-informe': () => handleSaveInforme(btn),
                     'show-help-topic': () => {
-                        const topic = actionTarget.dataset.topic;
-                        if (topic) {
-                            let title, content;
-                            if(topic === 'tir') {
-                                title = 'TIR (Tasa Interna de Retorno)';
-                                content = "<p>La TIR es la métrica de rentabilidad más precisa.</p><p>Te dice el <strong>beneficio anualizado real</strong> de tu inversión, como si fuera el tipo de interés que te daría un banco. Es inteligente porque tiene en cuenta no solo cuánto ha crecido tu dinero, sino también <strong>cuándo y cuánto capital</strong> has ido aportando o retirando a lo largo del tiempo.</p>";
-                            } else if (topic === 'pace') {
-                                title = 'Ritmo del Presupuesto (Pace)';
-                                content = "<p>El 'Pace' o ritmo te ayuda a saber si vas por el buen camino para cumplir tu presupuesto anual.</p><p>Compara el porcentaje de tu presupuesto que has consumido hasta hoy con el porcentaje del año que ya ha transcurrido. Por ejemplo, si a mitad de año (50% del tiempo) has gastado el 75% de tu presupuesto anual para 'Ocio', tu ritmo indicará que vas 'Excedido'.</p>";
-                            }
+    const topic = actionTarget.dataset.topic;
+    if (topic) {
+        let title, content;
+        if (topic === 'tir') {
+            title = 'TIR (Tasa Interna de Retorno)';
+            content = "<p>La TIR es la métrica de rentabilidad más precisa.</p><p>Te dice el <strong>beneficio anualizado real</strong> de tu inversión, como si fuera el tipo de interés que te daría un banco. Es inteligente porque tiene en cuenta no solo cuánto ha crecido tu dinero, sino también <strong>cuándo y cuánto capital</strong> has ido aportando o retirando a lo largo del tiempo.</p>";
+        } else if (topic === 'pace') {
+            title = 'Ritmo del Presupuesto (Pace)';
+            content = "<p>El 'Pace' o ritmo te ayuda a saber si vas por el buen camino para cumplir tu presupuesto anual.</p><p>Compara el porcentaje de tu presupuesto que has consumido hasta hoy con el porcentaje del año que ya ha transcurrido. Por ejemplo, si a mitad de año (50% del tiempo) has gastado el 75% de tu presupuesto anual para 'Ocio', tu ritmo indicará que vas 'Excedido'.</p>";
+        }
+        // === INICIO DE LAS NUEVAS EXPLICACIONES ===
+        else if (topic === 'tasa-ahorro') {
+            title = '¿Cómo se calcula la Tasa de Ahorro?';
+            content = `
+                <p>Mide qué porcentaje de tus ingresos consigues guardar después de cubrir todos tus gastos en el periodo seleccionado.</p>
+                <h4>Fórmula:</h4>
+                <code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Saldo Neto del Periodo / Ingresos Totales del Periodo) * 100</code>
+                <p style="margin-top: var(--sp-2);">Es el indicador clave de tu capacidad para generar riqueza.</p>
+            `;
+        } else if (topic === 'patrimonio-neto') {
+            title = '¿Cómo se calcula el Patrimonio Neto?';
+            content = `
+                <p>Representa tu riqueza total. Es la suma de todo lo que tienes (activos) menos todo lo que debes (pasivos).</p>
+                <h4>Fórmula:</h4>
+                <code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de los saldos de todas tus cuentas.</code>
+                <p style="margin-top: var(--sp-2);"><strong>Importante:</strong> Este valor es siempre tu situación global actual y no se ve afectado por los filtros de fecha del panel.</p>
+            `;
+        } else if (topic === 'pnl-inversion') {
+            title = '¿Cómo se calcula el P&L de Inversión?';
+            content = `
+                <p>P&L son las siglas de "Profits and Losses" (Ganancias y Pérdidas). Mide el <strong>flujo de caja neto</strong> de tus cuentas de inversión durante el periodo seleccionado.</p>
+                <h4>Fórmula:</h4>
+                <code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de todos los movimientos en cuentas de inversión.</code>
+                <p style="margin-top: var(--sp-2);">No incluye la revalorización de activos que no hayas vendido. Es útil para saber si tus inversiones te están dando dinero (dividendos, ventas) o si estás invirtiendo más capital (compras).</p>
+            `;
+        } else if (topic === 'progreso-presupuesto') {
+            title = '¿Cómo se calcula el Progreso del Presupuesto?';
+            content = `
+                <p>Compara tus gastos reales con tu plan de gastos para el periodo seleccionado.</p>
+                <h4>Fórmula:</h4>
+                <ol style="list-style-position: inside; padding-left: var(--sp-2);">
+                    <li style="margin-bottom: 6px;">Se calcula tu <strong>límite de gasto proporcional</strong> para el periodo (ej. Presupuesto Anual / 12 para un mes).</li>
+                    <li style="margin-bottom: 6px;">Se comparan tus <strong>gastos reales</strong> del periodo con ese límite.</li>
+                </ol>
+                <p style="margin-top: var(--sp-2);">Te ayuda a ver si te estás ciñendo a tu plan financiero y a corregir desviaciones a tiempo.</p>
+            `;
+        }
+        // === FIN DE LAS NUEVAS EXPLICACIONES ===
 
-                            const titleEl = select('help-modal-title');
-                            const bodyEl = select('help-modal-body');
-                            
-                            if (titleEl) titleEl.textContent = title;
-                            if (bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`;
-                            
-                            showModal('help-modal');
-                        }
-                    },
+        const titleEl = select('help-modal-title');
+        const bodyEl = select('help-modal-body');
+
+        if (titleEl) titleEl.textContent = title;
+        if (bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`;
+
+        showModal('help-modal');
+    }
+},
                     'configure-dashboard': showDashboardConfigModal,
                     'save-dashboard-config': () => handleSaveDashboardConfig(btn),
                     'use-password-instead': () => showPasswordFallback(),
@@ -6948,7 +7281,7 @@ const setMovimientoFormType = (type) => {
                     'import-csv': showCsvImportWizard,
                     'toggle-ledger': async () => { hapticFeedback('medium'); isOffBalanceMode = !isOffBalanceMode; document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A'; const activePageEl = selectOne('.view--active'); const activePage = activePageEl ? activePageEl.id : PAGE_IDS.INICIO; navigateTo(activePage, false); showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info'); },
                     'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
-                    'apply-filters': () => { hapticFeedback('light'); updateDashboardData(); },
+                    'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
                     'apply-informe-filters': () => { hapticFeedback('light'); renderInformesPage(); },
                     'add-movement': () => startMovementForm(),
                     'edit-movement': async () => { if (select('generic-modal')?.classList.contains('modal-overlay--active')) { hideModal('generic-modal'); } let movementData = db.movimientos.find(m => m.id === id); if (!movementData) { movementData = recentMovementsCache.find(item => item.id === id); } if (!movementData && id) { try { const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id); const doc = await movRef.get(); if (doc.exists) { movementData = { id: doc.id, ...doc.data() }; if (!db.movimientos.some(m => m.id === id)) { db.movimientos.push(movementData); } } else { showToast('Error: No se encontró el movimiento.', 'danger'); return; } } catch (error) { console.error("Error al obtener el movimiento:", error); showToast('No se pudo cargar el movimiento para editar.', 'danger'); return; } } startMovementForm(id, false); },
@@ -8161,342 +8494,314 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
     if (activeView) {
         switch(activeView.id) {
             case PAGE_IDS.MOVIMIENTOS: await loadInitialMovements(); break;
-            case PAGE_IDS.INICIO: await updateDashboardData(); break;
+            case PAGE_IDS.INICIO: await scheduleDashboardUpdate(); break;
             case PAGE_IDS.PLANIFICACION: renderPlanificacionPage(); break;
         }
     }
 };
 
-// (Asegúrate de tener esta función de Deshacer también actualizada)
-const handleUndoAction = async () => {
-    if (!lastActionForUndo) return;
-    const { actionType, collection, data } = lastActionForUndo;
-    if (actionType === 'delete') {
-        await saveDoc(collection, data.id, data);
-        if (collection === 'movimientos') {
-            if (data.tipo === 'traspaso') {
-                await updateAccountBalance(data.cuentaOrigenId, -data.cantidad);
-                await updateAccountBalance(data.cuentaDestinoId, data.cantidad);
-            } else {
-                await updateAccountBalance(data.cuentaId, data.cantidad);
-            }
+    const recalculateAllAccountBalances = async (btn) => {
+        if (!currentUser) {
+            showToast("Debes iniciar sesión para realizar esta acción.", "danger");
+            return;
         }
-        showToast('Eliminación deshecha.', 'info');
-    }
-    lastActionForUndo = null;
-    
-    const activeView = document.querySelector('.view--active');
-    if (activeView) {
-        switch(activeView.id) {
-            case PAGE_IDS.MOVIMIENTOS: await loadInitialMovements(); break;
-            case PAGE_IDS.INICIO: await updateDashboardData(); break;
-            case PAGE_IDS.PLANIFICACION: renderPlanificacionPage(); break;
-        }
-    }
-};
-		
-        const recalculateAllAccountBalances = async (btn) => {
-            if (!currentUser) {
-                showToast("Debes iniciar sesión para realizar esta acción.", "danger");
-                return;
-            }
 
-            setButtonLoading(btn, true, 'Auditando...');
-            showToast("Iniciando recálculo de saldos... Esto puede tardar un momento.", 'info', 4000);
+        setButtonLoading(btn, true, 'Auditando...');
+        showToast("Iniciando recálculo de saldos... Esto puede tardar un momento.", 'info', 4000);
 
-            try {
-                const userRef = fbDb.collection('users').doc(currentUser.uid);
-                const cuentasRef = userRef.collection('cuentas');
-                const movimientosRef = userRef.collection('movimientos');
+        try {
+            const userRef = fbDb.collection('users').doc(currentUser.uid);
+            const cuentasRef = userRef.collection('cuentas');
+            const movimientosRef = userRef.collection('movimientos');
 
-                const cuentasSnapshot = await cuentasRef.get();
-                const newBalances = {};
-                cuentasSnapshot.forEach(doc => {
-                    newBalances[doc.id] = 0;
-                });
-
-                const movimientosSnapshot = await movimientosRef.get();
-                console.log(`Procesando ${movimientosSnapshot.size} movimientos para el recálculo.`);
-
-                movimientosSnapshot.forEach(doc => {
-                    const mov = doc.data();
-                    if (mov.tipo === 'traspaso') {
-                        if (newBalances.hasOwnProperty(mov.cuentaOrigenId)) {
-                            newBalances[mov.cuentaOrigenId] -= mov.cantidad;
-                        }
-                        if (newBalances.hasOwnProperty(mov.cuentaDestinoId)) {
-                            newBalances[mov.cuentaDestinoId] += mov.cantidad;
-                        }
-                    } else {
-                        if (newBalances.hasOwnProperty(mov.cuentaId)) {
-                            newBalances[mov.cuentaId] += mov.cantidad;
-                        }
-                    }
-                });
-
-                const batch = fbDb.batch();
-                for (const cuentaId in newBalances) {
-                    const cuentaRef = cuentasRef.doc(cuentaId);
-                    batch.update(cuentaRef, { saldo: newBalances[cuentaId] });
-                }
-                
-                await batch.commit();
-
-                hapticFeedback('success');
-                showToast("¡Auditoría completada! Todos los saldos han sido recalculados y actualizados.", "info", 5000);
-                
-                loadCoreData(currentUser.uid);
-
-            } catch (error) {
-                console.error("Error crítico durante el recálculo de saldos:", error);
-                showToast("Ocurrió un error grave durante el recálculo. Revisa la consola.", "danger");
-            } finally {
-                setButtonLoading(btn, false);
-            }
-        };    
-
-        const handleSaveInvestmentAccounts = async (form, btn) => {
-            setButtonLoading(btn, true);
-            const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value));
-            const batch = fbDb.batch();
-            db.cuentas.forEach(c => {
-                const ref = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(c.id);
-                batch.update(ref, { esInversion: selectedIds.has(c.id) });
-            });
-            await batch.commit();
-            setButtonLoading(btn, false);
-            hideModal('generic-modal');
-            hapticFeedback('success');
-            showToast('Portafolio actualizado.');
-        };
-		const handleSaveAportacion = async (form, btn) => {
-             setButtonLoading(btn, true);
-            const cuentaId = select('aportacion-cuenta').value;
-            const cantidad = parseCurrencyString(select('aportacion-cantidad').value);
-            const fecha = select('aportacion-fecha').value;
-            const notas = select('aportacion-notas').value.trim();
-
-            if (!cuentaId || isNaN(cantidad) || !fecha) {
-                showToast('Completa todos los campos requeridos.', 'warning');
-                setButtonLoading(btn, false);
-                return;
-            }
-            
-            const newId = generateId();
-            const newCashflow = {
-                id: newId,
-                cuentaId,
-                cantidad: Math.round(cantidad * 100),
-                fecha: parseDateStringAsUTC(fecha).toISOString(),
-                notas
-            };
-            
-            await saveDoc('inversion_cashflows', newId, newCashflow);
-            setButtonLoading(btn, false);
-            hideModal('generic-modal');
-            hapticFeedback('success');
-            showToast('Operación de capital registrada.');
-            const activePageEl = document.querySelector('.view--active');
-            const activePage = activePageEl ? activePageEl.id : null;
-            if (activePage === PAGE_IDS.PATRIMONIO) {
-                renderPatrimonioPage();
-            }
-        };
-
-        document.addEventListener('DOMContentLoaded', initApp);
-		
-        const fetchMovementsInChunks = async (baseQuery, field, ids) => {
-            if (ids.length === 0) {
-                return [];
-            }
-            const idChunks = chunkArray(ids, 10);
-            
-            const queryPromises = idChunks.map(chunk => {
-                return baseQuery.where(field, 'in', chunk).get();
+            const cuentasSnapshot = await cuentasRef.get();
+            const newBalances = {};
+            cuentasSnapshot.forEach(doc => {
+                newBalances[doc.id] = 0;
             });
 
-            const querySnapshots = await Promise.all(queryPromises);
+            const movimientosSnapshot = await movimientosRef.get();
+            console.log(`Procesando ${movimientosSnapshot.size} movimientos para el recálculo.`);
 
-            let movements = [];
-            querySnapshots.forEach(snapshot => {
-                snapshot.forEach(doc => {
-                    movements.push({ id: doc.id, ...doc.data() });
-                });
-            });
-
-            return movements;
-        };
-
-        const validateField = (id, silent = false) => {
-            const input = select(id);
-            if (!input) return true;
-
-            clearError(id);
-            let isValid = true;
-            const value = input.value.trim();
-            const traspasoPill = select('mov-type-btn-traspaso');
-            const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
-
-            switch (id) {
-                case 'movimiento-cantidad':
-                    const amount = parseCurrencyString(value);
-                    if (isNaN(amount) || value === '') {
-                        displayError(id, 'Cantidad no válida.'); isValid = false;
+            movimientosSnapshot.forEach(doc => {
+                const mov = doc.data();
+                if (mov.tipo === 'traspaso') {
+                    if (newBalances.hasOwnProperty(mov.cuentaOrigenId)) {
+                        newBalances[mov.cuentaOrigenId] -= mov.cantidad;
                     }
-                    break;
-                case 'movimiento-descripcion':
-                    if (type !== 'traspaso' && value === '') {
-                        displayError(id, 'La descripción es obligatoria.'); isValid = false;
+                    if (newBalances.hasOwnProperty(mov.cuentaDestinoId)) {
+                        newBalances[mov.cuentaDestinoId] += mov.cantidad;
                     }
-                    break;
-                case 'movimiento-concepto':
-                    if (type === 'movimiento' && value === '') {
-                        displayError(id, 'El concepto es obligatorio.'); isValid = false;
-                    }
-                    break;
-                case 'movimiento-cuenta':
-                    if (type === 'movimiento' && value === '') {
-                        displayError(id, 'La cuenta es obligatoria.'); isValid = false;
-                    }
-                    break;
-                case 'movimiento-cuenta-origen':
-                case 'movimiento-cuenta-destino':
-                    if (type === 'traspaso') {
-                        const origen = select('movimiento-cuenta-origen').value;
-                        const destino = select('movimiento-cuenta-destino').value;
-                        if (value === '') {
-                            displayError(id, 'La cuenta es obligatoria.');
-                            isValid = false;
-                        } else if (origen && destino && origen === destino) {
-                            if (input.id === 'movimiento-cuenta-origen') {
-                                displayError(id, 'No puede ser la misma cuenta destino.');
-                            } else {
-                                displayError(id, 'No puede ser la misma cuenta origen.');
-                            }
-                            isValid = false;
-                        }
-                    }
-                    break;
-                case 'movimiento-fecha':
-                    if (value === '') {
-                        displayError(id, 'La fecha es obligatoria.'); isValid = false;
-                    }
-                    break;
-                case 'new-cuenta-nombre':
-                case 'new-cuenta-tipo':
-                case 'edit-cuenta-nombre':
-                case 'edit-cuenta-tipo':
-                    if (value === '') {
-                        displayError(id, 'Este campo es obligatorio.'); isValid = false;
-                    }
-                    break;
-                case 'new-concepto-nombre':
-                case 'edit-concepto-nombre':
-                    if (value === '') {
-                        displayError(id, 'Este campo es obligatorio.'); isValid = false;
-                    }
-                    break;
-                 case 'valoracion-valor':
-                    const valor = parseCurrencyString(value);
-                    if (isNaN(valor) || valor < 0) {
-                        displayError(id, 'Valor no válido. Debe ser un número positivo.'); isValid = false;
-                    }
-                    break;
-                case 'valoracion-fecha':
-                    if (value === '') {
-                        displayError(id, 'La fecha es obligatoria.'); isValid = false;
-                    }
-                    break;
-                case 'aportacion-cantidad':
-                    const aportacion = parseCurrencyString(value);
-                    if (isNaN(aportacion) || value === '') {
-                        displayError(id, 'Cantidad no válida.'); isValid = false;
-                    }
-                    break;
-                case 'aportacion-fecha':
-                    if (value === '') {
-                        displayError(id, 'La fecha es obligatoria.'); isValid = false;
-                    }
-                    break;
-            }
-
-            if (!isValid && !silent) hapticFeedback('light');
-
-            return isValid;
-        };
-
-        const validateMovementForm = () => {
-            let isValid = true;
-            if (!validateField('movimiento-cantidad')) isValid = false;
-            if (!validateField('movimiento-fecha')) isValid = false;
-
-           const traspasoPill = select('mov-type-btn-traspaso');
-            const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
-
-            if (type === 'movimiento') {
-                if (!validateField('movimiento-descripcion')) isValid = false;
-                if (!validateField('movimiento-concepto')) isValid = false;
-                if (!validateField('movimiento-cuenta')) isValid = false;
-            } else {
-                const origenValid = validateField('movimiento-cuenta-origen');
-                const destinoValid = validateField('movimiento-cuenta-destino');
-                if (!origenValid || !destinoValid) isValid = false;
-            }
-            return isValid;
-        };
-
-                const handleDescriptionInput = () => {
-            clearTimeout(descriptionSuggestionDebounceTimer);
-            descriptionSuggestionDebounceTimer = setTimeout(() => {
-                const descriptionInput = select('movimiento-descripcion');
-                const suggestionsBox = select('description-suggestions');
-                if (!descriptionInput || !suggestionsBox) return;
-
-                const query = descriptionInput.value.trim().toLowerCase();
-                suggestionsBox.innerHTML = '';
-
-                if (query.length < 3) {
-                    suggestionsBox.style.display = 'none';
-                    return;
-                }
-
-                const suggestions = [];
-                for (const [desc, data] of intelligentIndex.entries()) {
-                    if (desc.includes(query)) {
-                        suggestions.push({
-                            description: desc,
-                            conceptoId: data.conceptoId,
-                            cuentaId: data.cuentaId
-                        });
-                    }
-                }
-
-                if (suggestions.length > 0) {
-                    suggestions.sort((a, b) => a.description.localeCompare(b.description));
-                    let html = '';
-                    suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).forEach(s => {
-                        const concepto = db.conceptos.find(c => c.id === s.conceptoId);
-                        const cuenta = db.cuentas.find(c => c.id === s.cuentaId);
-                        html += `
-                            <div class="suggestion-item" 
-                                data-description="${escapeHTML(s.description)}" 
-                                data-concepto-id="${s.conceptoId}" 
-                                data-cuenta-id="${s.cuentaId}"
-                                tabindex="0"
-                            >
-                                <p>${escapeHTML(s.description)}</p>
-                                <small>${escapeHTML((concepto && concepto.nombre) || 'S/C')} • ${escapeHTML((cuenta && cuenta.nombre) || 'S/C')}</small>
-                            </div>
-                        `;
-                    });
-                    suggestionsBox.innerHTML = html;
-                    suggestionsBox.style.display = 'block';
                 } else {
-                    suggestionsBox.style.display = 'none';
+                    if (newBalances.hasOwnProperty(mov.cuentaId)) {
+                        newBalances[mov.cuentaId] += mov.cantidad;
+                    }
                 }
-            }, 300);
+            });
+
+            const batch = fbDb.batch();
+            for (const cuentaId in newBalances) {
+                const cuentaRef = cuentasRef.doc(cuentaId);
+                batch.update(cuentaRef, { saldo: newBalances[cuentaId] });
+            }
+            
+            await batch.commit();
+
+            hapticFeedback('success');
+            showToast("¡Auditoría completada! Todos los saldos han sido recalculados y actualizados.", "info", 5000);
+            
+            loadCoreData(currentUser.uid);
+
+        } catch (error) {
+            console.error("Error crítico durante el recálculo de saldos:", error);
+            showToast("Ocurrió un error grave durante el recálculo. Revisa la consola.", "danger");
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    };    
+
+    const handleSaveInvestmentAccounts = async (form, btn) => {
+        setButtonLoading(btn, true);
+        const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value));
+        const batch = fbDb.batch();
+        db.cuentas.forEach(c => {
+            const ref = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(c.id);
+            batch.update(ref, { esInversion: selectedIds.has(c.id) });
+        });
+        await batch.commit();
+        setButtonLoading(btn, false);
+        hideModal('generic-modal');
+        hapticFeedback('success');
+        showToast('Portafolio actualizado.');
+    };
+	const handleSaveAportacion = async (form, btn) => {
+         setButtonLoading(btn, true);
+        const cuentaId = select('aportacion-cuenta').value;
+        const cantidad = parseCurrencyString(select('aportacion-cantidad').value);
+        const fecha = select('aportacion-fecha').value;
+        const notas = select('aportacion-notas').value.trim();
+
+        if (!cuentaId || isNaN(cantidad) || !fecha) {
+            showToast('Completa todos los campos requeridos.', 'warning');
+            setButtonLoading(btn, false);
+            return;
+        }
+        
+        const newId = generateId();
+        const newCashflow = {
+            id: newId,
+            cuentaId,
+            cantidad: Math.round(cantidad * 100),
+            fecha: parseDateStringAsUTC(fecha).toISOString(),
+            notas
         };
-	 
-    </script>
+        
+        await saveDoc('inversion_cashflows', newId, newCashflow);
+        setButtonLoading(btn, false);
+        hideModal('generic-modal');
+        hapticFeedback('success');
+        showToast('Operación de capital registrada.');
+        const activePageEl = document.querySelector('.view--active');
+        const activePage = activePageEl ? activePageEl.id : null;
+        if (activePage === PAGE_IDS.PATRIMONIO) {
+            renderPatrimonioPage();
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', initApp);
+	
+    const fetchMovementsInChunks = async (baseQuery, field, ids) => {
+        if (ids.length === 0) {
+            return [];
+        }
+        const idChunks = chunkArray(ids, 10);
+        
+        const queryPromises = idChunks.map(chunk => {
+            return baseQuery.where(field, 'in', chunk).get();
+        });
+
+        const querySnapshots = await Promise.all(queryPromises);
+
+        let movements = [];
+        querySnapshots.forEach(snapshot => {
+            snapshot.forEach(doc => {
+                movements.push({ id: doc.id, ...doc.data() });
+            });
+        });
+
+        return movements;
+    };
+
+    const validateField = (id, silent = false) => {
+        const input = select(id);
+        if (!input) return true;
+
+        clearError(id);
+        let isValid = true;
+        const value = input.value.trim();
+        const traspasoPill = select('mov-type-btn-traspaso');
+        const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+
+        switch (id) {
+            case 'movimiento-cantidad':
+                const amount = parseCurrencyString(value);
+                if (isNaN(amount) || value === '') {
+                    displayError(id, 'Cantidad no válida.'); isValid = false;
+                }
+                break;
+            case 'movimiento-descripcion':
+                if (type !== 'traspaso' && value === '') {
+                    displayError(id, 'La descripción es obligatoria.'); isValid = false;
+                }
+                break;
+            case 'movimiento-concepto':
+                if (type === 'movimiento' && value === '') {
+                    displayError(id, 'El concepto es obligatorio.'); isValid = false;
+                }
+                break;
+            case 'movimiento-cuenta':
+                if (type === 'movimiento' && value === '') {
+                    displayError(id, 'La cuenta es obligatoria.'); isValid = false;
+                }
+                break;
+            case 'movimiento-cuenta-origen':
+            case 'movimiento-cuenta-destino':
+                if (type === 'traspaso') {
+                    const origen = select('movimiento-cuenta-origen').value;
+                    const destino = select('movimiento-cuenta-destino').value;
+                    if (value === '') {
+                        displayError(id, 'La cuenta es obligatoria.');
+                        isValid = false;
+                    } else if (origen && destino && origen === destino) {
+                        if (input.id === 'movimiento-cuenta-origen') {
+                            displayError(id, 'No puede ser la misma cuenta destino.');
+                        } else {
+                            displayError(id, 'No puede ser la misma cuenta origen.');
+                        }
+                        isValid = false;
+                    }
+                }
+                break;
+            case 'movimiento-fecha':
+                if (value === '') {
+                    displayError(id, 'La fecha es obligatoria.'); isValid = false;
+                }
+                break;
+            case 'new-cuenta-nombre':
+            case 'new-cuenta-tipo':
+            case 'edit-cuenta-nombre':
+            case 'edit-cuenta-tipo':
+                if (value === '') {
+                    displayError(id, 'Este campo es obligatorio.'); isValid = false;
+                }
+                break;
+            case 'new-concepto-nombre':
+            case 'edit-concepto-nombre':
+                if (value === '') {
+                    displayError(id, 'Este campo es obligatorio.'); isValid = false;
+                }
+                break;
+             case 'valoracion-valor':
+                const valor = parseCurrencyString(value);
+                if (isNaN(valor) || valor < 0) {
+                    displayError(id, 'Valor no válido. Debe ser un número positivo.'); isValid = false;
+                }
+                break;
+            case 'valoracion-fecha':
+                if (value === '') {
+                    displayError(id, 'La fecha es obligatoria.'); isValid = false;
+                }
+                break;
+            case 'aportacion-cantidad':
+                const aportacion = parseCurrencyString(value);
+                if (isNaN(aportacion) || value === '') {
+                    displayError(id, 'Cantidad no válida.'); isValid = false;
+                }
+                break;
+            case 'aportacion-fecha':
+                if (value === '') {
+                    displayError(id, 'La fecha es obligatoria.'); isValid = false;
+                }
+                break;
+        }
+
+        if (!isValid && !silent) hapticFeedback('light');
+
+        return isValid;
+    };
+
+    const validateMovementForm = () => {
+        let isValid = true;
+        if (!validateField('movimiento-cantidad')) isValid = false;
+        if (!validateField('movimiento-fecha')) isValid = false;
+
+       const traspasoPill = select('mov-type-btn-traspaso');
+        const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+
+        if (type === 'movimiento') {
+            if (!validateField('movimiento-descripcion')) isValid = false;
+            if (!validateField('movimiento-concepto')) isValid = false;
+            if (!validateField('movimiento-cuenta')) isValid = false;
+        } else {
+            const origenValid = validateField('movimiento-cuenta-origen');
+            const destinoValid = validateField('movimiento-cuenta-destino');
+            if (!origenValid || !destinoValid) isValid = false;
+        }
+        return isValid;
+    };
+
+            const handleDescriptionInput = () => {
+        clearTimeout(descriptionSuggestionDebounceTimer);
+        descriptionSuggestionDebounceTimer = setTimeout(() => {
+            const descriptionInput = select('movimiento-descripcion');
+            const suggestionsBox = select('description-suggestions');
+            if (!descriptionInput || !suggestionsBox) return;
+
+            const query = descriptionInput.value.trim().toLowerCase();
+            suggestionsBox.innerHTML = '';
+
+            if (query.length < 3) {
+                suggestionsBox.style.display = 'none';
+                return;
+            }
+
+            const suggestions = [];
+            for (const [desc, data] of intelligentIndex.entries()) {
+                if (desc.includes(query)) {
+                    suggestions.push({
+                        description: desc,
+                        conceptoId: data.conceptoId,
+                        cuentaId: data.cuentaId
+                    });
+                }
+            }
+
+            if (suggestions.length > 0) {
+                suggestions.sort((a, b) => a.description.localeCompare(b.description));
+                let html = '';
+                suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).forEach(s => {
+                    const concepto = db.conceptos.find(c => c.id === s.conceptoId);
+                    const cuenta = db.cuentas.find(c => c.id === s.cuentaId);
+                    html += `
+                        <div class="suggestion-item" 
+                            data-description="${escapeHTML(s.description)}" 
+                            data-concepto-id="${s.conceptoId}" 
+                            data-cuenta-id="${s.cuentaId}"
+                            tabindex="0"
+                        >
+                            <p>${escapeHTML(s.description)}</p>
+                            <small>${escapeHTML((concepto && concepto.nombre) || 'S/C')} • ${escapeHTML((cuenta && cuenta.nombre) || 'S/C')}</small>
+                        </div>
+                    `;
+                });
+                suggestionsBox.innerHTML = html;
+                suggestionsBox.style.display = 'block';
+            } else {
+                suggestionsBox.style.display = 'none';
+            }
+        }, 300);
+    };
+ 
+</script>
 </body>
 </html>
