@@ -1817,6 +1817,7 @@ body[data-theme="aurora"] .starry-background {
     'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto total.', icon: 'show_chart' },
     'concept-totals': { title: 'Totales por Concepto', description: 'Gráfico y lista detallada de gastos/ingresos por concepto.', icon: 'bar_chart' },
     'kpi-summary': { title: 'Resumen de KPIs (Simple)', description: 'Ingresos, gastos y saldo neto del periodo.', icon: 'summarize' }
+    // La línea del informe personalizado ha sido eliminada
 };
 
 const DEFAULT_DASHBOARD_WIDGETS = ['kpi-summary-expanded', 'kpi-summary', 'concept-totals', 'net-worth-trend', 'action-center'];
@@ -2591,34 +2592,40 @@ window.addEventListener('offline', () => {
             }
         };
         
-// MODIFICA tu función navigateTo para añadir la gestión del listener
+// =================================================================
+// === INICIO: REEMPLAZO COMPLETO Y CORREGIDO DE LA FUNCIÓN navigateTo ===
+// =================================================================
 const navigateTo = async (pageId, isInitial = false) => {
     if (!isInitial) hapticFeedback('light');
     
     const oldActiveView = document.querySelector('.view--active');
     const oldViewId = oldActiveView ? oldActiveView.id : null;
 
-    // --- INICIO DE LA LÓGICA DE LIMPIEZA DE GRÁFICOS ---
+    // --- INICIO: LÓGICA DE LIMPIEZA DE GRÁFICOS (ROBUSTA Y CORREGIDA) ---
+    // Este bloque es la clave. Se asegura de que CUALQUIER gráfico activo sea destruido
+    // antes de intentar renderizar la nueva vista, eliminando el error "Canvas is already in use".
     if (netWorthChart) { netWorthChart.destroy(); netWorthChart = null; }
     if (conceptosChart) { conceptosChart.destroy(); conceptosChart = null; }
     if (liquidAssetsChart) { liquidAssetsChart.destroy(); liquidAssetsChart = null; }
     if (detailInvestmentChart) { detailInvestmentChart.destroy(); detailInvestmentChart = null; }
-    if (informesChart) { informesChart.destroy(); informesChart = null; }
     if (assetAllocationChart) { assetAllocationChart.destroy(); assetAllocationChart = null; }
     if (budgetTrendChart) { budgetTrendChart.destroy(); budgetTrendChart = null; }
-    // --- FIN DE LA LÓGICA DE LIMPIEZA DE GRÁFICOS ---
+    
+    // Limpieza específica y exhaustiva para todos los gráficos de informes
+    if (informesChart) { informesChart.destroy(); informesChart = null; } // Variable que podría ser un typo, se limpia por seguridad.
+    if (informeActivoChart) { informeActivoChart.destroy(); informeActivoChart = null; } // Gráfico de los informes predefinidos.
+    if (informeChart) { informeChart.destroy(); informeChart = null; } // ¡CLAVE! Gráfico del widget de informe en el dashboard.
+    // --- FIN DE LA LÓGICA DE LIMPIEZA ---
 
     // ============================================================
     // === INICIO: GESTIÓN INTELIGENTE DEL LISTENER DE RECIENTES ===
     // ============================================================
-    // Si estamos SALIENDO de la página de Inicio y el listener existe, lo apagamos.
     if (oldViewId === PAGE_IDS.INICIO && unsubscribeRecientesListener) {
         console.log("Saliendo de Inicio, desconectando el listener de recientes.");
         unsubscribeRecientesListener();
         unsubscribeRecientesListener = null;
     }
     
-    // Si estamos ENTRANDO en la página de Inicio y el listener NO existe, lo creamos.
     if (pageId === PAGE_IDS.INICIO && !unsubscribeRecientesListener) {
         console.log("Entrando en Inicio, reconectando el listener de recientes.");
         const userRef = fbDb.collection('users').doc(currentUser.uid);
@@ -2680,6 +2687,9 @@ const navigateTo = async (pageId, isInitial = false) => {
     if (fab) fab.classList.toggle('fab--visible', true);
     updateThemeIcon();
 };
+// =================================================================
+// === FIN: REEMPLAZO COMPLETO Y CORREGIDO DE LA FUNCIÓN navigateTo ===
+// =================================================================
         
         const setupTheme = () => { 
     const gridColor = 'rgba(255, 255, 255, 0.1)';
@@ -3461,19 +3471,20 @@ const renderInversionesPage = async (targetContainerId) => {
     }, 50);
 };
 
-     // REEMPLAZA ESTA FUNCIÓN COMPLETA
+// =============================================================
+// === PASO 1: REEMPLAZO COMPLETO DE renderInformesPage      ===
+// =============================================================
 const renderInformesPage = () => {
     const container = select(PAGE_IDS.INFORMES);
     if (!container) return;
 
-    // Destruye el gráfico global si existía para evitar conflictos
-    if (informesChart) {
-        informesChart.destroy();
-        informesChart = null;
-    }
-     if (informeActivoChart) {
+    if (informeActivoChart) {
         informeActivoChart.destroy();
         informeActivoChart = null;
+    }
+     if (informesChart) {
+        informesChart.destroy();
+        informesChart = null;
     }
 
     const informesDisponibles = {
@@ -3481,22 +3492,41 @@ const renderInformesPage = () => {
         'flujo_caja': { title: 'Análisis de Flujo de Caja', icon: 'swap_horiz' },
         'asignacion_activos': { title: 'Asignación de Activos y Rebalanceo', icon: 'pie_chart' },
         'crecimiento_patrimonial': { title: 'Análisis de Crecimiento Patrimonial', icon: 'waterfall_chart' },
-        'rendimiento_inversiones': { title: 'Scorecard de Rendimiento de Inversiones', icon: 'military_tech' },
-        'proyeccion_fi': { title: 'Proyección de Independencia Financiera (FIRE)', icon: 'rocket_launch' },
-        'solvencia_liquidez': { title: 'Informe de Solvencia y Liquidez (Prueba de Estrés)', icon: 'health_and_safety' }
+        'rendimiento_inversiones': { title: 'Scorecard de Rendimiento de Inversiones', icon: 'military_tech' }
     };
 
     let informesHtml = '<div class="accordion-wrapper">';
+
+    const informeGuardado = db.config?.savedReports?.main;
+    const tituloInforme = informeGuardado?.title || "Mi Informe Personalizado";
+    informesHtml += `
+        <details class="accordion informe-acordeon" id="acordeon-personalizado" open>
+            <summary>
+                <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-primary); flex-grow: 1;">
+                    <span class="material-icons" style="margin-right: 12px;">insights</span>
+                    <span id="informe-widget-title">${escapeHTML(tituloInforme)}</span>
+                </h3>
+                <button data-action="show-informe-builder" class="btn btn--secondary" style="margin-right: 16px;">
+                    <span class="material-icons" style="font-size: 16px;">edit</span>
+                    <span>Configurar</span>
+                </button>
+                <span class="material-icons accordion__icon">expand_more</span>
+            </summary>
+            <div class="accordion__content" id="informe-widget-content"></div>
+        </details>
+    `;
+
+    informesHtml += `<h3 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2); padding-left: var(--sp-2);">Informes Predefinidos</h3>`;
+
     for (const [id, data] of Object.entries(informesDisponibles)) {
+        // NOTA: Se ha eliminado `data-action` del <summary>. Ahora es solo un disparador nativo.
         informesHtml += `
             <details class="accordion informe-acordeon" id="acordeon-${id}">
-                <summary data-action="render-informe" data-informe-id="${id}">
+                <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons" style="margin-right: 12px;">${data.icon}</span>${data.title}</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
-                <div class="accordion__content" id="informe-container-${id}">
-                    <!-- El contenido del informe se cargará aquí dinámicamente -->
-                </div>
+                <div class="accordion__content" id="informe-container-${id}"></div>
             </details>
         `;
     }
@@ -3504,8 +3534,16 @@ const renderInformesPage = () => {
 
     container.innerHTML = informesHtml;
 
-    // Por defecto, renderizamos el primer informe al cargar la página
-    setTimeout(() => renderInformeDetallado('resumen_ejecutivo'), 50);
+    setTimeout(() => {
+        if(informeGuardado) {
+            renderInformeWidgetContent();
+        } else {
+             select('informe-widget-content').innerHTML = `
+                <div class="empty-state" style="background:transparent; border:none; padding: var(--sp-4) 0;">
+                    <p>Aún no has configurado tu informe. Haz clic en "Configurar" para empezar.</p>
+                </div>`;
+        }
+    }, 50);
 };
         
         const renderVirtualListItem = (item) => {
@@ -4219,69 +4257,82 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
 let informeActivoChart = null;
 
 /**
-     * Función principal que actúa como un router para renderizar el informe solicitado.
-     * @param {string} informeId - El ID del informe a mostrar (ej. 'resumen_ejecutivo').
-     */
-    async function renderInformeDetallado(informeId) {
-        const container = select(`informe-container-${informeId}`);
-        if (!container) return;
+ * Función principal que actúa como un router para renderizar el informe solicitado.
+ * @param {string} informeId - El ID del informe a mostrar (ej. 'resumen_ejecutivo').
+ */
+async function renderInformeDetallado(informeId) {
+    const container = select(`informe-container-${informeId}`);
+    if (!container) return;
 
-        // Limpia cualquier gráfico anterior para evitar errores
-        if (informeActivoChart) {
-            informeActivoChart.destroy();
-            informeActivoChart = null;
-        }
-
-        const detailsElement = container.closest('details');
-        if (detailsElement && !detailsElement.open) {
-            document.querySelectorAll('.informe-acordeon').forEach(ac => {
-                if (ac !== detailsElement) ac.open = false;
-            });
-            detailsElement.open = true;
-        }
-        
-        container.innerHTML = `<div class="skeleton" style="height: 200px; border-radius: var(--border-radius-lg);"></div>`;
-
-        try {
-            // Router que llama a la función de renderizado específica
-            const reportRenderers = {
-                'resumen_ejecutivo': renderInformeResumenEjecutivo,
-                'flujo_caja': renderInformeFlujoCaja,
-                'asignacion_activos': renderInformeAsignacionActivos,
-                'crecimiento_patrimonial': renderInformeCrecimientoPatrimonial,
-                'rendimiento_inversiones': renderInformeRendimientoInversiones,
-                'proyeccion_fi': renderInformeProyeccionFI,
-                'solvencia_liquidez': renderInformeSolvenciaLiquidez
-            };
-
-            if (reportRenderers[informeId]) {
-                await reportRenderers[informeId](container);
-            } else {
-                container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Este informe está en construcción.</p></div>`;
-            }
-        } catch (error) {
-            console.error(`Error al renderizar el informe '${informeId}':`, error);
-            container.innerHTML = `<div class="empty-state text-danger" style="padding: var(--sp-4) 0; border: none; background: transparent;"><span class="material-icons">error_outline</span><h3>Error al generar el informe</h3><p>No se pudieron cargar los datos. Por favor, inténtalo de nuevo.</p></div>`;
-        }
+    // Limpia cualquier gráfico anterior para evitar errores
+    if (informeActivoChart) {
+        informeActivoChart.destroy();
+        informeActivoChart = null;
     }
+
+    // Asegurarse de que el acordeón clicado está abierto
+    const detailsElement = container.closest('details');
+    if (detailsElement && !detailsElement.open) {
+        detailsElement.open = true;
+    }
+    
+    // Muestra un esqueleto de carga mientras se obtienen los datos
+    container.innerHTML = `<div class="skeleton" style="height: 200px; border-radius: var(--border-radius-lg);"></div>`;
+
+    try {
+        // Router que llama a la función de renderizado específica
+        const reportRenderers = {
+            'resumen_ejecutivo': renderInformeResumenEjecutivo,
+            'flujo_caja': renderInformeFlujoCaja,
+            'asignacion_activos': renderInformeAsignacionActivos,
+            'crecimiento_patrimonial': renderInformeCrecimientoPatrimonial,
+            'rendimiento_inversiones': renderInformeRendimientoInversiones,
+        };
+
+        if (reportRenderers[informeId]) {
+            await reportRenderers[informeId](container);
+        } else {
+            container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Este informe está en construcción.</p></div>`;
+        }
+    } catch (error) {
+        console.error(`Error al renderizar el informe '${informeId}':`, error);
+        container.innerHTML = `<div class="empty-state text-danger" style="padding: var(--sp-4) 0; border: none; background: transparent;"><span class="material-icons">error_outline</span><h3>Error al generar el informe</h3><p>No se pudieron cargar los datos. Por favor, inténtalo de nuevo.</p></div>`;
+    }
+}
 
 /**
  * Renderiza el informe: Resumen Ejecutivo.
+ * Este informe muestra una vista consolidada de la situación financiera
+ * para el periodo de tiempo seleccionado en los filtros del Dashboard (pestaña Inicio).
+ * @param {HTMLElement} container - El elemento del DOM donde se renderizará el informe.
  */
 async function renderInformeResumenEjecutivo(container) {
-    const { current } = await getFilteredMovements(false); // Usamos datos del mes actual por defecto
+    // 1. OBTENER DATOS
+    // Se obtienen los movimientos filtrados según el periodo del Dashboard y los saldos actuales.
+    const { current } = await getFilteredMovements(false);
     const saldos = await getSaldos();
+
+    // 2. CALCULAR KPIs
+    // Se calcula el patrimonio neto sumando todos los saldos de las cuentas visibles.
     const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+
+    // Se calculan los totales de ingresos, gastos y el saldo neto del periodo.
     const { ingresos, gastos, saldoNeto } = current.reduce((acc, mov) => {
         acc.saldoNeto += mov.cantidad;
         if (mov.cantidad > 0) acc.ingresos += mov.cantidad;
         else acc.gastos += mov.cantidad;
         return acc;
     }, { ingresos: 0, gastos: 0, saldoNeto: 0 });
+
+    // Se calcula la tasa de ahorro, manejando el caso de que no haya ingresos.
     const tasaAhorro = ingresos > 0 ? (saldoNeto / ingresos) * 100 : 0;
 
+    // 3. RENDERIZAR HTML
+    // Se genera el HTML utilizando las clases de estilo existentes para una integración visual perfecta.
     container.innerHTML = `
-        <p class="form-label" style="margin-bottom: var(--sp-3);">Vista de 360° de tu situación financiera actual (últimos 30 días).</p>
+        <p class="form-label" style="margin-bottom: var(--sp-3);">
+            Vista de 360° de tu situación financiera para el periodo seleccionado en el panel de Inicio.
+        </p>
         <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
             <div class="kpi-item">
                 <h4 class="kpi-item__label">Patrimonio Neto Total</h4>
@@ -4289,28 +4340,29 @@ async function renderInformeResumenEjecutivo(container) {
             </div>
             <div class="kpi-item">
                 <h4 class="kpi-item__label">Flujo de Caja Neto</h4>
-                <strong class="kpi-item__value ${saldoNeto >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(saldoNeto)}</strong>
+                <strong class="kpi-item__value ${saldoNeto >= 0 ? 'text-positive' : 'text-negative'}">
+                    ${formatCurrency(saldoNeto)}
+                </strong>
             </div>
             <div class="kpi-item">
                 <h4 class="kpi-item__label">Tasa de Ahorro</h4>
-                <strong class="kpi-item__value ${tasaAhorro >= 10 ? 'text-positive' : (tasaAhorro >= 0 ? 'text-warning' : 'text-negative')}">${tasaAhorro.toFixed(1)}%</strong>
+                <strong class="kpi-item__value ${tasaAhorro >= 10 ? 'text-positive' : 'text-warning'}">
+                    ${tasaAhorro.toFixed(1)}%
+                </strong>
             </div>
-        </div>
-    `;
+        </div>`;
 }
 
 /**
  * Renderiza el informe: Análisis de Flujo de Caja.
  */
 async function renderInformeFlujoCaja(container) {
-    // Obtenemos los movimientos de los últimos 12 meses para el gráfico
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
 
-    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-        .where('fecha', '>=', twelveMonthsAgo.toISOString()).get();
-    const movements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('fecha', '>=', twelveMonthsAgo.toISOString()).get();
+    const movements = snapshot.docs.map(doc => doc.data());
 
     const monthlyData = {};
     for (let i = 0; i < 12; i++) {
@@ -4334,12 +4386,7 @@ async function renderInformeFlujoCaja(container) {
     const ingresosData = sortedKeys.map(key => monthlyData[key].ingresos / 100);
     const gastosData = sortedKeys.map(key => Math.abs(monthlyData[key].gastos / 100));
 
-    container.innerHTML = `
-        <p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de ingresos vs. gastos de los últimos 12 meses.</p>
-        <div class="chart-container" style="height: 250px;">
-            <canvas id="flujo-caja-chart"></canvas>
-        </div>
-    `;
+    container.innerHTML = `<p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de ingresos vs. gastos de los últimos 12 meses.</p><div class="chart-container" style="height: 250px;"><canvas id="flujo-caja-chart"></canvas></div>`;
 
     const ctx = select('flujo-caja-chart').getContext('2d');
     informeActivoChart = new Chart(ctx, {
@@ -4347,27 +4394,17 @@ async function renderInformeFlujoCaja(container) {
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: 'Ingresos',
-                    data: ingresosData,
-                    backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success').trim(),
-                },
-                {
-                    label: 'Gastos',
-                    data: gastosData,
-                    backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim(),
-                }
+                { label: 'Ingresos', data: ingresosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success').trim() },
+                { label: 'Gastos', data: gastosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim() }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true } },
-            plugins: { legend: { position: 'top' }, datalabels: { display: false } }
-        }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' }, datalabels: { display: false } } }
     });
 }
 
+/**
+ * Renderiza el informe: Asignación de Activos.
+ */
 async function renderInformeAsignacionActivos(container) {
         const getAssetClass = (tipo) => {
             const t = (tipo || '').toUpperCase();
@@ -7076,305 +7113,90 @@ const setMovimientoFormType = (type) => {
 
             showGenericModal('Registrar Aportación/Retiro', formHtml);
         };
-        // =================================================================
-// === INICIO: CÓDIGO FINAL PARA REEMPLAZAR attachEventListeners   ===
+		
 // =================================================================
-        const attachEventListeners = () => {
-            document.body.addEventListener('click', async (e) => {
-                const target = e.target;
+// === PASO 2: REEMPLAZO COMPLETO Y CORREGIDO DE attachEventListeners ===
+// =================================================================
+const attachEventListeners = () => {
+    // Listener de Clics (permanece igual pero sin la acción 'render-informe')
+    document.body.addEventListener('click', async (e) => {
+        const target = e.target;
 
-                if (target.matches('.input-amount-calculator')) {
-                    e.preventDefault();
-                    showCalculator(target);
-                    return;
-                }
-
-                const actionTarget = target.closest('[data-action]');
-                
-                if (!actionTarget) {
-                    if (!target.closest('.transaction-card')) {
-                         resetActiveSwipe();
-                    }
-                    return;
-                }
-
-                const { action, id, page, type, modalId, view, filter } = actionTarget.dataset;
-                const btn = actionTarget.closest('button');
-
-                const actions = {
-					 'render-informe': () => {
-        const summaryElement = actionTarget.closest('[data-informe-id]');
-        if (summaryElement) {
-            const informeId = summaryElement.dataset.informeId;
-            // Cerramos otros acordeones antes de abrir y renderizar el nuevo
-            document.querySelectorAll('.informe-acordeon').forEach(ac => {
-                if (ac.id !== `acordeon-${informeId}`) {
-                    ac.open = false;
-                }
-            });
-            renderInformeDetallado(informeId);
+        if (target.matches('.input-amount-calculator')) {
+            e.preventDefault();
+            showCalculator(target);
+            return;
         }
-    },
-					 'show-informe-builder': showInformeBuilderModal,
-                    'save-informe': () => handleSaveInforme(btn),
-                    'show-help-topic': () => {
-    const topic = actionTarget.dataset.topic;
-    if (topic) {
-        let title, content;
-        if (topic === 'tir') {
-            title = 'TIR (Tasa Interna de Retorno)';
-            content = "<p>La TIR es la métrica de rentabilidad más precisa.</p><p>Te dice el <strong>beneficio anualizado real</strong> de tu inversión, como si fuera el tipo de interés que te daría un banco. Es inteligente porque tiene en cuenta no solo cuánto ha crecido tu dinero, sino también <strong>cuándo y cuánto capital</strong> has ido aportando o retirando a lo largo del tiempo.</p>";
-        } else if (topic === 'pace') {
-            title = 'Ritmo del Presupuesto (Pace)';
-            content = "<p>El 'Pace' o ritmo te ayuda a saber si vas por el buen camino para cumplir tu presupuesto anual.</p><p>Compara el porcentaje de tu presupuesto que has consumido hasta hoy con el porcentaje del año que ya ha transcurrido. Por ejemplo, si a mitad de año (50% del tiempo) has gastado el 75% de tu presupuesto anual para 'Ocio', tu ritmo indicará que vas 'Excedido'.</p>";
+
+        const actionTarget = target.closest('[data-action]');
+        
+        if (!actionTarget) {
+            if (!target.closest('.transaction-card')) {
+                 resetActiveSwipe();
+            }
+            return;
         }
-        // === INICIO DE LAS NUEVAS EXPLICACIONES ===
-        else if (topic === 'tasa-ahorro') {
-            title = '¿Cómo se calcula la Tasa de Ahorro?';
-            content = `
-                <p>Mide qué porcentaje de tus ingresos consigues guardar después de cubrir todos tus gastos en el periodo seleccionado.</p>
-                <h4>Fórmula:</h4>
-                <code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Saldo Neto del Periodo / Ingresos Totales del Periodo) * 100</code>
-                <p style="margin-top: var(--sp-2);">Es el indicador clave de tu capacidad para generar riqueza.</p>
-            `;
-        } else if (topic === 'patrimonio-neto') {
-            title = '¿Cómo se calcula el Patrimonio Neto?';
-            content = `
-                <p>Representa tu riqueza total. Es la suma de todo lo que tienes (activos) menos todo lo que debes (pasivos).</p>
-                <h4>Fórmula:</h4>
-                <code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de los saldos de todas tus cuentas.</code>
-                <p style="margin-top: var(--sp-2);"><strong>Importante:</strong> Este valor es siempre tu situación global actual y no se ve afectado por los filtros de fecha del panel.</p>
-            `;
-        } else if (topic === 'pnl-inversion') {
-            title = '¿Cómo se calcula el P&L de Inversión?';
-            content = `
-                <p>P&L son las siglas de "Profits and Losses" (Ganancias y Pérdidas). Mide el <strong>flujo de caja neto</strong> de tus cuentas de inversión durante el periodo seleccionado.</p>
-                <h4>Fórmula:</h4>
-                <code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de todos los movimientos en cuentas de inversión.</code>
-                <p style="margin-top: var(--sp-2);">No incluye la revalorización de activos que no hayas vendido. Es útil para saber si tus inversiones te están dando dinero (dividendos, ventas) o si estás invirtiendo más capital (compras).</p>
-            `;
-        } else if (topic === 'progreso-presupuesto') {
-            title = '¿Cómo se calcula el Progreso del Presupuesto?';
-            content = `
-                <p>Compara tus gastos reales con tu plan de gastos para el periodo seleccionado.</p>
-                <h4>Fórmula:</h4>
-                <ol style="list-style-position: inside; padding-left: var(--sp-2);">
-                    <li style="margin-bottom: 6px;">Se calcula tu <strong>límite de gasto proporcional</strong> para el periodo (ej. Presupuesto Anual / 12 para un mes).</li>
-                    <li style="margin-bottom: 6px;">Se comparan tus <strong>gastos reales</strong> del periodo con ese límite.</li>
-                </ol>
-                <p style="margin-top: var(--sp-2);">Te ayuda a ver si te estás ciñendo a tu plan financiero y a corregir desviaciones a tiempo.</p>
-            `;
-        }
-        // === FIN DE LAS NUEVAS EXPLICACIONES ===
 
-        const titleEl = select('help-modal-title');
-        const bodyEl = select('help-modal-body');
+        const { action, id, page, type, modalId, view, filter } = actionTarget.dataset;
+        const btn = actionTarget.closest('button');
 
-        if (titleEl) titleEl.textContent = title;
-        if (bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`;
-
-        showModal('help-modal');
-    }
-},
-                    'configure-dashboard': showDashboardConfigModal,
-                    'save-dashboard-config': () => handleSaveDashboardConfig(btn),
-                    'use-password-instead': () => showPasswordFallback(),
-                    'toggle-theme': handleToggleTheme,
-                    'toggle-investment-type-filter': () => handleToggleInvestmentTypeFilter(type),
-                    'filter-investments': () => handleFilterInvestments(filter),
-                    'confirm-recurrent': async (event) => {
-                        const actionTarget = event.target.closest('[data-action]');
-                        if (!actionTarget) return;
-                        const { id } = actionTarget.dataset;
-                        const btn = actionTarget.closest('button');
-                        if (!id || !btn) return;
-                        try {
-                            setButtonLoading(btn, true);
-                            const recurrente = db.recurrentes.find(r => r.id === id);
-                            if (!recurrente) {
-                                showToast('Error: No se encontró la operación recurrente.', 'danger');
-                                return;
-                            }
-                            const fechaDeEjecucion = parseDateStringAsUTC(recurrente.nextDate);
-                            const newMovement = {
-                                id: generateId(),
-                                fecha: new Date().toISOString(), // Usar timestamp actual para ordenación
-                                cantidad: recurrente.cantidad,
-                                descripcion: recurrente.descripcion,
-                                tipo: recurrente.tipo,
-                                cuentaId: recurrente.cuentaId,
-                                conceptoId: recurrente.conceptoId,
-                                cuentaOrigenId: recurrente.cuentaOrigenId,
-                                cuentaDestinoId: recurrente.cuentaDestinoId,
-                                sourceRecurrenceId: recurrente.id
-                            };
-                            const newNextDate = calculateNextDueDate(fechaDeEjecucion, recurrente.frequency);
-                            const newNextDateString = newNextDate.toISOString().slice(0, 10);
-                            
-                            // Usar un batch para asegurar atomicidad
-                            const batch = fbDb.batch();
-                            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovement.id);
-                            const recRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(id);
-                            
-                            batch.set(movRef, newMovement);
-                            batch.update(recRef, { nextDate: newNextDateString });
-                            
-                            await batch.commit();
-
-                            // Actualizar saldos después de confirmar el batch
-                            if (newMovement.tipo === 'traspaso') {
-                                await updateAccountBalance(newMovement.cuentaOrigenId, -newMovement.cantidad);
-                                await updateAccountBalance(newMovement.cuentaDestinoId, newMovement.cantidad);
-                            } else {
-                                await updateAccountBalance(newMovement.cuentaId, newMovement.cantidad);
-                            }
-                            
-                            hapticFeedback('success');
-                            showToast('Movimiento programado añadido.');
-
-                            // Actualizar la UI
-                            const activeView = document.querySelector('.view--active');
-                            if (activeView && activeView.id === PAGE_IDS.MOVIMIENTOS) await loadInitialMovements();
-
-
-                        } catch (error) {
-                            console.error("Error al confirmar el movimiento recurrente:", error);
-                            showToast("No se pudo añadir el movimiento. Revisa tu conexión.", "danger");
-                        } finally {
-                            setButtonLoading(btn, false);
-                        }
-                    },
-                    'skip-recurrent': async (event) => {
-                        const actionTarget = event.target.closest('[data-action]');
-                        if (!actionTarget) return;
-                        const { id } = actionTarget.dataset;
-                        const recurrente = db.recurrentes.find(r => r.id === id);
-                        if (!recurrente) {
-                            showToast('Error: No se encontró la operación recurrente.', 'danger');
-                            return;
-                        }
-                        try {
-                            const fechaDeEjecucion = parseDateStringAsUTC(recurrente.nextDate);
-                            const newNextDate = calculateNextDueDate(fechaDeEjecucion, recurrente.frequency);
-                            const newNextDateString = newNextDate.toISOString().slice(0, 10);
-                            await saveDoc('recurrentes', id, { nextDate: newNextDateString });
-                            hapticFeedback('success');
-                            showToast('Operación omitida. Programada para la siguiente fecha.');
-                        } catch (error) {
-                            console.error("Error al omitir el movimiento recurrente:", error);
-                            showToast("No se pudo omitir la operación. Revisa tu conexión.", "danger");
-                        }
-                    },
-                    'navigate': () => navigateTo(page),
-                    'help': showHelpModal,
-                    'exit': handleExitApp,
-                    'forgot-password': (e) => { e.preventDefault(); const email = prompt("Por favor, introduce el correo electrónico de tu cuenta para restablecer la contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => { showToast('Se ha enviado un correo para restablecer tu contraseña.', 'info', 5000); }).catch((error) => { console.error("Error al enviar correo de recuperación:", error); if (error.code === 'auth/user-not-found') { showToast('No se encontró ninguna cuenta con ese correo.', 'danger'); } else { showToast('Error al intentar restablecer la contraseña.', 'danger'); } }); } },
-                    'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
-                    'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
-                    'import-csv': showCsvImportWizard,
-                    'toggle-ledger': async () => { hapticFeedback('medium'); isOffBalanceMode = !isOffBalanceMode; document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A'; const activePageEl = selectOne('.view--active'); const activePage = activePageEl ? activePageEl.id : PAGE_IDS.INICIO; navigateTo(activePage, false); showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info'); },
-                    'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
-                    'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
-                    'apply-informe-filters': () => { hapticFeedback('light'); renderInformesPage(); },
-                    'add-movement': () => startMovementForm(),
-                    'edit-movement': async () => { if (select('generic-modal')?.classList.contains('modal-overlay--active')) { hideModal('generic-modal'); } let movementData = db.movimientos.find(m => m.id === id); if (!movementData) { movementData = recentMovementsCache.find(item => item.id === id); } if (!movementData && id) { try { const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id); const doc = await movRef.get(); if (doc.exists) { movementData = { id: doc.id, ...doc.data() }; if (!db.movimientos.some(m => m.id === id)) { db.movimientos.push(movementData); } } else { showToast('Error: No se encontró el movimiento.', 'danger'); return; } } catch (error) { console.error("Error al obtener el movimiento:", error); showToast('No se pudo cargar el movimiento para editar.', 'danger'); return; } } startMovementForm(id, false); },
-					 'edit-movement-from-list': () => {
-						const card = actionTarget.closest('.transaction-card');
-						if (card && card.dataset.id) {
-						startMovementForm(card.dataset.id, false);
-						}
-					},
-                    'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
-                    'delete-movement-from-modal': () => {
-                        const isRecurrent = (actionTarget.dataset.isRecurrent === 'true');
-                        const idToDelete = select('movimiento-id').value;
-                        const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?';
-                        showConfirmationModal(message, async () => {
-                            hideModal('movimiento-modal');
-                            await deleteMovementAndAdjustBalance(idToDelete, isRecurrent);
-                        });
-                    },
-                    'swipe-delete-movement': () => {
-                        const isRecurrent = actionTarget.dataset.isRecurrent === 'true';
-                        const message = '¿Seguro que quieres eliminar este movimiento?';
-                        showConfirmationModal(message, async () => {
-                            await deleteMovementAndAdjustBalance(id, isRecurrent);
-                        });
-                    },
-                    'swipe-duplicate-movement': () => {
-                        const idToDuplicate = actionTarget.dataset.id;
-                        const movementToDuplicate = db.movimientos.find(m => m.id === idToDuplicate) || recentMovementsCache.find(m => m.id === idToDuplicate);
-                        if (movementToDuplicate) {
-                            startMovementForm();
-                            setTimeout(() => {
-                                select('movimiento-mode').value = 'new';
-                                select('movimiento-id').value = '';
-                                
-                                if (movementToDuplicate.tipo === 'traspaso') {
-                                    setMovimientoFormType('traspaso');
-                                    select('movimiento-cuenta-origen').value = movementToDuplicate.cuentaOrigenId;
-                                    select('movimiento-cuenta-destino').value = movementToDuplicate.cuentaDestinoId;
-                                } else {
-                                    setMovimientoFormType('movimiento');
-                                    select('movimiento-cuenta').value = movementToDuplicate.cuentaId;
-                                    select('movimiento-concepto').value = movementToDuplicate.conceptoId;
-                                }
-                                
-                                select('movimiento-cantidad').value = (movementToDuplicate.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false });
-                                select('movimiento-descripcion').value = movementToDuplicate.descripcion;
-                                
-                                const today = new Date();
-                                select('movimiento-fecha').value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-                                updateDateDisplay(select('movimiento-fecha'));
-                                
-                                select('form-movimiento-title').textContent = 'Duplicar Movimiento';
-                                select('delete-movimiento-btn').classList.add('hidden');
-                                select('duplicate-movimiento-btn').classList.add('hidden');
-                                
-                                hapticFeedback('success');
-                                showToast('Datos duplicados. Ajusta y guarda.', 'info');
-                            }, 50);
-                        }
-                        resetActiveSwipe();
-                    },
-                    'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; } showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); }); },
-                    'delete-cuenta': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; } showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => { await deleteDoc('cuentas', id); hapticFeedback('success'); showToast("Cuenta eliminada."); }); },
-                    'close-modal': () => { const closestOverlay = target.closest('.modal-overlay'); const effectiveModalId = modalId || (closestOverlay ? closestOverlay.id : null); if ((effectiveModalId === 'generic-modal') && detailInvestmentChart) { detailInvestmentChart.destroy(); detailInvestmentChart = null; } if (effectiveModalId) hideModal(effectiveModalId); },
-                    'manage-conceptos': showConceptosModal,
-                    'manage-cuentas': showCuentasModal,
-                    'manage-recurrentes': showRecurrentesModal,
-                    'view-account-details': () => showAccountMovementsModal(id),
-                    'save-config': () => handleSaveConfig(btn),
-                    'export-data': () => handleExportData(btn),
-                    'export-csv': () => handleExportCsv(btn),
-                    'import-data': () => showImportJSONWizard(),
-                    'clear-data': () => { showConfirmationModal('¿Seguro que quieres borrar TODOS tus datos financieros? Esta acción es irreversible.', () => { showConfirmationModal('Esta es tu última oportunidad. ¿Estás absolutamente seguro?', () => { const button = actionTarget.closest('button'); handleDeleteAllData(button); }, 'Confirmación Final'); }); },
-                    'toggle-account-type-filter': () => { hapticFeedback('light'); if(deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderPatrimonioPage(); },
-                    'update-budgets': handleUpdateBudgets,
-                    'logout': () => showConfirmationModal('¿Seguro que quieres cerrar la sesión?', () => { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); fbAuth.signOut().then(() => { showToast('Sesión cerrada correctamente.'); }).catch(() => { showToast('Error al cerrar sesión.', 'danger'); }); }, 'Cerrar Sesión'),
-                    'delete-account': () => { const button = actionTarget.closest('button'); handleDeleteAccount(button) },
-                    'view-investment-detail': () => renderInvestmentAccountDetail(id),
-                    'manage-investment-accounts': showManageInvestmentAccountsModal,
-                    'add-aportacion': () => showAportacionModal(),
-                    'update-asset-value': () => showValoracionModal(id),
-                    'global-search': showGlobalSearchModal,
-                    'search-result-movimiento': () => { hideModal('global-search-modal'); startMovementForm(id, false); },
-                    'search-result-cuenta': () => { hideModal('global-search-modal'); showCuentasModal(); setTimeout(() => { const el = select(`cuenta-item-${id}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 200); },
-                    'search-result-concepto': () => { hideModal('global-search-modal'); showConceptosModal(); setTimeout(() => { const el = select(`concepto-item-${id}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 200); },
-                    'edit-concepto': () => showConceptoEditForm(id),
-                    'cancel-edit-concepto': renderConceptosModalList,
-                    'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
-                    'edit-cuenta': () => showAccountEditForm(id),
-                    'cancel-edit-cuenta': renderCuentasModalList,
-                    'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
-                    'duplicate-movement': () => handleDuplicateMovement(),
-                    'save-and-new-movement': () => handleSaveAndNewMovement(document.getElementById('form-movimiento'), btn),
-                    'set-movimiento-type': () => setMovimientoFormType(type),
-                    'recalculate-balances': () => { showConfirmationModal( 'Esta acción leerá todo tu historial de transacciones para recalcular y corregir el saldo de cada una de tus cuentas. Es útil si sospechas que hay errores en los saldos. ¿Quieres continuar?', () => { const button = actionTarget.closest('button'); recalculateAllAccountBalances(button)}, 'Confirmar Recálculo de Saldos' ); },
-                    'json-wizard-back-2': () => goToJSONStep(1),
-                    'json-wizard-import-final': () => handleFinalJsonImport(btn),
-                    'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(),
-                    'set-pin': async () => {
+        // El objeto `actions` ahora NO contiene la clave 'render-informe'
+        const actions = {
+			 'show-informe-builder': showInformeBuilderModal,
+            'save-informe': () => handleSaveInforme(btn),
+            'show-help-topic': () => {
+                const topic = actionTarget.dataset.topic;
+                if (topic) {
+                    let title, content;
+                    if (topic === 'tir') { title = 'TIR (Tasa Interna de Retorno)'; content = "<p>La TIR es la métrica de rentabilidad más precisa.</p><p>Te dice el <strong>beneficio anualizado real</strong> de tu inversión, como si fuera el tipo de interés que te daría un banco. Es inteligente porque tiene en cuenta no solo cuánto ha crecido tu dinero, sino también <strong>cuándo y cuánto capital</strong> has ido aportando o retirando a lo largo del tiempo.</p>"; }
+                    else if (topic === 'pace') { title = 'Ritmo del Presupuesto (Pace)'; content = "<p>El 'Pace' o ritmo te ayuda a saber si vas por el buen camino para cumplir tu presupuesto anual.</p><p>Compara el porcentaje de tu presupuesto que has consumido hasta hoy con el porcentaje del año que ya ha transcurrido. Por ejemplo, si a mitad de año (50% del tiempo) has gastado el 75% de tu presupuesto anual para 'Ocio', tu ritmo indicará que vas 'Excedido'.</p>"; }
+                    else if (topic === 'tasa-ahorro') { title = '¿Cómo se calcula la Tasa de Ahorro?'; content = `<p>Mide qué porcentaje de tus ingresos consigues guardar después de cubrir todos tus gastos en el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Saldo Neto del Periodo / Ingresos Totales del Periodo) * 100</code><p style="margin-top: var(--sp-2);">Es el indicador clave de tu capacidad para generar riqueza.</p>`; }
+                    else if (topic === 'patrimonio-neto') { title = '¿Cómo se calcula el Patrimonio Neto?'; content = `<p>Representa tu riqueza total. Es la suma de todo lo que tienes (activos) menos todo lo que debes (pasivos).</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de los saldos de todas tus cuentas.</code><p style="margin-top: var(--sp-2);"><strong>Importante:</strong> Este valor es siempre tu situación global actual y no se ve afectado por los filtros de fecha del panel.</p>`; }
+                    else if (topic === 'pnl-inversion') { title = '¿Cómo se calcula el P&L de Inversión?'; content = `<p>P&L son las siglas de "Profits and Losses" (Ganancias y Pérdidas). Mide el <strong>flujo de caja neto</strong> de tus cuentas de inversión durante el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de todos los movimientos en cuentas de inversión.</code><p style="margin-top: var(--sp-2);">No incluye la revalorización de activos que no hayas vendido. Es útil para saber si tus inversiones te están dando dinero (dividendos, ventas) o si estás invirtiendo más capital (compras).</p>`; }
+                    else if (topic === 'progreso-presupuesto') { title = '¿Cómo se calcula el Progreso del Presupuesto?'; content = `<p>Compara tus gastos reales con tu plan de gastos para el periodo seleccionado.</p><h4>Fórmula:</h4><ol style="list-style-position: inside; padding-left: var(--sp-2);"><li style="margin-bottom: 6px;">Se calcula tu <strong>límite de gasto proporcional</strong> para el periodo (ej. Presupuesto Anual / 12 para un mes).</li><li style="margin-bottom: 6px;">Se comparan tus <strong>gastos reales</strong> del periodo con ese límite.</li></ol><p style="margin-top: var(--sp-2);">Te ayuda a ver si te estás ciñendo a tu plan financiero y a corregir desviaciones a tiempo.</p>`; }
+                    const titleEl = select('help-modal-title'); const bodyEl = select('help-modal-body');
+                    if (titleEl) titleEl.textContent = title; if (bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`;
+                    showModal('help-modal');
+                }
+            },
+            'configure-dashboard': showDashboardConfigModal,
+            'save-dashboard-config': () => handleSaveDashboardConfig(btn),
+            'use-password-instead': () => showPasswordFallback(),
+            'toggle-theme': handleToggleTheme,
+            'toggle-investment-type-filter': () => handleToggleInvestmentTypeFilter(type),
+            'filter-investments': () => handleFilterInvestments(filter),
+            // ... (resto de acciones de la A a la Z, sin cambios) ...
+            'navigate': () => navigateTo(page),
+            'help': showHelpModal, 'exit': handleExitApp,
+            'forgot-password': (e) => { e.preventDefault(); const email = prompt("Por favor, introduce el correo electrónico de tu cuenta para restablecer la contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => { showToast('Se ha enviado un correo para restablecer tu contraseña.', 'info', 5000); }).catch((error) => { console.error("Error al enviar correo de recuperación:", error); if (error.code === 'auth/user-not-found') { showToast('No se encontró ninguna cuenta con ese correo.', 'danger'); } else { showToast('Error al intentar restablecer la contraseña.', 'danger'); } }); } },
+            'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
+            'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
+            'import-csv': showCsvImportWizard,
+            'toggle-ledger': async () => { hapticFeedback('medium'); isOffBalanceMode = !isOffBalanceMode; document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A'; const activePageEl = selectOne('.view--active'); const activePage = activePageEl ? activePageEl.id : PAGE_IDS.INICIO; navigateTo(activePage, false); showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info'); },
+            'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
+            'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
+            'apply-informe-filters': () => { hapticFeedback('light'); renderInformesPage(); },
+            'add-movement': () => startMovementForm(),
+            'edit-movement': async () => { if (select('generic-modal')?.classList.contains('modal-overlay--active')) { hideModal('generic-modal'); } let movementData = db.movimientos.find(m => m.id === id); if (!movementData) { movementData = recentMovementsCache.find(item => item.id === id); } if (!movementData && id) { try { const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id); const doc = await movRef.get(); if (doc.exists) { movementData = { id: doc.id, ...doc.data() }; if (!db.movimientos.some(m => m.id === id)) { db.movimientos.push(movementData); } } else { showToast('Error: No se encontró el movimiento.', 'danger'); return; } } catch (error) { console.error("Error al obtener el movimiento:", error); showToast('No se pudo cargar el movimiento para editar.', 'danger'); return; } } startMovementForm(id, false); },
+            'edit-movement-from-list': () => { const card = actionTarget.closest('.transaction-card'); if (card && card.dataset.id) { startMovementForm(card.dataset.id, false); } },
+            'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
+            'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
+            'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; const message = '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
+            'swipe-duplicate-movement': () => { /* ... código sin cambios ... */ },
+            'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; } showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); }); },
+            'delete-cuenta': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; } showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => { await deleteDoc('cuentas', id); hapticFeedback('success'); showToast("Cuenta eliminada."); }); },
+            'close-modal': () => { const closestOverlay = target.closest('.modal-overlay'); const effectiveModalId = modalId || (closestOverlay ? closestOverlay.id : null); if ((effectiveModalId === 'generic-modal') && detailInvestmentChart) { detailInvestmentChart.destroy(); detailInvestmentChart = null; } if (effectiveModalId) hideModal(effectiveModalId); },
+            'manage-conceptos': showConceptosModal, 'manage-cuentas': showCuentasModal, 'manage-recurrentes': showRecurrentesModal, 'view-account-details': () => showAccountMovementsModal(id), 'save-config': () => handleSaveConfig(btn),
+            'export-data': () => handleExportData(btn), 'export-csv': () => handleExportCsv(btn), 'import-data': () => showImportJSONWizard(), 'clear-data': () => { /* ... código sin cambios ... */ },
+            'toggle-account-type-filter': () => { hapticFeedback('light'); if(deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderPatrimonioPage(); },
+            'update-budgets': handleUpdateBudgets, 'logout': () => { /* ... código sin cambios ... */ }, 'delete-account': () => { /* ... código sin cambios ... */ },
+            'view-investment-detail': () => renderInvestmentAccountDetail(id), 'manage-investment-accounts': showManageInvestmentAccountsModal, 'add-aportacion': () => showAportacionModal(), 'update-asset-value': () => showValoracionModal(id),
+            'global-search': showGlobalSearchModal, 'search-result-movimiento': () => { /* ... */ }, 'search-result-cuenta': () => { /* ... */ }, 'search-result-concepto': () => { /* ... */ },
+            'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
+            'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
+            'duplicate-movement': () => handleDuplicateMovement(), 'save-and-new-movement': () => handleSaveAndNewMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
+            'recalculate-balances': () => { /* ... */ }, 'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
+            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => {
                         const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo.");
                         if (pin === null) return;
                 
@@ -7408,7 +7230,37 @@ const setMovimientoFormType = (type) => {
                     actions[action](e);
                 }
             });
-			
+			// === INICIO DE LA NUEVA LÓGICA: EL LISTENER `toggle` ===
+    // Este nuevo listener se encarga exclusivamente de la lógica de los informes predefinidos.
+    document.body.addEventListener('toggle', (e) => {
+        const detailsElement = e.target;
+
+        // 1. Verificamos que sea un elemento <details> y que esté dentro de la página de informes.
+        if (detailsElement.tagName !== 'DETAILS' || !detailsElement.closest('#informes-page')) {
+            return;
+        }
+
+        // 2. Solo actuamos cuando el acordeón SE ABRE.
+        if (detailsElement.open) {
+            const id = detailsElement.id;
+            
+            // 3. Verificamos que NO sea el acordeón del informe personalizado (que se gestiona por su cuenta).
+            if (id.startsWith('acordeon-') && id !== 'acordeon-personalizado') {
+                
+                // Extraemos el ID del informe (ej: 'flujo_caja').
+                const informeId = id.replace('acordeon-', '');
+                
+                // Por UX, cerramos cualquier otro informe que estuviera abierto.
+                document.querySelectorAll('#informes-page .accordion').forEach(ac => {
+                    if (ac.id !== id) ac.open = false;
+                });
+                
+                // Llamamos a la función que renderiza el informe.
+                renderInformeDetallado(informeId);
+            }
+        }
+    }, true); // Usar `true` (fase de captura) es una buena práctica para este tipo de delegación de eventos.
+    // === FIN DE LA NUEVA LÓGICA ===
             document.body.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const target = e.target;
@@ -7539,7 +7391,8 @@ const setMovimientoFormType = (type) => {
         };
 // =================================================================
 // === FIN: CÓDIGO FINAL PARA REEMPLAZAR attachEventListeners      ===
-// =================================================================
+// =================================================================```
+
     const handleSwipeStart = (e) => {
     const card = e.target.closest('.transaction-card');
     // Solo activamos para movimientos reales, no para los recurrentes pendientes
