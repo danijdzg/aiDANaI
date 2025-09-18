@@ -393,7 +393,9 @@ body {
         .hidden { display: none !important; }
         .spinner { display: inline-block; width: 1em; height: 1em; border: .15em solid currentColor; border-radius: 50%; border-top-color: transparent; animation: spin .8s linear infinite; vertical-align: middle; }
         @keyframes spin { to { transform:rotate(360deg); } }
-		@keyframes fade-out-and-collapse {
+		// ELIMINA ESTAS REGLAS CSS COMPLETAS
+
+@keyframes fade-out-and-collapse {
     from {
         opacity: 1;
         transform: scaleY(1);
@@ -2250,8 +2252,7 @@ const longPressState = {
 
 		let isDashboardRendering = false;
 		let dashboardUpdateDebounceTimer = null;
-		let lastActionForUndo = null;
-
+		
 
 async function hashPin(pin) {
     const encoder = new TextEncoder();
@@ -2593,160 +2594,13 @@ async function loadCoreData(uid) {
 			if (!str || typeof str !== 'string') return '';
 			return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 		};
-// =========================================================
-// === REEMPLAZO COMPLETO DE LA FUNCIÓN showToast (v2.0) ===
-// =========================================================
-const showToast = (message, type = 'default', duration = 4000, options = {}) => {
-    const container = select('toast-container');
-    if (!container) return;
-    
-    // Para que el temporizador de borrado no se active si el usuario ya ha hecho clic en deshacer
-    let actionTriggered = false;
 
-    const toast = document.createElement('div');
-    toast.className = `toast toast--${type}`;
-    
-    const messageSpan = document.createElement('span');
-    messageSpan.textContent = message;
-    toast.appendChild(messageSpan);
-
-    if (options.actionText && typeof options.onActionClick === 'function') {
-        const actionButton = document.createElement('button');
-        actionButton.className = 'btn btn--primary'; 
-        actionButton.textContent = options.actionText;
-        actionButton.style.marginLeft = '1rem';
-        actionButton.style.padding = '0.25rem 0.5rem';
-        actionButton.style.fontSize = '0.8rem';
-        
-        actionButton.onclick = (e) => {
-            e.stopPropagation();
-            actionTriggered = true; // Marcamos que la acción se ha ejecutado
-            options.onActionClick();
-            toast.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in' })
-                 .onfinish = () => toast.remove();
-        };
-        toast.appendChild(actionButton);
-        toast.style.display = 'flex';
-        toast.style.alignItems = 'center';
-        toast.style.justifyContent = 'space-between';
-    }
-    
-    container.appendChild(toast);
-
-    const fadeIn = toast.animate([
-        { transform: 'translateY(20px) scale(0.95)', opacity: 0 },
-        { transform: 'translateY(0) scale(1)', opacity: 1 }
-    ], { duration: 300, easing: 'ease-out' });
-    
-    fadeIn.onfinish = () => {
-        if (type === 'danger' || type === 'error') hapticFeedback('error');
-        else if (type === 'warning') hapticFeedback('warning');
-        
-        // El temporizador principal del toast
-        setTimeout(() => {
-            if (document.body.contains(toast)) {
-               toast.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: 'ease-in' })
-                    .onfinish = () => {
-                        toast.remove();
-                        // SI el toast expira Y hay una acción de timeout Y no se ha pulsado el botón, la ejecutamos
-                        if (options.onTimeout && !actionTriggered) {
-                            options.onTimeout();
-                        }
-                    };
-            }
-        }, duration);
-    };
-};
         const setButtonLoading = (btn, isLoading, text = 'Cargando...') => {
             if (!btn) return;
             if (isLoading) { if (!originalButtonTexts.has(btn)) originalButtonTexts.set(btn, btn.innerHTML); btn.setAttribute('disabled', 'true'); btn.classList.add('btn--loading'); btn.innerHTML = `<span class="spinner"></span> <span>${text}</span>`;
             } else { btn.removeAttribute('disabled'); btn.classList.remove('btn--loading'); if (originalButtonTexts.has(btn)) { btn.innerHTML = originalButtonTexts.get(btn); originalButtonTexts.delete(btn); } }
         };
 		
-// =============================================================
-// === INICIO: NUEVA FUNCIÓN PARA EL BORRADO DEFINITIVO      ===
-// =============================================================
-const commitDeletion = async (actionToCommit) => {
-    // Si lastActionForUndo ha sido limpiado (porque el usuario pulsó "Deshacer"), no hacemos nada.
-    if (!actionToCommit || !lastActionForUndo || actionToCommit.data.id !== lastActionForUndo.data.id) {
-        console.log("Borrado cancelado por el usuario.");
-        return;
-    }
-
-    const { collection, data } = actionToCommit;
-    const isRecurrent = (collection === 'recurrentes');
-
-    try {
-        if (!isRecurrent) {
-            // Ajustamos el saldo de la cuenta SOLO en el borrado definitivo
-            if (data.tipo === 'traspaso') {
-                await updateAccountBalance(data.cuentaOrigenId, data.cantidad);
-                await updateAccountBalance(data.cuentaDestinoId, -data.cantidad);
-            } else {
-                await updateAccountBalance(data.cuentaId, -data.cantidad);
-            }
-        }
-        // Borramos el documento de la base de datos
-        await deleteDoc(collection, data.id);
-        
-        console.log(`Elemento ${data.id} borrado permanentemente.`);
-
-    } catch (error) {
-        console.error("Error en el borrado definitivo:", error);
-        showToast("Error al confirmar el borrado.", "danger");
-    } finally {
-        // Limpiamos la acción para asegurar que no se pueda cometer dos veces
-        lastActionForUndo = null;
-    }
-};		
-		
-// =============================================================
-// === INICIO: NUEVA FUNCIÓN PARA GESTIONAR LA ACCIÓN "DESHACER" ===
-// =============================================================
-const handleUndoAction = async () => {
-    if (!lastActionForUndo) return;
-
-    const { actionType, collection, data } = lastActionForUndo;
-    // Guardamos la info antes de limpiar la variable
-    const actionToUndo = { ...lastActionForUndo };
-    
-    // ¡CLAVE! Al poner lastActionForUndo a null, la función commitDeletion sabrá que no debe ejecutarse.
-    lastActionForUndo = null; 
-
-    if (actionType === 'delete') {
-        try {
-            showToast('Restaurando...', 'info', 2000);
-            
-            // Restauramos la apariencia del item en la UI
-            const itemEl = document.querySelector(`[data-id="${actionToUndo.data.id}"]`)?.closest('.swipe-container, .modal__list-item, .transaction-card');
-            if (itemEl) {
-                itemEl.classList.remove('item-deleting');
-                // FIX: Eliminar estilos inline que la animación pudo haber aplicado con `forwards`.
-                itemEl.style.cssText = ''; 
-            }
-
-            // La lógica de base de datos no cambia
-            await fbDb.collection('users').doc(currentUser.uid).collection(actionToUndo.collection).doc(actionToUndo.data.id).set(actionToUndo.data);
-            
-            hapticFeedback('success');
-            showToast('Elemento restaurado.', 'info');
-            
-            // Forzamos un refresco completo para asegurar la consistencia
-            const activeView = document.querySelector('.view--active');
-            if (activeView && activeView.id === PAGE_IDS.MOVIMIENTOS) {
-                await loadInitialMovements();
-            } else if (activeView && activeView.id === PAGE_IDS.INICIO) {
-                scheduleDashboardUpdate();
-            }
-
-        } catch (error) {
-            console.error("Error al deshacer la acción:", error);
-            showToast("No se pudo restaurar el elemento.", "danger");
-            // Si falla, restauramos la variable por si el usuario quiere intentarlo de nuevo
-            lastActionForUndo = actionToUndo;
-        }
-    }
-};
         const displayError = (id, msg) => { const err = select(`${id}-error`); if (err) { err.textContent = msg; err.setAttribute('role', 'alert'); } const inp = select(id); if (inp) inp.classList.add('form-input--invalid'); };
         const clearError = (id) => { const err = select(`${id}-error`); if (err) { err.textContent = ''; err.removeAttribute('role'); } const inp = select(id); if (inp) inp.classList.remove('form-input--invalid'); };
         const clearAllErrors = (formId) => { const f = select(formId); if (!f) return; f.querySelectorAll('.form-error').forEach((e) => e.textContent = ''); f.querySelectorAll('.form-input--invalid').forEach(e => e.classList.remove('form-input--invalid')); };
@@ -8956,14 +8810,12 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
             }
         };
 		
-// =============================================================
-// === PASO 2: REEMPLAZO DE LA LÓGICA DE BORRADO Y DESHACER ===
-// =============================================================
+// REEMPLAZA tu función deleteMovementAndAdjustBalance actual por esta:
 const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
     const collection = isRecurrent ? 'recurrentes' : 'movimientos';
     let dataToDelete;
     
-    // Buscamos el dato en la caché o en la base de datos
+    // Busca el elemento a borrar (en la caché o lo recupera de la base de datos)
     if (collection === 'movimientos') {
         dataToDelete = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id);
     } else {
@@ -8973,27 +8825,54 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
     if (!dataToDelete) {
         const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collection).doc(id);
         const doc = await docRef.get();
-        if (!doc.exists) return;
+        if (!doc.exists) {
+            showToast("Error: El elemento a borrar ya no existe.", "danger");
+            return;
+        }
         dataToDelete = { id: doc.id, ...doc.data() };
     }
 
-    // 1. Guardamos la acción para un posible "Deshacer"
-    const actionToCommit = { actionType: 'delete', collection, data: dataToDelete };
-    lastActionForUndo = actionToCommit;
+    // El modal de confirmación ya ha sido mostrado por el listener del evento click.
+    try {
+        // Usamos un "batch" para asegurar que todas las operaciones se completen con éxito o ninguna lo haga.
+        const batch = fbDb.batch();
+        const userRef = fbDb.collection('users').doc(currentUser.uid);
 
-    // 2. Animamos la salida del elemento de la lista
-    const itemEl = document.querySelector(`.transaction-card[data-id="${id}"]`)?.closest('.swipe-container, .modal__list-item');
-    if (itemEl) {
-        itemEl.classList.add('item-deleting');
+        // 1. Ajustar saldos de las cuentas (solo para movimientos, no para recurrentes futuros)
+        if (!isRecurrent) {
+            if (dataToDelete.tipo === 'traspaso') {
+                const origenRef = userRef.collection('cuentas').doc(dataToDelete.cuentaOrigenId);
+                const destinoRef = userRef.collection('cuentas').doc(dataToDelete.cuentaDestinoId);
+                batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(dataToDelete.cantidad) });
+                batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(-dataToDelete.cantidad) });
+            } else {
+                const cuentaRef = userRef.collection('cuentas').doc(dataToDelete.cuentaId);
+                batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(-dataToDelete.cantidad) });
+            }
+        }
+
+        // 2. Borrar el documento del movimiento o recurrente
+        const docToDeleteRef = userRef.collection(collection).doc(id);
+        batch.delete(docToDeleteRef);
+
+        // 3. Ejecutar todas las operaciones en la base de datos
+        await batch.commit();
+
+        hapticFeedback('success');
+        showToast("Elemento eliminado permanentemente.", "info");
+
+        // 4. Refrescar la interfaz de usuario para reflejar el cambio
+        const activeView = document.querySelector('.view--active');
+        if (activeView && (activeView.id === PAGE_IDS.MOVIMIENTOS || activeView.id === PAGE_IDS.PLANIFICACION)) {
+            await loadInitialMovements(); // Recarga la lista de movimientos
+        } else {
+            scheduleDashboardUpdate(); // O actualiza el dashboard si es la vista activa
+        }
+
+    } catch (error) {
+        console.error("Error en el borrado directo:", error);
+        showToast("Error al eliminar el elemento.", "danger");
     }
-    
-    // 3. Mostramos el toast. La clave está en el `onTimeout`.
-    showToast('Elemento eliminado.', 'info', 6000, {
-        actionText: 'Deshacer',
-        onActionClick: handleUndoAction,
-        // Cuando el toast expire, se llamará a la función de borrado definitivo
-        onTimeout: () => commitDeletion(actionToCommit)
-    });
 };
 
     const recalculateAllAccountBalances = async (btn) => {
