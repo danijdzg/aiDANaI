@@ -1400,7 +1400,6 @@ CONFIGURACION: 'configuracion-page',
     'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto.', icon: 'show_chart' },
     'concept-totals': { title: 'Análisis de Conceptos', description: 'Gráfico y lista de gastos/ingresos por concepto.', icon: 'bar_chart' },
     'patrimonio-structure': { title: 'Patrimonio', description: 'Gráfico interactivo y listado de todas tus cuentas y su peso.', icon: 'account_balance' },
-    'investment-portfolio': { title: 'Portafolio de Inversión', description: 'Análisis detallado del rendimiento de tus inversiones.', icon: 'rocket_launch' },
     'informe-personalizado': { title: 'Mi Informe Personalizado', description: 'Tu informe a medida creado desde el configurador.', icon: 'insights' },
     'kpi-summary': { title: 'Resumen de Flujo de Caja', description: 'Ingresos, gastos y saldo neto del periodo.', icon: 'summarize' }
 };
@@ -2327,58 +2326,92 @@ const getFilteredMovements = async (forComparison = false) => {
             return 0;
         };
         
-        const calculatePortfolioPerformance = async (cuentaId = null) => {
-            if (!dataLoaded.inversiones) await loadInversiones();
+// =========================================================================================
+// === INICIO: CEREBRO DE CÁLCULO DE RENDIMIENTO - VERSIÓN CON TIR AUTOMÁTICA (v7.0 FINAL) ===
+// =========================================================================================
+const calculatePortfolioPerformance = async (cuentaId = null) => {
+    if (!dataLoaded.inversiones) await loadInversiones();
 
-            const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion && (cuentaId ? c.id === cuentaId : true));
-            if (investmentAccounts.length === 0) {
-                return { valorActual: 0, capitalInvertido: 0, pnlAbsoluto: 0, pnlPorcentual: 0, irr: 0 };
+    const allInvestmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
+    const investmentAccounts = cuentaId ? allInvestmentAccounts.filter(c => c.id === cuentaId) : allInvestmentAccounts;
+    
+    if (investmentAccounts.length === 0) {
+        return { valorActual: 0, capitalInvertido: 0, pnlAbsoluto: 0, pnlPorcentual: 0, irr: 0 };
+    }
+
+    // Obtenemos todos los movimientos de una vez para ser eficientes.
+    const allMovements = await fetchAllMovementsForHistory();
+    const todosLosSaldos = getAllSaldos();
+    
+    // Creamos un Set con los IDs de TODAS las cuentas de inversión para hacer comprobaciones rápidas.
+    const allInvestmentAccountIds = new Set(allInvestmentAccounts.map(c => c.id));
+
+    let totalValor = 0;
+    let totalCapitalInvertido = 0;
+    let allIrrCashflows = [];
+
+    for (const cuenta of investmentAccounts) {
+        // "Capital Aportado" para el P&L sigue siendo el saldo de la cuenta.
+        const capitalInvertido = todosLosSaldos[cuenta.id] || 0;
+
+        // "Valor Actual" sigue siendo la última valoración guardada.
+        const valoraciones = (db.inversiones_historial || []).filter(v => v.cuentaId === cuenta.id).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+        const valorActual = valoraciones.length > 0 ? valoraciones[0].valor : 0;
+
+        totalValor += valorActual;
+        totalCapitalInvertido += capitalInvertido;
+
+        // *** ¡AQUÍ ESTÁ LA NUEVA MAGIA AUTOMÁTICA! ***
+        // Filtramos TODOS los movimientos de la historia para encontrar los que afectan a ESTA cuenta.
+        const accountMovements = allMovements.filter(m => 
+            m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id
+        );
+
+        const irrCashflows = accountMovements.map(mov => {
+            let amount = 0;
+            // Un movimiento normal dentro de la cuenta es un flujo de caja.
+            if (mov.tipo === 'movimiento') {
+                amount = -mov.cantidad; // Positivo (ingreso) es dinero que ENTRA (- para la TIR), Negativo (gasto) es dinero que SALE (+ para la TIR).
             }
-
-            let totalValor = 0;
-            let totalCapitalInvertido = 0;
-            let allIrrCashflows = [];
-
-            const todosLosSaldos = getAllSaldos();
-
-            for (const cuenta of investmentAccounts) {
-                const cashflows = (db.inversion_cashflows || []).filter(cf => cf.cuentaId === cuenta.id);
-                const capitalInvertido = cashflows.reduce((sum, cf) => sum + cf.cantidad, 0);
-
-                const valoraciones = (db.inversiones_historial || []).filter(v => v.cuentaId === cuenta.id).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-                
-                let valorActual;
-                if (valoraciones.length > 0) {
-                    valorActual = valoraciones[0].valor;
-                } else {
-                    valorActual = todosLosSaldos[cuenta.id] || 0;
+            // Un traspaso es un flujo de caja SOLO si la otra cuenta NO es de inversión.
+            else if (mov.tipo === 'traspaso') {
+                // Si esta cuenta es el ORIGEN
+                if (mov.cuentaOrigenId === cuenta.id) {
+                    // Y el destino NO es otra cuenta de inversión, es una salida de capital.
+                    if (!allInvestmentAccountIds.has(mov.cuentaDestinoId)) {
+                        amount = mov.cantidad; // Salida de dinero es un flujo positivo para la TIR.
+                    }
+                } 
+                // Si esta cuenta es el DESTINO
+                else if (mov.cuentaDestinoId === cuenta.id) {
+                    // Y el origen NO es otra cuenta de inversión, es una entrada de capital.
+                    if (!allInvestmentAccountIds.has(mov.cuentaOrigenId)) {
+                        amount = -mov.cantidad; // Entrada de dinero es un flujo negativo para la TIR.
+                    }
                 }
-
-                totalValor += valorActual;
-                totalCapitalInvertido += capitalInvertido;
-
-                const irrCashflows = [];
-                cashflows.forEach(cf => {
-                    irrCashflows.push({ amount: -cf.cantidad, date: new Date(cf.fecha) });
-                });
-                
-                if (valorActual !== 0) {
-                    irrCashflows.push({ amount: valorActual, date: new Date() });
-                }
-                allIrrCashflows.push(...irrCashflows);
             }
+            return { amount, date: new Date(mov.fecha) };
+        }).filter(cf => cf.amount !== 0); // Nos quedamos solo con los flujos de caja reales.
 
-            const pnlAbsoluto = totalValor - totalCapitalInvertido;
-            const pnlPorcentual = totalCapitalInvertido !== 0 ? (pnlAbsoluto / totalCapitalInvertido) * 100 : 0;
+        // Añadimos la valoración final.
+        if (valorActual !== 0) {
+            irrCashflows.push({ amount: valorActual, date: new Date() });
+        }
+        allIrrCashflows.push(...irrCashflows);
+    }
 
-            if (cuentaId) {
-                const irrUnico = calculateIRR(allIrrCashflows);
-				return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto: pnlAbsoluto, pnlPorcentual: pnlPorcentual, irr: irrUnico };
-            }
+    const pnlAbsoluto = totalValor - totalCapitalInvertido;
+    const pnlPorcentual = totalCapitalInvertido !== 0 ? (pnlAbsoluto / totalCapitalInvertido) * 100 : 0;
+    
+    // El cálculo de la TIR ahora usa el historial de movimientos reales.
+    const irr = calculateIRR(allIrrCashflows);
 
-            const irrGlobal = calculateIRR(allIrrCashflows);
-            return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto, pnlPorcentual, irr: irrGlobal };
-        };
+    if (cuentaId) {
+        return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto, pnlPorcentual, irr };
+    }
+    return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto, pnlPorcentual, irr };
+};
+
         const recalculateAndApplyRunningBalances = (movements, allAccountsDb) => {
     // 1. Agrupamos los movimientos por cada cuenta afectada.
     const movementsByAccount = {};
@@ -2796,154 +2829,134 @@ const getFilteredMovements = async (forComparison = false) => {
         renderInversionesPage('patrimonio-inversiones-container');
     }
 };
-// --- COPIA Y PEGA ESTE BLOQUE ENTERO EN LUGAR DE LA FUNCIÓN ANTIGUA ---
+// ====================================================================================
+// === INICIO: CÓDIGO DEL PORTAFOLIO CON DISEÑO COMPACTO DE 3 LÍNEAS (v6.0 FINAL) ===
+// ====================================================================================
+
+let investmentChartMode = 'valorado';
 
 const renderInversionesPage = async (targetContainerId) => {
     const container = select(targetContainerId);
     if (!container) return;
 
+    // --- Parte 1: Preparación de Datos (sin cambios) ---
+    const investmentAccounts = getVisibleAccounts().filter((c) => c.esInversion);
     const CHART_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
 
-    if (!db.cuentas || !dataLoaded.inversiones) {
-        container.innerHTML = `<div class="skeleton" style="height: 250px; border-radius: var(--border-radius-lg);"></div>`;
-        return;
-    }
-
-    const allInvestmentAccounts = getVisibleAccounts().filter((c) => c.esInversion);
-    if (allInvestmentAccounts.length === 0) {
+    if (investmentAccounts.length === 0) {
         container.innerHTML = `<div id="empty-investments" class="empty-state" style="margin-top: 0; border: none; background: transparent;">
                 <span class="material-icons">rocket_launch</span>
-                <h3>¿Listo para despegar?</h3>
-                <p>Para empezar, ve a 'Ajustes' > 'Gestión de Datos' > 'Cuentas' y marca tus cuentas de inversión.</p>
+                <h3>Tu Portafolio empieza aquí</h3>
+                <p>Ve a 'Ajustes' > 'Cuentas' y marca una cuenta como 'de inversión' para empezar el seguimiento.</p>
+                <button class="btn btn--primary" data-action="manage-investment-accounts" style="margin-top: var(--sp-4);">
+                    <span class="material-icons" style="font-size: 16px;">checklist</span>
+                    <span>Gestionar Activos</span>
+                </button>
             </div>`;
         return;
     }
 
-    const allAssetsData = await Promise.all(allInvestmentAccounts.map(async (cuenta) => {
-        const performance = await calculatePortfolioPerformance(cuenta.id);
-        return { cuenta, performance };
-    }));
-
-    const allInvestmentTypes = [...new Set(allAssetsData.map(asset => toSentenceCase(asset.cuenta.tipo || 'S/T')))].sort();
-    
-    const displayAssetsData = allAssetsData.filter(asset => 
-        !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.cuenta.tipo || 'S/T'))
+    const performanceData = await Promise.all(
+        investmentAccounts.map(async (cuenta) => {
+            const performance = await calculatePortfolioPerformance(cuenta.id);
+            return { ...cuenta, ...performance };
+        })
     );
 
+    // --- Parte 2: Lógica de Filtros y Gráfico (sin cambios) ---
+    const allInvestmentTypes = [...new Set(performanceData.map(asset => toSentenceCase(asset.tipo || 'S/T')))].sort();
     const colorMap = {};
-    allInvestmentTypes.forEach((label, index) => {
-        colorMap[label] = CHART_COLORS[index % CHART_COLORS.length];
-    });
+    allInvestmentTypes.forEach((label, index) => { colorMap[label] = CHART_COLORS[index % CHART_COLORS.length]; });
 
-    // Los botones se construyen con el 'data-action' correcto que instalamos en el Paso 1
     const pillsHTML = allInvestmentTypes.map(t => {
         const isActive = !deselectedInvestmentTypesFilter.has(t);
         const color = colorMap[t];
-        let style = '';
-        if (isActive && color) {
-            style = `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF; box-shadow: 0 0 8px ${color}70;"`;
-        }
+        let style = isActive ? `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF;"` : '';
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-investment-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('');
 
-    const displayPerformance = displayAssetsData.reduce((acc, asset) => {
-        acc.valorActual += asset.performance.valorActual;
-        acc.capitalInvertido += asset.performance.capitalInvertido;
-        return acc;
-    }, { valorActual: 0, capitalInvertido: 0 });
-    
-    displayPerformance.pnlAbsoluto = displayPerformance.valorActual - displayPerformance.capitalInvertido;
-    displayPerformance.pnlPorcentual = displayPerformance.capitalInvertido !== 0 ? (displayPerformance.pnlAbsoluto / displayPerformance.capitalInvertido) * 100 : 0;
-    
-    let irrCashflowsForDisplayGroup = [];
-    displayAssetsData.forEach(asset => {
-        irrCashflowsForDisplayGroup.push({ amount: asset.performance.valorActual, date: new Date() });
-        (db.inversion_cashflows || []).filter(cf => cf.cuentaId === asset.cuenta.id).forEach(cf => {
-            irrCashflowsForDisplayGroup.push({ amount: -cf.cantidad, date: new Date(cf.fecha) });
-        });
-    });
-    displayPerformance.irr = calculateIRR(irrCashflowsForDisplayGroup);
-    
-    const pnlClassDisplay = displayPerformance.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-    const irrClassDisplay = displayPerformance.irr >= 0 ? 'text-positive' : 'text-negative';
+    const displayAssetsData = performanceData.filter(asset => !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T')));
 
-    const assetCardsHTML = displayAssetsData.map(({ cuenta, performance }) => {
-        const pnlClass = performance.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-        return `<div class="investment-asset-card" data-id="${cuenta.id}"><div class="investment-asset-card__header"><div style="cursor: pointer;" data-action="view-investment-detail" data-id="${cuenta.id}"><h3 class="investment-asset-card__name">${escapeHTML(cuenta.nombre)}</h3><small style="color: var(--c-on-surface-secondary);">${escapeHTML(cuenta.tipo)}</small></div><div><div class="investment-asset-card__value">${formatCurrency(performance.valorActual)}</div><div class="investment-asset-card__pnl ${pnlClass}">${performance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(performance.pnlAbsoluto)} (${performance.pnlPorcentual.toFixed(2)}%)</div></div></div></div>`;
-    }).join('');
+    const portfolioTotalValorado = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.valorActual, 0);
+    const portfolioTotalInvertido = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.capitalInvertido, 0);
 
     container.innerHTML = `
-        <div class="card card--no-bg accordion-wrapper">
-             <details class="accordion" open>
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">pie_chart</span>Asignación y Filtros</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div class="filter-pills" style="margin-bottom: var(--sp-5);">${pillsHTML}</div>
-                    <div class="chart-container" style="height: 220px; margin-bottom: 0;"><canvas id="asset-allocation-chart"></canvas></div>
+        <div class="kpi-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--sp-4);">
+            <div class="kpi-item"><h4 class="kpi-item__label">Valor Actual</h4><strong class="kpi-item__value">${formatCurrency(portfolioTotalValorado)}</strong></div>
+            <div class="kpi-item"><h4 class="kpi-item__label">Capital Aportado (Saldo)</h4><strong class="kpi-item__value">${formatCurrency(portfolioTotalInvertido)}</strong></div>
+        </div>
+        <details class="accordion" open style="margin-bottom: var(--sp-4);">
+            <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">pie_chart</span>Asignación y Filtros</h3><span class="material-icons accordion__icon">expand_more</span></summary>
+            <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                <div class="filter-pills" style="margin-bottom: var(--sp-2);">${pillsHTML}</div>
+                <div class="filter-pills" style="justify-content: center; margin-bottom: var(--sp-4);">
+                    <button class="filter-pill ${investmentChartMode === 'valorado' ? 'filter-pill--active' : ''}" data-action="set-investment-chart-mode" data-mode="valorado">Ver Valoración</button>
+                    <button class="filter-pill ${investmentChartMode === 'invertido' ? 'filter-pill--active' : ''}" data-action="set-investment-chart-mode" data-mode="invertido">Ver Aportado</button>
                 </div>
-            </details>
-        </div>
-        <div id="investment-global-kpis" style="margin-top: var(--sp-4);">
-            <div style="display: flex; align-items: center; margin-bottom: var(--sp-2);"><h3 class="card__title" style="padding:0; margin:0; font-size: var(--fs-base);">Métricas del Portafolio (Filtrado)</h3></div>
-            <div class="kpi-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--sp-3);"><div class="kpi-item"><h4 class="kpi-item__label">Valor Total</h4><strong class="kpi-item__value">${formatCurrency(displayPerformance.valorActual)}</strong></div><div class="kpi-item"><h4 class="kpi-item__label">Capital Total</h4><strong class="kpi-item__value">${formatCurrency(displayPerformance.capitalInvertido)}</strong></div></div>
-            <div class="kpi-grid" style="grid-template-columns: 1fr 1fr;"><div class="kpi-item"><h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;"><span>P&L (€ y %)</span><button class="icon-btn" data-action="show-help-topic" data-topic="pnl" style="width: 20px; height: 20px;"><span class="material-icons" style="font-size: 16px;">help_outline</span></button></h4><strong class="kpi-item__value ${pnlClassDisplay}">${displayPerformance.pnlAbsoluto >= 0 ? '+' : ''}${formatCurrency(displayPerformance.pnlAbsoluto)}</strong><div class="kpi-item__comparison ${pnlClassDisplay}">(${displayPerformance.pnlPorcentual.toFixed(2)}%)</div></div><div class="kpi-item"><h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;"><span>TIR Anualizada</span><button class="icon-btn" data-action="show-help-topic" data-topic="tir" style="width: 20px; height: 20px;"><span class="material-icons" style="font-size: 16px;">help_outline</span></button></h4><strong class="kpi-item__value ${irrClassDisplay}">${(displayPerformance.irr * 100).toFixed(2)}%</strong></div></div>
-        </div>
-        <div id="investment-assets-list" style="margin-top: var(--sp-4);">${assetCardsHTML}</div>
-        <div class="card card--no-bg" style="padding:0; margin-top: var(--sp-4);"><div class="form-grid"><button class="btn btn--secondary" data-action="manage-investment-accounts"><span class="material-icons" style="font-size:16px;">checklist</span>Gestionar Activos</button><button class="btn btn--secondary" data-action="add-aportacion"><span class="material-icons" style="font-size:16px;">add_card</span>Aportar/Retirar</button></div></div>
-    `;
-    
+                <div class="chart-container" style="height: 220px; margin-bottom: 0;"><canvas id="asset-allocation-chart"></canvas></div>
+            </div>
+        </details>
+        <div id="investment-assets-list"></div>
+        <div class="card card--no-bg" style="padding:0; margin-top: var(--sp-4);">
+            <button class="btn btn--secondary btn--full" data-action="manage-investment-accounts"><span class="material-icons" style="font-size: 16px;">checklist</span>Gestionar Activos</button>
+        </div>`;
+
     setTimeout(() => {
+        // Renderizar el Gráfico (sin cambios)
         const allocationCtx = select('asset-allocation-chart');
-        if (allocationCtx) {
-            if (assetAllocationChart) assetAllocationChart.destroy();
-            
-            // El gráfico ahora solo muestra los datos filtrados
-            const allocationData = displayAssetsData.reduce((acc, { cuenta, performance }) => {
+        if (allocationCtx) { if (assetAllocationChart) assetAllocationChart.destroy(); const keyToSum = investmentChartMode === 'valorado' ? 'valorActual' : 'capitalInvertido'; const allocationData = displayAssetsData.reduce((acc, asset) => { const tipoKey = toSentenceCase(asset.tipo || 'Sin Categoría'); acc[tipoKey] = (acc[tipoKey] || 0) + asset[keyToSum]; return acc; }, {}); const chartLabels = Object.keys(allocationData).sort(); const chartValues = chartLabels.map(label => allocationData[label] || 0); if (chartLabels.length > 0) { assetAllocationChart = new Chart(allocationCtx, { type: 'doughnut', data: { labels: chartLabels, datasets: [{ data: chartValues.map(v => v / 100), backgroundColor: chartLabels.map(label => colorMap[label]), borderColor: getComputedStyle(document.body).getPropertyValue('--c-surface'), borderWidth: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.label}: ${formatCurrency(c.parsed * 100)}` }}, datalabels: { formatter: (v, ctx) => (v * 100 / ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0)).toFixed(0) + "%", color: getComputedStyle(document.body).getPropertyValue('--c-on-surface'), font: { weight: 'bold', size: 11 }}}} }); }}
+        
+        // --- Parte 4: Renderizar la NUEVA LISTA COMPACTA ---
+        const listContainer = select('investment-assets-list');
+        if (listContainer) {
+            const groupedDisplayData = displayAssetsData.reduce((acc, cuenta) => {
                 const tipo = toSentenceCase(cuenta.tipo || 'Sin Categoría');
-                if (!acc[tipo]) acc[tipo] = 0;
-                acc[tipo] += performance.valorActual;
+                if (!acc[tipo]) acc[tipo] = { cuentas: [], totalValor: 0 };
+                acc[tipo].cuentas.push(cuenta);
+                acc[tipo].totalValor += cuenta.valorActual;
                 return acc;
             }, {});
+            const sortedDisplayGroups = Object.entries(groupedDisplayData).sort(([, a], [, b]) => b.totalValor - a.totalValor);
+            listContainer.innerHTML = sortedDisplayGroups.map(([tipo, group]) => {
+                group.cuentas.sort((a, b) => b.valorActual - a.valorActual);
+                
+                // *** ¡LA MAGIA ESTÁ AQUÍ! ESTE ES EL NUEVO CÓDIGO HTML COMPACTO ***
+                const accountsHtml = group.cuentas.map(cuenta => {
+                    const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
+                    return `<div class="modal__list-item" style="padding: var(--sp-2); display: block;">
+                        
+                        <!-- LÍNEA 1: Nombre y Valor Actual -->
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; margin-bottom: var(--sp-1);">
+                            <strong style="font-size: var(--fs-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: var(--sp-2);">${escapeHTML(cuenta.nombre)}</strong>
+                            <strong style="font-size: var(--fs-base);">${formatCurrency(cuenta.valorActual)}</strong>
+                        </div>
 
-            const chartLabels = Object.keys(allocationData).sort();
-            const chartValues = chartLabels.map(label => allocationData[label] || 0);
-            
-            if (chartLabels.length > 0) {
-                assetAllocationChart = new Chart(allocationCtx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: chartLabels,
-                        datasets: [{
-                            data: chartValues.map(v => v / 100),
-                            backgroundColor: chartLabels.map(label => colorMap[label]),
-                            borderColor: getComputedStyle(document.body).getPropertyValue('--c-surface'),
-                            borderWidth: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        onHover: (event, chartElement) => {
-                            event.native.target.style.cursor = 'default';
-                        },
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: { callbacks: { label: (c) => `${c.label}: ${formatCurrency(c.parsed * 100)}` }},
-                            datalabels: {
-                                formatter: (value, context) => {
-                                    const sum = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-                                    const percentage = sum > 0 ? (value * 100 / sum).toFixed(0) + "%" : "0%";
-                                    return percentage;
-                                },
-                                color: getComputedStyle(document.body).getPropertyValue('--c-on-surface'),
-                                font: { weight: 'bold', size: 11 }
-                            }
-                        }
-                    }
-                });
-            }
+                        <!-- LÍNEA 2: Rendimiento (P&L y TIR) -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: var(--sp-2); font-size: var(--fs-xs);">
+                            <span class="${pnlClass}" style="font-weight: 600;">P&L: ${formatCurrency(cuenta.pnlAbsoluto)} (${cuenta.pnlPorcentual.toFixed(1)}%)</span>
+                            <span style="color:var(--c-info); font-weight:600;">TIR: ${(cuenta.irr * 100).toFixed(1)}%</span>
+                        </div>
+
+                        <!-- LÍNEA 3: Contexto y Acción -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <span style="color:var(--c-on-surface-secondary); font-size: var(--fs-xs);">Aportado (Saldo): ${formatCurrency(cuenta.capitalInvertido)}</span>
+                            <button class="btn btn--secondary" data-action="update-asset-value" data-id="${cuenta.id}" style="padding: 4px 10px; font-size: 0.75rem;"><span class="material-icons" style="font-size: 14px;">add_chart</span>Valoración</button>
+                        </div>
+
+                    </div>`;
+                }).join('');
+                
+                return `<details class="accordion" open style="margin-bottom: var(--sp-2);">
+                    <summary style="padding: var(--sp-3) var(--sp-4);">
+                        <span style="font-weight: 700;">${escapeHTML(tipo)}</span>
+                        <div style="text-align: right; font-weight: 600;">${formatCurrency(group.totalValor)}</div>
+                        <span class="material-icons accordion__icon">expand_more</span>
+                    </summary>
+                    <div class="accordion__content" style="padding: 0; border-top: 1px solid var(--c-outline);">
+                        ${accountsHtml}
+                    </div>
+                </details>`;
+            }).join('');
         }
     }, 50);
 };
@@ -3648,19 +3661,18 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
     });
 };
 
-// =================================================================
-// === INICIO: FUNCIÓN DEFINITIVA PARA EL WIDGET DE PATRIMONIO (v2.2 - CORREGIDA) ===
-// =================================================================
+
+// =============================================================
+// === INICIO: FUNCIÓN RESTAURADA PARA EL WIDGET DE PATRIMONIO ===
+// =============================================================
 const renderPatrimonioPage = async () => {
     const container = select('patrimonio-completo-container');
     if (!container) return;
 
-    // 1. OBTENEMOS LOS DATOS
     const visibleAccounts = getVisibleAccounts();
     const saldos = await getSaldos();
     const BASE_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
 
-    // 2. LÓGICA DE FILTROS
     const allAccountTypes = [...new Set(visibleAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
     const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
 
@@ -3679,156 +3691,56 @@ const renderPatrimonioPage = async () => {
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
     
-    // Filtramos las cuentas que se van a mostrar
     const filteredAccounts = visibleAccounts.filter(c => {
         const tipo = toSentenceCase(c.tipo || 'S/T');
         return filteredAccountTypes.has(tipo);
     });
 
-    // --- CORRECCIÓN #2: El total ahora se calcula SOBRE LAS CUENTAS FILTRADAS ---
     const totalFiltrado = filteredAccounts.reduce((sum, c) => sum + (saldos[c.id] || 0), 0);
     
-    // 3. PREPARAMOS DATOS PARA EL GRÁFICO
     const treeData = [];
     filteredAccounts.forEach(c => {
         const saldo = saldos[c.id] || 0;
         if (saldo > 0) {
-            treeData.push({
-                tipo: toSentenceCase(c.tipo || 'S/T'),
-                nombre: c.nombre,
-                saldo: saldo / 100
-            });
+            treeData.push({ tipo: toSentenceCase(c.tipo || 'S/T'), nombre: c.nombre, saldo: saldo / 100 });
         }
     });
 
-    // 4. CONSTRUIMOS EL HTML
     container.innerHTML = `
         <h3 class="card__title"><span class="material-icons">account_balance</span>Patrimonio</h3>
         <div class="card__content" style="padding-top:0;">
             <div class="patrimonio-header-grid__kpi" style="margin-bottom: var(--sp-4);">
                 <h4 class="kpi-item__label">Patrimonio Neto (Seleccionado)</h4>
-                <!-- Usamos el nuevo totalFiltrado para que cambie dinámicamente -->
                 <strong id="patrimonio-total-balance" class="kpi-item__value" style="font-size: 2rem; line-height: 1.1;">${formatCurrency(totalFiltrado)}</strong>
             </div>
             <div class="patrimonio-header-grid__filters" style="margin-bottom: var(--sp-4);">
                 <h4 class="kpi-item__label">Filtros por tipo de activo</h4>
                 <div id="filter-account-types-pills" class="filter-pills" style="margin-bottom: 0;">${pillsHTML}</div>
             </div>
-            
-            <div id="liquid-assets-chart-container" class="chart-container" style="height: 250px; margin-bottom: var(--sp-4);">
-                <canvas id="liquid-assets-chart"></canvas>
-            </div>
-
+            <div id="liquid-assets-chart-container" class="chart-container" style="height: 250px; margin-bottom: var(--sp-4);"><canvas id="liquid-assets-chart"></canvas></div>
             <div id="patrimonio-cuentas-lista"></div>
         </div>`;
 
-    // 5. RENDERIZAMOS GRÁFICO Y LISTA
     setTimeout(() => {
-        const chartCanvas = select('liquid-assets-chart');
-        const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
-
+        const chartCtx = select('liquid-assets-chart')?.getContext('2d');
         if (chartCtx) {
             if (liquidAssetsChart) liquidAssetsChart.destroy();
-            
-            // --- CORRECCIÓN #1: El código para dibujar el gráfico AHORA SÍ ESTÁ AQUÍ ---
             if (treeData.length > 0) {
-                liquidAssetsChart = new Chart(chartCtx, {
-                    type: 'treemap',
-                    data: {
-                        datasets: [{
-                            tree: treeData,
-                            key: 'saldo',
-                            groups: ['tipo', 'nombre'],
-                            spacing: 0.5,
-                            borderWidth: 1.5,
-                            borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'),
-                            backgroundColor: (ctx) => {
-                                if (ctx.type === 'data') {
-                                    const node = ctx.raw._data;
-                                    return colorMap[node.tipo] || 'grey';
-                                }
-                                return 'transparent';
-                            },
-                            labels: {
-                                display: true,
-                                color: '#FFFFFF',
-                                font: { size: 11, weight: '600' },
-                                align: 'center',
-                                position: 'middle',
-                                formatter: (ctx) => {
-                                    const node = ctx.raw._data;
-                                    if(ctx.raw.g.includes(node.nombre)) return node.nombre.split(' ');
-                                    return null;
-                                }
-                            }
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: (context) => {
-                                        const node = context.raw._data;
-                                        const value = formatCurrency(context.raw.v * 100);
-                                        if (node && node.nombre) return `${node.nombre}: ${value}`;
-                                        return `Total ${context.raw.g}: ${value}`;
-                                    }
-                                }
-                            },
-                            datalabels: { display: false }
-                        }
-                    }
-                });
+                liquidAssetsChart = new Chart(chartCtx, { type: 'treemap', data: { datasets: [{ tree: treeData, key: 'saldo', groups: ['tipo', 'nombre'], spacing: 0.5, borderWidth: 1.5, borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'), backgroundColor: (ctx) => (ctx.type === 'data' ? colorMap[ctx.raw._data.tipo] || 'grey' : 'transparent'), labels: { display: true, color: '#FFFFFF', font: { size: 11, weight: '600' }, align: 'center', position: 'middle', formatter: (ctx) => (ctx.raw.g.includes(ctx.raw._data.nombre) ? ctx.raw._data.nombre.split(' ') : null) } }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.raw._data.nombre}: ${formatCurrency(ctx.raw.v * 100)}` } }, datalabels: { display: false }}} });
             } else {
-                select('liquid-assets-chart-container').innerHTML = `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>No hay activos con saldo positivo para mostrar en el gráfico.</p></div>`;
+                select('liquid-assets-chart-container').innerHTML = `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>No hay activos con saldo positivo para mostrar.</p></div>`;
             }
         }
-
-        // Renderizamos la lista de cuentas con los porcentajes correctos
         const listaContainer = select('patrimonio-cuentas-lista');
         if (listaContainer) {
-            const accountsByType = filteredAccounts.reduce((acc, c) => {
-                const tipo = toSentenceCase(c.tipo || 'S/T');
-                if (!acc[tipo]) acc[tipo] = [];
-                acc[tipo].push(c);
-                return acc;
-            }, {});
-
+            const accountsByType = filteredAccounts.reduce((acc, c) => { const tipo = toSentenceCase(c.tipo || 'S/T'); if (!acc[tipo]) acc[tipo] = []; acc[tipo].push(c); return acc; }, {});
             listaContainer.innerHTML = Object.keys(accountsByType).sort().map(tipo => {
                 const accountsInType = accountsByType[tipo];
-                const typeBalance = accountsInType.reduce((sum, account) => sum + (saldos[account.id] || 0), 0);
+                const typeBalance = accountsInType.reduce((sum, acc) => sum + (saldos[acc.id] || 0), 0);
                 const porcentajeGlobal = totalFiltrado > 0 ? (typeBalance / totalFiltrado) * 100 : 0;
-                
-                const accountsHtml = accountsInType.sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
-                    const balance = saldos[c.id] || 0;
-                    const porcentajeGrupo = typeBalance !== 0 ? (balance / typeBalance) * 100 : 0;
-                    return `
-                    <div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" style="cursor: pointer; padding: var(--sp-2) 0;">
-                        <div>
-                            <span style="display: block; font-weight: 500;">${c.nombre}</span>
-                        <small style="color: var(--c-on-surface-secondary); font-weight: 500;">${porcentajeGrupo.toFixed(1)}% del total de ${tipo}</small>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: var(--sp-2);">${formatCurrency(balance)}<span class="material-icons" style="font-size: 18px; color: var(--c-on-surface-secondary);">chevron_right</span></div>
-                    </div>`;
-                }).join('');
-                
+                const accountsHtml = accountsInType.sort((a,b) => a.nombre.localeCompare(b.nombre)).map(c => `<div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" style="cursor: pointer; padding: var(--sp-2) 0;"><div><span style="display: block;">${c.nombre}</span><small style="color: var(--c-on-surface-secondary);">${((saldos[c.id] || 0) / typeBalance * 100).toFixed(1)}% de ${tipo}</small></div><div style="display: flex; align-items: center; gap: var(--sp-2);">${formatCurrency(saldos[c.id] || 0)}<span class="material-icons" style="font-size: 18px;">chevron_right</span></div></div>`).join('');
                 if (!accountsHtml) return '';
-
-                return `
-                    <details class="accordion" open style="margin-bottom: var(--sp-2);">
-                        <summary>
-                            <span class="account-group__name">${tipo}</span>
-                            <div style="display:flex; align-items:center; gap:var(--sp-2);">
-                                <small style="color: var(--c-on-surface-tertiary); font-weight: 600; margin-right: var(--sp-2);">${porcentajeGlobal.toFixed(1)}%</small>
-                                <span class="account-group__balance">${formatCurrency(typeBalance)}</span>
-                                <span class="material-icons accordion__icon">expand_more</span>
-                            </div>
-                        </summary>
-                        <div class="accordion__content" style="padding: 0 var(--sp-3);">${accountsHtml}</div>
-                    </details>`;
+                return `<details class="accordion" open style="margin-bottom: var(--sp-2);"><summary><span class="account-group__name">${tipo}</span><div style="display:flex; align-items:center; gap:var(--sp-2);"><small style="color: var(--c-on-surface-tertiary); margin-right: var(--sp-2);">${porcentajeGlobal.toFixed(1)}%</small><span class="account-group__balance">${formatCurrency(typeBalance)}</span><span class="material-icons accordion__icon">expand_more</span></div></summary><div class="accordion__content" style="padding: 0 var(--sp-3);">${accountsHtml}</div></details>`;
             }).join('');
         }
     }, 50);
@@ -4547,7 +4459,6 @@ const renderDashboardExpandedKpiSummary = () => {
                 </div>`;
         };
 
-   // REEMPLAZA LA FUNCIÓN ORIGINAL CON ESTA VERSIÓN CORREGIDA
 // REEMPLAZA LA FUNCIÓN ORIGINAL CON ESTA VERSIÓN SIMPLIFICADA
 const renderInicioResumenView = () => {
     const resumenContentContainer = select('resumen-content-container');
@@ -4572,8 +4483,7 @@ const renderInicioResumenView = () => {
                     <div class="skeleton" style="height:250px;"></div>
                 </div>
             </div>`;
-            case 'investment-portfolio':
-                return `<div class="card" id="inversion-widget"><h3 class="card__title"><span class="material-icons">rocket_launch</span>Portafolio de Inversión</h3><div class="card__content" id="patrimonio-inversiones-container"><div class="skeleton" style="height:150px;"></div></div></div>`;
+            // ¡ELIMINADO! El 'case' para 'investment-portfolio' ya no está aquí.
             case 'informe-personalizado':
                  return renderDashboardInformeWidget();
             default: return '';
@@ -4693,11 +4603,40 @@ const renderInicioResumenView = () => {
         };
 
 
+// =========================================================================================
+// === INICIO: RENDERIZADO DE PÁGINA "PLANIFICAR" CON ESTRUCTURA CORRECTA (v7.1) ===
+// =========================================================================================
 const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICACION);
     if(!container) return;
 
     container.innerHTML = `
+        <div class="card card--no-bg accordion-wrapper">
+            <details class="accordion" open>
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">rocket_launch</span>Portafolio de Inversión</h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" id="patrimonio-inversiones-container" style="padding: var(--sp-3) var(--sp-4);">
+                    <div class="skeleton" style="height:250px;"></div>
+                </div>
+            </details>
+        </div>
+        <div class="card card--no-bg accordion-wrapper">
+            <details class="accordion" open>
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                    <div id="pending-recurrents-container"></div>
+                    <p class="form-label" style="margin-bottom: var(--sp-3);">
+                        Pulsa en una operación para editarla. Estas son las que se ejecutarán en el futuro.
+                    </p>
+                    <div id="recurrentes-list-container"></div>
+                </div>
+            </details>
+        </div>
         <div class="card card--no-bg accordion-wrapper">
             <details class="accordion">
                 <summary>
@@ -4717,46 +4656,10 @@ const renderPlanificacionPage = () => {
                 </div>
             </details>
         </div>
-
-        <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div id="pending-recurrents-container"></div>
-                    
-                    <!-- === AQUÍ ESTÁ EL CAMBIO === -->
-                    <!-- Eliminamos el div con el botón "Gestionar" y dejamos un texto más útil -->
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">
-                        Pulsa en una operación para editarla. Estas son las que se ejecutarán en el futuro.
-                    </p>
-                    
-                    <div id="recurrentes-list-container"></div>
-                </div>
-            </details>
-        </div>
     `;
     
-    const budgetYearSelect = select('budget-year-selector');
-    if (budgetYearSelect) {
-        const currentYear = new Date().getFullYear();
-        let years = new Set([currentYear]);
-        (db.presupuestos || []).forEach(p => years.add(p.ano));
-        
-        const currentVal = budgetYearSelect.value;
-        budgetYearSelect.innerHTML = [...years].sort((a, b) => b - a).map(y => `<option value="${y}">${y}</option>`).join('');
-        
-        if (currentVal && [...years].some(y => y == parseInt(currentVal))) {
-            budgetYearSelect.value = currentVal;
-        } else {
-            budgetYearSelect.value = String(currentYear);
-        }
-        
-        budgetYearSelect.addEventListener('change', renderBudgetTracking);
-    }
-    
+    // Llamamos a las funciones que rellenan cada sección.
+    renderInversionesPage('patrimonio-inversiones-container');
     populateAllDropdowns();
     renderBudgetTracking();
     renderPendingRecurrents();
@@ -5632,14 +5535,23 @@ const generateInformeData = async (config) => {
     return { labels, datasets };
 };
         
-		/** Muestra el modal para configurar los widgets del dashboard. */
+// =========================================================================
+// === INICIO: MODAL DE CONFIGURACIÓN DE WIDGETS - VERSIÓN A PRUEBA DE ERRORES (v2.0) ===
+// =========================================================================
 const showDashboardConfigModal = () => {
-    const widgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
+    // Obtenemos la lista de widgets guardada por el usuario.
+    const savedWidgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
+
+    // *** ¡AQUÍ ESTÁ LA MAGIA! ***
+    // Filtramos la lista guardada para quedarnos SÓLO con los widgets que TODAVÍA existen en nuestro catálogo.
+    const widgetOrder = savedWidgetOrder.filter(widgetId => AVAILABLE_WIDGETS[widgetId]);
     
+    // Ahora, con una lista limpia y segura, construimos el HTML de los widgets activos.
     let listHtml = widgetOrder.map(widgetId => 
         renderWidgetConfigItem(widgetId, AVAILABLE_WIDGETS[widgetId], true)
     ).join('');
 
+    // Hacemos lo mismo para los widgets inactivos.
     listHtml += Object.keys(AVAILABLE_WIDGETS)
         .filter(id => !widgetOrder.includes(id))
         .map(widgetId => renderWidgetConfigItem(widgetId, AVAILABLE_WIDGETS[widgetId], false))
@@ -5653,6 +5565,7 @@ const showDashboardConfigModal = () => {
         </div>`;
     showGenericModal('Personalizar Panel', modalHtml);
 
+    // El resto de la función para el drag-and-drop no cambia.
     const list = select('widget-config-list');
     let draggedItem = null;
 
@@ -6390,11 +6303,14 @@ const setMovimientoFormType = (type) => {
             resultsContainer.innerHTML = resultsHtml;
         };
 
+		// AÑADE esta nueva función para el modal de Valoración.
 		const showValoracionModal = (cuentaId) => {
             const cuenta = db.cuentas.find(c => c.id === cuentaId);
             if (!cuenta) return;
 
             const fechaISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+            
+            // Buscamos la última valoración para pre-rellenar el campo, facilitando la vida al usuario.
             const ultimaValoracion = (db.inversiones_historial || [])
                 .filter(v => v.cuentaId === cuentaId)
                 .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
@@ -6421,40 +6337,78 @@ const setMovimientoFormType = (type) => {
 
             showGenericModal(`Actualizar Valor de ${cuenta.nombre}`, formHtml);
         };
-	
-        const handleSaveValoracion = async (form, btn) => {
-            setButtonLoading(btn, true);
-            const cuentaId = form.dataset.id;
-            const valor = parseCurrencyString(select('valoracion-valor').value);
-            const fecha = select('valoracion-fecha').value;
+// ======================================================================================
+// === INICIO: GUARDADO DE VALORACIÓN - VERSIÓN CON LÓGICA DE ACTUALIZACIÓN (v6.0 FINAL) ===
+// ======================================================================================
+const handleSaveValoracion = async (form, btn) => {
+    setButtonLoading(btn, true);
+    const cuentaId = form.dataset.id;
+    const valor = parseCurrencyString(select('valoracion-valor').value);
+    const fecha = select('valoracion-fecha').value;
+    
+    if (!cuentaId || isNaN(valor) || !fecha || valor < 0) {
+        showToast('El valor debe ser un número positivo y la fecha es obligatoria.', 'warning');
+        setButtonLoading(btn, false);
+        return;
+    }
+    
+    const fechaISO = parseDateStringAsUTC(fecha).toISOString();
 
-            if (!cuentaId || isNaN(valor) || !fecha || valor < 0) {
-                showToast('El valor debe ser un número positivo y la fecha es obligatoria.', 'warning');
-                setButtonLoading(btn, false);
-                return;
-            }
-
-            const newId = generateId();
-            const newValoracion = {
-                id: newId,
-                cuentaId: cuentaId,
-                valor: Math.round(valor * 100),
-                fecha: parseDateStringAsUTC(fecha).toISOString()
-            };
-
-            await saveDoc('inversiones_historial', newId, newValoracion);
-            setButtonLoading(btn, false);
-            hideModal('generic-modal');
-            hapticFeedback('success');
-            showToast('Valor del activo actualizado.');
+    try {
+        const userRef = fbDb.collection('users').doc(currentUser.uid);
+        let docToSaveId;
+        
+        // 1. Buscamos si ya existe una valoración para este activo en esta fecha.
+        const query = userRef.collection('inversiones_historial')
+            .where('cuentaId', '==', cuentaId)
+            .where('fecha', '==', fechaISO)
+            .limit(1);
             
-            const activePageEl = document.querySelector('.view--active');
-            const activePage = activePageEl ? activePageEl.id : null;
-            if (activePage === PAGE_IDS.PATRIMONIO) {
-                renderPatrimonioPage();
-            }
-        };
-		const showHelpModal = () => {
+        const existingSnapshot = await query.get();
+        
+        const valorEnCentimos = Math.round(valor * 100);
+
+        // 2. Si encontramos uno, lo actualizamos.
+        if (!existingSnapshot.empty) {
+            const existingDoc = existingSnapshot.docs[0];
+            docToSaveId = existingDoc.id;
+            // Usamos 'update' para cambiar solo el campo del valor.
+            await existingDoc.ref.update({ valor: valorEnCentimos });
+        } 
+        // 3. Si no hay ninguno, creamos uno nuevo.
+        else {
+            docToSaveId = generateId();
+            const newValoracion = {
+                id: docToSaveId,
+                cuentaId: cuentaId,
+                valor: valorEnCentimos,
+                fecha: fechaISO
+            };
+            // Usamos 'saveDoc' (que hace un 'set') para crear el nuevo documento.
+            await saveDoc('inversiones_historial', docToSaveId, newValoracion);
+        }
+
+        // 4. Forzamos la recarga de datos para garantizar la consistencia.
+        await loadInversiones(); 
+
+        // 5. Redibujamos la pantalla con la información 100% actualizada.
+        const container = select('patrimonio-inversiones-container');
+        if (container) {
+            await renderInversionesPage('patrimonio-inversiones-container');
+        }
+
+        setButtonLoading(btn, false);
+        hideModal('generic-modal');
+        hapticFeedback('success');
+        showToast('Valoración guardada correctamente.');
+
+    } catch (error) {
+        console.error("Error al guardar la valoración:", error);
+        showToast("No se pudo guardar la valoración.", "danger");
+        setButtonLoading(btn, false);
+    }
+};
+	const showHelpModal = () => {
     const titleEl = select('help-modal-title');
     const bodyEl = select('help-modal-body');
     
@@ -6474,11 +6428,11 @@ const setMovimientoFormType = (type) => {
 <p>Hemos diseñado la navegación para que responda a las preguntas clave sobre tu dinero. Cada pestaña es una pieza del puzle:</p>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">receipt_long</span><strong>1. Movimientos: ¿Qué ha pasado exactamente?</strong></summary>
+    <summary><span class="material-icons" style="margin-right:8px">receipt_long</span><strong>1. Diario: ¿Qué ha pasado exactamente?</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Tu <strong>diario financiero</strong> detallado y la pantalla principal. Aquí puedes bucear en tu historial completo, sin filtros. Es la verdad absoluta de tus finanzas.</p>
+        <p>Tu <strong>diario financiero</strong> detallado. Aquí es donde buceas en tu historial completo, sin filtros. Es la verdad absoluta de tus finanzas, el registro de cada batalla.</p>
         <ul>
-            <li><strong>Listado Infinito:</strong> Todos tus gastos, ingresos y traspasos, ordenados por fecha, con el más reciente primero. ¡Desliza hacia abajo para cargar más!</li>
+            <li><strong>Listado Infinito:</strong> Todos tus gastos, ingresos y traspasos, ordenados por fecha. ¡Desliza hacia abajo para cargar más y viajar en el tiempo!</li>
             <li><strong>Saldo de Auditoría:</strong> Cada movimiento muestra el saldo de la cuenta <strong>justo después</strong> de esa transacción. Es perfecto para cuadrar tus cuentas con el extracto del banco con una precisión milimétrica.</li>
             <li><strong>Recurrentes Pendientes:</strong> ¡La app te avisa! En la parte superior aparecerán las operaciones programadas que han vencido, para que las confirmes o las omitas con un solo clic.</li>
         </ul>
@@ -6487,27 +6441,28 @@ const setMovimientoFormType = (type) => {
 </details>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>2. Inicio: ¿Cómo voy hoy?</strong></summary>
+    <summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>2. Panel: ¿Cómo voy hoy?</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Esta es tu <strong>torre de control</strong>. De un solo vistazo, tienes el pulso de tu situación financiera para el periodo que elijas (¡este mes por defecto!). Es tu panel personalizable con:</p>
+        <p>Esta es tu <strong>torre de control</strong>. De un solo vistazo, tienes el pulso de tu situación financiera para el periodo que elijas (¡este año por defecto!). Es tu panel personalizable con los famosos "Widgets":</p>
         <ul>
             <li><strong>Centro de Operaciones:</strong> Tus constantes vitales. No solo ingresos y gastos, sino métricas clave como tu <strong>Tasa de Ahorro</strong> y el valor de tu <strong>Patrimonio Neto</strong>.</li>
             <li><strong>Centro de Acciones:</strong> La app piensa por ti. Te avisará de facturas recurrentes pendientes para que nunca se te pase nada.</li>
-            <li><strong>Gráficos Inteligentes:</strong> Desgloses visuales para entender al instante a dónde se va tu dinero y de dónde viene.</li>
+            <li><strong>Gráficos Inteligentes:</strong> Desgloses visuales para entender al instante a dónde se va tu dinero y de dónde viene. ¡Haz clic en una barra para ver los movimientos exactos!</li>
         </ul>
-        <p><strong>Ejemplo práctico:</strong> A mitad de mes, entras y ves en el gráfico que "Ocio y Restaurantes" ocupa un trozo más grande de lo esperado. ¡Te permite ajustar tus planes para las próximas semanas al momento!</p>
+        <p><strong>Ejemplo práctico:</strong> A mitad de mes, entras y ves en el gráfico de conceptos que "Ocio y Restaurantes" ocupa un trozo más grande de lo esperado. ¡Te permite ajustar tus planes para las próximas semanas al momento!</p>
     </div>
 </details>
                 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">edit_calendar</span><strong>3. Planificación: ¿Cuál es mi plan de futuro?</strong></summary>
+    <summary><span class="material-icons" style="margin-right:8px">edit_calendar</span><strong>3. Planificar: ¿Cuál es mi plan de futuro?</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
         <p>Aquí te pones el sombrero de estratega. Es donde le dices a tu dinero qué hacer, en lugar de preguntarte a dónde se ha ido. Es tu sección proactiva.</p>
         <ul>
-            <li><strong>Presupuestos Anuales:</strong> ¡Tu plan de batalla! Define cuánto quieres gastar o ingresar por categoría. La app te mostrará con gráficos y barras de progreso si te estás ciñendo al plan o si necesitas apretarte el cinturón.</li>
-            <li><strong>Movimientos Recurrentes:</strong> Automatiza tu vida. Gestiona tus pagos y cobros fijos (nómina, alquiler, Netflix...). La app te avisará cuando llegue la fecha para que los confirmes con un solo clic.</li>
+            <li><strong>Portafolio de Inversión:</strong> La joya de la corona. Analiza tus inversiones como un profesional (lo explicamos en detalle más abajo).</li>
+            <li><strong>Movimientos Recurrentes:</strong> Automatiza tu vida. Gestiona tus pagos y cobros fijos (nómina, alquiler, Netflix...). La app te avisará cuando llegue la fecha para que los confirmes.</li>
+            <li><strong>Presupuestos Anuales:</strong> ¡Tu plan de batalla! Define cuánto quieres gastar o ingresar por categoría. La app te mostrará con gráficos y barras de progreso si te estás ciñendo al plan y si vas a buen ritmo para cumplir tus objetivos anuales.</li>
         </ul>
-        <p><strong>Ejemplo práctico:</strong> Creas un presupuesto de 200€ al mes para "Ocio". En esta sección, verás una barra de progreso que te indica en tiempo real cuánto te queda y si vas a buen ritmo para no pasarte a final de año.</p>
+        <p><strong>Ejemplo práctico:</strong> Creas un presupuesto de 2.400€ al año para "Ocio" (200€/mes). A mitad de año, la app te dirá si has gastado más o menos del 50% de tu presupuesto, ayudándote a corregir el rumbo.</p>
     </div>
 </details>
 
@@ -6532,10 +6487,11 @@ const setMovimientoFormType = (type) => {
 <details class="accordion" style="margin-bottom: var(--sp-2);">
     <summary>📈 <strong>Seguimiento de Inversiones Nivel PRO</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Esto lleva tus finanzas al siguiente nivel. En <strong>Ajustes > Gestión de Datos > Cuentas</strong>, puedes marcar una cuenta como "de inversión". Al hacerlo, la app desbloquea métricas profesionales en la sección de Patrimonio (que no aparece hasta que tienes al menos una cuenta de inversión):</p>
+        <p>Esto lleva tus finanzas al siguiente nivel. Para activar esta sección, ve a <strong>Ajustes > Gestión de Datos > Cuentas</strong> y marca al menos una cuenta como "de inversión". Al hacerlo, la app desbloquea métricas profesionales en la pestaña <strong>Planificar</strong>:</p>
         <ul>
-            <li><strong>P&L (Ganancias y Pérdidas):</strong> Te dice, sin rodeos, cuánto dinero has ganado o perdido, tanto en euros como en porcentaje.</li>
-            <li><strong>TIR (Tasa Interna de Retorno):</strong> El indicador definitivo para saber si tu inversión es un cohete 🚀 o una tortuga 🐢. Te dice la rentabilidad <strong>anualizada</strong> real, teniendo en cuenta no solo el valor final, sino <strong>cuándo y cuánto dinero</strong> has ido metiendo o sacando a lo largo del tiempo. ¡Es lo que usan los profesionales!</li>
+            <li><strong>P&L (Ganancias y Pérdidas):</strong> El "marcador" que te dice si vas ganando o perdiendo. Te lo muestra en Euros (€) para que sepas el dinero contante y sonante, y en Porcentaje (%) para que sepas qué tan buena ha sido la inversión.</li>
+            <li><strong>TIR (Tasa Interna de Retorno):</strong> El indicador definitivo para saber si tu inversión es un cohete 🚀 o una tortuga 🐢. Te dice la rentabilidad <strong>anualizada</strong> real, teniendo en cuenta no solo el valor final, sino <strong>cuándo y cuánto dinero</strong> has ido metiendo o sacando a lo largo del tiempo. ¡Es la métrica que usan los profesionales!</li>
+            <li><strong>Valoración vs. Aportado:</strong> El portafolio te permite comparar de un vistazo el valor de mercado actual de tus activos con el dinero que realmente ha salido de tu bolsillo.</li>
         </ul>
     </div>
 </details>
@@ -6555,7 +6511,7 @@ const setMovimientoFormType = (type) => {
 </details>
 
 <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">¡Explora, registra y toma el control definitivo de tu futuro financiero! Estás al mando.</p>
-            `;
+        `;
     }
     
     showModal('help-modal');
@@ -6837,6 +6793,16 @@ const handleToggleTheme = () => {
 
             formHtml += `
                 </div>
+				<div style="border-top: 1px solid var(--c-outline); padding-top: var(--sp-4); margin-top: var(--sp-4);">
+    <h4 style="color: var(--c-danger);">Zona de Peligro</h4>
+    <p class="form-label" style="margin-bottom: var(--sp-3);">
+        Esta acción creará una nueva valoración para TODOS tus activos de inversión, igualando su valor al capital aportado. Esto pondrá su P&L a cero a fecha de hoy.
+    </p>
+    <button type="button" class="btn btn--danger btn--full" data-action="reset-portfolio-baseline">
+        <span class="material-icons" style="font-size: 16px;">restart_alt</span>
+        <span>Resetear P&L de Todos los Activos</span>
+    </button>
+</div>
                 <div class="modal__actions">
                     <button type="submit" class="btn btn--primary btn--full">Guardar Selección</button>
                 </div>
@@ -6912,6 +6878,7 @@ const attachEventListeners = () => {
         const btn = actionTarget.closest('button');
 
         const actions = {
+
             'toggle-investment-type-filter': () => handleToggleInvestmentTypeFilter(type),
             'toggle-account-type-filter': () => {
                 hapticFeedback('light');
@@ -6956,7 +6923,7 @@ const attachEventListeners = () => {
                     showModal('help-modal');
                 }
             },
-            'configure-dashboard': showDashboardConfigModal, 'save-dashboard-config': () => handleSaveDashboardConfig(btn),
+            'configure-dashboard': (e) => { e.preventDefault(); showDashboardConfigModal(); }, 'save-dashboard-config': () => handleSaveDashboardConfig(btn),
             'use-password-instead': () => showPasswordFallback(), 'toggle-theme': handleToggleTheme,
             'navigate': () => navigateTo(page), 'help': showHelpModal, 'exit': handleExitApp,
             'forgot-password': (e) => { e.preventDefault(); const email = prompt("Por favor, introduce el correo electrónico de tu cuenta para restablecer la contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => { showToast('Se ha enviado un correo para restablecer tu contraseña.', 'info', 5000); }).catch((error) => { console.error("Error al enviar correo de recuperación:", error); if (error.code === 'auth/user-not-found') { showToast('No se encontró ninguna cuenta con ese correo.', 'danger'); } else { showToast('Error al intentar restablecer la contraseña.', 'danger'); } }); } },
@@ -6978,7 +6945,8 @@ const attachEventListeners = () => {
             'manage-conceptos': showConceptosModal, 'manage-cuentas': showCuentasModal, 'manage-recurrentes': showRecurrentesModal, 'view-account-details': () => showAccountMovementsModal(id), 'save-config': () => handleSaveConfig(btn),
             'export-data': () => handleExportData(btn), 'export-csv': () => handleExportCsv(btn), 'import-data': () => showImportJSONWizard(), 'clear-data': () => { /* ... código sin cambios ... */ },
             'update-budgets': handleUpdateBudgets, 'logout': () => { /* ... código sin cambios ... */ }, 'delete-account': () => { /* ... código sin cambios ... */ },
-            'view-investment-detail': () => renderInvestmentAccountDetail(id), 'manage-investment-accounts': showManageInvestmentAccountsModal, 'add-aportacion': () => showAportacionModal(), 'update-asset-value': () => showValoracionModal(id),
+            'view-investment-detail': () => renderInvestmentAccountDetail(id), 'manage-investment-accounts': showManageInvestmentAccountsModal, 'update-asset-value': () => showValoracionModal(id), 'update-asset-value': () => showValoracionModal(id),
+			'set-investment-chart-mode': () => handleSetInvestmentChartMode(actionTarget.dataset.mode),
             'global-search': showGlobalSearchModal, 'search-result-movimiento': () => { /* ... */ }, 'search-result-cuenta': () => { /* ... */ }, 'search-result-concepto': () => { /* ... */ },
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
@@ -7148,7 +7116,17 @@ if (listContainer) {
 // =================================================================
 // === FIN: CÓDIGO FINAL PARA REEMPLAZAR attachEventListeners      ===
 // =================================================================```
-
+	const handleSetInvestmentChartMode = (mode) => {
+    if (investmentChartMode === mode) return; // No hacer nada si ya está en ese modo
+    hapticFeedback('light');
+    investmentChartMode = mode; // Actualizamos el estado global
+    
+    // Volvemos a renderizar toda la sección para que se actualice con el nuevo modo
+    const container = select('patrimonio-inversiones-container');
+    if (container) {
+        renderInversionesPage('patrimonio-inversiones-container');
+    }
+};
     const longPressState = {
     timer: null,
     targetCard: null,
@@ -8334,6 +8312,62 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
         hapticFeedback('success');
         showToast('Portafolio actualizado.');
     };
+	const handleResetPortfolioBaseline = async (btn) => {
+    const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
+    if (investmentAccounts.length === 0) {
+        showToast("No hay activos de inversión para resetear.", "warning");
+        return;
+    }
+
+    showConfirmationModal(
+        `¿Estás seguro? Se creará una nueva valoración para ${investmentAccounts.length} activo(s), poniendo su P&L a cero. Esta acción no se puede deshacer.`,
+        async () => {
+            setButtonLoading(btn, true, 'Reseteando...');
+            try {
+                const batch = fbDb.batch();
+                const userRef = fbDb.collection('users').doc(currentUser.uid);
+                const todayISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+
+                for (const cuenta of investmentAccounts) {
+                    // Calculamos el capital invertido para esta cuenta específica
+                    const cashflows = (db.inversion_cashflows || []).filter(cf => cf.cuentaId === cuenta.id);
+                    const capitalInvertido = cashflows.reduce((sum, cf) => sum + cf.cantidad, 0);
+
+                    // Creamos la nueva valoración que iguala el valor al capital
+                    const newId = generateId();
+                    const newValoracion = {
+                        id: newId,
+                        cuentaId: cuenta.id,
+                        valor: capitalInvertido, // ¡La magia está aquí!
+                        fecha: todayISO
+                    };
+                    
+                    const docRef = userRef.collection('inversiones_historial').doc(newId);
+                    batch.set(docRef, newValoracion);
+                }
+
+                await batch.commit();
+
+                hapticFeedback('success');
+                showToast("¡Línea base establecida! El P&L de todos los activos ha sido reseteado a cero.", "info", 5000);
+                
+                // Cerramos el modal y refrescamos el portafolio para ver el cambio
+                hideModal('generic-modal');
+                const container = select('patrimonio-inversiones-container');
+                if (container) {
+                    renderInversionesPage('patrimonio-inversiones-container');
+                }
+
+            } catch (error) {
+                console.error("Error al resetear la línea base del portafolio:", error);
+                showToast("Ocurrió un error durante el reseteo.", "danger");
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        },
+        "Confirmar Reseteo de P&L"
+    );
+};
 	const handleSaveAportacion = async (form, btn) => {
          setButtonLoading(btn, true);
         const cuentaId = select('aportacion-cuenta').value;
