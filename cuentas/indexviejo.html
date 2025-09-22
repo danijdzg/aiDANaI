@@ -2326,64 +2326,89 @@ const getFilteredMovements = async (forComparison = false) => {
             return 0;
         };
         
-// =================================================================================
-// === INICIO: CEREBRO DE CÁLCULO - VERSIÓN FINAL CORREGIDA (v5.1) ===
-// =================================================================================
+// =========================================================================================
+// === INICIO: CEREBRO DE CÁLCULO DE RENDIMIENTO - VERSIÓN CON TIR AUTOMÁTICA (v7.0 FINAL) ===
+// =========================================================================================
 const calculatePortfolioPerformance = async (cuentaId = null) => {
-    // Si no tenemos los datos de inversión, los cargamos.
     if (!dataLoaded.inversiones) await loadInversiones();
 
-    const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion && (cuentaId ? c.id === cuentaId : true));
+    const allInvestmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
+    const investmentAccounts = cuentaId ? allInvestmentAccounts.filter(c => c.id === cuentaId) : allInvestmentAccounts;
+    
     if (investmentAccounts.length === 0) {
         return { valorActual: 0, capitalInvertido: 0, pnlAbsoluto: 0, pnlPorcentual: 0, irr: 0 };
     }
 
+    // Obtenemos todos los movimientos de una vez para ser eficientes.
+    const allMovements = await fetchAllMovementsForHistory();
+    const todosLosSaldos = getAllSaldos();
+    
+    // Creamos un Set con los IDs de TODAS las cuentas de inversión para hacer comprobaciones rápidas.
+    const allInvestmentAccountIds = new Set(allInvestmentAccounts.map(c => c.id));
+
     let totalValor = 0;
     let totalCapitalInvertido = 0;
     let allIrrCashflows = [];
-    const todosLosSaldos = getAllSaldos();
 
-    // Recorremos cada cuenta de inversión para calcular sus métricas.
     for (const cuenta of investmentAccounts) {
-        // "Capital Aportado" es el saldo real de la cuenta.
+        // "Capital Aportado" para el P&L sigue siendo el saldo de la cuenta.
         const capitalInvertido = todosLosSaldos[cuenta.id] || 0;
 
-        // "Valor Actual" es la última valoración guardada.
-        const valoraciones = (db.inversiones_historial || [])
-            .filter(v => v.cuentaId === cuenta.id)
-            .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-        
+        // "Valor Actual" sigue siendo la última valoración guardada.
+        const valoraciones = (db.inversiones_historial || []).filter(v => v.cuentaId === cuenta.id).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
         const valorActual = valoraciones.length > 0 ? valoraciones[0].valor : 0;
 
-        // Acumulamos los totales. Estas variables SÍ son visibles en toda la función.
         totalValor += valorActual;
         totalCapitalInvertido += capitalInvertido;
 
-        // Preparamos los datos para la TIR.
-        const cashflowsTIR = (db.inversion_cashflows || []).filter(cf => cf.cuentaId === cuenta.id);
-        const irrCashflows = [];
-        cashflowsTIR.forEach(cf => {
-            irrCashflows.push({ amount: -cf.cantidad, date: new Date(cf.fecha) });
-        });
+        // *** ¡AQUÍ ESTÁ LA NUEVA MAGIA AUTOMÁTICA! ***
+        // Filtramos TODOS los movimientos de la historia para encontrar los que afectan a ESTA cuenta.
+        const accountMovements = allMovements.filter(m => 
+            m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id
+        );
+
+        const irrCashflows = accountMovements.map(mov => {
+            let amount = 0;
+            // Un movimiento normal dentro de la cuenta es un flujo de caja.
+            if (mov.tipo === 'movimiento') {
+                amount = -mov.cantidad; // Positivo (ingreso) es dinero que ENTRA (- para la TIR), Negativo (gasto) es dinero que SALE (+ para la TIR).
+            }
+            // Un traspaso es un flujo de caja SOLO si la otra cuenta NO es de inversión.
+            else if (mov.tipo === 'traspaso') {
+                // Si esta cuenta es el ORIGEN
+                if (mov.cuentaOrigenId === cuenta.id) {
+                    // Y el destino NO es otra cuenta de inversión, es una salida de capital.
+                    if (!allInvestmentAccountIds.has(mov.cuentaDestinoId)) {
+                        amount = mov.cantidad; // Salida de dinero es un flujo positivo para la TIR.
+                    }
+                } 
+                // Si esta cuenta es el DESTINO
+                else if (mov.cuentaDestinoId === cuenta.id) {
+                    // Y el origen NO es otra cuenta de inversión, es una entrada de capital.
+                    if (!allInvestmentAccountIds.has(mov.cuentaOrigenId)) {
+                        amount = -mov.cantidad; // Entrada de dinero es un flujo negativo para la TIR.
+                    }
+                }
+            }
+            return { amount, date: new Date(mov.fecha) };
+        }).filter(cf => cf.amount !== 0); // Nos quedamos solo con los flujos de caja reales.
+
+        // Añadimos la valoración final.
         if (valorActual !== 0) {
             irrCashflows.push({ amount: valorActual, date: new Date() });
         }
         allIrrCashflows.push(...irrCashflows);
     }
 
-    // Calculamos las métricas finales.
     const pnlAbsoluto = totalValor - totalCapitalInvertido;
     const pnlPorcentual = totalCapitalInvertido !== 0 ? (pnlAbsoluto / totalCapitalInvertido) * 100 : 0;
+    
+    // El cálculo de la TIR ahora usa el historial de movimientos reales.
     const irr = calculateIRR(allIrrCashflows);
 
-    // *** ¡AQUÍ ESTABA EL ERROR Y ESTA ES LA CORRECCIÓN! ***
-    // Si la función se llamó para una sola cuenta, devolvemos los totales acumulados,
-    // que en este caso corresponden a esa única cuenta. Usamos las variables que están "fuera del bloque del motor".
     if (cuentaId) {
         return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto, pnlPorcentual, irr };
     }
-
-    // Si no, devolvemos los totales de todo el portafolio.
     return { valorActual: totalValor, capitalInvertido: totalCapitalInvertido, pnlAbsoluto, pnlPorcentual, irr };
 };
 
@@ -6383,7 +6408,7 @@ const handleSaveValoracion = async (form, btn) => {
         setButtonLoading(btn, false);
     }
 };
-		const showHelpModal = () => {
+	const showHelpModal = () => {
     const titleEl = select('help-modal-title');
     const bodyEl = select('help-modal-body');
     
@@ -6403,11 +6428,11 @@ const handleSaveValoracion = async (form, btn) => {
 <p>Hemos diseñado la navegación para que responda a las preguntas clave sobre tu dinero. Cada pestaña es una pieza del puzle:</p>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">receipt_long</span><strong>1. Movimientos: ¿Qué ha pasado exactamente?</strong></summary>
+    <summary><span class="material-icons" style="margin-right:8px">receipt_long</span><strong>1. Diario: ¿Qué ha pasado exactamente?</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Tu <strong>diario financiero</strong> detallado y la pantalla principal. Aquí puedes bucear en tu historial completo, sin filtros. Es la verdad absoluta de tus finanzas.</p>
+        <p>Tu <strong>diario financiero</strong> detallado. Aquí es donde buceas en tu historial completo, sin filtros. Es la verdad absoluta de tus finanzas, el registro de cada batalla.</p>
         <ul>
-            <li><strong>Listado Infinito:</strong> Todos tus gastos, ingresos y traspasos, ordenados por fecha, con el más reciente primero. ¡Desliza hacia abajo para cargar más!</li>
+            <li><strong>Listado Infinito:</strong> Todos tus gastos, ingresos y traspasos, ordenados por fecha. ¡Desliza hacia abajo para cargar más y viajar en el tiempo!</li>
             <li><strong>Saldo de Auditoría:</strong> Cada movimiento muestra el saldo de la cuenta <strong>justo después</strong> de esa transacción. Es perfecto para cuadrar tus cuentas con el extracto del banco con una precisión milimétrica.</li>
             <li><strong>Recurrentes Pendientes:</strong> ¡La app te avisa! En la parte superior aparecerán las operaciones programadas que han vencido, para que las confirmes o las omitas con un solo clic.</li>
         </ul>
@@ -6416,27 +6441,28 @@ const handleSaveValoracion = async (form, btn) => {
 </details>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>2. Inicio: ¿Cómo voy hoy?</strong></summary>
+    <summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>2. Panel: ¿Cómo voy hoy?</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Esta es tu <strong>torre de control</strong>. De un solo vistazo, tienes el pulso de tu situación financiera para el periodo que elijas (¡este mes por defecto!). Es tu panel personalizable con:</p>
+        <p>Esta es tu <strong>torre de control</strong>. De un solo vistazo, tienes el pulso de tu situación financiera para el periodo que elijas (¡este año por defecto!). Es tu panel personalizable con los famosos "Widgets":</p>
         <ul>
             <li><strong>Centro de Operaciones:</strong> Tus constantes vitales. No solo ingresos y gastos, sino métricas clave como tu <strong>Tasa de Ahorro</strong> y el valor de tu <strong>Patrimonio Neto</strong>.</li>
             <li><strong>Centro de Acciones:</strong> La app piensa por ti. Te avisará de facturas recurrentes pendientes para que nunca se te pase nada.</li>
-            <li><strong>Gráficos Inteligentes:</strong> Desgloses visuales para entender al instante a dónde se va tu dinero y de dónde viene.</li>
+            <li><strong>Gráficos Inteligentes:</strong> Desgloses visuales para entender al instante a dónde se va tu dinero y de dónde viene. ¡Haz clic en una barra para ver los movimientos exactos!</li>
         </ul>
-        <p><strong>Ejemplo práctico:</strong> A mitad de mes, entras y ves en el gráfico que "Ocio y Restaurantes" ocupa un trozo más grande de lo esperado. ¡Te permite ajustar tus planes para las próximas semanas al momento!</p>
+        <p><strong>Ejemplo práctico:</strong> A mitad de mes, entras y ves en el gráfico de conceptos que "Ocio y Restaurantes" ocupa un trozo más grande de lo esperado. ¡Te permite ajustar tus planes para las próximas semanas al momento!</p>
     </div>
 </details>
                 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">edit_calendar</span><strong>3. Planificación: ¿Cuál es mi plan de futuro?</strong></summary>
+    <summary><span class="material-icons" style="margin-right:8px">edit_calendar</span><strong>3. Planificar: ¿Cuál es mi plan de futuro?</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
         <p>Aquí te pones el sombrero de estratega. Es donde le dices a tu dinero qué hacer, en lugar de preguntarte a dónde se ha ido. Es tu sección proactiva.</p>
         <ul>
-            <li><strong>Presupuestos Anuales:</strong> ¡Tu plan de batalla! Define cuánto quieres gastar o ingresar por categoría. La app te mostrará con gráficos y barras de progreso si te estás ciñendo al plan o si necesitas apretarte el cinturón.</li>
-            <li><strong>Movimientos Recurrentes:</strong> Automatiza tu vida. Gestiona tus pagos y cobros fijos (nómina, alquiler, Netflix...). La app te avisará cuando llegue la fecha para que los confirmes con un solo clic.</li>
+            <li><strong>Portafolio de Inversión:</strong> La joya de la corona. Analiza tus inversiones como un profesional (lo explicamos en detalle más abajo).</li>
+            <li><strong>Movimientos Recurrentes:</strong> Automatiza tu vida. Gestiona tus pagos y cobros fijos (nómina, alquiler, Netflix...). La app te avisará cuando llegue la fecha para que los confirmes.</li>
+            <li><strong>Presupuestos Anuales:</strong> ¡Tu plan de batalla! Define cuánto quieres gastar o ingresar por categoría. La app te mostrará con gráficos y barras de progreso si te estás ciñendo al plan y si vas a buen ritmo para cumplir tus objetivos anuales.</li>
         </ul>
-        <p><strong>Ejemplo práctico:</strong> Creas un presupuesto de 200€ al mes para "Ocio". En esta sección, verás una barra de progreso que te indica en tiempo real cuánto te queda y si vas a buen ritmo para no pasarte a final de año.</p>
+        <p><strong>Ejemplo práctico:</strong> Creas un presupuesto de 2.400€ al año para "Ocio" (200€/mes). A mitad de año, la app te dirá si has gastado más o menos del 50% de tu presupuesto, ayudándote a corregir el rumbo.</p>
     </div>
 </details>
 
@@ -6461,10 +6487,11 @@ const handleSaveValoracion = async (form, btn) => {
 <details class="accordion" style="margin-bottom: var(--sp-2);">
     <summary>📈 <strong>Seguimiento de Inversiones Nivel PRO</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Esto lleva tus finanzas al siguiente nivel. En <strong>Ajustes > Gestión de Datos > Cuentas</strong>, puedes marcar una cuenta como "de inversión". Al hacerlo, la app desbloquea métricas profesionales en la sección de Patrimonio (que no aparece hasta que tienes al menos una cuenta de inversión):</p>
+        <p>Esto lleva tus finanzas al siguiente nivel. Para activar esta sección, ve a <strong>Ajustes > Gestión de Datos > Cuentas</strong> y marca al menos una cuenta como "de inversión". Al hacerlo, la app desbloquea métricas profesionales en la pestaña <strong>Planificar</strong>:</p>
         <ul>
-            <li><strong>P&L (Ganancias y Pérdidas):</strong> Te dice, sin rodeos, cuánto dinero has ganado o perdido, tanto en euros como en porcentaje.</li>
-            <li><strong>TIR (Tasa Interna de Retorno):</strong> El indicador definitivo para saber si tu inversión es un cohete 🚀 o una tortuga 🐢. Te dice la rentabilidad <strong>anualizada</strong> real, teniendo en cuenta no solo el valor final, sino <strong>cuándo y cuánto dinero</strong> has ido metiendo o sacando a lo largo del tiempo. ¡Es lo que usan los profesionales!</li>
+            <li><strong>P&L (Ganancias y Pérdidas):</strong> El "marcador" que te dice si vas ganando o perdiendo. Te lo muestra en Euros (€) para que sepas el dinero contante y sonante, y en Porcentaje (%) para que sepas qué tan buena ha sido la inversión.</li>
+            <li><strong>TIR (Tasa Interna de Retorno):</strong> El indicador definitivo para saber si tu inversión es un cohete 🚀 o una tortuga 🐢. Te dice la rentabilidad <strong>anualizada</strong> real, teniendo en cuenta no solo el valor final, sino <strong>cuándo y cuánto dinero</strong> has ido metiendo o sacando a lo largo del tiempo. ¡Es la métrica que usan los profesionales!</li>
+            <li><strong>Valoración vs. Aportado:</strong> El portafolio te permite comparar de un vistazo el valor de mercado actual de tus activos con el dinero que realmente ha salido de tu bolsillo.</li>
         </ul>
     </div>
 </details>
@@ -6484,7 +6511,7 @@ const handleSaveValoracion = async (form, btn) => {
 </details>
 
 <p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">¡Explora, registra y toma el control definitivo de tu futuro financiero! Estás al mando.</p>
-            `;
+        `;
     }
     
     showModal('help-modal');
