@@ -32,7 +32,20 @@
 	<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     
     <style>
-	 /* === INICIO: ESTILOS PARA EL ONBOARDING INTERACTIVO === */
+	
+	#pending-recurrents-container .accordion__content {
+    display: flex;
+    flex-direction: column; 
+    gap: 12px;              
+}	
+    .acciones-recurrentes-corregidas {
+        display: flex;
+        flex-wrap: wrap; 
+        gap: 8px; 
+        justify-content: flex-end; 
+        margin-top: 4px; 
+    }
+	
 #onboarding-overlay {
     position: fixed;
     inset: 0;
@@ -166,9 +179,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap; /* <-- La magia está aquí */
-    justify-content: flex-end; /* Alinea los botones a la derecha */
-}	
+    flex-wrap: wrap; /* Esta línea es la clave para que no se amontonen si no caben */
+}
+
 	/* Pega este código CSS justo después de <style> */
 .widget-config-item { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2); background-color: var(--c-surface-variant); border-radius: var(--border-radius-md); margin-bottom: var(--sp-2); border: 1px solid var(--c-outline); }
 .widget-config-item.dragging { opacity: 0.5; background-color: var(--c-primary); }
@@ -685,7 +698,18 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .transaction-card__details { flex-grow: 1; min-width: 0; padding-right: var(--sp-2); }
 .transaction-card__row-1, .transaction-card__concept { font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .transaction-card__row-2, .transaction-card__description { font-size: var(--fs-xs); color: var(--c-on-surface-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.transaction-card__figures { flex-shrink: 0; text-align: right; }
+.transaction-card__figures {
+    /* Permitimos que este contenedor se encoja si no hay espacio */
+    flex-shrink: 1; 
+    text-align: right;
+    /* Establecemos un ancho mínimo para que no se colapse por completo */
+    min-width: 120px; 
+    /* Nos aseguramos de que el contenido interior se organice bien */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px; /* Espacio entre el importe y el contenedor de botones */
+}
 .transaction-card__amount { font-size: var(--fs-sm); font-weight: 700; display: block; }
 .transaction-card__balance { font-size: 0.7rem; color: var(--c-on-surface-secondary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
 .transaction-card__transfer-details { display: flex; flex-direction: column; gap: 0; margin: 2px 0 0 0; }
@@ -3229,35 +3253,41 @@ const renderInformesPage = () => {
                     </div>`;
             }
 
-            // Caso para renderizar cada item de movimiento recurrente pendiente
-            if (item.type === 'pending-item') {
-                const r = item.recurrent;
-                const nextDate = new Date(r.nextDate + 'T12:00:00Z');
-                const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-                const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+            // ▼▼▼ REEMPLAZA EL BLOQUE 'pending-item' ENTERO POR ESTE ▼▼▼
+if (item.type === 'pending-item') {
+    const r = item.recurrent;
+    const nextDate = new Date(r.nextDate + 'T12:00:00Z');
+    const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
 
-                return `
-                <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
-                    <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
-                    <div class="transaction-card__content">
-                        <div class="transaction-card__details">
-                            <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
-                            <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">Pendiente desde: ${formattedDate}</div>
-                        </div>
-                        <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-    <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
-    <div class="transaction-card__recurrent-actions"> {/* <-- Usamos la nueva clase */}
-        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
-            <span class="material-icons" style="font-size: 14px;">skip_next</span>No añadir
-        </button>
-        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
-            <span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
-        </button>
-    </div>
-</div>
-                </div>`;
-            }
-            /* === FIN: CÓDIGO AÑADIDO === */
+    // ESTA ES LA NUEVA ESTRUCTURA, MÁS SENCILLA Y VERTICAL
+    return `
+    <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
+        <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
+        <div class="transaction-card__content">
+            <div class="transaction-card__details">
+                <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">Pendiente desde: ${formattedDate}</div>
+                
+                <!-- Los botones ahora están aquí abajo, con más espacio -->
+                <div class="transaction-card__recurrent-actions" style="margin-top: 12px;">
+                    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
+                        <span class="material-icons" style="font-size: 14px;">skip_next</span>
+                        <span>No añadir</span>
+                    </button>
+                    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
+                        <span class="material-icons" style="font-size: 14px;">check</span>
+                        <span>Añadir Ahora</span>
+                    </button>
+                </div>
+            </div>
+            <div class="transaction-card__figures">
+                <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+            </div>
+        </div>
+    </div>`;
+}
+// ▲▲▲ FIN DEL BLOQUE A REEMPLAZAR ▲▲▲
             if (item.type === 'date-header') {
                 const dateObj = new Date(item.date + 'T12:00:00Z');
                 const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
@@ -4759,13 +4789,14 @@ const renderInicioResumenView = () => {
                         <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
 							<strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
 						<div style="display: flex; align-items: center; gap: 8px;">
-							<button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
-							<span class="material-icons" style="font-size: 14px;">skip_next</span>No añadir
-							</button>
-							<button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
-							<span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
-							</button>
-						</div>
+						<div class="transaction-card__recurrent-actions">
+    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
+        <span class="material-icons" style="font-size: 14px;">skip_next</span>No añadir
+    </button>
+    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
+        <span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
+    </button>
+</div>
                     </div>
                 </div>
                 `;
@@ -4781,7 +4812,12 @@ const renderInicioResumenView = () => {
                             </h3>
                             <span class="material-icons accordion__icon">expand_more</span>
                         </summary>
-                        <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);">${itemsHTML}</div>
+                        <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);"
+						<div class="contenedor-recurrentes-vertical">
+                    ${itemsHTML}
+                </div>
+
+            </div>
                     </details>
                 </div>
             `;
