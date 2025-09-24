@@ -1144,10 +1144,16 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 
             <div class="form-grid" style="grid-template-columns: 40% 1fr; align-items: flex-start;">
                 <div class="form-group">
-                    <label for="movimiento-cantidad" class="form-label">Cantidad</label>
-                    <input type="text" id="movimiento-cantidad" class="form-input input-amount-calculator" inputmode="none" required placeholder="Ej: -2,50" />
-                    <span class="form-error" id="movimiento-cantidad-error"></span>
-                </div>
+    <label for="movimiento-cantidad" class="form-label">Cantidad</label>
+    <div class="form-group-addon">
+        <input type="text" id="movimiento-cantidad" class="form-input" required placeholder="Ej: -2,50" />
+        <!-- Este botón solo se verá en PC -->
+        <button type="button" id="calculator-toggle-btn" class="icon-btn" title="Abrir Calculadora">
+            <span class="material-icons">calculate</span>
+        </button>
+    </div>
+    <span class="form-error" id="movimiento-cantidad-error"></span>
+</div>
                 <div class="form-group">
                     <label for="movimiento-descripcion" class="form-label">Descripción</label>
                     <input type="text" id="movimiento-descripcion" class="form-input" required placeholder="Ej: Compra semanal" />
@@ -1499,6 +1505,7 @@ const getInitialDb = () => ({
     } 
 });
         let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), deselectedAccountTypesFilter = new Set();
+		let calculatorKeyboardHandler = null;
 		let deselectedInvestmentTypesFilter = new Set();
 		let selectedInvestmentTypeFilter = null;
 		let intelligentIndex = new Map();
@@ -1866,7 +1873,7 @@ async function loadCoreData(uid) {
 		const select = (id) => document.getElementById(id);
 		const selectAll = (s) => document.querySelectorAll(s);
 		const selectOne = (s) => document.querySelector(s);
-        
+        const isMobileDevice = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 		const chunkArray = (array, size) => {
 			const chunks = [];
 			for (let i = 0; i < array.length; i += size) {
@@ -2400,24 +2407,41 @@ const navigateTo = async (pageId, isInitial = false) => {
 };
         
         const buildIntelligentIndex = (movementsSource = db.movimientos) => {
-            intelligentIndex.clear(); 
-            if (!movementsSource || movementsSource.length === 0) return;
+    intelligentIndex.clear(); 
+    if (!movementsSource || movementsSource.length === 0) return;
 
-            const sortedMovements = [...movementsSource].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    // Usamos un mapa temporal para construir el índice de forma más eficiente
+    const tempIndex = new Map();
 
-            for (const mov of sortedMovements) {
-                if (mov.tipo === 'movimiento' && mov.descripcion) {
-                    const key = mov.descripcion.trim().toLowerCase();
-                    if (!intelligentIndex.has(key)) {
-                        intelligentIndex.set(key, {
-                            conceptoId: mov.conceptoId,
-                            cuentaId: mov.cuentaId
-                        });
-                    }
-                }
+    // Recorremos los movimientos del más antiguo al más reciente
+    const sortedMovements = [...movementsSource].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+    for (const mov of sortedMovements) {
+        if (mov.tipo === 'movimiento' && mov.descripcion) {
+            const key = mov.descripcion.trim().toLowerCase();
+            if (!tempIndex.has(key)) {
+                // Si es la primera vez que vemos esta descripción, la inicializamos
+                tempIndex.set(key, {
+                    conceptoId: mov.conceptoId,
+                    cuentaId: mov.cuentaId,
+                    count: 1,
+                    lastUsed: new Date(mov.fecha).getTime() // Guardamos la fecha de la primera vez
+                });
+            } else {
+                // Si ya existe, actualizamos sus datos
+                const entry = tempIndex.get(key);
+                entry.conceptoId = mov.conceptoId; // Siempre usamos los datos del más reciente
+                entry.cuentaId = mov.cuentaId;
+                entry.count++; // Incrementamos el contador de frecuencia
+                entry.lastUsed = new Date(mov.fecha).getTime(); // Actualizamos la fecha de último uso
             }
-            console.log(`Índice inteligente actualizado con ${intelligentIndex.size} entradas.`);
-        };
+        }
+    }
+    
+    // Asignamos el mapa temporal ya procesado a nuestra variable global
+    intelligentIndex = tempIndex;
+    console.log(`Índice inteligente MEJORADO con ${intelligentIndex.size} entradas.`);
+};
 		
 		
 		const getVisibleAccounts = () => (db.cuentas || []).filter(c => !!c.offBalance === isOffBalanceMode);
@@ -6086,31 +6110,28 @@ const getDragAfterElement = (container, y) => {
 };
 
 		let suggestionDebounceTimer = null;
-        const applyDescriptionSuggestion = (description, conceptoId, cuentaId) => {
-            const descriptionInput = select('movimiento-descripcion');
-            const conceptoSelect = select('movimiento-concepto');
-            const cuentaSelect = select('movimiento-cuenta');
+        const applyDescriptionSuggestion = (target) => {
+    const { description, conceptoId, cuentaId } = target.dataset;
 
-            if (descriptionInput) descriptionInput.value = description;
-            if (conceptoSelect && conceptoId) {
-                conceptoSelect.value = conceptoId;
-                const parentEl = conceptoSelect.parentElement;
-                if (parentEl) {
-                    parentEl.classList.add('field-highlighted');
-                    setTimeout(() => parentEl.classList.remove('field-highlighted'), 1000);
-                }
-            }
-            if (cuentaSelect && cuentaId) {
-                cuentaSelect.value = cuentaId;
-                const parentEl = cuentaSelect.parentElement;
-                if (parentEl) {
-                    parentEl.classList.add('field-highlighted');
-                    setTimeout(() => parentEl.classList.remove('field-highlighted'), 1000);
-                }
-            }
-            const suggestionsBox = select('description-suggestions');
-            if (suggestionsBox) suggestionsBox.style.display = 'none';
-        };
+    select('movimiento-descripcion').value = toSentenceCase(description);
+    select('movimiento-concepto').value = conceptoId;
+    select('movimiento-cuenta').value = cuentaId;
+    
+    select('description-suggestions').style.display = 'none';
+
+    // Damos feedback visual y movemos el cursor al siguiente paso
+    hapticFeedback('light');
+    [select('movimiento-concepto'), select('movimiento-cuenta')].forEach(el => {
+        const parent = el.closest('.form-group-addon');
+        if(parent) {
+            parent.classList.add('field-highlighted');
+            setTimeout(() => parent.classList.remove('field-highlighted'), 1500);
+        }
+    });
+
+    // ¡La magia final! Movemos el foco al campo de la cantidad.
+    select('movimiento-cantidad').focus();
+};
 
                     const showModal = (id) => {
             const m = select(id);
@@ -6158,80 +6179,82 @@ const getDragAfterElement = (container, y) => {
                 });
             }
         };
-											   
-        let calculatorKeyboardHandler = null;
-
-       // REEMPLAZA TUS FUNCIONES showCalculator y hideCalculator CON ESTAS
-const showCalculator = (targetInput) => {
-    // Busca el modal que está activo en este momento
-    const activeModal = document.querySelector('.modal-overlay--active .modal');
-    if (!activeModal) return; // Si no hay modal activo, no hacer nada
-
-    const modalBody = activeModal.querySelector('.modal__body');
-    const calculatorOverlay = select('calculator-overlay');
-    if (!calculatorOverlay || !modalBody) return;
-
-    // Mostramos la calculadora
-    calculatorOverlay.classList.add('modal-overlay--active');
+		
+// Esta nueva función prepara el campo de cantidad cuando se abre el formulario.
+const initAmountInput = () => {
+    const amountInput = select('movimiento-cantidad');
+    const calculatorToggle = select('calculator-toggle-btn');
+    if (!amountInput || !calculatorToggle) return;
     
+    if (isMobileDevice()) {
+        // MÓVIL: Hacemos que el input no saque el teclado y que al tocarlo, se abra nuestra calculadora.
+        amountInput.setAttribute('inputmode', 'none');
+        calculatorToggle.style.display = 'none'; // Ocultamos el botón del icono en móvil
+        
+        // Usamos un listener de 'click' porque 'focus' puede ser problemático en algunos móviles
+        amountInput.onclick = (e) => {
+            e.preventDefault();
+            showCalculator(amountInput);
+        };
+
+    } else {
+        // ESCRITORIO: Permitimos escribir normalmente y el botón del icono abre la calculadora.
+        amountInput.setAttribute('inputmode', 'decimal');
+        calculatorToggle.style.display = 'inline-flex';
+        amountInput.onclick = null; // Quitamos el listener de móvil por si acaso
+        calculatorToggle.onclick = () => showCalculator(amountInput);
+    }
+};
+
+const showCalculator = (targetInput) => {
+    // ... (el resto de la lógica para mostrar el overlay de la calculadora no cambia)
+    const calculatorOverlay = select('calculator-overlay');
+    if (!calculatorOverlay) return;
+    
+    calculatorOverlay.classList.add('modal-overlay--active');
     calculatorState.isVisible = true;
     calculatorState.targetInput = targetInput;
-    const currentValue = targetInput.value.trim();
-    const parsedValue = parseCurrencyString(currentValue);
-
-    if (!isNaN(parsedValue) && currentValue !== '') {
-        calculatorState.displayValue = String(parsedValue).replace('.', ',');
-    } else {
-        calculatorState.displayValue = '0';
-    }
-    
+    // ... (el resto de la lógica para resetear el estado de la calculadora no cambia)
+    calculatorState.displayValue = '0';
     calculatorState.waitingForNewValue = true;
-    calculatorState.operand1 = null;
-    calculatorState.operator = null;
-    calculatorState.isResultDisplayed = false;
     updateCalculatorDisplay();
 
-    // Scroll automático si es necesario
-    setTimeout(() => {
-        const calculatorEl = select('calculator-ui');
-        const inputRect = targetInput.getBoundingClientRect();
-        const calculatorRect = calculatorEl.getBoundingClientRect();
-        
-        if (inputRect.bottom > calculatorRect.top) {
-            const scrollAmount = inputRect.bottom - calculatorRect.top + 20;
-            modalBody.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+    // ¡LA MAGIA PARA PC!
+    // Si no estamos en un móvil, activamos el control por teclado.
+    if (!isMobileDevice()) {
+        if (calculatorKeyboardHandler) {
+            document.removeEventListener('keydown', calculatorKeyboardHandler);
         }
-    }, 350);
+        
+        calculatorKeyboardHandler = (e) => {
+            if ("0123456789,.+-*/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) {
+                e.preventDefault();
+            }
 
-    // Gestión del teclado
-    if (calculatorKeyboardHandler) document.removeEventListener('keydown', calculatorKeyboardHandler);
-    calculatorKeyboardHandler = (e) => {
-        // ... (el contenido de esta función no cambia)
-        if ("0123456789,.+-*/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) e.preventDefault();
-        if (e.key >= '0' && e.key <= '9') handleCalculatorInput(e.key);
-        else if (e.key === ',' || e.key === '.') handleCalculatorInput('comma');
-        else if (e.key === 'Enter') handleCalculatorInput('done');
-        else if (e.key === 'Backspace') handleCalculatorInput('backspace');
-        else if (e.key === 'Delete') handleCalculatorInput('clear');
-        else if (e.key === 'Escape') hideCalculator();
-        else if (e.key === '+') handleCalculatorInput('add');
-        else if (e.key === '-') handleCalculatorInput('subtract');
-        else if (e.key === '*' || e.key === 'x') handleCalculatorInput('multiply');
-        else if (e.key === '/') handleCalculatorInput('divide');
-    };
-    document.addEventListener('keydown', calculatorKeyboardHandler);
+            if (e.key >= '0' && e.key <= '9') handleCalculatorInput(e.key);
+            else if (e.key === ',' || e.key === '.') handleCalculatorInput('comma');
+            else if (e.key === 'Enter') handleCalculatorInput('done');
+            else if (e.key === 'Backspace') handleCalculatorInput('backspace');
+            else if (e.key === 'Delete') handleCalculatorInput('clear');
+            else if (e.key === 'Escape') hideCalculator();
+            else if (e.key === '+') handleCalculatorInput('add');
+            else if (e.key === '-') handleCalculatorInput('subtract');
+            else if (e.key === '*' || e.key.toLowerCase() === 'x') handleCalculatorInput('multiply');
+            else if (e.key === '/') handleCalculatorInput('divide');
+        };
+
+        document.addEventListener('keydown', calculatorKeyboardHandler);
+    }
 };
 
 const hideCalculator = () => {
     const calculatorOverlay = select('calculator-overlay');
-    if (!calculatorOverlay) return;
-
-    calculatorOverlay.classList.remove('modal-overlay--active');
-    
-    calculatorState.targetInput = null;
+    if (calculatorOverlay) {
+        calculatorOverlay.classList.remove('modal-overlay--active');
+    }
     calculatorState.isVisible = false;
-    calculatorState.isResultDisplayed = false;
     
+    // MUY IMPORTANTE: Siempre limpiamos el listener del teclado para que no interfiera después.
     if (calculatorKeyboardHandler) {
         document.removeEventListener('keydown', calculatorKeyboardHandler);
         calculatorKeyboardHandler = null;
@@ -6250,62 +6273,72 @@ const hideCalculator = () => {
 	      
 const handleCalculatorInput = (key) => {
     hapticFeedback('light');
-    let { displayValue, waitingForNewValue, operand1, operator } = calculatorState;
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed } = calculatorState;
     
+    // Si se acaba de mostrar un resultado y el usuario introduce un número (no un operador), empezamos de cero.
+    if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
+        displayValue = '0';
+        isResultDisplayed = false;
+    }
+
     const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
 
     if (isOperator) {
         if (operand1 !== null && operator !== null && !waitingForNewValue) {
             calculate();
-            displayValue = calculatorState.displayValue; // Actualizamos el display con el resultado parcial
+            displayValue = calculatorState.displayValue; 
         }
-        // Usamos parseFloat para asegurarnos de que el operando es un número, no un string con comas.
         operand1 = parseFloat(displayValue.replace(',', '.'));
         operator = key;
         waitingForNewValue = true;
+        isResultDisplayed = false;
     } else {
         switch(key) {
             case 'done':
                 hapticFeedback('medium');
-                // Si hay una operación pendiente, la calculamos primero para mostrar el resultado final.
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
                     displayValue = calculatorState.displayValue;
                 }
                 
                 if (calculatorState.targetInput) {
-                    // Convertimos el valor final (con coma) a un número estándar.
                     const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
-                    // Formateamos para que siempre tenga 2 decimales y sea compatible con parseCurrencyString.
                     calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
                         useGrouping: false, 
                         minimumFractionDigits: 2, 
                         maximumFractionDigits: 2 
                     });
-                    // Disparamos un evento para que las validaciones y otros listeners reaccionen al cambio.
                     calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
                 hideCalculator();
-                return; // Salimos de la función aquí.
+                return;
 
             case 'comma':
-                // Reemplazamos el punto por la coma para la lógica interna.
                 if (waitingForNewValue) {
                     displayValue = '0,';
                     waitingForNewValue = false;
                 } else if (!displayValue.includes(',')) {
                     displayValue += ',';
                 }
+                isResultDisplayed = false;
                 break;
             
-            // Los casos 'clear', 'backspace', 'sign' y los dígitos se mantienen, pero adaptados
-            // para trabajar siempre con la coma como separador decimal en el 'displayValue'.
             case 'clear': 
-                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; break;
+                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; break;
             case 'backspace': 
-                displayValue = displayValue.slice(0, -1) || '0'; if(displayValue === '0') waitingForNewValue = true; break;
+                if (displayValue.length > 1) {
+                    displayValue = displayValue.slice(0, -1);
+                } else {
+                    displayValue = '0';
+                    waitingForNewValue = true;
+                }
+                isResultDisplayed = false;
+                break;
             case 'sign': 
-                if (displayValue !== '0') { displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; } break;
+                if (displayValue !== '0') { 
+                    displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
+                }
+                break;
             default: // Dígitos
                 if (waitingForNewValue || displayValue === '0') {
                     displayValue = key;
@@ -6313,6 +6346,7 @@ const handleCalculatorInput = (key) => {
                 } else {
                     displayValue += key;
                 }
+                isResultDisplayed = false;
                 break;
         }
     }
@@ -6321,7 +6355,8 @@ const handleCalculatorInput = (key) => {
     calculatorState.waitingForNewValue = waitingForNewValue;
     calculatorState.operand1 = operand1;
     calculatorState.operator = operator;
-    updateCalculatorDisplay(); // Llama a la función que refresca la pantalla
+    calculatorState.isResultDisplayed = isResultDisplayed;
+    updateCalculatorDisplay();
 };
 
 // Y también la función calculate() para que use comas correctamente
@@ -6338,17 +6373,22 @@ const calculate = () => {
         case 'divide':
             if (val2 === 0) {
                 showToast("No se puede dividir por cero.", "danger");
-                result = 0; // O manejar como 'Error'
+                result = 0;
             } else {
                 result = val1 / val2;
             }
             break;
     }
-    // El resultado se guarda como string con coma para ser consistente con el display.
-    calculatorState.displayValue = String(result).replace('.', ',');
+
+    // El resultado se formatea a un string con coma y un máximo de decimales para el display.
+    // toPrecision(12) evita errores de coma flotante como 0.1 + 0.2 = 0.30000000000000004
+    const resultString = parseFloat(result.toPrecision(12)).toString().replace('.', ',');
+    
+    calculatorState.displayValue = resultString;
     calculatorState.operand1 = null;
     calculatorState.operator = null;
     calculatorState.waitingForNewValue = true;
+    calculatorState.isResultDisplayed = true; // Marcamos que esto es un resultado final
 };
 		 const updateDoneButtonText = () => {
             const doneButton = select('calculator-btn-done');
@@ -6358,53 +6398,15 @@ const calculate = () => {
         };
         
 
-                const updateCalculatorDisplay = () => {
-            const display = select('calculator-display');
-            if (display) { 
-                let formattedDisplayValue = calculatorState.displayValue;
-                if (formattedDisplayValue === '0.') {
-                    formattedDisplayValue = '0,';
-                } else if (formattedDisplayValue.endsWith('.')) {
-                    formattedDisplayValue = formattedDisplayValue.replace('.', ',');
-                } else {
-                    const numValue = parseFloat(formattedDisplayValue);
-                    if (!isNaN(numValue)) {
-                        if (calculatorState.isResultDisplayed) {
-                            formattedDisplayValue = numValue.toLocaleString('es-ES', { 
-                                useGrouping: false,
-                                minimumFractionDigits: 2, 
-                                maximumFractionDigits: 2 
-                            });
-                        } else {
-                            const parts = formattedDisplayValue.split('.');
-                            const integerPart = parts[0];
-                            const decimalPart = parts[1] || '';
-
-                            formattedDisplayValue = numValue.toLocaleString('es-ES', { 
-                                useGrouping: false,
-                                minimumFractionDigits: decimalPart.length,
-                                maximumFractionDigits: decimalPart.length
-                            });
-                            
-                            if (formattedDisplayValue.includes(',') && !formattedDisplayValue.endsWith(',') && formattedDisplayValue.split(',')[1].length < decimalPart.length) {
-                                formattedDisplayValue += '0'.repeat(decimalPart.length - formattedDisplayValue.split(',')[1].length);
-                            } else if (!formattedDisplayValue.includes(',') && decimalPart.length > 0) {
-                                formattedDisplayValue += ',' + '0'.repeat(decimalPart.length);
-                            }
-                        }
-                    }
-                }
-                display.textContent = formattedDisplayValue;
-            }
-            if (calculatorState.targetInput) {
-                const numValue = parseFloat(calculatorState.displayValue) || 0;
-                calculatorState.targetInput.value = numValue.toLocaleString('es-ES', { 
-                    useGrouping: false,
-                    minimumFractionDigits: 2, 
-                    maximumFractionDigits: 2 
-                });
-            }
-        };
+        const updateCalculatorDisplay = () => {
+    const display = select('calculator-display');
+    if (display) {
+        // Esta función ahora es muy "tonta". Simplemente muestra lo que hay en
+        // calculatorState.displayValue, sin intentar formatearlo o cambiarlo.
+        // ¡El camarero obediente!
+        display.textContent = calculatorState.displayValue;
+    }
+};
         const showGenericModal=(title,html)=>{const titleEl = select('generic-modal-title'); if (titleEl) titleEl.textContent=title; const bodyEl = select('generic-modal-body'); if(bodyEl) bodyEl.innerHTML=html;showModal('generic-modal');};
 		const showDrillDownModal = (title, movements) => {
     // Ordenamos los movimientos por fecha para que se muestren cronológicamente
@@ -6612,6 +6614,7 @@ const setMovimientoFormType = (type) => {
             select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
             
             showModal('movimiento-modal');
+			initAmountInput();
         };
         
         
@@ -8025,7 +8028,68 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
 // === FIN: FUNCIÓN DE GUARDADO OPTIMIZADA                    ===
 // ============================================================
 
+// =================================================================
+// === INICIO: FUNCIÓN FALTANTE PARA GUARDAR RECURRENTES (SOLUCIÓN) ===
+// =================================================================
+const handleSaveRecurrent = async (form, btn) => {
+    clearAllErrors(form.id);
+    // Reutilizamos la misma validación, ya que los campos básicos son los mismos.
+    if (!validateMovementForm()) {
+        hapticFeedback('error');
+        showToast('Por favor, revisa los campos marcados en rojo.', 'warning');
+        return;
+    }
 
+    setButtonLoading(btn, true);
+
+    try {
+        const id = select('movimiento-id').value;
+        const cantidadValue = parseCurrencyString(select('movimiento-cantidad').value);
+        const tipo = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+        let cantidadFinal = Math.round(cantidadValue * 100);
+        if (tipo === 'traspaso') {
+            cantidadFinal = Math.abs(cantidadFinal);
+        }
+
+        const dataToSave = {
+            id: id,
+            cantidad: cantidadFinal,
+            descripcion: select('movimiento-descripcion').value.trim(),
+            tipo: tipo,
+            // Campos específicos de Movimiento/Traspaso
+            cuentaId: select('movimiento-cuenta').value,
+            conceptoId: select('movimiento-concepto').value,
+            cuentaOrigenId: select('movimiento-cuenta-origen').value,
+            cuentaDestinoId: select('movimiento-cuenta-destino').value,
+            // Campos específicos de Recurrente
+            frequency: select('recurrent-frequency').value,
+            nextDate: select('recurrent-next-date').value,
+            endDate: select('recurrent-end-date').value || null // Guardamos null si está vacío
+        };
+
+        // Guardamos los datos en la colección 'recurrentes'
+        await saveDoc('recurrentes', id, dataToSave);
+
+        setButtonLoading(btn, false);
+        hideModal('movimiento-modal');
+        hapticFeedback('success');
+        showToast('Operación recurrente actualizada correctamente.');
+
+        // Refrescamos la vista de planificación para ver los cambios al instante
+        const activePage = document.querySelector('.view--active');
+        if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+            renderPlanificacionPage();
+        }
+
+    } catch (error) {
+        console.error("Error al guardar la operación recurrente:", error);
+        showToast("No se pudo actualizar la operación recurrente.", "danger");
+        setButtonLoading(btn, false);
+    }
+};
+// =================================================================
+// === FIN: FUNCIÓN FALTANTE                                     ===
+// =================================================================
         const handleAddConcept = async (btn) => { 
             const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
             if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
@@ -8971,7 +9035,7 @@ const handleDescriptionInput = () => {
         const query = descriptionInput.value.trim().toLowerCase();
         suggestionsBox.innerHTML = '';
 
-        if (query.length < 3) {
+        if (query.length < 2) { // Empezamos a buscar a partir de 2 letras
             suggestionsBox.style.display = 'none';
             return;
         }
@@ -8979,38 +9043,39 @@ const handleDescriptionInput = () => {
         const suggestions = [];
         for (const [desc, data] of intelligentIndex.entries()) {
             if (desc.includes(query)) {
-                suggestions.push({
-                    description: desc,
-                    conceptoId: data.conceptoId,
-                    cuentaId: data.cuentaId
-                });
+                suggestions.push({ description: desc, ...data });
             }
         }
 
+        // Algoritmo de puntuación: 60% Frecuencia, 40% Recencia
+        const now = Date.now();
+        suggestions.sort((a, b) => {
+            const recencyA = Math.exp((a.lastUsed - now) / (1000 * 3600 * 24 * 30)); // Penaliza la antigüedad
+            const recencyB = Math.exp((b.lastUsed - now) / (1000 * 3600 * 24 * 30));
+            const scoreA = (a.count * 0.6) + (recencyA * 0.4);
+            const scoreB = (b.count * 0.6) + (recencyB * 0.4);
+            return scoreB - scoreA;
+        });
+
         if (suggestions.length > 0) {
-            suggestions.sort((a, b) => a.description.localeCompare(b.description));
-            let html = '';
-            suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).forEach(s => {
-                const concepto = db.conceptos.find(c => c.id === s.conceptoId);
-                const cuenta = db.cuentas.find(c => c.id === s.cuentaId);
-                html += `
+            suggestionsBox.innerHTML = suggestions.slice(0, 5).map(s => { // Mostramos hasta 5 sugerencias
+                const concepto = db.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
+                const cuenta = db.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
+                return `
                     <div class="suggestion-item" 
-                        data-description="${escapeHTML(s.description)}" 
-                        data-concepto-id="${s.conceptoId}" 
-                        data-cuenta-id="${s.cuentaId}"
-                        tabindex="0"
-                    >
-                        <p>${escapeHTML(s.description)}</p>
-                        <small>${escapeHTML((concepto && concepto.nombre) || 'S/C')} • ${escapeHTML((cuenta && cuenta.nombre) || 'S/C')}</small>
-                    </div>
-                `;
-            });
-            suggestionsBox.innerHTML = html;
+                         data-description="${escapeHTML(s.description)}" 
+                         data-concepto-id="${s.conceptoId}" 
+                         data-cuenta-id="${s.cuentaId}"
+                         tabindex="0">
+                        <p>${escapeHTML(toSentenceCase(s.description))}</p>
+                        <small>${escapeHTML(concepto)} • ${escapeHTML(cuenta)}</small>
+                    </div>`;
+            }).join('');
             suggestionsBox.style.display = 'block';
         } else {
             suggestionsBox.style.display = 'none';
         }
-    }, 300);
+    }, 250); // Un pequeño retardo para no buscar en cada letra instantáneamente
 };
             
 </script>
