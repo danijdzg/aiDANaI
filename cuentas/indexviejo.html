@@ -30,8 +30,6 @@
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0"></script>
 	<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
 	
@@ -1047,10 +1045,6 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
                 <span class="material-icons">edit_calendar</span>
                 <span class="bottom-nav__label">Planificación</span>
             </button>
-			<button data-action="navigate" data-page="informes-page" class="bottom-nav__item">
-                <span class="material-icons">analytics</span>
-                <span class="bottom-nav__label">Informes</span>
-            </button>
 			<button data-action="navigate" data-page="configuracion-page" class="bottom-nav__item">
                 <span class="material-icons">settings</span>
                 <span class="bottom-nav__label">Ajustes</span>
@@ -1083,9 +1077,6 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 
             <section id="planificacion-page" class="view">
                 <!-- El contenido se renderizará aquí vía JS (renderPlanificacionPage) -->
-            </section>
-			 <section id="informes-page" class="view">
-                <!-- El contenido de los informes se renderizará aquí vía JS -->
             </section>
             
             <section id="configuracion-page" class="view">
@@ -1482,7 +1473,6 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 PANEL: 'panel-page',
 DIARIO: 'diario-page',
 PLANIFICACION: 'planificacion-page',
-INFORMES: 'informes-page',
 CONFIGURACION: 'configuracion-page',
 };
 		
@@ -1498,16 +1488,15 @@ CONFIGURACION: 'configuracion-page',
 // CÓDIGO CORRECTO Y ÚNICO QUE DEBE QUEDAR EN TU ARCHIVO
 // PEGA ESTE BLOQUE ÚNICO Y CORRECTO EN SU LUGAR
 	const AVAILABLE_WIDGETS = {
-        // EL NUEVO Y ÚNICO WIDGET CON FILTROS
-		'super-centro-operaciones': { title: 'Centro de Operaciones', description: 'Visión completa con filtros, KPIs y análisis de conceptos.', icon: 'query_stats' },
-
-        // EL RESTO DE WIDGETS SE QUEDAN COMO ESTABAN
 		'action-center': { title: 'Centro de Acciones', description: 'Alertas y tareas pendientes.', icon: 'notifications_active' },
 		'emergency-fund': { title: 'Colchón de Emergencia', description: 'Calcula cuántos meses de gastos puedes cubrir con tu dinero líquido.', icon: 'shield' },
-		'fi-progress': { title: 'Independencia Financiera', description: 'Mide tu avance hacia la independencia financiera.', icon: 'flag' },
+		'fi-progress': { title: 'Independencia Financiera', description: 'Mide tu avance hacia la independencia financiera (Patrimonio / 30x Gasto Anual).', icon: 'flag' },
+		'kpi-summary-expanded': { title: 'Centro de Operaciones (KPIs)', description: 'Visión completa con los KPIs más importantes.', icon: 'query_stats' },
 		'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto.', icon: 'show_chart' },
+		'concept-totals': { title: 'Análisis de Conceptos', description: 'Gráfico y lista de gastos/ingresos por concepto.', icon: 'bar_chart' },
 		'patrimonio-structure': { title: 'Patrimonio', description: 'Gráfico interactivo y listado de todas tus cuentas y su peso.', icon: 'account_balance' },
 		'informe-personalizado': { title: 'Mi Informe Personalizado', description: 'Tu informe a medida creado desde el configurador.', icon: 'insights' },
+		'kpi-summary': { title: 'Resumen de Flujo de Caja', description: 'Ingresos, gastos y saldo neto del periodo.', icon: 'summarize' }
 	};
 const DEFAULT_DASHBOARD_WIDGETS = ['kpi-summary-expanded', 'net-worth-trend', 'patrimonio-structure', 'concept-totals', 'action-center'];	
 // ▼▼▼ REEMPLAZAR POR COMPLETO CON LA VERSIÓN FINAL Y MATEMÁTICAMENTE CORRECTA ▼▼▼
@@ -1994,131 +1983,6 @@ async function loadCoreData(uid) {
             if (!dateString) return null;
             return new Date(dateString + 'T12:00:00Z');
         };
-		const generateReportFilterControls = (reportId, defaultPeriod = 'año-actual') => {
-    return `
-        <div class="report-filters" data-report-id="${reportId}" style="margin-bottom: var(--sp-4); padding: var(--sp-3); background-color: var(--c-surface-variant); border-radius: var(--border-radius-md);">
-            <div class="form-group" style="margin-bottom: var(--sp-2);">
-                <label for="filter-periodo-${reportId}" class="form-label" style="margin-bottom: var(--sp-1);">Seleccionar Periodo</label>
-                <select id="filter-periodo-${reportId}" class="form-select report-period-selector">
-                    <option value="mes-actual" ${defaultPeriod === 'mes-actual' ? 'selected' : ''}>Este Mes</option>
-                    <option value="año-actual" ${defaultPeriod === 'año-actual' ? 'selected' : ''}>Este Año</option>
-                    <option value="ultimo-año" ${defaultPeriod === 'ultimo-año' ? 'selected' : ''}>Últimos 12 Meses</option>
-                    <option value="custom">Personalizado</option>
-                </select>
-            </div>
-            <div id="custom-date-filters-${reportId}" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: var(--sp-2);">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="filter-fecha-inicio-${reportId}" class="form-label" style="font-size: var(--fs-xs);">Desde</label>
-                    <input type="date" id="filter-fecha-inicio-${reportId}" class="form-input">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="filter-fecha-fin-${reportId}" class="form-label" style="font-size: var(--fs-xs);">Hasta</label>
-                    <input type="date" id="filter-fecha-fin-${reportId}" class="form-input">
-                </div>
-            </div>
-        </div>`;
-};
-
-	/**
- * Obtiene las fechas de inicio y fin basadas en un selector de periodo de informe.
- * @param {string} reportId - El ID del informe.
- * @returns {{sDate: Date, eDate: Date}} Un objeto con las fechas de inicio y fin.
- */
-const getDatesFromReportFilter = (reportId) => {
-    const periodSelector = select(`filter-periodo-${reportId}`);
-    if (!periodSelector) return { sDate: null, eDate: null };
-
-    const p = periodSelector.value;
-    let sDate, eDate;
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-
-    switch (p) {
-        case 'mes-actual':
-            sDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-            break;
-        case 'año-actual':
-            sDate = new Date(now.getFullYear(), 0, 1);
-            eDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-            break;
-        case 'ultimo-año':
-            eDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            sDate = new Date(now);
-            sDate.setFullYear(sDate.getFullYear() - 1);
-            sDate.setDate(sDate.getDate() + 1);
-            sDate.setHours(0,0,0,0);
-            break;
-        case 'custom':
-            const startInput = select(`filter-fecha-inicio-${reportId}`);
-            const endInput = select(`filter-fecha-fin-${reportId}`);
-            sDate = startInput?.value ? parseDateStringAsUTC(startInput.value) : null;
-            eDate = endInput?.value ? parseDateStringAsUTC(endInput.value) : null;
-            if (eDate) eDate.setUTCHours(23, 59, 59, 999);
-            break;
-    }
-    return { sDate, eDate };
-};
-
-/**
- * Calcula el impacto real de un movimiento en el flujo de caja de una contabilidad.
- * @param {object} mov - El objeto de movimiento.
- * @param {Set<string>} visibleAccountIds - Un Set con los IDs de las cuentas visibles.
- * @returns {number} La cantidad en céntimos del impacto del movimiento.
- */
-const calculateMovementAmount = (mov, visibleAccountIds) => {
-    let amount = 0;
-    if (mov.tipo === 'movimiento') {
-        amount = mov.cantidad;
-    } else if (mov.tipo === 'traspaso') {
-        const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
-        const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-        if (origenVisible && !destinoVisible) amount = -mov.cantidad;
-        else if (!origenVisible && destinoVisible) amount = mov.cantidad;
-    }
-    return amount;
-};
-
-/**
- * Función central para calcular totales de ingresos/gastos/neto para un conjunto de movimientos.
- * @param {Array<object>} movs - Array de movimientos a procesar.
- * @param {Set<string>} visibleAccountIds - Set de IDs de cuentas visibles.
- * @returns {{ingresos: number, gastos: number, saldoNeto: number}}
- */
-const calculateTotals = (movs, visibleAccountIds) => {
-    return movs.reduce((acc, mov) => {
-        const amount = calculateMovementAmount(mov, visibleAccountIds);
-        if (amount > 0) acc.ingresos += amount;
-        else acc.gastos += amount;
-        acc.saldoNeto += amount;
-        return acc;
-    }, { ingresos: 0, gastos: 0, saldoNeto: 0 });
-};
-
-// --- ACTUALIZAR EL EVENT LISTENER ---
-// Añadir un nuevo listener para el evento 'change' en los selectores de los informes
-document.body.addEventListener('change', e => {
-    if (e.target.classList.contains('report-period-selector')) {
-        const reportId = e.target.closest('.report-filters').dataset.reportId;
-        const customFilters = select(`custom-date-filters-${reportId}`);
-        if (customFilters) customFilters.classList.toggle('hidden', e.target.value !== 'custom');
-        
-        // Si no es personalizado, se regenera el informe inmediatamente
-        if (e.target.value !== 'custom') {
-            renderInformeDetallado(reportId);
-        }
-    }
-    // Añadir un listener para los inputs de fecha personalizados
-    if (e.target.type === 'date' && e.target.id.startsWith('filter-fecha-')) {
-        const reportId = e.target.closest('.report-filters').dataset.reportId;
-        const startDate = select(`filter-fecha-inicio-${reportId}`).value;
-        const endDate = select(`filter-fecha-fin-${reportId}`).value;
-        if(startDate && endDate) {
-             renderInformeDetallado(reportId);
-        }
-    }
-});
-
 
         const generateId = () => fbDb.collection('users').doc().id;
         const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -2441,19 +2305,13 @@ const navigateTo = async (pageId, isInitial = false) => {
         [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
         [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
         [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-		[PAGE_IDS.INFORMES]: { title: 'Informes', render: renderInformesPage, actions: standardActions },
-		[PAGE_IDS.CONFIGURACION]: { title: 'Ajustes', render: loadConfig, actions: standardActions },
+        [PAGE_IDS.CONFIGURACION]: { title: 'Ajustes', render: loadConfig, actions: standardActions },
     };
     
     if (pageRenderers[pageId]) { 
         if (leftEl) {
     // Construimos la parte base del HTML que siempre está presente
     let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}">Cont ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-		if (pageId === PAGE_IDS.PANEL) {
-    leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;">
-                        <span class="material-icons">dashboard_customize</span>
-                     </button>`;
-}
     
     // Si la página es el Diario, añadimos el botón de cambiar vista justo después del título
     if (pageId === PAGE_IDS.DIARIO) {
@@ -2556,14 +2414,26 @@ const navigateTo = async (pageId, isInitial = false) => {
 };
 		
         
+// REEMPLAZA tu función getFilteredMovements completa por esta:
 const getFilteredMovements = async (forComparison = false) => {
-    // 1. OBTENER FECHAS DEL FILTRO (esto no cambia)
+    // YA NO CONSULTAMOS FIRESTORE. Usamos la caché en memoria que siempre está actualizada.
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+
+    // Filtra los movimientos de la caché para que solo incluyan los de las cuentas visibles
+    const allVisibleMovements = recentMovementsCache.filter(mov => {
+        if (mov.tipo === 'traspaso') {
+            return visibleAccountIds.has(mov.cuentaOrigenId) || visibleAccountIds.has(mov.cuentaDestinoId);
+        }
+        return visibleAccountIds.has(mov.cuentaId);
+    });
+
     const filterPeriodo = select('filter-periodo');
     const p = filterPeriodo ? filterPeriodo.value : 'mes-actual';
     let sDate, eDate, prevSDate, prevEDate;
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
+    // El resto de la lógica de filtrado por fechas no cambia, ya que opera sobre el array.
     switch (p) {
         case 'mes-actual':
             sDate = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -2583,45 +2453,24 @@ const getFilteredMovements = async (forComparison = false) => {
             sDate = filterFechaInicio?.value ? parseDateStringAsUTC(filterFechaInicio.value) : null;
             eDate = filterFechaFin?.value ? parseDateStringAsUTC(filterFechaFin.value) : null;
             if(eDate) eDate.setUTCHours(23, 59, 59, 999);
-            // Para el modo 'custom', no calculamos periodo previo.
-            prevSDate = null; prevEDate = null; 
+            prevSDate = null; prevEDate = null;
             break;
         default:
             return { current: [], previous: [], label: '' };
     }
 
-    if (!sDate || !eDate) return { current: [], previous: [], label: '' };
-
-    // 2. ¡LA MAGIA! CONSULTAR A LA BASE DE DATOS DIRECTAMENTE
-    const fetchMovementsForRange = async (start, end) => {
+    const filterByDate = (movs, start, end) => {
         if (!start || !end) return [];
-
-        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-            .where('fecha', '>=', start.toISOString())
-            .where('fecha', '<=', end.toISOString())
-            .get();
-        return snapshot.docs.map(doc => doc.data());
+        return movs.filter(m => {
+            const movDate = new Date(m.fecha);
+            return movDate >= start && movDate <= end;
+        });
     };
 
-    // 3. OBTENER Y FILTRAR LOS MOVIMIENTOS
-    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-    
-    // Función interna para filtrar por contabilidad (A o B)
-    const filterByLedger = (movs) => movs.filter(m => {
-        if (m.tipo === 'traspaso') {
-            return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
-        }
-        return visibleAccountIds.has(m.cuentaId);
-    });
-
-    const currentMovsRaw = await fetchMovementsForRange(sDate, eDate);
-    const currentMovs = filterByLedger(currentMovsRaw);
-
+    const currentMovs = filterByDate(allVisibleMovements, sDate, eDate);
     if (!forComparison) return { current: currentMovs, previous: [], label: '' };
     
-    const prevMovsRaw = await fetchMovementsForRange(prevSDate, prevEDate);
-    const prevMovs = filterByLedger(prevMovsRaw);
-
+    const prevMovs = filterByDate(allVisibleMovements, prevSDate, prevEDate);
     const comparisonLabel = p === 'mes-actual' ? 'vs mes ant.' : (p === 'año-actual' ? 'vs año ant.' : '');
     
     return { current: currentMovs, previous: prevMovs, label: comparisonLabel };
@@ -3323,70 +3172,72 @@ const renderInformesPage = () => {
     const container = select(PAGE_IDS.INFORMES);
     if (!container) return;
 
-    // Limpia gráficos anteriores si la página se recarga
     if (informeActivoChart) {
         informeActivoChart.destroy();
         informeActivoChart = null;
     }
-    if (informesChart) {
+     if (informesChart) {
         informesChart.destroy();
         informesChart = null;
     }
 
     const informesDisponibles = {
-        'resumen_ejecutivo': { title: 'Resumen Ejecutivo', icon: 'insights' },
-        'flujo_caja': { title: 'Análisis de Flujo de Caja (12 Meses)', icon: 'swap_horiz' },
-        'asignacion_activos': { title: 'Asignación de Activos', icon: 'pie_chart' },
-        'crecimiento_patrimonial': { title: 'Crecimiento Patrimonial (Último Año)', icon: 'waterfall_chart' },
-        'rendimiento_inversiones': { title: 'Scorecard de Inversiones', icon: 'military_tech' }
+        'resumen_ejecutivo': { title: 'Resumen Ejecutivo (Dashboard)', icon: 'insights' },
+        'flujo_caja': { title: 'Análisis de Flujo de Caja', icon: 'swap_horiz' },
+        'asignacion_activos': { title: 'Asignación de Activos y Rebalanceo', icon: 'pie_chart' },
+        'crecimiento_patrimonial': { title: 'Análisis de Crecimiento Patrimonial', icon: 'waterfall_chart' },
+        'rendimiento_inversiones': { title: 'Scorecard de Rendimiento de Inversiones', icon: 'military_tech' }
     };
 
-    // === INICIO DE LA MODIFICACIÓN ===
-    // 1. Definimos qué informes llevarán filtros.
-    const reportsWithFilters = ['resumen_ejecutivo', 'flujo_caja'];
-    // === FIN DE LA MODIFICACIÓN ===
-
     let informesHtml = '<div class="accordion-wrapper">';
-    informesHtml += `<h3 style="margin-bottom: var(--sp-2); padding-left: var(--sp-2);">Informes Predefinidos</h3>`;
+
+    const informeGuardado = db.config?.savedReports?.main;
+    const tituloInforme = informeGuardado?.title || "Mi Informe Personalizado";
+    informesHtml += `
+        <details class="accordion informe-acordeon" id="acordeon-personalizado" open>
+            <summary>
+                <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-primary); flex-grow: 1;">
+                    <span class="material-icons" style="margin-right: 12px;">insights</span>
+                    <span id="informe-widget-title">${escapeHTML(tituloInforme)}</span>
+                </h3>
+                <button data-action="show-informe-builder" class="btn btn--secondary" style="margin-right: 16px;">
+                    <span class="material-icons" style="font-size: 16px;">edit</span>
+                    <span>Configurar</span>
+                </button>
+                <span class="material-icons accordion__icon">expand_more</span>
+            </summary>
+            <div class="accordion__content" id="informe-widget-content"></div>
+        </details>
+    `;
+
+    informesHtml += `<h3 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2); padding-left: var(--sp-2);">Informes Predefinidos</h3>`;
 
     for (const [id, data] of Object.entries(informesDisponibles)) {
-        
-        // === INICIO DE LA MODIFICACIÓN ===
-        // 2. Generamos los filtros SÓLO si el ID del informe está en nuestra lista.
-        let filtersHtml = ''; // Por defecto, no hay filtros.
-        if (reportsWithFilters.includes(id)) {
-            const defaultPeriod = (id === 'flujo_caja') ? 'ultimo-año' : 'año-actual';
-            filtersHtml = generateReportFilterControls(id, defaultPeriod);
-        }
-        // === FIN DE LA MODIFICACIÓN ===
-
+        // NOTA: Se ha eliminado `data-action` del <summary>. Ahora es solo un disparador nativo.
         informesHtml += `
             <details class="accordion informe-acordeon" id="acordeon-${id}">
                 <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface); flex-grow: 1;">
-                        <span class="material-icons" style="margin-right: 12px;">${data.icon}</span>
-                        <span>${data.title}</span>
-                    </h3>
-                    <button class="btn btn--secondary" data-action="export-pdf" data-report-id="${id}" style="padding: 6px 12px; font-size: 0.8rem; margin-right: 16px;">
-                        <span class="material-icons" style="font-size: 16px;">picture_as_pdf</span>
-                        <span>Exportar</span>
-                    </button>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons" style="margin-right: 12px;">${data.icon}</span>${data.title}</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
-                <div class="accordion__content" id="informe-container-${id}">
-                    <!-- La variable 'filtersHtml' contendrá los filtros o estará vacía -->
-                    ${filtersHtml} 
-                    
-                    <div id="informe-content-${id}">
-                         <p class="form-label" style="text-align:center; padding: var(--sp-4) 0;">Abre para generar el informe.</p>
-                    </div>
-                </div>
+                <div class="accordion__content" id="informe-container-${id}"></div>
             </details>
         `;
     }
     informesHtml += '</div>';
 
     container.innerHTML = informesHtml;
+
+    setTimeout(() => {
+        if(informeGuardado) {
+            renderInformeWidgetContent();
+        } else {
+             select('informe-widget-content').innerHTML = `
+                <div class="empty-state" style="background:transparent; border:none; padding: var(--sp-4) 0;">
+                    <p>Aún no has configurado tu informe. Haz clic en "Configurar" para empezar.</p>
+                </div>`;
+        }
+    }, 50);
 };
         
         const renderVirtualListItem = (item) => {
@@ -4122,15 +3973,72 @@ const renderPatrimonioPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // Ya no necesita el HTML de los filtros. Solo el contenedor para los widgets.
+    // Limpia gráficos anteriores si existen
+    if (conceptosChart) {
+        conceptosChart.destroy();
+        conceptosChart = null;
+    }
+
+    // El HTML de la página ha sido reestructurado según tus indicaciones
     container.innerHTML = `
-        <div id="resumen-content-container">
-            <!-- El contenido (los widgets) se renderizará aquí vía JS -->
+        <div class="card card--no-bg" id="dashboard-filters-widget">
+            <div class="accordion-wrapper">
+                <details class="accordion">
+                    <!-- LA MAGIA ESTÁ EN EL <SUMMARY> -->
+                    <summary>
+                        <!-- Título a la izquierda -->
+                        <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);">
+                            <span class="material-icons">filter_list</span>
+                            Filtros del Panel
+                        </h3>
+
+                        <!-- Botón destacado a la derecha, ANTES del icono de desplegar -->
+                        <button data-action="configure-dashboard" class="btn btn--secondary" title="Personalizar qué se ve en el Panel" style="margin-left: auto; margin-right: 16px;">
+                            <span class="material-icons" style="font-size: 1.2em;">dashboard_customize</span>
+                            <span>Personalizar</span>
+                        </button>
+                        
+                        <!-- Icono de desplegar al final -->
+                        <span class="material-icons accordion__icon">expand_more</span>
+                    </summary>
+
+                    <!-- El contenido del desplegable se mantiene igual -->
+                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                        <div class="form-group">
+                            <label for="filter-periodo" class="form-label">Periodo</label>
+                            <select id="filter-periodo" class="form-select">
+                                <option value="mes-actual">Este Mes</option>
+                                <option value="año-actual" selected>Este Año</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                        </div>
+                        <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr;">
+                            <div class="form-group">
+                                <label for="filter-fecha-inicio" class="form-label">Desde</label>
+                                <input type="date" id="filter-fecha-inicio" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="filter-fecha-fin" class="form-label">Hasta</label>
+                                <input type="date" id="filter-fecha-fin" class="form-input">
+                            </div>
+                        </div>
+                        <button data-action="apply-filters" class="btn btn--primary btn--full" style="margin-top: var(--sp-4);">Aplicar Filtros</button>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <!-- El resto del contenido del panel (widgets) -->
+        <div id="resumen-content-container" style="margin-top: var(--sp-4);">
+            <!-- El contenido se renderizará aquí vía JS -->
         </div>
     `;
     
-    // El resto de la función se mantiene para que todo siga funcionando
+    // El resto de la función se mantiene igual para que todo siga funcionando
     populateAllDropdowns();
+    
+    const filterPeriodo = select('filter-periodo');
+    if (filterPeriodo) filterPeriodo.dispatchEvent(new Event('change')); 
     renderInicioResumenView();
 };
  
@@ -4221,7 +4129,7 @@ const TransactionCardComponent = (m, dbData) => {
 };
 
  
-// =================================================================
+ // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES (v2.0) ===
 // =================================================================
 
@@ -4233,19 +4141,26 @@ let informeActivoChart = null;
  * @param {string} informeId - El ID del informe a mostrar (ej. 'resumen_ejecutivo').
  */
 async function renderInformeDetallado(informeId) {
-    // Apuntamos al contenedor específico del contenido, NO al contenedor general del acordeón
-    const container = select(`informe-content-${informeId}`);
+    const container = select(`informe-container-${informeId}`);
     if (!container) return;
 
-    // Aunque ahora solo se llama una vez, mantenemos la limpieza del gráfico por seguridad
+    // Limpia cualquier gráfico anterior para evitar errores
     if (informeActivoChart) {
         informeActivoChart.destroy();
         informeActivoChart = null;
     }
+
+    // Asegurarse de que el acordeón clicado está abierto
+    const detailsElement = container.closest('details');
+    if (detailsElement && !detailsElement.open) {
+        detailsElement.open = true;
+    }
     
+    // Muestra un esqueleto de carga mientras se obtienen los datos
     container.innerHTML = `<div class="skeleton" style="height: 200px; border-radius: var(--border-radius-lg);"></div>`;
 
     try {
+        // Router que llama a la función de renderizado específica
         const reportRenderers = {
             'resumen_ejecutivo': renderInformeResumenEjecutivo,
             'flujo_caja': renderInformeFlujoCaja,
@@ -4255,71 +4170,121 @@ async function renderInformeDetallado(informeId) {
         };
 
         if (reportRenderers[informeId]) {
-            // Llamamos a la función específica del informe. ELLA será la responsable de actualizar el innerHTML.
             await reportRenderers[informeId](container);
         } else {
-            container.innerHTML = `<div class="empty-state"><p>Informe no disponible.</p></div>`;
+            container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Este informe está en construcción.</p></div>`;
         }
     } catch (error) {
         console.error(`Error al renderizar el informe '${informeId}':`, error);
-        container.innerHTML = `<div class="empty-state text-danger"><p>Error al generar el informe.</p></div>`;
+        container.innerHTML = `<div class="empty-state text-danger" style="padding: var(--sp-4) 0; border: none; background: transparent;"><span class="material-icons">error_outline</span><h3>Error al generar el informe</h3><p>No se pudieron cargar los datos. Por favor, inténtalo de nuevo.</p></div>`;
     }
 }
 
+/**
+ * Renderiza el informe: Resumen Ejecutivo.
+ * Este informe muestra una vista consolidada de la situación financiera
+ * para el periodo de tiempo seleccionado en los filtros del Dashboard (pestaña Inicio).
+ * @param {HTMLElement} container - El elemento del DOM donde se renderizará el informe.
+ */
 async function renderInformeResumenEjecutivo(container) {
-    // 1. Ya no se genera el HTML de los filtros aquí.
-    container.innerHTML = `<div class="skeleton" style="height: 100px;"></div>`;
-
-    // 2. EXTRAEMOS LAS FECHAS DEL SELECTOR que ya existe en el DOM
-    const { sDate, eDate } = getDatesFromReportFilter('resumen_ejecutivo');
-
-    if (!sDate || !eDate) {
-        container.innerHTML = `<p class="form-label">Por favor, selecciona un rango de fechas válido.</p>`;
-        return;
-    }
-
-    // 3. OBTENEMOS y FILTRAMOS LOS DATOS (esta lógica no cambia)
-    const conceptoInicial = db.conceptos.find(c => c.nombre.toLowerCase() === 'inicial');
-    const conceptoInicialId = conceptoInicial ? conceptoInicial.id : null;
-
-    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-        .where('fecha', '>=', sDate.toISOString())
-        .where('fecha', '<=', eDate.toISOString())
-        .get();
-
-    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-    const movements = snapshot.docs.map(doc => doc.data()).filter(m => {
-        if (m.conceptoId === conceptoInicialId) return false;
-        if (m.tipo === 'traspaso') return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
-        return visibleAccountIds.has(m.cuentaId);
-    });
-
+    // 1. OBTENER DATOS
+    // Se obtienen los movimientos filtrados según el periodo del Dashboard y los saldos actuales.
+    const { current } = await getFilteredMovements(false);
     const saldos = await getSaldos();
+
+    // 2. CALCULAR KPIs
+    // Se calcula el patrimonio neto sumando todos los saldos de las cuentas visibles.
     const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
 
-    const { ingresos, gastos, saldoNeto } = calculateTotals(movements, visibleAccountIds);
+    // Se calculan los totales de ingresos, gastos y el saldo neto del periodo.
+    const { ingresos, gastos, saldoNeto } = current.reduce((acc, mov) => {
+        acc.saldoNeto += mov.cantidad;
+        if (mov.cantidad > 0) acc.ingresos += mov.cantidad;
+        else acc.gastos += mov.cantidad;
+        return acc;
+    }, { ingresos: 0, gastos: 0, saldoNeto: 0 });
+
+    // Se calcula la tasa de ahorro, manejando el caso de que no haya ingresos.
     const tasaAhorro = ingresos > 0 ? (saldoNeto / ingresos) * 100 : 0;
 
-    // 4. RENDERIZAMOS LOS RESULTADOS en el contenedor que nos han pasado
+    // 3. RENDERIZAR HTML
+    // Se genera el HTML utilizando las clases de estilo existentes para una integración visual perfecta.
     container.innerHTML = `
-        <div class="kpi-grid" id="kpi-data-resumen_ejecutivo">
-             <div class="kpi-item" data-label="Patrimonio Neto Total" data-value="${patrimonioNeto}">
+        <p class="form-label" style="margin-bottom: var(--sp-3);">
+            Vista de 360° de tu situación financiera para el periodo seleccionado en el panel de Inicio.
+        </p>
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+            <div class="kpi-item">
                 <h4 class="kpi-item__label">Patrimonio Neto Total</h4>
                 <strong class="kpi-item__value">${formatCurrency(patrimonioNeto)}</strong>
-                <div class="kpi-item__comparison">Valor actual global</div>
             </div>
-            <div class="kpi-item" data-label="Flujo de Caja Neto" data-value="${saldoNeto}">
+            <div class="kpi-item">
                 <h4 class="kpi-item__label">Flujo de Caja Neto</h4>
-                <strong class="kpi-item__value ${saldoNeto >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(saldoNeto)}</strong>
+                <strong class="kpi-item__value ${saldoNeto >= 0 ? 'text-positive' : 'text-negative'}">
+                    ${formatCurrency(saldoNeto)}
+                </strong>
             </div>
-            <div class="kpi-item" data-label="Tasa de Ahorro" data-value="${tasaAhorro.toFixed(1)}%">
+            <div class="kpi-item">
                 <h4 class="kpi-item__label">Tasa de Ahorro</h4>
-                <strong class="kpi-item__value ${tasaAhorro >= 10 ? 'text-positive' : 'text-warning'}">${tasaAhorro.toFixed(1)}%</strong>
+                <strong class="kpi-item__value ${tasaAhorro >= 10 ? 'text-positive' : 'text-warning'}">
+                    ${tasaAhorro.toFixed(1)}%
+                </strong>
             </div>
         </div>`;
 }
 
+/**
+ * Renderiza el informe: Análisis de Flujo de Caja.
+ */
+async function renderInformeFlujoCaja(container) {
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+    twelveMonthsAgo.setDate(1);
 
+    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('fecha', '>=', twelveMonthsAgo.toISOString()).get();
+    const movements = snapshot.docs.map(doc => doc.data());
+
+    const monthlyData = {};
+    for (let i = 0; i < 12; i++) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[key] = { ingresos: 0, gastos: 0 };
+    }
+
+    movements.forEach(mov => {
+        const d = new Date(mov.fecha);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (monthlyData[key]) {
+            if (mov.cantidad > 0) monthlyData[key].ingresos += mov.cantidad;
+            else monthlyData[key].gastos += mov.cantidad;
+        }
+    });
+
+    const sortedKeys = Object.keys(monthlyData).sort();
+    const labels = sortedKeys.map(key => new Date(key + '-02').toLocaleString('es-ES', { month: 'short', year: '2-digit' }));
+    const ingresosData = sortedKeys.map(key => monthlyData[key].ingresos / 100);
+    const gastosData = sortedKeys.map(key => Math.abs(monthlyData[key].gastos / 100));
+
+    container.innerHTML = `<p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de ingresos vs. gastos de los últimos 12 meses.</p><div class="chart-container" style="height: 250px;"><canvas id="flujo-caja-chart"></canvas></div>`;
+
+    const ctx = select('flujo-caja-chart').getContext('2d');
+    informeActivoChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'Ingresos', data: ingresosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success').trim() },
+                { label: 'Gastos', data: gastosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim() }
+            ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' }, datalabels: { display: false } } }
+    });
+}
+
+/**
+ * Renderiza el informe: Asignación de Activos.
+ */
 async function renderInformeAsignacionActivos(container) {
         const getAssetClass = (tipo) => {
             const t = (tipo || '').toUpperCase();
@@ -4359,172 +4324,125 @@ async function renderInformeAsignacionActivos(container) {
         });
     }
 
-    
+    /**
+     * Renderiza el informe: Crecimiento Patrimonial.
+     */
+    async function renderInformeCrecimientoPatrimonial(container) {
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        
+        const allMovements = await fetchAllMovementsForHistory();
+        const saldosActuales = await getSaldos();
+        const patrimonioActual = Object.values(saldosActuales).reduce((sum, s) => sum + s, 0);
+
+        let patrimonioInicial = patrimonioActual;
+        const movementsLastYear = allMovements.filter(m => new Date(m.fecha) >= oneYearAgo);
+        
+        movementsLastYear.forEach(mov => {
+            if (mov.tipo === 'traspaso') {
+                patrimonioInicial += saldosActuales.hasOwnProperty(mov.cuentaOrigenId) ? mov.cantidad : 0;
+                patrimonioInicial -= saldosActuales.hasOwnProperty(mov.cuentaDestinoId) ? mov.cantidad : 0;
+            } else {
+                patrimonioInicial -= saldosActuales.hasOwnProperty(mov.cuentaId) ? mov.cantidad : 0;
+            }
+        });
+        
+        const aportacionesNetas = movementsLastYear.reduce((sum, mov) => sum + mov.cantidad, 0);
+        const rendimientoMercado = patrimonioActual - patrimonioInicial - aportacionesNetas;
+
+        container.innerHTML = `
+            <p class="form-label" style="margin-bottom: var(--sp-3);">Desglose de cómo ha cambiado tu patrimonio en los últimos 12 meses.</p>
+            <div class="kpi-grid">
+                <div class="kpi-item"><h4 class="kpi-item__label">Patrimonio Inicial</h4><strong class="kpi-item__value">${formatCurrency(patrimonioInicial)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Ahorro Neto (Aportado)</h4><strong class="kpi-item__value text-positive">${formatCurrency(aportacionesNetas)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Rendimiento Inversiones</h4><strong class="kpi-item__value ${rendimientoMercado >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(rendimientoMercado)}</strong></div>
+                <div class="kpi-item"><h4 class="kpi-item__label">Patrimonio Final</h4><strong class="kpi-item__value">${formatCurrency(patrimonioActual)}</strong></div>
+            </div>
+        `;
+    }
+
     /**
      * Renderiza el informe: Scorecard de Rendimiento de Inversiones.
      */
     async function renderInformeRendimientoInversiones(container) {
-    const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
-    if (investmentAccounts.length === 0) {
-        container.innerHTML = `<div class="empty-state"><p>No tienes cuentas marcadas como "inversión".</p></div>`;
-        return;
-    }
+        const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
+        if (investmentAccounts.length === 0) {
+            container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>No has marcado ninguna cuenta como "inversión". Puedes hacerlo en Ajustes.</p></div>`;
+            return;
+        }
 
-    // 1. OBTENER DATOS DE CADA ACTIVO
-    let performanceData = await Promise.all(
-        investmentAccounts.map(async (cuenta) => {
-            const perf = await calculatePortfolioPerformance(cuenta.id);
-            return { ...cuenta, ...perf };
-        })
-    );
-
-    // 2. ORDENAR LOS DATOS por valor actual de mayor a menor
-    performanceData.sort((a, b) => b.valorActual - a.valorActual);
-
-    // 3. CALCULAR EL SUMARIO TOTAL
-    const portfolioTotal = await calculatePortfolioPerformance(); // Obtenemos el rendimiento global
-
-    // 4. CONSTRUIR EL HTML DE LA TABLA
-    let tableHtml = `
-        <p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de rendimiento de tus activos de inversión, ordenados por valor de mercado.</p>
-        <div style="overflow-x: auto;">
-            <table id="table-data-rendimiento_inversiones" style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr>
-                        <th>Activo</th>
-                        <th>Valor Actual</th>
-                        <th>P&L (€)</th>
-                        <th>P&L (%)</th>
-                        <th>TIR Anual</th>
-                    </tr>
-                </thead>
+        const performanceData = await Promise.all(investmentAccounts.map(c => calculatePortfolioPerformance(c.id)));
+        
+        let tableHtml = `
+            <p class="form-label" style="margin-bottom: var(--sp-3);">Comparativa de rendimiento de tus activos de inversión.</p>
+            <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead><tr><th>Activo</th><th>Valor Actual</th><th>P&L (€)</th><th>P&L (%)</th><th>TIR Anual</th></tr></thead>
                 <tbody>`;
 
-    // Añadir una fila por cada activo
-    performanceData.forEach(perf => {
-        const pnlClass = perf.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-        const tirClass = perf.irr >= 0.05 ? 'text-positive' : (perf.irr >= 0 ? 'text-warning' : 'text-negative');
-        tableHtml += `
-            <tr>
-                <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${perf.nombre}</td>
-                <td style="padding: 8px; border-bottom: 1px solid var(--c-outline); text-align: right;">${formatCurrency(perf.valorActual)}</td>
-                <td style="padding: 8px; border-bottom: 1px solid var(--c-outline); text-align: right;" class="${pnlClass}">${formatCurrency(perf.pnlAbsoluto)}</td>
-                <td style="padding: 8px; border-bottom: 1px solid var(--c-outline); text-align: right;" class="${pnlClass}">${perf.pnlPorcentual.toFixed(2)}%</td>
-                <td style="padding: 8px; border-bottom: 1px solid var(--c-outline); text-align: right;" class="${tirClass}">${(perf.irr * 100).toFixed(2)}%</td>
-            </tr>`;
-    });
+        investmentAccounts.forEach((cuenta, index) => {
+            const perf = performanceData[index];
+            const pnlClass = perf.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
+            const tirClass = perf.irr >= 0.05 ? 'text-positive' : (perf.irr >= 0 ? 'text-warning' : 'text-negative');
+            tableHtml += `
+                <tr>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${cuenta.nombre}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);">${formatCurrency(perf.valorActual)}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);" class="${pnlClass}">${formatCurrency(perf.pnlAbsoluto)}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);" class="${pnlClass}">${perf.pnlPorcentual.toFixed(2)}%</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--c-outline);" class="${tirClass}">${(perf.irr * 100).toFixed(2)}%</td>
+                </tr>
+            `;
+        });
 
-    tableHtml += `</tbody>`;
-
-    // --- AÑADIR LA NUEVA FILA DE SUMARIO ---
-    const totalPnlClass = portfolioTotal.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-    const totalTirClass = portfolioTotal.irr >= 0.05 ? 'text-positive' : (portfolioTotal.irr >= 0 ? 'text-warning' : 'text-negative');
-
-    tableHtml += `
-        <tfoot style="font-weight: 700; border-top: 2px solid var(--c-outline);">
-            <tr>
-                <td style="padding: 10px 8px;">TOTAL PORTAFOLIO</td>
-                <td style="padding: 10px 8px; text-align: right;">${formatCurrency(portfolioTotal.valorActual)}</td>
-                <td style="padding: 10px 8px; text-align: right;" class="${totalPnlClass}">${formatCurrency(portfolioTotal.pnlAbsoluto)}</td>
-                <td style="padding: 10px 8px; text-align: right;" class="${totalPnlClass}">${portfolioTotal.pnlPorcentual.toFixed(2)}%</td>
-                <td style="padding: 10px 8px; text-align: right;" class="${totalTirClass}">${(portfolioTotal.irr * 100).toFixed(2)}%</td>
-            </tr>
-        </tfoot>`;
-
-    tableHtml += `</table></div>`;
-    container.innerHTML = tableHtml;
-}
-
-    
-/**
- * Maneja la exportación a PDF, generando el informe si es necesario.
- * @param {string} reportId - El ID del informe a exportar.
- * @param {HTMLButtonElement} btn - El botón que activó la exportación.
- */
-const handleExportToPdf = async (reportId, btn) => {
-    setButtonLoading(btn, true);
-    
-    // Apuntamos al contenedor del *acordeón completo*
-    let accordionContent = select(`informe-container-${reportId}`);
-    
-    // Si el contenido del informe (el gráfico/KPIs) aún no se ha renderizado, lo hacemos ahora.
-    if (accordionContent && accordionContent.querySelector('#informe-content-' + reportId).querySelector('.form-label')) {
-        await renderInformeDetallado(reportId);
-        // Volvemos a seleccionar por si la estructura del DOM ha cambiado
-        accordionContent = select(`informe-container-${reportId}`);
+        tableHtml += `</tbody></table></div>`;
+        container.innerHTML = tableHtml;
     }
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    
-    const informesDisponibles = {
-        'resumen_ejecutivo': { title: 'Resumen Ejecutivo' },
-        'flujo_caja': { title: 'Análisis de Flujo de Caja' },
-        'asignacion_activos': { title: 'Asignación de Activos' },
-        'crecimiento_patrimonial': { title: 'Crecimiento Patrimonial' },
-        'rendimiento_inversiones': { title: 'Scorecard de Inversiones' }
-    };
-    const reportTitle = informesDisponibles[reportId]?.title || 'Informe Financiero';
-    
-    const primaryColor = getComputedStyle(document.body).getPropertyValue('--c-primary').trim();
-    
-    doc.setFontSize(18);
-    doc.setTextColor(primaryColor);
-    doc.text(reportTitle, 14, 22);
-    doc.setFontSize(10);
-    doc.setTextColor('#333333');
-    doc.text(`Informe generado el ${new Date().toLocaleDateString('es-ES')}`, 14, 28);
-
-    // Buscamos los datos dentro del contenedor de contenido específico
-    const reportContentContainer = select(`informe-content-${reportId}`);
-    const kpiData = reportContentContainer.querySelector(`#kpi-data-${reportId}`);
-    const tableData = reportContentContainer.querySelector(`#table-data-${reportId}`);
-    const chartCanvas = reportContentContainer.querySelector('canvas');
-
-    let finalY = 40;
-
-    if (kpiData) {
-        const kpis = Array.from(kpiData.querySelectorAll('.kpi-item')).map(item => ({
-            label: item.querySelector('.kpi-item__label').textContent,
-            value: item.querySelector('.kpi-item__value').textContent
-        }));
-        doc.autoTable({
-            startY: finalY,
-            head: [['Métrica', 'Valor']],
-            body: kpis.map(kpi => [kpi.label, kpi.value]),
-            theme: 'grid'
-        });
-        finalY = doc.autoTable.previous.finalY + 10;
-    } 
-    
-    if (tableData) {
-        doc.autoTable({
-            html: `#table-data-${reportId}`,
-            startY: finalY,
-            theme: 'grid',
-        });
-         finalY = doc.autoTable.previous.finalY + 10;
-    } 
-    
-    if (chartCanvas) {
-        try {
-            const chartImage = chartCanvas.toDataURL('image/png', 1.0);
-            const chartWidth = 180;
-            const chartHeight = (chartCanvas.height * chartWidth) / chartCanvas.width;
-            doc.addImage(chartImage, 'PNG', 15, finalY, chartWidth, chartHeight);
-        } catch (error) {
-            console.error("Error al exportar gráfico:", error);
-            doc.text("No se pudo exportar la visualización del gráfico.", 14, finalY + 5);
-        }
+    /**
+     * Renderiza el informe: Proyección de Independencia Financiera (FIRE).
+     */
+    async function renderInformeProyeccionFI(container) {
+        // ... (Implementación de la Proyección FIRE - esta es más compleja y podría ser una futura mejora)
+        container.innerHTML = `<div class="empty-state" style="padding: var(--sp-4) 0; border: none; background: transparent;"><p>Informe de Proyección FIRE en desarrollo. ¡Próximamente!</p></div>`;
     }
-    
-    doc.save(`Informe_${reportId}_${new Date().toISOString().slice(0,10)}.pdf`);
-    setButtonLoading(btn, false);
-};
 
-// =================================================================
-// === FIN: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF (v3.0 FINAL) ===
-// =================================================================
+    /**
+     * Renderiza el informe: Solvencia y Liquidez.
+     */
+    async function renderInformeSolvenciaLiquidez(container) {
+        const saldos = await getSaldos();
+        const liquidAccounts = getVisibleAccounts().filter(c => ['BANCO', 'AHORRO', 'EFECTIVO'].includes((c.tipo || '').toUpperCase()));
+        const debtAccounts = getVisibleAccounts().filter(c => ['PRÉSTAMO', 'TARJETA DE CRÉDITO'].includes((c.tipo || '').toUpperCase()));
+
+        const liquidezTotal = liquidAccounts.reduce((sum, c) => sum + (saldos[c.id] || 0), 0);
+        const deudaTotal = Math.abs(debtAccounts.reduce((sum, c) => sum + (saldos[c.id] || 0), 0));
+        const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+
+        const { current } = await getFilteredMovements(false);
+        const gastosMensuales = Math.abs(current.reduce((sum, mov) => mov.cantidad < 0 ? sum + mov.cantidad : sum, 0));
+        const mesesDeCobertura = gastosMensuales > 0 ? liquidezTotal / gastosMensuales : Infinity;
+        
+        container.innerHTML = `
+            <p class="form-label" style="margin-bottom: var(--sp-3);">Análisis de tu capacidad para afrontar imprevistos y tu nivel de endeudamiento.</p>
+            <div class="kpi-grid">
+                <div class="kpi-item">
+                    <h4 class="kpi-item__label">Colchón de Emergencia</h4>
+                    <strong class="kpi-item__value ${mesesDeCobertura >= 3 ? 'text-positive' : 'text-warning'}">${mesesDeCobertura === Infinity ? '∞' : mesesDeCobertura.toFixed(1)} meses</strong>
+                    <div class="kpi-item__comparison">Gastos cubiertos con tu liquidez</div>
+                </div>
+                <div class="kpi-item">
+                    <h4 class="kpi-item__label">Ratio Endeudamiento</h4>
+                    <strong class="kpi-item__value ${deudaTotal / patrimonioNeto < 0.4 ? 'text-positive' : 'text-warning'}">${(patrimonioNeto > 0 ? (deudaTotal / patrimonioNeto) * 100 : 0).toFixed(1)}%</strong>
+                    <div class="kpi-item__comparison">Deuda total vs. Patrimonio</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // =================================================================
+    // === FIN: SECCIÓN DE INFORMES CORREGIDA Y AMPLIADA (v3.0)       ===
+    // =================================================================
    
 const renderDashboardActionCenter = () => {
     return `
@@ -4673,72 +4591,6 @@ const renderDashboardKpiSummary = () => {
             </div>
         </div>`;
 };
-const renderDashboardSuperCentroOperaciones = () => {
-    return `
-    <div class="card card--no-bg" id="super-centro-operaciones-widget">
-        <div class="accordion-wrapper">
-            <details class="accordion" open>
-                <summary>
-                    <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);">
-                        <span class="material-icons">query_stats</span>
-                        Centro de Operaciones
-                    </h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <!-- 1. Los filtros ahora viven aquí dentro -->
-                    <div id="dashboard-filters-widget">
-                        <div class="form-group">
-                            <label for="filter-periodo" class="form-label">Periodo</label>
-                            <select id="filter-periodo" class="form-select">
-                                <option value="mes-actual">Este Mes</option>
-                                <option value="año-actual" selected>Este Año</option>
-                                <option value="custom">Personalizado</option>
-                            </select>
-                        </div>
-                        <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr;">
-                            <div class="form-group">
-                                <label for="filter-fecha-inicio" class="form-label">Desde</label>
-                                <input type="date" id="filter-fecha-inicio" class="form-input">
-                            </div>
-                            <div class="form-group">
-                                <label for="filter-fecha-fin" class="form-label">Hasta</label>
-                                <input type="date" id="filter-fecha-fin" class="form-input">
-                            </div>
-                        </div>
-                        <button data-action="apply-filters" class="btn btn--primary btn--full" style="margin-top: var(--sp-4);">Aplicar Filtros</button>
-                    </div>
-
-                    <hr style="border-color: var(--c-outline); opacity: 0.5; margin: var(--sp-5) 0;">
-
-                    <!-- 2. La sección de KPIs (antes Resumen Flujo Caja) -->
-                    <div class="kpi-grid" id="kpi-container" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom: var(--sp-5);">
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Ingresos</h4>
-                            <strong id="kpi-ingresos-value" class="kpi-item__value text-positive skeleton" data-current-value="0">+0,00 €</strong> 
-                            <div id="kpi-ingresos-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Gastos</h4>
-                            <strong id="kpi-gastos-value" class="kpi-item__value text-negative skeleton" data-current-value="0">0,00 €</strong>
-                            <div id="kpi-gastos-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Saldo Neto Periodo</h4>
-                            <strong id="kpi-saldo-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
-                            <div id="kpi-saldo-neto-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                    </div>
-
-                    <!-- 3. Los KPIs extendidos y la sección de conceptos -->
-                    ${renderDashboardExpandedKpiSummary()}
-                    ${renderDashboardConceptTotals()}
-                </div>
-            </details>
-        </div>
-    </div>`;
-};
 const renderDashboardExpandedKpiSummary = () => {
     return `
     <div class="card" id="kpi-ampliado-widget">
@@ -4773,13 +4625,13 @@ const renderDashboardExpandedKpiSummary = () => {
                 
                 <div class="kpi-item">
                     <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                        <span>P&L Portafolio Inversión</span>
+                        <span>P&L Inversión Periodo</span>
                          <button class="icon-btn" data-action="show-help-topic" data-topic="pnl-inversion" style="width: 20px; height: 20px;">
                             <span class="material-icons" style="font-size: 16px;">help_outline</span>
                         </button>
                     </h4>
                     <strong id="kpi-pnl-inversion-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
-                    <div id="kpi-pnl-inversion-comparison" class="kpi-item__comparison">Rentabilidad total</div>
+                    <div id="kpi-pnl-inversion-comparison" class="kpi-item__comparison">Flujo de caja neto</div>
                 </div>
 
                 <div class="kpi-item" style="grid-column: 1 / -1;">
@@ -4833,23 +4685,20 @@ const renderInicioResumenView = () => {
 
     resumenContentContainer.innerHTML = widgetOrder.map(widgetId => {
         switch(widgetId) {
-            // ==================================
-            // === ¡LOS CAMBIOS ESTÁN AQUÍ! ===
-            // ==================================
-            case 'super-centro-operaciones': return renderDashboardSuperCentroOperaciones(); // Llamamos a nuestra nueva función
-            // Ya NO están los 'case' para 'kpi-summary-expanded', 'kpi-summary', 'concept-totals'
-            
-            // EL RESTO SE QUEDA IGUAL
             case 'action-center': return renderDashboardActionCenter();
 			case 'emergency-fund': return renderDashboardEmergencyFund();
 			case 'fi-progress': return renderDashboardFIProgress();
+            case 'kpi-summary-expanded': return renderDashboardExpandedKpiSummary();
             case 'net-worth-trend': return renderDashboardNetWorthTrend();
+            case 'kpi-summary': return renderDashboardKpiSummary(); 
+            case 'concept-totals': return renderDashboardConceptTotals();
             case 'patrimonio-structure':
                return `<div class="card" id="patrimonio-widget">
                 <div id="patrimonio-completo-container">
                     <div class="skeleton" style="height:250px;"></div>
                 </div>
             </div>`;
+            // ¡ELIMINADO! El 'case' para 'investment-portfolio' ya no está aquí.
             case 'informe-personalizado':
                  return renderDashboardInformeWidget();
             default: return '';
@@ -5025,162 +4874,6 @@ const renderPlanificacionPage = () => {
     renderRecurrentsListOnPage();
     // La llamada a renderRecurrentesCalendar() ya no es necesaria, pero la eliminaremos formalmente en el paso 2.
 };
-  // =================================================================
-// === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF      ===
-// =================================================================
-async function renderInformeFlujoCaja(container) {
-    // 1. Ya no se genera el HTML de los filtros aquí.
-    container.innerHTML = `<div class="skeleton" style="height: 250px;"></div>`;
-
-    // 2. EXTRAEMOS LAS FECHAS
-    const { sDate, eDate } = getDatesFromReportFilter('flujo_caja');
-
-    if (!sDate || !eDate) {
-        container.innerHTML = `<p class="form-label">Por favor, selecciona un rango de fechas válido.</p>`;
-        return;
-    }
-
-    // 3. OBTENEMOS y FILTRAMOS LOS DATOS (lógica sin cambios)
-    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-        .where('fecha', '>=', sDate.toISOString())
-        .where('fecha', '<=', eDate.toISOString())
-        .get();
-
-    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-    const movements = snapshot.docs.map(doc => doc.data()).filter(m => {
-        if (m.tipo === 'traspaso') return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
-        return visibleAccountIds.has(m.cuentaId);
-    });
-
-    // 4. PROCESAMOS Y AGRUPAMOS LOS DATOS POR MES (lógica sin cambios)
-    const monthlyData = {};
-    movements.forEach(mov => {
-        const d = new Date(mov.fecha);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        if (!monthlyData[key]) monthlyData[key] = { ingresos: 0, gastos: 0 };
-        
-        let amount = calculateMovementAmount(mov, visibleAccountIds);
-        if (amount > 0) monthlyData[key].ingresos += amount;
-        else monthlyData[key].gastos += amount;
-    });
-
-    const sortedKeys = Object.keys(monthlyData).sort();
-    const labels = sortedKeys.map(key => new Date(key + '-02').toLocaleString('es-ES', { month: 'short', year: '2-digit' }));
-    const ingresosData = sortedKeys.map(key => monthlyData[key].ingresos / 100);
-    const gastosData = sortedKeys.map(key => Math.abs(monthlyData[key].gastos / 100));
-
-    // 5. RENDERIZAMOS EL GRÁFICO
-    container.innerHTML = `<div class="chart-container" style="height: 250px;"><canvas id="flujo-caja-chart"></canvas></div>`;
-    const ctx = select('flujo-caja-chart').getContext('2d');
-    informeActivoChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                { label: 'Ingresos', data: ingresosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-success').trim() },
-                { label: 'Gastos', data: gastosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim() }
-            ]
-        },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' }, datalabels: { display: false } } }
-    });
-}
-
-async function renderInformeCrecimientoPatrimonial(container) {
-    // Definimos la fecha de "apertura" contable
-    const fechaApertura = '2024-12-31';
-    const fechaInicioCalculo = '2025-01-01';
-
-    // Buscamos el ID del concepto "Inicial"
-    const conceptoInicial = db.conceptos.find(c => c.nombre.toLowerCase() === 'inicial');
-	const conceptoInicialId = conceptoInicial ? conceptoInicial.id : null;
-
-const calculateTotals = (movs) => {
-    let ingresos = 0, gastos = 0, saldoNeto = 0;
-    movs.forEach(m => {
-        // Añadimos la condición para ignorar el concepto "Inicial"
-        if (m.conceptoId === conceptoInicialId) {
-            return; // Saltamos este movimiento y no lo contamos
-        }
-
-        if (m.tipo === 'movimiento') {
-            saldoNeto += m.cantidad;
-            if (m.cantidad > 0) ingresos += m.cantidad;
-            else gastos += m.cantidad;
-        } else if (m.tipo === 'traspaso') {
-            const origenVisible = visibleAccountIds.has(m.cuentaOrigenId);
-            const destinoVisible = visibleAccountIds.has(m.cuentaDestinoId);
-            if (origenVisible && !destinoVisible) {
-                saldoNeto -= m.cantidad;
-                gastos -= m.cantidad;
-            } else if (!origenVisible && destinoVisible) {
-                saldoNeto += m.cantidad;
-                ingresos += m.cantidad;
-            }
-        }
-    });
-    return { ingresos, gastos, saldoNeto };
-};
-    
-    if (!conceptoInicial) {
-        container.innerHTML = `<div class="empty-state"><span class="material-icons text-warning">warning</span><h3>Concepto no encontrado</h3><p>Para generar este informe, necesitas un concepto llamado "Inicial" que contenga los saldos a fecha ${fechaApertura}.</p></div>`;
-        return;
-    }
-
-    const allMovements = await fetchAllMovementsForHistory();
-    const saldosActuales = await getSaldos();
-    const patrimonioActual = Object.values(saldosActuales).reduce((sum, s) => sum + s, 0);
-
-    // 1. CÁLCULO DEL PATRIMONIO INICIAL
-    const patrimonioInicial = allMovements
-        .filter(m => m.fecha.startsWith(fechaApertura) && m.conceptoId === conceptoInicial.id)
-        .reduce((sum, mov) => sum + mov.cantidad, 0);
-
-    if (patrimonioInicial <= 0) {
-        container.innerHTML = `<div class="empty-state"><span class="material-icons text-info">info</span><h3>Sin datos de apertura</h3><p>No se encontraron movimientos de "Inicial" con saldo positivo en la fecha ${fechaApertura}.</p></div>`;
-        return;
-    }
-
-    // 2. CÁLCULO DEL AHORRO NETO
-    const aportacionesNetas = allMovements
-        .filter(m => m.fecha >= fechaInicioCalculo && m.tipo === 'movimiento' && m.conceptoId !== conceptoInicial.id)
-        .reduce((sum, mov) => sum + mov.cantidad, 0);
-
-    // 3. CÁLCULO DEL RENDIMIENTO REAL DEL PORTAFOLIO DE INVERSIÓN
-    const portfolioPerformance = await calculatePortfolioPerformance();
-    const rendimientoPortafolio = portfolioPerformance.pnlAbsoluto;
-
-    // --- INICIO DE LA MODIFICACIÓN: Nuevo orden y texto ---
-    container.innerHTML = `
-        <p class="form-label" style="margin-bottom: var(--sp-3);">Desglose de la evolución de tu patrimonio desde el asiento de apertura el ${fechaApertura}.</p>
-        <div class="kpi-grid" id="kpi-data-crecimiento_patrimonial">
-            
-            <div class="kpi-item" data-label="Patrimonio Inicial (${fechaApertura})" data-value="${patrimonioInicial}">
-                <h4 class="kpi-item__label">Patrimonio Inicial (${fechaApertura})</h4>
-                <strong class="kpi-item__value">${formatCurrency(patrimonioInicial)}</strong>
-            </div>
-            
-            <div class="kpi-item" data-label="Ahorro Neto (Aportado)" data-value="${aportacionesNetas}">
-                <h4 class="kpi-item__label">Ahorro Neto (Aportado)</h4>
-                <strong class="kpi-item__value text-positive">${formatCurrency(aportacionesNetas)}</strong>
-            </div>
-
-            <div class="kpi-item" data-label="Patrimonio Final (Actual)" data-value="${patrimonioActual}">
-                <h4 class="kpi-item__label">Patrimonio Final (Actual)</h4>
-                <strong class="kpi-item__value">${formatCurrency(patrimonioActual)}</strong>
-            </div>
-            
-            <div class="kpi-item" data-label="P&L Portafolio Inversión" data-value="${rendimientoPortafolio}">
-                <h4 class="kpi-item__label">P&L Portafolio Inversión</h4>
-                <strong class="kpi-item__value ${rendimientoPortafolio >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(rendimientoPortafolio)}</strong>
-            </div>
-
-        </div>
-        <p class="form-label" style="text-align: center; margin-top: var(--sp-3); font-size: var(--fs-xs);">
-            Patrimonio Inicial + Ahorro Neto = Patrimonio Final --> Portafolio Inversión = Beneficio Ficticio
-        </p>`;
-    // --- FIN DE LA MODIFICACIÓN ---
-}
- 
 // =============================================================
 // === PASO 1: REEMPLAZO DE renderRecurrentsListOnPage       ===
 // =============================================================
@@ -5464,18 +5157,26 @@ const updateDashboardData = async () => {
         const investmentAccountIds = new Set(getVisibleAccounts().filter(c => c.esInversion).map(c => c.id));
 
         const calculateTotals = (movs) => { 
-    let ingresos = 0, gastos = 0, saldoNeto = 0;
-    movs.forEach(m => {
-        if (m.tipo === 'movimiento') {
-            saldoNeto += m.cantidad;
-            if (m.cantidad > 0) ingresos += m.cantidad;
-            else gastos += m.cantidad;
-        } else if (m.tipo === 'traspaso') {
-            // ... lógica de traspasos
-        }
-    });
-    return { ingresos, gastos, saldoNeto };
-};
+            let ingresos = 0, gastos = 0, saldoNeto = 0;
+            movs.forEach(m => {
+                if (m.tipo === 'movimiento') {
+                    saldoNeto += m.cantidad;
+                    if (m.cantidad > 0) ingresos += m.cantidad;
+                    else gastos += m.cantidad;
+                } else if (m.tipo === 'traspaso') {
+                    const origenVisible = visibleAccountIds.has(m.cuentaOrigenId);
+                    const destinoVisible = visibleAccountIds.has(m.cuentaDestinoId);
+                    if (origenVisible && !destinoVisible) {
+                        saldoNeto -= m.cantidad;
+                        gastos -= m.cantidad;
+                    } else if (!origenVisible && destinoVisible) {
+                        saldoNeto += m.cantidad;
+                        ingresos += m.cantidad;
+                    }
+                }
+            });
+            return { ingresos, gastos, saldoNeto };
+        };
         const currentTotals = calculateTotals(current);
         const previousTotals = calculateTotals(previous);
         const saldoNetoActual = currentTotals.saldoNeto;
@@ -5483,29 +5184,7 @@ const updateDashboardData = async () => {
         const tasaAhorroActual = currentTotals.ingresos > 0 ? (saldoNetoActual / currentTotals.ingresos) * 100 : (saldoNetoActual < 0 ? -100 : 0);
         const tasaAhorroAnterior = previousTotals.ingresos > 0 ? (previousTotals.saldoNeto / previousTotals.ingresos) * 100 : 0;
         const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
-
-        // =============================================================
-        // === INICIO: CÓDIGO NUEVO Y MEJORADO                         ===
-        // =============================================================
-        // 1. Llamamos a la función experta en calcular la rentabilidad total.
-        const portfolioPerformance = await calculatePortfolioPerformance();
-        
-        // 2. Extraemos el dato que nos interesa: el beneficio/pérdida absoluto.
-        const pnlInversionActual = portfolioPerformance.pnlAbsoluto;
-        // =============================================================
-        // === FIN: CÓDIGO NUEVO Y MEJORADO                            ===
-        // =============================================================
-        
-        // ... más código después ...
-
-//... Y más abajo, la parte que lo muestra:
-
-            const kpiPnlEl = select('kpi-pnl-inversion-value');
-            if (kpiPnlEl) {
-                kpiPnlEl.className = `kpi-item__value ${pnlInversionActual >= 0 ? 'text-positive' : 'text-negative'}`;
-                // ▼▼▼ ¡LÍNEA ACTUALIZADA! AHORA USA EL NUEVO CÁLCULO ▼▼▼
-                if (investmentAccountIds.size > 0) animateCountUp(kpiPnlEl, pnlInversionActual); else kpiPnlEl.textContent = 'N/A';
-            }
+        const pnlInversionActual = current.reduce((sum, mov) => (mov.tipo === 'movimiento' && investmentAccountIds.has(mov.cuentaId) ? sum + mov.cantidad : sum), 0);
         const now = new Date();
         const expenseBudgets = (db.presupuestos || []).filter(b => b.ano === now.getFullYear() && b.cantidad < 0);
         let totalBudgetedExpense = 0;
@@ -7467,19 +7146,8 @@ const attachEventListeners = () => {
         }
 
         const actions = {
-			'export-pdf': () => handleExportToPdf(id, btn),
             'toggle-diario-view': () => { diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list'; const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons'); if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list'; renderDiarioPage(); },
-			'calendar-nav': () => {
-    const direction = actionTarget.dataset.direction;
-    // Aseguramos que la fecha base es válida antes de operar
-    if (!(diarioCalendarDate instanceof Date) || isNaN(diarioCalendarDate)) {
-        diarioCalendarDate = new Date();
-    }
-    // Manipulamos la fecha en UTC para evitar saltos de día por DST
-    const currentMonth = diarioCalendarDate.getUTCMonth();
-    diarioCalendarDate.setUTCMonth(currentMonth + (direction === 'next' ? 1 : -1));
-    renderDiarioCalendar(); 
-},
+			'calendar-nav': () => { const direction = actionTarget.dataset.direction; diarioCalendarDate.setMonth(diarioCalendarDate.getMonth() + (direction === 'next' ? 1 : -1)); renderDiarioCalendar(); },
             'show-day-details': () => {
     const date = actionTarget.dataset.date;
     const movementsOfDay = db.movimientos.filter(m => m.fecha.startsWith(date));
@@ -7534,25 +7202,7 @@ const attachEventListeners = () => {
     });
 
     // El resto de la función 'attachEventListeners' permanece exactamente igual...
-    document.body.addEventListener('toggle', (e) => {
-    const detailsElement = e.target;
-    // Nos aseguramos de que solo reaccione a los acordeones de la página de informes
-    if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) {
-        return;
-    }
-    
-    if (detailsElement.open) {
-        const id = detailsElement.id;
-        const informeId = id.replace('acordeon-', '');
-        const container = select(`informe-content-${informeId}`);
-        
-        // La clave: solo renderizamos si el contenedor todavía tiene el texto inicial de "Abre para generar..."
-        // Esto previene recargas innecesarias si el usuario cierra y vuelve a abrir el acordeón.
-        if (container && container.querySelector('.form-label')) {
-            renderInformeDetallado(informeId);
-        }
-    }
-}, true);
+    document.body.addEventListener('toggle', (e) => { const detailsElement = e.target; if (detailsElement.tagName !== 'DETAILS' || !detailsElement.closest('#planificacion-page')) { return; } if (detailsElement.open) { const id = detailsElement.id; if (id.startsWith('acordeon-') && id !== 'acordeon-personalizado') { const informeId = id.replace('acordeon-', ''); document.querySelectorAll('#informes-page .accordion').forEach(ac => { if (ac.id !== id) ac.open = false; }); renderInformeDetallado(informeId); } } }, true);
     document.body.addEventListener('submit', (e) => { e.preventDefault(); const target = e.target; const submitter = e.submitter; const handlers = { 'login-form': () => { const action = submitter ? submitter.dataset.action : 'login'; if (action === 'login') { handleLogin(submitter); } else if (action === 'register') { handleRegister(submitter); } }, 'pin-form': handlePinSubmit, 'form-movimiento': () => handleSaveMovement(target, submitter), 'add-concepto-form': () => handleAddConcept(submitter), 'add-cuenta-form': () => handleAddAccount(submitter), 'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter), 'form-valoracion': () => handleSaveValoracion(target, submitter), }; if (handlers[target.id]) { handlers[target.id](); } });
     document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
     document.body.addEventListener('blur', (e) => { const id = e.target.id; if (id) { if (id === 'movimiento-cantidad') validateField('movimiento-cantidad'); if (id === 'movimiento-descripcion') { handleDescriptionAutocomplete(); if (!e.relatedTarget || !e.relatedTarget.closest('#description-suggestions')) { const suggestionsBox = select('description-suggestions'); if (suggestionsBox) suggestionsBox.style.display = 'none'; } } if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen'); validateField('movimiento-cuenta-destino'); } } }, true);
@@ -7587,27 +7237,6 @@ const attachEventListeners = () => {
             });
         }, { passive: true });
     }
-	// Pega este bloque completo al final de la función attachEventListeners,
-// justo antes de la llave de cierre `}`.
-
-document.body.addEventListener('toggle', (e) => {
-    const detailsElement = e.target;
-    if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) {
-        return;
-    }
-    
-    // Solo actuamos si el acordeón SE ABRE y si su contenido AÚN NO HA SIDO CARGADO.
-    // Esto evita recargas innecesarias y soluciona el problema.
-    if (detailsElement.open) {
-        const id = detailsElement.id;
-        const informeId = id.replace('acordeon-', '');
-        const container = select(`informe-container-${informeId}`);
-        // Comprobamos si el contenedor está vacío o tiene el texto inicial
-        if (container && container.querySelector('.form-label')) {
-            renderInformeDetallado(informeId);
-        }
-    }
-}, true);
 };
 // =================================================================
 // === FIN: FUNCIÓN attachEventListeners (VERSIÓN CORREGIDA)       ===
@@ -7947,20 +7576,21 @@ const handleSkipRecurrent = async (id, btn) => {
     }
 };
 
+// ▼▼▼ REEMPLAZAR LA FUNCIÓN ANTIGUA POR ESTA VERSIÓN CORREGIDA ▼▼▼
+
 const generateCalendarGrid = (date, dataMap) => {
     const year = date.getUTCFullYear();
     const month = date.getUTCMonth();
     
+    // CORRECCIÓN #1: Usamos UTC para obtener el día de la semana y lo normalizamos.
+    // (getDay() devuelve 0 para Domingo, esta fórmula lo ajusta a 0 para Lunes)
     const firstDayOffset = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
     
-    // --- INICIO DE LA CORRECCIÓN ---
-    // Obtenemos el número de días del mes de forma segura en UTC.
-    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    // --- FIN DE LA CORRECCIÓN ---
-
+    const daysInMonth = new Date(year, month + 1, 0).getUTCDate();
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
+    // El nombre del mes se obtiene correctamente de la fecha de entrada
     const monthName = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     
     let gridHtml = `<div class="calendar-header">
@@ -7975,10 +7605,10 @@ const generateCalendarGrid = (date, dataMap) => {
 
     let dayOfMonth = 1;
     for (let i = 0; i < 42; i++) {
-        // La condición del bucle se mantiene, ya que con el `daysInMonth` corregido, debería funcionar.
         if (i < firstDayOffset || dayOfMonth > daysInMonth) {
             gridHtml += `<div class="calendar-day empty"></div>`;
         } else {
+            // CORRECCIÓN #2: Creamos la fecha del día actual directamente en UTC.
             const currentDate = new Date(Date.UTC(year, month, dayOfMonth));
             const dateKey = currentDate.toISOString().slice(0, 10);
             const dayData = dataMap.get(dateKey);
@@ -7994,6 +7624,7 @@ const generateCalendarGrid = (date, dataMap) => {
             if (dayData) {
                 if (dayData.total !== undefined) {
                     const totalClass = dayData.total >= 0 ? 'text-positive' : 'text-negative';
+                    // Se aplica un umbral para no mostrar totales de 0,00 €
                     if (Math.abs(dayData.total) > 0) {
                         gridHtml += `<span class="calendar-day__total ${totalClass}">${formatCurrency(dayData.total)}</span>`;
                     }
@@ -8013,7 +7644,8 @@ const generateCalendarGrid = (date, dataMap) => {
     gridHtml += '</div>';
     return gridHtml;
 };
-// Reemplaza esta función completa:
+
+// REEMPLAZA LA FUNCIÓN ANTIGUA CON ESTA
 const renderDiarioCalendar = async () => {
     const container = select('diario-view-container');
     if (!container) return;
@@ -8021,18 +7653,11 @@ const renderDiarioCalendar = async () => {
     container.innerHTML = `<div class="calendar-container skeleton" style="height: 400px;"></div>`;
 
     try {
-        // Aseguramos que diarioCalendarDate siempre sea un objeto Date válido
-        if (!(diarioCalendarDate instanceof Date) || isNaN(diarioCalendarDate)) {
-            diarioCalendarDate = new Date();
-        }
-        // Forzamos la fecha a mediodía para evitar problemas de zona horaria en los cálculos
-        diarioCalendarDate.setHours(12, 0, 0, 0);
-
         const year = diarioCalendarDate.getFullYear();
         const month = diarioCalendarDate.getMonth();
         
         const startDate = new Date(Date.UTC(year, month, 1));
-        const endDate = new Date(Date.UTC(year, month + 1, 1)); // El primer instante del siguiente mes
+        const endDate = new Date(Date.UTC(year, month + 1, 1));
         
         const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
             .where('fecha', '>=', startDate.toISOString())
@@ -8044,22 +7669,16 @@ const renderDiarioCalendar = async () => {
         const dataMap = new Map();
         movementsOfMonth.forEach(m => {
             const dateKey = m.fecha.slice(0, 10);
-            if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, markers: new Set() });
+            if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0 });
             
-            let amount = 0;
             const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-
             if (m.tipo === 'traspaso') {
-                if (visibleAccountIds.has(m.cuentaOrigenId) && !visibleAccountIds.has(m.cuentaDestinoId)) amount = -m.cantidad;
-                else if (!visibleAccountIds.has(m.cuentaOrigenId) && visibleAccountIds.has(m.cuentaDestinoId)) amount = m.cantidad;
+                if (visibleAccountIds.has(m.cuentaOrigenId) && !visibleAccountIds.has(m.cuentaDestinoId)) dataMap.get(dateKey).total -= m.cantidad;
+                else if (!visibleAccountIds.has(m.cuentaOrigenId) && visibleAccountIds.has(m.cuentaDestinoId)) dataMap.get(dateKey).total += m.cantidad;
             } else {
-                if (visibleAccountIds.has(m.cuentaId)) amount = m.cantidad;
-            }
-
-            if (amount !== 0) {
-                 dataMap.get(dateKey).total += amount;
-                 if (amount > 0) dataMap.get(dateKey).markers.add('income');
-                 if (amount < 0) dataMap.get(dateKey).markers.add('expense');
+                if (visibleAccountIds.has(m.cuentaId)) {
+                    dataMap.get(dateKey).total += m.cantidad;
+                }
             }
         });
         
@@ -8069,6 +7688,7 @@ const renderDiarioCalendar = async () => {
         container.innerHTML = `<div class="empty-state"><p class="text-danger">No se pudieron cargar los datos del calendario.</p></div>`;
     }
 };
+
 
 // ==============================================================
 // === INICIO: FUNCIÓN CORREGIDA Y ROBUSTA PARA GUARDAR CAMBIOS ===
