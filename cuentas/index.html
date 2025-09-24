@@ -3573,7 +3573,23 @@ if (item.type === 'pending-item') {
             vList.contentEl.style.transform = `translateY(${offsetY}px)`; 
             vList.lastRenderedRange = { start: startIndex, end: endIndex };
         };
-        
+// =================================================================
+// === INICIO: NUEVA FUNCIÓN AYUDANTE PARA REFRESCOS RÁPIDOS     ===
+// =================================================================
+const updateLocalDataAndRefreshUI = async () => {
+    // 1. Recalcula los saldos con la lista de movimientos actualizada que tenemos en memoria.
+    await processMovementsForRunningBalance(db.movimientos, true);
+    
+    // 2. Le dice a la lista virtual que se redibuje con los nuevos datos.
+    updateVirtualListUI();
+
+    // 3. (Opcional pero recomendado) Actualiza el índice de autocompletado.
+    buildIntelligentIndex();
+};
+// =================================================================
+// === FIN: NUEVA FUNCIÓN AYUDANTE                               ===
+// ================================================================= 
+ 
 // =========================================================================
 // === INICIO: NUEVO SISTEMA COMPLETO DE CARGA DE MOVIMIENTOS (Paginación Manual)
 // =========================================================================
@@ -6242,9 +6258,8 @@ const hideCalculator = () => {
             hideCalculator();
         };       
 	      
-	const handleCalculatorInput = (key) => {
+const handleCalculatorInput = (key) => {
     hapticFeedback('light');
-    // Se elimina la variable 'isResultDisplayed' de la desestructuración
     let { displayValue, waitingForNewValue, operand1, operator } = calculatorState;
     
     const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
@@ -6252,119 +6267,99 @@ const hideCalculator = () => {
     if (isOperator) {
         if (operand1 !== null && operator !== null && !waitingForNewValue) {
             calculate();
-            displayValue = calculatorState.displayValue;
+            displayValue = calculatorState.displayValue; // Actualizamos el display con el resultado parcial
         }
-        operand1 = parseFloat(displayValue);
+        // Usamos parseFloat para asegurarnos de que el operando es un número, no un string con comas.
+        operand1 = parseFloat(displayValue.replace(',', '.'));
         operator = key;
         waitingForNewValue = true;
     } else {
         switch(key) {
-            // =================================================================
-            // === SOLUCIÓN 1: INICIO DE LA LÓGICA DE CALCULADORA MEJORADA ===
-            // =================================================================
-            case 'done': 
-                hapticFeedback('medium'); 
-                
-                // Si hay una operación pendiente, la calculamos primero.
+            case 'done':
+                hapticFeedback('medium');
+                // Si hay una operación pendiente, la calculamos primero para mostrar el resultado final.
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
-                    displayValue = calculatorState.displayValue; 
+                    displayValue = calculatorState.displayValue;
                 }
                 
-                // Asignamos el valor y cerramos inmediatamente.
                 if (calculatorState.targetInput) {
-                    const finalValue = parseFloat(displayValue) || 0;
-                    // Se formatea a 2 decimales, sin agrupación, para que sea un valor numérico estándar.
-                    calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    // Disparamos un evento 'input' para que cualquier validador reaccione.
+                    // Convertimos el valor final (con coma) a un número estándar.
+                    const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
+                    // Formateamos para que siempre tenga 2 decimales y sea compatible con parseCurrencyString.
+                    calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
+                        useGrouping: false, 
+                        minimumFractionDigits: 2, 
+                        maximumFractionDigits: 2 
+                    });
+                    // Disparamos un evento para que las validaciones y otros listeners reaccionen al cambio.
                     calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
-                hideCalculator(); 
+                hideCalculator();
                 return; // Salimos de la función aquí.
-            // =================================================================
-            // === SOLUCIÓN 1: FIN DE LA LÓGICA DE CALCULADORA MEJORADA      ===
-            // =================================================================
-            case 'comma': 
+
+            case 'comma':
+                // Reemplazamos el punto por la coma para la lógica interna.
                 if (waitingForNewValue) {
-                    displayValue = '0.';
+                    displayValue = '0,';
                     waitingForNewValue = false;
-                } else if (!displayValue.includes('.')) { 
-                    displayValue += '.'; 
-                } 
+                } else if (!displayValue.includes(',')) {
+                    displayValue += ',';
+                }
                 break;
+            
+            // Los casos 'clear', 'backspace', 'sign' y los dígitos se mantienen, pero adaptados
+            // para trabajar siempre con la coma como separador decimal en el 'displayValue'.
             case 'clear': 
-                displayValue = '0'; 
-                waitingForNewValue = true; 
-                operand1 = null;
-                operator = null;
-                break;
+                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; break;
             case 'backspace': 
-                displayValue = displayValue.slice(0, -1);
-                if (displayValue === '' || displayValue === '-') {
-                    displayValue = '0';
-                    waitingForNewValue = true;
-                }
-                break;
+                displayValue = displayValue.slice(0, -1) || '0'; if(displayValue === '0') waitingForNewValue = true; break;
             case 'sign': 
-                if (displayValue !== '0') { 
-                    displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
-                } 
-                break;
+                if (displayValue !== '0') { displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; } break;
             default: // Dígitos
-                if (waitingForNewValue || (displayValue === '0' && key !== '0' && !displayValue.includes('.'))) {
-                    displayValue = key; 
-                    waitingForNewValue = false; 
-                } else if (displayValue === '0' && key === '0' && !displayValue.includes('.')) {
-                    // Evita múltiples ceros al principio
-                    displayValue = '0';
+                if (waitingForNewValue || displayValue === '0') {
+                    displayValue = key;
+                    waitingForNewValue = false;
+                } else {
+                    displayValue += key;
                 }
-                else { 
-                    displayValue += key; 
-                } 
                 break;
         }
     }
     
-    // Ya no necesitamos gestionar 'isResultDisplayed'
     calculatorState.displayValue = displayValue;
     calculatorState.waitingForNewValue = waitingForNewValue;
     calculatorState.operand1 = operand1;
     calculatorState.operator = operator;
-    updateCalculatorDisplay();
+    updateCalculatorDisplay(); // Llama a la función que refresca la pantalla
 };
 
-// También eliminamos la función 'updateDoneButtonText' que ya no es necesaria.
-// El estado 'isResultDisplayed' en 'calculatorState' también puede ser eliminado.
-            const calculate = () => {
-            const val1 = parseFloat(calculatorState.operand1);
-            const val2 = parseFloat(calculatorState.displayValue);
-            if (isNaN(val1) || isNaN(val2) || !calculatorState.operator) {
-                return;
-            }
+// Y también la función calculate() para que use comas correctamente
+const calculate = () => {
+    const val1 = calculatorState.operand1;
+    const val2 = parseFloat(calculatorState.displayValue.replace(',', '.'));
+    if (isNaN(val1) || isNaN(val2) || !calculatorState.operator) return;
 
-            let result = 0;
-            switch (calculatorState.operator) {
-                case 'add': result = val1 + val2; break;
-                case 'subtract': result = val1 - val2; break;
-                case 'multiply': result = val1 * val2; break;
-                case 'divide':
-                    if (val2 === 0) {
-                        showToast("No se puede dividir por cero.", "danger");
-                        calculatorState.displayValue = '0';
-                        calculatorState.waitingForNewValue = true;
-                        calculatorState.operand1 = null;
-                        calculatorState.operator = null;
-                        return;
-                    }
-                    result = val1 / val2;
-                    break;
+    let result = 0;
+    switch (calculatorState.operator) {
+        case 'add': result = val1 + val2; break;
+        case 'subtract': result = val1 - val2; break;
+        case 'multiply': result = val1 * val2; break;
+        case 'divide':
+            if (val2 === 0) {
+                showToast("No se puede dividir por cero.", "danger");
+                result = 0; // O manejar como 'Error'
+            } else {
+                result = val1 / val2;
             }
-            calculatorState.displayValue = String(result);
-            calculatorState.operand1 = null;
-            calculatorState.operator = null;
-            calculatorState.waitingForNewValue = true;
-            calculatorState.isResultDisplayed = true;
-        };
+            break;
+    }
+    // El resultado se guarda como string con coma para ser consistente con el display.
+    calculatorState.displayValue = String(result).replace('.', ',');
+    calculatorState.operand1 = null;
+    calculatorState.operator = null;
+    calculatorState.waitingForNewValue = true;
+};
 		 const updateDoneButtonText = () => {
             const doneButton = select('calculator-btn-done');
             if (doneButton) {
@@ -8071,19 +8066,16 @@ const renderDiarioCalendar = async () => {
 };
 
 // ==============================================================
-// === INICIO: FUNCIÓN CORREGIDA Y ROBUSTA PARA GUARDAR CAMBIOS ===
+// === INICIO: FUNCIÓN DE GUARDADO OPTIMIZADA (v2.0)          ===
 // ==============================================================
 const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
     const mode = select('movimiento-mode').value;
     
-    // *** LA GRAN MEJORA: DECIDIR QUÉ HACER ***
-    // Si estamos editando un recurrente, llamamos a la nueva función especializada y nos detenemos.
     if (mode === 'edit-recurrent') {
         await handleSaveRecurrent(form, btn);
-        return; // Salimos para no ejecutar la lógica de movimientos normales.
+        return; 
     }
 
-    // Si no es un recurrente, continuamos con la lógica de siempre, pero ahora más segura.
     clearAllErrors(form.id);
     if (!validateMovementForm()) {
         hapticFeedback('error');
@@ -8113,6 +8105,28 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
     }
     
     try {
+        // --- ¡AQUÍ ESTÁ LA MAGIA DE LA OPTIMIZACIÓN! ---
+        if (mode.startsWith('edit')) {
+            // 1. Si estamos EDITANDO, buscamos el movimiento viejo en nuestra lista interna.
+            const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
+            if (index !== -1) {
+                // 2. Lo reemplazamos por el nuevo.
+                db.movimientos[index] = dataFromForm;
+            }
+        } else {
+            // 3. Si es NUEVO, lo añadimos al principio de la lista.
+            db.movimientos.unshift(dataFromForm);
+            newMovementIdToHighlight = dataFromForm.id;
+        }
+
+        // 4. Ordenamos la lista por si la fecha ha cambiado.
+        db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+        // 5. ¡REFRESCO INSTANTÁNEO! Usamos nuestra nueva función ayudante.
+        updateLocalDataAndRefreshUI();
+
+        // El resto del código que habla con la base de datos se mantiene,
+        // pero ahora se ejecuta en segundo plano mientras el usuario ya ve el cambio.
         await fbDb.runTransaction(async (transaction) => {
             let oldMovementData = null;
             if (mode.startsWith('edit')) {
@@ -8141,93 +8155,28 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
             transaction.set(movRef, dataFromForm);
         });
 
-        if (mode === 'new') newMovementIdToHighlight = dataFromForm.id;
-
         setButtonLoading(btn, false);
         if (!isSaveAndNew) hideModal('movimiento-modal');
         
         hapticFeedback('success');
         if (!isSaveAndNew) showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
-        
-        buildIntelligentIndex();
-        
-        const activePage = document.querySelector('.view--active');
-        if (activePage && activePage.id === PAGE_IDS.DIARIO) await loadInitialMovements();
+
+        // ¡YA NO NECESITAMOS RECARGAR TODO! La siguiente línea se elimina.
+        // ANTES: if (activePage && activePage.id === PAGE_IDS.DIARIO) await loadInitialMovements();
 
         return true;
     } catch (error) {
         console.error("Error al guardar el movimiento:", error);
         showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
         setButtonLoading(btn, false);
+        // Si hay un error, recargamos desde cero para asegurar la consistencia.
+        if (select('diario-page')?.classList.contains('view--active')) await loadInitialMovements();
         return false;
     }
 };
 // ============================================================
-// === FIN: FUNCIÓN CORREGIDA Y ROBUSTA PARA GUARDAR CAMBIOS ===
+// === FIN: FUNCIÓN DE GUARDADO OPTIMIZADA                    ===
 // ============================================================
-
-
-// =================================================================
-// === INICIO: NUEVA FUNCIÓN ESPECIALIZADA PARA GUARDAR RECURRENTES ===
-// =================================================================
-const handleSaveRecurrent = async (form, btn) => {
-    clearAllErrors(form.id);
-    // Aquí podrías añadir una validación específica para recurrentes si fuera necesario
-    
-    setButtonLoading(btn, true);
-
-    const id = select('movimiento-id').value;
-    const recurrenteOriginal = db.recurrentes.find(r => r.id === id);
-    if (!recurrenteOriginal) {
-        showToast("Error: no se encontró el recurrente a editar.", "danger");
-        setButtonLoading(btn, false);
-        return;
-    }
-
-    const cantidadValue = parseCurrencyString(select('movimiento-cantidad').value);
-    const type = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
-
-    // Creamos el objeto con los datos actualizados del formulario
-    const updatedData = {
-        cantidad: Math.round(cantidadValue * 100),
-        descripcion: select('movimiento-descripcion').value.trim(),
-        tipo: type,
-        cuentaId: select('movimiento-cuenta').value,
-        conceptoId: select('movimiento-concepto').value,
-        cuentaOrigenId: select('movimiento-cuenta-origen').value,
-        cuentaDestinoId: select('movimiento-cuenta-destino').value,
-        frequency: select('recurrent-frequency').value,
-        nextDate: select('recurrent-next-date').value,
-        endDate: select('recurrent-end-date').value || null,
-    };
-    if (updatedData.tipo === 'traspaso') {
-        updatedData.cantidad = Math.abs(updatedData.cantidad);
-    }
-
-    try {
-        // Guardamos directamente en la colección de 'recurrentes'
-        await saveDoc('recurrentes', id, updatedData);
-        
-        setButtonLoading(btn, false);
-        hideModal('movimiento-modal');
-        hapticFeedback('success');
-        showToast('Operación recurrente actualizada.');
-
-        // Refrescamos la vista de planificación para ver los cambios
-        const activePage = document.querySelector('.view--active');
-        if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
-            renderPlanificacionPage();
-        }
-
-    } catch (error) {
-        console.error("Error al actualizar el recurrente:", error);
-        showToast("No se pudo actualizar la operación recurrente.", "danger");
-        setButtonLoading(btn, false);
-    }
-};
-// ===============================================================
-// === FIN: NUEVA FUNCIÓN ESPECIALIZADA PARA GUARDAR RECURRENTES ===
-// ===============================================================
 
 
         const handleAddConcept = async (btn) => { 
@@ -8731,70 +8680,87 @@ const handleSaveRecurrent = async (form, btn) => {
             }
         };
 		
-// REEMPLAZA tu función deleteMovementAndAdjustBalance actual por esta:
+ // ==============================================================
+// === INICIO: FUNCIÓN DE BORRADO OPTIMIZADA (v2.0)           ===
+// ==============================================================
 const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
     const collection = isRecurrent ? 'recurrentes' : 'movimientos';
-    let dataToDelete;
     
-    // Busca el elemento a borrar (en la caché o lo recupera de la base de datos)
-    if (collection === 'movimientos') {
-        dataToDelete = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id);
-    } else {
-        dataToDelete = db.recurrentes.find(r => r.id === id);
-    }
-    
-    if (!dataToDelete) {
-        const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collection).doc(id);
-        const doc = await docRef.get();
-        if (!doc.exists) {
-            showToast("Error: El elemento a borrar ya no existe.", "danger");
-            return;
-        }
-        dataToDelete = { id: doc.id, ...doc.data() };
+    // Primero, buscamos el elemento en nuestra lista interna.
+    const itemToDelete = isRecurrent 
+        ? db.recurrentes.find(r => r.id === id) 
+        : db.movimientos.find(m => m.id === id);
+
+    if (!itemToDelete) {
+        showToast("Error: No se pudo encontrar el elemento para borrar.", "danger");
+        return;
     }
 
-    // El modal de confirmación ya ha sido mostrado por el listener del evento click.
     try {
-        // Usamos un "batch" para asegurar que todas las operaciones se completen con éxito o ninguna lo haga.
+        // --- ¡LA OPTIMIZACIÓN OCURRE AQUÍ! ---
+        
+        // 1. Añadimos una animación de borrado para suavizar la transición.
+        const itemElement = document.querySelector(`.transaction-card[data-id="${id}"]`)?.closest('.swipe-container');
+        if (itemElement) {
+            itemElement.classList.add('item-deleting');
+            // Esperamos a que la animación termine antes de redibujar.
+            itemElement.addEventListener('animationend', () => {
+                if (isRecurrent) {
+                    db.recurrentes = db.recurrentes.filter(r => r.id !== id);
+                    renderPlanificacionPage(); // La vista de recurrentes es más simple
+                } else {
+                    db.movimientos = db.movimientos.filter(m => m.id !== id);
+                    updateLocalDataAndRefreshUI();
+                }
+            }, { once: true });
+        } else {
+             // Si no encontramos el elemento visual, hacemos el cambio directamente.
+             if (isRecurrent) {
+                db.recurrentes = db.recurrentes.filter(r => r.id !== id);
+                renderPlanificacionPage();
+             } else {
+                db.movimientos = db.movimientos.filter(m => m.id !== id);
+                updateLocalDataAndRefreshUI();
+             }
+        }
+        
+        // El resto del código se ejecuta en segundo plano.
         const batch = fbDb.batch();
         const userRef = fbDb.collection('users').doc(currentUser.uid);
 
-        // 1. Ajustar saldos de las cuentas (solo para movimientos, no para recurrentes futuros)
         if (!isRecurrent) {
-            if (dataToDelete.tipo === 'traspaso') {
-                const origenRef = userRef.collection('cuentas').doc(dataToDelete.cuentaOrigenId);
-                const destinoRef = userRef.collection('cuentas').doc(dataToDelete.cuentaDestinoId);
-                batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(dataToDelete.cantidad) });
-                batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(-dataToDelete.cantidad) });
+            if (itemToDelete.tipo === 'traspaso') {
+                const origenRef = userRef.collection('cuentas').doc(itemToDelete.cuentaOrigenId);
+                const destinoRef = userRef.collection('cuentas').doc(itemToDelete.cuentaDestinoId);
+                batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(itemToDelete.cantidad) });
+                batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(-itemToDelete.cantidad) });
             } else {
-                const cuentaRef = userRef.collection('cuentas').doc(dataToDelete.cuentaId);
-                batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(-dataToDelete.cantidad) });
+                const cuentaRef = userRef.collection('cuentas').doc(itemToDelete.cuentaId);
+                batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(-itemToDelete.cantidad) });
             }
         }
 
-        // 2. Borrar el documento del movimiento o recurrente
         const docToDeleteRef = userRef.collection(collection).doc(id);
         batch.delete(docToDeleteRef);
 
-        // 3. Ejecutar todas las operaciones en la base de datos
         await batch.commit();
 
         hapticFeedback('success');
         showToast("Elemento eliminado permanentemente.", "info");
 
-        // 4. Refrescar la interfaz de usuario para reflejar el cambio
-        const activeView = document.querySelector('.view--active');
-        if (activeView && (activeView.id === PAGE_IDS.DIARIO || activeView.id === PAGE_IDS.PLANIFICACION)) {
-            await loadInitialMovements(); // Recarga la lista de movimientos
-        } else {
-            scheduleDashboardUpdate(); // O actualiza el dashboard si es la vista activa
-        }
+        // ¡YA NO NECESITAMOS RECARGAR TODO! Las siguientes líneas se eliminan o ya no son necesarias.
+        // ANTES: if (activeView && ...) { await loadInitialMovements(); } ...
 
     } catch (error) {
-        console.error("Error en el borrado directo:", error);
+        console.error("Error al eliminar:", error);
         showToast("Error al eliminar el elemento.", "danger");
+        // Si falla, recargamos desde cero para evitar inconsistencias.
+        if (select('diario-page')?.classList.contains('view--active')) await loadInitialMovements();
     }
 };
+// ============================================================
+// === FIN: FUNCIÓN DE BORRADO OPTIMIZADA                     ===
+// ============================================================
 
     const recalculateAllAccountBalances = async (btn) => {
         if (!currentUser) {
