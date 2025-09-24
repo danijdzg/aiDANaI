@@ -3317,7 +3317,7 @@ assetAllocationChart = new Chart(chartCtx, {
     }, 50);
 };
 // =============================================================
-// === PASO 1: REEMPLAZO COMPLETO DE renderInformesPage      ===
+// === INICIO: FUNCIÓN renderInformesPage (VERSIÓN MODIFICADA) ===
 // =============================================================
 const renderInformesPage = () => {
     const container = select(PAGE_IDS.INFORMES);
@@ -3334,31 +3334,43 @@ const renderInformesPage = () => {
     }
 
     const informesDisponibles = {
-        'resumen_ejecutivo': { title: 'Resumen Ejecutivo', icon: 'insights' },
-        'flujo_caja': { title: 'Análisis de Flujo de Caja (12 Meses)', icon: 'swap_horiz' },
+        'flujo_caja': { title: 'Análisis de Flujo de Caja', icon: 'swap_horiz' },
         'asignacion_activos': { title: 'Asignación de Activos', icon: 'pie_chart' },
+		'resumen_ejecutivo': { title: 'Resumen Ejecutivo', icon: 'insights' },
         'crecimiento_patrimonial': { title: 'Crecimiento Patrimonial (Último Año)', icon: 'waterfall_chart' },
         'rendimiento_inversiones': { title: 'Scorecard de Inversiones', icon: 'military_tech' }
     };
 
-    // === INICIO DE LA MODIFICACIÓN ===
-    // 1. Definimos qué informes llevarán filtros.
     const reportsWithFilters = ['resumen_ejecutivo', 'flujo_caja'];
-    // === FIN DE LA MODIFICACIÓN ===
+    
+    // --- INICIO DE LA MODIFICACIÓN ---
+    // 1. Definimos qué informes NO tendrán el botón de exportar.
+    const reportsWithoutExport = ['flujo_caja', 'asignacion_activos'];
+    // --- FIN DE LA MODIFICACIÓN ---
 
     let informesHtml = '<div class="accordion-wrapper">';
     informesHtml += `<h3 style="margin-bottom: var(--sp-2); padding-left: var(--sp-2);">Informes Predefinidos</h3>`;
 
     for (const [id, data] of Object.entries(informesDisponibles)) {
         
-        // === INICIO DE LA MODIFICACIÓN ===
-        // 2. Generamos los filtros SÓLO si el ID del informe está en nuestra lista.
-        let filtersHtml = ''; // Por defecto, no hay filtros.
+        let filtersHtml = '';
         if (reportsWithFilters.includes(id)) {
             const defaultPeriod = (id === 'flujo_caja') ? 'ultimo-año' : 'año-actual';
             filtersHtml = generateReportFilterControls(id, defaultPeriod);
         }
-        // === FIN DE LA MODIFICACIÓN ===
+        
+        // --- INICIO DE LA MODIFICACIÓN ---
+        // 2. Creamos una variable para el HTML del botón y la generamos condicionalmente.
+        let exportButtonHtml = '';
+        // Si el 'id' del informe actual NO está en nuestra lista de exclusión, generamos el botón.
+        if (!reportsWithoutExport.includes(id)) {
+            exportButtonHtml = `
+                <button class="btn btn--secondary" data-action="export-pdf" data-report-id="${id}" style="padding: 6px 12px; font-size: 0.8rem; margin-right: 16px;">
+                    <span class="material-icons" style="font-size: 16px;">picture_as_pdf</span>
+                    <span>Exportar</span>
+                </button>`;
+        }
+        // --- FIN DE LA MODIFICACIÓN ---
 
         informesHtml += `
             <details class="accordion informe-acordeon" id="acordeon-${id}">
@@ -3367,16 +3379,14 @@ const renderInformesPage = () => {
                         <span class="material-icons" style="margin-right: 12px;">${data.icon}</span>
                         <span>${data.title}</span>
                     </h3>
-                    <button class="btn btn--secondary" data-action="export-pdf" data-report-id="${id}" style="padding: 6px 12px; font-size: 0.8rem; margin-right: 16px;">
-                        <span class="material-icons" style="font-size: 16px;">picture_as_pdf</span>
-                        <span>Exportar</span>
-                    </button>
+                    
+                    <!-- 3. Insertamos la variable aquí. Estará vacía para los informes excluidos. -->
+                    ${exportButtonHtml}
+
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
                 <div class="accordion__content" id="informe-container-${id}">
-                    <!-- La variable 'filtersHtml' contendrá los filtros o estará vacía -->
                     ${filtersHtml} 
-                    
                     <div id="informe-content-${id}">
                          <p class="form-label" style="text-align:center; padding: var(--sp-4) 0;">Abre para generar el informe.</p>
                     </div>
@@ -3388,7 +3398,9 @@ const renderInformesPage = () => {
 
     container.innerHTML = informesHtml;
 };
-        
+// =============================================================
+// === FIN: FUNCIÓN renderInformesPage (VERSIÓN MODIFICADA)  ===
+// =============================================================
         const renderVirtualListItem = (item) => {
 			/* === INICIO: CÓDIGO AÑADIDO === */
             // Caso para renderizar la cabecera de la sección de pendientes
@@ -4451,15 +4463,16 @@ async function renderInformeAsignacionActivos(container) {
     container.innerHTML = tableHtml;
 }
 
-    
+// =================================================================
+// === INICIO: NUEVO SISTEMA DE PREVISUALIZACIÓN Y EXPORTACIÓN DE PDF ===
+// =================================================================
+
 /**
- * Maneja la exportación a PDF, generando el informe si es necesario.
- * @param {string} reportId - El ID del informe a exportar.
- * @param {HTMLButtonElement} btn - El botón que activó la exportación.
+ * Genera el objeto del documento PDF para un informe específico sin descargarlo.
+ * @param {string} reportId - El ID del informe.
+ * @returns {Promise<jspdf.jsPDF>} Una promesa que se resuelve con el objeto jsPDF.
  */
-const handleExportToPdf = async (reportId, btn) => {
-    setButtonLoading(btn, true);
-    
+async function generatePdfDocument(reportId) {
     // Apuntamos al contenedor del *acordeón completo*
     let accordionContent = select(`informe-container-${reportId}`);
     
@@ -4493,6 +4506,13 @@ const handleExportToPdf = async (reportId, btn) => {
 
     // Buscamos los datos dentro del contenedor de contenido específico
     const reportContentContainer = select(`informe-content-${reportId}`);
+    // ¡CORRECCIÓN IMPORTANTE! Añadimos una comprobación por si el contenedor no existe.
+    if (!reportContentContainer) {
+        console.error(`No se pudo encontrar el contenedor de contenido para el informe: ${reportId}`);
+        doc.text("Error: No se pudo generar el contenido del informe.", 14, 40);
+        return doc; // Devolvemos el doc con el mensaje de error
+    }
+    
     const kpiData = reportContentContainer.querySelector(`#kpi-data-${reportId}`);
     const tableData = reportContentContainer.querySelector(`#table-data-${reportId}`);
     const chartCanvas = reportContentContainer.querySelector('canvas');
@@ -4534,12 +4554,71 @@ const handleExportToPdf = async (reportId, btn) => {
         }
     }
     
-    doc.save(`Informe_${reportId}_${new Date().toISOString().slice(0,10)}.pdf`);
-    setButtonLoading(btn, false);
+    return doc;
+};
+
+
+/**
+ * Muestra un modal con la previsualización del PDF y un botón para descargarlo.
+ * @param {string} reportId - El ID del informe a previsualizar.
+ * @param {HTMLButtonElement} btn - El botón que activó la acción.
+ */
+const showPdfPreviewModal = async (reportId, btn) => {
+    setButtonLoading(btn, true, 'Generando...');
+    
+    try {
+        const doc = await generatePdfDocument(reportId);
+        
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Recreamos la lógica para obtener el título aquí, en lugar de intentar leerlo del PDF.
+        const informesDisponibles = {
+            'resumen_ejecutivo': { title: 'Resumen Ejecutivo' },
+            'flujo_caja': { title: 'Análisis de Flujo de Caja' },
+            'asignacion_activos': { title: 'Asignación de Activos' },
+            'crecimiento_patrimonial': { title: 'Crecimiento Patrimonial' },
+            'rendimiento_inversiones': { title: 'Scorecard de Inversiones' }
+        };
+        const reportTitle = informesDisponibles[reportId]?.title || 'Vista Previa del Informe';
+        // --- FIN DE LA CORRECCIÓN ---
+
+        const pdfDataUri = doc.output('datauristring');
+
+        const modalHtml = `
+            <div style="height: 75vh; display: flex; flex-direction: column;">
+                <iframe src="${pdfDataUri}" style="flex-grow: 1; border: none;" title="Previsualización de PDF">
+                    <p>Tu navegador no soporta la previsualización. Usa el botón de abajo para descargar.</p>
+                </iframe>
+            </div>
+            <div class="modal__actions">
+                <button class="btn btn--secondary" data-action="close-modal" data-modal-id="generic-modal">Cerrar</button>
+                <button id="confirm-pdf-download" class="btn btn--primary">
+                    <span class="material-icons" style="font-size: 16px;">download</span>
+                    <span>Descargar PDF</span>
+                </button>
+            </div>`;
+
+        showGenericModal(reportTitle, modalHtml);
+
+        // Añadimos el listener para el botón de descarga DENTRO del modal
+        const downloadBtn = select('confirm-pdf-download');
+        if(downloadBtn) {
+            downloadBtn.addEventListener('click', () => {
+                doc.save(`Informe_${reportId}_${new Date().toISOString().slice(0,10)}.pdf`);
+                hideModal('generic-modal');
+                showToast('Descarga iniciada.', 'info');
+            });
+        }
+
+    } catch (error) {
+        console.error("Error al generar la vista previa del PDF:", error);
+        showToast("No se pudo generar la vista previa.", "danger");
+    } finally {
+        setButtonLoading(btn, false);
+    }
 };
 
 // =================================================================
-// === FIN: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF (v3.0 FINAL) ===
+// === FIN: NUEVO SISTEMA DE PREVISUALIZACIÓN Y EXPORTACIÓN DE PDF ===
 // =================================================================
    
 const renderDashboardActionCenter = () => {
@@ -7462,7 +7541,7 @@ const attachEventListeners = () => {
         }
 
         const actions = {
-			'export-pdf': () => handleExportToPdf(reportId, btn),
+			'export-pdf': () => showPdfPreviewModal(reportId, btn),
             'toggle-diario-view': () => { diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list'; const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons'); if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list'; renderDiarioPage(); },
 			'calendar-nav': () => {
     const direction = actionTarget.dataset.direction;
