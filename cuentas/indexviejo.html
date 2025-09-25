@@ -8028,7 +8028,68 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
 // === FIN: FUNCIÓN DE GUARDADO OPTIMIZADA                    ===
 // ============================================================
 
+// =================================================================
+// === INICIO: FUNCIÓN FALTANTE PARA GUARDAR RECURRENTES (SOLUCIÓN) ===
+// =================================================================
+const handleSaveRecurrent = async (form, btn) => {
+    clearAllErrors(form.id);
+    // Reutilizamos la misma validación, ya que los campos básicos son los mismos.
+    if (!validateMovementForm()) {
+        hapticFeedback('error');
+        showToast('Por favor, revisa los campos marcados en rojo.', 'warning');
+        return;
+    }
 
+    setButtonLoading(btn, true);
+
+    try {
+        const id = select('movimiento-id').value;
+        const cantidadValue = parseCurrencyString(select('movimiento-cantidad').value);
+        const tipo = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+        let cantidadFinal = Math.round(cantidadValue * 100);
+        if (tipo === 'traspaso') {
+            cantidadFinal = Math.abs(cantidadFinal);
+        }
+
+        const dataToSave = {
+            id: id,
+            cantidad: cantidadFinal,
+            descripcion: select('movimiento-descripcion').value.trim(),
+            tipo: tipo,
+            // Campos específicos de Movimiento/Traspaso
+            cuentaId: select('movimiento-cuenta').value,
+            conceptoId: select('movimiento-concepto').value,
+            cuentaOrigenId: select('movimiento-cuenta-origen').value,
+            cuentaDestinoId: select('movimiento-cuenta-destino').value,
+            // Campos específicos de Recurrente
+            frequency: select('recurrent-frequency').value,
+            nextDate: select('recurrent-next-date').value,
+            endDate: select('recurrent-end-date').value || null // Guardamos null si está vacío
+        };
+
+        // Guardamos los datos en la colección 'recurrentes'
+        await saveDoc('recurrentes', id, dataToSave);
+
+        setButtonLoading(btn, false);
+        hideModal('movimiento-modal');
+        hapticFeedback('success');
+        showToast('Operación recurrente actualizada correctamente.');
+
+        // Refrescamos la vista de planificación para ver los cambios al instante
+        const activePage = document.querySelector('.view--active');
+        if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+            renderPlanificacionPage();
+        }
+
+    } catch (error) {
+        console.error("Error al guardar la operación recurrente:", error);
+        showToast("No se pudo actualizar la operación recurrente.", "danger");
+        setButtonLoading(btn, false);
+    }
+};
+// =================================================================
+// === FIN: FUNCIÓN FALTANTE                                     ===
+// =================================================================
         const handleAddConcept = async (btn) => { 
             const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
             if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
