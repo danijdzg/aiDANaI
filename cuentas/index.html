@@ -3264,10 +3264,9 @@ assetAllocationChart = new Chart(chartCtx, {
         if (listContainer) {
             const listHtml = displayAssetsData.sort((a,b) => b.valorActual - a.valorActual).map(cuenta => {
                     const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-                    return `<div class="modal__list-item" style="padding: var(--sp-3); display: block; border-bottom: 1px solid var(--c-outline);">
+                    return `<div class="modal__list-item" data-action="view-account-details" data-id="${cuenta.id}" style="cursor: pointer; padding: var(--sp-3); display: block; border-bottom: 1px solid var(--c-outline);">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; margin-bottom: var(--sp-1);">
-                            <strong style="font-size: var(--fs-base);">${escapeHTML(cuenta.nombre)}</strong>
-                            <strong style="font-size: var(--fs-base);">${formatCurrency(cuenta.valorActual)}</strong>
+                            <strong style="font-size: var(--fs-base);">${escapeHTML(cuenta.nombre)}</strong>                 <strong style="font-size: var(--fs-base);">${formatCurrency(cuenta.valorActual)}</strong>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: var(--sp-2); font-size: var(--fs-xs);">
                             <span class="${pnlClass}" style="font-weight: 600;">P&L: ${formatCurrency(cuenta.pnlAbsoluto)} (${cuenta.pnlPorcentual.toFixed(1)}%)</span>
@@ -3323,7 +3322,7 @@ const renderInformesPage = () => {
         
         let filtersHtml = '';
         if (reportsWithFilters.includes(id)) {
-            const defaultPeriod = (id === 'flujo_caja') ? 'ultimo-año' : 'año-actual';
+            const defaultPeriod = 'año-actual';
             filtersHtml = generateReportFilterControls(id, defaultPeriod);
         }
         
@@ -4317,44 +4316,66 @@ async function renderInformeResumenEjecutivo(container) {
 
 
 async function renderInformeAsignacionActivos(container) {
-        const getAssetClass = (tipo) => {
-            const t = (tipo || '').toUpperCase();
-            if (['RENTA FIJA', 'LETRAS', 'BONOS'].some(term => t.includes(term))) return 'Renta Fija';
-            if (['RENTA VARIABLE', 'ACCIONES', 'FONDOS', 'INDEXADO', 'BROKER'].some(term => t.includes(term))) return 'Renta Variable';
-            if (['PROPIEDAD', 'INMOBILIARIO'].some(term => t.includes(term))) return 'Inmobiliario';
-            if (['CRIPTO', 'BITCOIN'].some(term => t.includes(term))) return 'Criptoactivos';
-            if (['BANCO', 'AHORRO', 'EFECTIVO'].some(term => t.includes(term))) return 'Liquidez';
-            return 'Otros';
-        };
+    // CAMBIO 1: La función interna 'getAssetClass' ya no es necesaria y se ha eliminado.
 
-        const saldos = await getSaldos();
-        const assetAllocation = getVisibleAccounts().reduce((acc, cuenta) => {
-            if (cuenta.tipo.toUpperCase() !== 'PRÉSTAMO' && cuenta.tipo.toUpperCase() !== 'TARJETA DE CRÉDITO') {
-                const assetClass = getAssetClass(cuenta.tipo);
-                acc[assetClass] = (acc[assetClass] || 0) + (saldos[cuenta.id] || 0);
-            }
-            return acc;
-        }, {});
+    const saldos = await getSaldos();
+    
+    // CAMBIO 2: Modificamos la lógica de agrupación. Ahora usamos el "tipo" de la cuenta directamente.
+    const assetAllocation = getVisibleAccounts().reduce((acc, cuenta) => {
+        // Mantenemos la exclusión de las deudas para no distorsionar el gráfico de activos.
+        if (cuenta.tipo.toUpperCase() !== 'PRÉSTAMO' && cuenta.tipo.toUpperCase() !== 'TARJETA DE CRÉDITO') {
+            // Usamos 'toSentenceCase' para un formato limpio (ej: 'banco' -> 'Banco')
+            const assetType = toSentenceCase(cuenta.tipo || 'Sin Tipo');
+            acc[assetType] = (acc[assetType] || 0) + (saldos[cuenta.id] || 0);
+        }
+        return acc;
+    }, {});
 
-        const labels = Object.keys(assetAllocation);
-        const data = Object.values(assetAllocation).map(v => v / 100);
+    const labels = Object.keys(assetAllocation);
+    const data = Object.values(assetAllocation).map(v => v / 100);
 
-        container.innerHTML = `
-            <p class="form-label" style="margin-bottom: var(--sp-3);">Distribución de tu patrimonio por clase de activo. Úsalo para gestionar riesgos y alinear tus inversiones con tu estrategia.</p>
-            <div class="chart-container" style="height: 280px;">
-                <canvas id="asignacion-activos-chart"></canvas>
-            </div>
-            <!-- Aquí iría la tabla de rebalanceo en una futura iteración -->
-        `;
+    // CAMBIO 3: Actualizamos el texto descriptivo para que refleje la nueva vista detallada.
+    container.innerHTML = `
+        <p class="form-label" style="margin-bottom: var(--sp-3);">Distribución detallada de tu patrimonio, agrupado por el tipo específico de cada cuenta. Esto te da una visión granular de la composición de tus activos.</p>
+        <div class="chart-container" style="height: 280px;">
+            <canvas id="asignacion-activos-chart"></canvas>
+        </div>
+        <!-- Aquí iría la tabla de rebalanceo en una futura iteración -->
+    `;
 
-        const ctx = select('asignacion-activos-chart').getContext('2d');
-        informeActivoChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels, datasets: [{ data, backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6'] }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, datalabels: { formatter: (val, ctx) => { const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0); return (val * 100 / sum).toFixed(1) + '%'; }, color: '#fff' } } }
-        });
-    }
-
+    const ctx = select('asignacion-activos-chart').getContext('2d');
+    
+    // El resto de la lógica del gráfico no necesita cambios, ya que se adapta a los nuevos datos.
+    informeActivoChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { 
+            labels, 
+            datasets: [{ 
+                data, 
+                backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6', '#FF9F0A', '#45B6E9', '#D158A7'] 
+            }] 
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { 
+                legend: { position: 'right' }, 
+                datalabels: { 
+                    formatter: (val, ctx) => { 
+                        const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0); 
+                        const percentage = (val * 100 / sum);
+                        // Solo mostramos la etiqueta si es mayor al 3% para no saturar el gráfico
+                        return percentage > 3 ? percentage.toFixed(1) + '%' : '';
+                    }, 
+                    color: '#fff',
+                    font: {
+                        weight: 'bold'
+                    }
+                } 
+            } 
+        }
+    });
+}
     
     /**
      * Renderiza el informe: Scorecard de Rendimiento de Inversiones.
