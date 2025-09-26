@@ -3264,10 +3264,9 @@ assetAllocationChart = new Chart(chartCtx, {
         if (listContainer) {
             const listHtml = displayAssetsData.sort((a,b) => b.valorActual - a.valorActual).map(cuenta => {
                     const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-                    return `<div class="modal__list-item" style="padding: var(--sp-3); display: block; border-bottom: 1px solid var(--c-outline);">
+                    return `<div class="modal__list-item" data-action="view-account-details" data-id="${cuenta.id}" style="cursor: pointer; padding: var(--sp-3); display: block; border-bottom: 1px solid var(--c-outline);">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; margin-bottom: var(--sp-1);">
-                            <strong style="font-size: var(--fs-base);">${escapeHTML(cuenta.nombre)}</strong>
-                            <strong style="font-size: var(--fs-base);">${formatCurrency(cuenta.valorActual)}</strong>
+                            <strong style="font-size: var(--fs-base);">${escapeHTML(cuenta.nombre)}</strong>                 <strong style="font-size: var(--fs-base);">${formatCurrency(cuenta.valorActual)}</strong>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: var(--sp-2); font-size: var(--fs-xs);">
                             <span class="${pnlClass}" style="font-weight: 600;">P&L: ${formatCurrency(cuenta.pnlAbsoluto)} (${cuenta.pnlPorcentual.toFixed(1)}%)</span>
@@ -3317,13 +3316,13 @@ const renderInformesPage = () => {
     // --- FIN DE LA MODIFICACIÓN ---
 
     let informesHtml = '<div class="accordion-wrapper">';
-    informesHtml += `<h3 style="margin-bottom: var(--sp-2); padding-left: var(--sp-2);">Informes Predefinidos</h3>`;
+    
 
     for (const [id, data] of Object.entries(informesDisponibles)) {
         
         let filtersHtml = '';
         if (reportsWithFilters.includes(id)) {
-            const defaultPeriod = (id === 'flujo_caja') ? 'ultimo-año' : 'año-actual';
+            const defaultPeriod = 'año-actual';
             filtersHtml = generateReportFilterControls(id, defaultPeriod);
         }
         
@@ -4317,44 +4316,66 @@ async function renderInformeResumenEjecutivo(container) {
 
 
 async function renderInformeAsignacionActivos(container) {
-        const getAssetClass = (tipo) => {
-            const t = (tipo || '').toUpperCase();
-            if (['RENTA FIJA', 'LETRAS', 'BONOS'].some(term => t.includes(term))) return 'Renta Fija';
-            if (['RENTA VARIABLE', 'ACCIONES', 'FONDOS', 'INDEXADO', 'BROKER'].some(term => t.includes(term))) return 'Renta Variable';
-            if (['PROPIEDAD', 'INMOBILIARIO'].some(term => t.includes(term))) return 'Inmobiliario';
-            if (['CRIPTO', 'BITCOIN'].some(term => t.includes(term))) return 'Criptoactivos';
-            if (['BANCO', 'AHORRO', 'EFECTIVO'].some(term => t.includes(term))) return 'Liquidez';
-            return 'Otros';
-        };
+    // CAMBIO 1: La función interna 'getAssetClass' ya no es necesaria y se ha eliminado.
 
-        const saldos = await getSaldos();
-        const assetAllocation = getVisibleAccounts().reduce((acc, cuenta) => {
-            if (cuenta.tipo.toUpperCase() !== 'PRÉSTAMO' && cuenta.tipo.toUpperCase() !== 'TARJETA DE CRÉDITO') {
-                const assetClass = getAssetClass(cuenta.tipo);
-                acc[assetClass] = (acc[assetClass] || 0) + (saldos[cuenta.id] || 0);
-            }
-            return acc;
-        }, {});
+    const saldos = await getSaldos();
+    
+    // CAMBIO 2: Modificamos la lógica de agrupación. Ahora usamos el "tipo" de la cuenta directamente.
+    const assetAllocation = getVisibleAccounts().reduce((acc, cuenta) => {
+        // Mantenemos la exclusión de las deudas para no distorsionar el gráfico de activos.
+        if (cuenta.tipo.toUpperCase() !== 'PRÉSTAMO' && cuenta.tipo.toUpperCase() !== 'TARJETA DE CRÉDITO') {
+            // Usamos 'toSentenceCase' para un formato limpio (ej: 'banco' -> 'Banco')
+            const assetType = toSentenceCase(cuenta.tipo || 'Sin Tipo');
+            acc[assetType] = (acc[assetType] || 0) + (saldos[cuenta.id] || 0);
+        }
+        return acc;
+    }, {});
 
-        const labels = Object.keys(assetAllocation);
-        const data = Object.values(assetAllocation).map(v => v / 100);
+    const labels = Object.keys(assetAllocation);
+    const data = Object.values(assetAllocation).map(v => v / 100);
 
-        container.innerHTML = `
-            <p class="form-label" style="margin-bottom: var(--sp-3);">Distribución de tu patrimonio por clase de activo. Úsalo para gestionar riesgos y alinear tus inversiones con tu estrategia.</p>
-            <div class="chart-container" style="height: 280px;">
-                <canvas id="asignacion-activos-chart"></canvas>
-            </div>
-            <!-- Aquí iría la tabla de rebalanceo en una futura iteración -->
-        `;
+    // CAMBIO 3: Actualizamos el texto descriptivo para que refleje la nueva vista detallada.
+    container.innerHTML = `
+        <p class="form-label" style="margin-bottom: var(--sp-3);">Distribución detallada de tu patrimonio, agrupado por el tipo específico de cada cuenta. Esto te da una visión granular de la composición de tus activos.</p>
+        <div class="chart-container" style="height: 280px;">
+            <canvas id="asignacion-activos-chart"></canvas>
+        </div>
+        <!-- Aquí iría la tabla de rebalanceo en una futura iteración -->
+    `;
 
-        const ctx = select('asignacion-activos-chart').getContext('2d');
-        informeActivoChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels, datasets: [{ data, backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6'] }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, datalabels: { formatter: (val, ctx) => { const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0); return (val * 100 / sum).toFixed(1) + '%'; }, color: '#fff' } } }
-        });
-    }
-
+    const ctx = select('asignacion-activos-chart').getContext('2d');
+    
+    // El resto de la lógica del gráfico no necesita cambios, ya que se adapta a los nuevos datos.
+    informeActivoChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { 
+            labels, 
+            datasets: [{ 
+                data, 
+                backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6', '#FF9F0A', '#45B6E9', '#D158A7'] 
+            }] 
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { 
+                legend: { position: 'right' }, 
+                datalabels: { 
+                    formatter: (val, ctx) => { 
+                        const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0); 
+                        const percentage = (val * 100 / sum);
+                        // Solo mostramos la etiqueta si es mayor al 3% para no saturar el gráfico
+                        return percentage > 3 ? percentage.toFixed(1) + '%' : '';
+                    }, 
+                    color: '#fff',
+                    font: {
+                        weight: 'bold'
+                    }
+                } 
+            } 
+        }
+    });
+}
     
     /**
      * Renderiza el informe: Scorecard de Rendimiento de Inversiones.
@@ -4738,7 +4759,6 @@ const renderDashboardKpiSummary = () => {
 // ▼▼▼ REEMPLAZA TU FUNCIÓN renderDashboardSuperCentroOperaciones CON ESTA VERSIÓN REORDENADA ▼▼▼
 
 const renderDashboardSuperCentroOperaciones = () => {
-    // Esqueleto para la lista de conceptos mientras carga.
     const skeletonRows = Array(3).fill('<div class="skeleton" style="height: 48px; margin-bottom: var(--sp-2); border-radius: 8px;"></div>').join('');
     
     return `
@@ -4746,7 +4766,6 @@ const renderDashboardSuperCentroOperaciones = () => {
         <div class="accordion-wrapper">
             <details class="accordion" open>
                 <summary>
-                    <!-- ORDEN 1: TÍTULO PRINCIPAL (Y ÚNICO) -->
                     <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);">
                         <span class="material-icons">query_stats</span>
                         Centro de Operaciones
@@ -4756,8 +4775,21 @@ const renderDashboardSuperCentroOperaciones = () => {
 
                 <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                     
-                    <!-- ORDEN 2: CUADRO DE KPIs AVANZADOS (SIN TÍTULO DUPLICADO) -->
                     <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                        
+                        <!-- 1. KPI PATRIMONIO NETO (Ahora es el primero) -->
+                        <div class="kpi-item">
+                            <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                <span>Patrimonio Neto Total</span>
+                                <button class="icon-btn" data-action="show-help-topic" data-topic="patrimonio-neto" style="width: 20px; height: 20px;">
+                                    <span class="material-icons" style="font-size: 16px;">help_outline</span>
+                                </button>
+                            </h4>
+                            <strong id="kpi-patrimonio-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
+                            <div class="kpi-item__comparison">Vista global actual</div>
+                        </div>
+
+                        <!-- 2. KPI TASA DE AHORRO (Ahora es el segundo) -->
                         <div class="kpi-item">
                             <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
                                 <span>Tasa de Ahorro</span>
@@ -4771,16 +4803,8 @@ const renderDashboardSuperCentroOperaciones = () => {
                             </div>
                             <div id="kpi-tasa-ahorro-comparison" class="kpi-item__comparison"></div>
                         </div>
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                <span>Patrimonio Neto Total</span>
-                                <button class="icon-btn" data-action="show-help-topic" data-topic="patrimonio-neto" style="width: 20px; height: 20px;">
-                                    <span class="material-icons" style="font-size: 16px;">help_outline</span>
-                                </button>
-                            </h4>
-                            <strong id="kpi-patrimonio-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
-                            <div class="kpi-item__comparison">Vista global actual</div>
-                        </div>
+                        
+                        <!-- 3. KPI P&L INVERSIÓN (Ahora es el tercero) -->
                         <div class="kpi-item">
                             <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
                                 <span>P&L Portafolio Inversión</span>
@@ -4791,9 +4815,11 @@ const renderDashboardSuperCentroOperaciones = () => {
                             <strong id="kpi-pnl-inversion-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
                             <div id="kpi-pnl-inversion-comparison" class="kpi-item__comparison">Rentabilidad total</div>
                         </div>
-                        <div class="kpi-item" style="grid-column: 1 / -1;">
+
+                        <!-- 4. KPI PRESUPUESTO (Nombre y tamaño corregidos) -->
+                        <div class="kpi-item">  <!-- Se elimina el style="grid-column: 1 / -1;" -->
                              <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                <span>Progreso Presupuesto (Gastos del Periodo)</span>
+                                <span>Presupuesto gastos</span> <!-- Nombre cambiado -->
                                 <button class="icon-btn" data-action="show-help-topic" data-topic="progreso-presupuesto" style="width: 20px; height: 20px;">
                                     <span class="material-icons" style="font-size: 16px;">help_outline</span>
                                 </button>
@@ -5110,7 +5136,7 @@ const renderPlanificacionPage = () => {
     // Se mantiene el mismo HTML, pero sin el calendario de recurrentes
     container.innerHTML = `
         <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion" open>
+            <details class="accordion">
                 <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">rocket_launch</span>Portafolio de Inversión</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
@@ -5119,7 +5145,7 @@ const renderPlanificacionPage = () => {
             </details>
         </div>
         <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion" open>
+            <details class="accordion">
                 <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
@@ -5129,8 +5155,7 @@ const renderPlanificacionPage = () => {
                     <p class="form-label" style="margin-bottom: var(--sp-3);">Pulsa en una operación para editarla. Estas son las que se ejecutarán en el futuro.</p>
                     <div id="recurrentes-list-container"></div>
                     
-                    <!-- El calendario que estaba aquí ha sido eliminado -->
-
+                   
                 </div>
             </details>
         </div>
