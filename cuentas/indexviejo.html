@@ -1015,7 +1015,7 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 				</button>
             <button data-action="navigate" data-page="planificacion-page" class="bottom-nav__item">
                 <span class="material-icons">edit_calendar</span>
-                <span class="bottom-nav__label">Planificación</span>
+                <span class="bottom-nav__label">Planificar</span>
             </button>
 			<button data-action="navigate" data-page="informes-page" class="bottom-nav__item">
                 <span class="material-icons">analytics</span>
@@ -4815,20 +4815,7 @@ const renderDashboardSuperCentroOperaciones = () => {
                             <strong id="kpi-pnl-inversion-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
                             <div id="kpi-pnl-inversion-comparison" class="kpi-item__comparison">Rentabilidad total</div>
                         </div>
-
-                        <!-- 4. KPI PRESUPUESTO (Nombre y tamaño corregidos) -->
-                        <div class="kpi-item">  <!-- Se elimina el style="grid-column: 1 / -1;" -->
-                             <h4 class="kpi-item__label" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                <span>Presupuesto gastos</span> <!-- Nombre cambiado -->
-                                <button class="icon-btn" data-action="show-help-topic" data-topic="progreso-presupuesto" style="width: 20px; height: 20px;">
-                                    <span class="material-icons" style="font-size: 16px;">help_outline</span>
-                                </button>
-                            </h4>
-                            <div class="budget-item__progress" style="margin: 8px 0;">
-                                <progress id="kpi-presupuesto-progress" max="100" value="0" style="width: 100%; height: 8px;" class="budget-item__progress"></progress>
-                            </div>
-                            <div id="kpi-presupuesto-text" class="kpi-item__comparison skeleton" style="height: auto; min-height: 14px;">Calculando...</div>
-                        </div>
+                        
                     </div>
 
                     <hr style="border-color: var(--c-outline); opacity: 0.5; margin: var(--sp-5) 0;">
@@ -5703,6 +5690,7 @@ const updateDashboardData = async () => {
             kpiPnlEl.className = `kpi-item__value ${pnlInversionActual >= 0 ? 'text-positive' : 'text-negative'}`;
             if (investmentAccountIds.size > 0) animateCountUp(kpiPnlEl, pnlInversionActual); else kpiPnlEl.textContent = 'N/A';
             const progressEl = select('kpi-presupuesto-progress'), progressTextEl = select('kpi-presupuesto-text');
+			if (progressEl && progressTextEl) { // <--- LÍNEA AÑADIDA
             progressTextEl.classList.remove('skeleton');
             if (totalBudgetedExpense > 0) {
                 const percentage = (actualExpenseForBudget / totalBudgetedExpense) * 100;
@@ -5717,7 +5705,8 @@ const updateDashboardData = async () => {
                 if(progressEl) progressEl.value = 0;
                 progressTextEl.textContent = 'No hay presupuestos de gasto definidos para este año.';
             }
-        }
+			}
+        } 
         // --- FIN DE LA CORRECCIÓN CLAVE ---
         
         const actionCenterContainer = select('action-center-content');
@@ -6436,15 +6425,14 @@ const calculate = () => {
 
     // Construimos el contenido del modal
     const modalContentHTML = movements.length === 0
-        ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
-               <span class="material-icons">search_off</span>
-               <h3>Sin movimientos</h3>
-               <p>No se han encontrado movimientos para esta selección.</p>
-           </div>`
-        // Reutilizamos tu renderizador de items para mantener la consistencia visual
-        : `<div class="movements-modal-container" style="max-height: 60vh; overflow-y: auto; padding: 0 var(--sp-2);">
-               ${movements.map(m => TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })).join('')}
-           </div>`;
+    ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
+           <span class="material-icons">search_off</span>
+           <h3>Sin movimientos</h3>
+           <p>No se han encontrado movimientos para esta selección.</p>
+       </div>`
+    : `<div class="movements-modal-container" style="max-height: 60vh; overflow-y: auto; padding: 0 var(--sp-2);">
+           ${movements.map(m => TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })).join('').replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"')}
+       </div>`;
 
     // Llamamos a la función existente para mostrar el modal
     showGenericModal(title, modalContentHTML);
@@ -6503,7 +6491,7 @@ const showToast = (message, type = 'info', duration = 3000) => {
                            <p>No se han encontrado movimientos para esta cuenta.</p>
                        </div>` 
                     : `<div class="movements-modal-container">
-                           ${accountMovements.map((m) => renderVirtualListItem({type: 'transaction', movement: m})).join('')}
+                           ${accountMovements.map((m) => renderVirtualListItem({type: 'transaction', movement: m})).join('').replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"')}
                        </div>`;
 
                 const modalBody = select('generic-modal-body');
@@ -6568,7 +6556,7 @@ const setMovimientoFormType = (type) => {
             }
         };
 
-                const startMovementForm = (id = null, isRecurrent = false) => {
+        const startMovementForm = async (id = null, isRecurrent = false) => {
             hapticFeedback('medium');
             const form = select('form-movimiento');
             form.reset();
@@ -6579,19 +6567,31 @@ const setMovimientoFormType = (type) => {
             
             let data = null;
             let mode = 'new';
-            const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
-			if (id) {
-                const dataSource = isRecurrent ? db.recurrentes : db.movimientos;
-                data = dataSource.find(item => item.id === id);
+            
+            // --- INICIO DE LA LÓGICA MEJORADA ---
+            if (id) {
+                try {
+                    const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
+                    const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(id);
+                    const doc = await docRef.get();
 
-                if (!data && !isRecurrent) {
-                    data = recentMovementsCache.find(item => item.id === id);
-                }
-                
-                if (data) {
-                   mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
+                    if (doc.exists) {
+                        data = { id: doc.id, ...doc.data() };
+                        mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
+                    } else {
+                        showToast("Error: No se encontró el elemento para editar.", "danger");
+                        // Si no se encuentra, nos aseguramos de que el formulario se abra en modo "nuevo"
+                        mode = 'new';
+                        data = null;
+                        id = null; // Borramos el ID para evitar confusiones
+                    }
+                } catch (error) {
+                    console.error("Error al cargar el movimiento para editar:", error);
+                    showToast("Error al cargar los datos del movimiento.", "danger");
+                    return; // Detenemos la ejecución si hay un error de base de datos
                 }
             }
+            // --- FIN DE LA LÓGICA MEJORADA ---
         
 			select('movimiento-mode').value = mode;
             select('movimiento-id').value = id || '';
@@ -7389,6 +7389,15 @@ const attachEventListeners = () => {
                     handleDuplicateMovement(movement); // Le pasamos el movimiento directamente
                 }
             },
+			'search-result-movimiento': (e) => {
+				hideModal('global-search-modal');
+				startMovementForm(e.target.closest('[data-id]').dataset.id, false);
+			},
+			'edit-movement-from-modal': (e) => { // <<-- TU NUEVO BLOQUE
+				const movementId = e.target.closest('[data-id]').dataset.id;
+				hideModal('generic-modal'); 
+				startMovementForm(movementId, false); 
+			},
             'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; } showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); renderConceptosModalList(); }); },
             'delete-cuenta': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; } showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => { await deleteDoc('cuentas', id); hapticFeedback('success'); showToast("Cuenta eliminada."); renderCuentasModalList(); }); },
             'close-modal': () => { const closestOverlay = target.closest('.modal-overlay'); const effectiveModalId = modalId || (closestOverlay ? closestOverlay.id : null); if (effectiveModalId) hideModal(effectiveModalId); },
