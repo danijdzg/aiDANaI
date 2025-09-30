@@ -8225,7 +8225,32 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
     if (dataFromForm.tipo === 'traspaso') {
         dataFromForm.cantidad = Math.abs(dataFromForm.cantidad);
     }
-    
+    if (mode.startsWith('edit')) {
+        // Si estamos editando, primero revertimos el saldo del movimiento antiguo
+        const oldMovement = db.movimientos.find(m => m.id === dataFromForm.id);
+        if (oldMovement) {
+            if (oldMovement.tipo === 'traspaso') {
+                const oldOrigen = db.cuentas.find(c => c.id === oldMovement.cuentaOrigenId);
+                const oldDestino = db.cuentas.find(c => c.id === oldMovement.cuentaDestinoId);
+                if (oldOrigen) oldOrigen.saldo += oldMovement.cantidad;
+                if (oldDestino) oldDestino.saldo -= oldMovement.cantidad;
+            } else {
+                const oldCuenta = db.cuentas.find(c => c.id === oldMovement.cuentaId);
+                if (oldCuenta) oldCuenta.saldo -= oldMovement.cantidad;
+            }
+        }
+    }
+
+    // Ahora aplicamos el saldo del movimiento nuevo (o actualizado)
+    if (dataFromForm.tipo === 'traspaso') {
+        const cuentaOrigen = db.cuentas.find(c => c.id === dataFromForm.cuentaOrigenId);
+        const cuentaDestino = db.cuentas.find(c => c.id === dataFromForm.cuentaDestinoId);
+        if (cuentaOrigen) cuentaOrigen.saldo -= dataFromForm.cantidad;
+        if (cuentaDestino) cuentaDestino.saldo += dataFromForm.cantidad;
+    } else {
+        const cuenta = db.cuentas.find(c => c.id === dataFromForm.cuentaId);
+        if (cuenta) cuenta.saldo += dataFromForm.cantidad;
+    }
     try {
         // --- ¡AQUÍ ESTÁ LA MAGIA DE LA OPTIMIZACIÓN! ---
         if (mode.startsWith('edit')) {
