@@ -6694,87 +6694,88 @@ const setMovimientoFormType = (type) => {
         };
 
         const startMovementForm = async (id = null, isRecurrent = false) => {
-            hapticFeedback('medium');
-            const form = select('form-movimiento');
-            form.reset();
-            clearAllErrors(form.id);
-            populateAllDropdowns();
+    hapticFeedback('medium');
+    const form = select('form-movimiento');
+    form.reset();
+    clearAllErrors(form.id);
+    populateAllDropdowns();
 
-            setMovimientoFormType('movimiento'); 
-            
-            let data = null;
-            let mode = 'new';
-            
-            // --- INICIO DE LA LÓGICA MEJORADA ---
-            if (id) {
-                try {
-                    const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
-                    const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(id);
-                    const doc = await docRef.get();
+    let data = null;
+    let mode = 'new';
+    let initialType = 'movimiento'; // <<-- CORRECCIÓN: Usamos una variable temporal
 
-                    if (doc.exists) {
-                        data = { id: doc.id, ...doc.data() };
-                        mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
-                    } else {
-                        showToast("Error: No se encontró el elemento para editar.", "danger");
-                        // Si no se encuentra, nos aseguramos de que el formulario se abra en modo "nuevo"
-                        mode = 'new';
-                        data = null;
-                        id = null; // Borramos el ID para evitar confusiones
-                    }
-                } catch (error) {
-                    console.error("Error al cargar el movimiento para editar:", error);
-                    showToast("Error al cargar los datos del movimiento.", "danger");
-                    return; // Detenemos la ejecución si hay un error de base de datos
+    if (id) {
+        try {
+            const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
+            const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(id);
+            const doc = await docRef.get();
+
+            if (doc.exists) {
+                data = { id: doc.id, ...doc.data() };
+                mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
+                // <<-- CORRECCIÓN: Determinamos el tipo ANTES de hacer nada en la UI
+                if (data.tipo === 'traspaso') {
+                    initialType = 'traspaso';
                 }
+            } else {
+                showToast("Error: No se encontró el elemento para editar.", "danger");
+                mode = 'new';
+                data = null;
+                id = null;
             }
-            // --- FIN DE LA LÓGICA MEJORADA ---
-        
-			select('movimiento-mode').value = mode;
-            select('movimiento-id').value = id || '';
-        
-            if (data && data.tipo === 'traspaso') {
-                setMovimientoFormType('traspaso');
-            }
-        
-            select('form-movimiento-title').textContent = id && data ? (data.tipo === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento') : 'Añadir Movimiento';
-            select('movimiento-cantidad').value = data ? `${(data.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
-            
-            const fechaInput = select('movimiento-fecha');
-            const fecha = data && data.fecha ? new Date(data.fecha) : new Date();
-            fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-            updateDateDisplay(fechaInput);
+        } catch (error) {
+            console.error("Error al cargar el movimiento para editar:", error);
+            showToast("Error al cargar los datos del movimiento.", "danger");
+            return;
+        }
+    }
 
-            select('movimiento-descripcion').value = (data && data.descripcion) || '';
-        
-            if (data && data.tipo === 'traspaso') {
-                select('movimiento-cuenta-origen').value = (data && data.cuentaOrigenId) || '';
-                select('movimiento-cuenta-destino').value = (data && data.cuentaDestinoId) || '';
-            } else {
-                select('movimiento-cuenta').value = (data && data.cuentaId) || '';
-                select('movimiento-concepto').value = (data && data.conceptoId) || '';
-            }
-        
-            const recurrenteCheckbox = select('movimiento-recurrente');
-            const recurrentOptions = select('recurrent-options');
-            if (mode === 'edit-recurrent' && data) {
-                recurrenteCheckbox.checked = true;
-                select('recurrent-frequency').value = data.frequency;
-                select('recurrent-next-date').value = data.nextDate;
-                select('recurrent-end-date').value = data.endDate || '';
-                recurrentOptions.classList.remove('hidden');
-            } else {
-                recurrenteCheckbox.checked = false;
-                recurrentOptions.classList.add('hidden');
-            }
-            
-            select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
-            select('delete-movimiento-btn').dataset.isRecurrent = isRecurrent;
-            select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
-            
-            showModal('movimiento-modal');
-			initAmountInput();
-        };
+    // <<-- CORRECCIÓN: Ahora configuramos la UI con el tipo correcto desde el principio
+    setMovimientoFormType(initialType);
+
+    select('movimiento-mode').value = mode;
+    select('movimiento-id').value = id || '';
+
+    // El resto de la lógica de rellenado ahora funciona perfectamente
+    // porque los campos correctos ya están visibles.
+    select('form-movimiento-title').textContent = id && data ? (initialType === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento') : 'Añadir Movimiento';
+    select('movimiento-cantidad').value = data ? `${(data.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
+
+    const fechaInput = select('movimiento-fecha');
+    const fecha = data && data.fecha ? new Date(data.fecha) : new Date();
+    fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+    updateDateDisplay(fechaInput);
+
+    select('movimiento-descripcion').value = (data && data.descripcion) || '';
+
+    if (initialType === 'traspaso') {
+        select('movimiento-cuenta-origen').value = (data && data.cuentaOrigenId) || '';
+        select('movimiento-cuenta-destino').value = (data && data.cuentaDestinoId) || '';
+    } else {
+        select('movimiento-cuenta').value = (data && data.cuentaId) || '';
+        select('movimiento-concepto').value = (data && data.conceptoId) || '';
+    }
+
+    const recurrenteCheckbox = select('movimiento-recurrente');
+    const recurrentOptions = select('recurrent-options');
+    if (mode === 'edit-recurrent' && data) {
+        recurrenteCheckbox.checked = true;
+        select('recurrent-frequency').value = data.frequency;
+        select('recurrent-next-date').value = data.nextDate;
+        select('recurrent-end-date').value = data.endDate || '';
+        recurrentOptions.classList.remove('hidden');
+    } else {
+        recurrenteCheckbox.checked = false;
+        recurrentOptions.classList.add('hidden');
+    }
+
+    select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
+    select('delete-movimiento-btn').dataset.isRecurrent = isRecurrent;
+    select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
+
+    showModal('movimiento-modal');
+    initAmountInput();
+};
         
         
         const showGlobalSearchModal = () => {
