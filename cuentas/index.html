@@ -34,6 +34,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
+	 .form-input--error {
+    border: 2px solid red;
+    background: #ffecec;
+  }
 	/* === INICIO: Estilos para el Asistente aiDANaI === */
 .aidanai-modal-content {
     display: flex;
@@ -9460,7 +9464,85 @@ const handleDescriptionInput = () => {
         }
     }, 250); // Un pequeño retardo para no buscar en cada letra instantáneamente
 };
-            
+	const maxSuggestions = 5;
+const limitedSuggestions = suggestions.slice(0, maxSuggestions);
+
+// Mostrar coincidencia resaltada en negrita
+limitedSuggestions.forEach(s => {
+  const regex = new RegExp(`(${query})`, "gi");
+  const highlighted = s.description.replace(regex, "<strong>$1</strong>");
+
+  const item = document.createElement("div");
+  item.className = "suggestion-item";
+  item.innerHTML = highlighted;
+  item.dataset.description = s.description;
+  item.dataset.conceptoId = s.conceptoId;
+  item.dataset.cuentaId = s.cuentaId;
+
+  suggestionsBox.appendChild(item);
+});
+
+    // === VALIDACIÓN DEL CAMPO "CANTIDAD" ===
+const cantidadInput = document.getElementById("movimiento-cantidad");
+const cantidadError = document.getElementById("movimiento-cantidad-error");
+
+cantidadInput.addEventListener("input", () => {
+  let valor = cantidadInput.value.trim();
+
+  // Reemplazar coma por punto
+  valor = valor.replace(",", ".");
+
+  // Expresión regular: número positivo o negativo con hasta 2 decimales
+  const regex = /^-?\d+(\.\d{0,2})?$/;
+
+  if (valor === "" || !regex.test(valor)) {
+    cantidadError.textContent = "Introduce un número válido (ej: -2,50 o 15.00)";
+    cantidadInput.classList.add("form-input--error");
+  } else {
+    cantidadError.textContent = "";
+    cantidadInput.classList.remove("form-input--error");
+  }
+});
+
+// Función para convertir el valor a céntimos (ej: 2.50 => 250)
+function getCantidadEnCentimos() {
+  let valor = cantidadInput.value.trim().replace(",", ".");
+  return Math.round(parseFloat(valor) * 100);
+}
+// === ENFOQUE AUTOMÁTICO Y NAVEGACIÓN CON ENTER ===
+const descripcionInput = document.getElementById("movimiento-descripcion");
+const cuentaSelect = document.getElementById("movimiento-cuenta");
+const saveBtn = document.getElementById("save-movimiento-btn");
+
+// Al abrir el modal de movimiento, poner el foco en "Cantidad"
+document.addEventListener("show-modal", (e) => {
+  if (e.detail.modalId === "movimiento-modal") {
+    setTimeout(() => cantidadInput.focus(), 100);
+  }
+});
+
+// Usar ENTER para saltar entre campos
+cantidadInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    descripcionInput.focus();
+  }
+});
+
+descripcionInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    cuentaSelect.focus();
+  }
+});
+
+cuentaSelect.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    saveBtn.click();
+  }
+});
+        
 </script>
 </body>
 </html>
