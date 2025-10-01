@@ -6328,86 +6328,7 @@ const hideModal = (id) => {
     hapticFeedback('light');
 };	
 		
-// Esta nueva función prepara el campo de cantidad cuando se abre el formulario.
-const initAmountInput = () => {
-    const amountInput = select('movimiento-cantidad');
-    const calculatorToggle = select('calculator-toggle-btn');
-    if (!amountInput || !calculatorToggle) return;
-    
-    if (isMobileDevice()) {
-        // MÓVIL: Hacemos que el input no saque el teclado y que al tocarlo, se abra nuestra calculadora.
-        amountInput.setAttribute('inputmode', 'none');
-        calculatorToggle.style.display = 'none'; // Ocultamos el botón del icono en móvil
-        
-        // Usamos un listener de 'click' porque 'focus' puede ser problemático en algunos móviles
-        amountInput.onclick = (e) => {
-            e.preventDefault();
-            showCalculator(amountInput);
-        };
 
-    } else {
-        // ESCRITORIO: Permitimos escribir normalmente y el botón del icono abre la calculadora.
-        amountInput.setAttribute('inputmode', 'decimal');
-        calculatorToggle.style.display = 'inline-flex';
-        amountInput.onclick = null; // Quitamos el listener de móvil por si acaso
-        calculatorToggle.onclick = () => showCalculator(amountInput);
-    }
-};
-
-const showCalculator = (targetInput) => {
-    // ... (el resto de la lógica para mostrar el overlay de la calculadora no cambia)
-    const calculatorOverlay = select('calculator-overlay');
-    if (!calculatorOverlay) return;
-    
-    calculatorOverlay.classList.add('modal-overlay--active');
-    calculatorState.isVisible = true;
-    calculatorState.targetInput = targetInput;
-    // ... (el resto de la lógica para resetear el estado de la calculadora no cambia)
-    calculatorState.displayValue = '0';
-    calculatorState.waitingForNewValue = true;
-    updateCalculatorDisplay();
-
-    // ¡LA MAGIA PARA PC!
-    // Si no estamos en un móvil, activamos el control por teclado.
-    if (!isMobileDevice()) {
-        if (calculatorKeyboardHandler) {
-            document.removeEventListener('keydown', calculatorKeyboardHandler);
-        }
-        
-        calculatorKeyboardHandler = (e) => {
-            if ("0123456789,.+-*/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) {
-                e.preventDefault();
-            }
-
-            if (e.key >= '0' && e.key <= '9') handleCalculatorInput(e.key);
-            else if (e.key === ',' || e.key === '.') handleCalculatorInput('comma');
-            else if (e.key === 'Enter') handleCalculatorInput('done');
-            else if (e.key === 'Backspace') handleCalculatorInput('backspace');
-            else if (e.key === 'Delete') handleCalculatorInput('clear');
-            else if (e.key === 'Escape') hideCalculator();
-            else if (e.key === '+') handleCalculatorInput('add');
-            else if (e.key === '-') handleCalculatorInput('subtract');
-            else if (e.key === '*' || e.key.toLowerCase() === 'x') handleCalculatorInput('multiply');
-            else if (e.key === '/') handleCalculatorInput('divide');
-        };
-
-        document.addEventListener('keydown', calculatorKeyboardHandler);
-    }
-};
-
-const hideCalculator = () => {
-    const calculatorOverlay = select('calculator-overlay');
-    if (calculatorOverlay) {
-        calculatorOverlay.classList.remove('modal-overlay--active');
-    }
-    calculatorState.isVisible = false;
-    
-    // MUY IMPORTANTE: Siempre limpiamos el listener del teclado para que no interfiera después.
-    if (calculatorKeyboardHandler) {
-        document.removeEventListener('keydown', calculatorKeyboardHandler);
-        calculatorKeyboardHandler = null;
-    }
-};
         const closeCalculatorOnClickOutside = (e) => {
             const calculatorEl = select('calculator-ui');
             if (!calculatorState.isVisible || (calculatorEl && calculatorEl.contains(e.target))) {
@@ -6419,11 +6340,11 @@ const hideCalculator = () => {
             hideCalculator();
         };       
 	      
+// ▼▼▼ REEMPLAZA TU FUNCIÓN handleCalculatorInput CON ESTA VERSIÓN ▼▼▼
 const handleCalculatorInput = (key) => {
     hapticFeedback('light');
     let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed } = calculatorState;
     
-    // Si se acaba de mostrar un resultado y el usuario introduce un número (no un operador), empezamos de cero.
     if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
         displayValue = '0';
         isResultDisplayed = false;
@@ -6459,6 +6380,8 @@ const handleCalculatorInput = (key) => {
                     calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
                 hideCalculator();
+                // === ¡LA LÍNEA MÁGICA DEL ZEN FLOW! ===
+                select('movimiento-descripcion').focus();
                 return;
 
             case 'comma':
@@ -6575,7 +6498,85 @@ const calculate = () => {
     showGenericModal(title, modalContentHTML);
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
-		// =================================================================
+// Esta nueva función prepara el campo de cantidad cuando se abre el formulario.
+const initAmountInput = () => {
+    const amountInput = select('movimiento-cantidad');
+    const calculatorToggle = select('calculator-toggle-btn');
+    if (!amountInput || !calculatorToggle) return;
+    
+    if (isMobileDevice()) {
+        // MÓVIL: Hacemos que el input no saque el teclado y que al tocarlo, se abra nuestra calculadora.
+        amountInput.setAttribute('inputmode', 'none');
+        calculatorToggle.style.display = 'none'; // Ocultamos el botón del icono en móvil
+        
+        // Usamos un listener de 'click' porque 'focus' puede ser problemático en algunos móviles
+        amountInput.onclick = (e) => {
+            e.preventDefault();
+            showCalculator(amountInput);
+        };
+
+    } else {
+        // ESCRITORIO: Permitimos escribir normalmente y el botón del icono abre la calculadora.
+        amountInput.setAttribute('inputmode', 'decimal');
+        calculatorToggle.style.display = 'inline-flex';
+        amountInput.onclick = null; // Quitamos el listener de móvil por si acaso
+        calculatorToggle.onclick = () => showCalculator(amountInput);
+    }
+};
+
+const showCalculator = (targetInput) => {
+    const calculatorOverlay = select('calculator-overlay');
+    if (!calculatorOverlay) return;
+    
+    calculatorOverlay.classList.add('modal-overlay--active');
+    calculatorState.isVisible = true;
+    calculatorState.targetInput = targetInput;
+    calculatorState.displayValue = '0';
+    calculatorState.waitingForNewValue = true;
+    updateCalculatorDisplay();
+
+    // ¡LA MAGIA PARA PC!
+    if (!isMobileDevice()) {
+        if (calculatorKeyboardHandler) {
+            document.removeEventListener('keydown', calculatorKeyboardHandler);
+        }
+        
+        calculatorKeyboardHandler = (e) => {
+            if ("0123456789,.+-*\/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) {
+                e.preventDefault();
+            }
+
+            if (e.key >= '0' && e.key <= '9') handleCalculatorInput(e.key);
+            else if (e.key === ',' || e.key === '.') handleCalculatorInput('comma');
+            else if (e.key === 'Enter') handleCalculatorInput('done');
+            else if (e.key === 'Backspace') handleCalculatorInput('backspace');
+            else if (e.key === 'Delete') handleCalculatorInput('clear');
+            else if (e.key === 'Escape') hideCalculator();
+            else if (e.key === '+') handleCalculatorInput('add');
+            else if (e.key === '-') handleCalculatorInput('subtract');
+            else if (e.key === '*' || e.key.toLowerCase() === 'x') handleCalculatorInput('multiply');
+            else if (e.key === '/') handleCalculatorInput('divide');
+        };
+
+        document.addEventListener('keydown', calculatorKeyboardHandler);
+    }
+};
+
+const hideCalculator = () => {
+    const calculatorOverlay = select('calculator-overlay');
+    if (calculatorOverlay) {
+        calculatorOverlay.classList.remove('modal-overlay--active');
+    }
+    calculatorState.isVisible = false;
+    
+    if (calculatorKeyboardHandler) {
+        document.removeEventListener('keydown', calculatorKeyboardHandler);
+        calculatorKeyboardHandler = null;
+    }
+};		
+		
+		
+// =================================================================
 // === INICIO: FUNCIÓN showToast (CORRECCIÓN CRÍTICA) ===
 // =================================================================
 const showToast = (message, type = 'info', duration = 3000) => {
@@ -6693,6 +6694,7 @@ const setMovimientoFormType = (type) => {
             }
         };
 
+ // ▼▼▼ REEMPLAZA TU FUNCIÓN startMovementForm CON ESTA VERSIÓN ▼▼▼
         const startMovementForm = async (id = null, isRecurrent = false) => {
     hapticFeedback('medium');
     const form = select('form-movimiento');
@@ -6702,7 +6704,7 @@ const setMovimientoFormType = (type) => {
 
     let data = null;
     let mode = 'new';
-    let initialType = 'movimiento'; // <<-- CORRECCIÓN: Usamos una variable temporal
+    let initialType = 'movimiento';
 
     if (id) {
         try {
@@ -6713,7 +6715,6 @@ const setMovimientoFormType = (type) => {
             if (doc.exists) {
                 data = { id: doc.id, ...doc.data() };
                 mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
-                // <<-- CORRECCIÓN: Determinamos el tipo ANTES de hacer nada en la UI
                 if (data.tipo === 'traspaso') {
                     initialType = 'traspaso';
                 }
@@ -6730,14 +6731,11 @@ const setMovimientoFormType = (type) => {
         }
     }
 
-    // <<-- CORRECCIÓN: Ahora configuramos la UI con el tipo correcto desde el principio
     setMovimientoFormType(initialType);
 
     select('movimiento-mode').value = mode;
     select('movimiento-id').value = id || '';
 
-    // El resto de la lógica de rellenado ahora funciona perfectamente
-    // porque los campos correctos ya están visibles.
     select('form-movimiento-title').textContent = id && data ? (initialType === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento') : 'Añadir Movimiento';
     select('movimiento-cantidad').value = data ? `${(data.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
 
@@ -6772,10 +6770,15 @@ const setMovimientoFormType = (type) => {
     select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
     select('delete-movimiento-btn').dataset.isRecurrent = isRecurrent;
     select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
-
+    
+    // Si es un movimiento nuevo, abrimos la calculadora automáticamente
+    if (!id) {
+        setTimeout(() => showCalculator(select('movimiento-cantidad')), 150);
+    }
+    
     showModal('movimiento-modal');
-    initAmountInput();
-};
+    initAmountInput(); // Esta es la llamada al "sastre"
+};  
         
         
         const showGlobalSearchModal = () => {
@@ -9470,6 +9473,11 @@ const handleDescriptionInput = () => {
     }, 250); // Un pequeño retardo para no buscar en cada letra instantáneamente
 };
 	
+     
+// =================================================================
+// === INICIO: MEJORAS DE USABILIDAD DEL FORMULARIO (NIVEL SUPREMO) ===
+// =================================================================
+
     // === VALIDACIÓN DEL CAMPO "CANTIDAD" ===
 const cantidadInput = document.getElementById("movimiento-cantidad");
 const cantidadError = document.getElementById("movimiento-cantidad-error");
@@ -9531,6 +9539,9 @@ cuentaSelect.addEventListener("keydown", (e) => {
   }
 });
         
+// ===============================================================
+// === FIN: MEJORAS DE USABILIDAD DEL FORMULARIO               ===
+// ===============================================================        
 </script>
 </body>
 </html>
