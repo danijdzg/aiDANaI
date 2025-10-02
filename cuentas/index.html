@@ -2674,11 +2674,11 @@ const getFilteredMovements = async (forComparison = false) => {
                 const npvValue = npv(guess); const derivativeValue = derivative(guess); if (Math.abs(derivativeValue) < tolerance) break; const newGuess = guess - npvValue / derivativeValue; if (Math.abs(newGuess - guess) <= tolerance) { return newGuess; } guess = newGuess; }
             return 0;
         };
+		
 // =========================================================================================
-// === PASO FINAL: REEMPLAZA ESTA FUNCIÓN COMPLETA - VERSIÓN DEFINITIVA Y CORRECTA (v4) ===
+// === VERSIÓN FINAL: P&L basado en Saldo Contable y TIR basada en CADA movimiento        ===
 // =========================================================================================
 const calculatePortfolioPerformance = async (cuentaId = null) => {
-    // La carga de datos inicial no cambia
     if (!dataLoaded.inversiones) await loadInversiones();
 
     const allInvestmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
@@ -2689,74 +2689,81 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
     }
 
     const allMovements = await fetchAllMovementsForHistory();
-    const allInvestmentAccountIds = new Set(allInvestmentAccounts.map(c => c.id));
 
     let totalValorActual = 0;
-    let totalCapitalAportadoNeto = 0;
+    let totalCapitalInvertido_para_PNL = 0;
     let allIrrCashflows = [];
 
     for (const cuenta of investmentAccounts) {
-        // 1. OBTENEMOS EL VALOR DE MERCADO (Esto no cambia, es el valor que introduces manualmente)
+        // --- PARTE 1: LÓGICA PARA P&L (BASADO EN SALDO CONTABLE) ---
+
+        // 1. Obtenemos el valor de mercado actual desde la valoración manual.
         const valoraciones = (db.inversiones_historial || [])
             .filter(v => v.cuentaId === cuenta.id)
             .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
         const valorActual = valoraciones.length > 0 ? valoraciones[0].valor : 0;
         
-        // 2. CÁLCULO DEL "SALDO CONTABLE" O "CAPITAL APORTADO" (¡AQUÍ ESTÁ EL CAMBIO CLAVE!)
-        // Buscamos todos los movimientos que han afectado a esta cuenta
+        // 2. PREMISA DEL USUARIO: El "Capital Aportado" es exactamente el saldo contable.
+        const capitalInvertido_para_PNL = cuenta.saldo || 0;
+        
+        totalValorActual += valorActual;
+        totalCapitalInvertido_para_PNL += capitalInvertido_para_PNL;
+
+        // --- PARTE 2: LÓGICA PARA TIR (BASADA EN CADA MOVIMIENTO INDIVIDUAL) ---
+        
         const accountMovements = allMovements.filter(m => 
             (m.tipo === 'movimiento' && m.cuentaId === cuenta.id) ||
-            (m.tipo === 'traspaso' && m.cuentaDestinoId === cuenta.id) ||
-            (m.tipo === 'traspaso' && m.cuentaOrigenId === cuenta.id)
+            (m.tipo === 'traspaso' && (m.cuentaDestinoId === cuenta.id || m.cuentaOrigenId === cuenta.id))
         );
 
-        // Sumamos y restamos para obtener el saldo contable final
-        const capitalAportadoNeto = accountMovements.reduce((saldo, mov) => {
-            if (mov.tipo === 'movimiento' && mov.cuentaId === cuenta.id) {
-                return saldo + mov.cantidad;
-            }
-            if (mov.tipo === 'traspaso' && mov.cuentaDestinoId === cuenta.id) {
-                return saldo + mov.cantidad;
-            }
-            if (mov.tipo === 'traspaso' && mov.cuentaOrigenId === cuenta.id) {
-                return saldo - mov.cantidad;
-            }
-            return saldo;
-        }, 0);
-        
-        // --- El resto de la lógica ahora funciona con los números correctos ---
+        // 3. PREMISA DEL USUARIO: Convertimos CADA movimiento en un flujo de caja para la TIR.
+        const irrCashflows = accountMovements
+            .map(mov => {
+                let effectOnAccount = 0;
 
-        totalValorActual += valorActual;
-        totalCapitalAportadoNeto += capitalAportadoNeto;
+                // Determinamos el efecto real del movimiento sobre el saldo de ESTA cuenta.
+                if (mov.tipo === 'movimiento') {
+                    effectOnAccount = mov.cantidad;
+                } else if (mov.tipo === 'traspaso') {
+                    if (mov.cuentaDestinoId === cuenta.id) {
+                        effectOnAccount = mov.cantidad; // Entra dinero a la cuenta
+                    } else if (mov.cuentaOrigenId === cuenta.id) {
+                        effectOnAccount = -mov.cantidad; // Sale dinero de la cuenta
+                    }
+                }
+                
+                // Si el movimiento afectó a la cuenta, lo convertimos en un flujo de caja.
+                if (effectOnAccount !== 0) {
+                    // PREMISA DEL USUARIO:
+                    // - Si es una entrada (effectOnAccount > 0), es una "aportación" -> Flujo de caja NEGATIVO.
+                    // - Si es una salida (effectOnAccount < 0), es una "retirada" -> Flujo de caja POSITIVO.
+                    // Esto es matemáticamente equivalente a invertir el signo del efecto.
+                    return { amount: -effectOnAccount, date: new Date(mov.fecha) };
+                }
+                
+                return null; // Si no afectó, no es un flujo de caja.
+            })
+            .filter(cf => cf !== null); // Limpiamos los nulos
 
-        // 3. Preparamos los flujos de caja para el cálculo de la TIR
-        const irrCashflows = accountMovements.map(mov => {
-            let amount = 0;
-            // Para la TIR, solo nos importan los flujos que entran o salen del "ecosistema de inversión"
-            if (mov.tipo === 'traspaso') {
-                if (mov.cuentaOrigenId === cuenta.id && !allInvestmentAccountIds.has(mov.cuentaDestinoId)) amount = mov.cantidad; // Dinero que sale
-                if (mov.cuentaDestinoId === cuenta.id && !allInvestmentAccountIds.has(mov.cuentaOrigenId)) amount = -mov.cantidad; // Dinero que entra
-            } else if (mov.tipo === 'movimiento' && mov.cuentaId === cuenta.id) {
-                // Movimientos internos como dividendos o comisiones también son flujos de caja
-                amount = -mov.cantidad;
-            }
-            return { amount, date: new Date(mov.fecha) };
-        }).filter(cf => cf.amount !== 0);
-
+        // 4. El valor actual se añade como el último flujo de caja positivo (retirada final ficticia).
         if (valorActual !== 0) {
             irrCashflows.push({ amount: valorActual, date: new Date() });
         }
         allIrrCashflows.push(...irrCashflows);
     }
 
-    // 4. Se calculan las métricas finales con los valores correctos
-    const pnlAbsoluto = totalValorActual - totalCapitalAportadoNeto;
-    const pnlPorcentual = totalCapitalAportadoNeto !== 0 ? (pnlAbsoluto / totalCapitalAportadoNeto) * 100 : 0;
+    // --- PARTE 3: CÁLCULOS FINALES ---
+
+    // El P&L se calcula con tu lógica: Valoración - Saldo Contable.
+    const pnlAbsoluto = totalValorActual - totalCapitalInvertido_para_PNL;
+    const pnlPorcentual = totalCapitalInvertido_para_PNL !== 0 ? (pnlAbsoluto / totalCapitalInvertido_para_PNL) * 100 : 0;
+    
+    // La TIR se calcula con la lógica de flujos de caja que definiste.
     const irr = calculateIRR(allIrrCashflows);
 
     return { 
         valorActual: totalValorActual, 
-        capitalInvertido: totalCapitalAportadoNeto,
+        capitalInvertido: totalCapitalInvertido_para_PNL,
         pnlAbsoluto, 
         pnlPorcentual, 
         irr 
@@ -3294,7 +3301,7 @@ const renderInversionesPage = async (targetContainerId) => {
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: var(--sp-2); font-size: var(--fs-xs);">
                             <span class="${pnlClass}" style="font-weight: 600;">P&L: ${formatCurrency(cuenta.pnlAbsoluto)} (${cuenta.pnlPorcentual.toFixed(1)}%)</span>
-                            <span style="color:var(--c-info); font-weight:600;">TIR: ${(cuenta.irr * 100).toFixed(1)}%</span>
+                            <span style="color:var(--c-info); font-weight:600;">TIR: ${!isNaN(cuenta.irr) ? (cuenta.irr * 100).toFixed(1) + '%' : 'N/A'}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                             <span style="color:var(--c-on-surface-secondary); font-size: var(--fs-xs);">Aportado: ${formatCurrency(cuenta.capitalInvertido)}</span>
@@ -6875,70 +6882,80 @@ const showValoracionModal = (cuentaId) => {
 
     showGenericModal(`Actualizar Valor de ${cuenta.nombre}`, formHtml);
 };
+
 // ======================================================================================
-// === INICIO: GUARDADO DE VALORACIÓN - VERSIÓN CON LÓGICA DE ACTUALIZACIÓN (v6.0 FINAL) ===
+// === INICIO: GUARDADO DE VALORACIÓN - VERSIÓN FINAL CON ACTUALIZACIÓN OPTIMISTA (v8.0) ===
 // ======================================================================================
 const handleSaveValoracion = async (form, btn) => {
     setButtonLoading(btn, true);
     const cuentaId = form.dataset.id;
+    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+    if (!cuenta) {
+        showToast("Error: No se pudo encontrar la cuenta.", "danger");
+        setButtonLoading(btn, false);
+        return;
+    }
+
     const valor = parseCurrencyString(select('valoracion-valor').value);
     const fecha = select('valoracion-fecha').value;
     
-    if (!cuentaId || isNaN(valor) || !fecha || valor < 0) {
-        showToast('El valor debe ser un número positivo y la fecha es obligatoria.', 'warning');
+    if (isNaN(valor) || !fecha || valor < 0) {
+        showToast('El valor debe ser un número positivo y la fecha es obligatoria.', "warning");
         setButtonLoading(btn, false);
         return;
     }
     
     const fechaISO = parseDateStringAsUTC(fecha).toISOString();
+    const valorEnCentimos = Math.round(valor * 100);
 
     try {
         const userRef = fbDb.collection('users').doc(currentUser.uid);
-        let docToSaveId;
-        
-        // 1. Buscamos si ya existe una valoración para este activo en esta fecha.
-        const query = userRef.collection('inversiones_historial')
-            .where('cuentaId', '==', cuentaId)
-            .where('fecha', '==', fechaISO)
-            .limit(1);
-            
+        const query = userRef.collection('inversiones_historial').where('cuentaId', '==', cuentaId).where('fecha', '==', fechaISO).limit(1);
         const existingSnapshot = await query.get();
-        
-        const valorEnCentimos = Math.round(valor * 100);
 
-        // 2. Si encontramos uno, lo actualizamos.
+        let docId;
         if (!existingSnapshot.empty) {
-            const existingDoc = existingSnapshot.docs[0];
-            docToSaveId = existingDoc.id;
-            // Usamos 'update' para cambiar solo el campo del valor.
-            await existingDoc.ref.update({ valor: valorEnCentimos });
-        } 
-        // 3. Si no hay ninguno, creamos uno nuevo.
-        else {
-            docToSaveId = generateId();
-            const newValoracion = {
-                id: docToSaveId,
-                cuentaId: cuentaId,
-                valor: valorEnCentimos,
-                fecha: fechaISO
-            };
-            // Usamos 'saveDoc' (que hace un 'set') para crear el nuevo documento.
-            await saveDoc('inversiones_historial', docToSaveId, newValoracion);
+            docId = existingSnapshot.docs[0].id;
+            await existingSnapshot.docs[0].ref.update({ valor: valorEnCentimos });
+        } else {
+            docId = generateId();
+            await saveDoc('inversiones_historial', docId, { id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
         }
 
-        // 4. Forzamos la recarga de datos para garantizar la consistencia.
-        await loadInversiones(); 
+        // =====================================================================
+        // === INICIO: ACTUALIZACIÓN OPTIMISTA DE LA UI (LA SOLUCIÓN CLAVE)   ===
+        // =====================================================================
 
-        // 5. Redibujamos la pantalla con la información 100% actualizada.
-        const container = select('patrimonio-inversiones-container');
+        // 1. Buscamos si ya existe una valoración para esta fecha en nuestra memoria local.
+        const existingIndex = (db.inversiones_historial || []).findIndex(v => v.cuentaId === cuentaId && v.fecha === fechaISO);
+
+        if (existingIndex > -1) {
+            // Si existe, la actualizamos directamente en la memoria.
+            db.inversiones_historial[existingIndex].valor = valorEnCentimos;
+        } else {
+            // Si no existe, la añadimos a la memoria.
+            if (!db.inversiones_historial) db.inversiones_historial = [];
+            db.inversiones_historial.push({ id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
+        }
+
+        // 2. Nos aseguramos de que el filtro para este tipo de activo esté visible.
+        const tipoDeCuenta = toSentenceCase(cuenta.tipo || 'S/T');
+        deselectedInvestmentTypesFilter.delete(tipoDeCuenta);
+
+        // 3. Ahora sí, redibujamos la pantalla. Esta llamada usará la memoria que acabamos de actualizar.
+        const container = select('inversiones-content-container');
         if (container) {
-            await renderInversionesPage('patrimonio-inversiones-container');
+            await renderInversionesPage('inversiones-content-container');
         }
+        
+        // ===================================================================
+        // === FIN: ACTUALIZACIÓN OPTIMISTA DE LA UI                       ===
+        // ===================================================================
 
         setButtonLoading(btn, false);
         hideModal('generic-modal');
         hapticFeedback('success');
-        showToast('Valoración guardada correctamente.');
+        showToast('Valoración guardada y cálculos actualizados instantáneamente.');
 
     } catch (error) {
         console.error("Error al guardar la valoración:", error);
@@ -6946,6 +6963,9 @@ const handleSaveValoracion = async (form, btn) => {
         setButtonLoading(btn, false);
     }
 };
+// ======================================================================================
+// === FIN: GUARDADO DE VALORACIÓN - VERSIÓN FINAL                                      ===
+// ======================================================================================
 
 const showHelpModal = () => {
     const titleEl = select('help-modal-title');
