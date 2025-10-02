@@ -12,6 +12,8 @@ https://danijdzg.github.io/aiDANaI/dani/agenda/
 
 https://danijdzg.github.io/aiDANaI/dani/cuentas/
 
+https://danijdzg.github.io/aiDANaI/prompt/
+
 https://danijdzg.github.io/supuestosA2/
 
 La aplicación menu aiDANaI agrupa las otras tres aplicaciones cuentas, agenda y gympadel 
