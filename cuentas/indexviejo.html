@@ -1200,11 +1200,12 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
                     <div class="form-group">
                         <label for="recurrent-frequency" class="form-label">Frecuencia</label>
                         <select id="recurrent-frequency" class="form-select">
-                            <option value="daily">Diaria</option>
-                            <option value="weekly">Semanal</option>
-                            <option value="monthly" selected>Mensual</option>
-                            <option value="yearly">Anual</option>
-                        </select>
+							<option value="once">Única vez</option>
+							<option value="daily">Diaria</option>
+							<option value="weekly">Semanal</option>
+							<option value="monthly" selected>Mensual</option>
+							<option value="yearly">Anual</option>
+						</select>
                     </div>
                     <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
                         <div class="form-group">
@@ -5128,75 +5129,81 @@ const renderInicioResumenView = () => {
             recientesContainer.innerHTML = html;
         };
 		 const renderPendingRecurrents = () => {
-            const container = select('pending-recurrents-container');
-            if (!container || !db.recurrentes) return;
+    const container = select('pending-recurrents-container');
+    if (!container || !db.recurrentes) return;
 
-            const now = new Date();
-            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-            
-            const pending = db.recurrentes
-            .filter(r => {
-                const nextDate = parseDateStringAsUTC(r.nextDate);
-                const normalizedNextDate = new Date(Date.UTC(nextDate.getUTCFullYear(), nextDate.getUTCMonth(), nextDate.getUTCDate()));
-                return normalizedNextDate <= today;
-            })
-            .sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    
+    const pending = db.recurrentes
+    .filter(r => {
+        // --- ¡ESTA ES LA CORRECCIÓN CLAVE! ---
+        // Primero, nos aseguramos de que la fecha existe antes de intentar usarla.
+        if (!r.nextDate) return false;
 
-            if (pending.length === 0) {
-                container.innerHTML = '';
-                return;
-            }
+        const nextDate = parseDateStringAsUTC(r.nextDate);
+        // Segundo, comprobamos que la fecha se ha podido interpretar correctamente.
+        if (!nextDate) return false;
 
-            const itemsHTML = pending.map(r => {
-                const nextDate = new Date(r.nextDate + 'T12:00:00Z');
-                const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-                const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
-                const dateText = `Pendiente desde: ${formattedDate}`;
+        const normalizedNextDate = new Date(Date.UTC(nextDate.getUTCFullYear(), nextDate.getUTCMonth(), nextDate.getUTCDate()));
+        return normalizedNextDate <= today;
+    })
+    .sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
 
-                return `
-                <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
-                    <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
-                    <div class="transaction-card__content">
-                        <div class="transaction-card__details">
-                            <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
-                            <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">${dateText}</div>
-                        </div>
-                        <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-							<strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
-						<div style="display: flex; align-items: center; gap: 8px;">
-						<div class="transaction-card__recurrent-actions">
-    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
-        <span class="material-icons" style="font-size: 14px;">skip_next</span>No añadir
-    </button>
-    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
-        <span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
-    </button>
-</div>
-                    </div>
+    if (pending.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const itemsHTML = pending.map(r => {
+        const nextDate = new Date(r.nextDate + 'T12:00:00Z');
+        const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+        const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+        const dateText = `Pendiente desde: ${formattedDate}`;
+
+        return `
+        <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
+            <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
+            <div class="transaction-card__content">
+                <div class="transaction-card__details">
+                    <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                    <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">${dateText}</div>
                 </div>
-                `;
-            }).join('');
+                <div class="transaction-card__figures" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                    <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="transaction-card__recurrent-actions">
+    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
+<span class="material-icons" style="font-size: 14px;">skip_next</span>No añadir
+</button>
+<button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
+<span class="material-icons" style="font-size: 14px;">check</span>Añadir Ahora
+</button>
+</div>
+</div>
+</div>
+`;
+}).join('');
 
             container.innerHTML = `
-                <div class="card card--no-bg accordion-wrapper" style="margin-top: var(--sp-4);">
-                    <details class="accordion" open>
-                        <summary>
-                            <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);">
-                                <span class="material-icons">event_repeat</span>
-                                Operaciones Recurrentes Pendientes
-                            </h3>
-                            <span class="material-icons accordion__icon">expand_more</span>
-                        </summary>
-                        <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);"
-						<div class="contenedor-recurrentes-vertical">
-                    ${itemsHTML}
-                </div>
-
-            </div>
-                    </details>
-                </div>
-            `;
-        };
+        <div class="card card--no-bg accordion-wrapper" style="margin-top: var(--sp-4);">
+            <details class="accordion" open>
+                <summary>
+                    <h3 class="card__title" style="margin: 0; padding: 0; color: var(--c-on-surface);">
+                        <span class="material-icons">event_repeat</span>
+                        Operaciones Recurrentes Pendientes
+                    </h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" style="padding: 0 var(--sp-2) var(--sp-2) var(--sp-2);">
+                <div class="contenedor-recurrentes-vertical">
+            ${itemsHTML}
+        </div>
+    </div>
+            </details>
+        </div>
+    `;
+};
 
 
 // CÓDIGO FINAL DE LA FUNCIÓN renderPlanificacionPage
@@ -5404,7 +5411,7 @@ const calculateTotals = (movs) => {
 }
  
 // =============================================================
-// === PASO 3: REEMPLAZO DE renderRecurrentsListOnPage       ===
+// === PASO 1: REEMPLAZA ESTA FUNCIÓN COMPLETA               ===
 // =============================================================
 const renderRecurrentsListOnPage = () => {
     const container = select('recurrentes-list-container');
@@ -5416,6 +5423,8 @@ const renderRecurrentsListOnPage = () => {
     const upcomingRecurrents = (db.recurrentes || [])
         .filter(r => {
             const nextDate = parseDateStringAsUTC(r.nextDate);
+            // Si no hay fecha, no lo mostramos para evitar errores
+            if (!nextDate) return false; 
             const normalizedNextDate = new Date(Date.UTC(nextDate.getUTCFullYear(), nextDate.getUTCMonth(), nextDate.getUTCDate()));
             return normalizedNextDate > today;
         })
@@ -5428,19 +5437,20 @@ const renderRecurrentsListOnPage = () => {
 
     container.innerHTML = upcomingRecurrents.map(r => {
         const nextDate = new Date(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-        const frequencyMap = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
+        
+        // --- ¡AQUÍ ESTÁ LA CORRECCIÓN IMPORTANTE! ---
+        const frequencyMap = { once: 'Única vez', daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
+        
         const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
         const icon = r.cantidad >= 0 ? 'south_west' : 'north_east';
         
-        // === LA MAGIA ESTÁ AQUÍ ===
-        // Añadimos data-action, data-id y cursor: pointer al div principal del item.
         return `
         <div class="modal__list-item" id="page-recurrente-item-${r.id}" data-action="edit-recurrente" data-id="${r.id}" style="cursor: pointer;">
             <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
                 <span class="material-icons ${amountClass}" style="font-size: 20px;">${icon}</span>
                 <div style="display: flex; flex-direction: column; min-width: 0;">
                     <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(r.descripcion)}</span>
-                    <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">Próximo: ${nextDate} (${frequencyMap[r.frequency]})</small>
+                    <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">Próximo: ${nextDate} (${frequencyMap[r.frequency] || 'N/A'})</small>
                 </div>
             </div>
             <strong class="${amountClass}" style="margin-right: var(--sp-2);">${formatCurrency(r.cantidad)}</strong>
@@ -6318,86 +6328,7 @@ const hideModal = (id) => {
     hapticFeedback('light');
 };	
 		
-// Esta nueva función prepara el campo de cantidad cuando se abre el formulario.
-const initAmountInput = () => {
-    const amountInput = select('movimiento-cantidad');
-    const calculatorToggle = select('calculator-toggle-btn');
-    if (!amountInput || !calculatorToggle) return;
-    
-    if (isMobileDevice()) {
-        // MÓVIL: Hacemos que el input no saque el teclado y que al tocarlo, se abra nuestra calculadora.
-        amountInput.setAttribute('inputmode', 'none');
-        calculatorToggle.style.display = 'none'; // Ocultamos el botón del icono en móvil
-        
-        // Usamos un listener de 'click' porque 'focus' puede ser problemático en algunos móviles
-        amountInput.onclick = (e) => {
-            e.preventDefault();
-            showCalculator(amountInput);
-        };
 
-    } else {
-        // ESCRITORIO: Permitimos escribir normalmente y el botón del icono abre la calculadora.
-        amountInput.setAttribute('inputmode', 'decimal');
-        calculatorToggle.style.display = 'inline-flex';
-        amountInput.onclick = null; // Quitamos el listener de móvil por si acaso
-        calculatorToggle.onclick = () => showCalculator(amountInput);
-    }
-};
-
-const showCalculator = (targetInput) => {
-    // ... (el resto de la lógica para mostrar el overlay de la calculadora no cambia)
-    const calculatorOverlay = select('calculator-overlay');
-    if (!calculatorOverlay) return;
-    
-    calculatorOverlay.classList.add('modal-overlay--active');
-    calculatorState.isVisible = true;
-    calculatorState.targetInput = targetInput;
-    // ... (el resto de la lógica para resetear el estado de la calculadora no cambia)
-    calculatorState.displayValue = '0';
-    calculatorState.waitingForNewValue = true;
-    updateCalculatorDisplay();
-
-    // ¡LA MAGIA PARA PC!
-    // Si no estamos en un móvil, activamos el control por teclado.
-    if (!isMobileDevice()) {
-        if (calculatorKeyboardHandler) {
-            document.removeEventListener('keydown', calculatorKeyboardHandler);
-        }
-        
-        calculatorKeyboardHandler = (e) => {
-            if ("0123456789,.+-*/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) {
-                e.preventDefault();
-            }
-
-            if (e.key >= '0' && e.key <= '9') handleCalculatorInput(e.key);
-            else if (e.key === ',' || e.key === '.') handleCalculatorInput('comma');
-            else if (e.key === 'Enter') handleCalculatorInput('done');
-            else if (e.key === 'Backspace') handleCalculatorInput('backspace');
-            else if (e.key === 'Delete') handleCalculatorInput('clear');
-            else if (e.key === 'Escape') hideCalculator();
-            else if (e.key === '+') handleCalculatorInput('add');
-            else if (e.key === '-') handleCalculatorInput('subtract');
-            else if (e.key === '*' || e.key.toLowerCase() === 'x') handleCalculatorInput('multiply');
-            else if (e.key === '/') handleCalculatorInput('divide');
-        };
-
-        document.addEventListener('keydown', calculatorKeyboardHandler);
-    }
-};
-
-const hideCalculator = () => {
-    const calculatorOverlay = select('calculator-overlay');
-    if (calculatorOverlay) {
-        calculatorOverlay.classList.remove('modal-overlay--active');
-    }
-    calculatorState.isVisible = false;
-    
-    // MUY IMPORTANTE: Siempre limpiamos el listener del teclado para que no interfiera después.
-    if (calculatorKeyboardHandler) {
-        document.removeEventListener('keydown', calculatorKeyboardHandler);
-        calculatorKeyboardHandler = null;
-    }
-};
         const closeCalculatorOnClickOutside = (e) => {
             const calculatorEl = select('calculator-ui');
             if (!calculatorState.isVisible || (calculatorEl && calculatorEl.contains(e.target))) {
@@ -6409,11 +6340,11 @@ const hideCalculator = () => {
             hideCalculator();
         };       
 	      
+// ▼▼▼ REEMPLAZA TU FUNCIÓN handleCalculatorInput CON ESTA VERSIÓN ▼▼▼
 const handleCalculatorInput = (key) => {
     hapticFeedback('light');
     let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed } = calculatorState;
     
-    // Si se acaba de mostrar un resultado y el usuario introduce un número (no un operador), empezamos de cero.
     if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
         displayValue = '0';
         isResultDisplayed = false;
@@ -6449,6 +6380,8 @@ const handleCalculatorInput = (key) => {
                     calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
                 hideCalculator();
+                // === ¡LA LÍNEA MÁGICA DEL ZEN FLOW! ===
+                select('movimiento-descripcion').focus();
                 return;
 
             case 'comma':
@@ -6565,7 +6498,85 @@ const calculate = () => {
     showGenericModal(title, modalContentHTML);
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
-		// =================================================================
+// Esta nueva función prepara el campo de cantidad cuando se abre el formulario.
+const initAmountInput = () => {
+    const amountInput = select('movimiento-cantidad');
+    const calculatorToggle = select('calculator-toggle-btn');
+    if (!amountInput || !calculatorToggle) return;
+    
+    if (isMobileDevice()) {
+        // MÓVIL: Hacemos que el input no saque el teclado y que al tocarlo, se abra nuestra calculadora.
+        amountInput.setAttribute('inputmode', 'none');
+        calculatorToggle.style.display = 'none'; // Ocultamos el botón del icono en móvil
+        
+        // Usamos un listener de 'click' porque 'focus' puede ser problemático en algunos móviles
+        amountInput.onclick = (e) => {
+            e.preventDefault();
+            showCalculator(amountInput);
+        };
+
+    } else {
+        // ESCRITORIO: Permitimos escribir normalmente y el botón del icono abre la calculadora.
+        amountInput.setAttribute('inputmode', 'decimal');
+        calculatorToggle.style.display = 'inline-flex';
+        amountInput.onclick = null; // Quitamos el listener de móvil por si acaso
+        calculatorToggle.onclick = () => showCalculator(amountInput);
+    }
+};
+
+const showCalculator = (targetInput) => {
+    const calculatorOverlay = select('calculator-overlay');
+    if (!calculatorOverlay) return;
+    
+    calculatorOverlay.classList.add('modal-overlay--active');
+    calculatorState.isVisible = true;
+    calculatorState.targetInput = targetInput;
+    calculatorState.displayValue = '0';
+    calculatorState.waitingForNewValue = true;
+    updateCalculatorDisplay();
+
+    // ¡LA MAGIA PARA PC!
+    if (!isMobileDevice()) {
+        if (calculatorKeyboardHandler) {
+            document.removeEventListener('keydown', calculatorKeyboardHandler);
+        }
+        
+        calculatorKeyboardHandler = (e) => {
+            if ("0123456789,.+-*\/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) {
+                e.preventDefault();
+            }
+
+            if (e.key >= '0' && e.key <= '9') handleCalculatorInput(e.key);
+            else if (e.key === ',' || e.key === '.') handleCalculatorInput('comma');
+            else if (e.key === 'Enter') handleCalculatorInput('done');
+            else if (e.key === 'Backspace') handleCalculatorInput('backspace');
+            else if (e.key === 'Delete') handleCalculatorInput('clear');
+            else if (e.key === 'Escape') hideCalculator();
+            else if (e.key === '+') handleCalculatorInput('add');
+            else if (e.key === '-') handleCalculatorInput('subtract');
+            else if (e.key === '*' || e.key.toLowerCase() === 'x') handleCalculatorInput('multiply');
+            else if (e.key === '/') handleCalculatorInput('divide');
+        };
+
+        document.addEventListener('keydown', calculatorKeyboardHandler);
+    }
+};
+
+const hideCalculator = () => {
+    const calculatorOverlay = select('calculator-overlay');
+    if (calculatorOverlay) {
+        calculatorOverlay.classList.remove('modal-overlay--active');
+    }
+    calculatorState.isVisible = false;
+    
+    if (calculatorKeyboardHandler) {
+        document.removeEventListener('keydown', calculatorKeyboardHandler);
+        calculatorKeyboardHandler = null;
+    }
+};		
+		
+		
+// =================================================================
 // === INICIO: FUNCIÓN showToast (CORRECCIÓN CRÍTICA) ===
 // =================================================================
 const showToast = (message, type = 'info', duration = 3000) => {
@@ -6683,88 +6694,91 @@ const setMovimientoFormType = (type) => {
             }
         };
 
+ // ▼▼▼ REEMPLAZA TU FUNCIÓN startMovementForm CON ESTA VERSIÓN ▼▼▼
         const startMovementForm = async (id = null, isRecurrent = false) => {
-            hapticFeedback('medium');
-            const form = select('form-movimiento');
-            form.reset();
-            clearAllErrors(form.id);
-            populateAllDropdowns();
+    hapticFeedback('medium');
+    const form = select('form-movimiento');
+    form.reset();
+    clearAllErrors(form.id);
+    populateAllDropdowns();
 
-            setMovimientoFormType('movimiento'); 
-            
-            let data = null;
-            let mode = 'new';
-            
-            // --- INICIO DE LA LÓGICA MEJORADA ---
-            if (id) {
-                try {
-                    const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
-                    const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(id);
-                    const doc = await docRef.get();
+    let data = null;
+    let mode = 'new';
+    let initialType = 'movimiento';
 
-                    if (doc.exists) {
-                        data = { id: doc.id, ...doc.data() };
-                        mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
-                    } else {
-                        showToast("Error: No se encontró el elemento para editar.", "danger");
-                        // Si no se encuentra, nos aseguramos de que el formulario se abra en modo "nuevo"
-                        mode = 'new';
-                        data = null;
-                        id = null; // Borramos el ID para evitar confusiones
-                    }
-                } catch (error) {
-                    console.error("Error al cargar el movimiento para editar:", error);
-                    showToast("Error al cargar los datos del movimiento.", "danger");
-                    return; // Detenemos la ejecución si hay un error de base de datos
+    if (id) {
+        try {
+            const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
+            const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(id);
+            const doc = await docRef.get();
+
+            if (doc.exists) {
+                data = { id: doc.id, ...doc.data() };
+                mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
+                if (data.tipo === 'traspaso') {
+                    initialType = 'traspaso';
                 }
+            } else {
+                showToast("Error: No se encontró el elemento para editar.", "danger");
+                mode = 'new';
+                data = null;
+                id = null;
             }
-            // --- FIN DE LA LÓGICA MEJORADA ---
-        
-			select('movimiento-mode').value = mode;
-            select('movimiento-id').value = id || '';
-        
-            if (data && data.tipo === 'traspaso') {
-                setMovimientoFormType('traspaso');
-            }
-        
-            select('form-movimiento-title').textContent = id && data ? (data.tipo === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento') : 'Añadir Movimiento';
-            select('movimiento-cantidad').value = data ? `${(data.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
-            
-            const fechaInput = select('movimiento-fecha');
-            const fecha = data && data.fecha ? new Date(data.fecha) : new Date();
-            fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-            updateDateDisplay(fechaInput);
+        } catch (error) {
+            console.error("Error al cargar el movimiento para editar:", error);
+            showToast("Error al cargar los datos del movimiento.", "danger");
+            return;
+        }
+    }
 
-            select('movimiento-descripcion').value = (data && data.descripcion) || '';
-        
-            if (data && data.tipo === 'traspaso') {
-                select('movimiento-cuenta-origen').value = (data && data.cuentaOrigenId) || '';
-                select('movimiento-cuenta-destino').value = (data && data.cuentaDestinoId) || '';
-            } else {
-                select('movimiento-cuenta').value = (data && data.cuentaId) || '';
-                select('movimiento-concepto').value = (data && data.conceptoId) || '';
-            }
-        
-            const recurrenteCheckbox = select('movimiento-recurrente');
-            const recurrentOptions = select('recurrent-options');
-            if (mode === 'edit-recurrent' && data) {
-                recurrenteCheckbox.checked = true;
-                select('recurrent-frequency').value = data.frequency;
-                select('recurrent-next-date').value = data.nextDate;
-                select('recurrent-end-date').value = data.endDate || '';
-                recurrentOptions.classList.remove('hidden');
-            } else {
-                recurrenteCheckbox.checked = false;
-                recurrentOptions.classList.add('hidden');
-            }
-            
-            select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
-            select('delete-movimiento-btn').dataset.isRecurrent = isRecurrent;
-            select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
-            
-            showModal('movimiento-modal');
-			initAmountInput();
-        };
+    setMovimientoFormType(initialType);
+
+    select('movimiento-mode').value = mode;
+    select('movimiento-id').value = id || '';
+
+    select('form-movimiento-title').textContent = id && data ? (initialType === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento') : 'Añadir Movimiento';
+    select('movimiento-cantidad').value = data ? `${(data.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
+
+    const fechaInput = select('movimiento-fecha');
+    const fecha = data && data.fecha ? new Date(data.fecha) : new Date();
+    fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+    updateDateDisplay(fechaInput);
+
+    select('movimiento-descripcion').value = (data && data.descripcion) || '';
+
+    if (initialType === 'traspaso') {
+        select('movimiento-cuenta-origen').value = (data && data.cuentaOrigenId) || '';
+        select('movimiento-cuenta-destino').value = (data && data.cuentaDestinoId) || '';
+    } else {
+        select('movimiento-cuenta').value = (data && data.cuentaId) || '';
+        select('movimiento-concepto').value = (data && data.conceptoId) || '';
+    }
+
+    const recurrenteCheckbox = select('movimiento-recurrente');
+    const recurrentOptions = select('recurrent-options');
+    if (mode === 'edit-recurrent' && data) {
+        recurrenteCheckbox.checked = true;
+        select('recurrent-frequency').value = data.frequency;
+        select('recurrent-next-date').value = data.nextDate;
+        select('recurrent-end-date').value = data.endDate || '';
+        recurrentOptions.classList.remove('hidden');
+    } else {
+        recurrenteCheckbox.checked = false;
+        recurrentOptions.classList.add('hidden');
+    }
+
+    select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
+    select('delete-movimiento-btn').dataset.isRecurrent = isRecurrent;
+    select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
+    
+    // Si es un movimiento nuevo, abrimos la calculadora automáticamente
+    if (!id) {
+        setTimeout(() => showCalculator(select('movimiento-cantidad')), 150);
+    }
+    
+    showModal('movimiento-modal');
+    initAmountInput(); // Esta es la llamada al "sastre"
+};  
         
         
         const showGlobalSearchModal = () => {
@@ -7331,32 +7345,35 @@ const handleToggleTheme = () => {
         };
 				
         const renderRecurrentesModalList = () => {
-            const list = select('recurrentes-modal-list');
-            if (!list) return;
-            const recurrentes = [...(db.recurrentes || [])].sort((a,b) => new Date(a.nextDate) - new Date(b.nextDate));
-            list.innerHTML = recurrentes.length === 0 
-                ? `<div class="empty-state" style="background:transparent; padding:var(--sp-4) 0; border: none;"><span class="material-icons">event_repeat</span><h3>Sin operaciones programadas</h3><p>Puedes crear una al añadir un nuevo movimiento.</p></div>`
-                : recurrentes.map(r => {
-                    const nextDate = new Date(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-                    const frequencyMap = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
-                    const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
-                    const icon = r.cantidad >= 0 ? 'south_west' : 'north_east';
-                    return `
-                    <div class="modal__list-item" id="recurrente-item-${r.id}">
-                        <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
-                            <span class="material-icons ${amountClass}" style="font-size: 20px;">${icon}</span>
-                        <div style="display: flex; flex-direction: column; min-width: 0;">
-                                <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(r.descripcion)}</span>
-                                <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">Próximo: ${nextDate} (${frequencyMap[r.frequency]})</small>
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: var(--sp-1); flex-shrink: 0;">
-                            <strong class="${amountClass}" style="margin-right: var(--sp-2);">${formatCurrency(r.cantidad)}</strong>
-                            <button class="icon-btn" data-action="edit-recurrente" data-id="${r.id}" title="Editar Recurrente"><span class="material-icons">edit</span></button>
-                        </div>
-                    </div>`
-                }).join('');
-        };
+    const list = select('recurrentes-modal-list');
+    if (!list) return;
+    const recurrentes = [...(db.recurrentes || [])].sort((a,b) => new Date(a.nextDate) - new Date(b.nextDate));
+    list.innerHTML = recurrentes.length === 0 
+        ? `<div class="empty-state" style="background:transparent; padding:var(--sp-4) 0; border: none;"><span class="material-icons">event_repeat</span><h3>Sin operaciones programadas</h3><p>Puedes crear una al añadir un nuevo movimiento.</p></div>`
+        : recurrentes.map(r => {
+            const nextDate = new Date(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+            
+            // --- LA MISMA CORRECCIÓN, APLICADA AQUÍ TAMBIÉN ---
+            const frequencyMap = { once: 'Única vez', daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
+            
+            const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+            const icon = r.cantidad >= 0 ? 'south_west' : 'north_east';
+            return `
+            <div class="modal__list-item" id="recurrente-item-${r.id}">
+                <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
+                    <span class="material-icons ${amountClass}" style="font-size: 20px;">${icon}</span>
+                <div style="display: flex; flex-direction: column; min-width: 0;">
+                        <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(r.descripcion)}</span>
+                        <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">Próximo: ${nextDate} (${frequencyMap[r.frequency] || 'N/A'})</small>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: var(--sp-1); flex-shrink: 0;">
+                    <strong class="${amountClass}" style="margin-right: var(--sp-2);">${formatCurrency(r.cantidad)}</strong>
+                    <button class="icon-btn" data-action="edit-recurrente" data-id="${r.id}" title="Editar Recurrente"><span class="material-icons">edit</span></button>
+                </div>
+            </div>`
+        }).join('');
+};
 
         const showManageInvestmentAccountsModal = () => {
             const visibleAccounts = getVisibleAccounts().sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -7697,7 +7714,32 @@ const attachEventListeners = () => {
     document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
     document.body.addEventListener('blur', (e) => { const id = e.target.id; if (id) { if (id === 'movimiento-cantidad') validateField('movimiento-cantidad'); if (id === 'movimiento-descripcion') { handleDescriptionAutocomplete(); if (!e.relatedTarget || !e.relatedTarget.closest('#description-suggestions')) { const suggestionsBox = select('description-suggestions'); if (suggestionsBox) suggestionsBox.style.display = 'none'; } } if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen'); validateField('movimiento-cuenta-destino'); } } }, true);
     document.body.addEventListener('focusin', (e) => { if (e.target.matches('.pin-input')) { handlePinInputInteraction(); } if (e.target.id === 'movimiento-descripcion') { handleDescriptionInput(); } });
-    document.addEventListener('change', e => { const target = e.target; if (target.id === 'filter-periodo') { const el = select('custom-date-filters'); if (el) el.classList.toggle('hidden', target.value !== 'custom'); } if (target.id === 'movimiento-recurrente') { select('recurrent-options').classList.toggle('hidden', !target.checked); if(target.checked && !select('recurrent-next-date').value) { select('recurrent-next-date').value = select('movimiento-fecha').value; } } });
+    document.addEventListener('change', e => {
+    const target = e.target;
+
+    // Lógica para mostrar/ocultar los filtros de fecha personalizados
+    if (target.id === 'filter-periodo') {
+        const el = select('custom-date-filters');
+        if (el) el.classList.toggle('hidden', target.value !== 'custom');
+    }
+
+    // --- ¡ESTA ES LA PARTE QUE FALTABA Y ARREGLA EL FORMULARIO! ---
+    // Muestra/oculta TODAS las opciones de recurrencia al marcar/desmarcar el checkbox
+    if (target.id === 'movimiento-recurrente') {
+        select('recurrent-options').classList.toggle('hidden', !target.checked);
+        if(target.checked && !select('recurrent-next-date').value) {
+            select('recurrent-next-date').value = select('movimiento-fecha').value;
+        }
+    }
+    
+    // Lógica que añadimos para ocultar la fecha de fin si es "Única vez"
+    if (target.id === 'recurrent-frequency') {
+        const endDateGroup = select('recurrent-end-date').closest('.form-group');
+        if (endDateGroup) {
+            endDateGroup.classList.toggle('hidden', target.value === 'once');
+        }
+    }
+});
     const importFileInput = select('import-file-input'); if (importFileInput) importFileInput.addEventListener('change', (e) => { if(e.target.files) handleJSONFileSelect(e.target.files[0]); });
     const calculatorGrid = select('calculator-grid'); if (calculatorGrid) calculatorGrid.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
     const searchInput = select('global-search-input'); if (searchInput) searchInput.addEventListener('input', () => { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => { performGlobalSearch(searchInput.value); }, 250); });
@@ -7971,15 +8013,13 @@ const handleConfirmRecurrent = async (id, btn) => {
 
     try {
         const newMovementId = generateId();
-        const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
-
-        // --- INICIO DE LA LÓGICA OPTIMISTA (Actualización local inmediata) ---
-        // 1. Creamos el nuevo objeto de movimiento
+        
+        // Lógica optimista (actualización local inmediata)
         const newMovementData = {
             id: newMovementId,
             cantidad: recurrente.cantidad,
             descripcion: recurrente.descripcion,
-            fecha: new Date().toISOString(),
+            fecha: new Date().toISOString(), // Se añade con la fecha de hoy
             tipo: recurrente.tipo,
             cuentaId: recurrente.cuentaId,
             conceptoId: recurrente.conceptoId,
@@ -7987,27 +8027,44 @@ const handleConfirmRecurrent = async (id, btn) => {
             cuentaDestinoId: recurrente.cuentaDestinoId
         };
         
-        // 2. Añadimos el nuevo movimiento al array local y actualizamos el recurrente
         db.movimientos.unshift(newMovementData);
-        db.recurrentes[recurrenteIndex].nextDate = nextDueDate.toISOString().slice(0, 10);
+
+        // === ¡AQUÍ ESTÁ LA MAGIA! ===
+        if (recurrente.frequency === 'once') {
+            // Si es de única vez, lo eliminamos de la lista local de recurrentes.
+            db.recurrentes.splice(recurrenteIndex, 1);
+        } else {
+            // Si es periódico, calculamos la siguiente fecha.
+            const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
+            db.recurrentes[recurrenteIndex].nextDate = nextDueDate.toISOString().slice(0, 10);
+        }
         
-        // 3. ¡Refrescamos la UI al instante!
+        // Refrescamos la UI al instante
         const activePage = document.querySelector('.view--active');
         if (activePage && activePage.id === PAGE_IDS.DIARIO) {
             updateLocalDataAndRefreshUI();
-        } else {
-            renderPlanificacionPage(); // O la página de planificación si estamos ahí
+        } else if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+            renderPlanificacionPage();
         }
-        // --- FIN DE LA LÓGICA OPTIMISTA ---
 
-        // El resto se ejecuta en segundo plano para sincronizar con Firebase
+        // Sincronización en segundo plano con Firebase
         const batch = fbDb.batch();
         const newMovementRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovementId);
         batch.set(newMovementRef, newMovementData);
         
         const recurrenteRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(id);
-        batch.update(recurrenteRef, { nextDate: nextDueDate.toISOString().slice(0, 10) });
 
+        // === ¡LA MISMA LÓGICA EN FIREBASE! ===
+        if (recurrente.frequency === 'once') {
+            // Si es de única vez, lo borramos de la base de datos.
+            batch.delete(recurrenteRef);
+        } else {
+            // Si es periódico, actualizamos su próxima fecha.
+            const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
+            batch.update(recurrenteRef, { nextDate: nextDueDate.toISOString().slice(0, 10) });
+        }
+
+        // Ajuste de saldos (esto no cambia)
         if (recurrente.tipo === 'traspaso') {
             const origenRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(recurrente.cuentaOrigenId);
             const destinoRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(recurrente.cuentaDestinoId);
@@ -8026,6 +8083,7 @@ const handleConfirmRecurrent = async (id, btn) => {
     } catch (error) {
         console.error("Error al confirmar el movimiento recurrente:", error);
         showToast("No se pudo añadir el movimiento recurrente.", "danger");
+        // En caso de error, podríamos necesitar recargar los datos para asegurar la consistencia.
     } finally {
         if (btn) setButtonLoading(btn, false);
     }
@@ -8042,13 +8100,21 @@ const handleSkipRecurrent = async (id, btn) => {
     }
 
     try {
-        const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
-        
-        await saveDoc('recurrentes', id, { nextDate: nextDueDate.toISOString().slice(0, 10) });
+        // === ¡LA MISMA MAGIA OTRA VEZ! ===
+        if (recurrente.frequency === 'once') {
+            // Si es de única vez y lo omitimos, simplemente lo borramos.
+            await deleteDoc('recurrentes', id);
+            showToast("Operación programada eliminada.", "info");
+        } else {
+            // Si es periódico, calculamos la siguiente fecha para omitir la actual.
+            const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
+            await saveDoc('recurrentes', id, { nextDate: nextDueDate.toISOString().slice(0, 10) });
+            showToast("Operación recurrente omitida esta vez.", "info");
+        }
 
         hapticFeedback('success');
-        showToast("Operación recurrente omitida esta vez.", "info");
 
+        // La animación de borrado y refresco de UI funciona para ambos casos.
         const itemEl = select(`pending-recurrente-${id}`);
         if (itemEl) {
             itemEl.classList.add('item-deleting');
@@ -8061,7 +8127,7 @@ const handleSkipRecurrent = async (id, btn) => {
                 } else {
                     scheduleDashboardUpdate();
                 }
-            });
+            }, { once: true });
         }
 
     } catch (error) {
@@ -9406,23 +9472,11 @@ const handleDescriptionInput = () => {
         }
     }, 250); // Un pequeño retardo para no buscar en cada letra instantáneamente
 };
-	const maxSuggestions = 5;
-const limitedSuggestions = suggestions.slice(0, maxSuggestions);
-
-// Mostrar coincidencia resaltada en negrita
-limitedSuggestions.forEach(s => {
-  const regex = new RegExp(`(${query})`, "gi");
-  const highlighted = s.description.replace(regex, "<strong>$1</strong>");
-
-  const item = document.createElement("div");
-  item.className = "suggestion-item";
-  item.innerHTML = highlighted;
-  item.dataset.description = s.description;
-  item.dataset.conceptoId = s.conceptoId;
-  item.dataset.cuentaId = s.cuentaId;
-
-  suggestionsBox.appendChild(item);
-});
+	
+     
+// =================================================================
+// === INICIO: MEJORAS DE USABILIDAD DEL FORMULARIO (NIVEL SUPREMO) ===
+// =================================================================
 
     // === VALIDACIÓN DEL CAMPO "CANTIDAD" ===
 const cantidadInput = document.getElementById("movimiento-cantidad");
@@ -9485,6 +9539,9 @@ cuentaSelect.addEventListener("keydown", (e) => {
   }
 });
         
+// ===============================================================
+// === FIN: MEJORAS DE USABILIDAD DEL FORMULARIO               ===
+// ===============================================================        
 </script>
 </body>
 </html>
