@@ -34,6 +34,47 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
+	/* === INICIO: ESTILOS A PEGAR PARA LA INTRO CON VÍDEO Y SONIDO === */
+#start-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10001; /* El más alto de todos para que tape todo */
+    background-color: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#start-button {
+    background: none;
+    border: 2px solid white;
+    color: white;
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s ease-in-out;
+}
+#start-button:hover {
+    background-color: white;
+    color: black;
+}
+#video-intro-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background-color: #000;
+    transition: opacity 0.75s ease-in-out;
+}
+#intro-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Para que el vídeo cubra la pantalla sin deformarse */
+}
+/* === FIN: ESTILOS A PEGAR === */
 	 .form-input--error {
     border: 2px solid red;
     background: #ffecec;
@@ -878,7 +919,26 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 </head>
 <body data-ledger-mode="A">
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    
+  <!-- === INICIO: CÓDIGO A PEGAR PARA LA INTRO CON VÍDEO Y SONIDO === -->
+
+<!-- PANTALLA 1: EL BOTÓN PARA DAR PERMISO DE SONIDO -->
+<div id="start-overlay">
+    <button id="start-button">
+        <span class="material-icons">play_circle_filled</span>
+        ENTRAR
+    </button>
+</div>
+
+<!-- PANTALLA 2: EL VÍDEO (EMPIEZA OCULTO) -->
+<div id="video-intro-overlay" style="display: none;">
+    <video id="intro-video" playsinline>
+        <!-- ¡AQUÍ ESTÁ TU VÍDEO CON EL NOMBRE CORRECTO! -->
+        <source src="aiDANaI.mp4" type="video/mp4">
+        Tu navegador no soporta vídeos.
+    </video>
+</div>
+
+<!-- === FIN: CÓDIGO A PEGAR === -->  
     <div id="introScreen" class="intro-screen">
         <div class="starry-background"></div>
         <img id="splashImage" class="intro-screen__logo" src="aiDANaI.webp" alt="Logo App" />
@@ -2232,28 +2292,72 @@ document.body.addEventListener('change', e => {
             });
         };
         const initApp = async () => {
-            document.documentElement.lang = 'es';
-            setupTheme();
-			const savedTheme = localStorage.getItem('appTheme') || 'default';
-			document.body.dataset.theme = savedTheme;
-			updateThemeIcon();
-            attachEventListeners();
-            
-            const intro = select('introScreen'), quoteContainer = select('quoteContainer');
-            if (localStorage.getItem('skipIntro') === 'true') { if (intro) intro.remove(); } 
-            else if (intro && quoteContainer && quotesData.length) {
-                const r = quotesData[Math.floor(Math.random() * quotesData.length)];
-                const quoteTextEl = select('quoteText');
-                const quoteAuthorEl = select('quoteAuthor');
-                if(quoteTextEl) quoteTextEl.textContent = `"${r.cita}"`;
-                if(quoteAuthorEl) quoteAuthorEl.textContent = `— ${r.autor}`;
-                await wait(2500); quoteContainer.classList.add('visible');
-                await wait(4000); (intro).style.opacity = '0';
-                await wait(750); intro.remove();
-            } else if (intro) { intro.remove(); }
-            
-            checkAuthState();
-        };
+    // === INICIO: NUEVA LÓGICA PARA VÍDEO CON SONIDO ===
+
+    // 1. Buscamos los elementos que hemos creado en el HTML
+    const startOverlay = document.getElementById('start-overlay');
+    const startButton = document.getElementById('start-button');
+    const videoOverlay = document.getElementById('video-intro-overlay');
+    const introVideo = document.getElementById('intro-video');
+
+    // Esta es la función que contiene TODO el código que carga tu app
+    const procederConCargaDeApp = () => {
+        // Quitamos la pantalla de la cita, ya no la necesitamos
+        const introScreen = document.getElementById('introScreen');
+        if (introScreen) introScreen.remove();
+
+        // Este es el código ORIGINAL de tu antigua función initApp
+        document.documentElement.lang = 'es';
+        setupTheme();
+        const savedTheme = localStorage.getItem('appTheme') || 'default';
+        document.body.dataset.theme = savedTheme;
+        updateThemeIcon();
+        attachEventListeners();
+        checkAuthState();
+    };
+
+    // Si por alguna razón no encontramos los botones o el vídeo, cargamos la app directamente.
+    if (!startButton || !videoOverlay || !introVideo) {
+        procederConCargaDeApp();
+        return;
+    }
+
+    // 2. ORDEN PRINCIPAL: "Cuando alguien haga clic en el botón 'ENTRAR'..."
+    startButton.addEventListener('click', () => {
+        // "...esconde la pantalla del botón..."
+        startOverlay.style.display = 'none';
+
+        // "...enseña la pantalla del vídeo..."
+        videoOverlay.style.display = 'block';
+        
+        // "...¡Y DALE AL PLAY CON SONIDO!"
+        introVideo.play();
+    }, { once: true }); // El "once: true" es para que este código solo se ejecute la primera vez que hagan clic.
+
+
+    // 3. ORDEN SECUNDARIA: "Cuando el vídeo termine..."
+    introVideo.addEventListener('ended', () => {
+        // "...haz que la pantalla del vídeo desaparezca poco a poco..."
+        videoOverlay.style.opacity = '0';
+        
+        // "...y cuando haya desaparecido del todo, la borras y cargas la app."
+        videoOverlay.addEventListener('transitionend', () => {
+            videoOverlay.remove();
+            procederConCargaDeApp();
+        }, { once: true });
+    });
+
+    // 4. PLAN B: "Si el vídeo da un error y no se puede ver..."
+    introVideo.addEventListener('error', (e) => {
+        console.error("Error al reproducir el vídeo:", e);
+        // "...quita todo y carga la app para que el usuario no se quede atascado."
+        if (startOverlay) startOverlay.remove();
+        if (videoOverlay) videoOverlay.remove();
+        procederConCargaDeApp();
+    });
+
+    // === FIN: NUEVA LÓGICA ===
+};
 		window.addEventListener('online', () => {
     console.log("Conexión recuperada. Sincronizando...");
     syncState = 'syncing';
