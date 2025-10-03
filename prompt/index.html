@@ -103,7 +103,8 @@
     {
       "imports": {
         "react": "https://esm.sh/react@18.3.1",
-        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client"
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+        "@google/genai": "https://esm.sh/@google/genai"
       }
     }
     </script>
@@ -111,8 +112,10 @@
 <body>
     <div id="root"></div>
     <script type="module">
+// Entire application logic is contained within this script block as requested.
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
+import { GoogleGenAI, Type } from '@google/genai';
 
 // ===== From types.ts =====
 const GenerationType = {
@@ -125,7 +128,9 @@ const GenerationType = {
 };
 
 
-// ===== From services/promptGenerator.ts =====
+// ===== From services/geminiService.ts =====
+
+const ai = new GoogleGenAI({ apiKey: "AIzaSyDUSUt-0dbG59uTc96qazFl7QFeFQkYfD0" });
 
 const buildDetailedPrompt = (options) => {
   const { promptDetails: details, generationType } = options;
@@ -182,74 +187,60 @@ const buildDetailedPrompt = (options) => {
 };
 
 const generatePrompts = async (options) => {
-    console.log("Generando prompt localmente.");
-    await new Promise(resolve => setTimeout(resolve, 300)); // Simula carga
+  const { generationType } = options;
+  const detailedPrompt = buildDetailedPrompt(options);
 
-    const detailedPrompt = buildDetailedPrompt(options);
-    return [{
-        id: crypto.randomUUID(),
-        title: `Prompt Detallado Generado`,
-        prompt: detailedPrompt,
-        rationale: "Este prompt ha sido generado localmente a partir de tus especificaciones detalladas para maximizar la calidad de la respuesta de la IA."
-    }];
+  const systemInstruction = `Eres un asistente de IA llamado 'aiDANaI', un experto en ingeniería de prompts. Tu tarea es transformar los detalles proporcionados por el usuario en 3 variaciones de prompts expertamente diseñados y efectivos para modelos de IA generativa. Para cada prompt que generes, proporciona un título claro y una justificación explicando por qué es efectivo, centrándote en las técnicas utilizadas (por ejemplo, juego de roles, contexto detallado, restricciones específicas). La respuesta debe ser exclusivamente un objeto JSON.`;
+  const userPrompt = `Genera 3 variaciones de prompts distintas basadas en los siguientes detalles para un modelo de generación de **${generationType}**.\n\n--- DETALLES DEL USUARIO ---\n${detailedPrompt}\n--- FIN DE DETALLES ---\n\nProporciona la respuesta como un array de objetos JSON, donde cada objeto tenga las claves "title", "prompt" y "rationale".`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: userPrompt,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              prompt: { type: Type.STRING },
+              rationale: { type: Type.STRING }
+            },
+            required: ["title", "prompt", "rationale"]
+          }
+        }
+      }
+    });
+
+    const jsonString = response.text.trim();
+    const generated = JSON.parse(jsonString);
+    return generated.map(p => ({ ...p, id: crypto.randomUUID() }));
+  } catch (error) {
+    console.error("Error calling Gemini API for prompts:", error);
+    throw new Error("No se pudieron generar los prompts. Verifica la configuración de tu API Key y vuelve a intentarlo.");
+  }
 };
 
 const generateCodeFromDetails = async (details) => {
-    console.log("Generando código localmente.");
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simula carga
+    const detailedPrompt = buildDetailedPrompt({ promptDetails: details, generationType: GenerationType.CODE });
+    const systemInstruction = `Eres un programador de IA experto. Tu tarea es generar código limpio, eficiente y bien comentado basado en las especificaciones del usuario. Adhiérete estrictamente al lenguaje de programación, las bibliotecas y el estilo de codificación solicitados. El código debe ser funcional y estar listo para usar. Responde únicamente con el bloque de código en formato de texto plano, sin incluir 'markdown' (como \`\`\`lenguaje) ni ninguna otra explicación fuera del código mismo.`;
 
-    const lang = details.lenguaje?.toLowerCase().trim() || 'javascript';
-    let generatedCode = '';
-
-    const functionalityComment = `Funcionalidad solicitada: ${details.funcionalidad}`;
-    const librariesComment = `Librerías sugeridas: ${details.librerias || 'N/A'}`;
-    const returnsComment = `Se espera que la función devuelva algo como: ${details.salidas || 'un resultado apropiado'}`;
-    const errorHandlingComment = `Manejo de errores: ${details.manejoErrores || 'Implementación estándar'}`;
-
-    if (lang === 'python') {
-        generatedCode = `
-# --- CÓDIGO GENERADO LOCALMENTE ---
-def ${details.funcionalidad?.split(' ')[0] || 'mi_funcion'}(${details.entradas || 'params'}):
-    """
-    ${functionalityComment}
-    ${librariesComment}
-    ${errorHandlingComment}
-    """
-    try:
-        # TODO: Implementar la lógica principal aquí
-        print("Implementación de la lógica principal.")
-        
-        # ${returnsComment}
-        return "Resultado de ejemplo"
-    except Exception as e:
-        # Manejo de errores básico
-        print(f"Ocurrió un error: {e}")
-        return None
-`;
-    } else {
-        generatedCode = `
-// --- CÓDIGO GENERADO LOCALMENTE ---
-/**
- * @description ${details.funcionalidad}
- * @param {any} ${details.entradas || 'params'} - ${librariesComment}
- * @returns {${details.salidas || 'any'}}
- */
-function ${details.funcionalidad?.split(' ')[0] || 'miFuncion'}(${details.entradas || 'params'}) {
     try {
-        // TODO: Implementar la lógica principal aquí
-        console.log("Implementación de la lógica principal.");
-
-        // ${returnsComment}
-        return null;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: detailedPrompt,
+            config: {
+                systemInstruction,
+            }
+        });
+        return response.text.trim();
     } catch (error) {
-        // ${errorHandlingComment}
-        console.error("Ocurrió un error:", error);
-        throw error; // O manejarlo según se requiera
+        console.error("Error calling Gemini API for code:", error);
+        throw new Error("No se pudo generar el código. Verifica la configuración de tu API Key y vuelve a intentarlo.");
     }
-}
-`;
-    }
-    return generatedCode.trim();
 };
 
 
@@ -483,9 +474,10 @@ const PromptForm = ({ options, setOptions, onGenerate, isLoading, onGenerateCode
 
   const isFormValid = () => {
     const details = options.promptDetails;
+    if (!details) return false;
     switch (options.generationType) {
       case GenerationType.TEXT:
-        return details.tarea?.trim() !== '' && details.rol?.trim() !== '';
+        return details.tarea?.trim() && details.rol?.trim();
       case GenerationType.IMAGE:
         return !!details.descripcion?.trim();
       case GenerationType.VIDEO:
@@ -526,7 +518,7 @@ const PromptForm = ({ options, setOptions, onGenerate, isLoading, onGenerateCode
                   className: "inline-flex items-center gap-2 px-6 py-3 font-semibold text-text-primary bg-button-neutral rounded-lg hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               },
                   React.createElement(CodeIcon, { className: "w-5 h-5" }),
-                  "Generar Código"
+                  isGeneratingCode ? "Generando..." : "Generar Código"
               )
           )
         ),
@@ -538,7 +530,7 @@ const PromptForm = ({ options, setOptions, onGenerate, isLoading, onGenerateCode
                 className: "w-full md:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 font-bold text-lg text-white bg-gradient-to-r from-accent-purple to-accent-cyan rounded-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 transition-all duration-300 shadow-lg hover:shadow-accent-cyan/50"
             },
                 React.createElement(MagicWandIcon, { className: "w-6 h-6" }),
-                "Crear Prompt Detallado"
+                isLoading ? "Creando Magia..." : "Crear Prompts Detallados"
             )
         )
       )
@@ -546,14 +538,37 @@ const PromptForm = ({ options, setOptions, onGenerate, isLoading, onGenerateCode
   );
 };
 
+const loaderMessages = [
+  "Consultando a los oráculos digitales...",
+  "Afinando los algoritmos...",
+  "Despertando a la IA...",
+  "Convirtiendo ideas en magia...",
+  "Generando nuevas realidades...",
+  "Calculando posibilidades infinitas..."
+];
+
 const Loader = ({ message }) => {
+  const [displayMessage, setDisplayMessage] = useState(message || loaderMessages[0]);
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+        setDisplayMessage(prev => {
+            const currentIndex = loaderMessages.indexOf(prev);
+            const nextIndex = (currentIndex + 1) % loaderMessages.length;
+            return loaderMessages[nextIndex];
+        });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+
   return (
     React.createElement('div', { className: "flex flex-col items-center justify-center space-y-4 my-12" },
       React.createElement('div', { className: "relative h-16 w-16" },
         React.createElement('div', { className: "absolute top-0 left-0 h-full w-full rounded-full border-4 border-t-accent-purple border-r-accent-purple border-b-accent-cyan border-l-accent-cyan animate-spin" }),
         React.createElement('div', { className: "absolute top-0 left-0 h-full w-full rounded-full border-4 border-t-background-tertiary border-r-background-tertiary border-b-background-tertiary border-l-transparent animate-spin-reverse delay-150" })
       ),
-      React.createElement('p', { className: "text-lg text-text-secondary font-medium" }, message || 'Generando...')
+      React.createElement('p', { className: "text-lg text-text-secondary font-medium" }, displayMessage)
     )
   );
 };
@@ -900,20 +915,13 @@ const App = () => {
     setError(null);
     setGeneratedCode(null);
     setCodeError(null);
-    setOptions(prev => ({
-        ...prev,
+    setOptions({
         promptDetails: initialPromptDetails,
         generationType: tab
-    }));
+    });
   };
   
   const handleGenerateCode = useCallback(async () => {
-    const details = options.promptDetails;
-    if (options.generationType === GenerationType.CODE && (!details.lenguaje?.trim() || !details.funcionalidad?.trim())) {
-        setCodeError('Por favor, completa los campos requeridos "Lenguaje" y "Funcionalidad Principal".');
-        return;
-    }
-
     setIsGeneratingCode(true);
     setGeneratedCode(null);
     setCodeError(null);
@@ -924,15 +932,11 @@ const App = () => {
         const code = await generateCodeFromDetails(options.promptDetails);
         setGeneratedCode(code);
     } catch (e) {
-        if (e instanceof Error) {
-            setCodeError(e.message);
-        } else {
-            setCodeError("Ocurrió un error inesperado al generar el código.");
-        }
+        setCodeError(e.message || "Ocurrió un error inesperado al generar el código.");
     } finally {
         setIsGeneratingCode(false);
     }
-}, [options.promptDetails, options.generationType]);
+}, [options.promptDetails]);
 
   const handleGenerate = useCallback(async () => {
     setError(null);
@@ -940,51 +944,12 @@ const App = () => {
     setIsLoading(true);
     setGeneratedCode(null);
     setCodeError(null);
-
-    const details = options.promptDetails;
-    let isValid = false;
-    let errorMessage = '';
-
-    switch (options.generationType) {
-        case GenerationType.TEXT:
-            isValid = !!(details.tarea?.trim() && details.rol?.trim());
-            errorMessage = 'Por favor, completa los campos requeridos "Rol de la IA" y "Tarea Principal".';
-            break;
-        case GenerationType.IMAGE:
-            isValid = !!details.descripcion?.trim();
-            errorMessage = 'Por favor, completa el campo requerido "Descripción Principal".';
-            break;
-        case GenerationType.VIDEO:
-            isValid = !!details.escena?.trim();
-            errorMessage = 'Por favor, completa el campo requerido "Escena Principal".';
-            break;
-        case GenerationType.SOUND:
-            isValid = !!details.descripcionSonido?.trim();
-            errorMessage = 'Por favor, completa el campo requerido "Descripción Detallada".';
-            break;
-        case GenerationType.CODE:
-            isValid = !!(details.lenguaje?.trim() && details.funcionalidad?.trim());
-            errorMessage = 'Por favor, completa los campos requeridos "Lenguaje" y "Funcionalidad Principal".';
-            break;
-        default:
-            isValid = false;
-    }
-
-    if (!isValid) {
-        setError(errorMessage);
-        setIsLoading(false);
-        return;
-    }
     
     try {
       const prompts = await generatePrompts(options);
       setGeneratedPrompts(prompts);
     } catch (e) {
-      if (e instanceof Error) {
-        setError(e.message);
-      } else {
-        setError("Ocurrió un error inesperado.");
-      }
+      setError(e.message || "Ocurrió un error inesperado.");
     } finally {
       setIsLoading(false);
     }
@@ -1030,12 +995,12 @@ const App = () => {
                 code: generatedCode, 
                 language: options.promptDetails.lenguaje || 'code' 
         }),
-        isLoading && React.createElement(Loader, { message: "Creando prompt..." }),
+        isLoading && React.createElement(Loader, { message: "Creando prompts..." }),
         error && React.createElement('div', { className: "text-center text-accent-red mt-8 bg-accent-red/10 p-4 rounded-lg" }, error),
         generatedPrompts.length > 0 && (
           React.createElement('div', { className: "mt-12" },
             React.createElement('h2', { className: "text-3xl font-bold text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-accent-purple to-accent-cyan" },
-              "¡Aquí tienes tu Prompt Detallado!"
+              "¡Aquí tienes tus Prompts!"
             ),
             React.createElement('div', { className: "space-y-6" },
               generatedPrompts.map((prompt, index) => (
