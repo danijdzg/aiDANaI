@@ -403,6 +403,19 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .view-exiting { animation: view-fade-out 0.2s ease-in forwards; }
 @keyframes highlight-card { 0% { background-color: color-mix(in srgb, var(--c-primary) 15%, transparent); } 100% { background-color: transparent; } }
 .highlight-animation { animation: highlight-card 2s ease-out; }
+@keyframes highlight-field-success {
+    0% {
+        background-color: color-mix(in srgb, var(--c-success) 20%, transparent);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+.field-highlighted {
+    animation: highlight-field-success 1s ease-out;
+}
+
 @keyframes highlight-field-success { 0% { background-color: color-mix(in srgb, var(--c-success) 20%, transparent); } 100% { background-color: transparent; } }
 .field-highlighted { animation: highlight-field-success 1s ease-out; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
@@ -649,7 +662,20 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .toast { background-color: var(--c-surface); color: var(--c-white); padding: var(--sp-2) var(--sp-4); border-radius: var(--border-radius-md); box-shadow: 0 0 20px rgba(0,0,0,0.5); pointer-events: all; border: 1px solid var(--c-outline); }
 @keyframes fade-out-and-collapse { from { opacity: 1; transform: scaleY(1); max-height: 76px; padding-top: var(--sp-2); padding-bottom: var(--sp-2); } to { opacity: 0; transform: scaleY(0.8); max-height: 0; padding-top: 0; padding-bottom: 0; margin: 0; border: 0; } }
 .item-deleting { animation: fade-out-and-collapse 0.4s ease-out forwards; overflow: hidden; }
-#description-suggestions { display: none; position: absolute; top: 100%; left: 0; right: 0; background-color: var(--c-surface); border-radius: var(--border-radius-md); box-shadow: 0 10px 20px rgba(0,0,0,0.4); z-index: 1060; max-height: 150px; overflow-y: auto; border: 1px solid var(--c-outline); }
+#description-suggestions {
+    display: none; /* Empezará oculto */
+    position: absolute;
+    top: 100%; /* Justo debajo del campo de descripción */
+    left: 0;
+    right: 0;
+    background-color: var(--c-surface);
+    border-radius: var(--border-radius-md);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+    z-index: 1060; /* Muy alto para estar por encima de otros elementos */
+    max-height: 150px; /* Evita que la lista sea demasiado larga */
+    overflow-y: auto; /* Añade una barra de scroll si es necesario */
+    border: 1px solid var(--c-outline);
+}
 .suggestion-item { padding: var(--sp-2) var(--sp-3); cursor: pointer; font-size: var(--fs-sm); }
 .suggestion-item:hover { background-color: var(--c-surface-variant); }
 .suggestion-item small { color: var(--c-on-surface-secondary); font-size: var(--fs-xs); }
@@ -1108,10 +1134,10 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
                                 <button data-action="manage-cuentas" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">account_balance</span><span>Cuentas</span></button>
                                 <button data-action="manage-conceptos" class="btn btn--secondary"><span class="material-icons" style="font-size: 16px;">category</span><span>Conceptos</span></button>
                             </div>
-                            <button data-action="recalculate-balances" class="btn btn--primary btn--full" style="margin-top: var(--sp-4);">
-                                <span class="material-icons" style="font-size: 16px;">calculate</span>
-                                <span>Recalcular Saldos de Cuentas</span>
-                            </button>
+                            <button data-action="recalculate-balances" class="btn btn--secondary btn--full" style="margin-top: var(--sp-4);">
+							<span class="material-icons" style="font-size: 16px;">verified_user</span>
+							<span>Auditar y Corregir Saldos</span>
+							</button>
                         </div>
                     </details>
                 </div>
@@ -1605,7 +1631,7 @@ const getInitialDb = () => ({
             isVisible: false, 
             isResultDisplayed: false,
         };
-		let modalDragState = {
+let modalDragState = {
     isDragging: false,
     startY: 0,
     currentY: 0,
@@ -3345,7 +3371,48 @@ const renderInversionesPage = async (targetContainerId) => {
                 if (valor > 0) treeData.push({ tipo: toSentenceCase(asset.tipo || 'S/T'), nombre: asset.nombre, valor: valor });
             });
             if (treeData.length > 0) {
-                assetAllocationChart = new Chart(chartCtx, { type: 'treemap', /* ... opciones del gráfico ... */ });
+                assetAllocationChart = new Chart(chartCtx, {
+    type: 'treemap',
+    data: {
+        datasets: [{
+            tree: treeData,
+            key: 'valor', // Le decimos que use la propiedad 'valor' para el tamaño
+            groups: ['tipo', 'nombre'], // Agrupa primero por tipo y luego por nombre
+            spacing: 0.5,
+            borderWidth: 1.5,
+            borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'),
+            backgroundColor: (ctx) => {
+                // Usa el mapa de colores que ya has creado
+                return ctx.type === 'data' ? colorMap[ctx.raw._data.tipo] || 'grey' : 'transparent';
+            },
+            labels: {
+                display: true,
+                color: '#FFFFFF',
+                font: { size: 11, weight: '600' },
+                align: 'center',
+                position: 'middle',
+                formatter: (ctx) => {
+                    // Muestra el nombre del activo en el rectángulo
+                    return ctx.raw.g.includes(ctx.raw._data.nombre) ? ctx.raw._data.nombre.split(' ') : null;
+                }
+            }
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false }, // No necesitamos la leyenda en este tipo de gráfico
+            tooltip: {
+                callbacks: {
+                    // Personaliza el texto que aparece al pasar el ratón por encima
+                    label: (ctx) => `${ctx.raw._data.nombre}: ${formatCurrency(ctx.raw.v * 100)}`
+                }
+            },
+            datalabels: { display: false } // Desactivamos los datalabels por defecto
+        }
+    }
+});
             } else {
                  select('asset-allocation-chart').closest('.chart-container').innerHTML = `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>No hay activos con valor para mostrar.</p></div>`;
             }
@@ -3508,7 +3575,6 @@ if (item.type === 'pending-item') {
         </div>
     </div>`;
 }
-// ▲▲▲ FIN DEL BLOQUE A REEMPLAZAR ▲▲▲
             if (item.type === 'date-header') {
                 const dateObj = new Date(item.date + 'T12:00:00Z');
                 const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
@@ -3521,98 +3587,10 @@ if (item.type === 'pending-item') {
                     </div>
                 `;
             }
-
-            const m = item.movement;
 			if (item.type === 'transaction') {
-            return TransactionCardComponent(item.movement, { cuentas: db.cuentas, conceptos: db.conceptos });
-        }
-            let highlightClass = '';
-            if (m.id === newMovementIdToHighlight) {
-                highlightClass = 'highlight-animation';
-                newMovementIdToHighlight = null;
-            }
-
-            const formattedDate = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            let indicatorClass = '';
-            
-            if (m.tipo === 'traspaso') indicatorClass = 'transaction-card__indicator--transfer';
-            else if (m.cantidad >= 0) indicatorClass = 'transaction-card__indicator--income';
-            else indicatorClass = 'transaction-card__indicator--expense';
-
-            if (m.tipo === 'traspaso') {
-                const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId);
-                const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId);
-                return `
-                <div class="swipe-container">
-                    <div class="swipe-actions-container left">
-                        <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}">
-                            <span class="material-icons">content_copy</span>
-                            <span>Duplicar</span>
-                        </button>
-                    </div>
-                    <div class="swipe-actions-container right">
-                        <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}" data-is-recurrent="false">
-                            <span class="material-icons">delete</span>
-                            <span>Borrar</span>
-                        </button>
-                    </div>
-                    <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
-                        <div class="transaction-card__indicator ${indicatorClass}"></div>
-                        <div class="transaction-card__content">
-                            <div class="transaction-card__details">
-                                <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
-                                <div class="transaction-card__description">${formattedDate}</div>
-                                <div class="transaction-card__transfer-details">
-                                    <div class="transaction-card__transfer-row">
-                                        <span><span class="material-icons">arrow_upward</span> ${(origen && origen.nombre) || '?'}</span>
-                                        <span class="transaction-card__balance">${formatCurrency(m.runningBalanceOrigen)}</span>
-                                    </div>
-                                    <div class="transaction-card__transfer-row">
-                                        <span><span class="material-icons">arrow_downward</span> ${(destino && destino.nombre) || '?'}</span>
-                                        <span class="transaction-card__balance">${formatCurrency(m.runningBalanceDestino)}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="transaction-card__figures">
-                                <div class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-            } else {
-                const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
-                const concept = db.conceptos.find(c => c.id === m.conceptoId);
-                const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
-                return `
-                <div class="swipe-container">
-                    <div class="swipe-actions-container left">
-                        <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}">
-                            <span class="material-icons">content_copy</span>
-                            <span>Duplicar</span>
-                        </button>
-                    </div>
-                    <div class="swipe-actions-container right">
-                         <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}" data-is-recurrent="false">
-                            <span class="material-icons">delete</span>
-                            <span>Borrar</span>
-                        </button>
-                    </div>
-                    <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
-                        <div class="transaction-card__indicator ${indicatorClass}"></div>
-                        <div class="transaction-card__content">
-                            <div class="transaction-card__details">
-                                <div class="transaction-card__row-1">${toSentenceCase((concept && concept.nombre) || 'S/C')}</div>
-                                <div class="transaction-card__row-2">${formattedDate} • ${escapeHTML(m.descripcion)}</div>
-                            </div>
-                            <div class="transaction-card__figures">
-                                <div class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</div>
-                                <div class="transaction-card__balance">${formatCurrency(m.runningBalance)}</div>
-                                <div class="transaction-card__row-2" style="text-align: right;">${escapeHTML((cuenta && cuenta.nombre) || 'S/C')}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-            }
+        return TransactionCardComponent(item.movement, { cuentas: db.cuentas, conceptos: db.conceptos });
+		}
+        
         };
         
         const renderVisibleItems = () => {
@@ -4221,10 +4199,9 @@ const renderPatrimonioPage = async () => {
     renderInicioResumenView();
 };
  
-// ====================================================================
-// === INICIO: FUNCIÓN DE COMPONENTE REUTILIZABLE PARA TRANSACTION CARD ===
-// ====================================================================
-
+// =====================================================================
+// === INICIO: PASO 1 - REEMPLAZA ESTA FUNCIÓN POR COMPLETO          ===
+// =====================================================================
 /**
  * Genera el HTML para una tarjeta de movimiento o traspaso con sus acciones de swipe.
  * @param {object} m - El objeto del movimiento.
@@ -4286,7 +4263,7 @@ const TransactionCardComponent = (m, dbData) => {
             </div>`;
     }
     
-    // Envolvemos el contenido de la tarjeta con el contenedor de swipe y sus acciones
+ // Envolvemos el contenido de la tarjeta con el contenedor de swipe y sus acciones
     return `
     <div class="swipe-container">
         <div class="swipe-actions-container left">
@@ -4301,7 +4278,7 @@ const TransactionCardComponent = (m, dbData) => {
                 <span>Borrar</span>
             </button>
         </div>
-        <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
+        <div class="transaction-card ${highlightClass}" data-id="${m.id}">
             ${cardContentHTML}
         </div>
     </div>`;
@@ -6222,12 +6199,15 @@ const getDragAfterElement = (container, y) => {
 
 		let suggestionDebounceTimer = null;
         const applyDescriptionSuggestion = (target) => {
+    // Extraemos la información directamente del elemento clicado
     const { description, conceptoId, cuentaId } = target.dataset;
 
+    // Rellenamos los campos del formulario
     select('movimiento-descripcion').value = toSentenceCase(description);
     select('movimiento-concepto').value = conceptoId;
     select('movimiento-cuenta').value = cuentaId;
     
+    // Ocultamos la caja de sugerencias
     select('description-suggestions').style.display = 'none';
 
     // Damos feedback visual y movemos el cursor al siguiente paso
@@ -6244,7 +6224,6 @@ const getDragAfterElement = (container, y) => {
     select('movimiento-cantidad').focus();
 };
 
- // ▼▼▼ REEMPLAZA TU FUNCIÓN showModal CON ESTA VERSIÓN ▼▼▼
 const showModal = (id) => {
     const m = select(id);
     if (m) {
@@ -6266,7 +6245,6 @@ const showModal = (id) => {
         }
         
         // Los listeners de move y end los ponemos en document para capturar el movimiento
-        // incluso si el cursor sale del modal
         document.addEventListener('mousemove', handleModalDragMove);
         document.addEventListener('touchmove', handleModalDragMove, { passive: false });
         document.addEventListener('mouseup', handleModalDragEnd);
@@ -6279,7 +6257,6 @@ const showModal = (id) => {
     }
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN hideModal CON ESTA VERSIÓN ▼▼▼
 const hideModal = (id) => {
     const m = select(id);
     if (m) {
@@ -6302,7 +6279,7 @@ const hideModal = (id) => {
         document.removeEventListener('mouseup', handleModalDragEnd);
         document.removeEventListener('touchend', handleModalDragEnd);
         
-        // Reseteamos la posición por si el cierre fue con el botón y no por gesto
+        // Reseteamos la posición por si el cierre fue con el botón
         if (modalElement) modalElement.style.transform = '';
     }
 
@@ -7266,7 +7243,7 @@ const handleToggleTheme = () => {
     );
             list.innerHTML = conceptosFiltrados.length === 0 
                 ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay conceptos.</p>` 
-                : [...conceptosFiltrados].sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
+                : conceptosFiltrados.sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
                     const icon = (c && c.icon) || 'label';
                     const nombre = (c && c.nombre) || '';
                     return `<div id="concepto-item-${c.id}" class="modal__list-item"><div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;"><span class="material-icons" style="color: var(--c-primary);">${icon}</span><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(nombre)}</span></div><div style="display: flex; align-items: center; gap: var(--sp-1); flex-shrink: 0;"><button class="icon-btn" data-action="edit-concepto" data-id="${c.id}" title="Editar Concepto"><span class="material-icons">edit_note</span></button><button class="icon-btn" data-action="delete-concepto" data-id="${c.id}" title="Eliminar Concepto"><span class="material-icons">delete_outline</span></button></div></div>`;
@@ -7525,21 +7502,7 @@ const attachEventListeners = () => {
         navigateTo(pageToNavigate, false);
     }
 });
-    // Listener de Clics
-	document.body.addEventListener('dblclick', (e) => {
-        // Buscamos si el doble clic se hizo sobre una tarjeta de movimiento
-        const card = e.target.closest('.transaction-card[data-id]');
-        
-        if (card) {
-            const cardId = card.dataset.id;
-            // Un doble clic siempre se considera una acción intencionada
-            hapticFeedback('medium'); 
-            
-            // Asumimos que los elementos en la lista del diario nunca son recurrentes.
-            // La edición de recurrentes se hace desde la página de Planificación.
-            startMovementForm(cardId, false);
-        }
-    });
+    
     document.body.addEventListener('click', async (e) => {
         const target = e.target;
 
@@ -7643,7 +7606,6 @@ const attachEventListeners = () => {
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
             'add-movement': () => startMovementForm(),
-            'edit-movement-from-list': () => { /* Esta acción ahora la maneja el sistema de interacción */ },
             'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
             'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
             'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
@@ -7701,7 +7663,13 @@ const attachEventListeners = () => {
     showToast('Datos duplicados. Ajusta y guarda como nuevo.', 'info');
 },
             'save-and-new-movement': () => handleSaveAndNewMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
-            'recalculate-balances': () => recalculateAllAccountBalances(btn), 'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
+            'recalculate-balances': () => {
+    showConfirmationModal(
+        'Esta es una herramienta de auditoría que recalculará el saldo de cada cuenta desde cero, leyendo todo tu historial de movimientos. Úsala solo si sospechas que hay una inconsistencia. La operación puede tardar y consumir datos. ¿Quieres continuar?',
+        () => auditAndFixAllBalances(btn),
+        'Confirmar Auditoría Completa'
+    );
+}, 'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
             'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo."); if (pin === null) return; if (pin === "") { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); showToast('PIN de acceso rápido eliminado.', 'info'); return; } if (!/^\d{4}$/.test(pin)) { showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger'); return; } const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos."); if (pin !== pinConfirm) { showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger'); return; } const pinHash = await hashPin(pin); localStorage.setItem('pinUserHash', pinHash); localStorage.setItem('pinUserEmail', currentUser.email); hapticFeedback('success'); showToast('¡PIN de acceso rápido configurado con éxito!', 'info'); },
 			'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
@@ -7732,7 +7700,13 @@ const attachEventListeners = () => {
     }, true);
     document.body.addEventListener('submit', (e) => { e.preventDefault(); const target = e.target; const submitter = e.submitter; const handlers = { 'login-form': () => { const action = submitter ? submitter.dataset.action : 'login'; if (action === 'login') { handleLogin(submitter); } else if (action === 'register') { handleRegister(submitter); } }, 'pin-form': handlePinSubmit, 'form-movimiento': () => handleSaveMovement(target, submitter), 'add-concepto-form': () => handleAddConcept(submitter), 'add-cuenta-form': () => handleAddAccount(submitter), 'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter), 'form-valoracion': () => handleSaveValoracion(target, submitter), }; if (handlers[target.id]) { handlers[target.id](); } });
     document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
-    document.body.addEventListener('blur', (e) => { const id = e.target.id; if (id) { if (id === 'movimiento-cantidad') validateField('movimiento-cantidad'); if (id === 'movimiento-descripcion') { handleDescriptionAutocomplete(); if (!e.relatedTarget || !e.relatedTarget.closest('#description-suggestions')) { const suggestionsBox = select('description-suggestions'); if (suggestionsBox) suggestionsBox.style.display = 'none'; } } if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen'); validateField('movimiento-cuenta-destino'); } } }, true);
+    document.body.addEventListener('blur', (e) => {
+    const id = e.target.id;
+    if (id) {
+        if (id === 'movimiento-cantidad') validateField('movimiento-cantidad');  
+        if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id);
+        }
+}, true);
     document.body.addEventListener('focusin', (e) => { if (e.target.matches('.pin-input')) { handlePinInputInteraction(); } if (e.target.id === 'movimiento-descripcion') { handleDescriptionInput(); } });
     document.addEventListener('change', e => {
     const target = e.target;
@@ -7964,58 +7938,6 @@ const attachEventListeners = () => {
         };
 
         
-const handleDescriptionAutocomplete = () => {
-    const descriptionInput = select('movimiento-descripcion');
-    const conceptoSelect = select('movimiento-concepto');
-    const cuentaSelect = select('movimiento-cuenta');
-
-    if (!descriptionInput || !conceptoSelect || !cuentaSelect) return;
-    
-    if (conceptoSelect.value || cuentaSelect.value) {
-        return;
-    }
-
-    const key = descriptionInput.value.trim().toLowerCase();
-    
-    if (intelligentIndex.has(key)) {
-        const suggestion = intelligentIndex.get(key);
-        
-        conceptoSelect.value = suggestion.conceptoId;
-        cuentaSelect.value = suggestion.cuentaId;
-        
-        hapticFeedback('light');
-        const conceptoParent = conceptoSelect.closest('.form-group-addon');
-        const cuentaParent = cuentaSelect.closest('.form-group-addon');
-        
-        if (conceptoParent) {
-            conceptoParent.classList.add('field-highlighted');
-            setTimeout(() => conceptoParent.classList.remove('field-highlighted'), 1500);
-        }
-        if (cuentaParent) {
-            cuentaParent.classList.add('field-highlighted');
-            setTimeout(() => cuentaParent.classList.remove('field-highlighted'), 1500);
-        }
-
-        showToast('Concepto y cuenta autocompletados.', 'info', 2000);
-    }
-};
-
-const handleSaveAndNewMovement = async (form, btn) => {
-    const fechaActual = select('movimiento-fecha').value;
-    const tipoActual = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
-
-    const guardadoExitoso = await handleSaveMovement(form, btn, true);
-
-    if (guardadoExitoso) {
-        showToast('Guardado. Listo para el siguiente.', 'info');
-        
-        startMovementForm(null); 
-        
-        select('movimiento-fecha').value = fechaActual;
-        updateDateDisplay(select('movimiento-fecha'));
-        setMovimientoFormType(tipoActual);
-    }
-};
 
 // =================================================================
 // === INICIO: NUEVA FUNCIÓN PARA CONFIRMAR MOVIMIENTOS RECURRENTES ===
@@ -8281,9 +8203,7 @@ const renderDiarioCalendar = async () => {
     }
 };
 
-// =================================================================
-// === INICIO: PASO 1 - PEGA ESTA FUNCIÓN AUXILIAR EN TU CÓDIGO   ===
-// =================================================================
+
 const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     // Revertir el impacto del movimiento antiguo si estamos editando
     if (oldData) {
@@ -8309,13 +8229,6 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
         if (cuenta) cuenta.saldo += newData.cantidad;
     }
 };
-// =================================================================
-// === FIN: PASO 1                                               ===
-// =================================================================
-
-// =================================================================
-// === INICIO: PASO 2 - REEMPLAZA TU FUNCIÓN ANTIGUA CON ESTA      ===
-// =================================================================
 const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
     clearAllErrors(form.id);
     if (!validateMovementForm()) {
@@ -8329,7 +8242,7 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
     const isRecurrent = select('movimiento-recurrente').checked;
     
     if (isRecurrent) {
-        // ... (Tu lógica para recurrentes es correcta y no necesita cambios)
+        // Tu lógica para recurrentes es correcta y no necesita cambios
         try {
             const id = select('movimiento-id').value || generateId();
             const cantidadValue = parseCurrencyString(select('movimiento-cantidad').value);
@@ -8371,7 +8284,7 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
         }
 
     } else {
-        // --- AQUÍ ESTÁ LA LÓGICA CORREGIDA PARA MOVIMIENTOS NORMALES ---
+        // --- AQUÍ ESTÁ LA LÓGICA OPTIMISTA PARA MOVIMIENTOS NORMALES ---
         const mode = select('movimiento-mode').value;
         const type = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
         const cantidadValue = parseCurrencyString(select('movimiento-cantidad').value);
@@ -8393,13 +8306,13 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
         }
 
         try {
-            // NUEVO: Capturamos el estado antiguo ANTES de hacer cambios, si estamos editando.
+            // Capturamos el estado antiguo ANTES de hacer cambios, si estamos editando.
             let oldMovementData = null;
             if (mode.startsWith('edit')) {
                 oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
             }
             
-            // NUEVO: Actualizamos los saldos en nuestra memoria local (db.cuentas) al instante.
+            // Actualizamos los saldos en nuestra memoria local (db.cuentas) al instante.
             applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
 
             // Actualizamos la lista de movimientos en memoria
@@ -8412,12 +8325,11 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
             }
             db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-            // NUEVO: Esta función ahora usará los saldos correctos que acabamos de actualizar.
+            // Esta función ahora usará los saldos correctos que acabamos de actualizar.
             updateLocalDataAndRefreshUI();
 
             // La lógica de guardado en Firebase se mantiene, se ejecuta en segundo plano.
             await fbDb.runTransaction(async (transaction) => {
-                // ... (La lógica de tu transacción original es correcta y no necesita cambios)
                 let oldDataForTx = null;
                 if (mode.startsWith('edit')) {
                     const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
@@ -8456,9 +8368,7 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
         }
     }
 };
-// =================================================================
-// === FIN: PASO 2                                               ===
-// =================================================================
+
 
 /**
  * Prepara el formulario para duplicar un movimiento existente.
@@ -9079,7 +8989,7 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
 // === FIN: FUNCIÓN DE BORRADO OPTIMIZADA                     ===
 // ============================================================
 
-    const recalculateAllAccountBalances = async (btn) => {
+    const auditAndFixAllBalances = async (btn) => {
         if (!currentUser) {
             showToast("Debes iniciar sesión para realizar esta acción.", "danger");
             return;
@@ -9354,9 +9264,7 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
 
 
 
- // REEMPLAZA "handleDescriptionInput" y el bloque de swipe antiguo con ESTE bloque completo
-
-// ▼▼▼ REEMPLAZA LAS 3 FUNCIONES SIGUIENTES CON ESTE BLOQUE COMPLETO ▼▼▼
+ // ▼▼▼ REEMPLAZA LAS 3 FUNCIONES SIGUIENTES CON ESTE BLOQUE COMPLETO ▼▼▼
 
 const longPressState = { timer: null, isLongPress: false };
 const swipeState = { activeCard: null, startX: 0, currentX: 0, isSwiping: false, isSwipeIntent: false, threshold: 60 };
@@ -9456,9 +9364,7 @@ const handleInteractionEnd = (e) => {
             resetActiveSwipe();
         }
     } 
-    // 3. ¡CAMBIO CLAVE! Si NO fue long press y NUNCA hubo intención de swipe...
-    // Antes era un clic para editar, ahora simplemente no hacemos NADA.
-    // El usuario simplemente ha tocado y soltado la pantalla sin moverse.
+    // 3. Si NO fue long press y NUNCA hubo intención de swipe (un simple toque), no hacemos nada.
     else {
         // Bloque de código anterior eliminado. Un simple toque ya no abre el formulario.
     }
@@ -9480,6 +9386,7 @@ const resetActiveSwipe = () => {
     }
     swipeState.activeCard = null;
 };
+
 
 const handleDescriptionInput = () => {
     clearTimeout(descriptionSuggestionDebounceTimer);

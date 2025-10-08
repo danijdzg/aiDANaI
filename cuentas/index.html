@@ -2575,39 +2575,37 @@ const navigateTo = async (pageId, isInitial = false) => {
     Chart.register(ChartDataLabels);
 };
         
-        const buildIntelligentIndex = (movementsSource = db.movimientos) => {
+    const buildIntelligentIndex = (movementsSource = db.movimientos) => {
     intelligentIndex.clear(); 
     if (!movementsSource || movementsSource.length === 0) return;
 
-    // Usamos un mapa temporal para construir el índice de forma más eficiente
+    const visibleAccounts = getVisibleAccounts().map(c => c.id);
     const tempIndex = new Map();
 
-    // Recorremos los movimientos del más antiguo al más reciente
-    const sortedMovements = [...movementsSource].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    const movementsToIndex = [...movementsSource]
+        .filter(mov => mov.tipo === 'movimiento' && visibleAccounts.includes(mov.cuentaId)) // Filtramos solo por el ledger activo
+        .sort((a, b) => new Date(a.fecha) - new Date(b.fecha)); // Ordenamos por fecha
 
-    for (const mov of sortedMovements) {
-        if (mov.tipo === 'movimiento' && mov.descripcion) {
-            const key = mov.descripcion.trim().toLowerCase();
+    for (const mov of movementsToIndex) {
+        const desc = mov.descripcion.trim().toLowerCase();
+        if (desc.length > 3) {
+            const key = desc;
             if (!tempIndex.has(key)) {
-                // Si es la primera vez que vemos esta descripción, la inicializamos
                 tempIndex.set(key, {
                     conceptoId: mov.conceptoId,
                     cuentaId: mov.cuentaId,
-                    count: 1,
-                    lastUsed: new Date(mov.fecha).getTime() // Guardamos la fecha de la primera vez
+                    count: 0, // Reiniciamos el contador
+                    lastUsed: 0
                 });
-            } else {
-                // Si ya existe, actualizamos sus datos
-                const entry = tempIndex.get(key);
-                entry.conceptoId = mov.conceptoId; // Siempre usamos los datos del más reciente
-                entry.cuentaId = mov.cuentaId;
-                entry.count++; // Incrementamos el contador de frecuencia
-                entry.lastUsed = new Date(mov.fecha).getTime(); // Actualizamos la fecha de último uso
             }
+            const entry = tempIndex.get(key);
+            entry.conceptoId = mov.conceptoId; 
+            entry.cuentaId = mov.cuentaId;
+            entry.count++; 
+            entry.lastUsed = new Date(mov.fecha).getTime();
         }
     }
     
-    // Asignamos el mapa temporal ya procesado a nuestra variable global
     intelligentIndex = tempIndex;
     console.log(`Índice inteligente MEJORADO con ${intelligentIndex.size} entradas.`);
 };
@@ -7527,6 +7525,29 @@ const attachEventListeners = () => {
 
       
         const actions = {
+		'apply-description-suggestion': (e) => {
+    const suggestionItem = e.target.closest('.suggestion-item');
+    if (suggestionItem) {
+        const { description, conceptoId, cuentaId } = suggestionItem.dataset;
+        // Aplicamos la sugerencia con la descripción completa
+        select('movimiento-descripcion').value = toSentenceCase(description); 
+        select('movimiento-concepto').value = conceptoId;
+        select('movimiento-cuenta').value = cuentaId;
+        select('description-suggestions').style.display = 'none';
+        
+        // Animación para campos rellenados
+        [select('movimiento-concepto'), select('movimiento-cuenta')].forEach(el => {
+            const parent = el.closest('.form-group-addon');
+            if(parent) {
+                parent.classList.add('field-highlighted');
+                setTimeout(() => parent.classList.remove('field-highlighted'), 1500);
+            }
+        });
+        
+        select('movimiento-cantidad').focus(); // Foco al campo de cantidad
+        hapticFeedback('light');
+    }
+},
 		'show-aidanai-help': () => {
                 const activeView = document.querySelector('.view--active');
                 const pageId = activeView ? activeView.id : PAGE_IDS.PANEL; // Usamos el panel como fallback seguro
@@ -9394,11 +9415,11 @@ const handleDescriptionInput = () => {
         const descriptionInput = select('movimiento-descripcion');
         const suggestionsBox = select('description-suggestions');
         if (!descriptionInput || !suggestionsBox) return;
-
+        
         const query = descriptionInput.value.trim().toLowerCase();
         suggestionsBox.innerHTML = '';
 
-        if (query.length < 2) { // Empezamos a buscar a partir de 2 letras
+        if (query.length < 2) { 
             suggestionsBox.style.display = 'none';
             return;
         }
@@ -9410,22 +9431,49 @@ const handleDescriptionInput = () => {
             }
         }
 
-        // Algoritmo de puntuación: 60% Frecuencia, 40% Recencia
+        // 1. Algoritmo de puntuación: 60% Frecuencia, 40% Recencia
         const now = Date.now();
         suggestions.sort((a, b) => {
-            const recencyA = Math.exp((a.lastUsed - now) / (1000 * 3600 * 24 * 30)); // Penaliza la antigüedad
+            const recencyA = Math.exp((a.lastUsed - now) / (1000 * 3600 * 24 * 30)); 
             const recencyB = Math.exp((b.lastUsed - now) / (1000 * 3600 * 24 * 30));
-            const scoreA = (a.count * 0.6) + (recencyA * 0.4);
+            // Cuanto mayor la puntuación, mejor
+            const scoreA = (a.count * 0.6) + (recencyA * 0.4); 
             const scoreB = (b.count * 0.6) + (recencyB * 0.4);
             return scoreB - scoreA;
         });
 
-        if (suggestions.length > 0) {
-            suggestionsBox.innerHTML = suggestions.slice(0, 5).map(s => { // Mostramos hasta 5 sugerencias
+        const topSuggestion = suggestions[0];
+        const conceptoSelect = select('movimiento-concepto');
+        const cuentaSelect = select('movimiento-cuenta');
+        
+        // 2. LÓGICA CRÍTICA: DOBLE PREDICCIÓN AUTOMÁTICA
+        if (topSuggestion) {
+            // Rellenamos solo si la coincidencia es exacta o muy alta (por ejemplo, si la descripción actual empieza con la predicción)
+            if (topSuggestion.description.startsWith(query) && topSuggestion.description.length > query.length) {
+                
+                // Si el concepto está vacío, lo rellenamos
+                if (!conceptoSelect.value && conceptoSelect.querySelector(`option[value="${topSuggestion.conceptoId}"]`)) {
+                    conceptoSelect.value = topSuggestion.conceptoId;
+                    conceptoSelect.closest('.form-group-addon').classList.add('field-highlighted');
+                    setTimeout(() => conceptoSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
+                }
+                
+                // Si la cuenta está vacía, la rellenamos
+                if (!cuentaSelect.value && cuentaSelect.querySelector(`option[value="${topSuggestion.cuentaId}"]`)) {
+                    cuentaSelect.value = topSuggestion.cuentaId;
+                    cuentaSelect.closest('.form-group-addon').classList.add('field-highlighted');
+                    setTimeout(() => cuentaSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
+                }
+            }
+
+
+            // 3. Renderizamos las sugerencias en el box (ya implementado)
+            suggestionsBox.innerHTML = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).map(s => { 
                 const concepto = db.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
                 const cuenta = db.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
                 return `
                     <div class="suggestion-item" 
+                         data-action="apply-description-suggestion"
                          data-description="${escapeHTML(s.description)}" 
                          data-concepto-id="${s.conceptoId}" 
                          data-cuenta-id="${s.cuentaId}"
@@ -9438,7 +9486,7 @@ const handleDescriptionInput = () => {
         } else {
             suggestionsBox.style.display = 'none';
         }
-    }, 250); // Un pequeño retardo para no buscar en cada letra instantáneamente
+    }, 250); 
 };
 	
      
