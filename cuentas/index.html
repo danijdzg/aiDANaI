@@ -34,6 +34,42 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
+	/* === INICIO: Estilos para Animación de Guardado === */
+
+.save-animation-bubble {
+    /* Apariencia de la burbuja */
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    
+    /* Posicionamiento y capa */
+    position: fixed; /* Fijo en la pantalla para que viaje sobre todo */
+    z-index: 99999; /* La capa más alta de todas */
+    
+    /* Estado inicial (invisible) */
+    opacity: 0;
+    pointer-events: none; /* No se puede hacer clic en ella */
+}
+
+/* La animación que la hará volar y desaparecer */
+@keyframes fly-to-list {
+    0% {
+        /* Al principio, es opaca y tiene su tamaño normal */
+        opacity: 0.8;
+        transform: scale(1.2);
+    }
+    99% {
+        /* Justo antes de terminar, ya es casi invisible y pequeña */
+        opacity: 0.1;
+        transform: scale(0.2);
+    }
+    100% {
+        /* Al final, es totalmente invisible y desaparece */
+        opacity: 0;
+        transform: scale(0);
+    }
+}
+/* === FIN: Estilos para Animación de Guardado === */
 	/* === INICIO: ESTILOS A PEGAR PARA LA INTRO CON VÍDEO Y SONIDO === */
 #start-overlay {
     position: fixed;
@@ -521,8 +557,8 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .fab:hover { transform: scale(1.08) !important; box-shadow: 0 0 25px var(--c-primary); } .fab .material-icons { font-size: 28px; }
 
 /* --- Modales --- */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); display: flex; align-items: flex-end; justify-content: center; z-index: 1050; opacity: 0; transition: opacity 0.3s ease-out; pointer-events: none; }
-.app-layout.app-layout--transformed-by-modal { transform: scale(0.95) translateY(-10px); border-radius: var(--border-radius-lg); overflow: hidden; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(12px); display: flex; align-items: flex-end; justify-content: center; z-index: 1050; opacity: 0; transition: opacity 0.3s ease-out; pointer-events: none; }
+.app-layout.app-layout--transformed-by-modal { transform: scale(0.96) translateY(-8px); border-radius: var(--border-radius-lg); overflow: hidden; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
 .modal-overlay--active { opacity: 1; pointer-events: auto; }
 .modal { background: var(--c-surface); border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; padding: var(--sp-5); width: 100%; max-width: 420px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 0 30px rgba(0,0,0,0.5); transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
 .modal-overlay--active .modal { transform: translateY(0); }
@@ -545,7 +581,27 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .kpi-item__label { font-size: var(--fs-xs); font-weight: 600; color: var(--c-on-surface-secondary); margin-bottom: var(--sp-1); text-transform: uppercase; }
 .kpi-item__value { font-size: var(--fs-base); font-weight: 800; }
 .kpi-item__comparison { font-size: var(--fs-xs); font-weight: 500; margin-top: var(--sp-1); height: 14px; }
+/* --- AÑADE ESTE BLOQUE A TU CSS --- */
+.kpi-item[data-action] {
+    /* Reseteamos la apariencia de botón */
+    border: none;
+    background: none;
+    padding: 0;
+    text-align: inherit;
+    font-family: inherit;
+    
+    /* Añadimos la interactividad visual */
+    cursor: pointer;
+    transition: transform 0.2s, background-color 0.2s;
+}
 
+.kpi-item[data-action]:hover {
+    background-color: var(--c-surface-variant);
+}
+
+.kpi-item[data-action]:active {
+    transform: scale(0.97);
+}
 /* Lista de Movimientos Virtualizada */
 #movimientos-list-container { position: relative; padding: 0 var(--sp-4); }
 #virtual-list-sizer { position: relative; width: 100%; }
@@ -565,12 +621,9 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .transaction-card__row-1, .transaction-card__concept { font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .transaction-card__row-2, .transaction-card__description { font-size: var(--fs-xs); color: var(--c-on-surface-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .transaction-card__figures {
-    /* Permitimos que este contenedor se encoja si no hay espacio */
     flex-shrink: 1; 
     text-align: right;
-    /* Establecemos un ancho mínimo para que no se colapse por completo */
     min-width: 120px; 
-    /* Nos aseguramos de que el contenido interior se organice bien */
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -620,7 +673,7 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .form-label { display: block; font-size: var(--fs-sm); font-weight: 600; margin-bottom: var(--sp-2); color: var(--c-on-surface-secondary); }
 .form-input, .form-select { width: 100%; padding: var(--sp-3); border: 1px solid var(--c-outline); border-radius: var(--border-radius-md); background: var(--c-surface-variant); color: var(--c-on-surface); font-size: var(--fs-base); appearance: none; transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s; }
 .form-input:focus, .form-select:focus { outline: none; border-color: var(--c-primary); background-color: var(--c-surface); box-shadow: var(--c-border-glow); }
-.form-select { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23FFFFFF' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; padding-right: 36px; }
+.form-select { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23FFFFFF' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3csvg%3e"); background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; padding-right: 36px; }
 .form-grid { display: grid; grid-template-columns: 1fr; gap: var(--sp-3); }
 .form-group-addon { display: flex; align-items: center; gap: var(--sp-2); }
 .form-group-addon .form-group { flex-grow: 1; margin-bottom: 0; }
@@ -637,7 +690,11 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 
 /* --- Botones --- */
 .btn { padding: var(--sp-3) var(--sp-4); border: 1px solid transparent; border-radius: var(--border-radius-md); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); -webkit-user-select: none; user-select: none; }
-.btn:active { transform: scale(0.97); }
+.btn {
+    /* ... (propiedades existentes) ... */
+    transition: all 0.2s, transform 0.1s ease-out; /* Añadimos una transición específica para el transform */
+}
+.btn:active { transform: scale(0.98); opacity: 0.85; }
 .btn--primary { background-color: var(--c-primary); color: var(--c-white); border-color: var(--c-primary); } .btn--primary:hover { background-color: var(--c-primary-hover); border-color: var(--c-primary-hover); box-shadow: var(--shadow-md); }
 .btn--secondary { background-color: var(--c-surface-variant); color: var(--c-on-surface); border: 1px solid var(--c-outline); } .btn--secondary:hover { background-color: var(--c-outline); border-color: var(--c-on-surface-tertiary); }
 .btn--danger { background-color: var(--c-danger); color: var(--c-white); } .btn--danger:hover { box-shadow: var(--glow-red); }
@@ -694,7 +751,25 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .calculator-btn.btn-confirm { background-color: var(--c-primary); color: var(--c-white); }
 .calculator-btn.zero { grid-column: span 2; }
 .material-icons.backspace-icon { font-size: 1.2rem; }
+/* Estilo para el nuevo display de historial */
+.calculator-history-display {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--c-on-surface-secondary);
+    text-align: right;
+    padding: 0 var(--sp-3);
+    min-height: 22px;
+    margin-bottom: var(--sp-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
+/* Estilo para el botón de operador cuando está activo */
+.calculator-btn.btn-operator--active {
+    background-color: var(--c-primary);
+    color: var(--c-white);
+}
 /* --- Estilos de Contabilidad Dual (A/B) --- */
 body[data-ledger-mode="A"] #ledger-toggle-btn { background-color: var(--c-primary); border-color: var(--c-primary); color: var(--c-white); box-shadow: var(--shadow-sm); }
 body[data-ledger-mode="A"] #ledger-toggle-btn:hover { background-color: var(--c-primary-hover); border-color: var(--c-primary-hover); box-shadow: var(--shadow-md); }
@@ -865,15 +940,14 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 #json-preview-list { list-style: none; padding-left: 0; }
 #json-preview-list li { background-color: var(--c-surface-variant); padding: var(--sp-3); border-radius: var(--border-radius-md); margin-bottom: var(--sp-2); display: flex; align-items: center; gap: var(--sp-3); }
 #json-preview-list .material-icons { color: var(--c-success); }
+
 /* === INICIO: Estilos Profesionales para Búsqueda Global === */
 #global-search-results {
-    padding-top: var(--sp-2); /* Añade un poco de aire arriba */
+    padding-top: var(--sp-2);
 }
-
 .search-result-group {
-    margin-bottom: var(--sp-5); /* Separa claramente los grupos (Movimientos, Cuentas...) */
+    margin-bottom: var(--sp-5);
 }
-
 .search-result-group__title {
     font-size: var(--fs-xs);
     font-weight: 700;
@@ -884,7 +958,6 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     border-bottom: 1px solid var(--c-outline);
     margin-bottom: var(--sp-2);
 }
-
 .search-result-item {
     display: flex;
     align-items: center;
@@ -898,11 +971,9 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     border-radius: var(--border-radius-md);
     transition: background-color 0.2s ease-in-out;
 }
-
 .search-result-item:hover {
     background-color: var(--c-surface-variant);
 }
-
 .search-result-item__icon {
     flex-shrink: 0;
     width: 36px;
@@ -914,12 +985,10 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     background-color: var(--c-surface-variant);
     color: var(--c-primary);
 }
-
 .search-result-item__details {
     flex-grow: 1;
-    min-width: 0; /* Soluciona problemas de desbordamiento de texto */
+    min-width: 0;
 }
-
 .search-result-item__details p {
     font-weight: 600;
     color: var(--c-on-surface);
@@ -928,12 +997,10 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     text-overflow: ellipsis;
     margin: 0;
 }
-
 .search-result-item__details small {
     color: var(--c-on-surface-secondary);
     font-size: var(--fs-xs);
 }
-
 .search-result-item__amount {
     font-weight: 700;
     font-size: var(--fs-base);
@@ -1194,11 +1261,11 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     <label for="movimiento-cantidad" class="form-label">Cantidad</label>
     <div class="form-group-addon">
         <input type="text" id="movimiento-cantidad" class="form-input" required placeholder="Ej: -2,50" />
-        <!-- Este botón solo se verá en PC -->
-        <button type="button" id="calculator-toggle-btn" class="icon-btn" title="Abrir Calculadora">
-            <span class="material-icons">calculate</span>
-        </button>
-    </div>
+    <!-- Este botón solo se verá en PC -->
+    <button type="button" id="calculator-toggle-btn" class="icon-btn" title="Abrir Calculadora">
+        <span class="material-icons">calculate</span>
+    </button>
+</div>
     <span class="form-error" id="movimiento-cantidad-error"></span>
 </div>
                 <div class="form-group">
@@ -1318,7 +1385,6 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
             <div id="generic-modal-body" class="modal__body"></div>
         </div>
     </div>
-
 <div id="global-search-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
         <div class="modal">
             <header class="modal__header">
@@ -1408,32 +1474,34 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 </div>
 <div id="calculator-overlay" class="modal-overlay" style="background: transparent; pointer-events: none;">
     <div id="calculator-ui" class="calculator-ui" style="pointer-events: all;">
-        <div id="calculator-display" class="calculator-display">0</div>
-        <div id="calculator-grid" class="calculator-grid">
-            <button class="calculator-btn btn-operator" data-key="clear">C</button>
-            <button class="calculator-btn btn-operator" data-key="sign">+/-</button>
-            <button class="calculator-btn btn-operator" data-key="backspace"><span class="material-icons backspace-icon">backspace</span></button>
-            <button class="calculator-btn btn-confirm" id="calculator-btn-done" data-key="done">OK</button>
-            
-            <button class="calculator-btn" data-key="7">7</button>
-            <button class="calculator-btn" data-key="8">8</button>
-            <button class="calculator-btn" data-key="9">9</button>
-            <button class="calculator-btn btn-operator" data-key="divide">/</button>
+    <!-- === INICIO: CÓDIGO AÑADIDO === -->
+    <div id="calculator-history-display" class="calculator-history-display"></div>
+    <!-- === FIN: CÓDIGO AÑADIDO === -->
+    <div id="calculator-display" class="calculator-display">0</div>
+    <div id="calculator-grid" class="calculator-grid">
+        <button class="calculator-btn btn-operator" data-key="clear">C</button>
+        <button class="calculator-btn btn-operator" data-key="sign">+/-</button>
+        <button class="calculator-btn btn-operator" data-key="backspace"><span class="material-icons backspace-icon">backspace</span></button>
+        <button class="calculator-btn btn-confirm" id="calculator-btn-done" data-key="done">OK</button>
+        
+        <button class="calculator-btn" data-key="7">7</button>
+        <button class="calculator-btn" data-key="8">8</button>
+        <button class="calculator-btn" data-key="9">9</button>
+        <button class="calculator-btn btn-operator" data-key="divide">/</button>
 
-            <button class="calculator-btn" data-key="4">4</button>
-            <button class="calculator-btn" data-key="5">5</button>
-            <button class="calculator-btn" data-key="6">6</button>
-            <button class="calculator-btn btn-operator" data-key="multiply">x</button>
-            
-            <button class="calculator-btn" data-key="1">1</button>
-            <button class="calculator-btn" data-key="2">2</button>
-            <button class="calculator-btn" data-key="3">3</button>
-            <button class="calculator-btn btn-operator" data-key="subtract">-</button>
+        <button class="calculator-btn" data-key="4">4</button>
+        <button class="calculator-btn" data-key="5">5</button>
+        <button class="calculator-btn" data-key="6">6</button>
+        <button class="calculator-btn btn-operator" data-key="multiply">x</button>
+        
+        <button class="calculator-btn" data-key="1">1</button>
+        <button class="calculator-btn" data-key="2">2</button>
+        <button class="calculator-btn" data-key="3">3</button>
+        <button class="calculator-btn btn-operator" data-key="subtract">-</button>
 
-            <button class="calculator-btn zero" data-key="0">0</button>
-            <button class="calculator-btn" data-key="comma">,</button>
-            <button class="calculator-btn btn-operator" data-key="add">+</button>
-        </div>
+        <button class="calculator-btn zero" data-key="0">0</button>
+        <button class="calculator-btn" data-key="comma">,</button>
+        <button class="calculator-btn btn-operator" data-key="add">+</button>
     </div>
 </div>
 
@@ -1623,14 +1691,15 @@ const getInitialDb = () => ({
 		};
         
         let calculatorState = {
-            displayValue: '0',
-            operand1: null,
-            operator: null,
-            waitingForNewValue: true,
-            targetInput: null,
-            isVisible: false, 
-            isResultDisplayed: false,
-        };
+    displayValue: '0',
+    operand1: null,
+    operator: null,
+    waitingForNewValue: true,
+    targetInput: null,
+    isVisible: false, 
+    isResultDisplayed: false,
+    historyValue: '', // <-- ¡NUEVA PROPIEDAD!
+};
 let modalDragState = {
     isDragging: false,
     startY: 0,
@@ -2194,7 +2263,55 @@ document.body.addEventListener('change', e => {
             if (isLoading) { if (!originalButtonTexts.has(btn)) originalButtonTexts.set(btn, btn.innerHTML); btn.setAttribute('disabled', 'true'); btn.classList.add('btn--loading'); btn.innerHTML = `<span class="spinner"></span> <span>${text}</span>`;
             } else { btn.removeAttribute('disabled'); btn.classList.remove('btn--loading'); if (originalButtonTexts.has(btn)) { btn.innerHTML = originalButtonTexts.get(btn); originalButtonTexts.delete(btn); } }
         };
-		
+		// --- PEGA ESTA NUEVA FUNCIÓN COMPLETA EN TU JAVASCRIPT ---
+
+/**
+ * Dispara una animación de una "burbuja" que viaja desde un elemento
+ * hasta la parte superior de la lista de movimientos.
+ * @param {HTMLElement} fromElement - El elemento desde donde empieza la animación (ej. el botón Guardar).
+ * @param {string} color - 'green' para ingresos, 'red' para gastos.
+ */
+const triggerSaveAnimation = (fromElement, color) => {
+    if (!fromElement) return;
+
+    // 1. Encuentra el punto de partida y el de llegada.
+    const startRect = fromElement.getBoundingClientRect();
+    const listElement = select('movimientos-list-container') || select('diario-page'); // Un destino de respaldo
+    const endRect = listElement.getBoundingClientRect();
+
+    // 2. Calcula las coordenadas iniciales (el centro del botón).
+    const startX = startRect.left + startRect.width / 2;
+    const startY = startRect.top + startRect.height / 2;
+
+    // 3. Calcula las coordenadas finales (el centro superior de la lista).
+    const endX = endRect.left + endRect.width / 2;
+    const endY = endRect.top; // Apuntamos a la parte superior de la lista.
+
+    // 4. Crea el elemento "burbuja" en el DOM.
+    const bubble = document.createElement('div');
+    bubble.className = 'save-animation-bubble';
+    
+    // 5. Le da el color y la posición inicial.
+    const bubbleColor = color === 'green' ? 'var(--c-success)' : 'var(--c-danger)';
+    bubble.style.backgroundColor = bubbleColor;
+    bubble.style.left = `${startX - 10}px`; // Restamos la mitad de su tamaño (20px / 2)
+    bubble.style.top = `${startY - 10}px`;
+
+    document.body.appendChild(bubble);
+
+    // 6. ¡LA MAGIA! Usamos la animación CSS que creamos.
+    // Forzamos un 'reflow' para que el navegador aplique el estado inicial antes de animar.
+    void bubble.offsetWidth; 
+
+    // La animación durará 0.7 segundos y se moverá a las coordenadas finales.
+    bubble.style.animation = `fly-to-list 0.7s cubic-bezier(0.5, 0, 1, 0.5) forwards`;
+    bubble.style.transform = `translate(${endX - startX}px, ${endY - startY}px) scale(0)`;
+    
+    // 7. Limpieza: Cuando la animación termina, eliminamos la burbuja del DOM.
+    bubble.addEventListener('animationend', () => {
+        bubble.remove();
+    }, { once: true });
+};
         const displayError = (id, msg) => { const err = select(`${id}-error`); if (err) { err.textContent = msg; err.setAttribute('role', 'alert'); } const inp = select(id); if (inp) inp.classList.add('form-input--invalid'); };
         const clearError = (id) => { const err = select(`${id}-error`); if (err) { err.textContent = ''; err.removeAttribute('role'); } const inp = select(id); if (inp) inp.classList.remove('form-input--invalid'); };
         const clearAllErrors = (formId) => { const f = select(formId); if (!f) return; f.querySelectorAll('.form-error').forEach((e) => e.textContent = ''); f.querySelectorAll('.form-input--invalid').forEach(e => e.classList.remove('form-input--invalid')); };
@@ -2268,7 +2385,45 @@ document.body.addEventListener('change', e => {
                 pinInputs[0].focus();
             }
         };
-        
+        const handleKpiDrilldown = async (kpiButton) => {
+    const type = kpiButton.dataset.type;
+    if (!type) return;
+
+    hapticFeedback('light');
+
+    // 1. Obtenemos los movimientos del periodo que se está mostrando actualmente.
+    const { current } = await getFilteredMovements(false);
+    
+    let movementsToShow = [];
+    let modalTitle = '';
+
+    // 2. Filtramos esa lista según el KPI que se ha pulsado.
+    switch (type) {
+        case 'ingresos':
+            modalTitle = 'Ingresos del Periodo';
+            movementsToShow = current.filter(m => {
+                const amount = calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id)));
+                return amount > 0;
+            });
+            break;
+        case 'gastos':
+            modalTitle = 'Gastos del Periodo';
+            movementsToShow = current.filter(m => {
+                const amount = calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id)));
+                return amount < 0;
+            });
+            break;
+        case 'saldoNeto':
+            modalTitle = 'Todos los Movimientos del Periodo';
+            movementsToShow = current; // Mostramos todos
+            break;
+        default:
+            return;
+    }
+
+    // 3. Usamos tu función ya existente para mostrar el modal con la lista filtrada.
+    showDrillDownModal(modalTitle, movementsToShow);
+};
         const handlePinInputInteraction = () => {
             const inputs = Array.from(selectAll('#pin-inputs-container .pin-input'));
             inputs.forEach((input, index) => {
@@ -2482,7 +2637,7 @@ window.addEventListener('offline', () => {
         }
     }
 };
-// ▼▼▼ REEMPLAZA TU FUNCIÓN navigateTo POR COMPLETO CON ESTA VERSIÓN ▼▼▼
+// ▼▼▼ REEMPLAZA tu función navigateTo POR COMPLETO CON ESTA VERSIÓN ▼▼▼
 
 const navigateTo = async (pageId, isInitial = false) => {
     const oldView = document.querySelector('.view--active');
@@ -3047,20 +3202,20 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
                     
                     if (isNaN(amountValue)) continue;
 
-                    const newAmountInCents = Math.round(amountValue * 100);
+                    const newAmountInCentimos = Math.round(amountValue * 100);
                     let budget = (db.presupuestos || []).find(b => b.ano === year && b.conceptoId === conceptoId);
                     
                     if (budget) {
                         const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(budget.id);
-                        if (newAmountInCents !== 0) {
-                            batch.update(ref, { cantidad: newAmountInCents });
+                        if (newAmountInCentimos !== 0) {
+                            batch.update(ref, { cantidad: newAmountInCentimos });
                         } else {
                             batch.delete(ref);
                         }
-                    } else if (newAmountInCents !== 0) {
+                    } else if (newAmountInCentimos !== 0) {
                         const newId = generateId();
                         const ref = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').doc(newId);
-                        batch.set(ref, { id: newId, ano: year, conceptoId: conceptoId, cantidad: newAmountInCents });
+                        batch.set(ref, { id: newId, ano: year, conceptoId: conceptoId, cantidad: newAmountInCentimos });
                     }
                 }
 
@@ -3925,7 +4080,6 @@ const renderDiarioPage = async () => {
         percentage: (dayOfYear / totalDaysInYear) * 100,
         daysPassed: dayOfYear,
         daysRemaining: totalDaysInYear - dayOfYear,
-        totalDaysInYear: totalDaysInYear
     };
 };
 
@@ -4082,7 +4236,7 @@ const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBu
          showDrillDownModal(`Movimientos de ${monthName} ${year}`, movementsOfMonth);
 		},
     onHover: (event, chartElement) => {
-        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+        event.native.target.style.cursor = chartElement ? 'pointer' : 'default';
     }
     // ====================================================
 }
@@ -4914,22 +5068,25 @@ const renderDashboardSuperCentroOperaciones = () => {
 
                     <!-- ORDEN 4: INGRESOS, GASTOS Y SALDO NETO -->
                     <div class="kpi-grid" id="kpi-container" style="margin-bottom: var(--sp-5);">
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Ingresos</h4>
-                            <strong id="kpi-ingresos-value" class="kpi-item__value text-positive skeleton" data-current-value="0">+0,00 €</strong> 
-                            <div id="kpi-ingresos-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Gastos</h4>
-                            <strong id="kpi-gastos-value" class="kpi-item__value text-negative skeleton" data-current-value="0">0,00 €</strong>
-                            <div id="kpi-gastos-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Saldo Neto Periodo</h4>
-                            <strong id="kpi-saldo-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
-                            <div id="kpi-saldo-neto-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                    </div>
+    <!-- KPI de Ingresos -->
+    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="ingresos">
+        <h4 class="kpi-item__label">Ingresos</h4>
+        <strong id="kpi-ingresos-value" class="kpi-item__value text-positive skeleton" data-current-value="0">+0,00 €</strong> 
+        <div id="kpi-ingresos-comparison" class="kpi-item__comparison"></div>
+    </button>
+    <!-- KPI de Gastos -->
+    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="gastos">
+        <h4 class="kpi-item__label">Gastos</h4>
+        <strong id="kpi-gastos-value" class="kpi-item__value text-negative skeleton" data-current-value="0">0,00 €</strong>
+        <div id="kpi-gastos-comparison" class="kpi-item__comparison"></div>
+    </button>
+    <!-- KPI de Saldo Neto -->
+    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="saldoNeto">
+        <h4 class="kpi-item__label">Saldo Neto Periodo</h4>
+        <strong id="kpi-saldo-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
+        <div id="kpi-saldo-neto-comparison" class="kpi-item__comparison"></div>
+    </button>
+</div>
                     
                     <hr style="border-color: var(--c-outline); opacity: 0.5; margin: var(--sp-5) 0;">
 
@@ -5799,7 +5956,7 @@ const updateDashboardData = async () => {
         const conceptListContainer = select('concepto-totals-list');
         const chartCanvas = select('conceptos-chart');
         if (conceptListContainer && chartCanvas) {
-             const chartCtx = chartCanvas.getContext('2d'); const chartContainer = chartCanvas.closest('.chart-container'); if(chartContainer) chartContainer.classList.remove('skeleton'); if (conceptosChart) conceptosChart.destroy(); const cTots = current.reduce((a, m) => { if (m.tipo === 'movimiento' && m.conceptoId) { if (!a[m.conceptoId]) { const con = db.conceptos.find((c) => c.id === m.conceptoId); a[m.conceptoId] = { total: 0, movements: [], icon: (con && con.icon) || 'label' }; } a[m.conceptoId].total += m.cantidad; a[m.conceptoId].movements.push(m); } return a; }, {}); const sortedTotals = Object.entries(cTots).sort(([, a], [, b]) => a.total - b.total); const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-chart-positive').trim(); const colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim(); conceptosChart = new Chart(chartCtx, { type: 'bar', data: { labels: sortedTotals.map(([id]) => { const con = db.conceptos.find((c) => c.id === id); return toSentenceCase((con && con.nombre) || '?') }), datasets: [{ data: sortedTotals.map(([, data]) => data.total / 100), backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger), borderRadius: 6, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (context) => `Total: ${formatCurrency(context.parsed.y * 100)}` } } }, scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } }, onClick: (event, elements) => { if (elements.length === 0) return; const index = elements[0].index; const [conceptoId, data] = sortedTotals[index]; const concepto = db.conceptos.find(c => c.id === conceptoId); const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Desconocido'; hapticFeedback('light'); showDrillDownModal(`Movimientos de: ${conceptoNombre}`, data.movements); }, onHover: (event, chartElement) => { event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default'; } } }); conceptListContainer.innerHTML = (sortedTotals.length === 0) ? `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>Sin datos para los filtros.</p></div>` : sortedTotals.map(([id, data]) => { const concepto = db.conceptos.find(c => c.id === id); const nombreConcepto = (concepto && concepto.nombre) || 'Desconocido'; const totalGastosAbs = Math.abs(currentTotals.gastos); const totalIngresos = currentTotals.ingresos; const amountClass = data.total >= 0 ? 'text-positive' : 'text-negative'; let percentage = 0; let progressClass = ''; if (data.total < 0 && totalGastosAbs > 0) { percentage = (Math.abs(data.total) / totalGastosAbs) * 100; progressClass = 'budget-item__progress--danger'; } else if (data.total > 0 && totalIngresos > 0) { percentage = (data.total / totalIngresos) * 100; } return `<div class="modal__list-item" style="cursor: pointer; padding: var(--sp-2) var(--sp-1);" data-action="show-concept-drilldown" data-concept-id="${id}" data-concept-name="${escapeHTML(nombreConcepto)}"><div style="flex-grow: 1;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;"><span>${escapeHTML(nombreConcepto)}</span><strong class="${amountClass}">${formatCurrency(data.total)}</strong></div><div class="budget-item__progress"><progress max="100" value="${percentage}" class="budget-item__progress ${progressClass}" style="width: 100%; height: 5px;"></progress></div></div></div>`; }).join('');
+             const chartCtx = chartCanvas.getContext('2d'); const chartContainer = chartCanvas.closest('.chart-container'); if(chartContainer) chartContainer.classList.remove('skeleton'); if (conceptosChart) conceptosChart.destroy(); const cTots = current.reduce((a, m) => { if (m.tipo === 'movimiento' && m.conceptoId) { if (!a[m.conceptoId]) { const con = db.conceptos.find((c) => c.id === m.conceptoId); a[m.conceptoId] = { total: 0, movements: [], icon: (con && con.icon) || 'label' }; } a[m.conceptoId].total += m.cantidad; a[m.conceptoId].movements.push(m); } return a; }, {}); const sortedTotals = Object.entries(cTots).sort(([, a], [, b]) => a.total - b.total); const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-chart-positive').trim(); const colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim(); conceptosChart = new Chart(chartCtx, { type: 'bar', data: { labels: sortedTotals.map(([id]) => { const con = db.conceptos.find((c) => c.id === id); return toSentenceCase((con && con.nombre) || '?') }), datasets: [{ data: sortedTotals.map(([, data]) => data.total / 100), backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger), borderRadius: 6, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (context) => `Total: ${formatCurrency(context.parsed.y * 100)}` } } }, scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } }, onClick: (event, elements) => { if (elements.length === 0) return; const index = elements.index; const [conceptoId, data] = sortedTotals[index]; const concepto = db.conceptos.find(c => c.id === conceptoId); const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Desconocido'; hapticFeedback('light'); showDrillDownModal(`Movimientos de: ${conceptoNombre}`, data.movements); }, onHover: (event, chartElement) => { event.native.target.style.cursor = chartElement ? 'pointer' : 'default'; } } }); conceptListContainer.innerHTML = (sortedTotals.length === 0) ? `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>Sin datos para los filtros.</p></div>` : sortedTotals.map(([id, data]) => { const concepto = db.conceptos.find(c => c.id === id); const nombreConcepto = (concepto && concepto.nombre) || 'Desconocido'; const totalGastosAbs = Math.abs(currentTotals.gastos); const totalIngresos = currentTotals.ingresos; const amountClass = data.total >= 0 ? 'text-positive' : 'text-negative'; let percentage = 0; let progressClass = ''; if (data.total < 0 && totalGastosAbs > 0) { percentage = (Math.abs(data.total) / totalGastosAbs) * 100; progressClass = 'budget-item__progress--danger'; } else if (data.total > 0 && totalIngresos > 0) { percentage = (data.total / totalIngresos) * 100; } return `<div class="modal__list-item" style="cursor: pointer; padding: var(--sp-2) var(--sp-1);" data-action="show-concept-drilldown" data-concept-id="${id}" data-concept-name="${escapeHTML(nombreConcepto)}"><div style="flex-grow: 1;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;"><span>${escapeHTML(nombreConcepto)}</span><strong class="${amountClass}">${formatCurrency(data.total)}</strong></div><div class="budget-item__progress"><progress max="100" value="${percentage}" class="budget-item__progress ${progressClass}" style="width: 100%; height: 5px;"></progress></div></div></div>`; }).join('');
         }
 		
 		if (select('patrimonio-completo-container')) { await renderPatrimonioPage(); }
@@ -6133,7 +6290,7 @@ const generateInformeData = async (config) => {
             if(config.metrica === 'gastos') return Math.abs(periodData.gastos / 100);
             return (periodData.ingresos + periodData.gastos) / 100;
         });
-        datasets.push({ label: 'Total', data, backgroundColor: colorPalette[0], borderColor: colorPalette[0] });
+        datasets.push({ label: 'Total', data, backgroundColor: colorPalette, borderColor: colorPalette });
     } else { // Desglose por concepto
         const conceptTotals = {};
         Object.values(groupedData).forEach(period => {
@@ -6321,15 +6478,49 @@ const hideModal = (id) => {
             }
             hideCalculator();
         };       
-	      
-// ▼▼▼ REEMPLAZA TU FUNCIÓN handleCalculatorInput CON ESTA VERSIÓN ▼▼▼
+	// Actualiza el display del historial
+const updateCalculatorHistoryDisplay = () => {
+    const historyDisplay = select('calculator-history-display');
+    if (historyDisplay) {
+        historyDisplay.textContent = calculatorState.historyValue;
+    }
+};
+
+// Mapea las claves a los símbolos visuales
+const getOperatorSymbol = (key) => {
+    switch(key) {
+        case 'add': return '+';
+        case 'subtract': return '−'; // Usamos un guion más estilizado
+        case 'multiply': return '×';
+        case 'divide': return '÷';
+        default: return '';
+    }
+};
+
+// Gestiona qué botón de operador se ve activo
+const updateActiveOperatorButton = () => {
+    // Primero, quitamos la clase activa de todos
+    selectAll('.calculator-btn.btn-operator').forEach(btn => {
+        btn.classList.remove('btn-operator--active');
+    });
+    
+    // Luego, si hay un operador activo, se la añadimos al botón correspondiente
+    if (calculatorState.operator) {
+        const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('btn-operator--active');
+        }
+    }
+};      
+// REEMPLAZA TU FUNCIÓN handleCalculatorInput COMPLETA CON ESTA VERSIÓN
 const handleCalculatorInput = (key) => {
     hapticFeedback('light');
-    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed } = calculatorState;
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
     
     if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
         displayValue = '0';
         isResultDisplayed = false;
+        historyValue = ''; // Limpiamos historial al empezar un nuevo cálculo
     }
 
     const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
@@ -6341,6 +6532,7 @@ const handleCalculatorInput = (key) => {
         }
         operand1 = parseFloat(displayValue.replace(',', '.'));
         operator = key;
+        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`; // Actualizamos el historial
         waitingForNewValue = true;
         isResultDisplayed = false;
     } else {
@@ -6361,8 +6553,8 @@ const handleCalculatorInput = (key) => {
                     });
                     calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
+                historyValue = ''; // Limpiamos historial al finalizar
                 hideCalculator();
-                // === ¡LA LÍNEA MÁGICA DEL ZEN FLOW! ===
                 select('movimiento-descripcion').focus();
                 return;
 
@@ -6377,7 +6569,14 @@ const handleCalculatorInput = (key) => {
                 break;
             
             case 'clear': 
-                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; break;
+                displayValue = '0'; 
+                waitingForNewValue = true; 
+                operand1 = null; 
+                operator = null; 
+                isResultDisplayed = false; 
+                historyValue = ''; // Limpiamos historial
+                break;
+
             case 'backspace': 
                 if (displayValue.length > 1) {
                     displayValue = displayValue.slice(0, -1);
@@ -6387,11 +6586,13 @@ const handleCalculatorInput = (key) => {
                 }
                 isResultDisplayed = false;
                 break;
+
             case 'sign': 
                 if (displayValue !== '0') { 
                     displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
                 }
                 break;
+                
             default: // Dígitos
                 if (waitingForNewValue || displayValue === '0') {
                     displayValue = key;
@@ -6404,12 +6605,18 @@ const handleCalculatorInput = (key) => {
         }
     }
     
+    // Guardamos todos los cambios en el estado global
     calculatorState.displayValue = displayValue;
     calculatorState.waitingForNewValue = waitingForNewValue;
     calculatorState.operand1 = operand1;
     calculatorState.operator = operator;
     calculatorState.isResultDisplayed = isResultDisplayed;
+    calculatorState.historyValue = historyValue;
+    
+    // Actualizamos toda la interfaz de la calculadora
     updateCalculatorDisplay();
+    updateCalculatorHistoryDisplay();
+    updateActiveOperatorButton();
 };
 
 // Y también la función calculate() para que use comas correctamente
@@ -6771,9 +6978,7 @@ const setMovimientoFormType = (type) => {
             showModal('global-search-modal');
             setTimeout(() => {
                 const input = select('global-search-input');
-				if (id === 'concepto-search-input') renderConceptosModalList();
-				if (id === 'cuenta-search-input') renderCuentasModalList();
-				
+								
                 if (input) {
                     input.focus();
                     input.value = '';
@@ -6892,9 +7097,7 @@ const showValoracionModal = (cuentaId) => {
 
     const fechaISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
     
-    const ultimaValoracion = (db.inversiones_historial || [])
-        .filter(v => v.cuentaId === cuentaId)
-        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+    const ultimaValoracion = (db.inversiones_historial || []).filter(v => v.cuentaId === cuentaId).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
 
     const valorActualInput = ultimaValoracion ? (ultimaValoracion.valor / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 }) : '';
 
@@ -6951,8 +7154,8 @@ const handleSaveValoracion = async (form, btn) => {
 
         let docId;
         if (!existingSnapshot.empty) {
-            docId = existingSnapshot.docs[0].id;
-            await existingSnapshot.docs[0].ref.update({ valor: valorEnCentimos });
+            docId = existingSnapshot.docs.id;
+            await existingSnapshot.docs.ref.update({ valor: valorEnCentimos });
         } else {
             docId = generateId();
             await saveDoc('inversiones_historial', docId, { id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
@@ -7528,6 +7731,7 @@ const attachEventListeners = () => {
 
       
         const actions = {
+		'show-kpi-drilldown': () => handleKpiDrilldown(actionTarget),
 		'apply-description-suggestion': (e) => {
     const suggestionItem = e.target.closest('.suggestion-item');
     if (suggestionItem) {
@@ -7686,7 +7890,7 @@ const attachEventListeners = () => {
     // 4. Avisamos al usuario de lo que ha pasado.
     showToast('Datos duplicados. Ajusta y guarda como nuevo.', 'info');
 },
-            'save-and-new-movement': () => handleSaveAndNewMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
+            'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
             'recalculate-balances': () => {
     showConfirmationModal(
         'Esta es una herramienta de auditoría que recalculará el saldo de cada cuenta desde cero, leyendo todo tu historial de movimientos. Úsala solo si sospechas que hay una inconsistencia. La operación puede tardar y consumir datos. ¿Quieres continuar?',
@@ -7762,7 +7966,7 @@ const attachEventListeners = () => {
     const calculatorGrid = select('calculator-grid'); if (calculatorGrid) calculatorGrid.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
     const searchInput = select('global-search-input'); if (searchInput) searchInput.addEventListener('input', () => { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => { performGlobalSearch(searchInput.value); }, 250); });
     document.body.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); e.stopPropagation(); showGlobalSearchModal(); } });
-    const dropZone = select('json-drop-zone'); if (dropZone) { dropZone.addEventListener('click', () => { const el = select('import-file-input'); if (el) el.click() }); dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); }); dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); }); dropZone.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const files = e.dataTransfer.files; if (files && files.length > 0) handleJSONFileSelect(files[0]); }); }
+    const dropZone = select('json-drop-zone'); if (dropZone) { dropZone.addEventListener('click', () => { const el = select('import-file-input'); if (el) el.click() }); dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); }); dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); }); dropZone.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const files = e.dataTransfer.files; if (files && files.length > 0) handleJSONFileSelect(files); }); }
     const suggestionsBox = select('description-suggestions'); if (suggestionsBox) { suggestionsBox.addEventListener('click', (e) => { const suggestionItem = e.target.closest('.suggestion-item'); if (suggestionItem) { const { description, conceptoId, cuentaId } = suggestionItem.dataset; applyDescriptionSuggestion(description, conceptoId, cuentaId); } }); }
     const fechaDisplayButton = select('movimiento-fecha-display'); const fechaRealInput = select('movimiento-fecha'); if (fechaDisplayButton && fechaRealInput) { fechaDisplayButton.addEventListener('click', () => fechaRealInput.showPicker()); fechaRealInput.addEventListener('input', () => updateDateDisplay(fechaRealInput)); }
     const diarioContainer = select('diario-page');
@@ -8325,966 +8529,997 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
             cuentaOrigenId: select('movimiento-cuenta-origen').value,
             cuentaDestinoId: select('movimiento-cuenta-destino').value,
         };
-        if (dataFromForm.tipo === 'traspaso') {
-            dataFromForm.cantidad = Math.abs(dataFromForm.cantidad);
+if (dataFromForm.tipo === 'traspaso') {
+dataFromForm.cantidad = Math.abs(dataFromForm.cantidad);
+}
+
+try {
+        // Capturamos el estado antiguo ANTES de hacer cambios, si estamos editando.
+        let oldMovementData = null;
+        if (mode.startsWith('edit')) {
+            oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
         }
+        
+        // Actualizamos los saldos en nuestra memoria local (db.cuentas) al instante.
+        applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
 
-        try {
-            // Capturamos el estado antiguo ANTES de hacer cambios, si estamos editando.
-            let oldMovementData = null;
+        // Actualizamos la lista de movimientos en memoria
+        if (mode.startsWith('edit')) {
+            const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
+            if (index !== -1) db.movimientos[index] = dataFromForm;
+        } else {
+            db.movimientos.unshift(dataFromForm);
+            newMovementIdToHighlight = dataFromForm.id;
+        }
+        db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+        // Esta función ahora usará los saldos correctos que acabamos de actualizar.
+        updateLocalDataAndRefreshUI();
+
+        // La lógica de guardado en Firebase se mantiene, se ejecuta en segundo plano.
+        await fbDb.runTransaction(async (transaction) => {
+            let oldDataForTx = null;
             if (mode.startsWith('edit')) {
-                oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
+                const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
+                const oldDoc = await transaction.get(oldDocRef);
+                if (oldDoc.exists) oldDataForTx = oldDoc.data();
             }
-            
-            // Actualizamos los saldos en nuestra memoria local (db.cuentas) al instante.
-            applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
-
-            // Actualizamos la lista de movimientos en memoria
-            if (mode.startsWith('edit')) {
-                const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
-                if (index !== -1) db.movimientos[index] = dataFromForm;
-            } else {
-                db.movimientos.unshift(dataFromForm);
-                newMovementIdToHighlight = dataFromForm.id;
-            }
-            db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
-            // Esta función ahora usará los saldos correctos que acabamos de actualizar.
-            updateLocalDataAndRefreshUI();
-
-            // La lógica de guardado en Firebase se mantiene, se ejecuta en segundo plano.
-            await fbDb.runTransaction(async (transaction) => {
-                let oldDataForTx = null;
-                if (mode.startsWith('edit')) {
-                    const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
-                    const oldDoc = await transaction.get(oldDocRef);
-                    if (oldDoc.exists) oldDataForTx = oldDoc.data();
-                }
-                if (oldDataForTx) {
-                    if (oldDataForTx.tipo === 'traspaso') {
-                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
-                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                    } else {
-                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                    }
-                }
-                if (dataFromForm.tipo === 'traspaso') {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            if (oldDataForTx) {
+                if (oldDataForTx.tipo === 'traspaso') {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
                 } else {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
                 }
-                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
-                transaction.set(movRef, dataFromForm);
-            });
-            
-            setButtonLoading(btn, false);
-            if (!isSaveAndNew) hideModal('movimiento-modal');
-            hapticFeedback('success');
-            if (!isSaveAndNew) showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
-            return true;
-        } catch (error) {
-            console.error("Error al guardar el movimiento:", error);
-            showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
-            setButtonLoading(btn, false);
-            if (select('diario-page')?.classList.contains('view--active')) await loadMoreMovements(true); // Recarga si hay error
-            return false;
-        }
-    }
-};
+            }
+            if (dataFromForm.tipo === 'traspaso') {
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            } else {
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            }
+            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
+            transaction.set(movRef, dataFromForm);
+        });
+        
+        setButtonLoading(btn, false);
+hapticFeedback('success');
 
+if (!isSaveAndNew) {
+    // ¡Llamamos a nuestra animación aquí!
+    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+
+    // Esperamos un poquito antes de cerrar el modal para que la animación empiece a verse.
+    setTimeout(() => {
+        hideModal('movimiento-modal');
+    }, 200); // 200 milisegundos es un buen retardo.
+
+} else {
+    // Si es "Guardar y Nuevo", disparamos la animación igualmente.
+    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+}
+
+if (!isSaveAndNew) {
+    showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+} else {
+    // Si es "Guardar y Nuevo", limpiamos el formulario para el siguiente.
+    form.reset();
+    setMovimientoFormType('movimiento'); // Volvemos al tipo por defecto
+    const today = new Date();
+    const fechaInput = select('movimiento-fecha');
+    fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+    updateDateDisplay(fechaInput);
+    select('movimiento-cantidad').focus(); // Foco en el campo de cantidad.
+}
+        return true;
+    } catch (error) {
+        console.error("Error al guardar el movimiento:", error);
+        showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
+        setButtonLoading(btn, false);
+        if (select('diario-page')?.classList.contains('view--active')) await loadMoreMovements(true); // Recarga si hay error
+        return false;
+    }
+}
+
+};
 
 /**
- * Prepara el formulario para duplicar un movimiento existente.
- * @param {object} movementToDuplicate - El objeto del movimiento que se va a copiar.
- */
+
+Prepara el formulario para duplicar un movimiento existente.
+
+@param {object} movementToDuplicate - El objeto del movimiento que se va a copiar.
+*/
 const handleDuplicateMovement = (movementToDuplicate) => {
-    if (!movementToDuplicate) return;
+if (!movementToDuplicate) return;
 
-    hapticFeedback('medium');
+hapticFeedback('medium');
 
-    // 1. Abrimos el formulario de edición con los datos del movimiento original.
-    // Esto rellena todos los campos por nosotros (cantidad, descripción, etc.).
-    startMovementForm(movementToDuplicate.id, false);
-    
-    // 2. Usamos un pequeño retardo para asegurarnos de que el formulario ya está visible
-    // antes de modificarlo para que actúe como "Nuevo" en lugar de "Editar".
-    setTimeout(() => {
-        // 3. Modificamos el estado del formulario para que sepa que vamos a crear
-        // un movimiento NUEVO, no a actualizar el antiguo.
-        select('movimiento-mode').value = 'new';
-        select('movimiento-id').value = ''; // Borramos el ID antiguo, ¡muy importante!
-        select('form-movimiento-title').textContent = 'Duplicar Movimiento';
+// 1. Abrimos el formulario de edición con los datos del movimiento original.
+// Esto rellena todos los campos por nosotros (cantidad, descripción, etc.).
+startMovementForm(movementToDuplicate.id, false);
 
-        // 4. Ocultamos los botones que no tienen sentido aquí (borrar y duplicar de nuevo).
-        select('delete-movimiento-btn').classList.add('hidden');
-        select('duplicate-movimiento-btn').classList.add('hidden');
-        
-        // 5. Ponemos la fecha de hoy por defecto, que es lo más común al duplicar.
-        const today = new Date();
-        const fechaInput = select('movimiento-fecha');
-        fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-        updateDateDisplay(fechaInput); // Actualizamos el texto "Hoy"
+// 2. Usamos un pequeño retardo para asegurarnos de que el formulario ya está visible
+// antes de modificarlo para que actúe como "Nuevo" en lugar de "Editar".
+setTimeout(() => {
+// 3. Modificamos el estado del formulario para que sepa que vamos a crear
+// un movimiento NUEVO, no a actualizar el antiguo.
+select('movimiento-mode').value = 'new';
+select('movimiento-id').value = ''; // Borramos el ID antiguo, ¡muy importante!
+select('form-movimiento-title').textContent = 'Duplicar Movimiento';
 
-        showToast('Datos duplicados. Ajusta y guarda.', 'info');
-    }, 50); // 50 milisegundos es suficiente.
+
+// 4. Ocultamos los botones que no tienen sentido aquí (borrar y duplicar de nuevo).
+ select('delete-movimiento-btn').classList.add('hidden');
+ select('duplicate-movimiento-btn').classList.add('hidden');
+ 
+ // 5. Ponemos la fecha de hoy por defecto, que es lo más común al duplicar.
+ const today = new Date();
+ const fechaInput = select('movimiento-fecha');
+ fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+ updateDateDisplay(fechaInput); // Actualizamos el texto "Hoy"
+
+ showToast('Datos duplicados. Ajusta y guarda.', 'info');
+
+}, 50); // 50 milisegundos es suficiente.
 };
 
-        const handleAddConcept = async (btn) => { 
-            const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
-            if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
-            const newId = generateId();
-            await saveDoc('conceptos', newId, { id: newId, nombre, icon: 'label' }, btn);
-            hapticFeedback('success'); 
-            showToast('Concepto añadido.');
-            (select('add-concepto-form')).reset(); 
-        };
-        const handleAddAccount = async (btn) => { 
-            const nombre = (select('new-cuenta-nombre')).value.trim(); 
-            const tipo = toSentenceCase((select('new-cuenta-tipo')).value.trim()); 
-            if (!nombre || !tipo) { showToast('El nombre y el tipo son obligatorios.', 'warning'); return; } 
-            const newId = generateId();
-            await saveDoc('cuentas', newId, { id: newId, nombre, tipo, saldo: 0, esInversion: false, offBalance: isOffBalanceMode, fechaCreacion: new Date().toISOString() }, btn);
-            hapticFeedback('success'); 
-            showToast('Cuenta añadida.');
-            (select('add-cuenta-form')).reset();
-        };
-        const handleSaveConfig = async (btn) => { 
-            setButtonLoading(btn, true);
-            const newConfig = { dashboardWidgets: (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS };
-            await fbDb.collection('users').doc(currentUser.uid).set({ config: newConfig }, { merge: true });
-            localStorage.setItem('skipIntro', String(newConfig.skipIntro));
-            setButtonLoading(btn, false);
-            hapticFeedback('success'); showToast('Configuración guardada.'); 
-        };
-		
-	
-                 const handleExportData = async (btn) => {
-            if (!currentUser) { showToast("No hay usuario autenticado.", "danger"); return; }
-            setButtonLoading(btn, true, 'Exportando...');
-            try {
-                const dataPayload = {};
-                const collections = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
-                
-                for (const collectionName of collections) {
-                    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
-                    dataPayload[collectionName] = snapshot.docs.map(doc => doc.data());
-                }
-                dataPayload.config = db.config;
 
-                const exportObject = {
-                    meta: {
-                        appName: "Cuentas aiDANaI",
-                        version: "2.0.0",
-                        exportDate: new Date().toISOString()
-                    },
-                    data: dataPayload
-                };
-                
-                const jsonString = JSON.stringify(exportObject, null, 2);
-                const blob = new Blob([jsonString], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `cuentas_aidanai_backup_${new Date().toISOString().slice(0,10)}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                showToast("Exportación JSON completada.", "info");
-            } catch (error) {
-                console.error("Error al exportar datos:", error);
-                showToast("Error durante la exportación.", "danger");
-            } finally {
-                setButtonLoading(btn, false);
-            }
-        };
-		const formatDateForCsv = (isoDateString) => {
-            if (!isoDateString) return '';
-            const date = new Date(isoDateString);
-            const day = String(date.getUTCDate()).padStart(2, '0');
-            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-            const year = date.getUTCFullYear();
-            return `${day}/${month}/${year}`;
-        };
+const handleAddConcept = async (btn) => { 
+     const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
+     if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
+     const newId = generateId();
+     await saveDoc('conceptos', newId, { id: newId, nombre, icon: 'label' }, btn);
+     hapticFeedback('success'); 
+     showToast('Concepto añadido.');
+     (select('add-concepto-form')).reset(); 
+ };
+ const handleAddAccount = async (btn) => { 
+     const nombre = (select('new-cuenta-nombre')).value.trim(); 
+     const tipo = toSentenceCase((select('new-cuenta-tipo')).value.trim()); 
+     if (!nombre || !tipo) { showToast('El nombre y el tipo son obligatorios.', 'warning'); return; } 
+     const newId = generateId();
+     await saveDoc('cuentas', newId, { id: newId, nombre, tipo, saldo: 0, esInversion: false, offBalance: isOffBalanceMode, fechaCreacion: new Date().toISOString() }, btn);
+     hapticFeedback('success'); 
+     showToast('Cuenta añadida.');
+     (select('add-cuenta-form')).reset();
+ };
+ const handleSaveConfig = async (btn) => { 
+     setButtonLoading(btn, true);
+     const newConfig = { dashboardWidgets: (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS };
+     await fbDb.collection('users').doc(currentUser.uid).set({ config: newConfig }, { merge: true });
+     localStorage.setItem('skipIntro', String(newConfig.skipIntro));
+     setButtonLoading(btn, false);
+     hapticFeedback('success'); showToast('Configuración guardada.'); 
+ };
+ 
 
-        const handleExportCsv = async (btn) => {
-            if (!currentUser) { showToast("No hay usuario autenticado.", "danger"); return; }
-            setButtonLoading(btn, true, 'Exportando...');
-            
-            try {
-                const allMovements = await fetchAllMovementsForSearch();
-                const allCuentas = db.cuentas;
-                const allConceptos = db.conceptos;
+          const handleExportData = async (btn) => {
+     if (!currentUser) { showToast("No hay usuario autenticado.", "danger"); return; }
+     setButtonLoading(btn, true, 'Exportando...');
+     try {
+         const dataPayload = {};
+         const collections = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+         
+         for (const collectionName of collections) {
+             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
+             dataPayload[collectionName] = snapshot.docs.map(doc => doc.data());
+         }
+         dataPayload.config = db.config;
 
-                const cuentasMap = new Map(allCuentas.map(c => [c.id, c]));
-                const conceptosMap = new Map(allConceptos.map(c => [c.id, c]));
+         const exportObject = {
+             meta: {
+                 appName: "Cuentas aiDANaI",
+                 version: "2.0.0",
+                 exportDate: new Date().toISOString()
+             },
+             data: dataPayload
+         };
+         
+         const jsonString = JSON.stringify(exportObject, null, 2);
+         const blob = new Blob([jsonString], { type: 'application/json' });
+         const url = URL.createObjectURL(blob);
+         const a = document.createElement('a');
+         a.href = url;
+         a.download = `cuentas_aidanai_backup_${new Date().toISOString().slice(0,10)}.json`;
+         document.body.appendChild(a);
+         a.click();
+         document.body.removeChild(a);
+         URL.revokeObjectURL(url);
+         showToast("Exportación JSON completada.", "info");
+     } catch (error) {
+         console.error("Error al exportar datos:", error);
+         showToast("Error durante la exportación.", "danger");
+     } finally {
+         setButtonLoading(btn, false);
+     }
+ };
+ const formatDateForCsv = (isoDateString) => {
+     if (!isoDateString) return '';
+     const date = new Date(isoDateString);
+     const day = String(date.getUTCDate()).padStart(2, '0');
+     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+     const year = date.getUTCFullYear();
+     return `${day}/${month}/${year}`;
+ };
 
-                let csvRows = [];
-                const csvHeader = ['FECHA', 'CUENTA', 'CONCEPTO', 'IMPORTE', 'DESCRIPCIÓN'];
-                csvRows.push(csvHeader.join(';'));
-                
-                for (const cuenta of allCuentas) {
-                    const movementsOfAccount = allMovements.filter(m => {
-                        return (m.tipo === 'movimiento' && m.cuentaId === cuenta.id) ||
-                               (m.tipo === 'traspaso' && m.cuentaOrigenId === cuenta.id) ||
-                               (m.tipo === 'traspaso' && m.cuentaDestinoId === cuenta.id);
-                    });
+ const handleExportCsv = async (btn) => {
+     if (!currentUser) { showToast("No hay usuario autenticado.", "danger"); return; }
+     setButtonLoading(btn, true, 'Exportando...');
+     
+     try {
+         const allMovements = await fetchAllMovementsForSearch();
+         const allCuentas = db.cuentas;
+         const allConceptos = db.conceptos;
 
-                    const balanceChange = movementsOfAccount.reduce((sum, m) => {
-                        if (m.tipo === 'movimiento') return sum + m.cantidad;
-                        if (m.tipo === 'traspaso' && m.cuentaOrigenId === cuenta.id) return sum - m.cantidad;
-                        if (m.tipo === 'traspaso' && m.cuentaDestinoId === cuenta.id) return sum + m.cantidad;
-                        return sum;
-                    }, 0);
-                    
-                    const initialBalance = (cuenta.saldo || 0) - balanceChange;
-                    
-                    if (initialBalance !== 0) {
-                        const cuentaNombre = `${cuenta.offBalance ? 'N-' : ''}${cuenta.nombre}`;
-                        const importeStr = (initialBalance / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
-                        const fechaCreacion = cuenta.fechaCreacion ? formatDateForCsv(cuenta.fechaCreacion) : '01/01/2025';
+         const cuentasMap = new Map(allCuentas.map(c => [c.id, c]));
+         const conceptosMap = new Map(allConceptos.map(c => [c.id, c]));
 
-                        csvRows.push([fechaCreacion, `"${cuentaNombre}"`, 'INICIAL', importeStr, '"Saldo Inicial"'].join(';'));
-                    }
-                }
-                
-                const sortedMovements = allMovements.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+         let csvRows = [];
+         const csvHeader = ['FECHA', 'CUENTA', 'CONCEPTO', 'IMPORTE', 'DESCRIPCIÓN'];
+         csvRows.push(csvHeader.join(';'));
+         
+         for (const cuenta of allCuentas) {
+             const movementsOfAccount = allMovements.filter(m => {
+                 return (m.tipo === 'movimiento' && m.cuentaId === cuenta.id) ||
+                        (m.tipo === 'traspaso' && m.cuentaOrigenId === cuenta.id) ||
+                        (m.tipo === 'traspaso' && m.cuentaDestinoId === cuenta.id);
+             });
 
-                for (const mov of sortedMovements) {
-                    const fecha = formatDateForCsv(mov.fecha);
-                    const descripcion = `"${mov.descripcion.replace(/"/g, '""')}"`;
-                    const importeStr = (mov.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
+             const balanceChange = movementsOfAccount.reduce((sum, m) => {
+                 if (m.tipo === 'movimiento') return sum + m.cantidad;
+                 if (m.tipo === 'traspaso' && m.cuentaOrigenId === cuenta.id) return sum - m.cantidad;
+                 if (m.tipo === 'traspaso' && m.cuentaDestinoId === cuenta.id) return sum + m.cantidad;
+                 return sum;
+             }, 0);
+             
+             const initialBalance = (cuenta.saldo || 0) - balanceChange;
+             
+             if (initialBalance !== 0) {
+                 const cuentaNombre = `${cuenta.offBalance ? 'N-' : ''}${cuenta.nombre}`;
+                 const importeStr = (initialBalance / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
+                 const fechaCreacion = cuenta.fechaCreacion ? formatDateForCsv(cuenta.fechaCreacion) : '01/01/2025';
 
-                    if (mov.tipo === 'traspaso') {
-                        const cuentaOrigen = cuentasMap.get(mov.cuentaOrigenId);
-                        const cuentaDestino = cuentasMap.get(mov.cuentaDestinoId);
-                        
-                        if (cuentaOrigen && cuentaDestino) {
-                            const nombreOrigen = `${cuentaOrigen.offBalance ? 'N-' : ''}${cuentaOrigen.nombre}`;
-                            const nombreDestino = `${cuentaDestino.offBalance ? 'N-' : ''}${cuentaDestino.nombre}`;
-                            const importeNegativo = (-mov.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
-                            
-                            csvRows.push([fecha, `"${nombreOrigen}"`, 'TRASPASO', importeNegativo, descripcion].join(';'));
-                            csvRows.push([fecha, `"${nombreDestino}"`, 'TRASPASO', importeStr, descripcion].join(';'));
-                        }
-                    } else {
-                        const cuenta = cuentasMap.get(mov.cuentaId);
-                        const concepto = conceptosMap.get(mov.conceptoId);
+                 csvRows.push([fechaCreacion, `"${cuentaNombre}"`, 'INICIAL', importeStr, '"Saldo Inicial"'].join(';'));
+             }
+         }
+         
+         const sortedMovements = allMovements.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-                        if (cuenta && concepto && concepto.nombre !== 'Saldo Inicial') {
-                            const nombreCuenta = `${cuenta.offBalance ? 'N-' : ''}${cuenta.nombre}`;
-                            csvRows.push([fecha, `"${nombreCuenta}"`, `"${concepto.nombre}"`, importeStr, descripcion].join(';'));
-                        }
-                    }
-                }
+         for (const mov of sortedMovements) {
+             const fecha = formatDateForCsv(mov.fecha);
+             const descripcion = `"${mov.descripcion.replace(/"/g, '""')}"`;
+             const importeStr = (mov.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
 
-                const csvString = csvRows.join('\r\n');
-                const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `cuentas_aidanai_export_${new Date().toISOString().slice(0,10)}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                showToast("Exportación CSV completada.", "info");
-                
-            } catch (error) {
-                console.error("Error al exportar datos a CSV:", error);
-                showToast("Error durante la exportación a CSV.", "danger");
-            } finally {
-                setButtonLoading(btn, false);
-            }
-        };
-        const csv_parseDate = (dateString) => {
-            if (!dateString) return null;
-            const parts = dateString.split('/');
-            if (parts.length !== 3) return null;
-            const day = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10) - 1;
-            const year = parseInt(parts[2], 10);
-            if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1970) return null;
-            return new Date(Date.UTC(year, month, day, 12, 0, 0));
-        };
+             if (mov.tipo === 'traspaso') {
+                 const cuentaOrigen = cuentasMap.get(mov.cuentaOrigenId);
+                 const cuentaDestino = cuentasMap.get(mov.cuentaDestinoId);
+                 
+                 if (cuentaOrigen && cuentaDestino) {
+                     const nombreOrigen = `${cuentaOrigen.offBalance ? 'N-' : ''}${cuentaOrigen.nombre}`;
+                     const nombreDestino = `${cuentaDestino.offBalance ? 'N-' : ''}${cuentaDestino.nombre}`;
+                     const importeNegativo = (-mov.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
+                     
+                     csvRows.push([fecha, `"${nombreOrigen}"`, 'TRASPASO', importeNegativo, descripcion].join(';'));
+                     csvRows.push([fecha, `"${nombreDestino}"`, 'TRASPASO', importeStr, descripcion].join(';'));
+                 }
+             } else {
+                 const cuenta = cuentasMap.get(mov.cuentaId);
+                 const concepto = conceptosMap.get(mov.conceptoId);
 
-        const csv_parseCurrency = (currencyString) => {
-            if (typeof currencyString !== 'string' || !currencyString) return 0;
-            const number = parseFloat(
-                currencyString
-                .replace('€', '')
-                .trim()
-                .replace(/\./g, '')
-                .replace(',', '.')
-            );
-            return isNaN(number) ? 0 : Math.round(number * 100);
-        };
+                 if (cuenta && concepto && concepto.nombre !== 'Saldo Inicial') {
+                     const nombreCuenta = `${cuenta.offBalance ? 'N-' : ''}${cuenta.nombre}`;
+                     csvRows.push([fecha, `"${nombreCuenta}"`, `"${concepto.nombre}"`, importeStr, descripcion].join(';'));
+                 }
+             }
+         }
 
-        const csv_inferType = (name) => {
-            const upperName = name.toUpperCase();
-            if (upperName.includes('TARJETA')) return { tipo: 'Tarjeta', esInversion: false };
-            if (upperName.includes('EFECTIVO')) return { tipo: 'Efectivo', esInversion: false };
-            if (upperName.includes('PENSIÓN')) return { tipo: 'Pensión', esInversion: true };
-            if (upperName.includes('LETRAS')) return { tipo: 'Renta Fija', esInversion: true };
-            if (['FONDO', 'FONDOS'].some(t => upperName.includes(t))) return { tipo: 'Fondos', esInversion: true };
-            if (['TRADEREPUBLIC', 'MYINVESTOR', 'DEGIRO', 'INTERACTIVEBROKERS', 'INDEXACAPITAL', 'COINBASE', 'CRIPTAN', 'KRAKEN', 'BIT2ME', 'N26', 'FREEDOM24', 'DEBLOCK', 'BBVA', 'CIVISLEND', 'HOUSERS', 'URBANITAE', 'MINTOS', 'HAUSERA'].some(b => upperName.includes(b))) return { tipo: 'Broker', esInversion: true };
-            if (upperName.includes('NARANJA') || upperName.includes('AHORRO')) return { tipo: 'Ahorro', esInversion: false };
-            return { tipo: 'Banco', esInversion: false };
-        };
+         const csvString = csvRows.join('\r\n');
+         const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
+         const url = URL.createObjectURL(blob);
+         const a = document.createElement('a');
+         a.href = url;
+         a.download = `cuentas_aidanai_export_${new Date().toISOString().slice(0,10)}.csv`;
+         document.body.appendChild(a);
+         a.click();
+         document.body.removeChild(a);
+         URL.revokeObjectURL(url);
+         showToast("Exportación CSV completada.", "info");
+         
+     } catch (error) {
+         console.error("Error al exportar datos a CSV:", error);
+         showToast("Error durante la exportación a CSV.", "danger");
+     } finally {
+         setButtonLoading(btn, false);
+     }
+ };
+ const csv_parseDate = (dateString) => {
+     if (!dateString) return null;
+     const parts = dateString.split('/');
+     if (parts.length !== 3) return null;
+     const day = parseInt(parts[0], 10);
+	 const month = parseInt(parts[1], 10) - 1;
+	 const year = parseInt(parts[2], 10);
+     if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1970) return null;
+     return new Date(Date.UTC(year, month, day, 12, 0, 0));
+ };
 
-        const csv_processFile = (file) => {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const csvData = event.target.result.replace(/^\uFEFF/, '');
-                        const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== '' && line.includes(';'));
-                        if (lines.length <= 1) {
-                            showToast("El archivo CSV está vacío o solo contiene la cabecera.", "warning");
-                            return resolve(null);
-                        }
-                        
-                        lines.shift();
+ const csv_parseCurrency = (currencyString) => {
+     if (typeof currencyString !== 'string' || !currencyString) return 0;
+     const number = parseFloat(
+         currencyString
+         .replace('€', '')
+         .trim()
+         .replace(/\./g, '')
+         .replace(',', '.')
+     );
+     return isNaN(number) ? 0 : Math.round(number * 100);
+ };
 
-                        let rowCount = 0, initialCount = 0;
-                        const cuentasMap = new Map();
-                        const conceptosMap = new Map();
-                        const movimientos = [];
-                        const potentialTransfers = [];
-                        
-                        for (const line of lines) {
-                            rowCount++;
-                            const columns = line.split(';').map(c => c.trim().replace(/"/g, ''));
-                            const [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion = ''] = columns;
+ const csv_inferType = (name) => {
+     const upperName = name.toUpperCase();
+     if (upperName.includes('TARJETA')) return { tipo: 'Tarjeta', esInversion: false };
+     if (upperName.includes('EFECTIVO')) return { tipo: 'Efectivo', esInversion: false };
+     if (upperName.includes('PENSIÓN')) return { tipo: 'Pensión', esInversion: true };
+     if (upperName.includes('LETRAS')) return { tipo: 'Renta Fija', esInversion: true };
+     if (['FONDO', 'FONDOS'].some(t => upperName.includes(t))) return { tipo: 'Fondos', esInversion: true };
+     if (['TRADEREPUBLIC', 'MYINVESTOR', 'DEGIRO', 'INTERACTIVEBROKERS', 'INDEXACAPITAL', 'COINBASE', 'CRIPTAN', 'KRAKEN', 'BIT2ME', 'N26', 'FREEDOM24', 'DEBLOCK', 'BBVA', 'CIVISLEND', 'HOUSERS', 'URBANITAE', 'MINTOS', 'HAUSERA'].some(b => upperName.includes(b))) return { tipo: 'Broker', esInversion: true };
+     if (upperName.includes('NARANJA') || upperName.includes('AHORRO')) return { tipo: 'Ahorro', esInversion: false };
+     return { tipo: 'Banco', esInversion: false };
+ };
 
-                            if (!fechaStr || !cuentaStr || !conceptoStr || !importeStr) {
-                                console.warn(`Línea inválida o incompleta #${rowCount + 1}. Saltando...`, line);
-                                continue;
-                            }
-                            
-                            const fecha = csv_parseDate(fechaStr);
-                            if (!fecha) {
-                                 console.warn(`Fecha inválida en la fila ${rowCount + 1}: ${fechaStr}`);
-                                 continue;
-                            }
+ const csv_processFile = (file) => {
+     return new Promise((resolve, reject) => {
+         const reader = new FileReader();
+         reader.onload = (event) => {
+             try {
+                 const csvData = event.target.result.replace(/^\uFEFF/, '');
+                 const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== '' && line.includes(';'));
+                 if (lines.length <= 1) {
+                     showToast("El archivo CSV está vacío o solo contiene la cabecera.", "warning");
+                     return resolve(null);
+                 }
+                 
+                 lines.shift();
 
-                            const conceptoLimpio = conceptoStr.trim().toUpperCase().replace(/\s*;-$/, '');
-                            const offBalance = cuentaStr.startsWith('N-');
-                            const nombreCuentaLimpio = cuentaStr.replace(/^(D-|N-)/, '');
-                            const cantidad = csv_parseCurrency(importeStr);
+                 let rowCount = 0, initialCount = 0;
+                 const cuentasMap = new Map();
+                 const conceptosMap = new Map();
+                 const movimientos = [];
+                 const potentialTransfers = [];
+                 
+                 for (const line of lines) {
+                     rowCount++;
+                     const columns = line.split(';').map(c => c.trim().replace(/"/g, ''));
+                     const [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion = ''] = columns;
 
-                            if (!cuentasMap.has(nombreCuentaLimpio)) {
-                                const { tipo, esInversion } = csv_inferType(nombreCuentaLimpio);
-                                cuentasMap.set(nombreCuentaLimpio, { id: generateId(), nombre: nombreCuentaLimpio, tipo, saldo: 0, esInversion, offBalance, fechaCreacion: new Date(Date.UTC(2025, 0, 1)).toISOString() });
-                            }
+                     if (!fechaStr || !cuentaStr || !conceptoStr || !importeStr) {
+                         console.warn(`Línea inválida o incompleta #${rowCount + 1}. Saltando...`, line);
+                         continue;
+                     }
+                     
+                     const fecha = csv_parseDate(fechaStr);
+                     if (!fecha) {
+                          console.warn(`Fecha inválida en la fila ${rowCount + 1}: ${fechaStr}`);
+                          continue;
+                     }
 
-                            if (conceptoLimpio === 'INICIAL') {
-                                initialCount++;
-                                if (!conceptosMap.has('SALDO INICIAL')) conceptosMap.set('SALDO INICIAL', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
-                                const conceptoInicial = conceptosMap.get('SALDO INICIAL');
-                                movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion: descripcion || 'Existencia Inicial', tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoInicial ? conceptoInicial.id : null });
-                                continue;
-                            }
+                     const conceptoLimpio = conceptoStr.trim().toUpperCase().replace(/\s*;-$/, '');
+                     const offBalance = cuentaStr.startsWith('N-');
+                     const nombreCuentaLimpio = cuentaStr.replace(/^(D-|N-)/, '');
+                     const cantidad = csv_parseCurrency(importeStr);
 
-                            if (conceptoLimpio && conceptoLimpio !== 'TRASPASO' && !conceptosMap.has(conceptoLimpio)) {
-                                conceptosMap.set(conceptoLimpio, { id: generateId(), nombre: toSentenceCase(conceptoLimpio), icon: 'label' });
-                            }
-                            
-                            if (conceptoLimpio === 'TRASPASO') {
-                                potentialTransfers.push({ fecha, nombreCuenta: nombreCuentaLimpio, cantidad, descripcion, originalRow: rowCount });
-                            } else {
-                                const conceptoActual = conceptosMap.get(conceptoLimpio);
-                                movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion, tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoActual ? conceptoActual.id : null });
-                            }
-                        }
+                     if (!cuentasMap.has(nombreCuentaLimpio)) {
+                         const { tipo, esInversion } = csv_inferType(nombreCuentaLimpio);
+                         cuentasMap.set(nombreCuentaLimpio, { id: generateId(), nombre: nombreCuentaLimpio, tipo, saldo: 0, esInversion, offBalance, fechaCreacion: new Date(Date.UTC(2025, 0, 1)).toISOString() });
+                     }
 
-                        let matchedTransfersCount = 0;
-                        let unmatchedTransfers = [];
-                        const transferGroups = new Map();
-                        potentialTransfers.forEach(t => {
-                            const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}`;
-                            if (!transferGroups.has(key)) transferGroups.set(key, []);
-                            transferGroups.get(key).push(t);
-                        });
+                     if (conceptoLimpio === 'INICIAL') {
+                         initialCount++;
+                         if (!conceptosMap.has('SALDO INICIAL')) conceptosMap.set('SALDO INICIAL', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
+                         const conceptoInicial = conceptosMap.get('SALDO INICIAL');
+                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion: descripcion || 'Existencia Inicial', tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoInicial ? conceptoInicial.id : null });
+                         continue;
+                     }
 
-                        transferGroups.forEach((group) => {
-                            const gastos = group.filter(t => t.cantidad < 0);
-                            const ingresos = group.filter(t => t.cantidad > 0);
-                            while (gastos.length > 0 && ingresos.length > 0) {
-                                const Gasto = gastos.pop();
-                                const Ingreso = ingresos.pop();
-                                movimientos.push({ id: generateId(), fecha: Gasto.fecha.toISOString(), cantidad: Math.abs(Gasto.cantidad), descripcion: Gasto.descripcion || Ingreso.descripcion || 'Traspaso', tipo: 'traspaso', cuentaOrigenId: cuentasMap.get(Gasto.nombreCuenta).id, cuentaDestinoId: cuentasMap.get(Ingreso.nombreCuenta).id });
-                                matchedTransfersCount++;
-                            }
-                            unmatchedTransfers.push(...gastos, ...ingresos);
-                        });
-                        
-                        const conceptoInicialId = conceptosMap.has('SALDO INICIAL') ? conceptosMap.get('SALDO INICIAL').id : null;
-                        const finalData = { cuentas: Array.from(cuentasMap.values()), conceptos: Array.from(conceptosMap.values()), movimientos, presupuestos: [], recurrentes: [], inversiones_historial: [], inversion_cashflows: [], config: getInitialDb().config };
-                        const totalMovements = movimientos.filter(m => m.tipo === 'movimiento' && m.conceptoId !== conceptoInicialId).length;
+                     if (conceptoLimpio && conceptoLimpio !== 'TRASPASO' && !conceptosMap.has(conceptoLimpio)) {
+                         conceptosMap.set(conceptoLimpio, { id: generateId(), nombre: toSentenceCase(conceptoLimpio), icon: 'label' });
+                     }
+                     
+                     if (conceptoLimpio === 'TRASPASO') {
+                         potentialTransfers.push({ fecha, nombreCuenta: nombreCuentaLimpio, cantidad, descripcion, originalRow: rowCount });
+                     } else {
+                         const conceptoActual = conceptosMap.get(conceptoLimpio);
+                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion, tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoActual ? conceptoActual.id : null });
+                     }
+                 }
 
-                        resolve({
-                            jsonData: finalData,
-                            stats: { rowCount, accounts: cuentasMap.size, concepts: conceptosMap.size, movements: totalMovements, transfers: matchedTransfersCount, initials: initialCount, unmatched: unmatchedTransfers.length }
-                        });
+                 let matchedTransfersCount = 0;
+                 let unmatchedTransfers = [];
+                 const transferGroups = new Map();
+                 potentialTransfers.forEach(t => {
+                     const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}`;
+                     if (!transferGroups.has(key)) transferGroups.set(key, []);
+                     transferGroups.get(key).push(t);
+                 });
 
-                    } catch (error) {
-                        reject(error);
-                    }
-                };
-                reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
-                reader.readAsText(file, 'UTF-8');
-            });
-        };
+                 transferGroups.forEach((group) => {
+                     const gastos = group.filter(t => t.cantidad < 0);
+                     const ingresos = group.filter(t => t.cantidad > 0);
+                     while (gastos.length > 0 && ingresos.length > 0) {
+                         const Gasto = gastos.pop();
+                         const Ingreso = ingresos.pop();
+                         movimientos.push({ id: generateId(), fecha: Gasto.fecha.toISOString(), cantidad: Math.abs(Gasto.cantidad), descripcion: Gasto.descripcion || Ingreso.descripcion || 'Traspaso', tipo: 'traspaso', cuentaOrigenId: cuentasMap.get(Gasto.nombreCuenta).id, cuentaDestinoId: cuentasMap.get(Ingreso.nombreCuenta).id });
+                         matchedTransfersCount++;
+                     }
+                     unmatchedTransfers.push(...gastos, ...ingresos);
+                 });
+                 
+                 const conceptoInicialId = conceptosMap.has('SALDO INICIAL') ? conceptosMap.get('SALDO INICIAL').id : null;
+                 const finalData = { cuentas: Array.from(cuentasMap.values()), conceptos: Array.from(conceptosMap.values()), movimientos, presupuestos: [], recurrentes: [], inversiones_historial: [], inversion_cashflows: [], config: getInitialDb().config };
+                 const totalMovements = movimientos.filter(m => m.tipo === 'movimiento' && m.conceptoId !== conceptoInicialId).length;
 
-        const showCsvImportWizard = () => {
-            const wizardHTML = `
-            <div id="csv-wizard-content">
-                <div id="csv-wizard-step-1" class="json-wizard-step">
-                    <h4>Paso 1: Selecciona tu archivo CSV</h4>
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">
-                        Columnas requeridas: <code>FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCIÓN</code>.
-                        <br><strong>Atención:</strong> La importación reemplazará <strong>todos</strong> tus datos actuales.
-                    </p>
-                    <div id="csv-drop-zone" class="upload-area">
-                        <p>Arrastra tu archivo <code>.csv</code> aquí o <strong>haz clic para seleccionarlo</strong>.</p>
-                        <span id="csv-file-name" class="file-name" style="color: var(--c-success); font-weight: 600; margin-top: 1rem; display: block;"></span>
-                    </div>
-                    <div id="csv-file-error" class="form-error" style="text-align: center; margin-top: var(--sp-3);"></div>
-                    <div class="modal__actions">
-                        <button id="csv-process-btn" class="btn btn--primary btn--full" disabled>Analizar Archivo</button>
-                    </div>
-                </div>
+                 resolve({
+                     jsonData: finalData,
+                     stats: { rowCount, accounts: cuentasMap.size, concepts: conceptosMap.size, movements: totalMovements, transfers: matchedTransfersCount, initials: initialCount, unmatched: unmatchedTransfers.length }
+                 });
 
-                <div id="csv-wizard-step-2" class="json-wizard-step" style="display: none;">
-                    <h4>Paso 2: Revisa y confirma</h4>
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">Hemos analizado tu archivo. Si los datos son correctos, pulsa "Importar" para reemplazar tus datos actuales.</p>
-                    <div class="results-log" style="display: block; margin-top: 0;">
-                        <h2>Resultados del Análisis</h2>
-                        <ul id="csv-preview-list"></ul>
-                    </div>
-                    <div class="form-error" style="margin-top: var(--sp-2); text-align: center;"><strong>Atención:</strong> Esta acción es irreversible.</div>
-                    <div class="modal__actions" style="justify-content: space-between;">
-                        <button id="csv-wizard-back-btn" class="btn btn--secondary">Atrás</button>
-                        <button id="csv-wizard-import-final" class="btn btn--danger"><span class="material-icons">warning</span>Importar y Reemplazar</button>
-                    </div>
-                </div>
+             } catch (error) {
+                 reject(error);
+             }
+         };
+         reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+         reader.readAsText(file, 'UTF-8');
+     });
+ };
 
-                <div id="csv-wizard-step-3" class="json-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; min-height: 250px;">
-                    <div id="csv-import-progress">
-                        <span class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></span>
-                        <h4 style="margin-top: var(--sp-4);">Importando...</h4>
-                        <p>Borrando datos antiguos e importando los nuevos. Por favor, no cierres esta ventana.</p>
-                    </div>
-                     <div id="csv-import-result" style="display: none;">
-                        <span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span>
-                        <h4 id="csv-result-title" style="margin-top: var(--sp-2);"></h4>
-                        <p id="csv-result-message"></p>
-                        <div class="modal__actions" style="justify: center;">
-                            <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">Finalizar</button>
-                        </div>
-                     </div>
-                </div>
-            </div>`;
+ const showCsvImportWizard = () => {
+     const wizardHTML = `
+     <div id="csv-wizard-content">
+         <div id="csv-wizard-step-1" class="json-wizard-step">
+             <h4>Paso 1: Selecciona tu archivo CSV</h4>
+             <p class="form-label" style="margin-bottom: var(--sp-3);">
+                 Columnas requeridas: <code>FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCIÓN</code>.
+                 <br><strong>Atención:</strong> La importación reemplazará <strong>todos</strong> tus datos actuales.
+             </p>
+             <div id="csv-drop-zone" class="upload-area">
+                 <p>Arrastra tu archivo <code>.csv</code> aquí o <strong>haz clic para seleccionarlo</strong>.</p>
+                 <span id="csv-file-name" class="file-name" style="color: var(--c-success); font-weight: 600; margin-top: 1rem; display: block;"></span>
+             </div>
+             <div id="csv-file-error" class="form-error" style="text-align: center; margin-top: var(--sp-3);"></div>
+             <div class="modal__actions">
+                 <button id="csv-process-btn" class="btn btn--primary btn--full" disabled>Analizar Archivo</button>
+             </div>
+         </div>
 
-            showGenericModal('Asistente de Importación CSV', wizardHTML);
+         <div id="csv-wizard-step-2" class="json-wizard-step" style="display: none;">
+             <h4>Paso 2: Revisa y confirma</h4>
+             <p class="form-label" style="margin-bottom: var(--sp-3);">Hemos analizado tu archivo. Si los datos son correctos, pulsa "Importar" para reemplazar tus datos actuales.</p>
+             <div class="results-log" style="display: block; margin-top: 0;">
+                 <h2>Resultados del Análisis</h2>
+                 <ul id="csv-preview-list"></ul>
+             </div>
+             <div class="form-error" style="margin-top: var(--sp-2); text-align: center;"><strong>Atención:</strong> Esta acción es irreversible.</div>
+             <div class="modal__actions" style="justify-content: space-between;">
+                 <button id="csv-wizard-back-btn" class="btn btn--secondary">Atrás</button>
+                 <button id="csv-wizard-import-final" class="btn btn--danger"><span class="material-icons">warning</span>Importar y Reemplazar</button>
+             </div>
+         </div>
 
-            setTimeout(() => {
-                let csvFile = null;
-                let processedData = null;
-                const wizardContent = select('csv-wizard-content');
-                if (!wizardContent) return;
+         <div id="csv-wizard-step-3" class="json-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; min-height: 250px;">
+             <div id="csv-import-progress">
+                 <span class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></span>
+                 <h4 style="margin-top: var(--sp-4);">Importando...</h4>
+                 <p>Borrando datos antiguos e importando los nuevos. Por favor, no cierres esta ventana.</p>
+             </div>
+              <div id="csv-import-result" style="display: none;">
+                 <span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span>
+                 <h4 id="csv-result-title" style="margin-top: var(--sp-2);"></h4>
+                 <p id="csv-result-message"></p>
+                 <div class="modal__actions" style="justify: center;">
+                     <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">Finalizar</button>
+                 </div>
+              </div>
+         </div>
+     </div>`;
 
-                const goToStep = (step) => {
-                    wizardContent.querySelectorAll('.json-wizard-step').forEach(s => s.style.display = 'none');
-                    wizardContent.querySelector(`#csv-wizard-step-${step}`).style.display = 'flex';
-                };
+     showGenericModal('Asistente de Importación CSV', wizardHTML);
 
-                const fileInput = document.createElement('input');
-                fileInput.type = 'file'; fileInput.accept = '.csv, text/csv'; fileInput.className = 'hidden';
-                wizardContent.appendChild(fileInput);
+     setTimeout(() => {
+         let csvFile = null;
+         let processedData = null;
+         const wizardContent = select('csv-wizard-content');
+         if (!wizardContent) return;
 
-                const handleFileSelection = (files) => {
-                    const file = files[0];
-                    const nameEl = select('csv-file-name'), processBtn = select('csv-process-btn'), errorEl = select('csv-file-error');
-                    if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) {
-                        csvFile = file;
-                        nameEl.textContent = `Archivo: ${file.name}`;
-                        processBtn.disabled = false;
-                        errorEl.textContent = '';
-                    } else {
-                        csvFile = null;
-                        nameEl.textContent = 'Por favor, selecciona un archivo .csv válido.';
-                        processBtn.disabled = true;
-                    }
-                };
-                
-                const dropZone = select('csv-drop-zone');
-                dropZone.addEventListener('click', () => fileInput.click());
-                fileInput.addEventListener('change', () => handleFileSelection(fileInput.files));
-                dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-                dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-                dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFileSelection(e.dataTransfer.files); });
+         const goToStep = (step) => {
+             wizardContent.querySelectorAll('.json-wizard-step').forEach(s => s.style.display = 'none');
+             wizardContent.querySelector(`#csv-wizard-step-${step}`).style.display = 'flex';
+         };
 
-                select('csv-process-btn').addEventListener('click', async (e) => {
-                    if (!csvFile) return;
-                    const btn = e.target;
-                    setButtonLoading(btn, true, 'Analizando...');
-                    try {
-                        const result = await csv_processFile(csvFile);
-                        if (result) {
-                            processedData = result.jsonData;
-                            const { stats } = result;
-                            const previewList = select('csv-preview-list');
-                            let html = `
-                                <li><span class="label">Filas Válidas Leídas</span><span class="value">${stats.rowCount}</span></li>
-                                <li><span class="label">Cuentas a Crear</span><span class="value success">${stats.accounts}</span></li>
-                                <li><span class="label">Conceptos a Crear</span><span class="value success">${stats.concepts}</span></li>
-                                <li><span class="label">Saldos Iniciales</span><span class="value">${stats.initials}</span></li>
-                                <li><span class="label">Movimientos (Ingreso/Gasto)</span><span class="value">${stats.movements}</span></li>
-                                <li><span class="label">Transferencias Emparejadas</span><span class="value">${stats.transfers}</span></li>
-                                <li><span class="label">Transferencias sin Pareja</span><span class="value ${stats.unmatched > 0 ? 'danger' : 'success'}">${stats.unmatched}</span></li>
-                            `;
-                            previewList.innerHTML = html;
-                            goToStep(2);
-                        }
-                    } catch (error) {
-                        console.error("Error al procesar CSV:", error);
-                        select('csv-file-error').textContent = `Error: ${error.message}`;
-                    } finally {
-                        setButtonLoading(btn, false);
-                    }
-                });
+         const fileInput = document.createElement('input');
+         fileInput.type = 'file'; fileInput.accept = '.csv, text/csv'; fileInput.className = 'hidden';
+         wizardContent.appendChild(fileInput);
 
-                select('csv-wizard-back-btn').addEventListener('click', () => goToStep(1));
-                select('csv-wizard-import-final').addEventListener('click', (e) => {
-                    if (processedData) handleFinalCsvImport(e.target, processedData, goToStep);
-                });
-            }, 0);
-        };
+         const handleFileSelection = (files) => {
+             const file = files;
+             const nameEl = select('csv-file-name'), processBtn = select('csv-process-btn'), errorEl = select('csv-file-error');
+             if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) {
+                 csvFile = file;
+                 nameEl.textContent = `Archivo: ${file.name}`;
+                 processBtn.disabled = false;
+                 errorEl.textContent = '';
+             } else {
+                 csvFile = null;
+                 nameEl.textContent = 'Por favor, selecciona un archivo .csv válido.';
+                 processBtn.disabled = true;
+             }
+         };
+         
+         const dropZone = select('csv-drop-zone');
+         dropZone.addEventListener('click', () => fileInput.click());
+         fileInput.addEventListener('change', () => handleFileSelection(fileInput.files));
+         dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+         dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+         dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFileSelection(e.dataTransfer.files); });
 
-        const handleFinalCsvImport = async (btn, dataToImport, goToStep) => {
-            goToStep(3);
-            setButtonLoading(btn, true, 'Importando...');
+         select('csv-process-btn').addEventListener('click', async (e) => {
+             if (!csvFile) return;
+             const btn = e.target;
+             setButtonLoading(btn, true, 'Analizando...');
+             try {
+                 const result = await csv_processFile(csvFile);
+                 if (result) {
+                     processedData = result.jsonData;
+                     const { stats } = result;
+                     const previewList = select('csv-preview-list');
+                     let html = `
+                         <li><span class="label">Filas Válidas Leídas</span><span class="value">${stats.rowCount}</span></li>
+                         <li><span class="label">Cuentas a Crear</span><span class="value success">${stats.accounts}</span></li>
+                         <li><span class="label">Conceptos a Crear</span><span class="value success">${stats.concepts}</span></li>
+                         <li><span class="label">Saldos Iniciales</span><span class="value">${stats.initials}</span></li>
+                         <li><span class="label">Movimientos (Ingreso/Gasto)</span><span class="value">${stats.movements}</span></li>
+                         <li><span class="label">Transferencias Emparejadas</span><span class="value">${stats.transfers}</span></li>
+                         <li><span class="label">Transferencias sin Pareja</span><span class="value ${stats.unmatched > 0 ? 'danger' : 'success'}">${stats.unmatched}</span></li>
+                     `;
+                     previewList.innerHTML = html;
+                     goToStep(2);
+                 }
+             } catch (error) {
+                 console.error("Error al procesar CSV:", error);
+                 select('csv-file-error').textContent = `Error: ${error.message}`;
+             } finally {
+                 setButtonLoading(btn, false);
+             }
+         });
 
-            try {
-                const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+         select('csv-wizard-back-btn').addEventListener('click', () => goToStep(1));
+         select('csv-wizard-import-final').addEventListener('click', (e) => {
+             if (processedData) handleFinalCsvImport(e.target, processedData, goToStep);
+         });
+     }, 0);
+ };
 
-                for (const collectionName of collectionsToClear) {
-                    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
-                    if (snapshot.empty) continue;
-                    let batch = fbDb.batch();
-                    let count = 0;
-                    for (const doc of snapshot.docs) {
-                        batch.delete(doc.ref);
-                        count++;
-                        if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
-                    }
-                    if (count > 0) await batch.commit();
-                }
-                
-                for (const collectionName of Object.keys(dataToImport)) {
-                    const items = dataToImport[collectionName];
-                    if (Array.isArray(items) && items.length > 0) {
-                        let batch = fbDb.batch();
-                        let count = 0;
-                        for (const item of items) {
-                            if (item.id) {
-                                const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
-                                batch.set(docRef, item);
-                                count++;
-                                if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
-                            }
-                        }
-                        if (count > 0) await batch.commit();
-                    } else if (collectionName === 'config') {
-                        await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
-                    }
-                }
-                
-                const resultEl = select('csv-import-result');
-                select('csv-import-progress').style.display = 'none';
-                if(resultEl) {
-                    resultEl.style.display = 'block';
-                    resultEl.querySelector('#csv-result-title').textContent = '¡Importación Completada!';
-                    resultEl.querySelector('#csv-result-message').textContent = 'Los datos se han importado correctamente. La aplicación se recargará.';
-                }
-                
-                hapticFeedback('success');
-                showToast('¡Importación completada!', 'info', 4000);
-                setTimeout(() => location.reload(), 4500);
+ const handleFinalCsvImport = async (btn, dataToImport, goToStep) => {
+     goToStep(3);
+     setButtonLoading(btn, true, 'Importando...');
 
-            } catch (error) {
-                console.error("Error en importación final desde CSV:", error);
-                showToast("Error crítico durante la importación.", "danger", 5000);
-                const resultEl = select('csv-import-result');
-                select('csv-import-progress').style.display = 'none';
-                if(resultEl) {
-                    resultEl.style.display = 'block';
-                    resultEl.querySelector('#csv-result-title').textContent = '¡Error en la Importación!';
-                    resultEl.querySelector('#csv-result-message').textContent = 'Ocurrió un error. Revisa la consola e inténtalo de nuevo.';
-                    const iconEl = resultEl.querySelector('.material-icons');
-                    if (iconEl) iconEl.style.color = 'var(--c-danger)';
-                }
-                setButtonLoading(btn, false);
-            }
-        };
-		
- // ==============================================================
-// === INICIO: FUNCIÓN DE BORRADO OPTIMIZADA (v2.0)           ===
+     try {
+         const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+
+         for (const collectionName of collectionsToClear) {
+             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
+             if (snapshot.empty) continue;
+             let batch = fbDb.batch();
+             let count = 0;
+             for (const doc of snapshot.docs) {
+                 batch.delete(doc.ref);
+                 count++;
+                 if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+             }
+             if (count > 0) await batch.commit();
+         }
+         
+         for (const collectionName of Object.keys(dataToImport)) {
+             const items = dataToImport[collectionName];
+             if (Array.isArray(items) && items.length > 0) {
+                 let batch = fbDb.batch();
+                 let count = 0;
+                 for (const item of items) {
+                     if (item.id) {
+                         const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
+                         batch.set(docRef, item);
+                         count++;
+                         if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+                     }
+                 }
+                 if (count > 0) await batch.commit();
+             } else if (collectionName === 'config') {
+                 await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
+             }
+         }
+         
+         const resultEl = select('csv-import-result');
+         select('csv-import-progress').style.display = 'none';
+         if(resultEl) {
+             resultEl.style.display = 'block';
+             resultEl.querySelector('#csv-result-title').textContent = '¡Importación Completada!';
+             resultEl.querySelector('#csv-result-message').textContent = 'Los datos se han importado correctamente. La aplicación se recargará.';
+         }
+         
+         hapticFeedback('success');
+         showToast('¡Importación completada!', 'info', 4000);
+         setTimeout(() => location.reload(), 4500);
+
+     } catch (error) {
+         console.error("Error en importación final desde CSV:", error);
+         showToast("Error crítico durante la importación.", "danger", 5000);
+         const resultEl = select('csv-import-result');
+         select('csv-import-progress').style.display = 'none';
+         if(resultEl) {
+             resultEl.style.display = 'block';
+             resultEl.querySelector('#csv-result-title').textContent = '¡Error en la Importación!';
+             resultEl.querySelector('#csv-result-message').textContent = 'Ocurrió un error. Revisa la consola e inténtalo de nuevo.';
+             const iconEl = resultEl.querySelector('.material-icons');
+             if (iconEl) iconEl.style.color = 'var(--c-danger)';
+         }
+         setButtonLoading(btn, false);
+     }
+ };
+
+// ==============================================================
+// === INICIO: FUNCIÓN DE BORRADO OPTIMIZADA (v2.0) ===
 // ==============================================================
 const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
-    const collection = isRecurrent ? 'recurrentes' : 'movimientos';
-    
-    // Primero, buscamos el elemento en nuestra lista interna.
-    const itemToDelete = isRecurrent 
-        ? db.recurrentes.find(r => r.id === id) 
-        : db.movimientos.find(m => m.id === id);
+const collection = isRecurrent ? 'recurrentes' : 'movimientos';
 
-    if (!itemToDelete) {
-        showToast("Error: No se pudo encontrar el elemento para borrar.", "danger");
+// Primero, buscamos el elemento en nuestra lista interna.
+const itemToDelete = isRecurrent 
+    ? db.recurrentes.find(r => r.id === id) 
+    : db.movimientos.find(m => m.id === id);
+
+if (!itemToDelete) {
+    showToast("Error: No se pudo encontrar el elemento para borrar.", "danger");
+    return;
+}
+
+try {
+    // --- ¡LA OPTIMIZACIÓN OCURRE AQUÍ! ---
+    
+    // 1. Añadimos una animación de borrado para suavizar la transición.
+    const itemElement = document.querySelector(`.transaction-card[data-id="${id}"]`)?.closest('.swipe-container');
+    if (itemElement) {
+        itemElement.classList.add('item-deleting');
+        // Esperamos a que la animación termine antes de redibujar.
+        itemElement.addEventListener('animationend', () => {
+            if (isRecurrent) {
+                db.recurrentes = db.recurrentes.filter(r => r.id !== id);
+                renderPlanificacionPage(); // La vista de recurrentes es más simple
+            } else {
+                db.movimientos = db.movimientos.filter(m => m.id !== id);
+                updateLocalDataAndRefreshUI();
+            }
+        }, { once: true });
+    } else {
+         // Si no encontramos el elemento visual, hacemos el cambio directamente.
+         if (isRecurrent) {
+            db.recurrentes = db.recurrentes.filter(r => r.id !== id);
+            renderPlanificacionPage();
+         } else {
+            db.movimientos = db.movimientos.filter(m => m.id !== id);
+            updateLocalDataAndRefreshUI();
+         }
+    }
+    
+    // El resto del código se ejecuta en segundo plano.
+    const batch = fbDb.batch();
+    const userRef = fbDb.collection('users').doc(currentUser.uid);
+
+    if (!isRecurrent) {
+        if (itemToDelete.tipo === 'traspaso') {
+            const origenRef = userRef.collection('cuentas').doc(itemToDelete.cuentaOrigenId);
+            const destinoRef = userRef.collection('cuentas').doc(itemToDelete.cuentaDestinoId);
+            batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(itemToDelete.cantidad) });
+            batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(-itemToDelete.cantidad) });
+        } else {
+            const cuentaRef = userRef.collection('cuentas').doc(itemToDelete.cuentaId);
+            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(-itemToDelete.cantidad) });
+        }
+    }
+
+    const docToDeleteRef = userRef.collection(collection).doc(id);
+    batch.delete(docToDeleteRef);
+
+    await batch.commit();
+
+    hapticFeedback('success');
+    showToast("Elemento eliminado permanentemente.", "info");
+
+    // ¡YA NO NECESITAMOS RECARGAR TODO! Las siguientes líneas se eliminan o ya no son necesarias.
+    // ANTES: if (activeView && ...) { await loadInitialMovements(); } ...
+
+} catch (error) {
+    console.error("Error al eliminar:", error);
+    showToast("Error al eliminar el elemento.", "danger");
+    // Si falla, recargamos desde cero para evitar inconsistencias.
+    if (select('diario-page')?.classList.contains('view--active')) await loadInitialMovements();
+}
+
+};
+// ============================================================
+// === FIN: FUNCIÓN DE BORRADO OPTIMIZADA ===
+// ============================================================
+const auditAndFixAllBalances = async (btn) => {
+    if (!currentUser) {
+        showToast("Debes iniciar sesión para realizar esta acción.", "danger");
         return;
     }
 
+    setButtonLoading(btn, true, 'Auditando...');
+    showToast("Iniciando recálculo de saldos... Esto puede tardar un momento.", 'info', 4000);
+
     try {
-        // --- ¡LA OPTIMIZACIÓN OCURRE AQUÍ! ---
-        
-        // 1. Añadimos una animación de borrado para suavizar la transición.
-        const itemElement = document.querySelector(`.transaction-card[data-id="${id}"]`)?.closest('.swipe-container');
-        if (itemElement) {
-            itemElement.classList.add('item-deleting');
-            // Esperamos a que la animación termine antes de redibujar.
-            itemElement.addEventListener('animationend', () => {
-                if (isRecurrent) {
-                    db.recurrentes = db.recurrentes.filter(r => r.id !== id);
-                    renderPlanificacionPage(); // La vista de recurrentes es más simple
-                } else {
-                    db.movimientos = db.movimientos.filter(m => m.id !== id);
-                    updateLocalDataAndRefreshUI();
-                }
-            }, { once: true });
-        } else {
-             // Si no encontramos el elemento visual, hacemos el cambio directamente.
-             if (isRecurrent) {
-                db.recurrentes = db.recurrentes.filter(r => r.id !== id);
-                renderPlanificacionPage();
-             } else {
-                db.movimientos = db.movimientos.filter(m => m.id !== id);
-                updateLocalDataAndRefreshUI();
-             }
-        }
-        
-        // El resto del código se ejecuta en segundo plano.
-        const batch = fbDb.batch();
         const userRef = fbDb.collection('users').doc(currentUser.uid);
+        const cuentasRef = userRef.collection('cuentas');
+        const movimientosRef = userRef.collection('movimientos');
 
-        if (!isRecurrent) {
-            if (itemToDelete.tipo === 'traspaso') {
-                const origenRef = userRef.collection('cuentas').doc(itemToDelete.cuentaOrigenId);
-                const destinoRef = userRef.collection('cuentas').doc(itemToDelete.cuentaDestinoId);
-                batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(itemToDelete.cantidad) });
-                batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(-itemToDelete.cantidad) });
+        const cuentasSnapshot = await cuentasRef.get();
+        const newBalances = {};
+        cuentasSnapshot.forEach(doc => {
+            newBalances[doc.id] = 0;
+        });
+
+        const movimientosSnapshot = await movimientosRef.get();
+        console.log(`Procesando ${movimientosSnapshot.size} movimientos para el recálculo.`);
+
+        movimientosSnapshot.forEach(doc => {
+            const mov = doc.data();
+            if (mov.tipo === 'traspaso') {
+                if (newBalances.hasOwnProperty(mov.cuentaOrigenId)) {
+                    newBalances[mov.cuentaOrigenId] -= mov.cantidad;
+                }
+                if (newBalances.hasOwnProperty(mov.cuentaDestinoId)) {
+                    newBalances[mov.cuentaDestinoId] += mov.cantidad;
+                }
             } else {
-                const cuentaRef = userRef.collection('cuentas').doc(itemToDelete.cuentaId);
-                batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(-itemToDelete.cantidad) });
+                if (newBalances.hasOwnProperty(mov.cuentaId)) {
+                    newBalances[mov.cuentaId] += mov.cantidad;
+                }
             }
+        });
+
+        const batch = fbDb.batch();
+        for (const cuentaId in newBalances) {
+            const cuentaRef = cuentasRef.doc(cuentaId);
+            batch.update(cuentaRef, { saldo: newBalances[cuentaId] });
         }
-
-        const docToDeleteRef = userRef.collection(collection).doc(id);
-        batch.delete(docToDeleteRef);
-
+        
         await batch.commit();
 
         hapticFeedback('success');
-        showToast("Elemento eliminado permanentemente.", "info");
-
-        // ¡YA NO NECESITAMOS RECARGAR TODO! Las siguientes líneas se eliminan o ya no son necesarias.
-        // ANTES: if (activeView && ...) { await loadInitialMovements(); } ...
+        showToast("¡Auditoría completada! Todos los saldos han sido recalculados y actualizados.", "info", 5000);
+        
+        loadCoreData(currentUser.uid);
 
     } catch (error) {
-        console.error("Error al eliminar:", error);
-        showToast("Error al eliminar el elemento.", "danger");
-        // Si falla, recargamos desde cero para evitar inconsistencias.
-        if (select('diario-page')?.classList.contains('view--active')) await loadInitialMovements();
+        console.error("Error crítico durante el recálculo de saldos:", error);
+        showToast("Ocurrió un error grave durante el recálculo. Revisa la consola.", "danger");
+    } finally {
+        setButtonLoading(btn, false);
     }
+};    
+
+const handleSaveInvestmentAccounts = async (form, btn) => {
+    setButtonLoading(btn, true);
+    const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value));
+    const batch = fbDb.batch();
+    db.cuentas.forEach(c => {
+        const ref = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(c.id);
+        batch.update(ref, { esInversion: selectedIds.has(c.id) });
+    });
+    await batch.commit();
+    setButtonLoading(btn, false);
+    hideModal('generic-modal');
+    hapticFeedback('success');
+    showToast('Portafolio actualizado.');
 };
-// ============================================================
-// === FIN: FUNCIÓN DE BORRADO OPTIMIZADA                     ===
-// ============================================================
+const handleResetPortfolioBaseline = async (btn) => {
+const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
+if (investmentAccounts.length === 0) {
+    showToast("No hay activos de inversión para resetear.", "warning");
+    return;
+}
 
-    const auditAndFixAllBalances = async (btn) => {
-        if (!currentUser) {
-            showToast("Debes iniciar sesión para realizar esta acción.", "danger");
-            return;
-        }
-
-        setButtonLoading(btn, true, 'Auditando...');
-        showToast("Iniciando recálculo de saldos... Esto puede tardar un momento.", 'info', 4000);
-
+showConfirmationModal(
+    `¿Estás seguro? Se creará una nueva valoración para ${investmentAccounts.length} activo(s), poniendo su valor al capital aportado. Esto pondrá su P&L a cero a fecha de hoy. Esta acción no se puede deshacer.`,
+    async () => {
+        setButtonLoading(btn, true, 'Reseteando...');
         try {
-            const userRef = fbDb.collection('users').doc(currentUser.uid);
-            const cuentasRef = userRef.collection('cuentas');
-            const movimientosRef = userRef.collection('movimientos');
-
-            const cuentasSnapshot = await cuentasRef.get();
-            const newBalances = {};
-            cuentasSnapshot.forEach(doc => {
-                newBalances[doc.id] = 0;
-            });
-
-            const movimientosSnapshot = await movimientosRef.get();
-            console.log(`Procesando ${movimientosSnapshot.size} movimientos para el recálculo.`);
-
-            movimientosSnapshot.forEach(doc => {
-                const mov = doc.data();
-                if (mov.tipo === 'traspaso') {
-                    if (newBalances.hasOwnProperty(mov.cuentaOrigenId)) {
-                        newBalances[mov.cuentaOrigenId] -= mov.cantidad;
-                    }
-                    if (newBalances.hasOwnProperty(mov.cuentaDestinoId)) {
-                        newBalances[mov.cuentaDestinoId] += mov.cantidad;
-                    }
-                } else {
-                    if (newBalances.hasOwnProperty(mov.cuentaId)) {
-                        newBalances[mov.cuentaId] += mov.cantidad;
-                    }
-                }
-            });
-
             const batch = fbDb.batch();
-            for (const cuentaId in newBalances) {
-                const cuentaRef = cuentasRef.doc(cuentaId);
-                batch.update(cuentaRef, { saldo: newBalances[cuentaId] });
+            const userRef = fbDb.collection('users').doc(currentUser.uid);
+            const todayISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+
+            for (const cuenta of investmentAccounts) {
+                // Calculamos el capital invertido para esta cuenta específica
+                const cashflows = (db.inversion_cashflows || []).filter(cf => cf.cuentaId === cuenta.id);
+                const capitalInvertido = cashflows.reduce((sum, cf) => sum + cf.cantidad, 0);
+
+                // Creamos la nueva valoración que iguala el valor al capital
+                const newId = generateId();
+                const newValoracion = {
+                    id: newId,
+                    cuentaId: cuenta.id,
+                    valor: capitalInvertido, // ¡La magia está aquí!
+                    fecha: todayISO
+                };
+                
+                const docRef = userRef.collection('inversiones_historial').doc(newId);
+                batch.set(docRef, newValoracion);
             }
-            
+
             await batch.commit();
 
             hapticFeedback('success');
-            showToast("¡Auditoría completada! Todos los saldos han sido recalculados y actualizados.", "info", 5000);
+            showToast("¡Línea base establecida! El P&L de todos los activos ha sido reseteado a cero.", "info", 5000);
             
-            loadCoreData(currentUser.uid);
+            // Cerramos el modal y refrescamos el portafolio para ver el cambio
+            hideModal('generic-modal');
+            const container = select('patrimonio-inversiones-container');
+            if (container) {
+                renderInversionesPage('patrimonio-inversiones-container');
+            }
 
         } catch (error) {
-            console.error("Error crítico durante el recálculo de saldos:", error);
-            showToast("Ocurrió un error grave durante el recálculo. Revisa la consola.", "danger");
+            console.error("Error al resetear la línea base del portafolio:", error);
+            showToast("Ocurrió un error durante el reseteo.", "danger");
         } finally {
             setButtonLoading(btn, false);
         }
-    };    
+    },
+    "Confirmar Reseteo de P&L"
+);
 
-    const handleSaveInvestmentAccounts = async (form, btn) => {
-        setButtonLoading(btn, true);
-        const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value));
-        const batch = fbDb.batch();
-        db.cuentas.forEach(c => {
-            const ref = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(c.id);
-            batch.update(ref, { esInversion: selectedIds.has(c.id) });
+};
+
+document.addEventListener('DOMContentLoaded', initApp);
+
+const fetchMovementsInChunks = async (baseQuery, field, ids) => {
+    if (ids.length === 0) {
+        return [];
+    }
+    const idChunks = chunkArray(ids, 10);
+    
+    const queryPromises = idChunks.map(chunk => {
+        return baseQuery.where(field, 'in', chunk).get();
+    });
+
+    const querySnapshots = await Promise.all(queryPromises);
+
+    let movements = [];
+    querySnapshots.forEach(snapshot => {
+        snapshot.forEach(doc => {
+            movements.push({ id: doc.id, ...doc.data() });
         });
-        await batch.commit();
-        setButtonLoading(btn, false);
-        hideModal('generic-modal');
-        hapticFeedback('success');
-        showToast('Portafolio actualizado.');
-    };
-	const handleResetPortfolioBaseline = async (btn) => {
-    const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
-    if (investmentAccounts.length === 0) {
-        showToast("No hay activos de inversión para resetear.", "warning");
-        return;
+    });
+
+    return movements;
+};
+
+const validateField = (id, silent = false) => {
+    const input = select(id);
+    if (!input) return true;
+
+    clearError(id);
+    let isValid = true;
+    const value = input.value.trim();
+    const traspasoPill = select('mov-type-btn-traspaso');
+    const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+
+    switch (id) {
+        case 'movimiento-cantidad':
+            const amount = parseCurrencyString(value);
+            if (isNaN(amount) || value === '') {
+                displayError(id, 'Cantidad no válida.'); isValid = false;
+            }
+            break;
+        case 'movimiento-descripcion':
+            if (type !== 'traspaso' && value === '') {
+                displayError(id, 'La descripción es obligatoria.'); isValid = false;
+            }
+            break;
+        case 'movimiento-concepto':
+            if (type === 'movimiento' && value === '') {
+                displayError(id, 'El concepto es obligatorio.'); isValid = false;
+            }
+            break;
+        case 'movimiento-cuenta':
+            if (type === 'movimiento' && value === '') {
+                displayError(id, 'La cuenta es obligatoria.'); isValid = false;
+            }
+            break;
+        case 'movimiento-cuenta-origen':
+        case 'movimiento-cuenta-destino':
+            if (type === 'traspaso') {
+                const origen = select('movimiento-cuenta-origen').value;
+                const destino = select('movimiento-cuenta-destino').value;
+                if (value === '') {
+                    displayError(id, 'La cuenta es obligatoria.');
+                    isValid = false;
+                } else if (origen && destino && origen === destino) {
+                    if (input.id === 'movimiento-cuenta-origen') {
+                        displayError(id, 'No puede ser la misma cuenta destino.');
+                    } else {
+                        displayError(id, 'No puede ser la misma cuenta origen.');
+                    }
+                    isValid = false;
+                }
+            }
+            break;
+        case 'movimiento-fecha':
+            if (value === '') {
+                displayError(id, 'La fecha es obligatoria.'); isValid = false;
+            }
+            break;
+        case 'new-cuenta-nombre':
+        case 'new-cuenta-tipo':
+        case 'edit-cuenta-nombre':
+        case 'edit-cuenta-tipo':
+            if (value === '') {
+                displayError(id, 'Este campo es obligatorio.'); isValid = false;
+            }
+            break;
+        case 'new-concepto-nombre':
+        case 'edit-concepto-nombre':
+            if (value === '') {
+                displayError(id, 'Este campo es obligatorio.'); isValid = false;
+            }
+            break;
+         case 'valoracion-valor':
+            const valor = parseCurrencyString(value);
+            if (isNaN(valor) || valor < 0) {
+                displayError(id, 'Valor no válido. Debe ser un número positivo.'); isValid = false;
+            }
+            break;
+        case 'valoracion-fecha':
+            if (value === '') {
+                displayError(id, 'La fecha es obligatoria.'); isValid = false;
+            }
+            break;
+        case 'aportacion-cantidad':
+            const aportacion = parseCurrencyString(value);
+            if (isNaN(aportacion) || value === '') {
+                displayError(id, 'Cantidad no válida.'); isValid = false;
+            }
+            break;
+        case 'aportacion-fecha':
+            if (value === '') {
+                displayError(id, 'La fecha es obligatoria.'); isValid = false;
+            }
+            break;
     }
 
-    showConfirmationModal(
-        `¿Estás seguro? Se creará una nueva valoración para ${investmentAccounts.length} activo(s), poniendo su P&L a cero. Esta acción no se puede deshacer.`,
-        async () => {
-            setButtonLoading(btn, true, 'Reseteando...');
-            try {
-                const batch = fbDb.batch();
-                const userRef = fbDb.collection('users').doc(currentUser.uid);
-                const todayISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+    if (!isValid && !silent) hapticFeedback('light');
 
-                for (const cuenta of investmentAccounts) {
-                    // Calculamos el capital invertido para esta cuenta específica
-                    const cashflows = (db.inversion_cashflows || []).filter(cf => cf.cuentaId === cuenta.id);
-                    const capitalInvertido = cashflows.reduce((sum, cf) => sum + cf.cantidad, 0);
-
-                    // Creamos la nueva valoración que iguala el valor al capital
-                    const newId = generateId();
-                    const newValoracion = {
-                        id: newId,
-                        cuentaId: cuenta.id,
-                        valor: capitalInvertido, // ¡La magia está aquí!
-                        fecha: todayISO
-                    };
-                    
-                    const docRef = userRef.collection('inversiones_historial').doc(newId);
-                    batch.set(docRef, newValoracion);
-                }
-
-                await batch.commit();
-
-                hapticFeedback('success');
-                showToast("¡Línea base establecida! El P&L de todos los activos ha sido reseteado a cero.", "info", 5000);
-                
-                // Cerramos el modal y refrescamos el portafolio para ver el cambio
-                hideModal('generic-modal');
-                const container = select('patrimonio-inversiones-container');
-                if (container) {
-                    renderInversionesPage('patrimonio-inversiones-container');
-                }
-
-            } catch (error) {
-                console.error("Error al resetear la línea base del portafolio:", error);
-                showToast("Ocurrió un error durante el reseteo.", "danger");
-            } finally {
-                setButtonLoading(btn, false);
-            }
-        },
-        "Confirmar Reseteo de P&L"
-    );
+    return isValid;
 };
-	
-    document.addEventListener('DOMContentLoaded', initApp);
-	
-    const fetchMovementsInChunks = async (baseQuery, field, ids) => {
-        if (ids.length === 0) {
-            return [];
-        }
-        const idChunks = chunkArray(ids, 10);
-        
-        const queryPromises = idChunks.map(chunk => {
-            return baseQuery.where(field, 'in', chunk).get();
-        });
 
-        const querySnapshots = await Promise.all(queryPromises);
+const validateMovementForm = () => {
+    let isValid = true;
+    if (!validateField('movimiento-cantidad')) isValid = false;
+    if (!validateField('movimiento-fecha')) isValid = false;
 
-        let movements = [];
-        querySnapshots.forEach(snapshot => {
-            snapshot.forEach(doc => {
-                movements.push({ id: doc.id, ...doc.data() });
-            });
-        });
+   const traspasoPill = select('mov-type-btn-traspaso');
+    const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
 
-        return movements;
-    };
-
-    const validateField = (id, silent = false) => {
-        const input = select(id);
-        if (!input) return true;
-
-        clearError(id);
-        let isValid = true;
-        const value = input.value.trim();
-        const traspasoPill = select('mov-type-btn-traspaso');
-        const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
-
-        switch (id) {
-            case 'movimiento-cantidad':
-                const amount = parseCurrencyString(value);
-                if (isNaN(amount) || value === '') {
-                    displayError(id, 'Cantidad no válida.'); isValid = false;
-                }
-                break;
-            case 'movimiento-descripcion':
-                if (type !== 'traspaso' && value === '') {
-                    displayError(id, 'La descripción es obligatoria.'); isValid = false;
-                }
-                break;
-            case 'movimiento-concepto':
-                if (type === 'movimiento' && value === '') {
-                    displayError(id, 'El concepto es obligatorio.'); isValid = false;
-                }
-                break;
-            case 'movimiento-cuenta':
-                if (type === 'movimiento' && value === '') {
-                    displayError(id, 'La cuenta es obligatoria.'); isValid = false;
-                }
-                break;
-            case 'movimiento-cuenta-origen':
-            case 'movimiento-cuenta-destino':
-                if (type === 'traspaso') {
-                    const origen = select('movimiento-cuenta-origen').value;
-                    const destino = select('movimiento-cuenta-destino').value;
-                    if (value === '') {
-                        displayError(id, 'La cuenta es obligatoria.');
-                        isValid = false;
-                    } else if (origen && destino && origen === destino) {
-                        if (input.id === 'movimiento-cuenta-origen') {
-                            displayError(id, 'No puede ser la misma cuenta destino.');
-                        } else {
-                            displayError(id, 'No puede ser la misma cuenta origen.');
-                        }
-                        isValid = false;
-                    }
-                }
-                break;
-            case 'movimiento-fecha':
-                if (value === '') {
-                    displayError(id, 'La fecha es obligatoria.'); isValid = false;
-                }
-                break;
-            case 'new-cuenta-nombre':
-            case 'new-cuenta-tipo':
-            case 'edit-cuenta-nombre':
-            case 'edit-cuenta-tipo':
-                if (value === '') {
-                    displayError(id, 'Este campo es obligatorio.'); isValid = false;
-                }
-                break;
-            case 'new-concepto-nombre':
-            case 'edit-concepto-nombre':
-                if (value === '') {
-                    displayError(id, 'Este campo es obligatorio.'); isValid = false;
-                }
-                break;
-             case 'valoracion-valor':
-                const valor = parseCurrencyString(value);
-                if (isNaN(valor) || valor < 0) {
-                    displayError(id, 'Valor no válido. Debe ser un número positivo.'); isValid = false;
-                }
-                break;
-            case 'valoracion-fecha':
-                if (value === '') {
-                    displayError(id, 'La fecha es obligatoria.'); isValid = false;
-                }
-                break;
-            case 'aportacion-cantidad':
-                const aportacion = parseCurrencyString(value);
-                if (isNaN(aportacion) || value === '') {
-                    displayError(id, 'Cantidad no válida.'); isValid = false;
-                }
-                break;
-            case 'aportacion-fecha':
-                if (value === '') {
-                    displayError(id, 'La fecha es obligatoria.'); isValid = false;
-                }
-                break;
-        }
-
-        if (!isValid && !silent) hapticFeedback('light');
-
-        return isValid;
-    };
-
-    const validateMovementForm = () => {
-        let isValid = true;
-        if (!validateField('movimiento-cantidad')) isValid = false;
-        if (!validateField('movimiento-fecha')) isValid = false;
-
-       const traspasoPill = select('mov-type-btn-traspaso');
-        const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
-
-        if (type === 'movimiento') {
-            if (!validateField('movimiento-descripcion')) isValid = false;
-            if (!validateField('movimiento-concepto')) isValid = false;
-            if (!validateField('movimiento-cuenta')) isValid = false;
-        } else {
-            const origenValid = validateField('movimiento-cuenta-origen');
-            const destinoValid = validateField('movimiento-cuenta-destino');
-            if (!origenValid || !destinoValid) isValid = false;
-        }
-        return isValid;
-    };
+    if (type === 'movimiento') {
+        if (!validateField('movimiento-descripcion')) isValid = false;
+        if (!validateField('movimiento-concepto')) isValid = false;
+        if (!validateField('movimiento-cuenta')) isValid = false;
+    } else {
+        const origenValid = validateField('movimiento-cuenta-origen');
+        const destinoValid = validateField('movimiento-cuenta-destino');
+        if (!origenValid || !destinoValid) isValid = false;
+    }
+    return isValid;
+};
 
 // ▼▼▼ REEMPLAZA LAS 3 FUNCIONES SIGUIENTES CON ESTE BLOQUE COMPLETO ▼▼▼
 
@@ -9292,46 +9527,44 @@ const longPressState = { timer: null, isLongPress: false };
 const swipeState = { activeCard: null, startX: 0, currentX: 0, isSwiping: false, isSwipeIntent: false, threshold: 60 };
 
 const handleInteractionStart = (e) => {
-    const card = e.target.closest('.transaction-card');
-    if (!card || !card.dataset.id) return;
+const card = e.target.closest('.transaction-card');
+if (!card || !card.dataset.id) return;
 
-    resetActiveSwipe();
-    
-    longPressState.isLongPress = false;
-    longPressState.timer = setTimeout(() => {
-        longPressState.isLongPress = true;
-        // Si se activa el long press, cancelamos cualquier posible swipe
-        swipeState.isSwiping = false; 
-        hapticFeedback('medium');
-        startMovementForm(card.dataset.id, false);
-    }, 500);
+resetActiveSwipe();
 
-    swipeState.isSwiping = true;
-    swipeState.isSwipeIntent = false; // ¡IMPORTANTE! Reseteamos la "intención" de swipe.
-    swipeState.activeCard = card;
-    swipeState.startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
-    swipeState.currentX = swipeState.startX; // Inicializamos currentX
+longPressState.isLongPress = false;
+longPressState.timer = setTimeout(() => {
+    longPressState.isLongPress = true;
+    // Si se activa el long press, cancelamos cualquier posible swipe
+    swipeState.isSwiping = false; 
+    hapticFeedback('medium');
+    startMovementForm(card.dataset.id, false);
+}, 500);
+
+swipeState.isSwiping = true;
+swipeState.isSwipeIntent = false; // ¡IMPORTANTE! Reseteamos la "intención" de swipe.
+swipeState.activeCard = card;
+swipeState.startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+swipeState.currentX = swipeState.startX; // Inicializamos currentX
+
 };
 
 const handleInteractionMove = (e) => {
     if (!swipeState.isSwiping || !swipeState.activeCard) return;
 
+    // ▼▼▼ LA CORRECCIÓN CLAVE ESTÁ AQUÍ ▼▼▼
     const diff = (e.type === 'touchmove' ? e.touches[0].clientX : e.clientX) - swipeState.startX;
 
-    // --- ¡AQUÍ ESTÁ LA NUEVA MAGIA! (La "Zona Muerta") ---
-    // Solo consideramos que hay intención de hacer swipe si el movimiento supera los 10px.
     if (!swipeState.isSwipeIntent && Math.abs(diff) > 10) {
         swipeState.isSwipeIntent = true;
-        // Si empieza un swipe, cancelamos el temporizador del long press.
         if (longPressState.timer) {
             clearTimeout(longPressState.timer);
             longPressState.timer = null;
         }
     }
     
-    // Solo aplicamos las animaciones de swipe SI se ha detectado la intención.
     if (swipeState.isSwipeIntent) {
-        e.preventDefault(); // Prevenimos el scroll vertical solo si es un swipe horizontal.
+        e.preventDefault(); 
         swipeState.currentX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
         const currentDiff = swipeState.currentX - swipeState.startX;
         
@@ -9357,173 +9590,174 @@ const handleInteractionMove = (e) => {
 };
 
 const handleInteractionEnd = (e) => {
-    // Siempre limpiamos el temporizador de long press al soltar.
-    if (longPressState.timer) {
-        clearTimeout(longPressState.timer);
-        longPressState.timer = null;
-    }
+// Siempre limpiamos el temporizador de long press al soltar.
+if (longPressState.timer) {
+clearTimeout(longPressState.timer);
+longPressState.timer = null;
+}
 
-    if (!swipeState.isSwiping || !swipeState.activeCard) return;
 
-    // --- ¡LA LÓGICA DE DECISIÓN FINAL MEJORADA! ---
-    // 1. Si FUE un long press, no hacemos nada más, ya se abrió el modal.
-    if (longPressState.isLongPress) {
-        // No hacemos nada, la acción ya se ejecutó.
-    }
-    // 2. Si HUBO intención de swipe...
-    else if (swipeState.isSwipeIntent) {
-        const diff = swipeState.currentX - swipeState.startX;
-        swipeState.activeCard.style.transition = 'transform 0.3s ease-out';
-        
-        if (Math.abs(diff) > swipeState.threshold) {
-            // Swipe completado
-            const direction = diff > 0 ? 'right' : 'left';
-            const finalX = direction === 'right' ? 75 : -75;
-            swipeState.activeCard.style.transform = `translateX(${finalX}px)`;
-            hapticFeedback('light');
-        } else {
-            // Swipe cancelado
-            resetActiveSwipe();
-        }
-    } 
-    // 3. Si NO fue long press y NUNCA hubo intención de swipe (un simple toque), ya no abrimos el formulario.
-    else {
-        // Un simple toque ahora no hace nada, permitiendo scrolls limpios.
-    }
+if (!swipeState.isSwiping || !swipeState.activeCard) return;
+
+// --- ¡LA LÓGICA DE DECISIÓN FINAL MEJORADA! ---
+// 1. Si FUE un long press, no hacemos nada más, ya se abrió el modal.
+if (longPressState.isLongPress) {
+    // No hacemos nada, la acción ya se ejecutó.
+}
+// 2. Si HUBO intención de swipe...
+else if (swipeState.isSwipeIntent) {
+    const diff = swipeState.currentX - swipeState.startX;
+    swipeState.activeCard.style.transition = 'transform 0.3s ease-out';
     
-    // Reseteamos todo para la próxima interacción.
-    swipeState.isSwiping = false;
-    swipeState.isSwipeIntent = false;
-    longPressState.isLongPress = false;
+    if (Math.abs(diff) > swipeState.threshold) {
+        // Swipe completado
+        const direction = diff > 0 ? 'right' : 'left';
+        const finalX = direction === 'right' ? 75 : -75;
+        swipeState.activeCard.style.transform = `translateX(${finalX}px)`;
+        hapticFeedback('light');
+    } else {
+        // Swipe cancelado
+        resetActiveSwipe();
+    }
+} 
+// 3. Si NO fue long press y NUNCA hubo intención de swipe (un simple toque), ya no abrimos el formulario.
+else {
+    // Un simple toque ahora no hace nada, permitiendo scrolls limpios.
+}
+
+// Reseteamos todo para la próxima interacción.
+swipeState.isSwiping = false;
+swipeState.isSwipeIntent = false;
+longPressState.isLongPress = false;
+
 };
 
 // Asegúrate de que tu función resetActiveSwipe también oculte las acciones
 const resetActiveSwipe = () => {
-    if (swipeState.activeCard) {
-        swipeState.activeCard.style.transition = 'transform 0.3s ease-out';
-        swipeState.activeCard.style.transform = 'translateX(0px)';
-        // También nos aseguramos de ocultar las acciones aquí
-        const parent = swipeState.activeCard.parentElement;
-        parent.querySelector('.swipe-actions-container.left')?.classList.remove('swipe-actions-container--visible');
-        parent.querySelector('.swipe-actions-container.right')?.classList.remove('swipe-actions-container--visible');
-    }
-    swipeState.activeCard = null;
+if (swipeState.activeCard) {
+swipeState.activeCard.style.transition = 'transform 0.3s ease-out';
+swipeState.activeCard.style.transform = 'translateX(0px)';
+// También nos aseguramos de ocultar las acciones aquí
+const parent = swipeState.activeCard.parentElement;
+parent.querySelector('.swipe-actions-container.left')?.classList.remove('swipe-actions-container--visible');
+parent.querySelector('.swipe-actions-container.right')?.classList.remove('swipe-actions-container--visible');
+}
+swipeState.activeCard = null;
 };
-
- 
-
 
 const handleDescriptionInput = () => {
-    clearTimeout(descriptionSuggestionDebounceTimer);
-    descriptionSuggestionDebounceTimer = setTimeout(() => {
-        const descriptionInput = select('movimiento-descripcion');
-        const suggestionsBox = select('description-suggestions');
-        if (!descriptionInput || !suggestionsBox) return;
-        
-        const query = descriptionInput.value.trim().toLowerCase();
-        suggestionsBox.innerHTML = '';
+clearTimeout(descriptionSuggestionDebounceTimer);
+descriptionSuggestionDebounceTimer = setTimeout(() => {
+const descriptionInput = select('movimiento-descripcion');
+const suggestionsBox = select('description-suggestions');
+if (!descriptionInput || !suggestionsBox) return;
 
-        if (query.length < 2) { 
-            suggestionsBox.style.display = 'none';
-            return;
+const query = descriptionInput.value.trim().toLowerCase();
+    suggestionsBox.innerHTML = '';
+
+    if (query.length < 2) { 
+        suggestionsBox.style.display = 'none';
+        return;
+    }
+
+    const suggestions = [];
+    for (const [desc, data] of intelligentIndex.entries()) {
+        if (desc.includes(query)) {
+            suggestions.push({ description: desc, ...data });
         }
+    }
 
-        const suggestions = [];
-        for (const [desc, data] of intelligentIndex.entries()) {
-            if (desc.includes(query)) {
-                suggestions.push({ description: desc, ...data });
+    // 1. Algoritmo de puntuación: 60% Frecuencia, 40% Recencia
+    const now = Date.now();
+    suggestions.sort((a, b) => {
+        const recencyA = Math.exp((a.lastUsed - now) / (1000 * 3600 * 24 * 30)); 
+        const recencyB = Math.exp((b.lastUsed - now) / (1000 * 3600 * 24 * 30));
+        // Cuanto mayor la puntuación, mejor
+        const scoreA = (a.count * 0.6) + (recencyA * 0.4); 
+        const scoreB = (b.count * 0.6) + (recencyB * 0.4);
+        return scoreB - scoreA;
+    });
+
+    const topSuggestion = suggestions[0];
+    const conceptoSelect = select('movimiento-concepto');
+    const cuentaSelect = select('movimiento-cuenta');
+    
+    // 2. LÓGICA CRÍTICA: DOBLE PREDICCIÓN AUTOMÁTICA
+    if (topSuggestion) {
+        // Rellenamos solo si la coincidencia es exacta o muy alta (por ejemplo, si la descripción actual empieza con la predicción)
+        if (topSuggestion.description.startsWith(query) && topSuggestion.description.length > query.length) {
+            
+            // Si el concepto está vacío, lo rellenamos
+            if (!conceptoSelect.value && conceptoSelect.querySelector(`option[value="${topSuggestion.conceptoId}"]`)) {
+                conceptoSelect.value = topSuggestion.conceptoId;
+                conceptoSelect.closest('.form-group-addon').classList.add('field-highlighted');
+                setTimeout(() => conceptoSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
+            }
+            
+            // Si la cuenta está vacío, lo rellenamos
+            if (!cuentaSelect.value && cuentaSelect.querySelector(`option[value="${topSuggestion.cuentaId}"]`)) {
+                cuentaSelect.value = topSuggestion.cuentaId;
+                cuentaSelect.closest('.form-group-addon').classList.add('field-highlighted');
+                setTimeout(() => cuentaSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
             }
         }
 
-        // 1. Algoritmo de puntuación: 60% Frecuencia, 40% Recencia
-        const now = Date.now();
-        suggestions.sort((a, b) => {
-            const recencyA = Math.exp((a.lastUsed - now) / (1000 * 3600 * 24 * 30)); 
-            const recencyB = Math.exp((b.lastUsed - now) / (1000 * 3600 * 24 * 30));
-            // Cuanto mayor la puntuación, mejor
-            const scoreA = (a.count * 0.6) + (recencyA * 0.4); 
-            const scoreB = (b.count * 0.6) + (recencyB * 0.4);
-            return scoreB - scoreA;
-        });
 
-        const topSuggestion = suggestions[0];
-        const conceptoSelect = select('movimiento-concepto');
-        const cuentaSelect = select('movimiento-cuenta');
-        
-        // 2. LÓGICA CRÍTICA: DOBLE PREDICCIÓN AUTOMÁTICA
-        if (topSuggestion) {
-            // Rellenamos solo si la coincidencia es exacta o muy alta (por ejemplo, si la descripción actual empieza con la predicción)
-            if (topSuggestion.description.startsWith(query) && topSuggestion.description.length > query.length) {
-                
-                // Si el concepto está vacío, lo rellenamos
-                if (!conceptoSelect.value && conceptoSelect.querySelector(`option[value="${topSuggestion.conceptoId}"]`)) {
-                    conceptoSelect.value = topSuggestion.conceptoId;
-                    conceptoSelect.closest('.form-group-addon').classList.add('field-highlighted');
-                    setTimeout(() => conceptoSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
-                }
-                
-                // Si la cuenta está vacía, la rellenamos
-                if (!cuentaSelect.value && cuentaSelect.querySelector(`option[value="${topSuggestion.cuentaId}"]`)) {
-                    cuentaSelect.value = topSuggestion.cuentaId;
-                    cuentaSelect.closest('.form-group-addon').classList.add('field-highlighted');
-                    setTimeout(() => cuentaSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
-                }
-            }
+        // 3. Renderizamos las sugerencias en el box (ya implementado)
+        suggestionsBox.innerHTML = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).map(s => { 
+            const concepto = db.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
+            const cuenta = db.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
+            return `
+                <div class="suggestion-item" 
+                     data-action="apply-description-suggestion"
+                     data-description="${escapeHTML(s.description)}" 
+                     data-concepto-id="${s.conceptoId}" 
+                     data-cuenta-id="${s.cuentaId}"
+                     tabindex="0">
+                    <p>${escapeHTML(toSentenceCase(s.description))}</p>
+                    <small>${escapeHTML(concepto)} • ${escapeHTML(cuenta)}</small>
+                </div>`;
+        }).join('');
+        suggestionsBox.style.display = 'block';
+    } else {
+        suggestionsBox.style.display = 'none';
+    }
+}, 250);
 
-
-            // 3. Renderizamos las sugerencias en el box (ya implementado)
-            suggestionsBox.innerHTML = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).map(s => { 
-                const concepto = db.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
-                const cuenta = db.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
-                return `
-                    <div class="suggestion-item" 
-                         data-action="apply-description-suggestion"
-                         data-description="${escapeHTML(s.description)}" 
-                         data-concepto-id="${s.conceptoId}" 
-                         data-cuenta-id="${s.cuentaId}"
-                         tabindex="0">
-                        <p>${escapeHTML(toSentenceCase(s.description))}</p>
-                        <small>${escapeHTML(concepto)} • ${escapeHTML(cuenta)}</small>
-                    </div>`;
-            }).join('');
-            suggestionsBox.style.display = 'block';
-        } else {
-            suggestionsBox.style.display = 'none';
-        }
-    }, 250); 
 };
-	
-     
+
 // =================================================================
 // === INICIO: MEJORAS DE USABILIDAD DEL FORMULARIO (NIVEL SUPREMO) ===
 // =================================================================
 
-    // === VALIDACIÓN DEL CAMPO "CANTIDAD" ===
+
+// === VALIDACIÓN DEL CAMPO "CANTIDAD" ===
+
 const cantidadInput = document.getElementById("movimiento-cantidad");
 const cantidadError = document.getElementById("movimiento-cantidad-error");
 
 cantidadInput.addEventListener("input", () => {
-  let valor = cantidadInput.value.trim();
+let valor = cantidadInput.value.trim();
 
-  // Reemplazar coma por punto
-  valor = valor.replace(",", ".");
+// Reemplazar coma por punto
+valor = valor.replace(",", ".");
 
-  // Expresión regular: número positivo o negativo con hasta 2 decimales
-  const regex = /^-?\d+(\.\d{0,2})?$/;
+// Expresión regular: número positivo o negativo con hasta 2 decimales
+const regex = /^-?\d+(.\d{0,2})?$/;
 
-  if (valor === "" || !regex.test(valor)) {
-    cantidadError.textContent = "Introduce un número válido (ej: -2,50 o 15.00)";
-    cantidadInput.classList.add("form-input--error");
-  } else {
-    cantidadError.textContent = "";
-    cantidadInput.classList.remove("form-input--error");
-  }
+if (valor === "" || !regex.test(valor)) {
+cantidadError.textContent = "Introduce un número válido (ej: -2,50 o 15.00)";
+cantidadInput.classList.add("form-input--error");
+} else {
+cantidadError.textContent = "";
+cantidadInput.classList.remove("form-input--error");
+}
 });
 
 // Función para convertir el valor a céntimos (ej: 2.50 => 250)
 function getCantidadEnCentimos() {
-  let valor = cantidadInput.value.trim().replace(",", ".");
-  return Math.round(parseFloat(valor) * 100);
+let valor = cantidadInput.value.trim().replace(",", ".");
+return Math.round(parseFloat(valor) * 100);
 }
 // === ENFOQUE AUTOMÁTICO Y NAVEGACIÓN CON ENTER ===
 const descripcionInput = document.getElementById("movimiento-descripcion");
@@ -9532,36 +9766,37 @@ const saveBtn = document.getElementById("save-movimiento-btn");
 
 // Al abrir el modal de movimiento, poner el foco en "Cantidad"
 document.addEventListener("show-modal", (e) => {
-  if (e.detail.modalId === "movimiento-modal") {
-    setTimeout(() => cantidadInput.focus(), 100);
-  }
+if (e.detail.modalId === "movimiento-modal") {
+setTimeout(() => cantidadInput.focus(), 100);
+}
 });
 
 // Usar ENTER para saltar entre campos
 cantidadInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    descripcionInput.focus();
-  }
+if (e.key === "Enter") {
+e.preventDefault();
+descripcionInput.focus();
+}
 });
 
 descripcionInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    cuentaSelect.focus();
-  }
+if (e.key === "Enter") {
+e.preventDefault();
+cuentaSelect.focus();
+}
 });
 
 cuentaSelect.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    saveBtn.click();
-  }
+if (e.key === "Enter") {
+e.preventDefault();
+saveBtn.click();
+}
 });
-        
+
 // ===============================================================
-// === FIN: MEJORAS DE USABILIDAD DEL FORMULARIO               ===
-// ===============================================================        
+// === FIN: MEJORAS DE USABILIDAD DEL FORMULARIO ===
+// ===============================================================
 </script>
+
 </body>
 </html>
