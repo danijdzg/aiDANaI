@@ -402,7 +402,26 @@ body[data-ledger-mode="B"] .bottom-nav__item--active {
 html { height: -webkit-fill-available; scroll-behavior: smooth; }
 body { font-family: var(--font-family); background-color: var(--c-background); color: var(--c-on-surface); line-height: 1.4; min-height: 100vh; min-height: -webkit-fill-available; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow: hidden; font-weight: 500; }
 *:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; border-radius: var(--sp-2); }
+@keyframes item-enter {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
+/* Esta es la clase que prepara el elemento para animar, pero lo mantiene invisible */
+.list-item-animate {
+    opacity: 0;
+}
+
+/* Esta es la clase que dispara la animación */
+.list-item-animate.item-enter-active {
+    animation: item-enter 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
 @keyframes pop-in { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes slide-in-from-right {
     from { transform: translateX(100%); opacity: 0.8; }
@@ -457,6 +476,35 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .skeleton { background-color: var(--c-surface-variant); background-image: linear-gradient(90deg, var(--c-surface-variant), color-mix(in srgb, var(--c-outline) 20%, var(--c-surface-variant)), var(--c-surface-variant)); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; border-radius: var(--sp-2); color: transparent !important; user-select: none; }
 .skeleton > * { visibility: hidden; }
+.skeleton-card {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-2) 0;
+    min-height: 64px;
+    margin: 0 var(--sp-4);
+}
+.skeleton-card__indicator {
+    width: 3px;
+    height: 48px;
+    margin-right: var(--sp-2);
+}
+.skeleton-card__content {
+    flex-grow: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.skeleton-card__line {
+    height: 12px;
+    border-radius: 4px;
+}
+.skeleton-card__line--sm { width: 60%; }
+.skeleton-card__line--xs { width: 40%; margin-top: 8px; }
+.skeleton-card__amount {
+    width: 80px;
+    height: 16px;
+    border-radius: 4px;
+}
 /* === INICIO: Estilos para Widgets en Carga === */
 .widget-container {
     position: relative; /* Necesario para posicionar el spinner dentro */
@@ -1707,55 +1755,6 @@ let modalDragState = {
     targetModal: null
 };
 
-function handleModalDragStart(e) {
-    const modal = e.target.closest('.modal');
-    if (!modal) return;
-    
-    // Solo permitir el gesto si el contenido principal del modal no está haciendo scroll
-    const modalBody = modal.querySelector('.modal__body');
-    if (modalBody && modalBody.scrollTop > 0) return;
-
-    modalDragState.isDragging = true;
-    modalDragState.targetModal = modal;
-    modalDragState.startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
-    modal.style.transition = 'none'; // Quitamos la transición para un control directo
-}
-
-function handleModalDragMove(e) {
-    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
-    
-    modalDragState.currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
-    let deltaY = modalDragState.currentY - modalDragState.startY;
-
-    // Solo aplicamos el transform si el arrastre es hacia abajo
-    if (deltaY > 0) {
-        e.preventDefault(); // Prevenimos el scroll de la página detrás del modal
-        modalDragState.targetModal.style.transform = `translateY(${deltaY}px)`;
-    }
-}
-
-function handleModalDragEnd(e) {
-    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
-
-    const modal = modalDragState.targetModal;
-    modal.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'; // Restauramos la transición
-
-    const deltaY = modalDragState.currentY - modalDragState.startY;
-    const modalHeight = modal.offsetHeight;
-
-    // Si se ha arrastrado más del 30% de la altura del modal, lo cerramos
-    if (deltaY > modalHeight * 0.3) {
-        const overlay = modal.closest('.modal-overlay');
-        if (overlay) hideModal(overlay.id);
-    } else {
-        // Si no, lo devolvemos a su sitio
-        modal.style.transform = 'translateY(0)';
-    }
-
-    // Reseteamos el estado
-    modalDragState.isDragging = false;
-    modalDragState.targetModal = null;
-}
         let descriptionSuggestionDebounceTimer = null; 
         const DESCRIPTION_SUGGESTION_LIMIT = 5;
         
@@ -1923,7 +1922,7 @@ async function loadCoreData(uid) {
             if (collectionName === 'recurrentes') {
                 dataLoaded.recurrentes = true;
                 const activePage = document.querySelector('.view--active');
-                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) loadInitialMovements();
+                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderDiarioPage();
                 if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) renderPlanificacionPage();
             }
             
@@ -2385,43 +2384,42 @@ const triggerSaveAnimation = (fromElement, color) => {
                 pinInputs[0].focus();
             }
         };
-        const handleKpiDrilldown = async (kpiButton) => {
+    const handleKpiDrilldown = async (kpiButton) => {
     const type = kpiButton.dataset.type;
     if (!type) return;
 
     hapticFeedback('light');
+    showGenericModal('Cargando detalles...', `<div style="text-align:center; padding: var(--sp-5);"><span class="spinner"></span></div>`);
 
-    // 1. Obtenemos los movimientos del periodo que se está mostrando actualmente.
     const { current } = await getFilteredMovements(false);
     
     let movementsToShow = [];
     let modalTitle = '';
 
-    // 2. Filtramos esa lista según el KPI que se ha pulsado.
     switch (type) {
         case 'ingresos':
             modalTitle = 'Ingresos del Periodo';
-            movementsToShow = current.filter(m => {
-                const amount = calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id)));
-                return amount > 0;
-            });
+            movementsToShow = current.filter(m => calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id))) > 0);
             break;
         case 'gastos':
             modalTitle = 'Gastos del Periodo';
-            movementsToShow = current.filter(m => {
-                const amount = calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id)));
-                return amount < 0;
-            });
+            movementsToShow = current.filter(m => calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id))) < 0);
             break;
         case 'saldoNeto':
             modalTitle = 'Todos los Movimientos del Periodo';
-            movementsToShow = current; // Mostramos todos
+            movementsToShow = current;
             break;
         default:
+            hideModal('generic-modal');
             return;
     }
 
-    // 3. Usamos tu función ya existente para mostrar el modal con la lista filtrada.
+    // ¡USAMOS NUESTRA FUNCIÓN MAESTRA OTRA VEZ!
+    if (movementsToShow.length > 0) {
+        recalculateAndApplyRunningBalances(movementsToShow, db.cuentas);
+    }
+
+    // Y ahora llamamos a la función que muestra la lista.
     showDrillDownModal(modalTitle, movementsToShow);
 };
         const handlePinInputInteraction = () => {
@@ -3008,7 +3006,7 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
     };
 };
 
-        const recalculateAndApplyRunningBalances = (movements, allAccountsDb) => {
+    const recalculateAndApplyRunningBalances = (movements, allAccountsDb) => {
     // 1. Agrupamos los movimientos por cada cuenta afectada.
     const movementsByAccount = {};
     movements.forEach(mov => {
@@ -3772,6 +3770,14 @@ if (item.type === 'pending-item') {
                 if (vList.items[i]) visibleHtml += renderVirtualListItem(vList.items[i]);
             }
             vList.contentEl.innerHTML = visibleHtml; 
+			const renderedItems = vList.contentEl.querySelectorAll('.list-item-animate');
+renderedItems.forEach((item, index) => {
+    // Aplicamos la clase que dispara la animación con un pequeño retraso
+    // para cada elemento, creando el efecto cascada.
+    setTimeout(() => {
+        item.classList.add('item-enter-active');
+    }, index * 40); // 40 milisegundos de retraso entre cada item
+});
             const offsetY = vList.itemMap[startIndex] ? vList.itemMap[startIndex].offset : 0; 
             vList.contentEl.style.transform = `translateY(${offsetY}px)`; 
             vList.lastRenderedRange = { start: startIndex, end: endIndex };
@@ -3963,7 +3969,21 @@ const loadMoreMovements = async (isInitial = false) => {
     const loadMoreBtn = select('load-more-btn');
     if (isInitial) {
         // En la carga inicial, usamos un esqueleto.
-        select('virtual-list-content').innerHTML = '<div class="skeleton" style="height: 300px; width: 100%;"></div>';
+        let skeletonHTML = '';
+for (let i = 0; i < 5; i++) {
+    skeletonHTML += `
+        <div class="skeleton-card">
+            <div class="skeleton skeleton-card__indicator"></div>
+            <div class="skeleton-card__content">
+                <div>
+                    <div class="skeleton skeleton-card__line skeleton-card__line--sm"></div>
+                    <div class="skeleton skeleton-card__line skeleton-card__line--xs"></div>
+                </div>
+                <div class="skeleton skeleton-card__amount"></div>
+            </div>
+        </div>`;
+}
+select('virtual-list-content').innerHTML = skeletonHTML;
     } else if (loadMoreBtn) {
         // En las cargas subsecuentes, ponemos el botón en estado de carga.
         setButtonLoading(loadMoreBtn, true, 'Cargando...');
@@ -4417,7 +4437,7 @@ const TransactionCardComponent = (m, dbData) => {
     
  // Envolvemos el contenido de la tarjeta con el contenedor de swipe y sus acciones
     return `
-    <div class="swipe-container">
+    <div class="swipe-container list-item-animate">
         <div class="swipe-actions-container left">
             <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}">
                 <span class="material-icons">content_copy</span>
@@ -4430,7 +4450,7 @@ const TransactionCardComponent = (m, dbData) => {
                 <span>Borrar</span>
             </button>
         </div>
-        <div class="transaction-card ${highlightClass}" data-id="${m.id}">
+        <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
             ${cardContentHTML}
         </div>
     </div>`;
@@ -5068,25 +5088,25 @@ const renderDashboardSuperCentroOperaciones = () => {
 
                     <!-- ORDEN 4: INGRESOS, GASTOS Y SALDO NETO -->
                     <div class="kpi-grid" id="kpi-container" style="margin-bottom: var(--sp-5);">
-    <!-- KPI de Ingresos -->
-    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="ingresos">
-        <h4 class="kpi-item__label">Ingresos</h4>
-        <strong id="kpi-ingresos-value" class="kpi-item__value text-positive skeleton" data-current-value="0">+0,00 €</strong> 
-        <div id="kpi-ingresos-comparison" class="kpi-item__comparison"></div>
-    </button>
-    <!-- KPI de Gastos -->
-    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="gastos">
-        <h4 class="kpi-item__label">Gastos</h4>
-        <strong id="kpi-gastos-value" class="kpi-item__value text-negative skeleton" data-current-value="0">0,00 €</strong>
-        <div id="kpi-gastos-comparison" class="kpi-item__comparison"></div>
-    </button>
-    <!-- KPI de Saldo Neto -->
-    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="saldoNeto">
-        <h4 class="kpi-item__label">Saldo Neto Periodo</h4>
-        <strong id="kpi-saldo-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
-        <div id="kpi-saldo-neto-comparison" class="kpi-item__comparison"></div>
-    </button>
-</div>
+                        <!-- KPI de Ingresos -->
+                        <button class="kpi-item" data-action="show-kpi-drilldown" data-type="ingresos">
+                            <h4 class="kpi-item__label">Ingresos</h4>
+                            <strong id="kpi-ingresos-value" class="kpi-item__value text-positive skeleton" data-current-value="0">+0,00 €</strong> 
+                            <div id="kpi-ingresos-comparison" class="kpi-item__comparison"></div>
+                        </button>
+                        <!-- KPI de Gastos -->
+                        <button class="kpi-item" data-action="show-kpi-drilldown" data-type="gastos">
+                            <h4 class="kpi-item__label">Gastos</h4>
+                            <strong id="kpi-gastos-value" class="kpi-item__value text-negative skeleton" data-current-value="0">0,00 €</strong>
+                            <div id="kpi-gastos-comparison" class="kpi-item__comparison"></div>
+                        </button>
+                        <!-- KPI de Saldo Neto -->
+                        <button class="kpi-item" data-action="show-kpi-drilldown" data-type="saldoNeto">
+                            <h4 class="kpi-item__label">Saldo Neto Periodo</h4>
+                            <strong id="kpi-saldo-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
+                            <div id="kpi-saldo-neto-comparison" class="kpi-item__comparison"></div>
+                        </button>
+                    </div>
                     
                     <hr style="border-color: var(--c-outline); opacity: 0.5; margin: var(--sp-5) 0;">
 
@@ -6382,24 +6402,19 @@ const getDragAfterElement = (container, y) => {
 const showModal = (id) => {
     const m = select(id);
     if (m) {
-        const mainScroller = selectOne('.app-layout__main');
-        if (mainScroller) { 
-            lastScrollTop = mainScroller.scrollTop;
-        }
+        // ... tu código existente para mostrar el modal ...
         m.classList.add('modal-overlay--active');
-        
-        if (isInitialLoadComplete) {
-            select('app-root').classList.add('app-layout--transformed-by-modal');
-        }
+        select('app-root').classList.add('app-layout--transformed-by-modal');
 
+        // --- INICIO DE LA LÓGICA AÑADIDA ---
         const modalElement = m.querySelector('.modal');
         if (modalElement) {
-            // Añadimos los listeners al abrir el modal
+            // Cuando se muestra el modal, empezamos a escuchar si el usuario lo toca.
             modalElement.addEventListener('mousedown', handleModalDragStart);
             modalElement.addEventListener('touchstart', handleModalDragStart, { passive: true });
         }
         
-        // Los listeners de move y end los ponemos en document para capturar el movimiento
+        // Los listeners de mover y soltar los ponemos en todo el documento
         document.addEventListener('mousemove', handleModalDragMove);
         document.addEventListener('touchmove', handleModalDragMove, { passive: false });
         document.addEventListener('mouseup', handleModalDragEnd);
@@ -6416,14 +6431,10 @@ const hideModal = (id) => {
     const m = select(id);
     if (m) {
         m.classList.remove('modal-overlay--active');
-        
         select('app-root').classList.remove('app-layout--transformed-by-modal');
 
-        if (id === 'movimiento-modal' && calculatorState.isVisible) {
-            hideCalculator();
-        }
-
-        // MUY IMPORTANTE: Limpiamos los listeners para evitar fugas de memoria
+        // --- INICIO DE LA LÓGICA AÑADIDA ---
+        // ¡MUY IMPORTANTE! Cuando el modal se cierra, dejamos de escuchar los gestos.
         const modalElement = m.querySelector('.modal');
         if (modalElement) {
             modalElement.removeEventListener('mousedown', handleModalDragStart);
@@ -6434,7 +6445,7 @@ const hideModal = (id) => {
         document.removeEventListener('mouseup', handleModalDragEnd);
         document.removeEventListener('touchend', handleModalDragEnd);
         
-        // Reseteamos la posición por si el cierre fue con el botón
+        // Nos aseguramos de que el modal se resetee visualmente
         if (modalElement) modalElement.style.transform = '';
     }
 
@@ -6668,22 +6679,30 @@ const calculate = () => {
     }
 };
         const showGenericModal=(title,html)=>{const titleEl = select('generic-modal-title'); if (titleEl) titleEl.textContent=title; const bodyEl = select('generic-modal-body'); if(bodyEl) bodyEl.innerHTML=html;showModal('generic-modal');};
-		const showDrillDownModal = (title, movements) => {
-    // Ordenamos los movimientos por fecha para que se muestren cronológicamente
+const showDrillDownModal = (title, movements) => {
+    // Ordenamos los movimientos para que se muestren cronológicamente
     movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
     // Construimos el contenido del modal
-    const modalContentHTML = movements.length === 0
+    let modalContentHTML = movements.length === 0
     ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
            <span class="material-icons">search_off</span>
            <h3>Sin movimientos</h3>
            <p>No se han encontrado movimientos para esta selección.</p>
        </div>`
-    : `<div class="movements-modal-container" style="max-height: 60vh; overflow-y: auto; padding: 0 var(--sp-2);">
-           ${movements.map(m => TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })).join('').replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"')}
-       </div>`;
+    : movements.map(m => 
+          TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
+      )
+      .join('')
+      .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
 
-    // Llamamos a la función existente para mostrar el modal
+    // ==============================================================================
+    // === ¡AQUÍ ESTÁ LA LÍNEA DE CÓDIGO CLAVE QUE SOLUCIONA EL PROBLEMA VISUAL! ===
+    // ==============================================================================
+    // Eliminamos la clase que los hacía invisibles (opacity: 0)
+    modalContentHTML = modalContentHTML.replace(/list-item-animate/g, '');
+
+    // Llamamos a la función existente para mostrar el modal con el HTML ya limpio y visible
     showGenericModal(title, modalContentHTML);
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
@@ -6771,74 +6790,65 @@ const hideCalculator = () => {
 // =================================================================
 // === INICIO: FUNCIÓN showToast (CORRECCIÓN CRÍTICA) ===
 // =================================================================
-const showToast = (message, type = 'info', duration = 3000) => {
-    const container = select('toast-container');
-    if (!container) return;
+const showAccountMovementsModal = async (cId) => {
+    const cuenta = getVisibleAccounts().find((c) => c.id === cId);
+    if (!cuenta) return;
 
-    const toast = document.createElement('div');
-    toast.className = `toast toast--${type}`;
-    toast.textContent = message;
-    toast.style.animation = 'pop-in 0.3s ease-out forwards';
+    showGenericModal(`Movimientos de ${cuenta.nombre}`, `<div style="text-align:center; padding: var(--sp-5);"><span class="spinner"></span><p style="margin-top: var(--sp-3);">Cargando historial...</p></div>`);
 
-    container.appendChild(toast);
+    try {
+        const movsSnapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').get();
+        const allMovements = movsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    setTimeout(() => {
-        toast.style.animation = 'fade-out-and-collapse 0.4s ease-out forwards';
-        toast.addEventListener('animationend', () => {
-            toast.remove();
-        });
-    }, duration);
+        const accountMovements = allMovements.filter(m => 
+            m.cuentaId === cId || 
+            m.cuentaOrigenId === cId || 
+            m.cuentaDestinoId === cId
+        );
+        
+        // ¡LA MAGIA SUCEDE AQUÍ! Usamos nuestra nueva función para preparar los datos.
+        if (accountMovements.length > 0) {
+            recalculateAndApplyRunningBalances(accountMovements, db.cuentas);
+        }
+        
+        // Llamamos directamente a showDrillDownModal, que ya sabe cómo mostrar la lista.
+        showDrillDownModal(`Movimientos de ${cuenta.nombre}`, accountMovements);
+
+    } catch (error) {
+        console.error("Error al obtener los movimientos de la cuenta:", error);
+        showToast("No se pudo cargar el historial de la cuenta.", "danger");
+        const modalBody = select('generic-modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = `<p class="text-danger" style="text-align:center;">Ha ocurrido un error al cargar los datos.</p>`;
+        }
+    }
 };
-// ===============================================================
-// === FIN: FUNCIÓN showToast (CORRECCIÓN CRÍTICA) ===
-// ===============================================================
-        
-                const showAccountMovementsModal = async (cId) => {
-            const cuenta = getVisibleAccounts().find((c) => c.id === cId);
-            if (!cuenta) return;
+    const showAccountMovementsForDashboardPeriod = async (accountId) => {
+    const cuenta = getVisibleAccounts().find((c) => c.id === accountId);
+    if (!cuenta) return;
 
-            showGenericModal(`Movimientos de ${cuenta.nombre}`, `<div style="text-align:center; padding: var(--sp-5);"><span class="spinner"></span><p style="margin-top: var(--sp-3);">Cargando historial...</p></div>`);
+    // Mostramos un spinner mientras se procesan los datos.
+    showGenericModal(`Movimientos de ${cuenta.nombre}`, `<div style="text-align:center; padding: var(--sp-5);"><span class="spinner"></span></div>`);
 
-            try {
-                const movsSnapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').get();
-                const allMovements = movsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // 1. Obtenemos los movimientos ya filtrados por fecha del panel.
+    const { current } = await getFilteredMovements(false);
+    
+    // 2. Filtramos esa lista por la cuenta seleccionada.
+    const accountMovementsInPeriod = current.filter(m => 
+        m.cuentaId === accountId || 
+        m.cuentaOrigenId === accountId || 
+        m.cuentaDestinoId === accountId
+    );
+    
+    // 3. ¡EL PASO CRÍTICO QUE FALTABA!
+    // Calculamos los saldos acumulados para esta lista específica de movimientos.
+    if (accountMovementsInPeriod.length > 0) {
+        recalculateAndApplyRunningBalances(accountMovementsInPeriod, db.cuentas);
+    }
 
-                const accountMovements = allMovements.filter(m => 
-                    m.cuentaId === cId || 
-                    m.cuentaOrigenId === cId || 
-                    m.cuentaDestinoId === cId
-                );
-
-                if (accountMovements.length > 0) {
-                    recalculateAndApplyRunningBalances(accountMovements, db.cuentas);
-                    accountMovements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-                }
-                
-                const html = accountMovements.length === 0 
-                    ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
-                           <span class="material-icons">search_off</span>
-                           <h3>Sin movimientos</h3>
-                           <p>No se han encontrado movimientos para esta cuenta.</p>
-                       </div>` 
-                    : `<div class="movements-modal-container">
-                           ${accountMovements.map((m) => renderVirtualListItem({type: 'transaction', movement: m})).join('').replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"')}
-                       </div>`;
-
-                const modalBody = select('generic-modal-body');
-                if (modalBody) {
-                    modalBody.innerHTML = html;
-                }
-
-            } catch (error) {
-                console.error("Error al obtener los movimientos de la cuenta:", error);
-                showToast("No se pudo cargar el historial de la cuenta.", "danger");
-                const modalBody = select('generic-modal-body');
-                if (modalBody) {
-                    modalBody.innerHTML = `<p class="text-danger" style="text-align:center;">Ha ocurrido un error al cargar los datos.</p>`;
-                }
-            }
-        };
-        
+    // 4. Usamos la función de modal existente para mostrar el resultado ya procesado.
+    showDrillDownModal(`Movimientos de ${cuenta.nombre}`, accountMovementsInPeriod);
+};
 const setMovimientoFormType = (type) => {
     hapticFeedback('light');
     const isTraspaso = type === 'traspaso';
@@ -7731,7 +7741,40 @@ const attachEventListeners = () => {
 
       
         const actions = {
+		'context-edit': () => {
+    hideModal('generic-modal');
+    startMovementForm(id, false); // 'id' ya está disponible en el scope
+},
+'context-duplicate': () => {
+    hideModal('generic-modal');
+    const movement = db.movimientos.find(m => m.id === id); // 'id' ya está disponible
+    if(movement) handleDuplicateMovement(movement);
+},
+'context-delete': () => {
+    hideModal('generic-modal');
+    showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => {
+        await deleteMovementAndAdjustBalance(id, false); // 'id' ya está disponible
+    });
+},
 		'show-kpi-drilldown': () => handleKpiDrilldown(actionTarget),
+            // Acción para los movimientos en el modal de detalle
+    'edit-movement-from-modal': (e) => {
+        const movementId = e.target.closest('[data-id]').dataset.id;
+        hideModal('generic-modal'); // Primero cerramos el modal de la lista
+        startMovementForm(movementId, false); // Luego abrimos el de edición
+    },
+
+    // Acción para los movimientos en la lista principal (Diario)
+    'edit-movement-from-list': (e) => {
+        const movementId = e.target.closest('[data-id]').dataset.id;
+        startMovementForm(movementId, false);
+    },
+
+    // Acción para ver el historial COMPLETO de una cuenta
+    'view-account-details': (e) => {
+        const accountId = e.target.closest('[data-id]').dataset.id;
+        showAccountMovementsModal(accountId);
+    },
 		'apply-description-suggestion': (e) => {
     const suggestionItem = e.target.closest('.suggestion-item');
     if (suggestionItem) {
@@ -7797,6 +7840,14 @@ const attachEventListeners = () => {
             'configure-dashboard': (e) => { e.preventDefault(); showDashboardConfigModal(); }, 'save-dashboard-config': () => handleSaveDashboardConfig(btn),
             'use-password-instead': () => showPasswordFallback(), 'toggle-theme': handleToggleTheme,
             'navigate': () => navigateTo(page), 'help': showHelpModal, 'exit': handleExitApp,
+			'navigate': () => {
+				hapticFeedback('light'); // <-- AÑADIR AQUÍ
+				navigateTo(page);
+},
+			'toggle-theme': () => {
+				handleToggleTheme();
+				hapticFeedback('light'); // <-- AÑADIR AQUÍ
+},
             'forgot-password': (e) => { e.preventDefault(); const email = prompt("Por favor, introduce el correo electrónico de tu cuenta para restablecer la contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => { showToast('Se ha enviado un correo para restablecer tu contraseña.', 'info', 5000); }).catch((error) => { console.error("Error al enviar correo de recuperación:", error); if (error.code === 'auth/user-not-found') { showToast('No se encontró ninguna cuenta con ese correo.', 'danger'); } else { showToast('Error al intentar restablecer la contraseña.', 'danger'); } }); } },
             'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
             'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
@@ -7862,7 +7913,10 @@ const attachEventListeners = () => {
             'update-budgets': handleUpdateBudgets, 'logout': () => fbAuth.signOut(), 'delete-account': () => { showConfirmationModal('Esto eliminará tu cuenta y todos tus datos de forma PERMANENTE. ¿Estás absolutamente seguro?', async () => { /* Lógica de borrado de cuenta aquí */ }); },
             'manage-investment-accounts': showManageInvestmentAccountsModal, 'update-asset-value': () => showValoracionModal(id),
             'set-investment-chart-mode': () => handleSetInvestmentChartMode(actionTarget.dataset.mode),
-            'global-search': showGlobalSearchModal,
+            'global-search': () => {
+    showGlobalSearchModal();
+    hapticFeedback('medium'); // <-- AÑADIR AQUÍ (es una acción principal)
+},
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
             // =============================================================
@@ -9521,32 +9575,93 @@ const validateMovementForm = () => {
     return isValid;
 };
 
-// ▼▼▼ REEMPLAZA LAS 3 FUNCIONES SIGUIENTES CON ESTE BLOQUE COMPLETO ▼▼▼
+// AÑADIR ESTE BLOQUE DE 3 FUNCIONES NUEVAS
+function handleModalDragStart(e) {
+    const modal = e.target.closest('.modal');
+    // Nos aseguramos de que el arrastre empieza en el modal y no en el overlay
+    if (!modal) return;
+    
+    // ¡Clave! Si el contenido del modal está scrolleado, no hacemos nada.
+    const modalBody = modal.querySelector('.modal__body');
+    if (modalBody && modalBody.scrollTop > 0) return;
+
+    modalDragState.isDragging = true;
+    modalDragState.targetModal = modal;
+    modalDragState.startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+    
+    // Quitamos la animación para que el movimiento sea instantáneo
+    modal.style.transition = 'none';
+}
+
+function handleModalDragMove(e) {
+    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
+    
+    modalDragState.currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+    let deltaY = modalDragState.currentY - modalDragState.startY;
+
+    // Solo permitimos arrastrar hacia abajo
+    if (deltaY > 0) {
+        // Evitamos que la página de detrás se mueva en el móvil
+        e.preventDefault(); 
+        modalDragState.targetModal.style.transform = `translateY(${deltaY}px)`;
+    }
+}
+
+function handleModalDragEnd(e) {
+    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
+
+    const modal = modalDragState.targetModal;
+    // Le devolvemos su animación de "muelle"
+    modal.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'; 
+
+    const deltaY = modalDragState.currentY - modalDragState.startY;
+    const modalHeight = modal.offsetHeight;
+
+    // Si lo hemos arrastrado más de un 30% de su altura, lo cerramos.
+    if (deltaY > modalHeight * 0.3) {
+        const overlay = modal.closest('.modal-overlay');
+        if (overlay) hideModal(overlay.id);
+    } else {
+        // Si no, vuelve a su sitio
+        modal.style.transform = 'translateY(0)';
+    }
+
+    // Reseteamos todo para la próxima vez
+    modalDragState.isDragging = false;
+    modalDragState.targetModal = null;
+}
 
 const longPressState = { timer: null, isLongPress: false };
 const swipeState = { activeCard: null, startX: 0, currentX: 0, isSwiping: false, isSwipeIntent: false, threshold: 60 };
 
 const handleInteractionStart = (e) => {
-const card = e.target.closest('.transaction-card');
-if (!card || !card.dataset.id) return;
+    const card = e.target.closest('.transaction-card');
+    if (!card || !card.dataset.id) return;
 
-resetActiveSwipe();
+    resetActiveSwipe();
 
-longPressState.isLongPress = false;
-longPressState.timer = setTimeout(() => {
-    longPressState.isLongPress = true;
-    // Si se activa el long press, cancelamos cualquier posible swipe
-    swipeState.isSwiping = false; 
-    hapticFeedback('medium');
-    startMovementForm(card.dataset.id, false);
-}, 500);
+    // --- INICIO DE LA NUEVA LÓGICA ---
+    longPressState.isLongPress = false; // Reseteamos por si acaso
+    // 1. Iniciamos el cronómetro de medio segundo (500ms)
+    longPressState.timer = setTimeout(() => {
+        // 2. Si el cronómetro termina, ¡es una pulsación larga!
+        longPressState.isLongPress = true;
+        swipeState.isSwiping = false; // Cancelamos el swipe
+        
+        hapticFeedback('medium'); // Vibración para confirmar
+        
+        // 3. Llamamos a nuestra nueva función que muestra el menú
+        showContextMenuForMovement(card.dataset.id);
+        
+    }, 500); // 500 milisegundos = medio segundo
+    // --- FIN DE LA NUEVA LÓGICA ---
 
-swipeState.isSwiping = true;
-swipeState.isSwipeIntent = false; // ¡IMPORTANTE! Reseteamos la "intención" de swipe.
-swipeState.activeCard = card;
-swipeState.startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
-swipeState.currentX = swipeState.startX; // Inicializamos currentX
-
+    // El resto de la lógica para el swipe se mantiene igual
+    swipeState.isSwiping = true;
+    swipeState.isSwipeIntent = false;
+    swipeState.activeCard = card;
+    swipeState.startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+    swipeState.currentX = swipeState.startX;
 };
 
 const handleInteractionMove = (e) => {
@@ -9557,9 +9672,7 @@ const handleInteractionMove = (e) => {
 
     if (!swipeState.isSwipeIntent && Math.abs(diff) > 10) {
         swipeState.isSwipeIntent = true;
-        if (longPressState.timer) {
-            clearTimeout(longPressState.timer);
-            longPressState.timer = null;
+		if (longPressState.timer) clearTimeout(longPressState.timer);
         }
     }
     
@@ -9587,51 +9700,62 @@ const handleInteractionMove = (e) => {
         swipeState.activeCard.style.transition = 'none';
         swipeState.activeCard.style.transform = `translateX(${currentDiff}px)`;
     }
-};
+
 
 const handleInteractionEnd = (e) => {
-// Siempre limpiamos el temporizador de long press al soltar.
-if (longPressState.timer) {
-clearTimeout(longPressState.timer);
-longPressState.timer = null;
-}
-
-
-if (!swipeState.isSwiping || !swipeState.activeCard) return;
-
-// --- ¡LA LÓGICA DE DECISIÓN FINAL MEJORADA! ---
-// 1. Si FUE un long press, no hacemos nada más, ya se abrió el modal.
-if (longPressState.isLongPress) {
-    // No hacemos nada, la acción ya se ejecutó.
-}
-// 2. Si HUBO intención de swipe...
-else if (swipeState.isSwipeIntent) {
-    const diff = swipeState.currentX - swipeState.startX;
-    swipeState.activeCard.style.transition = 'transform 0.3s ease-out';
-    
-    if (Math.abs(diff) > swipeState.threshold) {
-        // Swipe completado
-        const direction = diff > 0 ? 'right' : 'left';
-        const finalX = direction === 'right' ? 75 : -75;
-        swipeState.activeCard.style.transform = `translateX(${finalX}px)`;
-        hapticFeedback('light');
-    } else {
-        // Swipe cancelado
-        resetActiveSwipe();
+    // Siempre limpiamos el cronómetro al soltar, por si no se había disparado.
+    if (longPressState.timer) {
+        clearTimeout(longPressState.timer);
+        longPressState.timer = null;
     }
-} 
-// 3. Si NO fue long press y NUNCA hubo intención de swipe (un simple toque), ya no abrimos el formulario.
-else {
-    // Un simple toque ahora no hace nada, permitiendo scrolls limpios.
-}
+    
+    // Si ya se ejecutó la acción de pulsación larga, no hacemos nada más.
+    if (longPressState.isLongPress) {
+        longPressState.isLongPress = false; // Reseteamos para la próxima vez
+        return;
+    }
 
-// Reseteamos todo para la próxima interacción.
-swipeState.isSwiping = false;
-swipeState.isSwipeIntent = false;
-longPressState.isLongPress = false;
+    // El resto de tu lógica de swipe se mantiene igual.
+    if (!swipeState.isSwiping || !swipeState.activeCard) return;
+    
+    if (swipeState.isSwipeIntent) {
+        const diff = swipeState.currentX - swipeState.startX;
+        swipeState.activeCard.style.transition = 'transform 0.3s ease-out';
+        
+        if (Math.abs(diff) > swipeState.threshold) {
+            const direction = diff > 0 ? 'right' : 'left';
+            const finalX = direction === 'right' ? 75 : -75;
+            swipeState.activeCard.style.transform = `translateX(${finalX}px)`;
+            hapticFeedback('light');
+        } else {
+            resetActiveSwipe();
+        }
+    } 
 
+    swipeState.isSwiping = false;
+    swipeState.isSwipeIntent = false;
 };
+const showContextMenuForMovement = (movementId) => {
+    const movement = db.movimientos.find(m => m.id === movementId);
+    if (!movement) return;
 
+    const html = `
+        <div style="display: flex; flex-direction: column; gap: var(--sp-2);">
+            <button class="btn btn--secondary btn--full" data-action="context-edit" data-id="${movementId}">
+                <span class="material-icons">edit</span> Editar Movimiento
+            </button>
+            <button class="btn btn--secondary btn--full" data-action="context-duplicate" data-id="${movementId}">
+                <span class="material-icons">content_copy</span> Duplicar
+            </button>
+            <button class="btn btn--danger btn--full" data-action="context-delete" data-id="${movementId}">
+                <span class="material-icons">delete</span> Eliminar
+            </button>
+        </div>
+    `;
+    
+    // Usamos el modal genérico para mostrar las opciones
+    showGenericModal(`Acciones para: ${movement.descripcion}`, html);
+};
 // Asegúrate de que tu función resetActiveSwipe también oculte las acciones
 const resetActiveSwipe = () => {
 if (swipeState.activeCard) {

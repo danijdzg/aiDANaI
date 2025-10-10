@@ -34,6 +34,42 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
+	/* === INICIO: Estilos para Animación de Guardado === */
+
+.save-animation-bubble {
+    /* Apariencia de la burbuja */
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    
+    /* Posicionamiento y capa */
+    position: fixed; /* Fijo en la pantalla para que viaje sobre todo */
+    z-index: 99999; /* La capa más alta de todas */
+    
+    /* Estado inicial (invisible) */
+    opacity: 0;
+    pointer-events: none; /* No se puede hacer clic en ella */
+}
+
+/* La animación que la hará volar y desaparecer */
+@keyframes fly-to-list {
+    0% {
+        /* Al principio, es opaca y tiene su tamaño normal */
+        opacity: 0.8;
+        transform: scale(1.2);
+    }
+    99% {
+        /* Justo antes de terminar, ya es casi invisible y pequeña */
+        opacity: 0.1;
+        transform: scale(0.2);
+    }
+    100% {
+        /* Al final, es totalmente invisible y desaparece */
+        opacity: 0;
+        transform: scale(0);
+    }
+}
+/* === FIN: Estilos para Animación de Guardado === */
 	/* === INICIO: ESTILOS A PEGAR PARA LA INTRO CON VÍDEO Y SONIDO === */
 #start-overlay {
     position: fixed;
@@ -545,7 +581,27 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .kpi-item__label { font-size: var(--fs-xs); font-weight: 600; color: var(--c-on-surface-secondary); margin-bottom: var(--sp-1); text-transform: uppercase; }
 .kpi-item__value { font-size: var(--fs-base); font-weight: 800; }
 .kpi-item__comparison { font-size: var(--fs-xs); font-weight: 500; margin-top: var(--sp-1); height: 14px; }
+/* --- AÑADE ESTE BLOQUE A TU CSS --- */
+.kpi-item[data-action] {
+    /* Reseteamos la apariencia de botón */
+    border: none;
+    background: none;
+    padding: 0;
+    text-align: inherit;
+    font-family: inherit;
+    
+    /* Añadimos la interactividad visual */
+    cursor: pointer;
+    transition: transform 0.2s, background-color 0.2s;
+}
 
+.kpi-item[data-action]:hover {
+    background-color: var(--c-surface-variant);
+}
+
+.kpi-item[data-action]:active {
+    transform: scale(0.97);
+}
 /* Lista de Movimientos Virtualizada */
 #movimientos-list-container { position: relative; padding: 0 var(--sp-4); }
 #virtual-list-sizer { position: relative; width: 100%; }
@@ -695,7 +751,25 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .calculator-btn.btn-confirm { background-color: var(--c-primary); color: var(--c-white); }
 .calculator-btn.zero { grid-column: span 2; }
 .material-icons.backspace-icon { font-size: 1.2rem; }
+/* Estilo para el nuevo display de historial */
+.calculator-history-display {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--c-on-surface-secondary);
+    text-align: right;
+    padding: 0 var(--sp-3);
+    min-height: 22px;
+    margin-bottom: var(--sp-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
+/* Estilo para el botón de operador cuando está activo */
+.calculator-btn.btn-operator--active {
+    background-color: var(--c-primary);
+    color: var(--c-white);
+}
 /* --- Estilos de Contabilidad Dual (A/B) --- */
 body[data-ledger-mode="A"] #ledger-toggle-btn { background-color: var(--c-primary); border-color: var(--c-primary); color: var(--c-white); box-shadow: var(--shadow-sm); }
 body[data-ledger-mode="A"] #ledger-toggle-btn:hover { background-color: var(--c-primary-hover); border-color: var(--c-primary-hover); box-shadow: var(--shadow-md); }
@@ -1400,32 +1474,34 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 </div>
 <div id="calculator-overlay" class="modal-overlay" style="background: transparent; pointer-events: none;">
     <div id="calculator-ui" class="calculator-ui" style="pointer-events: all;">
-        <div id="calculator-display" class="calculator-display">0</div>
-        <div id="calculator-grid" class="calculator-grid">
-            <button class="calculator-btn btn-operator" data-key="clear">C</button>
-            <button class="calculator-btn btn-operator" data-key="sign">+/-</button>
-            <button class="calculator-btn btn-operator" data-key="backspace"><span class="material-icons backspace-icon">backspace</span></button>
-            <button class="calculator-btn btn-confirm" id="calculator-btn-done" data-key="done">OK</button>
-            
-            <button class="calculator-btn" data-key="7">7</button>
-            <button class="calculator-btn" data-key="8">8</button>
-            <button class="calculator-btn" data-key="9">9</button>
-            <button class="calculator-btn btn-operator" data-key="divide">/</button>
+    <!-- === INICIO: CÓDIGO AÑADIDO === -->
+    <div id="calculator-history-display" class="calculator-history-display"></div>
+    <!-- === FIN: CÓDIGO AÑADIDO === -->
+    <div id="calculator-display" class="calculator-display">0</div>
+    <div id="calculator-grid" class="calculator-grid">
+        <button class="calculator-btn btn-operator" data-key="clear">C</button>
+        <button class="calculator-btn btn-operator" data-key="sign">+/-</button>
+        <button class="calculator-btn btn-operator" data-key="backspace"><span class="material-icons backspace-icon">backspace</span></button>
+        <button class="calculator-btn btn-confirm" id="calculator-btn-done" data-key="done">OK</button>
+        
+        <button class="calculator-btn" data-key="7">7</button>
+        <button class="calculator-btn" data-key="8">8</button>
+        <button class="calculator-btn" data-key="9">9</button>
+        <button class="calculator-btn btn-operator" data-key="divide">/</button>
 
-            <button class="calculator-btn" data-key="4">4</button>
-            <button class="calculator-btn" data-key="5">5</button>
-            <button class="calculator-btn" data-key="6">6</button>
-            <button class="calculator-btn btn-operator" data-key="multiply">x</button>
-            
-            <button class="calculator-btn" data-key="1">1</button>
-            <button class="calculator-btn" data-key="2">2</button>
-            <button class="calculator-btn" data-key="3">3</button>
-            <button class="calculator-btn btn-operator" data-key="subtract">-</button>
+        <button class="calculator-btn" data-key="4">4</button>
+        <button class="calculator-btn" data-key="5">5</button>
+        <button class="calculator-btn" data-key="6">6</button>
+        <button class="calculator-btn btn-operator" data-key="multiply">x</button>
+        
+        <button class="calculator-btn" data-key="1">1</button>
+        <button class="calculator-btn" data-key="2">2</button>
+        <button class="calculator-btn" data-key="3">3</button>
+        <button class="calculator-btn btn-operator" data-key="subtract">-</button>
 
-            <button class="calculator-btn zero" data-key="0">0</button>
-            <button class="calculator-btn" data-key="comma">,</button>
-            <button class="calculator-btn btn-operator" data-key="add">+</button>
-        </div>
+        <button class="calculator-btn zero" data-key="0">0</button>
+        <button class="calculator-btn" data-key="comma">,</button>
+        <button class="calculator-btn btn-operator" data-key="add">+</button>
     </div>
 </div>
 
@@ -1615,14 +1691,15 @@ const getInitialDb = () => ({
 		};
         
         let calculatorState = {
-            displayValue: '0',
-            operand1: null,
-            operator: null,
-            waitingForNewValue: true,
-            targetInput: null,
-            isVisible: false, 
-            isResultDisplayed: false,
-        };
+    displayValue: '0',
+    operand1: null,
+    operator: null,
+    waitingForNewValue: true,
+    targetInput: null,
+    isVisible: false, 
+    isResultDisplayed: false,
+    historyValue: '', // <-- ¡NUEVA PROPIEDAD!
+};
 let modalDragState = {
     isDragging: false,
     startY: 0,
@@ -2186,7 +2263,55 @@ document.body.addEventListener('change', e => {
             if (isLoading) { if (!originalButtonTexts.has(btn)) originalButtonTexts.set(btn, btn.innerHTML); btn.setAttribute('disabled', 'true'); btn.classList.add('btn--loading'); btn.innerHTML = `<span class="spinner"></span> <span>${text}</span>`;
             } else { btn.removeAttribute('disabled'); btn.classList.remove('btn--loading'); if (originalButtonTexts.has(btn)) { btn.innerHTML = originalButtonTexts.get(btn); originalButtonTexts.delete(btn); } }
         };
-		
+		// --- PEGA ESTA NUEVA FUNCIÓN COMPLETA EN TU JAVASCRIPT ---
+
+/**
+ * Dispara una animación de una "burbuja" que viaja desde un elemento
+ * hasta la parte superior de la lista de movimientos.
+ * @param {HTMLElement} fromElement - El elemento desde donde empieza la animación (ej. el botón Guardar).
+ * @param {string} color - 'green' para ingresos, 'red' para gastos.
+ */
+const triggerSaveAnimation = (fromElement, color) => {
+    if (!fromElement) return;
+
+    // 1. Encuentra el punto de partida y el de llegada.
+    const startRect = fromElement.getBoundingClientRect();
+    const listElement = select('movimientos-list-container') || select('diario-page'); // Un destino de respaldo
+    const endRect = listElement.getBoundingClientRect();
+
+    // 2. Calcula las coordenadas iniciales (el centro del botón).
+    const startX = startRect.left + startRect.width / 2;
+    const startY = startRect.top + startRect.height / 2;
+
+    // 3. Calcula las coordenadas finales (el centro superior de la lista).
+    const endX = endRect.left + endRect.width / 2;
+    const endY = endRect.top; // Apuntamos a la parte superior de la lista.
+
+    // 4. Crea el elemento "burbuja" en el DOM.
+    const bubble = document.createElement('div');
+    bubble.className = 'save-animation-bubble';
+    
+    // 5. Le da el color y la posición inicial.
+    const bubbleColor = color === 'green' ? 'var(--c-success)' : 'var(--c-danger)';
+    bubble.style.backgroundColor = bubbleColor;
+    bubble.style.left = `${startX - 10}px`; // Restamos la mitad de su tamaño (20px / 2)
+    bubble.style.top = `${startY - 10}px`;
+
+    document.body.appendChild(bubble);
+
+    // 6. ¡LA MAGIA! Usamos la animación CSS que creamos.
+    // Forzamos un 'reflow' para que el navegador aplique el estado inicial antes de animar.
+    void bubble.offsetWidth; 
+
+    // La animación durará 0.7 segundos y se moverá a las coordenadas finales.
+    bubble.style.animation = `fly-to-list 0.7s cubic-bezier(0.5, 0, 1, 0.5) forwards`;
+    bubble.style.transform = `translate(${endX - startX}px, ${endY - startY}px) scale(0)`;
+    
+    // 7. Limpieza: Cuando la animación termina, eliminamos la burbuja del DOM.
+    bubble.addEventListener('animationend', () => {
+        bubble.remove();
+    }, { once: true });
+};
         const displayError = (id, msg) => { const err = select(`${id}-error`); if (err) { err.textContent = msg; err.setAttribute('role', 'alert'); } const inp = select(id); if (inp) inp.classList.add('form-input--invalid'); };
         const clearError = (id) => { const err = select(`${id}-error`); if (err) { err.textContent = ''; err.removeAttribute('role'); } const inp = select(id); if (inp) inp.classList.remove('form-input--invalid'); };
         const clearAllErrors = (formId) => { const f = select(formId); if (!f) return; f.querySelectorAll('.form-error').forEach((e) => e.textContent = ''); f.querySelectorAll('.form-input--invalid').forEach(e => e.classList.remove('form-input--invalid')); };
@@ -2260,7 +2385,45 @@ document.body.addEventListener('change', e => {
                 pinInputs[0].focus();
             }
         };
-        
+        const handleKpiDrilldown = async (kpiButton) => {
+    const type = kpiButton.dataset.type;
+    if (!type) return;
+
+    hapticFeedback('light');
+
+    // 1. Obtenemos los movimientos del periodo que se está mostrando actualmente.
+    const { current } = await getFilteredMovements(false);
+    
+    let movementsToShow = [];
+    let modalTitle = '';
+
+    // 2. Filtramos esa lista según el KPI que se ha pulsado.
+    switch (type) {
+        case 'ingresos':
+            modalTitle = 'Ingresos del Periodo';
+            movementsToShow = current.filter(m => {
+                const amount = calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id)));
+                return amount > 0;
+            });
+            break;
+        case 'gastos':
+            modalTitle = 'Gastos del Periodo';
+            movementsToShow = current.filter(m => {
+                const amount = calculateMovementAmount(m, new Set(getVisibleAccounts().map(c => c.id)));
+                return amount < 0;
+            });
+            break;
+        case 'saldoNeto':
+            modalTitle = 'Todos los Movimientos del Periodo';
+            movementsToShow = current; // Mostramos todos
+            break;
+        default:
+            return;
+    }
+
+    // 3. Usamos tu función ya existente para mostrar el modal con la lista filtrada.
+    showDrillDownModal(modalTitle, movementsToShow);
+};
         const handlePinInputInteraction = () => {
             const inputs = Array.from(selectAll('#pin-inputs-container .pin-input'));
             inputs.forEach((input, index) => {
@@ -4905,22 +5068,25 @@ const renderDashboardSuperCentroOperaciones = () => {
 
                     <!-- ORDEN 4: INGRESOS, GASTOS Y SALDO NETO -->
                     <div class="kpi-grid" id="kpi-container" style="margin-bottom: var(--sp-5);">
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Ingresos</h4>
-                            <strong id="kpi-ingresos-value" class="kpi-item__value text-positive skeleton" data-current-value="0">+0,00 €</strong> 
-                            <div id="kpi-ingresos-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Gastos</h4>
-                            <strong id="kpi-gastos-value" class="kpi-item__value text-negative skeleton" data-current-value="0">0,00 €</strong>
-                            <div id="kpi-gastos-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                        <div class="kpi-item">
-                            <h4 class="kpi-item__label">Saldo Neto Periodo</h4>
-                            <strong id="kpi-saldo-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
-                            <div id="kpi-saldo-neto-comparison" class="kpi-item__comparison"></div>
-                        </div>
-                    </div>
+    <!-- KPI de Ingresos -->
+    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="ingresos">
+        <h4 class="kpi-item__label">Ingresos</h4>
+        <strong id="kpi-ingresos-value" class="kpi-item__value text-positive skeleton" data-current-value="0">+0,00 €</strong> 
+        <div id="kpi-ingresos-comparison" class="kpi-item__comparison"></div>
+    </button>
+    <!-- KPI de Gastos -->
+    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="gastos">
+        <h4 class="kpi-item__label">Gastos</h4>
+        <strong id="kpi-gastos-value" class="kpi-item__value text-negative skeleton" data-current-value="0">0,00 €</strong>
+        <div id="kpi-gastos-comparison" class="kpi-item__comparison"></div>
+    </button>
+    <!-- KPI de Saldo Neto -->
+    <button class="kpi-item" data-action="show-kpi-drilldown" data-type="saldoNeto">
+        <h4 class="kpi-item__label">Saldo Neto Periodo</h4>
+        <strong id="kpi-saldo-neto-value" class="kpi-item__value skeleton" data-current-value="0">0,00 €</strong>
+        <div id="kpi-saldo-neto-comparison" class="kpi-item__comparison"></div>
+    </button>
+</div>
                     
                     <hr style="border-color: var(--c-outline); opacity: 0.5; margin: var(--sp-5) 0;">
 
@@ -6312,15 +6478,49 @@ const hideModal = (id) => {
             }
             hideCalculator();
         };       
-	      
-// ▼▼▼ REEMPLAZA TU FUNCIÓN handleCalculatorInput CON ESTA VERSIÓN ▼▼▼
+	// Actualiza el display del historial
+const updateCalculatorHistoryDisplay = () => {
+    const historyDisplay = select('calculator-history-display');
+    if (historyDisplay) {
+        historyDisplay.textContent = calculatorState.historyValue;
+    }
+};
+
+// Mapea las claves a los símbolos visuales
+const getOperatorSymbol = (key) => {
+    switch(key) {
+        case 'add': return '+';
+        case 'subtract': return '−'; // Usamos un guion más estilizado
+        case 'multiply': return '×';
+        case 'divide': return '÷';
+        default: return '';
+    }
+};
+
+// Gestiona qué botón de operador se ve activo
+const updateActiveOperatorButton = () => {
+    // Primero, quitamos la clase activa de todos
+    selectAll('.calculator-btn.btn-operator').forEach(btn => {
+        btn.classList.remove('btn-operator--active');
+    });
+    
+    // Luego, si hay un operador activo, se la añadimos al botón correspondiente
+    if (calculatorState.operator) {
+        const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('btn-operator--active');
+        }
+    }
+};      
+// REEMPLAZA TU FUNCIÓN handleCalculatorInput COMPLETA CON ESTA VERSIÓN
 const handleCalculatorInput = (key) => {
     hapticFeedback('light');
-    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed } = calculatorState;
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
     
     if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
         displayValue = '0';
         isResultDisplayed = false;
+        historyValue = ''; // Limpiamos historial al empezar un nuevo cálculo
     }
 
     const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
@@ -6332,6 +6532,7 @@ const handleCalculatorInput = (key) => {
         }
         operand1 = parseFloat(displayValue.replace(',', '.'));
         operator = key;
+        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`; // Actualizamos el historial
         waitingForNewValue = true;
         isResultDisplayed = false;
     } else {
@@ -6352,8 +6553,8 @@ const handleCalculatorInput = (key) => {
                     });
                     calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
+                historyValue = ''; // Limpiamos historial al finalizar
                 hideCalculator();
-                // === ¡LA LÍNEA MÁGICA DEL ZEN FLOW! ===
                 select('movimiento-descripcion').focus();
                 return;
 
@@ -6368,7 +6569,14 @@ const handleCalculatorInput = (key) => {
                 break;
             
             case 'clear': 
-                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; break;
+                displayValue = '0'; 
+                waitingForNewValue = true; 
+                operand1 = null; 
+                operator = null; 
+                isResultDisplayed = false; 
+                historyValue = ''; // Limpiamos historial
+                break;
+
             case 'backspace': 
                 if (displayValue.length > 1) {
                     displayValue = displayValue.slice(0, -1);
@@ -6378,11 +6586,13 @@ const handleCalculatorInput = (key) => {
                 }
                 isResultDisplayed = false;
                 break;
+
             case 'sign': 
                 if (displayValue !== '0') { 
                     displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
                 }
                 break;
+                
             default: // Dígitos
                 if (waitingForNewValue || displayValue === '0') {
                     displayValue = key;
@@ -6395,12 +6605,18 @@ const handleCalculatorInput = (key) => {
         }
     }
     
+    // Guardamos todos los cambios en el estado global
     calculatorState.displayValue = displayValue;
     calculatorState.waitingForNewValue = waitingForNewValue;
     calculatorState.operand1 = operand1;
     calculatorState.operator = operator;
     calculatorState.isResultDisplayed = isResultDisplayed;
+    calculatorState.historyValue = historyValue;
+    
+    // Actualizamos toda la interfaz de la calculadora
     updateCalculatorDisplay();
+    updateCalculatorHistoryDisplay();
+    updateActiveOperatorButton();
 };
 
 // Y también la función calculate() para que use comas correctamente
@@ -6762,9 +6978,7 @@ const setMovimientoFormType = (type) => {
             showModal('global-search-modal');
             setTimeout(() => {
                 const input = select('global-search-input');
-				if (id === 'concepto-search-input') renderConceptosModalList();
-				if (id === 'cuenta-search-input') renderCuentasModalList();
-				
+								
                 if (input) {
                     input.focus();
                     input.value = '';
@@ -7517,6 +7731,7 @@ const attachEventListeners = () => {
 
       
         const actions = {
+		'show-kpi-drilldown': () => handleKpiDrilldown(actionTarget),
 		'apply-description-suggestion': (e) => {
     const suggestionItem = e.target.closest('.suggestion-item');
     if (suggestionItem) {
@@ -8368,9 +8583,34 @@ try {
         });
         
         setButtonLoading(btn, false);
-        if (!isSaveAndNew) hideModal('movimiento-modal');
-        hapticFeedback('success');
-        if (!isSaveAndNew) showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+hapticFeedback('success');
+
+if (!isSaveAndNew) {
+    // ¡Llamamos a nuestra animación aquí!
+    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+
+    // Esperamos un poquito antes de cerrar el modal para que la animación empiece a verse.
+    setTimeout(() => {
+        hideModal('movimiento-modal');
+    }, 200); // 200 milisegundos es un buen retardo.
+
+} else {
+    // Si es "Guardar y Nuevo", disparamos la animación igualmente.
+    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+}
+
+if (!isSaveAndNew) {
+    showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+} else {
+    // Si es "Guardar y Nuevo", limpiamos el formulario para el siguiente.
+    form.reset();
+    setMovimientoFormType('movimiento'); // Volvemos al tipo por defecto
+    const today = new Date();
+    const fechaInput = select('movimiento-fecha');
+    fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+    updateDateDisplay(fechaInput);
+    select('movimiento-cantidad').focus(); // Foco en el campo de cantidad.
+}
         return true;
     } catch (error) {
         console.error("Error al guardar el movimiento:", error);
