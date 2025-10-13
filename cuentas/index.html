@@ -735,7 +735,48 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .form-switch .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
 .form-switch input:checked + .slider { background-color: var(--c-success); border-color: var(--c-success); }
 .form-switch input:checked + .slider:before { transform: translateX(18px); }
+/* === INICIO: Estilos para el Campo de Importe Reactivo === */
 
+/* El campo de texto ahora crece para ocupar el espacio disponible */
+#movimiento-cantidad {
+    flex-grow: 1; /* Ocupa todo el espacio que sobra en el 'form-group-addon' */
+    text-align: right; /* Alineamos el texto a la derecha */
+    font-size: 1.2rem; /* Hacemos el número aún más grande y protagonista */
+    font-weight: 700;
+    line-height: 1.2; /* Ajuste para que encaje bien verticalmente */
+}
+
+/* --- Estilos visuales para el campo de cantidad --- */
+
+/* Contenedor padre del campo de cantidad */
+#movimiento-cantidad-form-group {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Estilo del input cuando es INGRESO */
+#movimiento-cantidad-form-group.is-ingreso #movimiento-cantidad {
+    border-color: var(--c-success);
+    color: var(--c-success);
+}
+
+/* Estilo del input cuando es GASTO */
+#movimiento-cantidad-form-group.is-gasto #movimiento-cantidad {
+    border-color: var(--c-danger);
+    color: var(--c-danger);
+}
+
+/* Quitamos el fondo de color del input para un look más limpio */
+#movimiento-cantidad-form-group.is-ingreso #movimiento-cantidad:focus,
+#movimiento-cantidad-form-group.is-gasto #movimiento-cantidad:focus {
+     background-color: var(--c-surface-variant);
+}
+
+#movimiento-cantidad-form-group.is-ingreso #movimiento-cantidad:focus,
+#movimiento-cantidad-form-group.is-gasto #movimiento-cantidad:focus {
+     background-color: var(--c-surface);
+}
+
+/* === FIN: Estilos para el Campo de Importe Reactivo === */
 /* --- Botones --- */
 .btn { padding: var(--sp-3) var(--sp-4); border: 1px solid transparent; border-radius: var(--border-radius-md); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); -webkit-user-select: none; user-select: none; }
 .btn {
@@ -1324,11 +1365,13 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
             </div>
 
             <div class="form-grid" style="grid-template-columns: 40% 1fr; align-items: flex-start;">
-                <div class="form-group">
+                <div class="form-group" id="movimiento-cantidad-form-group">
     <label for="movimiento-cantidad" class="form-label">Cantidad</label>
     <div class="form-group-addon">
-        <input type="text" id="movimiento-cantidad" class="form-input" required placeholder="Ej: -2,50" />
-    <!-- Este botón solo se verá en PC -->
+    <!-- El botón de +/- ha sido eliminado -->
+
+    <input type="text" id="movimiento-cantidad" class="form-input" required placeholder='"-25,50" o "150"' />
+    
     <button type="button" id="calculator-toggle-btn" class="icon-btn" title="Abrir Calculadora">
         <span class="material-icons">calculate</span>
     </button>
@@ -2364,6 +2407,15 @@ const triggerSaveAnimation = (fromElement, color) => {
             
             return parseFloat(cleanStr);
         };
+		const formatAsCurrencyInput = (num) => {
+    if (isNaN(num)) return '';
+    // Usamos Intl.NumberFormat que es la forma moderna y correcta de hacerlo.
+    return new Intl.NumberFormat('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        useGrouping: true // ¡Esta es la opción clave!
+    }).format(num);
+};
 		const showPinScreen = (user) => {
             currentUser = user;
             const pinScreen = select('pin-login-screen');
@@ -6399,6 +6451,19 @@ const hideModal = (id) => {
         });
     }
 };
+ const updateAmountTypeUI = (isGasto) => {
+    const amountGroup = select('movimiento-cantidad-form-group');
+    if (!amountGroup) return;
+
+    if (isGasto) {
+        amountGroup.classList.add('is-gasto');
+        amountGroup.classList.remove('is-ingreso');
+    } else {
+        amountGroup.classList.remove('is-gasto');
+        amountGroup.classList.add('is-ingreso');
+    }
+};
+
 	const showAidanaiModal = (pageId) => {
     // Busca el contenido de ayuda para la página actual, o usa el por defecto si no lo encuentra.
     const help = AIDANAI_HELP_CONTENT[pageId] || AIDANAI_HELP_CONTENT['default'];
@@ -6491,25 +6556,33 @@ const handleCalculatorInput = (key) => {
     } else {
         switch(key) {
             case 'done':
-                hapticFeedback('medium');
-                if (operand1 !== null && operator !== null && !waitingForNewValue) {
-                    calculate();
-                    displayValue = calculatorState.displayValue;
-                }
-                
-                if (calculatorState.targetInput) {
-                    const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
-                    calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
-                        useGrouping: false, 
-                        minimumFractionDigits: 2, 
-                        maximumFractionDigits: 2 
-                    });
-                    calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                historyValue = ''; // Limpiamos historial al finalizar
-                hideCalculator();
-                select('movimiento-descripcion').focus();
-                return;
+    hapticFeedback('medium');
+    if (operand1 !== null && operator !== null && !waitingForNewValue) {
+        calculate();
+        displayValue = calculatorState.displayValue;
+    }
+    
+    if (calculatorState.targetInput) {
+        const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
+        
+        // --- INICIO DE LA MODIFICACIÓN ---
+        // La calculadora ahora inserta el valor "limpio" (sin puntos de miles),
+        // pero con la coma decimal correcta para España.
+        calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
+            useGrouping: false, // ¡Clave! No usamos separadores de miles aquí.
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        });
+        // --- FIN DE LA MODIFICACIÓN ---
+
+        calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        // Forzamos el evento 'blur' para que se formatee inmediatamente
+        calculatorState.targetInput.dispatchEvent(new Event('blur')); 
+    }
+    historyValue = '';
+    hideCalculator();
+    select('movimiento-descripcion').focus();
+    return;
 
             case 'comma':
                 if (waitingForNewValue) {
@@ -6849,7 +6922,16 @@ const setMovimientoFormType = (type) => {
     let data = null;
     let mode = 'new';
     let initialType = 'movimiento';
-
+	let initialAmount = 0;
+    if (data) {
+        initialAmount = data.cantidad;
+    }
+    
+    // Usamos nuestra nueva función de formato aquí
+    const amountValue = initialAmount !== 0 ? (initialAmount / 100) : null;
+    select('movimiento-cantidad').value = amountValue !== null ? formatAsCurrencyInput(amountValue) : '';
+    
+    updateAmountTypeUI(initialAmount < 0 || (!id && initialAmount === 0)); // Gasto por defecto
     if (id) {
         try {
             const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
@@ -7635,6 +7717,30 @@ const handleSaveDashboardConfig = async (btn) => {
 // === INICIO: FUNCIÓN attachEventListeners (VERSIÓN CORREGIDA)    ===
 // =================================================================
 const attachEventListeners = () => {
+	const amountInputForFormatting = select('movimiento-cantidad');
+if (amountInputForFormatting) {
+    // Evento FOCUS: Se activa cuando el usuario hace clic en el campo.
+    amountInputForFormatting.addEventListener('focus', (e) => {
+        const input = e.target;
+        if (input.value === '') return;
+
+        // "Limpiamos" el valor, quitando los puntos de miles para facilitar la edición.
+        const rawValue = input.value.replace(/\./g, '');
+        input.value = rawValue;
+    });
+
+    // Evento BLUR: Se activa cuando el usuario sale del campo.
+    amountInputForFormatting.addEventListener('blur', (e) => {
+        const input = e.target;
+        if (input.value === '') return;
+
+        // 1. Convertimos el valor (que puede o no tener puntos) a un número.
+        const numericValue = parseCurrencyString(input.value);
+        
+        // 2. Usamos nuestra nueva función para formatearlo con los puntos de miles.
+        input.value = formatAsCurrencyInput(numericValue);
+    });
+}
 	window.addEventListener('popstate', (event) => {
     // Primero, comprobamos si hay algún modal activo
     const activeModal = document.querySelector('.modal-overlay--active');
@@ -7680,9 +7786,35 @@ const attachEventListeners = () => {
 
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
         const btn = actionTarget.closest('button');
-
+		const amountInputForSync = select('movimiento-cantidad');
+if (amountInputForSync) {
+    amountInputForSync.addEventListener('input', () => {
+        const currentValue = parseCurrencyString(amountInputForSync.value) || 0;
+        updateAmountTypeUI(currentValue < 0);
+    });
+}
       
         const actions = {
+	'toggle-amount-type': () => {
+    const amountInput = select('movimiento-cantidad');
+    const amountGroup = select('movimiento-cantidad-form-group');
+    if (!amountInput || !amountGroup) return;
+
+    hapticFeedback('light');
+
+    const currentValue = parseCurrencyString(amountInput.value) || 0;
+    const isCurrentlyGasto = amountGroup.classList.contains('is-gasto');
+
+    const newValue = currentValue === 0 ? 0 : -currentValue;
+    
+    amountInput.value = newValue.toLocaleString('es-ES', {
+        useGrouping: false,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+
+    updateAmountTypeUI(!isCurrentlyGasto);
+},
 		'context-edit': () => {
     hideModal('generic-modal');
     startMovementForm(id, false); // 'id' ya está disponible en el scope
