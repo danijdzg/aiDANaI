@@ -34,6 +34,27 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
+	#diario-filter-active-indicator {
+    background-color: color-mix(in srgb, var(--c-primary) 20%, transparent);
+    padding: var(--sp-2) var(--sp-4);
+    margin: var(--sp-4) var(--sp-4) 0 var(--sp-4);
+    border-radius: var(--border-radius-md);
+    text-align: center;
+    border: 1px solid var(--c-primary);
+}
+#diario-filter-active-indicator p {
+    margin: 0;
+    font-size: var(--fs-sm);
+    font-weight: 500;
+}
+#diario-filter-active-indicator button {
+    background: none;
+    border: none;
+    color: var(--c-primary);
+    text-decoration: underline;
+    font-weight: 700;
+    cursor: pointer;
+}
 	/* === INICIO: Estilos para Animación de Guardado === */
 
 .save-animation-bubble {
@@ -1096,9 +1117,39 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     white-space: nowrap;
 }
 /* === FIN: Estilos Profesionales para Búsqueda Global === */
+
+/* === INICIO: Estilos para Pull-to-Refresh === */
+#pull-to-refresh-indicator {
+    position: absolute;
+    top: 44px; /* Altura de la barra superior para que no quede debajo */
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    padding: 10px;
+    opacity: 0; /* Empieza totalmente invisible */
+    transform: translateY(-50px); /* Empieza escondido arriba */
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+#pull-to-refresh-indicator.visible {
+    opacity: 1;
+    transform: translateY(0); /* Se desliza a su posición visible */
+}
+
+#pull-to-refresh-indicator .spinner {
+    width: 24px;
+    height: 24px;
+    border-width: 3px;
+    color: var(--c-primary);
+}
+/* === FIN: Estilos para Pull-to-Refresh === */
+
     </style>
 	
 </head>
+
 <body data-ledger-mode="A">
     <noscript>You need to enable JavaScript to run this app.</noscript>
      
@@ -1242,10 +1293,12 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 </section>
 
             <section id="diario-page" class="view" style="padding: 0; gap: 0;">
-                <div id="diario-view-container">
-    <!-- El contenido (lista o calendario) se renderizará aquí -->
-</div>
-            </section>
+				<div id="pull-to-refresh-indicator">
+					<span class="spinner"></span>
+				</div>
+				<div id="diario-view-container">
+					</div>
+			</section>
 			<section id="inversiones-page" class="view">
                 <!-- El contenido del portafolio se renderizará aquí -->
             </section>
@@ -1495,6 +1548,54 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
             <div id="generic-modal-body" class="modal__body"></div>
         </div>
     </div>
+	 <div id="diario-filters-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diario-filters-title">
+    <div class="modal">
+        <div class="modal__grabber"></div>
+        <header class="modal__header" style="padding-top: var(--sp-2);">
+            <h3 id="diario-filters-title" class="modal__title">Filtrar Diario</h3>
+            <button class="icon-btn" data-action="close-modal" data-modal-id="diario-filters-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
+        </header>
+        <div class="modal__body">
+            <form id="diario-filters-form" novalidate>
+                <div class="form-group">
+                    <label class="form-label">Rango de Fechas</label>
+                    <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                        <input type="date" id="filter-diario-start-date" class="form-input">
+                        <input type="date" id="filter-diario-end-date" class="form-input">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="filter-diario-description" class="form-label">La descripción contiene...</label>
+                    <input type="search" id="filter-diario-description" class="form-input" placeholder="Ej: Amazon, compra semanal...">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Importe entre...</label>
+                    <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                        <input type="number" id="filter-diario-min-amount" class="form-input" placeholder="Mínimo (€)">
+                        <input type="number" id="filter-diario-max-amount" class="form-input" placeholder="Máximo (€)">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="filter-diario-cuentas" class="form-label">Cuentas (selección múltiple)</label>
+                    <select id="filter-diario-cuentas" class="form-select" multiple style="height: 120px;"></select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="filter-diario-conceptos" class="form-label">Conceptos (selección múltiple)</label>
+                    <select id="filter-diario-conceptos" class="form-select" multiple style="height: 120px;"></select>
+                </div>
+                
+                <div class="modal__actions" style="justify-content: space-between;">
+                    <button type="button" data-action="clear-diario-filters" class="btn btn--secondary">Limpiar Filtros</button>
+                    <button type="submit" class="btn btn--primary">Aplicar Filtros</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <div id="global-search-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
         <div class="modal">
             <header class="modal__header">
@@ -1756,7 +1857,84 @@ const getInitialDb = () => ({
         savedReports: {} // <-- AÑADIDO: para guardar la configuración de los informes
     } 
 });
+		// ▼▼▼ PEGA ESTE BLOQUE DE CÓDIGO JS ▼▼▼
+
+// Variable global para guardar los filtros activos
+let diarioActiveFilters = null;
+let allDiarioMovementsCache = []; // Caché para guardar TODOS los movimientos una vez cargados
+
+// Función para abrir y preparar el modal de filtros
+const showDiarioFiltersModal = () => {
+    showModal('diario-filters-modal');
+
+    // Rellenamos los selectores múltiples de Cuentas y Conceptos
+    const populateMultiSelect = (id, data, nameKey, valKey = 'id') => {
+        const selectEl = select(id);
+        if (!selectEl) return;
+        selectEl.innerHTML = [...data]
+            .sort((a, b) => (a[nameKey] || "").localeCompare(b[nameKey] || ""))
+            .map(item => `<option value="${item[valKey]}">${item[nameKey]}</option>`)
+            .join('');
+    };
+    
+    populateMultiSelect('filter-diario-cuentas', getVisibleAccounts(), 'nombre');
+    populateMultiSelect('filter-diario-conceptos', db.conceptos, 'nombre');
+
+    // Rellenamos el formulario con los filtros que ya estaban activos (si los hay)
+    if (diarioActiveFilters) {
+        select('filter-diario-start-date').value = diarioActiveFilters.startDate || '';
+        select('filter-diario-end-date').value = diarioActiveFilters.endDate || '';
+        select('filter-diario-description').value = diarioActiveFilters.description || '';
+        select('filter-diario-min-amount').value = diarioActiveFilters.minAmount || '';
+        select('filter-diario-max-amount').value = diarioActiveFilters.maxAmount || '';
+        // Reseleccionamos las opciones en los selectores múltiples
+        Array.from(select('filter-diario-cuentas').options).forEach(opt => {
+            opt.selected = diarioActiveFilters.cuentas?.includes(opt.value);
+        });
+        Array.from(select('filter-diario-conceptos').options).forEach(opt => {
+            opt.selected = diarioActiveFilters.conceptos?.includes(opt.value);
+        });
+    }
+};
+
+// La función que se ejecuta al pulsar "Aplicar Filtros"
+const applyDiarioFilters = async () => {
+    // Guardamos los valores del formulario en nuestra variable global
+    diarioActiveFilters = {
+        startDate: select('filter-diario-start-date').value,
+        endDate: select('filter-diario-end-date').value,
+        description: select('filter-diario-description').value.toLowerCase(),
+        minAmount: select('filter-diario-min-amount').value,
+        maxAmount: select('filter-diario-max-amount').value,
+        cuentas: Array.from(select('filter-diario-cuentas').selectedOptions).map(opt => opt.value),
+        conceptos: Array.from(select('filter-diario-conceptos').selectedOptions).map(opt => opt.value)
+    };
+    
+    hideModal('diario-filters-modal');
+    hapticFeedback('success');
+    showToast('Filtros aplicados. Mostrando resultados.', 'info');
+    
+    // Volvemos a renderizar la página del Diario para que aplique los filtros
+    await renderDiarioPage();
+};
+
+// La función que se ejecuta al pulsar "Limpiar Filtros"
+const clearDiarioFilters = async () => {
+    diarioActiveFilters = null;
+    select('diario-filters-form').reset();
+    hideModal('diario-filters-modal');
+    showToast('Filtros eliminados.', 'info');
+    await renderDiarioPage();
+};
+
+// ▲▲▲ FIN DEL BLOQUE A PEGAR ▲▲▲
         let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), deselectedAccountTypesFilter = new Set();
+		let ptrState = {
+			startY: 0,
+			isPulling: false,
+			distance: 0,
+			threshold: 80 // Distancia en píxeles que hay que arrastrar para que se active
+		};
 		let calculatorKeyboardHandler = null;
 		let deselectedInvestmentTypesFilter = new Set();
 		let selectedInvestmentTypeFilter = null;
@@ -2311,9 +2489,110 @@ document.body.addEventListener('change', e => {
         const generateId = () => fbDb.collection('users').doc().id;
         const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
         const formatCurrency = (numInCents) => {
-            const number = (numInCents || 0) / 100;
-            return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(number);
-        };
+    const number = (numInCents || 0) / 100;
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(number);
+};
+
+// ▼▼▼ PÉGALA AQUÍ ▼▼▼
+const showToast = (message, type = 'info', duration = 3000) => {
+    const container = select('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast--${type}`;
+    toast.textContent = message;
+    toast.setAttribute('role', 'alert');
+    
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    });
+    
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, duration);
+};
+// ▲▲▲ AQUÍ TERMINA LA FUNCIÓN PEGADA ▲▲▲
+// ▼▼▼ PEGA ESTE BLOQUE DE CÓDIGO JS EN TU SCRIPT ▼▼▼
+   // Variable global para guardar a nuestro "asistente"
+let widgetObserver = null;
+
+/**
+ * Esta es la función que se llamará cuando un esqueleto entre en la pantalla.
+ * Es como la orden que le damos al asistente: "¡Enciende esta luz!".
+ */
+const lazyLoadWidget = async (widgetElement) => {
+    const widgetType = widgetElement.dataset.widgetType;
+    if (!widgetType) return;
+
+    // Marcamos el widget como "cargando" para evitar que se cargue dos veces
+    widgetElement.dataset.widgetType = 'loading';
+    
+    // Le ponemos un spinner para que el usuario vea que algo pasa
+    widgetElement.classList.add('widget--loading');
+    const spinner = document.createElement('div');
+    spinner.className = 'widget-spinner';
+    spinner.innerHTML = '<span class="spinner" style="width: 28px; height: 28px;"></span>';
+    widgetElement.prepend(spinner);
+
+    // Dependiendo de la "etiqueta" del widget, llamamos a la función de carga correcta.
+    // Usaremos la función 'updateDashboardData' que ya tienes, que es muy potente.
+    try {
+        await updateDashboardData(); // Esta función ya sabe cómo rellenar todos los widgets
+    } catch(error) {
+        console.error(`Error al cargar el widget ${widgetType}:`, error);
+        widgetElement.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar este widget.</p></div>`;
+    } finally {
+        // Una vez cargado, quitamos el spinner y la clase de carga.
+        widgetElement.classList.remove('widget--loading');
+        spinner.remove();
+    }
+};
+
+/**
+ * Esta función crea y activa a nuestro "asistente".
+ * Le dice qué elementos tiene que vigilar.
+ */
+const initWidgetObserver = () => {
+    // Si ya teníamos un asistente, lo despedimos para contratar uno nuevo y limpio.
+    if (widgetObserver) {
+        widgetObserver.disconnect();
+    }
+
+    const options = {
+        root: selectOne('.app-layout__main'), // Observa el scroll dentro del contenedor principal
+        rootMargin: '150px', // Empieza a cargar el widget cuando esté a 150px de entrar en pantalla
+        threshold: 0.01 // Se activa en cuanto un 1% del widget sea visible
+    };
+
+    // Creamos el asistente y le decimos qué hacer cuando vea algo.
+    widgetObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            // Si el elemento que estamos vigilando (entry.target) está ahora visible...
+            if (entry.isIntersecting) {
+                const widgetElement = entry.target;
+                
+                // Le damos la orden de cargar su contenido.
+                lazyLoadWidget(widgetElement);
+                
+                // Le decimos al asistente que deje de vigilar este elemento, ¡su trabajo aquí ha terminado!
+                observer.unobserve(widgetElement);
+            }
+        });
+    }, options);
+
+    // Finalmente, le damos al asistente la lista de todos los esqueletos que tiene que vigilar.
+    const widgetsToLoad = document.querySelectorAll('[data-widget-type]');
+    widgetsToLoad.forEach(widget => {
+        widgetObserver.observe(widget);
+    });
+};
+
+// ▲▲▲ FIN DEL BLOQUE A PEGAR ▲▲▲
         const toSentenceCase = (str) => {
 			if (!str || typeof str !== 'string') return '';
 			return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
@@ -2715,7 +2994,16 @@ const navigateTo = async (pageId, isInitial = false) => {
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
             if (pageId === PAGE_IDS.PANEL) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
-            if (pageId === PAGE_IDS.DIARIO) leftSideHTML += `<button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista" style="margin-left: 8px;"><span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span></button>`;
+            if (pageId === PAGE_IDS.DIARIO) {
+    leftSideHTML += `
+        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
+            <span class="material-icons">filter_list</span>
+        </button>
+        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+            <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+        </button>
+    `;
+}
             leftEl.innerHTML = leftSideHTML;
         }
         if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
@@ -4068,7 +4356,7 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 
         let movementsObserver = null; // Variable global para el observador
 
-// REEMPLAZA TU "renderDiarioPage" CON ESTA VERSIÓN
+// ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
 const renderDiarioPage = async () => {
     const container = select('diario-page');
     if (!container.querySelector('#diario-view-container')) {
@@ -4078,49 +4366,86 @@ const renderDiarioPage = async () => {
     const viewContainer = select('diario-view-container');
     if (!viewContainer) return;
 
-    if (diarioViewMode === 'list') {
-        // Inyectamos el HTML de la lista
-        viewContainer.innerHTML = `
-            <div id="movimientos-list-container">
-                <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
-            </div>
-            <div id="load-more-container" class="hidden" style="text-align: center; padding: var(--sp-4);"><div id="list-loader"><span class="spinner"></span></div></div>
-            <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
-                <span class="material-icons">receipt_long</span><h3>Tu historial empieza aquí</h3><p>Pulsa el botón \`+\` para añadir tu primer ingreso o gasto.</p>
-            </div>`;
-       
-        // Preparamos los elementos para la lista virtual
-        vList.scrollerEl = selectOne('.app-layout__main');
-        vList.sizerEl = select('virtual-list-sizer');
-        vList.contentEl = select('virtual-list-content');
+    // Si la vista es calendario, la lógica no cambia.
+    if (diarioViewMode === 'calendar') {
         if (movementsObserver) movementsObserver.disconnect();
-        
-        // Reseteamos el estado de carga
-        lastVisibleMovementDoc = null;
-        allMovementsLoaded = false;
-        isLoadingMoreMovements = false;
-        runningBalancesCache = null; 
-        db.movimientos = []; 
-        
-        // Iniciamos la carga
-        await loadMoreMovements(true);
+        await renderDiarioCalendar();
+        return;
+    }
 
-        // Activamos el scroll infinito
-        movementsObserver = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting && !isLoadingMoreMovements && !allMovementsLoaded) {
-                loadMoreMovements();
+    // --- LÓGICA NUEVA PARA LA VISTA DE LISTA CON FILTROS ---
+    viewContainer.innerHTML = `
+        <div id="diario-filter-active-indicator" class="hidden">
+            <p>Mostrando resultados filtrados. <button data-action="clear-diario-filters">Limpiar filtros</button></p>
+        </div>
+        <div id="movimientos-list-container">
+            <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
+        </div>
+        <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
+            <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
+        </div>`;
+
+    // Preparamos la lista virtual
+    vList.scrollerEl = selectOne('.app-layout__main');
+    vList.sizerEl = select('virtual-list-sizer');
+    vList.contentEl = select('virtual-list-content');
+
+    // Mostramos un esqueleto de carga
+    let skeletonHTML = '';
+    for (let i = 0; i < 7; i++) {
+        skeletonHTML += `<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>`;
+    }
+    select('virtual-list-content').innerHTML = skeletonHTML;
+    
+    // 1. CARGAMOS TODOS LOS MOVIMIENTOS SI AÚN NO LOS TENEMOS
+    if (allDiarioMovementsCache.length === 0) {
+        allDiarioMovementsCache = await fetchAllMovementsForHistory();
+    }
+
+    let movementsToDisplay = [...allDiarioMovementsCache];
+
+    // 2. APLICAMOS LOS FILTROS SI EXISTEN
+    if (diarioActiveFilters) {
+        select('diario-filter-active-indicator').classList.remove('hidden');
+        
+        const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
+        
+        movementsToDisplay = movementsToDisplay.filter(m => {
+            if (startDate && m.fecha < startDate) return false;
+            if (endDate && m.fecha > endDate) return false;
+            if (description && !m.descripcion.toLowerCase().includes(description)) return false;
+            
+            const cantidadEuros = m.cantidad / 100;
+            if (minAmount && cantidadEuros < parseFloat(minAmount)) return false;
+            if (maxAmount && cantidadEuros > parseFloat(maxAmount)) return false;
+            
+            if (cuentas.length > 0) {
+                if (m.tipo === 'traspaso' && !cuentas.includes(m.cuentaOrigenId) && !cuentas.includes(m.cuentaDestinoId)) return false;
+                if (m.tipo === 'movimiento' && !cuentas.includes(m.cuentaId)) return false;
             }
-        }, { root: vList.scrollerEl, rootMargin: "400px" });
-        
-        const loadMoreEl = select('load-more-container');
-        if(loadMoreEl) {
-             movementsObserver.observe(loadMoreEl);
-        }
+            if (conceptos.length > 0 && m.tipo === 'movimiento' && !conceptos.includes(m.conceptoId)) return false;
 
+            return true;
+        });
     } else {
-        // Mostramos el calendario
-        if (movementsObserver) movementsObserver.disconnect();
-        await renderDiarioCalendar(); // Usamos await porque ahora es asíncrona
+         select('diario-filter-active-indicator').classList.add('hidden');
+    }
+    
+    // 3. ACTUALIZAMOS LA LISTA VIRTUAL CON LOS DATOS FILTRADOS
+    db.movimientos = movementsToDisplay; // Sobrescribimos la lista temporal que usa la UI
+    await processMovementsForRunningBalance(db.movimientos, true);
+    updateVirtualListUI();
+
+    // Actualizamos el mensaje de "vacío" si no hay resultados
+    if (movementsToDisplay.length === 0) {
+        const emptyState = select('empty-movimientos');
+        if (diarioActiveFilters) {
+            emptyState.querySelector('h3').textContent = 'Sin Resultados';
+            emptyState.querySelector('p').textContent = 'No se encontraron movimientos que coincidan con tus filtros.';
+        } else {
+            emptyState.querySelector('h3').textContent = 'Tu historial empieza aquí';
+            emptyState.querySelector('p').textContent = 'Pulsa el botón `+` para añadir tu primer ingreso o gasto.';
+        }
     }
 };
 		
@@ -5200,7 +5525,7 @@ const renderDashboardExpandedKpiSummary = () => {
                 </div>`;
         };
 
-// REEMPLAZA LA FUNCIÓN ORIGINAL CON ESTA VERSIÓN SIMPLIFICADA
+/// ▼▼▼ REEMPLAZA TU FUNCIÓN renderInicioResumenView POR COMPLETO CON ESTA VERSIÓN ▼▼▼
 const renderInicioResumenView = () => {
     const resumenContentContainer = select('resumen-content-container');
     if (!resumenContentContainer) return;
@@ -5209,31 +5534,44 @@ const renderInicioResumenView = () => {
 
     const widgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
 
+    // AHORA, esta función solo imprime los esqueletos con una etiqueta especial.
     resumenContentContainer.innerHTML = widgetOrder.map(widgetId => {
+        // La etiqueta es 'data-widget-type'
         switch(widgetId) {
-            // ==================================
-            // === ¡LOS CAMBIOS ESTÁN AQUÍ! ===
-            // ==================================
-            case 'super-centro-operaciones': return renderDashboardSuperCentroOperaciones(); // Llamamos a nuestra nueva función
-            // Ya NO están los 'case' para 'kpi-summary-expanded', 'kpi-summary', 'concept-totals'
+            case 'super-centro-operaciones':
+                // La función renderDashboardSuperCentroOperaciones() ya devuelve el esqueleto,
+                // solo necesitamos añadirle nuestra etiqueta al div principal.
+                return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
             
-            // EL RESTO SE QUEDA IGUAL
-            case 'action-center': return renderDashboardActionCenter();
-			case 'emergency-fund': return renderDashboardEmergencyFund();
-			case 'fi-progress': return renderDashboardFIProgress();
-            case 'net-worth-trend': return renderDashboardNetWorthTrend();
+            case 'net-worth-trend':
+                return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
+            
             case 'patrimonio-structure':
-               return `<div class="card" id="patrimonio-widget">
-                <div id="patrimonio-completo-container">
-                    <div class="skeleton" style="height:250px;"></div>
-                </div>
-            </div>`;
+               return `<div data-widget-type="patrimonio-structure">
+                           <div class="card" id="patrimonio-widget">
+                               <div id="patrimonio-completo-container">
+                                   <div class="skeleton" style="height:250px;"></div>
+                               </div>
+                           </div>
+                       </div>`;
+            
+            // Repetimos el patrón para los demás widgets...
+            case 'action-center':
+                return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
+            case 'emergency-fund':
+                return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
+            case 'fi-progress':
+                return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
             case 'informe-personalizado':
-                 return renderDashboardInformeWidget();
-            default: return '';
+                 return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
+            default:
+                return '';
         }
     }).join('<div style="height: var(--sp-4);"></div>');
- };
+    
+    // ¡IMPORTANTE! Después de dibujar los esqueletos, le decimos a nuestro "asistente" que empiece a observar.
+    initWidgetObserver();
+};
 		
         const _renderRecientesFromCache = async () => {
             const recientesContainer = select('inicio-view-recientes');
@@ -5839,17 +6177,7 @@ const updateDashboardData = async () => {
     if (isDashboardRendering) return;
     isDashboardRendering = true;
 
-    const widgetContainers = document.querySelectorAll('#kpi-container, #super-centro-operaciones-widget, #concept-totals-widget, #net-worth-trend-widget, #action-center-widget, #patrimonio-widget, #emergency-fund-widget, #fi-progress-widget, #informe-personalizado-widget');
-    widgetContainers.forEach(container => {
-        if (container) {
-            container.classList.add('widget--loading');
-            const spinner = document.createElement('div');
-            spinner.className = 'widget-spinner';
-            spinner.innerHTML = '<span class="spinner" style="width: 28px; height: 28px;"></span>';
-            container.prepend(spinner);
-        }
-    });
-
+    
     try {
         const { current, previous, label } = await getFilteredMovements(true);
         const saldos = await getSaldos();
@@ -5978,6 +6306,10 @@ const updateDashboardData = async () => {
         if (select('informe-personalizado-widget')) { await renderInformeWidgetContent(); }
 		
     } finally {
+        // --- INICIO DE LA CORRECCIÓN ---
+        const widgetContainers = document.querySelectorAll('[data-widget-type]');
+        // --- FIN DE LA CORRECCIÓN ---
+        
         widgetContainers.forEach(container => {
             if (container) {
                 container.classList.remove('widget--loading');
@@ -6911,6 +7243,7 @@ const setMovimientoFormType = (type) => {
             }
         };
 
+
  // ▼▼▼ REEMPLAZA TU FUNCIÓN startMovementForm CON ESTA VERSIÓN ▼▼▼
         const startMovementForm = async (id = null, isRecurrent = false) => {
     hapticFeedback('medium');
@@ -7795,6 +8128,8 @@ if (amountInputForSync) {
 }
       
         const actions = {
+	'show-diario-filters': showDiarioFiltersModal,
+    'clear-diario-filters': clearDiarioFilters,	
 	'toggle-amount-type': () => {
     const amountInput = select('movimiento-cantidad');
     const amountGroup = select('movimiento-cantidad-form-group');
@@ -8054,7 +8389,9 @@ if (amountInputForSync) {
             }
         }
     }, true);
-    document.body.addEventListener('submit', (e) => { e.preventDefault(); const target = e.target; const submitter = e.submitter; const handlers = { 'login-form': () => { const action = submitter ? submitter.dataset.action : 'login'; if (action === 'login') { handleLogin(submitter); } else if (action === 'register') { handleRegister(submitter); } }, 'pin-form': handlePinSubmit, 'form-movimiento': () => handleSaveMovement(target, submitter), 'add-concepto-form': () => handleAddConcept(submitter), 'add-cuenta-form': () => handleAddAccount(submitter), 'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter), 'form-valoracion': () => handleSaveValoracion(target, submitter), }; if (handlers[target.id]) { handlers[target.id](); } });
+    document.body.addEventListener('submit', (e) => { e.preventDefault(); const target = e.target; const submitter = e.submitter; const handlers = { 'login-form': () => { const action = submitter ? submitter.dataset.action : 'login'; if (action === 'login') { handleLogin(submitter); } else if (action === 'register') { handleRegister(submitter); } }, 'pin-form': handlePinSubmit, 'form-movimiento': () => handleSaveMovement(target, submitter), 'add-concepto-form': () => handleAddConcept(submitter), 'add-cuenta-form': () => handleAddAccount(submitter), 'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter), 'form-valoracion': () => handleSaveValoracion(target, submitter), }; if (handlers[target.id]) { handlers[target.id](); }if (e.target.id === 'diario-filters-form') {
+        applyDiarioFilters();
+    } });
     document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
     document.body.addEventListener('blur', (e) => {
     const id = e.target.id;
@@ -8111,15 +8448,92 @@ if (amountInputForSync) {
     const suggestionsBox = select('description-suggestions'); if (suggestionsBox) { suggestionsBox.addEventListener('click', (e) => { const suggestionItem = e.target.closest('.suggestion-item'); if (suggestionItem) { const { description, conceptoId, cuentaId } = suggestionItem.dataset; applyDescriptionSuggestion(description, conceptoId, cuentaId); } }); }
     const fechaDisplayButton = select('movimiento-fecha-display'); const fechaRealInput = select('movimiento-fecha'); if (fechaDisplayButton && fechaRealInput) { fechaDisplayButton.addEventListener('click', () => fechaRealInput.showPicker()); fechaRealInput.addEventListener('input', () => updateDateDisplay(fechaRealInput)); }
     const diarioContainer = select('diario-page');
-    if (diarioContainer) {
-        diarioContainer.addEventListener('mousedown', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e));
-        diarioContainer.addEventListener('touchstart', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e), { passive: true });
-        diarioContainer.addEventListener('mousemove', handleInteractionMove);
-        diarioContainer.addEventListener('touchmove', handleInteractionMove, { passive: false });
-        diarioContainer.addEventListener('mouseup', handleInteractionEnd);
-        diarioContainer.addEventListener('mouseleave', handleInteractionEnd);
-        diarioContainer.addEventListener('touchend', handleInteractionEnd);
-    }
+if (diarioContainer) {
+    const mainScroller = selectOne('.app-layout__main');
+
+    // Listener para el INICIO del toque
+    diarioContainer.addEventListener('touchstart', (e) => {
+        // Si el scroll no está arriba del todo, no hacemos nada.
+        if (mainScroller.scrollTop > 0) return;
+
+        ptrState.startY = e.touches[0].clientY;
+        ptrState.isPulling = true;
+        
+        // También llamamos a la función de swipe que ya tenías
+        if (e.target.closest('.transaction-card')) {
+            handleInteractionStart(e);
+        }
+    }, { passive: true });
+
+    // Listener para el MOVIMIENTO del dedo
+    diarioContainer.addEventListener('touchmove', (e) => {
+        if (!ptrState.isPulling) {
+            // Si no estamos en modo "pull", dejamos que la función de swipe haga su trabajo
+            handleInteractionMove(e);
+            return;
+        }
+
+        const currentY = e.touches[0].clientY;
+        ptrState.distance = currentY - ptrState.startY;
+
+        // Solo actuamos si el gesto es hacia abajo
+        if (ptrState.distance > 0) {
+            // Esto evita que la página entera se mueva mientras tiramos
+            e.preventDefault(); 
+            
+            const indicator = select('pull-to-refresh-indicator');
+            if (indicator) {
+                // Hacemos visible el spinner
+                indicator.classList.add('visible');
+                // Rotamos el spinner a medida que tiramos para un efecto más chulo
+                const rotation = Math.min(ptrState.distance * 2, 360);
+                indicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`;
+            }
+        }
+    }, { passive: false });
+
+    // Listener para cuando se SUELTA el dedo
+    diarioContainer.addEventListener('touchend', async (e) => {
+        const indicator = select('pull-to-refresh-indicator');
+
+        if (ptrState.isPulling && ptrState.distance > ptrState.threshold) {
+            // ¡REFRESCAR! El usuario ha tirado lo suficiente.
+            hapticFeedback('medium');
+            if (indicator) {
+                indicator.querySelector('.spinner').style.animation = 'spin 1s linear infinite';
+            }
+
+            // Llamamos a la función que ya tienes para cargar movimientos, 
+            // pero le decimos que es una carga "inicial" para que borre los antiguos.
+            await loadMoreMovements(true);
+
+            // Ocultamos el indicador suavemente después de refrescar
+            setTimeout(() => {
+                if (indicator) {
+                    indicator.classList.remove('visible');
+                    indicator.querySelector('.spinner').style.animation = '';
+                }
+            }, 500);
+
+        } else if (indicator) {
+            // Si no ha tirado lo suficiente, simplemente lo ocultamos.
+            indicator.classList.remove('visible');
+        }
+        
+        // Reseteamos el estado
+        ptrState.isPulling = false;
+        ptrState.distance = 0;
+
+        // También llamamos a la función de fin de swipe que ya tenías
+        handleInteractionEnd(e);
+    });
+
+    // Mantenemos el resto de listeners que gestionan el swipe
+    diarioContainer.addEventListener('mousedown', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e));
+    diarioContainer.addEventListener('mousemove', handleInteractionMove);
+    diarioContainer.addEventListener('mouseup', handleInteractionEnd);
+    diarioContainer.addEventListener('mouseleave', handleInteractionEnd);
+}
     const mainScroller = selectOne('.app-layout__main');
     if (mainScroller) {
         let scrollRAF = null;
