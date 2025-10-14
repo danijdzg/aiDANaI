@@ -846,7 +846,24 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .suggestion-item { padding: var(--sp-2) var(--sp-3); cursor: pointer; font-size: var(--fs-sm); }
 .suggestion-item:hover { background-color: var(--c-surface-variant); }
 .suggestion-item small { color: var(--c-on-surface-secondary); font-size: var(--fs-xs); }
-.movimiento-date-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background-color: var(--c-surface-variant); color: var(--c-on-surface); font-weight: 700; font-size: var(--fs-sm); border-radius: 99px; margin-top: var(--sp-4); margin-bottom: var(--sp-2); }
+.movimiento-date-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background-color: color-mix(in srgb, var(--c-surface-variant) 85%, transparent); /* Ligera transparencia */
+    color: var(--c-on-surface);
+    font-weight: 700;
+    font-size: var(--fs-sm);
+    border-radius: 99px;
+    margin-top: var(--sp-4);
+    margin-bottom: var(--sp-2);
+    /* Propiedades "pegajosas" añadidas */
+    position: sticky;
+    top: 44px; 
+    z-index: 10;
+    backdrop-filter: blur(8px);
+}
 
 /* --- Calculadora Flotante --- */
 #calculator-overlay { z-index: 1100; /* Debe estar por encima de otros modales */ }
@@ -1948,7 +1965,7 @@ const clearDiarioFilters = async () => {
         const originalButtonTexts = new Map();
         let conceptosChart = null, liquidAssetsChart = null, detailInvestmentChart = null, informesChart = null, assetAllocationChart = null, budgetTrendChart = null, netWorthChart = null;
         let lastScrollTop = null;
-        
+        let pageScrollPositions = {};
         let jsonWizardState = {
             file: null,
             data: null,
@@ -1978,22 +1995,193 @@ const clearDiarioFilters = async () => {
 			renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
 		};
         
+       // ▼▼▼ COPIA Y PEGA ESTE BLOQUE ÚNICO EN LUGAR DEL CÓDIGO DE LA CALCULADORA QUE TENGAS ▼▼▼
+
         let calculatorState = {
-    displayValue: '0',
-    operand1: null,
-    operator: null,
-    waitingForNewValue: true,
-    targetInput: null,
-    isVisible: false, 
-    isResultDisplayed: false,
-    historyValue: '', // <-- ¡NUEVA PROPIEDAD!
-};
-let modalDragState = {
-    isDragging: false,
-    startY: 0,
-    currentY: 0,
-    targetModal: null
-};
+            displayValue: '0',
+            operand1: null,
+            operator: null,
+            waitingForNewValue: true,
+            targetInput: null,
+            isVisible: false, 
+            isResultDisplayed: false,
+            historyValue: '', // <-- ¡NUEVA PROPIEDAD para guardar la "chuleta"!
+        };
+        
+        // Actualiza el display del historial
+        const updateCalculatorHistoryDisplay = () => {
+            const historyDisplay = select('calculator-history-display');
+            if (historyDisplay) {
+                historyDisplay.textContent = calculatorState.historyValue;
+            }
+        };
+
+        // Mapea las claves a los símbolos visuales
+        const getOperatorSymbol = (key) => {
+            switch(key) {
+                case 'add': return '+';
+                case 'subtract': return '−'; // Usamos un guion más estilizado
+                case 'multiply': return '×';
+                case 'divide': return '÷';
+                default: return '';
+            }
+        };
+
+        // Gestiona qué botón de operador se ve activo
+        const updateActiveOperatorButton = () => {
+            // Primero, quitamos la clase activa de todos
+            selectAll('.calculator-btn.btn-operator').forEach(btn => {
+                btn.classList.remove('btn-operator--active');
+            });
+            
+            // Luego, si hay un operador activo, se la añadimos al botón correspondiente
+            if (calculatorState.operator) {
+                const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
+                if (activeBtn) {
+                    activeBtn.classList.add('btn-operator--active');
+                }
+            }
+        };      
+
+        const handleCalculatorInput = (key) => {
+            hapticFeedback('light');
+            let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
+            
+            if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
+                displayValue = '0';
+                isResultDisplayed = false;
+                historyValue = ''; // Limpiamos historial al empezar un nuevo cálculo
+            }
+
+            const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
+
+            if (isOperator) {
+                if (operand1 !== null && operator !== null && !waitingForNewValue) {
+                    calculate();
+                    displayValue = calculatorState.displayValue; 
+                }
+                operand1 = parseFloat(displayValue.replace(',', '.'));
+                operator = key;
+                historyValue = `${displayValue} ${getOperatorSymbol(operator)}`; // Actualizamos el historial
+                waitingForNewValue = true;
+                isResultDisplayed = false;
+            } else {
+                switch(key) {
+                    case 'done':
+                        hapticFeedback('medium');
+                        if (operand1 !== null && operator !== null && !waitingForNewValue) {
+                            calculate();
+                            displayValue = calculatorState.displayValue;
+                        }
+                        
+                        if (calculatorState.targetInput) {
+                            const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
+                            
+                            calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
+                                useGrouping: false, 
+                                minimumFractionDigits: 2, 
+                                maximumFractionDigits: 2 
+                            });
+
+                            calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            calculatorState.targetInput.dispatchEvent(new Event('blur')); 
+                        }
+                        historyValue = '';
+                        hideCalculator();
+                        select('movimiento-descripcion').focus();
+                        return;
+
+                    case 'comma':
+                        if (waitingForNewValue) {
+                            displayValue = '0,';
+                            waitingForNewValue = false;
+                        } else if (!displayValue.includes(',')) {
+                            displayValue += ',';
+                        }
+                        isResultDisplayed = false;
+                        break;
+                    
+                    case 'clear': 
+                        displayValue = '0'; 
+                        waitingForNewValue = true; 
+                        operand1 = null; 
+                        operator = null; 
+                        isResultDisplayed = false; 
+                        historyValue = ''; // Limpiamos historial
+                        break;
+
+                    case 'backspace': 
+                        if (displayValue.length > 1) {
+                            displayValue = displayValue.slice(0, -1);
+                        } else {
+                            displayValue = '0';
+                            waitingForNewValue = true;
+                        }
+                        isResultDisplayed = false;
+                        break;
+
+                    case 'sign': 
+                        if (displayValue !== '0') { 
+                            displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
+                        }
+                        break;
+                        
+                    default: // Dígitos
+                        if (waitingForNewValue || displayValue === '0') {
+                            displayValue = key;
+                            waitingForNewValue = false;
+                        } else {
+                            displayValue += key;
+                        }
+                        isResultDisplayed = false;
+                        break;
+                }
+            }
+            
+            // Guardamos todos los cambios en el estado global
+            calculatorState.displayValue = displayValue;
+            calculatorState.waitingForNewValue = waitingForNewValue;
+            calculatorState.operand1 = operand1;
+            calculatorState.operator = operator;
+            calculatorState.isResultDisplayed = isResultDisplayed;
+            calculatorState.historyValue = historyValue;
+            
+            // Actualizamos toda la interfaz de la calculadora
+            updateCalculatorDisplay();
+            updateCalculatorHistoryDisplay(); // <-- Llamamos a la nueva función
+            updateActiveOperatorButton(); // <-- Y a esta para el estilo
+        };
+
+        const calculate = () => {
+            const val1 = calculatorState.operand1;
+            const val2 = parseFloat(calculatorState.displayValue.replace(',', '.'));
+            if (isNaN(val1) || isNaN(val2) || !calculatorState.operator) return;
+
+            let result = 0;
+            switch (calculatorState.operator) {
+                case 'add': result = val1 + val2; break;
+                case 'subtract': result = val1 - val2; break;
+                case 'multiply': result = val1 * val2; break;
+                case 'divide':
+                    if (val2 === 0) {
+                        showToast("No se puede dividir por cero.", "danger");
+                        result = 0;
+                    } else {
+                        result = val1 / val2;
+                    }
+                    break;
+            }
+
+            const resultString = parseFloat(result.toPrecision(12)).toString().replace('.', ',');
+            
+            calculatorState.displayValue = resultString;
+            calculatorState.operand1 = null;
+            calculatorState.operator = null;
+            calculatorState.waitingForNewValue = true;
+            calculatorState.isResultDisplayed = true;
+        };
+
+// ▲▲▲ FIN DEL BLOQUE ▲▲▲
 
         let descriptionSuggestionDebounceTimer = null; 
         const DESCRIPTION_SUGGESTION_LIMIT = 5;
@@ -2957,6 +3145,10 @@ window.addEventListener('offline', () => {
 const navigateTo = async (pageId, isInitial = false) => {
     const oldView = document.querySelector('.view--active');
     const newView = select(pageId);
+	const mainScroller = selectOne('.app-layout__main');
+	if (oldView && mainScroller) {
+    pageScrollPositions[oldView.id] = mainScroller.scrollTop;
+	}
     if (!newView || (oldView && oldView.id === pageId)) return;
 
     destroyAllCharts();
@@ -3038,8 +3230,10 @@ const navigateTo = async (pageId, isInitial = false) => {
         oldView.classList.remove('view--active');
     }
 
-    const mainScroller = selectOne('.app-layout__main'); 
-    if (mainScroller) mainScroller.scrollTop = 0;
+    if (mainScroller) {
+    // Si hay una posición guardada para esta página, la usamos. Si no, vamos arriba.
+    mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
+}
 
     if (pageId === PAGE_IDS.PANEL) {
         setTimeout(scheduleDashboardUpdate, 50);
@@ -4355,6 +4549,33 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 // =========================================================================
 
         let movementsObserver = null; // Variable global para el observador
+		const initMovementsObserver = () => {
+    // Si ya existía un vigilante, lo reiniciamos
+    if (movementsObserver) {
+        movementsObserver.disconnect();
+    }
+
+    const trigger = select('infinite-scroll-trigger');
+    if (!trigger) return;
+
+    // Configuramos el vigilante para que actúe cuando el "activador" esté a punto de verse
+    const options = {
+        root: selectOne('.app-layout__main'), // Vigila el scroll dentro de la ventana principal
+        rootMargin: '200px', // Empieza a cargar 200px antes de que llegue al final
+        threshold: 0.01
+    };
+
+    movementsObserver = new IntersectionObserver((entries) => {
+        // Si el vigilante ve nuestro activador...
+        if (entries[0].isIntersecting) {
+            // ...llama a la función para cargar más movimientos automáticamente.
+            loadMoreMovements();
+        }
+    }, options);
+
+    // Le decimos al vigilante que empiece a observar nuestro activador invisible.
+    movementsObserver.observe(trigger);
+};
 
 // ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
 const renderDiarioPage = async () => {
@@ -4375,15 +4596,16 @@ const renderDiarioPage = async () => {
 
     // --- LÓGICA NUEVA PARA LA VISTA DE LISTA CON FILTROS ---
     viewContainer.innerHTML = `
-        <div id="diario-filter-active-indicator" class="hidden">
-            <p>Mostrando resultados filtrados. <button data-action="clear-diario-filters">Limpiar filtros</button></p>
-        </div>
-        <div id="movimientos-list-container">
-            <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
-        </div>
-        <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
-            <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
-        </div>`;
+    <div id="diario-filter-active-indicator" class="hidden">
+        <p>Mostrando resultados filtrados. <button data-action="clear-diario-filters">Limpiar filtros</button></p>
+    </div>
+    <div id="movimientos-list-container">
+        <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
+    </div>
+    <div id="infinite-scroll-trigger" style="height: 50px;"></div> 
+    <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
+        <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
+    </div>`;
 
     // Preparamos la lista virtual
     vList.scrollerEl = selectOne('.app-layout__main');
@@ -4435,6 +4657,7 @@ const renderDiarioPage = async () => {
     db.movimientos = movementsToDisplay; // Sobrescribimos la lista temporal que usa la UI
     await processMovementsForRunningBalance(db.movimientos, true);
     updateVirtualListUI();
+	initMovementsObserver(); // Activa el vigilante del scroll infinito
 
     // Actualizamos el mensaje de "vacío" si no hay resultados
     if (movementsToDisplay.length === 0) {
@@ -6724,7 +6947,68 @@ const getDragAfterElement = (container, y) => {
     // ¡La magia final! Movemos el foco al campo de la cantidad.
     select('movimiento-cantidad').focus();
 };
+ let modalDragState = {
+    isDragging: false,
+    startY: 0,
+    currentY: 0,
+    targetModal: null
+};
 
+// 2. Función que se activa CUANDO EMPIEZAS A ARRASTRAR
+function handleModalDragStart(e) {
+    const modal = e.target.closest('.modal');
+    if (!modal) return;
+
+    // ¡Importante! Si has bajado el scroll dentro del modal, no hacemos nada.
+    const modalBody = modal.querySelector('.modal__body');
+    if (modalBody && modalBody.scrollTop > 0) return;
+
+    modalDragState.isDragging = true;
+    modalDragState.targetModal = modal;
+    modalDragState.startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+
+    // Quitamos la animación para que el movimiento sea instantáneo
+    modal.style.transition = 'none';
+}
+
+// 3. Función que se activa MIENTRAS MUEVES EL DEDO
+function handleModalDragMove(e) {
+    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
+
+    modalDragState.currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+    let deltaY = modalDragState.currentY - modalDragState.startY;
+
+    // Solo permitimos arrastrar hacia abajo
+    if (deltaY > 0) {
+        e.preventDefault(); // Evita que la página de detrás se mueva
+        modalDragState.targetModal.style.transform = `translateY(${deltaY}px)`;
+    }
+}
+
+// 4. Función que se activa CUANDO SUELTAS EL DEDO
+function handleModalDragEnd(e) {
+    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
+
+    const modal = modalDragState.targetModal;
+    // Le devolvemos su animación de "muelle"
+    modal.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'; 
+
+    const deltaY = modalDragState.currentY - modalDragState.startY;
+    const modalHeight = modal.offsetHeight;
+
+    // Si lo hemos arrastrado más de un tercio de su altura, lo cerramos.
+    if (deltaY > modalHeight * 0.3) {
+        const overlay = modal.closest('.modal-overlay');
+        if (overlay) hideModal(overlay.id);
+    } else {
+        // Si no, vuelve a su sitio
+        modal.style.transform = 'translateY(0)';
+    }
+
+    // Reseteamos todo para la próxima vez
+    modalDragState.isDragging = false;
+    modalDragState.targetModal = null;
+}
 const showModal = (id) => {
     const m = select(id);
     if (m) {
@@ -6733,18 +7017,19 @@ const showModal = (id) => {
         select('app-root').classList.add('app-layout--transformed-by-modal');
 
         // --- INICIO DE LA LÓGICA AÑADIDA ---
-        const modalElement = m.querySelector('.modal');
-        if (modalElement) {
-            // Cuando se muestra el modal, empezamos a escuchar si el usuario lo toca.
-            modalElement.addEventListener('mousedown', handleModalDragStart);
-            modalElement.addEventListener('touchstart', handleModalDragStart, { passive: true });
-        }
-        
-        // Los listeners de mover y soltar los ponemos en todo el documento
-        document.addEventListener('mousemove', handleModalDragMove);
-        document.addEventListener('touchmove', handleModalDragMove, { passive: false });
-        document.addEventListener('mouseup', handleModalDragEnd);
-        document.addEventListener('touchend', handleModalDragEnd);
+const modalElement = m.querySelector('.modal');
+if (modalElement) {
+    // Cuando se muestra el modal, empezamos a escuchar si el usuario lo toca.
+    modalElement.addEventListener('mousedown', handleModalDragStart);
+    modalElement.addEventListener('touchstart', handleModalDragStart, { passive: true });
+}
+
+// Los listeners de mover y soltar los ponemos en todo el documento
+document.addEventListener('mousemove', handleModalDragMove);
+document.addEventListener('touchmove', handleModalDragMove, { passive: false });
+document.addEventListener('mouseup', handleModalDragEnd);
+document.addEventListener('touchend', handleModalDragEnd);
+// --- FIN DE LA LÓGICA AÑADIDA ---
 
         if (!id.includes('calculator')) {
             const f = m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
@@ -6759,20 +7044,20 @@ const hideModal = (id) => {
         m.classList.remove('modal-overlay--active');
         select('app-root').classList.remove('app-layout--transformed-by-modal');
 
-        // --- INICIO DE LA LÓGICA AÑADIDA ---
         // ¡MUY IMPORTANTE! Cuando el modal se cierra, dejamos de escuchar los gestos.
-        const modalElement = m.querySelector('.modal');
-        if (modalElement) {
-            modalElement.removeEventListener('mousedown', handleModalDragStart);
-            modalElement.removeEventListener('touchstart', handleModalDragStart);
-        }
-        document.removeEventListener('mousemove', handleModalDragMove);
-        document.removeEventListener('touchmove', handleModalDragMove);
-        document.removeEventListener('mouseup', handleModalDragEnd);
-        document.removeEventListener('touchend', handleModalDragEnd);
-        
-        // Nos aseguramos de que el modal se resetee visualmente
-        if (modalElement) modalElement.style.transform = '';
+const modalElement = m.querySelector('.modal');
+if (modalElement) {
+    modalElement.removeEventListener('mousedown', handleModalDragStart);
+    modalElement.removeEventListener('touchstart', handleModalDragStart);
+}
+document.removeEventListener('mousemove', handleModalDragMove);
+document.removeEventListener('touchmove', handleModalDragMove);
+document.removeEventListener('mouseup', handleModalDragEnd);
+document.removeEventListener('touchend', handleModalDragEnd);
+
+// Nos aseguramos de que el modal se resetee visualmente
+if (modalElement) modalElement.style.transform = '';
+// --- FIN DE LA LÓGICA AÑADIDA ---
     }
 
     const mainScroller = selectOne('.app-layout__main');
@@ -6828,186 +7113,7 @@ const hideModal = (id) => {
             }
             hideCalculator();
         };       
-	// Actualiza el display del historial
-const updateCalculatorHistoryDisplay = () => {
-    const historyDisplay = select('calculator-history-display');
-    if (historyDisplay) {
-        historyDisplay.textContent = calculatorState.historyValue;
-    }
-};
 
-// Mapea las claves a los símbolos visuales
-const getOperatorSymbol = (key) => {
-    switch(key) {
-        case 'add': return '+';
-        case 'subtract': return '−'; // Usamos un guion más estilizado
-        case 'multiply': return '×';
-        case 'divide': return '÷';
-        default: return '';
-    }
-};
-
-// Gestiona qué botón de operador se ve activo
-const updateActiveOperatorButton = () => {
-    // Primero, quitamos la clase activa de todos
-    selectAll('.calculator-btn.btn-operator').forEach(btn => {
-        btn.classList.remove('btn-operator--active');
-    });
-    
-    // Luego, si hay un operador activo, se la añadimos al botón correspondiente
-    if (calculatorState.operator) {
-        const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
-        if (activeBtn) {
-            activeBtn.classList.add('btn-operator--active');
-        }
-    }
-};      
-// REEMPLAZA TU FUNCIÓN handleCalculatorInput COMPLETA CON ESTA VERSIÓN
-const handleCalculatorInput = (key) => {
-    hapticFeedback('light');
-    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
-    
-    if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
-        displayValue = '0';
-        isResultDisplayed = false;
-        historyValue = ''; // Limpiamos historial al empezar un nuevo cálculo
-    }
-
-    const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
-
-    if (isOperator) {
-        if (operand1 !== null && operator !== null && !waitingForNewValue) {
-            calculate();
-            displayValue = calculatorState.displayValue; 
-        }
-        operand1 = parseFloat(displayValue.replace(',', '.'));
-        operator = key;
-        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`; // Actualizamos el historial
-        waitingForNewValue = true;
-        isResultDisplayed = false;
-    } else {
-        switch(key) {
-            case 'done':
-    hapticFeedback('medium');
-    if (operand1 !== null && operator !== null && !waitingForNewValue) {
-        calculate();
-        displayValue = calculatorState.displayValue;
-    }
-    
-    if (calculatorState.targetInput) {
-        const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
-        
-        // --- INICIO DE LA MODIFICACIÓN ---
-        // La calculadora ahora inserta el valor "limpio" (sin puntos de miles),
-        // pero con la coma decimal correcta para España.
-        calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
-            useGrouping: false, // ¡Clave! No usamos separadores de miles aquí.
-            minimumFractionDigits: 2, 
-            maximumFractionDigits: 2 
-        });
-        // --- FIN DE LA MODIFICACIÓN ---
-
-        calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        // Forzamos el evento 'blur' para que se formatee inmediatamente
-        calculatorState.targetInput.dispatchEvent(new Event('blur')); 
-    }
-    historyValue = '';
-    hideCalculator();
-    select('movimiento-descripcion').focus();
-    return;
-
-            case 'comma':
-                if (waitingForNewValue) {
-                    displayValue = '0,';
-                    waitingForNewValue = false;
-                } else if (!displayValue.includes(',')) {
-                    displayValue += ',';
-                }
-                isResultDisplayed = false;
-                break;
-            
-            case 'clear': 
-                displayValue = '0'; 
-                waitingForNewValue = true; 
-                operand1 = null; 
-                operator = null; 
-                isResultDisplayed = false; 
-                historyValue = ''; // Limpiamos historial
-                break;
-
-            case 'backspace': 
-                if (displayValue.length > 1) {
-                    displayValue = displayValue.slice(0, -1);
-                } else {
-                    displayValue = '0';
-                    waitingForNewValue = true;
-                }
-                isResultDisplayed = false;
-                break;
-
-            case 'sign': 
-                if (displayValue !== '0') { 
-                    displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
-                }
-                break;
-                
-            default: // Dígitos
-                if (waitingForNewValue || displayValue === '0') {
-                    displayValue = key;
-                    waitingForNewValue = false;
-                } else {
-                    displayValue += key;
-                }
-                isResultDisplayed = false;
-                break;
-        }
-    }
-    
-    // Guardamos todos los cambios en el estado global
-    calculatorState.displayValue = displayValue;
-    calculatorState.waitingForNewValue = waitingForNewValue;
-    calculatorState.operand1 = operand1;
-    calculatorState.operator = operator;
-    calculatorState.isResultDisplayed = isResultDisplayed;
-    calculatorState.historyValue = historyValue;
-    
-    // Actualizamos toda la interfaz de la calculadora
-    updateCalculatorDisplay();
-    updateCalculatorHistoryDisplay();
-    updateActiveOperatorButton();
-};
-
-// Y también la función calculate() para que use comas correctamente
-const calculate = () => {
-    const val1 = calculatorState.operand1;
-    const val2 = parseFloat(calculatorState.displayValue.replace(',', '.'));
-    if (isNaN(val1) || isNaN(val2) || !calculatorState.operator) return;
-
-    let result = 0;
-    switch (calculatorState.operator) {
-        case 'add': result = val1 + val2; break;
-        case 'subtract': result = val1 - val2; break;
-        case 'multiply': result = val1 * val2; break;
-        case 'divide':
-            if (val2 === 0) {
-                showToast("No se puede dividir por cero.", "danger");
-                result = 0;
-            } else {
-                result = val1 / val2;
-            }
-            break;
-    }
-
-    // El resultado se formatea a un string con coma y un máximo de decimales para el display.
-    // toPrecision(12) evita errores de coma flotante como 0.1 + 0.2 = 0.30000000000000004
-    const resultString = parseFloat(result.toPrecision(12)).toString().replace('.', ',');
-    
-    calculatorState.displayValue = resultString;
-    calculatorState.operand1 = null;
-    calculatorState.operator = null;
-    calculatorState.waitingForNewValue = true;
-    calculatorState.isResultDisplayed = true; // Marcamos que esto es un resultado final
-};
 		 const updateDoneButtonText = () => {
             const doneButton = select('calculator-btn-done');
             if (doneButton) {
@@ -8365,8 +8471,7 @@ if (amountInputForSync) {
 			'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
             'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
-            'load-more-movements': () => loadMoreMovements(),
-        };
+            };
         
         if (actions[action]) {
             actions[action](e);
@@ -10097,63 +10202,7 @@ const validateMovementForm = () => {
     }
     return isValid;
 };
-
-// AÑADIR ESTE BLOQUE DE 3 FUNCIONES NUEVAS
-function handleModalDragStart(e) {
-    const modal = e.target.closest('.modal');
-    // Nos aseguramos de que el arrastre empieza en el modal y no en el overlay
-    if (!modal) return;
-    
-    // ¡Clave! Si el contenido del modal está scrolleado, no hacemos nada.
-    const modalBody = modal.querySelector('.modal__body');
-    if (modalBody && modalBody.scrollTop > 0) return;
-
-    modalDragState.isDragging = true;
-    modalDragState.targetModal = modal;
-    modalDragState.startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
-    
-    // Quitamos la animación para que el movimiento sea instantáneo
-    modal.style.transition = 'none';
-}
-
-function handleModalDragMove(e) {
-    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
-    
-    modalDragState.currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
-    let deltaY = modalDragState.currentY - modalDragState.startY;
-
-    // Solo permitimos arrastrar hacia abajo
-    if (deltaY > 0) {
-        // Evitamos que la página de detrás se mueva en el móvil
-        e.preventDefault(); 
-        modalDragState.targetModal.style.transform = `translateY(${deltaY}px)`;
-    }
-}
-
-function handleModalDragEnd(e) {
-    if (!modalDragState.isDragging || !modalDragState.targetModal) return;
-
-    const modal = modalDragState.targetModal;
-    // Le devolvemos su animación de "muelle"
-    modal.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'; 
-
-    const deltaY = modalDragState.currentY - modalDragState.startY;
-    const modalHeight = modal.offsetHeight;
-
-    // Si lo hemos arrastrado más de un 30% de su altura, lo cerramos.
-    if (deltaY > modalHeight * 0.3) {
-        const overlay = modal.closest('.modal-overlay');
-        if (overlay) hideModal(overlay.id);
-    } else {
-        // Si no, vuelve a su sitio
-        modal.style.transform = 'translateY(0)';
-    }
-
-    // Reseteamos todo para la próxima vez
-    modalDragState.isDragging = false;
-    modalDragState.targetModal = null;
-}
-
+ 
 const longPressState = { timer: null, isLongPress: false };
 const swipeState = { activeCard: null, startX: 0, currentX: 0, isSwiping: false, isSwipeIntent: false, threshold: 60 };
 
@@ -10302,85 +10351,99 @@ swipeState.activeCard = null;
 };
 
 const handleDescriptionInput = () => {
-clearTimeout(descriptionSuggestionDebounceTimer);
-descriptionSuggestionDebounceTimer = setTimeout(() => {
-const descriptionInput = select('movimiento-descripcion');
-const suggestionsBox = select('description-suggestions');
-if (!descriptionInput || !suggestionsBox) return;
+    clearTimeout(descriptionSuggestionDebounceTimer);
+    descriptionSuggestionDebounceTimer = setTimeout(() => {
+        const descriptionInput = select('movimiento-descripcion');
+        const suggestionsBox = select('description-suggestions');
+        if (!descriptionInput || !suggestionsBox) return;
 
-const query = descriptionInput.value.trim().toLowerCase();
-    suggestionsBox.innerHTML = '';
+        const query = descriptionInput.value.trim().toLowerCase();
+        suggestionsBox.innerHTML = '';
 
-    if (query.length < 2) { 
-        suggestionsBox.style.display = 'none';
-        return;
-    }
-
-    const suggestions = [];
-    for (const [desc, data] of intelligentIndex.entries()) {
-        if (desc.includes(query)) {
-            suggestions.push({ description: desc, ...data });
+        if (query.length < 2) {
+            suggestionsBox.style.display = 'none';
+            return;
         }
-    }
 
-    // 1. Algoritmo de puntuación: 60% Frecuencia, 40% Recencia
-    const now = Date.now();
-    suggestions.sort((a, b) => {
-        const recencyA = Math.exp((a.lastUsed - now) / (1000 * 3600 * 24 * 30)); 
-        const recencyB = Math.exp((b.lastUsed - now) / (1000 * 3600 * 24 * 30));
-        // Cuanto mayor la puntuación, mejor
-        const scoreA = (a.count * 0.6) + (recencyA * 0.4); 
-        const scoreB = (b.count * 0.6) + (recencyB * 0.4);
-        return scoreB - scoreA;
-    });
-
-    const topSuggestion = suggestions[0];
-    const conceptoSelect = select('movimiento-concepto');
-    const cuentaSelect = select('movimiento-cuenta');
-    
-    // 2. LÓGICA CRÍTICA: DOBLE PREDICCIÓN AUTOMÁTICA
-    if (topSuggestion) {
-        // Rellenamos solo si la coincidencia es exacta o muy alta (por ejemplo, si la descripción actual empieza con la predicción)
-        if (topSuggestion.description.startsWith(query) && topSuggestion.description.length > query.length) {
-            
-            // Si el concepto está vacío, lo rellenamos
-            if (!conceptoSelect.value && conceptoSelect.querySelector(`option[value="${topSuggestion.conceptoId}"]`)) {
-                conceptoSelect.value = topSuggestion.conceptoId;
-                conceptoSelect.closest('.form-group-addon').classList.add('field-highlighted');
-                setTimeout(() => conceptoSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
-            }
-            
-            // Si la cuenta está vacío, lo rellenamos
-            if (!cuentaSelect.value && cuentaSelect.querySelector(`option[value="${topSuggestion.cuentaId}"]`)) {
-                cuentaSelect.value = topSuggestion.cuentaId;
-                cuentaSelect.closest('.form-group-addon').classList.add('field-highlighted');
-                setTimeout(() => cuentaSelect.closest('.form-group-addon').classList.remove('field-highlighted'), 1500);
+        // 1. Busca las mejores sugerencias basadas en tus hábitos
+        const suggestions = [];
+        for (const [desc, data] of intelligentIndex.entries()) {
+            if (desc.includes(query)) {
+                suggestions.push({ description: desc, ...data });
             }
         }
 
+        const now = Date.now();
+        suggestions.sort((a, b) => {
+            const recencyA = Math.exp((a.lastUsed - now) / (1000 * 3600 * 24 * 30));
+            const recencyB = Math.exp((b.lastUsed - now) / (1000 * 3600 * 24 * 30));
+            const scoreA = (a.count * 0.6) + (recencyA * 0.4);
+            const scoreB = (b.count * 0.6) + (recencyB * 0.4);
+            return scoreB - scoreA;
+        });
 
-        // 3. Renderizamos las sugerencias en el box (ya implementado)
-        suggestionsBox.innerHTML = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).map(s => { 
-            const concepto = db.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
-            const cuenta = db.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
-            return `
-                <div class="suggestion-item" 
-                     data-action="apply-description-suggestion"
-                     data-description="${escapeHTML(s.description)}" 
-                     data-concepto-id="${s.conceptoId}" 
-                     data-cuenta-id="${s.cuentaId}"
-                     tabindex="0">
-                    <p>${escapeHTML(toSentenceCase(s.description))}</p>
-                    <small>${escapeHTML(concepto)} • ${escapeHTML(cuenta)}</small>
-                </div>`;
-        }).join('');
-        suggestionsBox.style.display = 'block';
-    } else {
-        suggestionsBox.style.display = 'none';
-    }
-}, 250);
+        const topSuggestion = suggestions[0];
+        const conceptoSelect = select('movimiento-concepto');
+        const cuentaSelect = select('movimiento-cuenta');
 
+        // ==========================================================
+        // ===        ✨ ¡LA MAGIA DEL COPILOTO SUCEDE AQUÍ! ✨      ===
+        // ==========================================================
+        if (topSuggestion) {
+            // 2. Si lo que escribes coincide con el inicio de tu mejor sugerencia...
+            if (topSuggestion.description.startsWith(query) && topSuggestion.description.length > query.length) {
+                
+                // 3. ...y si el campo "Concepto" está vacío, ¡lo rellenamos por ti!
+                if (!conceptoSelect.value && conceptoSelect.querySelector(`option[value="${topSuggestion.conceptoId}"]`)) {
+                    conceptoSelect.value = topSuggestion.conceptoId;
+                    
+                    // Animación para que veas lo que ha pasado
+                    const parent = conceptoSelect.closest('.form-group-addon');
+                    if(parent) {
+                        parent.classList.add('field-highlighted');
+                        setTimeout(() => parent.classList.remove('field-highlighted'), 1500);
+                    }
+                }
+                
+                // 4. ...y hacemos lo mismo con el campo "Cuenta".
+                if (!cuentaSelect.value && cuentaSelect.querySelector(`option[value="${topSuggestion.cuentaId}"]`)) {
+                    cuentaSelect.value = topSuggestion.cuentaId;
+
+                    // Animación para que veas lo que ha pasado
+                    const parent = cuentaSelect.closest('.form-group-addon');
+                    if(parent) {
+                        parent.classList.add('field-highlighted');
+                        setTimeout(() => parent.classList.remove('field-highlighted'), 1500);
+                    }
+                }
+            }
+            
+            // ==========================================================
+            // ===                FIN DE LA MAGIA                     ===
+            // ==========================================================
+
+            // 5. El resto del código simplemente muestra la lista de sugerencias, como ya hacía antes.
+            suggestionsBox.innerHTML = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).map(s => {
+                const concepto = db.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
+                const cuenta = db.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
+                return `
+                    <div class="suggestion-item" 
+                         data-action="apply-description-suggestion"
+                         data-description="${escapeHTML(s.description)}" 
+                         data-concepto-id="${s.conceptoId}" 
+                         data-cuenta-id="${s.cuentaId}"
+                         tabindex="0">
+                        <p>${escapeHTML(toSentenceCase(s.description))}</p>
+                        <small>${escapeHTML(concepto)} • ${escapeHTML(cuenta)}</small>
+                    </div>`;
+            }).join('');
+            suggestionsBox.style.display = 'block';
+        } else {
+            suggestionsBox.style.display = 'none';
+        }
+    }, 250);
 };
+
 
 // =================================================================
 // === INICIO: MEJORAS DE USABILIDAD DEL FORMULARIO (NIVEL SUPREMO) ===
