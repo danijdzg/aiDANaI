@@ -4418,9 +4418,7 @@ const updateLocalDataAndRefreshUI = async () => {
 // === FIN: NUEVA FUNCIÓN AYUDANTE                               ===
 // ================================================================= 
  
-// =========================================================================
-// === INICIO: NUEVO SISTEMA COMPLETO DE CARGA DE MOVIMIENTOS (Paginación Manual)
-// =========================================================================
+// ▼▼▼ REEMPLAZA TU FUNCIÓN updateVirtualListUI POR COMPLETO CON ESTA VERSIÓN CORREGIDA ▼▼▼
 
 const updateVirtualListUI = () => {
     if (!vList.sizerEl) return;
@@ -4450,47 +4448,69 @@ const updateVirtualListUI = () => {
         });
     }
 
-   // 2. Agrupación de movimientos por mes y día (esto no cambia)
+   // 2. Agrupación de movimientos por mes y día
     const groupedByMonth = {};
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+
     (db.movimientos || []).forEach(mov => {
-        const date = new Date(mov.fecha);
-        const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-        const dateKey = mov.fecha.slice(0, 10);
-        if (!groupedByMonth[monthKey]) { groupedByMonth[monthKey] = { days: {}, monthNet: 0, monthIncome: 0, monthExpense: 0 }; }
-        if (!groupedByMonth[monthKey].days[dateKey]) { groupedByMonth[monthKey].days[dateKey] = { movements: [], total: 0 }; }
-        const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-        let amount = 0;
+        let isVisibleInLedger = false;
+        let amountForTotals = 0;
+
+        // ✅ INICIO DE LA LÓGICA CORREGIDA PARA VISIBILIDAD Y TOTALES ✅
         if (mov.tipo === 'traspaso') {
-            if (visibleAccountIds.has(mov.cuentaOrigenId) && !visibleAccountIds.has(mov.cuentaDestinoId)) amount = -mov.cantidad;
-            else if (!visibleAccountIds.has(mov.cuentaOrigenId) && visibleAccountIds.has(mov.cuentaDestinoId)) amount = mov.cantidad;
-        } else { if (visibleAccountIds.has(mov.cuentaId)) amount = mov.cantidad; }
-        if (amount !== 0) {
-            groupedByMonth[monthKey].days[dateKey].movements.push(mov);
-            groupedByMonth[monthKey].days[dateKey].total += amount;
-            groupedByMonth[monthKey].monthNet += amount;
-            if (amount > 0) groupedByMonth[monthKey].monthIncome += amount; else groupedByMonth[monthKey].monthExpense += amount;
+            const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
+            const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
+            
+            // Un traspaso es VISIBLE si al menos una de sus cuentas está en la contabilidad actual.
+            isVisibleInLedger = origenVisible || destinoVisible;
+
+            // Su IMPACTO en los totales solo se cuenta si es un traspaso entre contabilidades.
+            if (origenVisible && !destinoVisible) amountForTotals = -mov.cantidad;
+            else if (!origenVisible && destinoVisible) amountForTotals = mov.cantidad;
+
+        } else { // Es un movimiento normal (ingreso/gasto)
+            isVisibleInLedger = visibleAccountIds.has(mov.cuentaId);
+            if (isVisibleInLedger) {
+                amountForTotals = mov.cantidad;
+            }
         }
+
+        // Si el movimiento es visible, lo procesamos para mostrarlo.
+        if (isVisibleInLedger) {
+            const date = new Date(mov.fecha);
+            const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+            const dateKey = mov.fecha.slice(0, 10);
+            
+            if (!groupedByMonth[monthKey]) { groupedByMonth[monthKey] = { days: {}, monthNet: 0, monthIncome: 0, monthExpense: 0 }; }
+            if (!groupedByMonth[monthKey].days[dateKey]) { groupedByMonth[monthKey].days[dateKey] = { movements: [], total: 0 }; }
+            
+            // Añadimos el movimiento a la lista de ESE DÍA.
+            groupedByMonth[monthKey].days[dateKey].movements.push(mov);
+
+            // Actualizamos los totales SÓLO con el impacto real en la contabilidad.
+            groupedByMonth[monthKey].days[dateKey].total += amountForTotals;
+            groupedByMonth[monthKey].monthNet += amountForTotals;
+            if (amountForTotals > 0) groupedByMonth[monthKey].monthIncome += amountForTotals;
+            else groupedByMonth[monthKey].monthExpense += amountForTotals;
+        }
+        // ✅ FIN DE LA LÓGICA CORREGIDA ✅
     });
 
-    // === INICIO DE LA LÓGICA FINAL Y SIMPLIFICADA ===
+    // 3. Construcción de la lista para la interfaz (esta parte ya era correcta)
     const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
 
     for (const monthKey of sortedMonths) {
         const monthData = groupedByMonth[monthKey];
         const monthDate = new Date(monthKey + '-02T12:00:00Z');
 
-        // REGLA ÚNICA: El resumen del mes SIEMPRE va primero.
         vList.items.push({ type: 'month-header', date: monthDate, net: monthData.monthNet, income: monthData.monthIncome, expense: monthData.monthExpense });
         vList.itemMap.push({ height: 70, offset: currentHeight });
         currentHeight += 70;
 
-        // Después del resumen, procesamos todos los días y movimientos de ese mes.
         const sortedDates = Object.keys(monthData.days).sort((a, b) => b.localeCompare(a));
         for (const dateKey of sortedDates) {
             const group = monthData.days[dateKey];
             
-            // ✅ ESTA ES LA MODIFICACIÓN QUE DEBES APLICAR ✅
-            // Solo creamos la cabecera y listamos movimientos si realmente hay alguno.
             if (group.movements && group.movements.length > 0) {
                 vList.items.push({ type: 'date-header', date: dateKey, total: group.total });
                 vList.itemMap.push({ height: vList.heights.header, offset: currentHeight });
@@ -4505,9 +4525,8 @@ const updateVirtualListUI = () => {
             }
         }
     }
-    // === FIN DE LA LÓGICA FINAL ===
     
-    // 3. Renderizar y actualizar (sin cambios)
+    // 4. Renderizar y actualizar (sin cambios)
     vList.sizerEl.style.height = `${currentHeight}px`;
     vList.lastRenderedRange = { start: -1, end: -1 }; 
     renderVisibleItems();
@@ -9233,7 +9252,7 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
         if (cuenta) cuenta.saldo += newData.cantidad;
     }
 };
-const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
+const handleSaveMovement = async (form, btn) => {
     clearAllErrors(form.id);
     if (!validateMovementForm()) {
         hapticFeedback('error');
@@ -9241,16 +9260,17 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
         return false;
     }
 
+    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
     setButtonLoading(btn, true);
 
     const isRecurrent = select('movimiento-recurrente').checked;
-    
+
     if (isRecurrent) {
-        // Tu lógica para recurrentes es correcta y no necesita cambios
+        // La lógica para recurrentes no cambia, ya que no afecta directamente a la lista del Diario.
         try {
             const id = select('movimiento-id').value || generateId();
             const cantidadValue = parseCurrencyString(select('movimiento-cantidad').value);
-            const tipo = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+            const tipo = select('mov-type-btn-traspaso').classList.contains('filter-pill-active') ? 'traspaso' : 'movimiento';
             
             const dataToSave = {
                 id: id,
@@ -9269,44 +9289,21 @@ const handleSaveMovement = async (form, btn, isSaveAndNew = false) => {
             await saveDoc('recurrentes', id, dataToSave);
 
             setButtonLoading(btn, false);
-hapticFeedback('success');
+            hapticFeedback('success');
 
-if (!isSaveAndNew) {
-    // ¡Llamamos a nuestra animación aquí!
-    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
-
-    // Esperamos un poquito antes de cerrar el modal para que la animación empiece a verse.
-    setTimeout(() => {
-        hideModal('movimiento-modal');
-    }, 200); // 200 milisegundos es un buen retardo.
-
-} else {
-    // Si es "Guardar y Nuevo", disparamos la animación igualmente.
-    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
-}
-
-// El toast ahora se muestra después para no interferir.
-if (!isSaveAndNew) {
-    showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
-} else {
-    // Si es "Guardar y Nuevo", limpiamos el formulario para el siguiente.
-    form.reset();
-    setMovimientoFormType('movimiento'); // Volvemos al tipo por defecto
-    const today = new Date();
-    const fechaInput = select('movimiento-fecha');
-    fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-    updateDateDisplay(fechaInput);
-    select('movimiento-cantidad').focus(); // Foco en el campo de cantidad.
-    
-    // ¡Importante! Reseteamos la variable para la siguiente animación.
-    newMovementIdToHighlight = null; 
-}
+            if (!isSaveAndNew) {
+                hideModal('movimiento-modal');
+                showToast(select('movimiento-mode').value === 'new' ? 'Operación programada.' : 'Operación actualizada.');
+            } else {
+                form.reset();
+                showToast('Operación programada, puedes añadir otra.', 'info');
+                select('movimiento-cantidad').focus();
+            }
 
             const activePage = document.querySelector('.view--active');
             if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
                 renderPlanificacionPage();
             }
-            
             return true;
 
         } catch (error) {
@@ -9317,7 +9314,7 @@ if (!isSaveAndNew) {
         }
 
     } else {
-        // --- AQUÍ ESTÁ LA LÓGICA OPTIMISTA PARA MOVIMIENTOS NORMALES ---
+        // --- ✅ AQUÍ ESTÁ LA LÓGICA CORREGIDA PARA MOVIMIENTOS NORMALES ---
         const mode = select('movimiento-mode').value;
         const type = select('mov-type-btn-traspaso').classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
         const cantidadValue = parseCurrencyString(select('movimiento-cantidad').value);
@@ -9334,98 +9331,97 @@ if (!isSaveAndNew) {
             cuentaOrigenId: select('movimiento-cuenta-origen').value,
             cuentaDestinoId: select('movimiento-cuenta-destino').value,
         };
-if (dataFromForm.tipo === 'traspaso') {
-dataFromForm.cantidad = Math.abs(dataFromForm.cantidad);
-}
-
-try {
-        // Capturamos el estado antiguo ANTES de hacer cambios, si estamos editando.
-        let oldMovementData = null;
-        if (mode.startsWith('edit')) {
-            oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
+        if (dataFromForm.tipo === 'traspaso') {
+            dataFromForm.cantidad = Math.abs(dataFromForm.cantidad);
         }
-        
-        // Actualizamos los saldos en nuestra memoria local (db.cuentas) al instante.
-        applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
 
-        // Actualizamos la lista de movimientos en memoria
-        if (mode.startsWith('edit')) {
-            const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
-            if (index !== -1) db.movimientos[index] = dataFromForm;
-        } else {
-            db.movimientos.unshift(dataFromForm);
-            newMovementIdToHighlight = dataFromForm.id;
-        }
-        db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
-        // Esta función ahora usará los saldos correctos que acabamos de actualizar.
-        updateLocalDataAndRefreshUI();
-
-        // La lógica de guardado en Firebase se mantiene, se ejecuta en segundo plano.
-        await fbDb.runTransaction(async (transaction) => {
-            let oldDataForTx = null;
+        try {
+            let oldMovementData = null;
             if (mode.startsWith('edit')) {
-                const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
-                const oldDoc = await transaction.get(oldDocRef);
-                if (oldDoc.exists) oldDataForTx = oldDoc.data();
+                oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
             }
-            if (oldDataForTx) {
-                if (oldDataForTx.tipo === 'traspaso') {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                } else {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+            
+            // 1. Actualización Optimista (en memoria, instantáneo)
+            applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
+
+            if (mode.startsWith('edit')) {
+                const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
+                if (index !== -1) db.movimientos[index] = dataFromForm;
+            } else {
+                db.movimientos.unshift(dataFromForm);
+                newMovementIdToHighlight = dataFromForm.id;
+            }
+            db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
+
+            // 2. Redibujado de la UI
+            updateLocalDataAndRefreshUI();
+            
+            // 3. ¡LA ORDEN DE DESPLAZAMIENTO CRUCIAL!
+            const activePage = document.querySelector('.view--active');
+            if (activePage && activePage.id === PAGE_IDS.DIARIO) {
+                const mainScroller = document.querySelector('.app-layout__main');
+                if (mainScroller) {
+                    mainScroller.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             }
-            if (dataFromForm.tipo === 'traspaso') {
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+
+            // 4. Sincronización en segundo plano con la base de datos
+            await fbDb.runTransaction(async (transaction) => {
+                // ... (La lógica de la transacción no cambia)
+                let oldDataForTx = null;
+                if (mode.startsWith('edit')) {
+                    const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
+                    const oldDoc = await transaction.get(oldDocRef);
+                    if (oldDoc.exists) oldDataForTx = oldDoc.data();
+                }
+                if (oldDataForTx) {
+                    if (oldDataForTx.tipo === 'traspaso') {
+                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
+                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                    } else {
+                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                    }
+                }
+                if (dataFromForm.tipo === 'traspaso') {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+                } else {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+                }
+                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
+                transaction.set(movRef, dataFromForm);
+            });
+            
+            // 5. Feedback final al usuario
+            setButtonLoading(btn, false);
+            hapticFeedback('success');
+            triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+
+            if (!isSaveAndNew) {
+                setTimeout(() => hideModal('movimiento-modal'), 200);
+                showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
             } else {
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+                form.reset();
+                setMovimientoFormType('movimiento');
+                const today = new Date();
+                const fechaInput = select('movimiento-fecha');
+                fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+                updateDateDisplay(fechaInput);
+                select('movimiento-cantidad').focus();
             }
-            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
-            transaction.set(movRef, dataFromForm);
-        });
-        
-        setButtonLoading(btn, false);
-hapticFeedback('success');
+            return true;
 
-if (!isSaveAndNew) {
-    // ¡Llamamos a nuestra animación aquí!
-    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
-
-    // Esperamos un poquito antes de cerrar el modal para que la animación empiece a verse.
-    setTimeout(() => {
-        hideModal('movimiento-modal');
-    }, 200); // 200 milisegundos es un buen retardo.
-
-} else {
-    // Si es "Guardar y Nuevo", disparamos la animación igualmente.
-    triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
-}
-
-if (!isSaveAndNew) {
-    showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
-} else {
-    // Si es "Guardar y Nuevo", limpiamos el formulario para el siguiente.
-    form.reset();
-    setMovimientoFormType('movimiento'); // Volvemos al tipo por defecto
-    const today = new Date();
-    const fechaInput = select('movimiento-fecha');
-    fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-    updateDateDisplay(fechaInput);
-    select('movimiento-cantidad').focus(); // Foco en el campo de cantidad.
-}
-        return true;
-    } catch (error) {
-        console.error("Error al guardar el movimiento:", error);
-        showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
-        setButtonLoading(btn, false);
-        if (select('diario-page')?.classList.contains('view--active')) await loadMoreMovements(true); // Recarga si hay error
-        return false;
+        } catch (error) {
+            console.error("Error al guardar el movimiento:", error);
+            showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
+            setButtonLoading(btn, false);
+            // Si hay un error, forzamos una recarga completa para evitar inconsistencias
+            if (select('diario-page')?.classList.contains('view--active')) {
+                 await renderDiarioPage();
+            }
+            return false;
+        }
     }
-}
-
 };
 
 /**
