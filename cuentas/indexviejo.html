@@ -41,11 +41,16 @@
     border-radius: var(--border-radius-md);
     text-align: center;
     border: 1px solid var(--c-primary);
+	display: flex; /* Añade esto */
+    justify-content: space-between; /* Añade esto */
+    align-items: center; /* Añade esto */
 }
 #diario-filter-active-indicator p {
     margin: 0;
     font-size: var(--fs-sm);
     font-weight: 500;
+	display: flex;
+    gap: 8px;
 }
 #diario-filter-active-indicator button {
     background: none;
@@ -864,7 +869,40 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
     z-index: 10;
     backdrop-filter: blur(8px);
 }
+.movimiento-month-header {
+    background-color: var(--c-surface);
+    padding: var(--sp-3) var(--sp-4);
+    margin-top: var(--sp-4);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--c-outline);
+    box-shadow: var(--shadow-sm);
+    
+    /* Propiedades "pegajosas" para que se quede fija al hacer scroll */
+    position: sticky;
+    top: 88px; /* Altura de la barra de título (44px) + cabecera de día (44px) */
+    z-index: 9; /* Por debajo de la cabecera de día */
 
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.movimiento-month-header__title {
+    font-size: var(--fs-lg);
+    font-weight: 800;
+    color: var(--c-primary);
+    text-transform: capitalize;
+}
+
+.movimiento-month-header__summary {
+    text-align: right;
+}
+
+.movimiento-month-header__summary p {
+    margin: 0;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+}
 /* --- Calculadora Flotante --- */
 #calculator-overlay { z-index: 1100; /* Debe estar por encima de otros modales */ }
 .calculator-ui { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%); width: 100%; max-width: 420px; z-index: 10; background-color: var(--c-surface-variant); border-top: 1px solid var(--c-outline); padding: var(--sp-3); padding-bottom: calc(var(--sp-3) + env(safe-area-inset-bottom)); border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; box-shadow: 0 -5px 20px rgba(0,0,0,0.3); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); visibility: hidden; }
@@ -1738,6 +1776,66 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
     
     <script type="module">
+	const handleExportFilteredCsv = (btn) => {
+    // La lista de movimientos a exportar es la que ya tenemos filtrada en db.movimientos
+    const movementsToExport = db.movimientos;
+
+    if (movementsToExport.length === 0) {
+        showToast("No hay datos para exportar.", "warning");
+        return;
+    }
+
+    setButtonLoading(btn, true, 'Exportando...');
+
+    try {
+        const cuentasMap = new Map(db.cuentas.map(c => [c.id, c.nombre]));
+        const conceptosMap = new Map(db.conceptos.map(c => [c.id, c.nombre]));
+
+        const csvHeader = ['FECHA', 'CUENTA', 'CONCEPTO', 'IMPORTE', 'DESCRIPCIÓN'];
+        let csvRows = [csvHeader.join(';')];
+        
+        // Ordenamos los movimientos por fecha para la exportación
+        movementsToExport.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+        for (const mov of movementsToExport) {
+            const fecha = formatDateForCsv(mov.fecha);
+            const descripcion = `"${mov.descripcion.replace(/"/g, '""')}"`;
+            const importeStr = (mov.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
+            let cuentaNombre = '';
+            let conceptoNombre = '';
+
+            if (mov.tipo === 'traspaso') {
+                const origen = cuentasMap.get(mov.cuentaOrigenId) || '?';
+                const destino = cuentasMap.get(mov.cuentaDestinoId) || '?';
+                cuentaNombre = `"${origen} -> ${destino}"`;
+                conceptoNombre = '"TRASPASO"';
+            } else {
+                cuentaNombre = `"${cuentasMap.get(mov.cuentaId) || 'S/C'}"`;
+                conceptoNombre = `"${conceptosMap.get(mov.conceptoId) || 'S/C'}"`;
+            }
+
+            csvRows.push([fecha, cuentaNombre, conceptoNombre, importeStr, descripcion].join(';'));
+        }
+
+        const csvString = csvRows.join('\r\n');
+        const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `diario_filtrado_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast("Exportación CSV completada.", "info");
+
+    } catch (error) {
+        console.error("Error al exportar CSV filtrado:", error);
+        showToast("Error durante la exportación.", "danger");
+    } finally {
+        setButtonLoading(btn, false);
+    }
+};
 
 	import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm'
         
@@ -4197,8 +4295,19 @@ const renderInformesPage = () => {
 // === FIN: FUNCIÓN renderInformesPage (VERSIÓN MODIFICADA)  ===
 // =============================================================
         const renderVirtualListItem = (item) => {
-			/* === INICIO: CÓDIGO AÑADIDO === */
-            // Caso para renderizar la cabecera de la sección de pendientes
+			if (item.type === 'month-header') {
+    const monthName = item.date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return `
+        <div class="movimiento-month-header">
+            <h3 class="movimiento-month-header__title">${monthName}</h3>
+            <div class="movimiento-month-header__summary">
+                <p class="text-positive">${formatCurrency(item.income)}</p>
+                <p class="text-negative">${formatCurrency(item.expense)}</p>
+                <p style="border-top: 1px solid var(--c-outline); margin-top: 2px; padding-top: 2px;">${formatCurrency(item.net)}</p>
+            </div>
+        </div>
+    `;
+}
             if (item.type === 'pending-header') {
                 return `
                     <div class="movimiento-date-header" style="background-color: var(--c-warning); color: var(--c-black); font-weight: 800; letter-spacing: 0.5px;">
@@ -4354,36 +4463,73 @@ const updateVirtualListUI = () => {
         });
     }
 
-    // 2. Agrupar y añadir el historial de movimientos
-    const grouped = {};
-    (db.movimientos || []).forEach(mov => {
-        const dateKey = mov.fecha.slice(0, 10);
-        if (!grouped[dateKey]) grouped[dateKey] = { movements: [], total: 0 };
-        grouped[dateKey].movements.push(mov);
-        const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-        if (mov.tipo === 'traspaso') {
-            if (visibleAccountIds.has(mov.cuentaOrigenId) && !visibleAccountIds.has(mov.cuentaDestinoId)) grouped[dateKey].total -= mov.cantidad;
-            else if (!visibleAccountIds.has(mov.cuentaOrigenId) && visibleAccountIds.has(mov.cuentaDestinoId)) grouped[dateKey].total += mov.cantidad;
-        } else {
-            grouped[dateKey].total += mov.cantidad;
-        }
-    });
+   // 2. Agrupar y añadir el historial de movimientos
+const groupedByMonth = {};
+(db.movimientos || []).forEach(mov => {
+    const date = new Date(mov.fecha);
+    const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+    const dateKey = mov.fecha.slice(0, 10);
 
-    const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+    if (!groupedByMonth[monthKey]) {
+        groupedByMonth[monthKey] = {
+            days: {},
+            monthNet: 0,
+            monthIncome: 0,
+            monthExpense: 0
+        };
+    }
+    if (!groupedByMonth[monthKey].days[dateKey]) {
+        groupedByMonth[monthKey].days[dateKey] = {
+            movements: [],
+            total: 0
+        };
+    }
+
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+    let amount = 0;
+    if (mov.tipo === 'traspaso') {
+        if (visibleAccountIds.has(mov.cuentaOrigenId) && !visibleAccountIds.has(mov.cuentaDestinoId)) amount = -mov.cantidad;
+        else if (!visibleAccountIds.has(mov.cuentaOrigenId) && visibleAccountIds.has(mov.cuentaDestinoId)) amount = mov.cantidad;
+    } else {
+        amount = mov.cantidad;
+    }
+    
+    groupedByMonth[monthKey].days[dateKey].movements.push(mov);
+    groupedByMonth[monthKey].days[dateKey].total += amount;
+    groupedByMonth[monthKey].monthNet += amount;
+    if (amount > 0) groupedByMonth[monthKey].monthIncome += amount;
+    else groupedByMonth[monthKey].monthExpense += amount;
+});
+
+const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
+
+for (const monthKey of sortedMonths) {
+    const monthData = groupedByMonth[monthKey];
+    const monthDate = new Date(monthKey + '-02T12:00:00Z'); // Usamos el día 2 para evitar problemas de zona horaria
+    
+    // Insertamos la nueva cabecera mensual
+    vList.items.push({
+        type: 'month-header',
+        date: monthDate,
+        net: monthData.monthNet,
+        income: monthData.monthIncome,
+        expense: monthData.monthExpense
+    });
+    // ¡No olvides registrar su altura!
+    vList.itemMap.push({ height: 70, offset: currentHeight }); // Altura estimada, ajústala si es necesario
+    currentHeight += 70;
+
+    const sortedDates = Object.keys(monthData.days).sort((a, b) => b.localeCompare(a));
     for (const dateKey of sortedDates) {
-        const group = grouped[dateKey];
+        const group = monthData.days[dateKey];
         vList.items.push({ type: 'date-header', date: dateKey, total: group.total });
         vList.itemMap.push({ height: vList.heights.header, offset: currentHeight });
         currentHeight += vList.heights.header;
         
-        // ORDEN CORREGIDO: Se ordenan los movimientos para consistencia con el cálculo de saldos.
         group.movements.sort((a, b) => {
             const dateA = new Date(a.fecha).getTime();
             const dateB = new Date(b.fecha).getTime();
-            if (dateB !== dateA) {
-                return dateB - dateA; // Primero por fecha/hora, más reciente primero
-            }
-            // Si las fechas son idénticas, el ID de Firebase es el desempate final.
+            if (dateB !== dateA) return dateB - dateA;
             return b.id.localeCompare(a.id); 
         });
 
@@ -4394,6 +4540,7 @@ const updateVirtualListUI = () => {
             currentHeight += itemHeight;
         }
     }
+}
     
     // 3. Renderizar y actualizar
     vList.sizerEl.style.height = `${currentHeight}px`;
@@ -4597,8 +4744,15 @@ const renderDiarioPage = async () => {
     // --- LÓGICA NUEVA PARA LA VISTA DE LISTA CON FILTROS ---
     viewContainer.innerHTML = `
     <div id="diario-filter-active-indicator" class="hidden">
-        <p>Mostrando resultados filtrados. <button data-action="clear-diario-filters">Limpiar filtros</button></p>
+    <p>Mostrando resultados filtrados.</p>
+    <div>
+        <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">
+            <span class="material-icons" style="font-size: 14px;">download</span>
+            Exportar
+        </button>
+        <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
     </div>
+</div>
     <div id="movimientos-list-container">
         <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
     </div>
@@ -8234,6 +8388,7 @@ if (amountInputForSync) {
 }
       
         const actions = {
+	'export-filtered-csv': () => handleExportFilteredCsv(btn),	
 	'show-diario-filters': showDiarioFiltersModal,
     'clear-diario-filters': clearDiarioFilters,	
 	'toggle-amount-type': () => {

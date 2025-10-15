@@ -863,11 +863,6 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
     border-radius: 99px;
     margin-top: var(--sp-4);
     margin-bottom: var(--sp-2);
-    /* Propiedades "pegajosas" añadidas */
-    position: sticky;
-    top: 44px; 
-    z-index: 10;
-    backdrop-filter: blur(8px);
 }
 .movimiento-month-header {
     background-color: var(--c-surface);
@@ -876,11 +871,6 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
     border-radius: var(--border-radius-lg);
     border: 1px solid var(--c-outline);
     box-shadow: var(--shadow-sm);
-    
-    /* Propiedades "pegajosas" para que se quede fija al hacer scroll */
-    position: sticky;
-    top: 88px; /* Altura de la barra de título (44px) + cabecera de día (44px) */
-    z-index: 9; /* Por debajo de la cabecera de día */
 
     display: flex;
     justify-content: space-between;
@@ -3126,7 +3116,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.PANEL, true);
+			navigateTo(PAGE_IDS.DIARIO, true);
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -4432,8 +4422,6 @@ const updateLocalDataAndRefreshUI = async () => {
 // === INICIO: NUEVO SISTEMA COMPLETO DE CARGA DE MOVIMIENTOS (Paginación Manual)
 // =========================================================================
 
-// Paso A: La función que renderiza. Ahora es una única función que construye la UI
-// a partir de la lista de movimientos que ya tenemos en la caché `db.movimientos`.
 const updateVirtualListUI = () => {
     if (!vList.sizerEl) return;
 
@@ -4441,8 +4429,7 @@ const updateVirtualListUI = () => {
     vList.itemMap = [];
     let currentHeight = 0;
     
-    // 1. Añadir recurrentes pendientes (si existen)
-    // ... (Esta lógica no cambia y se mantiene igual que antes) ...
+    // 1. Lógica para los recurrentes pendientes (esto no cambia)
     const now = new Date();
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const pendingRecurrents = (db.recurrentes || [])
@@ -4463,95 +4450,70 @@ const updateVirtualListUI = () => {
         });
     }
 
-   // 2. Agrupar y añadir el historial de movimientos
-const groupedByMonth = {};
-(db.movimientos || []).forEach(mov => {
-    const date = new Date(mov.fecha);
-    const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-    const dateKey = mov.fecha.slice(0, 10);
-
-    if (!groupedByMonth[monthKey]) {
-        groupedByMonth[monthKey] = {
-            days: {},
-            monthNet: 0,
-            monthIncome: 0,
-            monthExpense: 0
-        };
-    }
-    if (!groupedByMonth[monthKey].days[dateKey]) {
-        groupedByMonth[monthKey].days[dateKey] = {
-            movements: [],
-            total: 0
-        };
-    }
-
-    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-    let amount = 0;
-    if (mov.tipo === 'traspaso') {
-        if (visibleAccountIds.has(mov.cuentaOrigenId) && !visibleAccountIds.has(mov.cuentaDestinoId)) amount = -mov.cantidad;
-        else if (!visibleAccountIds.has(mov.cuentaOrigenId) && visibleAccountIds.has(mov.cuentaDestinoId)) amount = mov.cantidad;
-    } else {
-        amount = mov.cantidad;
-    }
-    
-    groupedByMonth[monthKey].days[dateKey].movements.push(mov);
-    groupedByMonth[monthKey].days[dateKey].total += amount;
-    groupedByMonth[monthKey].monthNet += amount;
-    if (amount > 0) groupedByMonth[monthKey].monthIncome += amount;
-    else groupedByMonth[monthKey].monthExpense += amount;
-});
-
-const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
-
-for (const monthKey of sortedMonths) {
-    const monthData = groupedByMonth[monthKey];
-    const monthDate = new Date(monthKey + '-02T12:00:00Z'); // Usamos el día 2 para evitar problemas de zona horaria
-    
-    // Insertamos la nueva cabecera mensual
-    vList.items.push({
-        type: 'month-header',
-        date: monthDate,
-        net: monthData.monthNet,
-        income: monthData.monthIncome,
-        expense: monthData.monthExpense
+   // 2. Agrupación de movimientos por mes y día (esto no cambia)
+    const groupedByMonth = {};
+    (db.movimientos || []).forEach(mov => {
+        const date = new Date(mov.fecha);
+        const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+        const dateKey = mov.fecha.slice(0, 10);
+        if (!groupedByMonth[monthKey]) { groupedByMonth[monthKey] = { days: {}, monthNet: 0, monthIncome: 0, monthExpense: 0 }; }
+        if (!groupedByMonth[monthKey].days[dateKey]) { groupedByMonth[monthKey].days[dateKey] = { movements: [], total: 0 }; }
+        const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+        let amount = 0;
+        if (mov.tipo === 'traspaso') {
+            if (visibleAccountIds.has(mov.cuentaOrigenId) && !visibleAccountIds.has(mov.cuentaDestinoId)) amount = -mov.cantidad;
+            else if (!visibleAccountIds.has(mov.cuentaOrigenId) && visibleAccountIds.has(mov.cuentaDestinoId)) amount = mov.cantidad;
+        } else { if (visibleAccountIds.has(mov.cuentaId)) amount = mov.cantidad; }
+        if (amount !== 0) {
+            groupedByMonth[monthKey].days[dateKey].movements.push(mov);
+            groupedByMonth[monthKey].days[dateKey].total += amount;
+            groupedByMonth[monthKey].monthNet += amount;
+            if (amount > 0) groupedByMonth[monthKey].monthIncome += amount; else groupedByMonth[monthKey].monthExpense += amount;
+        }
     });
-    // ¡No olvides registrar su altura!
-    vList.itemMap.push({ height: 70, offset: currentHeight }); // Altura estimada, ajústala si es necesario
-    currentHeight += 70;
 
-    const sortedDates = Object.keys(monthData.days).sort((a, b) => b.localeCompare(a));
-    for (const dateKey of sortedDates) {
-        const group = monthData.days[dateKey];
-        vList.items.push({ type: 'date-header', date: dateKey, total: group.total });
-        vList.itemMap.push({ height: vList.heights.header, offset: currentHeight });
-        currentHeight += vList.heights.header;
-        
-        group.movements.sort((a, b) => {
-            const dateA = new Date(a.fecha).getTime();
-            const dateB = new Date(b.fecha).getTime();
-            if (dateB !== dateA) return dateB - dateA;
-            return b.id.localeCompare(a.id); 
-        });
+    // === INICIO DE LA LÓGICA FINAL Y SIMPLIFICADA ===
+    const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
 
-        for (const mov of group.movements) {
-            const itemHeight = mov.tipo === 'traspaso' ? vList.heights.transfer : vList.heights.transaction;
-            vList.items.push({ type: 'transaction', movement: mov });
-            vList.itemMap.push({ height: itemHeight, offset: currentHeight });
-            currentHeight += itemHeight;
+    for (const monthKey of sortedMonths) {
+        const monthData = groupedByMonth[monthKey];
+        const monthDate = new Date(monthKey + '-02T12:00:00Z');
+
+        // REGLA ÚNICA: El resumen del mes SIEMPRE va primero.
+        vList.items.push({ type: 'month-header', date: monthDate, net: monthData.monthNet, income: monthData.monthIncome, expense: monthData.monthExpense });
+        vList.itemMap.push({ height: 70, offset: currentHeight });
+        currentHeight += 70;
+
+        // Después del resumen, procesamos todos los días y movimientos de ese mes.
+        const sortedDates = Object.keys(monthData.days).sort((a, b) => b.localeCompare(a));
+        for (const dateKey of sortedDates) {
+            const group = monthData.days[dateKey];
+            
+            // ✅ ESTA ES LA MODIFICACIÓN QUE DEBES APLICAR ✅
+            // Solo creamos la cabecera y listamos movimientos si realmente hay alguno.
+            if (group.movements && group.movements.length > 0) {
+                vList.items.push({ type: 'date-header', date: dateKey, total: group.total });
+                vList.itemMap.push({ height: vList.heights.header, offset: currentHeight });
+                currentHeight += vList.heights.header;
+                group.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
+                for (const mov of group.movements) {
+                    const itemHeight = mov.tipo === 'traspaso' ? vList.heights.transfer : vList.heights.transaction;
+                    vList.items.push({ type: 'transaction', movement: mov });
+                    vList.itemMap.push({ height: itemHeight, offset: currentHeight });
+                    currentHeight += itemHeight;
+                }
+            }
         }
     }
-}
+    // === FIN DE LA LÓGICA FINAL ===
     
-    // 3. Renderizar y actualizar
+    // 3. Renderizar y actualizar (sin cambios)
     vList.sizerEl.style.height = `${currentHeight}px`;
-    vList.lastRenderedRange = { start: -1, end: -1 }; // Forzar re-renderizado
+    vList.lastRenderedRange = { start: -1, end: -1 }; 
     renderVisibleItems();
-
-    // 4. Gestionar la visibilidad de los contenedores
     const loadMoreContainer = select('load-more-container');
     const emptyContainer = select('empty-movimientos');
     const listContainer = select('movimientos-list-container');
-    
     if (vList.items.length === 0) {
         listContainer?.classList.add('hidden');
         loadMoreContainer?.classList.add('hidden');
@@ -4559,7 +4521,6 @@ for (const monthKey of sortedMonths) {
     } else {
         listContainer?.classList.remove('hidden');
         emptyContainer?.classList.add('hidden');
-        // El botón "Cargar más" solo aparece si NO hemos llegado al final.
         loadMoreContainer?.classList.toggle('hidden', allMovementsLoaded);
     }
 };
