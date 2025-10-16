@@ -703,6 +703,95 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 .fab { position: fixed; bottom: calc(56px + env(safe-area-inset-bottom)); right: var(--sp-5); width: 56px; height: 56px; background-color: var(--c-primary); color: var(--c-white); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); z-index: 50; transform: scale(0); opacity: 0; transition: transform 0.2s ease-out, opacity 0.2s ease-out; }
 .fab--visible { transform: scale(1); opacity: 1; }
 .fab:hover { transform: scale(1.08) !important; box-shadow: 0 0 25px var(--c-primary); } .fab .material-icons { font-size: 28px; }
+.fab-container {
+    position: fixed;
+    bottom: calc(56px + env(safe-area-inset-bottom));
+    right: var(--sp-5);
+    z-index: 1040; /* Por encima de la app, pero debajo de los modales */
+    display: flex;
+    flex-direction: column-reverse; /* Apila los elementos hacia arriba */
+    align-items: center;
+    gap: 16px; /* Espacio entre los botones */
+}
+
+/* El botón principal necesita estar visible por defecto */
+#fab-main {
+    position: relative; /* Para que quede por encima de los otros botones al estar cerrado */
+    transform: scale(1); /* Anulamos la animación de aparición por defecto */
+    opacity: 1;
+}
+/* El icono del botón principal */
+#fab-main .material-icons {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- Los botones de acción y sus etiquetas --- */
+.fab-action-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+    pointer-events: none; /* No se puede hacer clic cuando están ocultos */
+}
+.fab-action-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    color: var(--c-white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-sm);
+}
+.fab-action-label {
+    background-color: var(--c-surface);
+    color: var(--c-on-surface);
+    padding: 4px 10px;
+    border-radius: var(--border-radius-md);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+    white-space: nowrap;
+}
+
+/* --- Lógica de Apertura y Cierre --- */
+.fab-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    z-index: -1;
+    transition: opacity 0.3s ease-out;
+    pointer-events: none;
+}
+
+/* Estado ACTIVO del contenedor */
+.fab-container--active #fab-main .material-icons {
+    transform: rotate(45deg); /* Gira el '+' para convertirlo en 'x' */
+}
+.fab-container--active .fab-overlay {
+    opacity: 1;
+    pointer-events: auto; /* Permite hacer clic para cerrar */
+}
+.fab-container--active .fab-action-item {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+/* Pequeño retraso para que aparezcan en cascada */
+.fab-container--active .fab-action-item:nth-last-of-type(2) { transition-delay: 0.05s; }
+.fab-container--active .fab-action-item:nth-last-of-type(3) { transition-delay: 0.1s; }
+.fab-container--active .fab-action-item:nth-last-of-type(4) { transition-delay: 0.15s; }
+
+/* Asignamos colores a los botones pequeños */
+.fab-action-btn.btn--danger { background-color: var(--c-danger); }
+.fab-action-btn.btn--success { background-color: var(--c-success); }
+.fab-action-btn.btn--info { background-color: var(--c-info); }
 
 /* --- Modales --- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(12px); display: flex; align-items: flex-end; justify-content: center; z-index: 1050; opacity: 0; transition: opacity 0.3s ease-out; pointer-events: none; }
@@ -1513,7 +1602,35 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 
         </main>
         
-        <button data-action="add-movement" id="fab-add-movimiento" class="fab" title="Añadir Movimiento" aria-label="Añadir Movimiento"><span class="material-icons">add</span></button>
+        <div class="fab-container">
+    <!-- Overlay para cerrar el menú al hacer clic fuera -->
+    <div class="fab-overlay"></div>
+
+    <!-- Acciones que aparecen -->
+    <div class="fab-action-item">
+        <span class="fab-action-label">Traspaso</span>
+        <button data-action="open-fab-action" data-type="traspaso" class="fab-action-btn btn--info">
+            <span class="material-icons">swap_horiz</span>
+        </button>
+    </div>
+    <div class="fab-action-item">
+        <span class="fab-action-label">Ingreso</span>
+        <button data-action="open-fab-action" data-type="ingreso" class="fab-action-btn btn--success">
+            <span class="material-icons">arrow_downward</span>
+        </button>
+    </div>
+    <div class="fab-action-item">
+        <span class="fab-action-label">Gasto</span>
+        <button data-action="open-fab-action" data-type="gasto" class="fab-action-btn btn--danger">
+            <span class="material-icons">arrow_upward</span>
+        </button>
+    </div>
+    
+    <!-- Botón Principal (el que siempre se ve) -->
+    <button data-action="toggle-fab-menu" id="fab-main" class="fab fab--visible" title="Añadir Movimiento">
+        <span class="material-icons">add</span>
+    </button>
+</div>
 
     </div>
 
@@ -8503,6 +8620,28 @@ if (amountInputForFormatting) {
         const btn = actionTarget.closest('button');
 		      
         const actions = {
+		'export-filtered-csv': () => handleExportFilteredCsv(btn),
+            'show-diario-filters': showDiarioFiltersModal,
+            // ... (el resto de tus acciones existentes)
+
+            // === INICIO DE LOS CAMBIOS EN EL LISTENER ===
+            'toggle-fab-menu': toggleFabMenu, // 1. Nueva acción para el botón principal
+
+            'open-fab-action': (e) => { // 2. Nueva acción para los botones pequeños
+                const button = e.target.closest('[data-type]');
+                if (!button) return;
+
+                // Primero cerramos el menú
+                document.querySelector('.fab-container').classList.remove('fab-container--active');
+                
+                // Luego, abrimos el formulario y le aplicamos el tipo correcto
+                startMovementForm(); // Llama a tu función que abre el modal
+                
+                // Usamos un pequeño retardo para asegurar que el modal está listo
+                setTimeout(() => {
+                    setMovimientoFormType(button.dataset.type);
+                }, 50);
+            },
 	'export-filtered-csv': () => handleExportFilteredCsv(btn),	
 	'show-diario-filters': showDiarioFiltersModal,
     'clear-diario-filters': clearDiarioFilters,	
@@ -8669,8 +8808,8 @@ if (amountInputForFormatting) {
             },
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
-            'add-movement': () => startMovementForm(),
-            'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
+            
+			'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
             'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
             'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
             'swipe-duplicate-movement': () => {
@@ -9094,9 +9233,19 @@ if (diarioContainer) {
                 setButtonLoading(btn, false);
             }
         };
+const toggleFabMenu = () => {
+    const container = document.querySelector('.fab-container');
+    if (!container) return;
 
-        
+    hapticFeedback('medium');
+    container.classList.toggle('fab-container--active');
 
+    // Cierra el menú si se pulsa el overlay
+    const overlay = container.querySelector('.fab-overlay');
+    const closeMenu = () => container.classList.remove('fab-container--active');
+    overlay.addEventListener('click', closeMenu, { once: true });
+};
+    
 // =================================================================
 // === INICIO: NUEVA FUNCIÓN PARA CONFIRMAR MOVIMIENTOS RECURRENTES ===
 // =================================================================
