@@ -1557,7 +1557,8 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
         </div>
     </div>
 
-    <!-- ESTOS ERAN LOS DIVS QUE FALTABAN, AHORA ESTÁN INCLUIDOS -->
+    <!-- ✅ INICIO DE LA CORRECCIÓN ESTRUCTURAL ✅ -->
+    <!-- Estos son los contenedores que controlan qué campos se ven -->
     <div id="movimiento-fields">
         <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
             <div class="form-group-addon">
@@ -1600,6 +1601,7 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
             </div>
         </div>
     </div>
+    <!-- ✅ FIN DE LA CORRECCIÓN ESTRUCTURAL ✅ -->
     
     <div style="border-top: 1px solid var(--c-outline); margin-top: var(--sp-3); padding-top: var(--sp-2);">
         <div class="form-switch-group modal__list-item" style="padding: var(--sp-2) 0;">
@@ -1643,15 +1645,15 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     </div>
 
     <div class="modal__actions">
-                <div class="left-actions">
-                    <button type="button" id="delete-movimiento-btn" data-action="delete-movement-from-modal" class="icon-btn btn--danger hidden" title="Borrar"><span class="material-icons">delete</span></button>
-                    <button type="button" id="duplicate-movimiento-btn" data-action="duplicate-movement" class="icon-btn btn--secondary hidden" title="Duplicar"><span class="material-icons">content_copy</span></button>
-                </div>
-                <div class="right-actions">
-                    <button id="save-and-new-movimiento-btn" type="button" data-action="save-and-new-movement" class="btn btn--secondary">Guardar y Nuevo</button>
-                    <button id="save-movimiento-btn" type="submit" class="btn btn--primary">Guardar</button>
-                </div>
-            </div>
+        <div class="left-actions">
+            <button type="button" id="delete-movimiento-btn" data-action="delete-movement-from-modal" class="icon-btn btn--danger hidden" title="Borrar"><span class="material-icons">delete</span></button>
+            <button type="button" id="duplicate-movimiento-btn" data-action="duplicate-movement" class="icon-btn btn--secondary hidden" title="Duplicar"><span class="material-icons">content_copy</span></button>
+        </div>
+        <div class="right-actions">
+            <button id="save-and-new-movimiento-btn" type="button" data-action="save-and-new-movement" class="btn btn--secondary">Guardar y Nuevo</button>
+            <button id="save-movimiento-btn" type="submit" class="btn btn--primary">Guardar</button>
+        </div>
+    </div>
 </form>
 <!-- ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲ -->
 			</div>
@@ -9457,113 +9459,118 @@ const handleSaveMovement = async (form, btn) => {
             return false;
         }
 
+    } 
+	else {
+    // --- ✅ LÓGICA CORREGIDA PARA MOVIMIENTOS NORMALES (NO RECURRENTES) ---
+    
+    const mode = select('movimiento-mode').value;
+    const movementId = select('movimiento-id').value;
+
+    // --- ✅ INICIO DE LA CORRECCIÓN ---
+    // Usamos el mismo método robusto para obtener el tipo de movimiento
+    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+    // --- ✅ FIN DE LA CORRECCIÓN ---
+    
+    const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
+    let cantidadFinal = Math.round(Math.abs(cantidadPositiva) * 100);
+
+    if (selectedType === 'gasto') {
+        cantidadFinal = -cantidadFinal;
     } else {
-        // --- ✅ LÓGICA CORREGIDA PARA MOVIMIENTOS NORMALES (NO RECURRENTES) ---
-        
-        // Declaradas UNA SOLA VEZ aquí
-        const mode = select('movimiento-mode').value;
-        const movementId = select('movimiento-id').value;
-
-        const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
-        const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
-        let cantidadFinal = Math.round(cantidadPositiva * 100);
-
-        if (selectedType === 'gasto') {
-            cantidadFinal = -Math.abs(cantidadFinal);
-        } else {
-            cantidadFinal = Math.abs(cantidadFinal);
-        }
-
-        const dataFromForm = {
-            id: movementId || generateId(),
-            cantidad: cantidadFinal,
-            tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
-            descripcion: (selectedType === 'traspaso' && select('movimiento-descripcion').value.trim() === '') ? 'Traspaso' : select('movimiento-descripcion').value.trim(),
-            fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
-            cuentaId: select('movimiento-cuenta').value,
-            conceptoId: select('movimiento-concepto').value,
-            cuentaOrigenId: select('movimiento-cuenta-origen').value,
-            cuentaDestinoId: select('movimiento-cuenta-destino').value,
-        };
-
-        try {
-            let oldMovementData = null;
-            if (mode.startsWith('edit')) {
-                oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
-            }
-            
-            applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
-
-            if (mode.startsWith('edit')) {
-                const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
-                if (index !== -1) db.movimientos[index] = dataFromForm;
-            } else {
-                db.movimientos.unshift(dataFromForm);
-                newMovementIdToHighlight = dataFromForm.id;
-            }
-            db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
-
-            updateLocalDataAndRefreshUI();
-            
-            const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.DIARIO) {
-                const mainScroller = document.querySelector('.app-layout__main');
-                if (mainScroller) mainScroller.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-
-            await fbDb.runTransaction(async (transaction) => {
-                let oldDataForTx = null;
-                if (mode.startsWith('edit')) {
-                    const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
-                    const oldDoc = await transaction.get(oldDocRef);
-                    if (oldDoc.exists) oldDataForTx = oldDoc.data();
-                }
-                if (oldDataForTx) {
-                    if (oldDataForTx.tipo === 'traspaso') {
-                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
-                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                    } else {
-                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                    }
-                }
-                if (dataFromForm.tipo === 'traspaso') {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
-                } else {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
-                }
-                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
-                transaction.set(movRef, dataFromForm);
-            });
-            
-            setButtonLoading(btn, false);
-            hapticFeedback('success');
-            triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
-
-            if (!isSaveAndNew) {
-                setTimeout(() => hideModal('movimiento-modal'), 200);
-                showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
-            } else {
-                form.reset();
-                setMovimientoFormType('gasto'); // Volver a Gasto por defecto
-                const today = new Date();
-                const fechaInput = select('movimiento-fecha');
-                fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-                updateDateDisplay(fechaInput);
-                select('movimiento-cantidad').focus();
-            }
-            return true;
-
-        } catch (error) {
-            console.error("Error al guardar el movimiento:", error);
-            showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
-            setButtonLoading(btn, false);
-            if (select('diario-page')?.classList.contains('view--active')) {
-                 await renderDiarioPage();
-            }
-            return false;
-        }
+        // Para 'ingreso' y 'traspaso', la cantidad es positiva
+        cantidadFinal = Math.abs(cantidadFinal);
     }
+
+    const dataFromForm = {
+        id: movementId || generateId(),
+        cantidad: cantidadFinal,
+        tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
+        descripcion: (selectedType === 'traspaso' && select('movimiento-descripcion').value.trim() === '') ? 'Traspaso' : select('movimiento-descripcion').value.trim(),
+        fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
+        cuentaId: select('movimiento-cuenta').value,
+        conceptoId: select('movimiento-concepto').value,
+        cuentaOrigenId: select('movimiento-cuenta-origen').value,
+        cuentaDestinoId: select('movimiento-cuenta-destino').value,
+    };
+
+    try {
+        let oldMovementData = null;
+        if (mode.startsWith('edit')) {
+            oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
+        }
+        
+        applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
+
+        if (mode.startsWith('edit')) {
+            const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
+            if (index !== -1) db.movimientos[index] = dataFromForm;
+        } else {
+            db.movimientos.unshift(dataFromForm);
+            newMovementIdToHighlight = dataFromForm.id;
+        }
+        db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
+
+        updateLocalDataAndRefreshUI();
+        
+        const activePage = document.querySelector('.view--active');
+        if (activePage && activePage.id === PAGE_IDS.DIARIO) {
+            const mainScroller = document.querySelector('.app-layout__main');
+            if (mainScroller) mainScroller.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        await fbDb.runTransaction(async (transaction) => {
+            let oldDataForTx = null;
+            if (mode.startsWith('edit')) {
+                const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
+                const oldDoc = await transaction.get(oldDocRef);
+                if (oldDoc.exists) oldDataForTx = oldDoc.data();
+            }
+            if (oldDataForTx) {
+                if (oldDataForTx.tipo === 'traspaso') {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                } else {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                }
+            }
+            if (dataFromForm.tipo === 'traspaso') {
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            } else {
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            }
+            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
+            transaction.set(movRef, dataFromForm);
+        });
+        
+        setButtonLoading(btn, false);
+        hapticFeedback('success');
+        triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+
+        if (!isSaveAndNew) {
+            setTimeout(() => hideModal('movimiento-modal'), 200);
+            showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+        } else {
+            form.reset();
+            setMovimientoFormType('gasto');
+            const today = new Date();
+            const fechaInput = select('movimiento-fecha');
+            fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+            updateDateDisplay(fechaInput);
+            select('movimiento-cantidad').focus();
+        }
+        return true;
+
+    } catch (error) {
+        console.error("Error al guardar el movimiento:", error);
+        showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
+        setButtonLoading(btn, false);
+        if (select('diario-page')?.classList.contains('view--active')) {
+             await renderDiarioPage();
+        }
+        return false;
+    }
+}
 };
 
 /**
@@ -10442,14 +10449,16 @@ const validateMovementForm = () => {
     if (!validateField('movimiento-cantidad')) isValid = false;
     if (!validateField('movimiento-fecha')) isValid = false;
 
-   const traspasoPill = select('mov-type-btn-traspaso');
-    const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+    // --- ✅ INICIO DE LA CORRECCIÓN ---
+    // En lugar de buscar por un ID, buscamos el botón activo y leemos su 'data-type'
+    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+    // --- ✅ FIN DE LA CORRECCIÓN ---
 
-    if (type === 'movimiento') {
+    if (selectedType === 'movimiento' || selectedType === 'gasto' || selectedType === 'ingreso') {
         if (!validateField('movimiento-descripcion')) isValid = false;
         if (!validateField('movimiento-concepto')) isValid = false;
         if (!validateField('movimiento-cuenta')) isValid = false;
-    } else {
+    } else { // Esto ahora sí se ejecutará cuando el tipo sea 'traspaso'
         const origenValid = validateField('movimiento-cuenta-origen');
         const destinoValid = validateField('movimiento-cuenta-destino');
         if (!origenValid || !destinoValid) isValid = false;
