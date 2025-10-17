@@ -4254,7 +4254,7 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
     // LA SOLUCIÓN:
     // Ya no buscamos el contenedor, simplemente llamamos a la función de
     // renderizado con el ID correcto para la pestaña de Inversiones.
-    renderInversionesPage('inversiones-content-container');
+    renderInversionesView();
 };
 
 // ====================================================================================
@@ -4263,7 +4263,7 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
 
 let investmentChartMode = 'valorado';
 
-const renderInversionesPage = async (targetContainerId) => {
+const renderPortfolioMainContent = async (targetContainerId) => {
     const container = select(targetContainerId);
     if (!container) return;
 
@@ -4356,47 +4356,40 @@ const renderInversionesPage = async (targetContainerId) => {
             });
             if (treeData.length > 0) {
                 assetAllocationChart = new Chart(chartCtx, {
-    type: 'treemap',
-    data: {
-        datasets: [{
-            tree: treeData,
-            key: 'valor', // Le decimos que use la propiedad 'valor' para el tamaño
-            groups: ['tipo', 'nombre'], // Agrupa primero por tipo y luego por nombre
-            spacing: 0.5,
-            borderWidth: 1.5,
-            borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'),
-            backgroundColor: (ctx) => {
-                // Usa el mapa de colores que ya has creado
-                return ctx.type === 'data' ? colorMap[ctx.raw._data.tipo] || 'grey' : 'transparent';
-            },
-            labels: {
-                display: true,
-                color: '#FFFFFF',
-                font: { size: 11, weight: '600' },
-                align: 'center',
-                position: 'middle',
-                formatter: (ctx) => {
-                    // Muestra el nombre del activo en el rectángulo
-                    return ctx.raw.g.includes(ctx.raw._data.nombre) ? ctx.raw._data.nombre.split(' ') : null;
-                }
-            }
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false }, // No necesitamos la leyenda en este tipo de gráfico
-            tooltip: {
-                callbacks: {
-                    // Personaliza el texto que aparece al pasar el ratón por encima
-                    label: (ctx) => `${ctx.raw._data.nombre}: ${formatCurrency(ctx.raw.v * 100)}`
-                }
-            },
-            datalabels: { display: false } // Desactivamos los datalabels por defecto
-        }
-    }
-});
+                    type: 'treemap',
+                    data: {
+                        datasets: [{
+                            tree: treeData,
+                            key: 'valor',
+                            groups: ['tipo', 'nombre'],
+                            spacing: 0.5,
+                            borderWidth: 1.5,
+                            borderColor: getComputedStyle(document.body).getPropertyValue('--c-background'),
+                            backgroundColor: (ctx) => {
+                                return ctx.type === 'data' ? colorMap[ctx.raw._data.tipo] || 'grey' : 'transparent';
+                            },
+                            labels: {
+                                display: true,
+                                color: '#FFFFFF',
+                                font: { size: 11, weight: '600' },
+                                align: 'center',
+                                position: 'middle',
+                                formatter: (ctx) => {
+                                    return ctx.raw.g.includes(ctx.raw._data.nombre) ? ctx.raw._data.nombre.split(' ') : null;
+                                }
+                            }
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: (ctx) => `${ctx.raw._data.nombre}: ${formatCurrency(ctx.raw.v * 100)}` } },
+                            datalabels: { display: false }
+                        }
+                    }
+                });
             } else {
                  select('asset-allocation-chart').closest('.chart-container').innerHTML = `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>No hay activos con valor para mostrar.</p></div>`;
             }
@@ -5393,7 +5386,167 @@ const TransactionCardComponent = (m, dbData) => {
         </div>
     </div>`;
 };
+// ▼▼▼ REEMPLAZA TU FUNCIÓN renderPortfolioEvolutionChart CON ESTA VERSIÓN ESPECTACULAR ▼▼▼
 
+/**
+ * Renderiza un gráfico de área apilado que muestra la evolución del capital aportado y las ganancias/pérdidas.
+ * @param {string} targetContainerId - El ID del contenedor donde se dibujará el gráfico.
+ */
+async function renderPortfolioEvolutionChart(targetContainerId) {
+    const container = select(targetContainerId);
+    if (!container) return;
+
+    container.innerHTML = `<div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"><canvas id="portfolio-evolution-chart"></canvas></div>`;
+
+    await loadInversiones();
+    const allMovements = await fetchAllMovementsForHistory();
+
+    const filteredInvestmentAccounts = getVisibleAccounts().filter(account => {
+        const accountType = toSentenceCase(account.tipo || 'S/T');
+        return !deselectedInvestmentTypesFilter.has(accountType) && account.esInversion;
+    });
+    const filteredAccountIds = new Set(filteredInvestmentAccounts.map(c => c.id));
+
+    if (filteredInvestmentAccounts.length === 0) {
+        container.innerHTML = `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>No hay activos seleccionados para mostrar la evolución.</p></div>`;
+        return;
+    }
+
+    // 1. Recopilamos todos los eventos (esta parte no cambia)
+    const timeline = [];
+    const history = (db.inversiones_historial || []).filter(h => filteredAccountIds.has(h.cuentaId));
+    history.forEach(v => timeline.push({ date: v.fecha.slice(0, 10), type: 'valuation', value: v.valor, accountId: v.cuentaId }));
+
+    const cashFlowMovements = allMovements.filter(m => {
+        return (m.tipo === 'movimiento' && filteredAccountIds.has(m.cuentaId)) ||
+               (m.tipo === 'traspaso' && (filteredAccountIds.has(m.cuentaOrigenId) || filteredAccountIds.has(m.cuentaDestinoId)));
+    });
+    cashFlowMovements.forEach(m => {
+        let amount = 0;
+        if (m.tipo === 'movimiento') amount = m.cantidad;
+        else if (m.tipo === 'traspaso') {
+            if (filteredAccountIds.has(m.cuentaDestinoId) && !filteredAccountIds.has(m.cuentaOrigenId)) amount = m.cantidad;
+            if (filteredAccountIds.has(m.cuentaOrigenId) && !filteredAccountIds.has(m.cuentaDestinoId)) amount = -m.cantidad;
+        }
+        if (amount !== 0) timeline.push({ date: m.fecha.slice(0, 10), type: 'cashflow', value: amount });
+    });
+    
+    if (timeline.length < 1) {
+         container.innerHTML = `<div class="empty-state" style="padding:16px 0; background:transparent; border:none;"><p>No hay datos suficientes para mostrar la evolución.</p></div>`;
+         return;
+    }
+    timeline.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // 2. Procesamos la línea de tiempo (esta parte no cambia)
+    const dailyData = new Map();
+    let runningCapital = 0;
+    const lastKnownValues = new Map();
+
+    timeline.forEach(event => {
+        if (!dailyData.has(event.date)) {
+            const prevDate = new Date(event.date); prevDate.setDate(prevDate.getDate() - 1);
+            const prevDateKey = prevDate.toISOString().slice(0, 10);
+            dailyData.set(event.date, dailyData.has(prevDateKey) ? { ...dailyData.get(prevDateKey) } : { capital: runningCapital, value: 0 });
+        }
+        const day = dailyData.get(event.date);
+        if (event.type === 'cashflow') {
+            runningCapital += event.value;
+            day.capital = runningCapital;
+        } else if (event.type === 'valuation') {
+            lastKnownValues.set(event.accountId, event.value);
+        }
+        let totalValue = 0;
+        for(const id of filteredAccountIds) totalValue += lastKnownValues.get(id) || 0;
+        day.value = totalValue;
+    });
+
+    // 3. Preparamos datos para Chart.js (esta parte no cambia)
+    const sortedDates = [...dailyData.keys()].sort();
+    const chartLabels = sortedDates;
+    const capitalData = sortedDates.map(date => dailyData.get(date).capital / 100);
+    const totalValueData = sortedDates.map(date => dailyData.get(date).value / 100);
+
+    // --- ¡AQUÍ EMPIEZA LA NUEVA MAGIA VISUAL! ---
+    const chartCanvas = select('portfolio-evolution-chart');
+    const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
+    if (!chartCtx) return;
+
+    if (Chart.getChart(chartCanvas)) Chart.getChart(chartCanvas).destroy();
+    chartCanvas.closest('.chart-container').classList.remove('skeleton');
+
+    // Creamos el gradiente para el área
+    const primaryColor = getComputedStyle(document.body).getPropertyValue('--c-primary').trim();
+    const gradient = chartCtx.createLinearGradient(0, 0, 0, 220);
+    gradient.addColorStop(0, primaryColor.replace(')', ', 0.6)'));
+    gradient.addColorStop(1, primaryColor.replace(')', ', 0.05)'));
+    
+    new Chart(chartCtx, {
+        type: 'line',
+        data: {
+            labels: chartLabels,
+            datasets: [
+                {
+                    label: 'Valor Total',
+					data: totalValueData,
+					borderColor: primaryColor,      // Mantenemos el color principal para la línea
+					backgroundColor: gradient,      // El gradiente para el área se queda igual
+					
+					tension: 0.4,
+					pointRadius: 0,
+					borderWidth: 2.5,               // Un grosor de 2.5px para que la línea se vea bien definida
+		},
+                {
+                    label: 'Capital Aportado',
+                    data: capitalData,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--c-info').trim(),
+                    fill: false,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    borderDash: [5, 5], // <-- Línea punteada para que sea una referencia
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: { callback: value => formatCurrency(value * 100) }
+                },
+                x: {
+                    type: 'time',
+                    time: { unit: 'month', tooltipFormat: 'dd MMM yyyy' },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true } },
+                datalabels: { display: false },
+                // Tooltip mejorado para mostrar el P&L calculado al momento
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: (context) => {
+                            const label = context.dataset.label || '';
+                            const value = context.parsed.y;
+                            return `${label}: ${formatCurrency(value * 100)}`;
+                        },
+                        footer: (tooltipItems) => {
+                            const total = tooltipItems.find(i => i.dataset.label === 'Valor Total')?.parsed.y || 0;
+                            const capital = tooltipItems.find(i => i.dataset.label === 'Capital Aportado')?.parsed.y || 0;
+                            const pnl = total - capital;
+                            const pnlFormatted = formatCurrency(pnl * 100);
+                            // Le damos un color al P&L en el tooltip
+                            return `P&L: ${pnlFormatted}`;
+                        }
+                    }
+                }
+            },
+            interaction: { mode: 'index', intersect: false }
+        }
+    });
+}
  
 // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES (v2.0) ===
@@ -6319,13 +6472,36 @@ const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.INVERSIONES);
     if (!container) return;
 
-    // Preparamos el contenedor y llamamos a la función que ya sabe cómo dibujar el portafolio
+    // Ahora esta función se encarga de TODO: crea el esqueleto y llama a las funciones que lo rellenan.
     container.innerHTML = `
         <div id="inversiones-content-container">
-             <!-- El contenido del portafolio se renderizará aquí -->
+            <!-- Nuevo Acordeón para el Gráfico de Evolución -->
+            <details class="accordion" open style="margin-bottom: var(--sp-4);">
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
+                        <span class="material-icons">show_chart</span>
+                        Evolución del Portafolio
+                    </h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" id="portfolio-evolution-container" style="padding: var(--sp-3) var(--sp-4);">
+                    <!-- Esqueleto de carga para el gráfico de evolución -->
+                    <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
+                </div>
+            </details>
+
+            <!-- El resto de tu HTML de la página de Inversiones se generará después -->
+            <div id="portfolio-main-content">
+                <!-- Esqueleto de carga para el resto de la página -->
+                <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
+            </div>
         </div>
     `;
-    renderInversionesPage('inversiones-content-container');
+	    // Llamamos a las dos funciones que rellenarán cada parte.
+    setTimeout(async () => {
+        await renderPortfolioEvolutionChart('portfolio-evolution-container');
+        await renderPortfolioMainContent('portfolio-main-content');
+    }, 50);
 };
   // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF      ===
@@ -9011,7 +9187,7 @@ if (diarioContainer) {
     
     // LA SOLUCIÓN:
     // Aplicamos la misma lógica aquí. Forzamos el redibujado en el contenedor correcto.
-    renderInversionesPage('inversiones-content-container');
+    renderInversionesView();
 };
             
         const showImportJSONWizard = () => {
