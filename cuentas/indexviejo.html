@@ -502,6 +502,29 @@ body[data-ledger-mode="B"] .bottom-nav__item--active {
 html { height: -webkit-fill-available; scroll-behavior: smooth; }
 body { font-family: var(--font-family); background-color: var(--c-background); color: var(--c-on-surface); line-height: 1.4; min-height: 100vh; min-height: -webkit-fill-available; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow: hidden; font-weight: 500; }
 *:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; border-radius: var(--sp-2); }
+@keyframes fade-out-and-collapse {
+    from {
+        opacity: 1;
+        transform: scaleY(1);
+        max-height: 76px; /* Altura máxima de un item */
+        padding-top: var(--sp-2);
+        padding-bottom: var(--sp-2);
+    }
+    to {
+        opacity: 0;
+        transform: scaleY(0.8);
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin: 0;
+        border: 0;
+    }
+}
+
+.item-deleting {
+    animation: fade-out-and-collapse 0.4s ease-out forwards;
+    overflow: hidden;
+}
 @keyframes item-enter {
     from {
         opacity: 0;
@@ -3197,7 +3220,7 @@ const triggerSaveAnimation = (fromElement, color) => {
 
     // 1. Encuentra el punto de partida y el de llegada.
     const startRect = fromElement.getBoundingClientRect();
-    const listElement = select('movimientos-list-container') || select('diario-page'); // Un destino de respaldo
+    const listElement = select('movimientos-list-container') || select('diario-page');
     const endRect = listElement.getBoundingClientRect();
 
     // 2. Calcula las coordenadas iniciales (el centro del botón).
@@ -3206,7 +3229,7 @@ const triggerSaveAnimation = (fromElement, color) => {
 
     // 3. Calcula las coordenadas finales (el centro superior de la lista).
     const endX = endRect.left + endRect.width / 2;
-    const endY = endRect.top; // Apuntamos a la parte superior de la lista.
+    const endY = endRect.top;
 
     // 4. Crea el elemento "burbuja" en el DOM.
     const bubble = document.createElement('div');
@@ -3220,8 +3243,7 @@ const triggerSaveAnimation = (fromElement, color) => {
 
     document.body.appendChild(bubble);
 
-    // 6. ¡LA MAGIA! Usamos la animación CSS que creamos.
-    // Forzamos un 'reflow' para que el navegador aplique el estado inicial antes de animar.
+    // 6. ¡LA MAGIA! Forzamos un 'reflow' para que el navegador aplique el estado inicial antes de animar.
     void bubble.offsetWidth; 
 
     // La animación durará 0.7 segundos y se moverá a las coordenadas finales.
@@ -7569,19 +7591,23 @@ const getDragAfterElement = (container, y) => {
     // ¡La magia final! Movemos el foco al campo de la cantidad.
     select('movimiento-cantidad').focus();
 };
- let modalDragState = {
+
+// =================================================================
+// === INICIO: CÓDIGO UNIFICADO PARA MODALES ARRASTRABLES ===
+// =================================================================
+
+let modalDragState = {
     isDragging: false,
     startY: 0,
     currentY: 0,
     targetModal: null
 };
 
-// 2. Función que se activa CUANDO EMPIEZAS A ARRASTRAR
+// Se activa CUANDO EMPIEZAS A ARRASTRAR
 function handleModalDragStart(e) {
     const modal = e.target.closest('.modal');
     if (!modal) return;
 
-    // ¡Importante! Si has bajado el scroll dentro del modal, no hacemos nada.
     const modalBody = modal.querySelector('.modal__body');
     if (modalBody && modalBody.scrollTop > 0) return;
 
@@ -7589,69 +7615,60 @@ function handleModalDragStart(e) {
     modalDragState.targetModal = modal;
     modalDragState.startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
 
-    // Quitamos la animación para que el movimiento sea instantáneo
     modal.style.transition = 'none';
 }
 
-// 3. Función que se activa MIENTRAS MUEVES EL DEDO
+// Se activa MIENTRAS MUEVES EL DEDO/RATÓN
 function handleModalDragMove(e) {
     if (!modalDragState.isDragging || !modalDragState.targetModal) return;
 
     modalDragState.currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
     let deltaY = modalDragState.currentY - modalDragState.startY;
 
-    // Solo permitimos arrastrar hacia abajo
     if (deltaY > 0) {
-        e.preventDefault(); // Evita que la página de detrás se mueva
+        e.preventDefault();
         modalDragState.targetModal.style.transform = `translateY(${deltaY}px)`;
     }
 }
 
-// 4. Función que se activa CUANDO SUELTAS EL DEDO
+// Se activa CUANDO SUELTAS EL DEDO/RATÓN
 function handleModalDragEnd(e) {
     if (!modalDragState.isDragging || !modalDragState.targetModal) return;
 
     const modal = modalDragState.targetModal;
-    // Le devolvemos su animación de "muelle"
     modal.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'; 
 
     const deltaY = modalDragState.currentY - modalDragState.startY;
     const modalHeight = modal.offsetHeight;
 
-    // Si lo hemos arrastrado más de un tercio de su altura, lo cerramos.
     if (deltaY > modalHeight * 0.3) {
         const overlay = modal.closest('.modal-overlay');
         if (overlay) hideModal(overlay.id);
     } else {
-        // Si no, vuelve a su sitio
         modal.style.transform = 'translateY(0)';
     }
 
-    // Reseteamos todo para la próxima vez
     modalDragState.isDragging = false;
     modalDragState.targetModal = null;
 }
+
+// FUNCIÓN showModal ACTUALIZADA
 const showModal = (id) => {
     const m = select(id);
     if (m) {
-        // ... tu código existente para mostrar el modal ...
         m.classList.add('modal-overlay--active');
         select('app-root').classList.add('app-layout--transformed-by-modal');
 
-        // --- INICIO DE LA LÓGICA AÑADIDA ---
-const modalElement = m.querySelector('.modal');
-if (modalElement) {
-    // Cuando se muestra el modal, empezamos a escuchar si el usuario lo toca.
-    modalElement.addEventListener('mousedown', handleModalDragStart);
-    modalElement.addEventListener('touchstart', handleModalDragStart, { passive: true });
-}
+        const modalElement = m.querySelector('.modal');
+        if (modalElement) {
+            modalElement.addEventListener('mousedown', handleModalDragStart);
+            modalElement.addEventListener('touchstart', handleModalDragStart, { passive: true });
+        }
 
-// Los listeners de mover y soltar los ponemos en todo el documento
-document.addEventListener('mousemove', handleModalDragMove);
-document.addEventListener('touchmove', handleModalDragMove, { passive: false });
-document.addEventListener('mouseup', handleModalDragEnd);
-document.addEventListener('touchend', handleModalDragEnd);
-// --- FIN DE LA LÓGICA AÑADIDA ---
+        document.addEventListener('mousemove', handleModalDragMove);
+        document.addEventListener('touchmove', handleModalDragMove, { passive: false });
+        document.addEventListener('mouseup', handleModalDragEnd);
+        document.addEventListener('touchend', handleModalDragEnd);
 
         if (!id.includes('calculator')) {
             const f = m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
@@ -7660,26 +7677,24 @@ document.addEventListener('touchend', handleModalDragEnd);
     }
 };
 
+// FUNCIÓN hideModal ACTUALIZADA
 const hideModal = (id) => {
     const m = select(id);
     if (m) {
         m.classList.remove('modal-overlay--active');
         select('app-root').classList.remove('app-layout--transformed-by-modal');
 
-        // ¡MUY IMPORTANTE! Cuando el modal se cierra, dejamos de escuchar los gestos.
-const modalElement = m.querySelector('.modal');
-if (modalElement) {
-    modalElement.removeEventListener('mousedown', handleModalDragStart);
-    modalElement.removeEventListener('touchstart', handleModalDragStart);
-}
-document.removeEventListener('mousemove', handleModalDragMove);
-document.removeEventListener('touchmove', handleModalDragMove);
-document.removeEventListener('mouseup', handleModalDragEnd);
-document.removeEventListener('touchend', handleModalDragEnd);
+        const modalElement = m.querySelector('.modal');
+        if (modalElement) {
+            modalElement.removeEventListener('mousedown', handleModalDragStart);
+            modalElement.removeEventListener('touchstart', handleModalDragStart);
+        }
+        document.removeEventListener('mousemove', handleModalDragMove);
+        document.removeEventListener('touchmove', handleModalDragMove);
+        document.removeEventListener('mouseup', handleModalDragEnd);
+        document.removeEventListener('touchend', handleModalDragEnd);
 
-// Nos aseguramos de que el modal se resetee visualmente
-if (modalElement) modalElement.style.transform = '';
-// --- FIN DE LA LÓGICA AÑADIDA ---
+        if (modalElement) modalElement.style.transform = '';
     }
 
     const mainScroller = selectOne('.app-layout__main');
@@ -7690,7 +7705,10 @@ if (modalElement) modalElement.style.transform = '';
         });
     }
 };
- 
+
+// =================================================================
+// === FIN: CÓDIGO UNIFICADO PARA MODALES ARRASTRABLES ===
+// =================================================================
 
 	const showAidanaiModal = (pageId) => {
     // Busca el contenido de ayuda para la página actual, o usa el por defecto si no lo encuentra.
@@ -9795,7 +9813,7 @@ const handleSaveMovement = async (form, btn) => {
 
             setButtonLoading(btn, false);
             hapticFeedback('success');
-
+			triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
             if (!isSaveAndNew) {
                 hideModal('movimiento-modal');
                 showToast(select('movimiento-mode').value === 'new' ? 'Operación programada.' : 'Operación actualizada.');
@@ -10485,10 +10503,8 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
     // Buscamos el elemento visual en el DOM ANTES de hacer cualquier cambio.
     const itemElement = document.querySelector(`.transaction-card[data-id="${id}"]`)?.closest('.swipe-container');
 
-    // --- INICIO DE LA LÓGICA DE BORRADO ---
     try {
         // 1. ELIMINACIÓN DE DATOS (Optimista e Inmediata)
-        // Quitamos el elemento de nuestra lista de datos interna. La UI todavía no lo sabe.
         let itemToDelete;
         if (isRecurrent) {
             const index = db.recurrentes.findIndex(r => r.id === id);
@@ -10502,25 +10518,19 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
 
         // 2. EFECTO VISUAL (Si el elemento está en pantalla)
         if (itemElement) {
-            // Aplicamos la clase que inicia la animación de desaparición.
             itemElement.classList.add('item-deleting');
         }
 
         // 3. SINCRONIZACIÓN Y REDIBUJADO
-        // Esperamos el tiempo exacto que dura la animación antes de redibujar la lista.
         setTimeout(() => {
-            // Esta función redibuja la lista virtual usando la lista de datos que ya está actualizada.
-            updateLocalDataAndRefreshUI();
-            // Si borramos un recurrente, refrescamos la vista de planificación.
-            if (isRecurrent) renderPlanificacionPage();
+            updateLocalDataAndRefreshUI(); // Redibuja la lista virtual con los datos ya actualizados.
+            if (isRecurrent) renderPlanificacionPage(); // Refresca la vista de planificación si se borra un recurrente.
         }, itemElement ? ANIMATION_DURATION : 0); // Si no hay elemento visual, el redibujado es inmediato.
 
         // 4. PERSISTENCIA EN BASE DE DATOS (en segundo plano)
-        // Mientras la animación ocurre, enviamos la orden de borrado a Firebase.
         const batch = fbDb.batch();
         const userRef = fbDb.collection('users').doc(currentUser.uid);
 
-        // Ajustamos saldos si es un movimiento normal
         if (!isRecurrent) {
             if (itemToDelete.tipo === 'traspaso') {
                 const origenRef = userRef.collection('cuentas').doc(itemToDelete.cuentaOrigenId);
@@ -10543,8 +10553,7 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
     } catch (error) {
         console.error("Error al eliminar:", error);
         showToast("Error al eliminar. Recargando para mantener la consistencia...", "danger");
-        // Como último recurso si algo falla, recargamos la página.
-        setTimeout(() => location.reload(), 1500);
+        setTimeout(() => location.reload(), 1500); // Recarga como último recurso.
     }
 };
 // ============================================================
