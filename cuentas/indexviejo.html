@@ -34,6 +34,66 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
+	/* === INICIO: Estilos para el Informe de Cuenta (Cartilla) === */
+.informe-extracto-container {
+    border: 1px solid var(--c-outline);
+    border-radius: var(--border-radius-lg);
+    background-color: var(--c-surface);
+    overflow: hidden;
+}
+
+.informe-linea-header {
+    display: grid;
+    grid-template-columns: 80px 1fr 100px 100px;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-4);
+    font-weight: 700;
+    font-size: var(--fs-xs);
+    color: var(--c-on-surface-secondary);
+    background-color: var(--c-surface-variant);
+    border-bottom: 1px solid var(--c-outline);
+}
+
+.informe-linea-movimiento {
+    display: grid;
+    grid-template-columns: 80px 1fr 100px 100px;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--c-outline);
+    font-size: var(--fs-sm);
+    align-items: center;
+}
+
+.informe-linea-movimiento:last-child {
+    border-bottom: none;
+}
+
+.informe-linea-movimiento .concepto {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.informe-linea-movimiento .descripcion {
+    font-size: var(--fs-xs);
+    color: var(--c-on-surface-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.informe-linea-movimiento .importe,
+.informe-linea-movimiento .saldo {
+    text-align: right;
+    font-weight: 600;
+    font-family: monospace, sans-serif; /* Para que los números se alineen bien */
+}
+
+/* Colores para Ingreso/Gasto */
+.text-ingreso { color: var(--c-success); }
+.text-gasto { color: var(--c-danger); }
+/* === FIN: Estilos para el Informe de Cuenta (Cartilla) === */
 	/* Estilo para el input cuando es TRASPASO */
 #movimiento-cantidad-form-group.is-traspaso #movimiento-cantidad {
     border-color: var(--c-info); /* Azul */
@@ -1552,6 +1612,10 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
                 <span class="material-icons">edit_calendar</span>
                 <span class="bottom-nav__label">Planificar</span>
             </button>
+			<button data-action="navigate" data-page="informes-page" class="bottom-nav__item">
+                <span class="material-icons">analytics</span>
+                <span class="bottom-nav__label">Informes</span>
+            </button>
             <button data-action="navigate" data-page="configuracion-page" class="bottom-nav__item">
                 <span class="material-icons">settings</span>
                 <span class="bottom-nav__label">Ajustes</span>
@@ -2093,6 +2157,7 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
     
     <script type="module">
+	
 	const handleExportFilteredCsv = (btn) => {
     // La lista de movimientos a exportar es la que ya tenemos filtrada en db.movimientos
     const movementsToExport = db.movimientos;
@@ -4526,91 +4591,6 @@ const renderPortfolioMainContent = async (targetContainerId) => {
     }, 50);
 };
 
-// =============================================================
-// === INICIO: FUNCIÓN renderInformesPage (VERSIÓN MODIFICADA) ===
-// =============================================================
-const renderInformesPage = () => {
-    const container = select(PAGE_IDS.INFORMES);
-    if (!container) return;
-
-    // Limpia gráficos anteriores si la página se recarga
-    if (informeActivoChart) {
-        informeActivoChart.destroy();
-        informeActivoChart = null;
-    }
-    if (informesChart) {
-        informesChart.destroy();
-        informesChart = null;
-    }
-
-    const informesDisponibles = {
-        'flujo_caja': { title: 'Análisis de Flujo de Caja', icon: 'swap_horiz' },
-        'asignacion_activos': { title: 'Asignación de Activos', icon: 'pie_chart' },
-		'resumen_ejecutivo': { title: 'Resumen Ejecutivo', icon: 'insights' },
-        'crecimiento_patrimonial': { title: 'Crecimiento Patrimonial (Último Año)', icon: 'waterfall_chart' },
-        'rendimiento_inversiones': { title: 'Scorecard de Inversiones', icon: 'military_tech' }
-    };
-
-    const reportsWithFilters = ['resumen_ejecutivo', 'flujo_caja'];
-    
-    // --- INICIO DE LA MODIFICACIÓN ---
-    // 1. Definimos qué informes NO tendrán el botón de exportar.
-    const reportsWithoutExport = ['flujo_caja', 'asignacion_activos'];
-    // --- FIN DE LA MODIFICACIÓN ---
-
-    let informesHtml = '<div class="accordion-wrapper">';
-    
-
-    for (const [id, data] of Object.entries(informesDisponibles)) {
-        
-        let filtersHtml = '';
-        if (reportsWithFilters.includes(id)) {
-            const defaultPeriod = 'año-actual';
-            filtersHtml = generateReportFilterControls(id, defaultPeriod);
-        }
-        
-        // --- INICIO DE LA MODIFICACIÓN ---
-        // 2. Creamos una variable para el HTML del botón y la generamos condicionalmente.
-        let exportButtonHtml = '';
-        // Si el 'id' del informe actual NO está en nuestra lista de exclusión, generamos el botón.
-        if (!reportsWithoutExport.includes(id)) {
-            exportButtonHtml = `
-                <button class="btn btn--secondary" data-action="export-pdf" data-report-id="${id}" style="padding: 6px 12px; font-size: 0.8rem; margin-right: 16px;">
-                    <span class="material-icons" style="font-size: 16px;">picture_as_pdf</span>
-                    <span>Exportar</span>
-                </button>`;
-        }
-        // --- FIN DE LA MODIFICACIÓN ---
-
-        informesHtml += `
-            <details class="accordion informe-acordeon" id="acordeon-${id}">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface); flex-grow: 1;">
-                        <span class="material-icons" style="margin-right: 12px;">${data.icon}</span>
-                        <span>${data.title}</span>
-                    </h3>
-                    
-                    <!-- 3. Insertamos la variable aquí. Estará vacía para los informes excluidos. -->
-                    ${exportButtonHtml}
-
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" id="informe-container-${id}">
-                    ${filtersHtml} 
-                    <div id="informe-content-${id}">
-                         <p class="form-label" style="text-align:center; padding: var(--sp-4) 0;">Abre para generar el informe.</p>
-                    </div>
-                </div>
-            </details>
-        `;
-    }
-    informesHtml += '</div>';
-
-    container.innerHTML = informesHtml;
-};
-// =============================================================
-// === FIN: FUNCIÓN renderInformesPage (VERSIÓN MODIFICADA)  ===
-// =============================================================
         const renderVirtualListItem = (item) => {
 			if (item.type === 'month-header') {
     const monthName = item.date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -8807,9 +8787,163 @@ const handleSaveDashboardConfig = async (btn) => {
     renderInicioResumenView();
 };
 
+// =============================================================
+// === BLOQUE ÚNICO Y DEFINITIVO PARA LA PESTAÑA DE INFORMES ===
+// =============================================================
+
+/**
+ * Crea el HTML para una única fila del informe de extracto de cuenta.
+ */
+const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
+    const fecha = new Date(mov.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    let importe = 0;
+    let colorClass = '';
+    let concepto = '';
+    let descripcion = mov.descripcion || '';
+
+    if (mov.tipo === 'traspaso') {
+        const origen = allCuentas.find(c => c.id === mov.cuentaOrigenId);
+        const destino = allCuentas.find(c => c.id === mov.cuentaDestinoId);
+        
+        if (mov.cuentaOrigenId === cuentaId) {
+            importe = -mov.cantidad;
+            colorClass = 'text-gasto';
+            concepto = `Traspaso a ${destino ? escapeHTML(destino.nombre) : '?'}`;
+        } else {
+            importe = mov.cantidad;
+            colorClass = 'text-ingreso';
+            concepto = `Traspaso desde ${origen ? escapeHTML(origen.nombre) : '?'}`;
+        }
+    } else {
+        importe = mov.cantidad;
+        colorClass = importe >= 0 ? 'text-ingreso' : 'text-gasto';
+        const conceptoObj = db.conceptos.find(c => c.id === mov.conceptoId);
+        concepto = conceptoObj ? escapeHTML(conceptoObj.nombre) : 'Sin Concepto';
+    }
+
+    return `
+        <div class="informe-linea-movimiento">
+            <div class="fecha">${fecha}</div>
+            <div>
+                <div class="concepto">${concepto}</div>
+                <div class="descripcion">${escapeHTML(descripcion)}</div>
+            </div>
+            <div class="importe ${colorClass}">${formatCurrency(importe)}</div>
+            <div class="saldo">${formatCurrency(mov.runningBalance)}</div>
+        </div>
+    `;
+};
+
+/**
+ * Renderiza la página principal de Informes, mostrando la interfaz para generar el extracto.
+ */
+const renderInformesPage = () => {
+    const container = select(PAGE_IDS.INFORMES);
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="card card--no-bg accordion-wrapper">
+            <details class="accordion" open>
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
+                        <span class="material-icons">wysiwyg</span>
+                        <span>Extracto de Cuenta (Cartilla)</span>
+                    </h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                    <form id="informe-cuenta-form" novalidate>
+                        <div class="form-group">
+                            <label for="informe-cuenta-select" class="form-label">Selecciona una cuenta para ver su historial completo:</label>
+                            <select id="informe-cuenta-select" class="form-select" required></select>
+                        </div>
+                        <button type="submit" class="btn btn--primary btn--full">Generar Extracto</button>
+                    </form>
+                </div>
+            </details>
+        </div>
+        
+        <div id="informe-resultado-container" style="margin-top: var(--sp-4);"></div>`;
+
+    const populate = (id, data, nameKey, valKey='id') => {
+        const el = select(id); if (!el) return;
+        let opts = '<option value="">Seleccionar cuenta...</option>';
+        [...data].sort((a,b) => (a[nameKey]||"").localeCompare(b[nameKey]||"")).forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
+        el.innerHTML = opts;
+    };
+    populate('informe-cuenta-select', getVisibleAccounts(), 'nombre', 'id');
+};
+
+/**
+ * Se activa al pulsar "Generar Extracto". Calcula y muestra el historial de una cuenta
+ * con saldo acumulado, ordenado del más reciente al más antiguo.
+ */
+const handleGenerateInformeCuenta = async (form, btn) => {
+    setButtonLoading(btn, true, 'Generando...');
+    const cuentaId = select('informe-cuenta-select').value;
+    const resultadoContainer = select('informe-resultado-container');
+    
+    if (!cuentaId || !resultadoContainer) {
+        showToast("Por favor, selecciona una cuenta.", "warning");
+        setButtonLoading(btn, false);
+        return;
+    }
+
+    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+    resultadoContainer.innerHTML = `<div class="card"><div class="card__content" style="text-align:center;"><span class="spinner"></span><p style="margin-top: var(--sp-3);">Buscando en todo el historial...</p></div></div>`;
+
+    try {
+        const todosLosMovimientos = await fetchAllMovementsForHistory();
+
+        const movimientosDeLaCuenta = todosLosMovimientos.filter(m => 
+            (m.cuentaId === cuentaId) || 
+            (m.cuentaOrigenId === cuentaId) || 
+            (m.cuentaDestinoId === cuentaId)
+        )
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+        let saldoAcumulado = cuenta.saldo || 0;
+        for (const mov of movimientosDeLaCuenta) {
+            mov.runningBalance = saldoAcumulado;
+            if (mov.tipo === 'traspaso') {
+                if (mov.cuentaOrigenId === cuentaId) saldoAcumulado += mov.cantidad;
+                if (mov.cuentaDestinoId === cuentaId) saldoAcumulado -= mov.cantidad;
+            } else {
+                saldoAcumulado -= mov.cantidad;
+            }
+        }
+        
+        let resultadoHtml = `<h3 class="card__title">Extracto de ${escapeHTML(cuenta.nombre)}</h3>`;
+        if (movimientosDeLaCuenta.length > 0) {
+            resultadoHtml += `
+                <div class="informe-extracto-container">
+                    <div class="informe-linea-header">
+                        <div>Fecha</div>
+                        <div>Concepto / Descripción</div>
+                        <div style="text-align: right;">Importe</div>
+                        <div style="text-align: right;">Saldo</div>
+                    </div>
+                    ${movimientosDeLaCuenta.map(mov => renderInformeCuentaRow(mov, cuentaId, db.cuentas)).join('')}
+                </div>`;
+        } else {
+            resultadoHtml += `<div class="empty-state"><p>Esta cuenta no tiene movimientos.</p></div>`;
+        }
+        
+        resultadoContainer.innerHTML = resultadoHtml;
+
+    } catch (error) {
+        console.error("Error generando informe de cuenta:", error);
+        resultadoContainer.innerHTML = `<div class="card card--no-bg text-danger" style="padding: var(--sp-4); text-align: center;">Error al generar el informe.</div>`;
+        showToast("No se pudo generar el extracto.", "danger");
+    } finally {
+        setButtonLoading(btn, false);
+    }
+};
+
 // =================================================================
-// === INICIO: BLOQUE DE CÓDIGO CORREGIDO PARA REEMPLAZAR        ===
+// === FIN DEL BLOQUE DEFINITIVO                                 ===
 // =================================================================
+
 const attachEventListeners = () => {
     const cantidadInput = document.getElementById("movimiento-cantidad");
     if (cantidadInput) {
@@ -9154,9 +9288,39 @@ const attachEventListeners = () => {
             }
         }
     }, true);
-    document.body.addEventListener('submit', (e) => { e.preventDefault(); const target = e.target; const submitter = e.submitter; const handlers = { 'login-form': () => { const action = submitter ? submitter.dataset.action : 'login'; if (action === 'login') { handleLogin(submitter); } else if (action === 'register') { handleRegister(submitter); } }, 'pin-form': handlePinSubmit, 'form-movimiento': () => handleSaveMovement(target, submitter), 'add-concepto-form': () => handleAddConcept(submitter), 'add-cuenta-form': () => handleAddAccount(submitter), 'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter), 'form-valoracion': () => handleSaveValoracion(target, submitter), }; if (handlers[target.id]) { handlers[target.id](); }if (e.target.id === 'diario-filters-form') {
-        applyDiarioFilters();
-    } });
+    // ▼▼▼ REEMPLAZA TU BLOQUE 'submit' ENTERO POR ESTE ▼▼▼
+    document.body.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const target = e.target;
+        const submitter = e.submitter;
+        const handlers = {
+            'login-form': () => {
+                const action = submitter ? submitter.dataset.action : 'login';
+                if (action === 'login') {
+                    handleLogin(submitter);
+                } else if (action === 'register') {
+                    handleRegister(submitter);
+                }
+            },
+            'pin-form': handlePinSubmit,
+            'form-movimiento': () => handleSaveMovement(target, submitter),
+            'add-concepto-form': () => handleAddConcept(submitter),
+            'add-cuenta-form': () => handleAddAccount(submitter),
+            
+            // --- ¡AQUÍ ESTÁ LA CONEXIÓN QUE FALTABA! ---
+            'informe-cuenta-form': () => handleGenerateInformeCuenta(target, submitter),
+            // --- FIN DE LA CONEXIÓN ---
+
+            'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter),
+            'form-valoracion': () => handleSaveValoracion(target, submitter),
+            'diario-filters-form': applyDiarioFilters
+        };
+
+        if (handlers[target.id]) {
+            handlers[target.id]();
+        }
+    });
+// ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲
     document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
     document.body.addEventListener('blur', (e) => {
     const id = e.target.id;

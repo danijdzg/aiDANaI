@@ -785,7 +785,7 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 /* --- Botón Flotante (FAB) --- */
 .fab-container {
     position: fixed;
-    bottom: 16px; /* Más pegado al borde */
+    bottom: calc(64px + env(safe-area-inset-bottom)); /* 48px de la barra + 16px de margen */
     right: 16px;  /* Más pegado al borde */
     z-index: 1040;
     display: flex;
@@ -809,7 +809,7 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
     box-shadow: var(--shadow-md);
     
     /* LA MAGIA: Transparencia al 50% */
-    opacity: 0.5; 
+    opacity: 0.7; 
     
     transition: all 0.25s ease-in-out;
     position: relative; /* Necesario para que esté por encima de los otros al cerrarse */
@@ -1823,14 +1823,6 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     </button>
 </div>
     
-    <!-- Botón Principal (el que siempre se ve) -->
-    <button data-action="toggle-fab-menu" id="fab-main" class="fab fab--visible" title="Añadir Movimiento">
-        <span class="material-icons">add</span>
-    </button>
-</div>
-
-    </div>
-
     <div id="toast-container" aria-live="assertive"></div>
     
     <div id="movimiento-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="form-movimiento-title">
@@ -6653,9 +6645,7 @@ async function renderInformeFlujoCaja(container) {
 }
 
 async function renderInformeCrecimientoPatrimonial(container) {
-    // Definimos la fecha de "apertura" contable
-    const fechaApertura = '2024-12-31';
-    const fechaInicioCalculo = '2025-01-01';
+    
 
     // Buscamos el ID del concepto "Inicial"
     const conceptoInicial = db.conceptos.find(c => c.nombre.toLowerCase() === 'inicial');
@@ -6698,9 +6688,15 @@ const calculateTotals = (movs) => {
     const patrimonioActual = Object.values(saldosActuales).reduce((sum, s) => sum + s, 0);
 
     // 1. CÁLCULO DEL PATRIMONIO INICIAL
-    const patrimonioInicial = allMovements
-        .filter(m => m.fecha.startsWith(fechaApertura) && m.conceptoId === conceptoInicial.id)
-        .reduce((sum, mov) => sum + mov.cantidad, 0);
+    const movimientosIniciales = allMovements
+    .filter(m => m.conceptoId === conceptoInicial.id)
+    .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+const primerMovimientoInicial = movimientosIniciales[0];
+const patrimonioInicial = primerMovimientoInicial ? primerMovimientoInicial.cantidad : 0;
+const fechaApertura = primerMovimientoInicial ? new Date(primerMovimientoInicial.fecha).toLocaleDateString('es-ES') : 'N/A';
+const fechaInicioCalculo = primerMovimientoInicial ? new Date(primerMovimientoInicial.fecha) : new Date();
+if(primerMovimientoInicial) fechaInicioCalculo.setDate(fechaInicioCalculo.getDate() + 1);
 
     if (patrimonioInicial <= 0) {
         container.innerHTML = `<div class="empty-state"><span class="material-icons text-info">info</span><h3>Sin datos de apertura</h3><p>No se encontraron movimientos de "Inicial" con saldo positivo en la fecha ${fechaApertura}.</p></div>`;
@@ -6709,8 +6705,8 @@ const calculateTotals = (movs) => {
 
     // 2. CÁLCULO DEL AHORRO NETO
     const aportacionesNetas = allMovements
-        .filter(m => m.fecha >= fechaInicioCalculo && m.tipo === 'movimiento' && m.conceptoId !== conceptoInicial.id)
-        .reduce((sum, mov) => sum + mov.cantidad, 0);
+    .filter(m => m.fecha >= fechaInicioCalculo.toISOString().slice(0,10) && m.tipo === 'movimiento' && m.conceptoId !== conceptoInicial.id)
+    .reduce((sum, mov) => sum + mov.cantidad, 0);
 
     // 3. CÁLCULO DEL RENDIMIENTO REAL DEL PORTAFOLIO DE INVERSIÓN
     const portfolioPerformance = await calculatePortfolioPerformance();
@@ -8824,10 +8820,7 @@ const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
     return `
         <div class="informe-linea-movimiento">
             <div class="fecha">${fecha}</div>
-            <div>
-                <div class="concepto">${concepto}</div>
-                <div class="descripcion">${escapeHTML(descripcion)}</div>
-            </div>
+            <div class="concepto">${concepto}${descripcion ? ` / ${escapeHTML(descripcion)}` : ''}</div>
             <div class="importe ${colorClass}">${formatCurrency(importe)}</div>
             <div class="saldo">${formatCurrency(mov.runningBalance)}</div>
         </div>
@@ -10027,7 +10020,17 @@ const handleSaveMovement = async (form, btn) => {
         id: movementId || generateId(),
         cantidad: cantidadFinal,
         tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
-        descripcion: (selectedType === 'traspaso' && select('movimiento-descripcion').value.trim() === '') ? 'Traspaso' : select('movimiento-descripcion').value.trim(),
+        descripcion: (() => {
+    const descInput = select('movimiento-descripcion').value.trim();
+    if (selectedType === 'traspaso' && descInput === '') {
+        const origen = select('movimiento-cuenta-origen');
+        const destino = select('movimiento-cuenta-destino');
+        const nombreOrigen = origen.options[origen.selectedIndex]?.text || '?';
+        const nombreDestino = destino.options[destino.selectedIndex]?.text || '?';
+        return `Traspaso de ${nombreOrigen} a ${nombreDestino}`;
+    }
+    return descInput;
+})(),
         fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
         cuentaId: select('movimiento-cuenta').value,
         conceptoId: select('movimiento-concepto').value,
