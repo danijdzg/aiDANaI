@@ -7114,9 +7114,8 @@ const attachEventListeners = () => {
                     [PAGE_IDS.PANEL]: renderPanelPage,
                     [PAGE_IDS.DIARIO]: renderDiarioPage,
                     [PAGE_IDS.INVERSIONES]: renderInversionesView,
-                    [PAGE_IDS.PLANIFICACION]: renderPlanificacionPage,
-                    [PAGE_IDS.INFORMES]: renderInformesPage,
-                    [PAGE_IDS.CONFIGURACION]: loadConfig,
+                    [PAGE_IDS.ANALISIS]: renderAnalisisPage,
+                    [PAGE_IDS.AJUSTES]: renderAjustesPage,
                 };
                 if (pageRenderers[activePageId]) {
                     await pageRenderers[activePageId]();
