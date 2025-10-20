@@ -63,13 +63,13 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const PAGE_IDS = {
-            PANEL: 'panel-page',
-            DIARIO: 'diario-page',
-            INVERSIONES: 'inversiones-page', // <-- AÑADIDO
-            PLANIFICACION: 'planificacion-page',
-            INFORMES: 'informes-page',
-            CONFIGURACION: 'configuracion-page',
-        };
+			PANEL: 'panel-page',
+			DIARIO: 'diario-page',
+			INVERSIONES: 'inversiones-page',
+			ANALISIS: 'analisis-page',       // <-- NUEVO
+			AJUSTES: 'ajustes-page',         // <-- NUEVO
+};
+
 	const AIDANAI_HELP_CONTENT = {
     [PAGE_IDS.PANEL]: {
         title: "Tu Torre de Control Financiera",
@@ -1513,13 +1513,12 @@ const navigateTo = async (pageId, isInitial = false) => {
         await Promise.all([loadPresupuestos(), loadInversiones()]);
     }
     const pageRenderers = {
-        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-        [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-        [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-		[PAGE_IDS.INFORMES]: { title: 'Informes', render: renderInformesPage, actions: standardActions },
-		[PAGE_IDS.CONFIGURACION]: { title: 'Ajustes', render: loadConfig, actions: standardActions },
-    };
+    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+    [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
+    [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
+    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+};
      if (pageRenderers[pageId]) { 
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
@@ -9177,3 +9176,26 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+// Pega estas dos nuevas funciones en cualquier lugar de main.js
+
+const renderAnalisisPage = () => {
+    // Esta función se encarga de preparar la pestaña de Análisis
+    populateAllDropdowns(); // Para el selector de año de presupuestos
+    renderBudgetTracking(); // Dibuja la sección de presupuestos
+    
+    // Rellenamos el selector de cuentas para el informe de extracto
+    const populate = (id, data, nameKey, valKey='id') => {
+        const el = select(id); if (!el) return;
+        let opts = '<option value="">Seleccionar cuenta...</option>';
+        [...data].sort((a,b) => (a[nameKey]||"").localeCompare(b[nameKey]||"")).forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
+        el.innerHTML = opts;
+    };
+    populate('informe-cuenta-select', getVisibleAccounts(), 'nombre', 'id');
+};
+
+const renderAjustesPage = () => {
+    // Esta función prepara la pestaña de Ajustes
+    loadConfig(); // Muestra el email del usuario, etc.
+    renderPendingRecurrents(); // Muestra los recurrentes pendientes de aprobación
+    renderRecurrentsListOnPage(); // Muestra la lista de futuras automaciones
+};
