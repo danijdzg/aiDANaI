@@ -83,17 +83,13 @@ const handleExportFilteredCsv = (btn) => {
         title: "Tu Centro de Mando Patrimonial",
         content: "Esta es la joya de la corona, donde tus activos crecen. Sigue el rendimiento de tu portafolio con métricas clave como la <strong>Rentabilidad (P&L)</strong> y la <strong>TIR anualizada</strong>, la métrica que usan los profesionales para saber si una inversión de verdad merece la pena."
     },
-    [PAGE_IDS.PLANIFICACION]: {
-        title: "La Sala de Estrategia",
-        content: "Aquí es donde le dices a tu dinero qué hacer, en lugar de preguntarte a dónde se ha ido. Automatiza tus <strong>gastos recurrentes</strong> (nómina, alquiler, suscripciones) y crea <strong>presupuestos anuales</strong> para controlar categorías clave y alcanzar tus metas financieras."
+    [PAGE_IDS.ANALISIS]: { // ANTES: Planificación e Informes
+        title: "El Laboratorio de Estrategia",
+        content: "Aquí conviertes tus números en sabiduría. Automatiza tus <strong>gastos recurrentes</strong> (nómina, alquiler), crea <strong>presupuestos anuales</strong> para controlar tus metas y genera <strong>informes detallados</strong> para entender patrones. <strong>Función estrella:</strong> ¡Puedes exportar tus análisis a <strong>PDF</strong>!"
     },
-    [PAGE_IDS.INFORMES]: {
-        title: "El Laboratorio de Datos",
-        content: "Convierte tus números en sabiduría. Los informes te ayudan a entender patrones. Analiza tu flujo de caja, cómo crece tu patrimonio y el rendimiento de tus inversiones. <strong>Función estrella:</strong> ¡Puedes exportarlos a <strong>PDF</strong> para tenerlos siempre a mano o compartirlos!"
-    },
-    [PAGE_IDS.CONFIGURACION]: {
+    [PAGE_IDS.AJUSTES]: { // ANTES: Configuración
         title: "La Sala de Máquinas",
-        content: "Aquí ajustas la app a tu gusto. No olvides la función más potente: la <strong>Contabilidad Dual (A/B)</strong>. Úsala para separar tus finanzas personales de un proyecto, un negocio, la comunidad de vecinos, ¡o lo que se te ocurra! Es como tener dos apps en una."
+        content: "Aquí ajustas la app a tu gusto. Gestiona tus cuentas, conceptos y no olvides la función más potente: la <strong>Contabilidad Dual (A/B)</strong>. Úsala para separar tus finanzas personales de un proyecto o negocio. ¡Es como tener dos apps en una!"
     },
     'default': {
         title: "¡Hola! Soy aiDANaI, tu copiloto",
