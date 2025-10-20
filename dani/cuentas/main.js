@@ -6710,17 +6710,13 @@ const handleGenerateInformeCuenta = async (form, btn) => {
     resultadoContainer.innerHTML = `<div class="card"><div class="card__content" style="text-align:center;"><span class="spinner"></span></div></div>`;
 
     try {
-        // 1. Obtener TODOS los movimientos (considera obtener solo los de la cuenta si el rendimiento se ve afectado)
         const todosLosMovimientos = await fetchAllMovementsForHistory();
-
-        // 2. Filtrar movimientos relacionados con la cuenta seleccionada
         const movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
             (m.cuentaId === cuentaId) ||
             (m.cuentaOrigenId === cuentaId) ||
             (m.cuentaDestinoId === cuentaId)
         );
 
-        // Si no hay movimientos, mostrar estado vacío
         if (movimientosDeLaCuenta.length === 0) {
              resultadoContainer.innerHTML = `
                 <h3 class="card__title">Extracto de ${escapeHTML(cuenta.nombre)}</h3>
@@ -6729,37 +6725,31 @@ const handleGenerateInformeCuenta = async (form, btn) => {
              return;
         }
 
-        // 3. Ordenar movimientos ANTIGUO -> NUEVO para cálculo de saldo acumulado
-        movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime() || a.id.localeCompare(b.id));
+        movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha).getTime() - new Date(a.fecha).getTime() || a.id.localeCompare(b.id));
 
-        // 4. Calcular Saldos Acumulados (Iterando ANTIGUO -> NUEVO)
-        // Determinar el saldo inicial *antes* del primer movimiento en la lista
         const impactoTotalHistorico = movimientosDeLaCuenta.reduce((sum, mov) => {
             if (mov.tipo === 'traspaso') {
                 if (mov.cuentaOrigenId === cuentaId) return sum - mov.cantidad;
                 if (mov.cuentaDestinoId === cuentaId) return sum + mov.cantidad;
-            } else if (mov.cuentaId === cuentaId) { // Solo contar movimientos directos para cálculo de saldo
+            } else if (mov.cuentaId === cuentaId) {
                 return sum + mov.cantidad;
             }
             return sum;
         }, 0);
         let saldoAcumulado = (cuenta.saldo || 0) - impactoTotalHistorico;
 
-        // Asignar saldo acumulado a cada movimiento
         for (const mov of movimientosDeLaCuenta) {
             if (mov.tipo === 'traspaso') {
                 if (mov.cuentaOrigenId === cuentaId) saldoAcumulado -= mov.cantidad;
                 if (mov.cuentaDestinoId === cuentaId) saldoAcumulado += mov.cantidad;
-            } else if (mov.cuentaId === cuentaId) { // Solo ajustar por movimientos directos
+            } else if (mov.cuentaId === cuentaId) {
                 saldoAcumulado += mov.cantidad;
             }
-            // Guardar el saldo *después* de que ocurriera el movimiento
             mov.runningBalance = saldoAcumulado;
         }
 
-        // 5. Agrupar movimientos por Mes (YYYY-MM)
         const groupedByMonth = movimientosDeLaCuenta.reduce((acc, mov) => {
-            const monthKey = mov.fecha.slice(0, 7); // "YYYY-MM"
+            const monthKey = mov.fecha.slice(0, 7);
             if (!acc[monthKey]) {
                 acc[monthKey] = [];
             }
@@ -6767,7 +6757,6 @@ const handleGenerateInformeCuenta = async (form, btn) => {
             return acc;
         }, {});
 
-        // 6. Generar HTML (Iterando NUEVO -> ANTIGUO para mostrar)
         let resultadoHtml = `
             <h3 class="card__title" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>Extracto de ${escapeHTML(cuenta.nombre)}</span>
@@ -6783,7 +6772,6 @@ const handleGenerateInformeCuenta = async (form, btn) => {
                     <span class="saldo">Saldo</span>
                 </div>`;
 
-        // Función auxiliar para calcular el impacto específico en la cuenta
         const calculateAccountImpact = (mov, accId) => {
              if (mov.tipo === 'traspaso') {
                 if (mov.cuentaOrigenId === accId) return -mov.cantidad;
@@ -6791,54 +6779,50 @@ const handleGenerateInformeCuenta = async (form, btn) => {
              } else if (mov.cuentaId === accId) {
                 return mov.cantidad;
              }
-             return 0; // El movimiento no impacta el flujo de caja de esta cuenta
+             return 0;
         };
 
-
-        // Obtener claves de mes y ordenar NUEVO -> ANTIGUO
         const sortedMonthKeys = Object.keys(groupedByMonth).sort().reverse();
 
         for (const monthKey of sortedMonthKeys) {
             const movementsForMonth = groupedByMonth[monthKey];
 
-            // 1. INICIALIZAR los totales del mes a CERO ANTES del bucle de movimientos
+            // ======================================================================
+            // === INICIO DE LA LÓGICA CORREGIDA: RESUMEN ANTES QUE MOVIMIENTOS ===
+            // ======================================================================
+
+            // 1. PRIMERA PASADA: Calcular totales ANTES de imprimir nada.
             let monthIncome = 0;
             let monthExpense = 0;
-
-            // 2. Ordenar movimientos dentro del mes (NUEVO -> ANTIGUO para mostrar)
-            movementsForMonth.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime() || b.id.localeCompare(a.id));
-
-            // 3. BUCLE PARA AÑADIR LAS FILAS DE MOVIMIENTOS Y CALCULAR TOTALES
             for (const mov of movementsForMonth) {
-                // Añadir la fila del movimiento al HTML
-                resultadoHtml += renderInformeCuentaRow(mov, cuentaId, db.cuentas); // Usa el runningBalance precalculado
-
-                // Calcular el impacto de este movimiento y sumarlo a los totales del mes
                 const impact = calculateAccountImpact(mov, cuentaId);
                 if (impact > 0) {
                     monthIncome += impact;
                 } else {
-                    monthExpense += impact; // Los gastos son negativos
+                    monthExpense += impact; // Los gastos ya son negativos
                 }
-            } // <-- FIN del bucle for (const mov...)
-
-            // 4. DESPUÉS del bucle de movimientos, calcular el neto y AÑADIR LA FILA DE RESUMEN
+            }
             const monthNet = monthIncome + monthExpense;
-            // Usar día 2 para crear la fecha evita problemas con zonas horarias al obtener el nombre del mes
             const monthDate = new Date(monthKey + '-02T12:00:00Z');
             const monthName = monthDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
+            // 2. AÑADIR LA FILA DE RESUMEN PRIMERO
             resultadoHtml += `
                 <div class="informe-linea-resumen">
                     <span class="fecha"></span>
                     <span class="descripcion">${monthName}: Ingresos ${formatCurrency(monthIncome)} - Gastos ${formatCurrency(monthExpense)}</span>
                     <span class="importe ${monthNet >= 0 ? 'text-ingreso' : 'text-gasto'}">${formatCurrency(monthNet)}</span>
                     <span class="saldo"></span>
-                </div>`; // <-- Fila de resumen añadida AL FINAL
+                </div>`;
 
-        } // --- FIN DEL BUCLE DE MESES ---
+            // 3. SEGUNDA PASADA: Ordenar y añadir las filas de movimientos individuales DESPUÉS del resumen.
+            movementsForMonth.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime() || b.id.localeCompare(a.id));
+            for (const mov of movementsForMonth) {
+                resultadoHtml += renderInformeCuentaRow(mov, cuentaId, db.cuentas);
+            }
+            
+            }
 
-        // Cerrar el contenedor principal del informe
         resultadoHtml += `</div>`;
         resultadoContainer.innerHTML = resultadoHtml;
     } catch (error) {
@@ -6850,9 +6834,7 @@ const handleGenerateInformeCuenta = async (form, btn) => {
     }
 };
 
-// =================================================================
-// === FIN DEL BLOQUE DEFINITIVO                                 ===
-// =================================================================
+
 
 const attachEventListeners = () => {
     const cantidadInput = document.getElementById("movimiento-cantidad");
