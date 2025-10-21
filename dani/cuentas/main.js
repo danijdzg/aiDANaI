@@ -9168,7 +9168,7 @@ const handleDescriptionInput = () => {
 if ('serviceWorker' in navigator) {
   // Usamos el evento 'load' para no retrasar la carga inicial de la app
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
+    navigator.serviceWorker.register('service-worker.js')
       .then(registration => {
         console.log('Service Worker registrado con éxito:', registration);
       })
