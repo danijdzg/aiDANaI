@@ -2850,7 +2850,7 @@ select('virtual-list-content').innerHTML = skeletonHTML;
     movementsObserver.observe(trigger);
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
+// 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
 const renderDiarioPage = async () => {
     const container = select('diario-page');
     if (!container.querySelector('#diario-view-container')) {
@@ -2860,87 +2860,93 @@ const renderDiarioPage = async () => {
     const viewContainer = select('diario-view-container');
     if (!viewContainer) return;
 
-    // Si la vista es calendario, la lógica no cambia.
     if (diarioViewMode === 'calendar') {
         if (movementsObserver) movementsObserver.disconnect();
         await renderDiarioCalendar();
         return;
     }
 
-    // --- LÓGICA NUEVA PARA LA VISTA DE LISTA CON FILTROS ---
     viewContainer.innerHTML = `
-    <div id="diario-filter-active-indicator" class="hidden">
-    <p>Mostrando resultados filtrados.</p>
-    <div>
-        <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">
-            <span class="material-icons" style="font-size: 14px;">download</span>
-            Exportar
-        </button>
-        <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
-    </div>
-</div>
-    <div id="movimientos-list-container">
-        <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
-    </div>
-    <div id="infinite-scroll-trigger" style="height: 50px;"></div> 
-    <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
-        <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
-    </div>`;
+        <div id="diario-filter-active-indicator" class="hidden">
+            <p>Mostrando resultados filtrados.</p>
+            <div>
+                <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">
+                    <span class="material-icons" style="font-size: 14px;">download</span>
+                    Exportar
+                </button>
+                <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
+            </div>
+        </div>
+        <div id="movimientos-list-container">
+            <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
+        </div>
+        <div id="infinite-scroll-trigger" style="height: 50px;"></div> 
+        <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
+            <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
+        </div>`;
 
-    // Preparamos la lista virtual
     vList.scrollerEl = selectOne('.app-layout__main');
     vList.sizerEl = select('virtual-list-sizer');
     vList.contentEl = select('virtual-list-content');
 
-    // Mostramos un esqueleto de carga
     let skeletonHTML = '';
     for (let i = 0; i < 7; i++) {
         skeletonHTML += `<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>`;
     }
     select('virtual-list-content').innerHTML = skeletonHTML;
     
-    // 1. CARGAMOS TODOS LOS MOVIMIENTOS SI AÚN NO LOS TENEMOS
-    if (allDiarioMovementsCache.length === 0) {
-        allDiarioMovementsCache = await fetchAllMovementsForHistory();
-    }
+    // ---- INICIO DE LA LÓGICA CORREGIDA ----
+    const scrollTrigger = select('infinite-scroll-trigger');
 
-    let movementsToDisplay = [...allDiarioMovementsCache];
-
-    // 2. APLICAMOS LOS FILTROS SI EXISTEN
     if (diarioActiveFilters) {
+        // MODO FILTRADO: Ocultamos el scroll infinito y filtramos los datos cacheados.
+        if (scrollTrigger) scrollTrigger.classList.add('hidden'); // Oculta el activador
+        if (movementsObserver) movementsObserver.disconnect(); // Detiene el observador
+
         select('diario-filter-active-indicator').classList.remove('hidden');
         
+        if (allDiarioMovementsCache.length === 0) {
+            allDiarioMovementsCache = await fetchAllMovementsForHistory();
+        }
+
         const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
-        
-        movementsToDisplay = movementsToDisplay.filter(m => {
+        const movementsToDisplay = allDiarioMovementsCache.filter(m => {
             if (startDate && m.fecha < startDate) return false;
             if (endDate && m.fecha > endDate) return false;
             if (description && !m.descripcion.toLowerCase().includes(description)) return false;
-            
             const cantidadEuros = m.cantidad / 100;
             if (minAmount && cantidadEuros < parseFloat(minAmount)) return false;
             if (maxAmount && cantidadEuros > parseFloat(maxAmount)) return false;
-            
             if (cuentas.length > 0) {
                 if (m.tipo === 'traspaso' && !cuentas.includes(m.cuentaOrigenId) && !cuentas.includes(m.cuentaDestinoId)) return false;
                 if (m.tipo === 'movimiento' && !cuentas.includes(m.cuentaId)) return false;
             }
             if (conceptos.length > 0 && m.tipo === 'movimiento' && !conceptos.includes(m.conceptoId)) return false;
-
             return true;
         });
+        
+        db.movimientos = movementsToDisplay;
+
     } else {
-         select('diario-filter-active-indicator').classList.add('hidden');
+        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
+        if (scrollTrigger) scrollTrigger.classList.remove('hidden');
+        select('diario-filter-active-indicator').classList.add('hidden');
+        
+        db.movimientos = [];
+        lastVisibleMovementDoc = null;
+        allMovementsLoaded = false;
+        isLoadingMoreMovements = false;
+        
+        await loadMoreMovements(true); // Carga la primera página
+        initMovementsObserver(); // Activa el observador del scroll infinito
+        return; // Salimos aquí porque loadMoreMovements ya actualiza la UI
     }
-    
-    // 3. ACTUALIZAMOS LA LISTA VIRTUAL CON LOS DATOS FILTRADOS
-    db.movimientos = movementsToDisplay; // Sobrescribimos la lista temporal que usa la UI
+    // ---- FIN DE LA LÓGICA CORREGIDA ----
+
     await processMovementsForRunningBalance(db.movimientos, true);
     updateVirtualListUI();
-	initMovementsObserver(); // Activa el vigilante del scroll infinito
 
-    // Actualizamos el mensaje de "vacío" si no hay resultados
-    if (movementsToDisplay.length === 0) {
+    if (db.movimientos.length === 0) {
         const emptyState = select('empty-movimientos');
         if (diarioActiveFilters) {
             emptyState.querySelector('h3').textContent = 'Sin Resultados';
@@ -6081,8 +6087,8 @@ const handleSaveValoracion = async (form, btn) => {
 
         let docId;
         if (!existingSnapshot.empty) {
-            docId = existingSnapshot.docs.id;
-            await existingSnapshot.docs.ref.update({ valor: valorEnCentimos });
+            docId = existingSnapshot.docs[0].id;
+			await existingSnapshot.docs[0].ref.update({ valor: valorEnCentimos });
         } else {
             docId = generateId();
             await saveDoc('inversiones_historial', docId, { id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
@@ -6710,13 +6716,17 @@ const handleGenerateInformeCuenta = async (form, btn) => {
     resultadoContainer.innerHTML = `<div class="card"><div class="card__content" style="text-align:center;"><span class="spinner"></span></div></div>`;
 
     try {
+        // 1. Obtener TODOS los movimientos (considera obtener solo los de la cuenta si el rendimiento se ve afectado)
         const todosLosMovimientos = await fetchAllMovementsForHistory();
+
+        // 2. Filtrar movimientos relacionados con la cuenta seleccionada
         const movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
             (m.cuentaId === cuentaId) ||
             (m.cuentaOrigenId === cuentaId) ||
             (m.cuentaDestinoId === cuentaId)
         );
 
+        // Si no hay movimientos, mostrar estado vacío
         if (movimientosDeLaCuenta.length === 0) {
              resultadoContainer.innerHTML = `
                 <h3 class="card__title">Extracto de ${escapeHTML(cuenta.nombre)}</h3>
@@ -6725,31 +6735,37 @@ const handleGenerateInformeCuenta = async (form, btn) => {
              return;
         }
 
-        movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha).getTime() - new Date(a.fecha).getTime() || a.id.localeCompare(b.id));
+        // 3. Ordenar movimientos ANTIGUO -> NUEVO para cálculo de saldo acumulado
+        movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime() || a.id.localeCompare(b.id));
 
+        // 4. Calcular Saldos Acumulados (Iterando ANTIGUO -> NUEVO)
+        // Determinar el saldo inicial *antes* del primer movimiento en la lista
         const impactoTotalHistorico = movimientosDeLaCuenta.reduce((sum, mov) => {
             if (mov.tipo === 'traspaso') {
                 if (mov.cuentaOrigenId === cuentaId) return sum - mov.cantidad;
                 if (mov.cuentaDestinoId === cuentaId) return sum + mov.cantidad;
-            } else if (mov.cuentaId === cuentaId) {
+            } else if (mov.cuentaId === cuentaId) { // Solo contar movimientos directos para cálculo de saldo
                 return sum + mov.cantidad;
             }
             return sum;
         }, 0);
         let saldoAcumulado = (cuenta.saldo || 0) - impactoTotalHistorico;
 
+        // Asignar saldo acumulado a cada movimiento
         for (const mov of movimientosDeLaCuenta) {
             if (mov.tipo === 'traspaso') {
                 if (mov.cuentaOrigenId === cuentaId) saldoAcumulado -= mov.cantidad;
                 if (mov.cuentaDestinoId === cuentaId) saldoAcumulado += mov.cantidad;
-            } else if (mov.cuentaId === cuentaId) {
+            } else if (mov.cuentaId === cuentaId) { // Solo ajustar por movimientos directos
                 saldoAcumulado += mov.cantidad;
             }
+            // Guardar el saldo *después* de que ocurriera el movimiento
             mov.runningBalance = saldoAcumulado;
         }
 
+        // 5. Agrupar movimientos por Mes (YYYY-MM)
         const groupedByMonth = movimientosDeLaCuenta.reduce((acc, mov) => {
-            const monthKey = mov.fecha.slice(0, 7);
+            const monthKey = mov.fecha.slice(0, 7); // "YYYY-MM"
             if (!acc[monthKey]) {
                 acc[monthKey] = [];
             }
@@ -6757,6 +6773,7 @@ const handleGenerateInformeCuenta = async (form, btn) => {
             return acc;
         }, {});
 
+        // 6. Generar HTML (Iterando NUEVO -> ANTIGUO para mostrar)
         let resultadoHtml = `
             <h3 class="card__title" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>Extracto de ${escapeHTML(cuenta.nombre)}</span>
@@ -6772,6 +6789,7 @@ const handleGenerateInformeCuenta = async (form, btn) => {
                     <span class="saldo">Saldo</span>
                 </div>`;
 
+        // Función auxiliar para calcular el impacto específico en la cuenta
         const calculateAccountImpact = (mov, accId) => {
              if (mov.tipo === 'traspaso') {
                 if (mov.cuentaOrigenId === accId) return -mov.cantidad;
@@ -6779,50 +6797,54 @@ const handleGenerateInformeCuenta = async (form, btn) => {
              } else if (mov.cuentaId === accId) {
                 return mov.cantidad;
              }
-             return 0;
+             return 0; // El movimiento no impacta el flujo de caja de esta cuenta
         };
 
+
+        // Obtener claves de mes y ordenar NUEVO -> ANTIGUO
         const sortedMonthKeys = Object.keys(groupedByMonth).sort().reverse();
 
         for (const monthKey of sortedMonthKeys) {
             const movementsForMonth = groupedByMonth[monthKey];
 
-            // ======================================================================
-            // === INICIO DE LA LÓGICA CORREGIDA: RESUMEN ANTES QUE MOVIMIENTOS ===
-            // ======================================================================
-
-            // 1. PRIMERA PASADA: Calcular totales ANTES de imprimir nada.
+            // 1. INICIALIZAR los totales del mes a CERO ANTES del bucle de movimientos
             let monthIncome = 0;
             let monthExpense = 0;
+
+            // 2. Ordenar movimientos dentro del mes (NUEVO -> ANTIGUO para mostrar)
+            movementsForMonth.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime() || b.id.localeCompare(a.id));
+
+            // 3. BUCLE PARA AÑADIR LAS FILAS DE MOVIMIENTOS Y CALCULAR TOTALES
             for (const mov of movementsForMonth) {
+                // Añadir la fila del movimiento al HTML
+                resultadoHtml += renderInformeCuentaRow(mov, cuentaId, db.cuentas); // Usa el runningBalance precalculado
+
+                // Calcular el impacto de este movimiento y sumarlo a los totales del mes
                 const impact = calculateAccountImpact(mov, cuentaId);
                 if (impact > 0) {
                     monthIncome += impact;
                 } else {
-                    monthExpense += impact; // Los gastos ya son negativos
+                    monthExpense += impact; // Los gastos son negativos
                 }
-            }
+            } // <-- FIN del bucle for (const mov...)
+
+            // 4. DESPUÉS del bucle de movimientos, calcular el neto y AÑADIR LA FILA DE RESUMEN
             const monthNet = monthIncome + monthExpense;
+            // Usar día 2 para crear la fecha evita problemas con zonas horarias al obtener el nombre del mes
             const monthDate = new Date(monthKey + '-02T12:00:00Z');
             const monthName = monthDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-            // 2. AÑADIR LA FILA DE RESUMEN PRIMERO
             resultadoHtml += `
                 <div class="informe-linea-resumen">
                     <span class="fecha"></span>
-                    <span class="descripcion">${monthName}: Ingresos ${formatCurrency(monthIncome)} - Gastos ${formatCurrency(monthExpense)}</span>
+                    <span class="descripcion">${monthName}: Ingresos ${formatCurrency(monthIncome)} - Gastos ${formatCurrency(Math.abs(monthExpense))}</span>
                     <span class="importe ${monthNet >= 0 ? 'text-ingreso' : 'text-gasto'}">${formatCurrency(monthNet)}</span>
                     <span class="saldo"></span>
-                </div>`;
+                </div>`; // <-- Fila de resumen añadida AL FINAL
 
-            // 3. SEGUNDA PASADA: Ordenar y añadir las filas de movimientos individuales DESPUÉS del resumen.
-            movementsForMonth.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime() || b.id.localeCompare(a.id));
-            for (const mov of movementsForMonth) {
-                resultadoHtml += renderInformeCuentaRow(mov, cuentaId, db.cuentas);
-            }
-            
-            }
+        } // --- FIN DEL BUCLE DE MESES ---
 
+        // Cerrar el contenedor principal del informe
         resultadoHtml += `</div>`;
         resultadoContainer.innerHTML = resultadoHtml;
     } catch (error) {
@@ -6834,7 +6856,9 @@ const handleGenerateInformeCuenta = async (form, btn) => {
     }
 };
 
-
+// =================================================================
+// === FIN DEL BLOQUE DEFINITIVO                                 ===
+// =================================================================
 
 const attachEventListeners = () => {
     const cantidadInput = document.getElementById("movimiento-cantidad");
@@ -7865,7 +7889,7 @@ const handleSaveMovement = async (form, btn) => {
 
             setButtonLoading(btn, false);
             hapticFeedback('success');
-			triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+			triggerSaveAnimation(btn, dataToSave.cantidad >= 0 ? 'green' : 'red');
             if (!isSaveAndNew) {
                 hideModal('movimiento-modal');
                 showToast(select('movimiento-mode').value === 'new' ? 'Operación programada.' : 'Operación actualizada.');
