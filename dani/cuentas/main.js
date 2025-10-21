@@ -106,16 +106,11 @@ const handleExportFilteredCsv = (btn) => {
 // CÓDIGO CORRECTO Y ÚNICO QUE DEBE QUEDAR EN TU ARCHIVO
 // PEGA ESTE BLOQUE ÚNICO Y CORRECTO EN SU LUGAR
 	const AVAILABLE_WIDGETS = {
-        // EL NUEVO Y ÚNICO WIDGET CON FILTROS
-		'super-centro-operaciones': { title: 'Centro de Operaciones', description: 'Visión completa con filtros, KPIs y análisis de conceptos.', icon: 'query_stats' },
-
-        // EL RESTO DE WIDGETS SE QUEDAN COMO ESTABAN
+        'super-centro-operaciones': { title: 'Centro de Operaciones', description: 'Visión completa con filtros, KPIs y análisis de conceptos.', icon: 'query_stats' },
 		'action-center': { title: 'Centro de Acciones', description: 'Alertas y tareas pendientes.', icon: 'notifications_active' },
-		'emergency-fund': { title: 'Colchón de Emergencia', description: 'Calcula cuántos meses de gastos puedes cubrir con tu dinero líquido.', icon: 'shield' },
-		'fi-progress': { title: 'Independencia Financiera', description: 'Mide tu avance hacia la independencia financiera.', icon: 'flag' },
 		'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto.', icon: 'show_chart' },
 		'patrimonio-structure': { title: 'Patrimonio', description: 'Gráfico interactivo y listado de todas tus cuentas y su peso.', icon: 'account_balance' },
-		'informe-personalizado': { title: 'Mi Informe Personalizado', description: 'Tu informe a medida creado desde el configurador.', icon: 'insights' },
+		
 	};
 const DEFAULT_DASHBOARD_WIDGETS = [
     'super-centro-operaciones', // <-- El widget principal y más completo
