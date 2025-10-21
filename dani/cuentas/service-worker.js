@@ -7,19 +7,24 @@ const URLS_TO_CACHE = [
   'index.html',
   'style.css',
   'main.js',
+  'manifest.json', // Es buena práctica cachear también el manifest
+  'aiDANaI.webp',  // Cachear la imagen principal
   'icons/android-chrome-192x192.png',
   'icons/android-chrome-512x512.png',
   'views/panel.html',
   'views/diario.html',
   'views/inversiones.html',
-  'views/planificacion.html',
-  'views/informes.html',
-  'views/configuracion.html'
+  // --- INICIO DE LA CORRECCIÓN ---
+  // Se eliminan los archivos antiguos y se añaden los nuevos.
+  'views/analisis.html',
+  'views/ajustes.html'
+  // --- FIN DE LA CORRECCIÓN ---
 ];
 
 // Evento 'install': Se dispara cuando el Service Worker se instala por primera vez.
-// Aquí es donde guardamos la "carcasa" de la app en la caché.
 self.addEventListener('install', event => {
+  // skipWaiting() fuerza al nuevo Service Worker a activarse inmediatamente.
+  self.skipWaiting(); 
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
@@ -30,52 +35,45 @@ self.addEventListener('install', event => {
 });
 
 // Evento 'activate': Se dispara cuando el Service Worker se activa.
-// Aquí limpiamos cachés antiguas para asegurarnos de que el usuario siempre tenga la última versión.
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          // Si el nombre de la caché no es el actual, la borramos.
           if (CACHE_NAME !== cacheName) {
+            console.log('Borrando caché antigua:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
-    })
+    }).then(() => self.clients.claim()) // Toma el control de las páginas abiertas.
   );
 });
 
-// Evento 'fetch': Se dispara CADA VEZ que la app pide un recurso (un fichero, una imagen, etc.).
-// Aquí es donde interceptamos la petición y decidimos qué hacer.
+// Evento 'fetch': Se dispara CADA VEZ que la app pide un recurso.
 self.addEventListener('fetch', event => {
+  // Solo aplicamos la estrategia de caché para peticiones GET
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // 1. Si encontramos el recurso en la caché...
-        if (response) {
-          // ...lo devolvemos directamente. ¡Esto es súper rápido!
-          return response;
-        }
-
-        // 2. Si no está en la caché, vamos a internet a buscarlo.
-        return fetch(event.request).then(
-          networkResponse => {
-            // Si la respuesta de la red es válida...
-            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-              return networkResponse;
-            }
-            
-            // 3. Hacemos una copia de la respuesta y la guardamos en la caché para la próxima vez.
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
-
-            return networkResponse;
+    caches.open(CACHE_NAME).then(cache => {
+      // 1. Intentar obtener el recurso de la red (Estrategia: Network First)
+      return fetch(event.request)
+        .then(networkResponse => {
+          // Si la petición a la red tiene éxito, la guardamos en caché y la devolvemos
+          if (networkResponse.ok) {
+            cache.put(event.request, networkResponse.clone());
           }
-        );
-      })
+          return networkResponse;
+        })
+        .catch(() => {
+          // 2. Si la red falla, buscamos en la caché como respaldo (Offline Fallback)
+          return cache.match(event.request).then(cachedResponse => {
+            return cachedResponse || Response.error();
+          });
+        });
+    })
   );
 });
