@@ -117,7 +117,12 @@ const handleExportFilteredCsv = (btn) => {
 		'patrimonio-structure': { title: 'Patrimonio', description: 'Gráfico interactivo y listado de todas tus cuentas y su peso.', icon: 'account_balance' },
 		'informe-personalizado': { title: 'Mi Informe Personalizado', description: 'Tu informe a medida creado desde el configurador.', icon: 'insights' },
 	};
-const DEFAULT_DASHBOARD_WIDGETS = ['super-centro-operaciones', 'net-worth-trend', 'patrimonio-structure', 'action-center'];	
+const DEFAULT_DASHBOARD_WIDGETS = [
+    'super-centro-operaciones', // <-- El widget principal y más completo
+    'net-worth-trend',          // Evolución del Patrimonio
+    'patrimonio-structure',     // Desglose del Patrimonio
+    'action-center'             // Centro de Acciones (Recurrentes pendientes)
+];
 // ▼▼▼ REEMPLAZAR POR COMPLETO CON LA VERSIÓN FINAL Y MATEMÁTICAMENTE CORRECTA ▼▼▼
 // AÑADE ESTA NUEVA FUNCIÓN A main.js
 const updateAnalisisWidgets = async () => {
@@ -1565,7 +1570,7 @@ const navigateTo = async (pageId, isInitial = false) => {
         await Promise.all([loadPresupuestos(), loadInversiones()]);
     }
     const pageRenderers = {
-    [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderPanelPage, actions: standardActions }, // <-- CAMBIADO
+    [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderInicioPage, actions: standardActions }, // <-- CAMBIADO
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
     [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
     [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
@@ -3283,7 +3288,7 @@ const renderPatrimonioPage = async () => {
             
             			
         };
-    const renderPanelPage = () => {
+    const renderInicioPage  = () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
@@ -7010,7 +7015,7 @@ const attachEventListeners = () => {
                 const activePageEl = selectOne('.view--active');
                 const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.PANEL;
                 const pageRenderers = {
-                    [PAGE_IDS.PANEL]: renderPanelPage,
+                    [PAGE_IDS.PANEL]: renderInicioPage ,
                     [PAGE_IDS.DIARIO]: renderDiarioPage,
                     [PAGE_IDS.INVERSIONES]: renderInversionesView,
                     [PAGE_IDS.ANALISIS]: renderAnalisisPage,
