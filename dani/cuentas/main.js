@@ -735,7 +735,7 @@ async function loadCoreData(uid) {
             
             populateAllDropdowns();
             
-            if (select(PAGE_IDS.PANEL)?.classList.contains('view--active')) scheduleDashboardUpdate();
+            if (select(PAGE_IDS.INICIO)?.classList.contains('view--active')) scheduleDashboardUpdate();
             
         }, error => console.error(`Error escuchando ${collectionName}: `, error));
         unsubscribeListeners.push(unsubscribe);
@@ -769,7 +769,7 @@ async function loadCoreData(uid) {
             
             // Si el usuario está en la página de Inicio, la actualizamos inmediatamente.
             const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PANEL) {
+            if (activePage && activePage.id === PAGE_IDS.INICIO) {
                 scheduleDashboardUpdate();
             }
         }, error => console.error("Error escuchando movimientos recientes: ", error));
@@ -1566,7 +1566,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     `;
     
     if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.PANEL) {
+    if (pageId === PAGE_IDS.INICIO) {
         await Promise.all([loadPresupuestos(), loadInversiones()]);
     }
     const pageRenderers = {
@@ -1579,7 +1579,7 @@ const navigateTo = async (pageId, isInitial = false) => {
      if (pageRenderers[pageId]) { 
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-            if (pageId === PAGE_IDS.PANEL) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
             if (pageId === PAGE_IDS.DIARIO) {
                 leftSideHTML += `
                     <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
@@ -1621,7 +1621,7 @@ const navigateTo = async (pageId, isInitial = false) => {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
-    if (pageId === PAGE_IDS.PANEL) {
+    if (pageId === PAGE_IDS.INICIO) {
         setTimeout(scheduleDashboardUpdate, 50);
     }
 };
@@ -3289,7 +3289,7 @@ const renderPatrimonioPage = async () => {
             			
         };
     const renderInicioPage  = () => {
-    const container = select(PAGE_IDS.PANEL);
+    const container = select(PAGE_IDS.INICIO);
     if (!container) return;
 
     // --- ¡LA CORRECCIÓN CLAVE ESTÁ AQUÍ! ---
@@ -4667,7 +4667,7 @@ const updateNetWorthChart = async (saldos) => {
 const scheduleDashboardUpdate = () => {
     // El jefe de obra solo trabaja si la página "Inicio" está abierta.
     const activePage = document.querySelector('.view--active');
-    if (!activePage || activePage.id !== PAGE_IDS.PANEL) {
+    if (!activePage || activePage.id !== PAGE_IDS.INICIO) {
         return;
     }
       
@@ -4680,7 +4680,7 @@ const scheduleDashboardUpdate = () => {
 
 const updateDashboardData = async () => {
     const activePage = document.querySelector('.view--active');
-    if (!activePage || activePage.id !== PAGE_IDS.PANEL) {
+    if (!activePage || activePage.id !== PAGE_IDS.INICIO) {
         return;
     }
 
@@ -6835,7 +6835,7 @@ const attachEventListeners = () => {
             history.pushState({ page: window.history.state?.page }, '', `#${window.history.state?.page || 'panel-page'}`);
             return;
         }
-        const pageToNavigate = event.state ? event.state.page : PAGE_IDS.PANEL;
+        const pageToNavigate = event.state ? event.state.page : PAGE_IDS.INICIO;
         if (pageToNavigate) {
             navigateTo(pageToNavigate, false);
         }
@@ -6960,7 +6960,7 @@ const attachEventListeners = () => {
             },
             'show-aidanai-help': () => {
                 const activeView = document.querySelector('.view--active');
-                const pageId = activeView ? activeView.id : PAGE_IDS.PANEL;
+                const pageId = activeView ? activeView.id : PAGE_IDS.INICIO;
                 showAidanaiModal(pageId);
             },
             'show-concept-drilldown': () => {
@@ -7013,9 +7013,9 @@ const attachEventListeners = () => {
                     toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`;
                 }
                 const activePageEl = selectOne('.view--active');
-                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.PANEL;
+                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO;
                 const pageRenderers = {
-                    [PAGE_IDS.PANEL]: renderInicioPage ,
+                    [PAGE_IDS.INICIO]: renderInicioPage ,
                     [PAGE_IDS.DIARIO]: renderDiarioPage,
                     [PAGE_IDS.INVERSIONES]: renderInversionesView,
                     [PAGE_IDS.ANALISIS]: renderAnalisisPage,
