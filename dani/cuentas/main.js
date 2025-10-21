@@ -63,7 +63,7 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const PAGE_IDS = {
-			PANEL: 'panel-page',
+			INICIO: 'inicio-page', // <-- CAMBIADO
 			DIARIO: 'diario-page',
 			INVERSIONES: 'inversiones-page',
 			ANALISIS: 'analisis-page',       // <-- NUEVO
@@ -71,7 +71,7 @@ const handleExportFilteredCsv = (btn) => {
 };
 
 	const AIDANAI_HELP_CONTENT = {
-    [PAGE_IDS.PANEL]: {
+    [PAGE_IDS.INICIO]: { // <-- CAMBIADO
         title: "Tu Torre de Control Financiera",
         content: "¡Bienvenido al Panel! Esta es tu vista de pájaro. De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
     },
@@ -117,8 +117,64 @@ const handleExportFilteredCsv = (btn) => {
 		'patrimonio-structure': { title: 'Patrimonio', description: 'Gráfico interactivo y listado de todas tus cuentas y su peso.', icon: 'account_balance' },
 		'informe-personalizado': { title: 'Mi Informe Personalizado', description: 'Tu informe a medida creado desde el configurador.', icon: 'insights' },
 	};
-const DEFAULT_DASHBOARD_WIDGETS = ['kpi-summary-expanded', 'net-worth-trend', 'patrimonio-structure', 'concept-totals', 'action-center'];	
+const DEFAULT_DASHBOARD_WIDGETS = ['super-centro-operaciones', 'net-worth-trend', 'patrimonio-structure', 'action-center'];	
 // ▼▼▼ REEMPLAZAR POR COMPLETO CON LA VERSIÓN FINAL Y MATEMÁTICAMENTE CORRECTA ▼▼▼
+// AÑADE ESTA NUEVA FUNCIÓN A main.js
+const updateAnalisisWidgets = async () => {
+    try {
+        // Renderiza el informe personalizado
+        const informeContainer = document.querySelector('[data-widget-type="informe-personalizado"]');
+        if (informeContainer) {
+            informeContainer.innerHTML = renderDashboardInformeWidget();
+            await renderInformeWidgetContent();
+        }
+        
+        // Renderiza y calcula Colchón de Emergencia e Independencia Financiera
+        const saldos = await getSaldos();
+        const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+        const efData = calculateEmergencyFund(saldos, db.cuentas, recentMovementsCache);
+        const fiData = calculateFinancialIndependence(patrimonioNeto, efData.gastoMensualPromedio);
+
+        // Colchón de Emergencia
+        const efContainer = document.querySelector('[data-widget-type="emergency-fund"]');
+        if (efContainer) {
+            efContainer.innerHTML = renderDashboardEmergencyFund(); // Dibuja el esqueleto
+            const efWidget = efContainer.querySelector('#emergency-fund-widget');
+            efWidget.querySelector('.card__content').classList.remove('skeleton'); 
+            const monthsValueEl = efWidget.querySelector('#kpi-ef-months-value'); 
+            const progressEl = efWidget.querySelector('#kpi-ef-progress'); 
+            const textEl = efWidget.querySelector('#kpi-ef-text');
+            if (monthsValueEl && progressEl && textEl) { 
+                monthsValueEl.textContent = isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : '∞'; 
+                progressEl.value = Math.min(efData.mesesCobertura, 6); 
+                let textClass = 'text-danger'; 
+                if (efData.mesesCobertura >= 6) textClass = 'text-positive'; 
+                else if (efData.mesesCobertura >= 3) textClass = 'text-warning'; 
+                monthsValueEl.className = `kpi-item__value ${textClass}`; 
+                textEl.innerHTML = `Tu dinero líquido cubre <strong>${isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : 'todos tus'}</strong> meses de gastos.`; 
+            }
+        }
+        
+        // Independencia Financiera
+        const fiContainer = document.querySelector('[data-widget-type="fi-progress"]');
+        if(fiContainer) {
+            fiContainer.innerHTML = renderDashboardFIProgress(); // Dibuja el esqueleto
+            const fiWidget = fiContainer.querySelector('#fi-progress-widget');
+            fiWidget.querySelector('.card__content').classList.remove('skeleton'); 
+            const percentageValueEl = fiWidget.querySelector('#kpi-fi-percentage-value'); 
+            const progressEl = fiWidget.querySelector('#kpi-fi-progress'); 
+            const textEl = fiWidget.querySelector('#kpi-fi-text'); 
+            if (percentageValueEl && progressEl && textEl) { 
+                percentageValueEl.textContent = `${fiData.progresoFI.toFixed(1)}%`; 
+                progressEl.value = fiData.progresoFI; 
+                textEl.innerHTML = `Objetivo: <strong>${formatCurrency(fiData.objetivoFI)}</strong> (basado en un gasto anual de ${formatCurrency(fiData.gastoAnualEstimado)})`; 
+            }
+        }
+
+    } catch (error) {
+        console.error("Error al actualizar los widgets de análisis:", error);
+    }
+};
 
 const getRecurrentsForDate = (dateString) => {
     const targetDate = parseDateStringAsUTC(dateString);
@@ -1345,7 +1401,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.DIARIO, true);
+			navigateTo(PAGE_IDS.INICIO, true); // <-- CAMBIADO
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -1509,7 +1565,7 @@ const navigateTo = async (pageId, isInitial = false) => {
         await Promise.all([loadPresupuestos(), loadInversiones()]);
     }
     const pageRenderers = {
-    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+    [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderPanelPage, actions: standardActions }, // <-- CAMBIADO
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
     [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
     [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
@@ -9021,18 +9077,12 @@ if ('serviceWorker' in navigator) {
 // Pega estas dos nuevas funciones en cualquier lugar de main.js
 
 const renderAnalisisPage = () => {
-    // Esta función se encarga de preparar la pestaña de Análisis
-    populateAllDropdowns(); // Para el selector de año de presupuestos
-    renderBudgetTracking(); // Dibuja la sección de presupuestos
+    // Lógica existente para la sección de presupuestos
+    populateAllDropdowns();
+    renderBudgetTracking();
     
-    // Rellenamos el selector de cuentas para el informe de extracto
-    const populate = (id, data, nameKey, valKey='id') => {
-        const el = select(id); if (!el) return;
-        let opts = '<option value="">Seleccionar cuenta...</option>';
-        [...data].sort((a,b) => (a[nameKey]||"").localeCompare(b[nameKey]||"")).forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
-        el.innerHTML = opts;
-    };
-    populate('informe-cuenta-select', getVisibleAccounts(), 'nombre', 'id');
+    // Nueva lógica para renderizar y actualizar los widgets movidos
+    updateAnalisisWidgets();
 };
 
 const renderAjustesPage = () => {

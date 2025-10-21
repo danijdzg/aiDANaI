@@ -11,7 +11,7 @@ const URLS_TO_CACHE = [
   'aiDANaI.webp',  // Cachear la imagen principal
   'icons/android-chrome-192x192.png',
   'icons/android-chrome-512x512.png',
-  'views/panel.html',
+  'views/inicio.html', // <-- CAMBIADO,
   'views/diario.html',
   'views/inversiones.html',
   // --- INICIO DE LA CORRECCIÓN ---
