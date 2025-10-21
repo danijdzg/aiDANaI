@@ -30,9 +30,7 @@
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0"></script>
 	<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-    
+	    
     <style>
 	
 /* === INICIO: Estilos para el Informe de Cuenta (Cartilla) - VERSIÓN FINAL CORREGIDA === */
@@ -6123,161 +6121,6 @@ async function renderInformeDetallado(informeId) {
     }
 }
 
-// =================================================================
-// === INICIO: NUEVO SISTEMA DE PREVISUALIZACIÓN Y EXPORTACIÓN DE PDF ===
-// =================================================================
-
-/**
- * Genera el objeto del documento PDF para un informe específico sin descargarlo.
- * @param {string} reportId - El ID del informe.
- * @returns {Promise<jspdf.jsPDF>} Una promesa que se resuelve con el objeto jsPDF.
- */
-async function generatePdfDocument(reportId) {
-    // Apuntamos al contenedor del *acordeón completo*
-    let accordionContent = select(`informe-container-${reportId}`);
-    
-    // Si el contenido del informe (el gráfico/KPIs) aún no se ha renderizado, lo hacemos ahora.
-    if (accordionContent && accordionContent.querySelector('#informe-content-' + reportId).querySelector('.form-label')) {
-        await renderInformeDetallado(reportId);
-        // Volvemos a seleccionar por si la estructura del DOM ha cambiado
-        accordionContent = select(`informe-container-${reportId}`);
-    }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    
-    const informesDisponibles = {
-        'extracto_cuenta': { title: 'Extracto de Cuenta' },
-        'top_gastos': { title: 'Análisis de Gastos' }, // <-- AÑADIDO
-        'crecimiento_patrimonial': { title: 'Crecimiento Patrimonial' }, // <-- AÑADIDO
-    };
-    const reportTitle = informesDisponibles[reportId]?.title || 'Informe Financiero';
-    
-    const primaryColor = getComputedStyle(document.body).getPropertyValue('--c-primary').trim();
-    
-    doc.setFontSize(18);
-    doc.setTextColor(primaryColor);
-    doc.text(reportTitle, 14, 22);
-    doc.setFontSize(10);
-    doc.setTextColor('#333333');
-    doc.text(`Informe generado el ${new Date().toLocaleDateString('es-ES')}`, 14, 28);
-
-    // Buscamos los datos dentro del contenedor de contenido específico
-    const reportContentContainer = select(`informe-content-${reportId}`);
-    // ¡CORRECCIÓN IMPORTANTE! Añadimos una comprobación por si el contenedor no existe.
-    if (!reportContentContainer) {
-        console.error(`No se pudo encontrar el contenedor de contenido para el informe: ${reportId}`);
-        doc.text("Error: No se pudo generar el contenido del informe.", 14, 40);
-        return doc; // Devolvemos el doc con el mensaje de error
-    }
-    
-    const kpiData = reportContentContainer.querySelector(`#kpi-data-${reportId}`);
-    const tableData = reportContentContainer.querySelector(`#table-data-${reportId}`);
-    const chartCanvas = reportContentContainer.querySelector('canvas');
-
-    let finalY = 40;
-
-    if (kpiData) {
-        const kpis = Array.from(kpiData.querySelectorAll('.kpi-item')).map(item => ({
-            label: item.querySelector('.kpi-item__label').textContent,
-            value: item.querySelector('.kpi-item__value').textContent
-        }));
-        doc.autoTable({
-            startY: finalY,
-            head: [['Métrica', 'Valor']],
-            body: kpis.map(kpi => [kpi.label, kpi.value]),
-            theme: 'grid'
-        });
-        finalY = doc.autoTable.previous.finalY + 10;
-    } 
-    
-    if (tableData) {
-        doc.autoTable({
-            html: `#table-data-${reportId}`,
-            startY: finalY,
-            theme: 'grid',
-        });
-         finalY = doc.autoTable.previous.finalY + 10;
-    } 
-    
-    if (chartCanvas) {
-        try {
-            const chartImage = chartCanvas.toDataURL('image/png', 1.0);
-            const chartWidth = 180;
-            const chartHeight = (chartCanvas.height * chartWidth) / chartCanvas.width;
-            doc.addImage(chartImage, 'PNG', 15, finalY, chartWidth, chartHeight);
-        } catch (error) {
-            console.error("Error al exportar gráfico:", error);
-            doc.text("No se pudo exportar la visualización del gráfico.", 14, finalY + 5);
-        }
-    }
-    
-    return doc;
-};
-
-
-/**
- * Muestra un modal con la previsualización del PDF y un botón para descargarlo.
- * @param {string} reportId - El ID del informe a previsualizar.
- * @param {HTMLButtonElement} btn - El botón que activó la acción.
- */
-const showPdfPreviewModal = async (reportId, btn) => {
-    setButtonLoading(btn, true, 'Generando...');
-    
-    try {
-        const doc = await generatePdfDocument(reportId);
-        
-        // --- INICIO DE LA CORRECCIÓN ---
-        // Recreamos la lógica para obtener el título aquí, en lugar de intentar leerlo del PDF.
-        const informesDisponibles = {
-            'resumen_ejecutivo': { title: 'Resumen Ejecutivo' },
-            'flujo_caja': { title: 'Análisis de Flujo de Caja' },
-            'asignacion_activos': { title: 'Asignación de Activos' },
-            'crecimiento_patrimonial': { title: 'Crecimiento Patrimonial' },
-            'rendimiento_inversiones': { title: 'Scorecard de Inversiones' }
-        };
-        const reportTitle = informesDisponibles[reportId]?.title || 'Vista Previa del Informe';
-        // --- FIN DE LA CORRECCIÓN ---
-
-        const pdfDataUri = doc.output('datauristring');
-
-        const modalHtml = `
-            <div style="height: 75vh; display: flex; flex-direction: column;">
-                <iframe src="${pdfDataUri}" style="flex-grow: 1; border: none;" title="Previsualización de PDF">
-                    <p>Tu navegador no soporta la previsualización. Usa el botón de abajo para descargar.</p>
-                </iframe>
-            </div>
-            <div class="modal__actions">
-                <button class="btn btn--secondary" data-action="close-modal" data-modal-id="generic-modal">Cerrar</button>
-                <button id="confirm-pdf-download" class="btn btn--primary">
-                    <span class="material-icons" style="font-size: 16px;">download</span>
-                    <span>Descargar PDF</span>
-                </button>
-            </div>`;
-
-        showGenericModal(reportTitle, modalHtml);
-
-        // Añadimos el listener para el botón de descarga DENTRO del modal
-        const downloadBtn = select('confirm-pdf-download');
-        if(downloadBtn) {
-            downloadBtn.addEventListener('click', () => {
-                doc.save(`Informe_${reportId}_${new Date().toISOString().slice(0,10)}.pdf`);
-                hideModal('generic-modal');
-                showToast('Descarga iniciada.', 'info');
-            });
-        }
-
-    } catch (error) {
-        console.error("Error al generar la vista previa del PDF:", error);
-        showToast("No se pudo generar la vista previa.", "danger");
-    } finally {
-        setButtonLoading(btn, false);
-    }
-};
-
-// =================================================================
-// === FIN: NUEVO SISTEMA DE PREVISUALIZACIÓN Y EXPORTACIÓN DE PDF ===
-// =================================================================
    
 const renderDashboardActionCenter = () => {
     return `
@@ -9167,13 +9010,10 @@ const handleGenerateInformeCuenta = async (form, btn) => {
 
         // 6. Generar HTML (Iterando NUEVO -> ANTIGUO para mostrar)
         let resultadoHtml = `
-            <h3 class="card__title" style="display: flex; justify-content: space-between; align-items: center;">
-                <span>Extracto de ${escapeHTML(cuenta.nombre)}</span>
-                <button class="btn btn--secondary" data-action="export-pdf" data-report-id="extracto_cuenta" style="padding: 4px 10px; font-size: 0.75rem;">
-                    <span class="material-icons" style="font-size: 14px;">picture_as_pdf</span> PDF
-                </button>
-            </h3>
-            <div class="informe-extracto-container">
+			<h3 class="card__title">
+			<span>Extracto de ${escapeHTML(cuenta.nombre)}</span>
+			</h3>
+				<div class="informe-extracto-container">
                 <div class="informe-linea-header">
                     <span class="fecha">Fecha</span>
                     <span class="descripcion">Descripción</span>
@@ -9460,7 +9300,6 @@ const attachEventListeners = () => {
                     showDrillDownModal(`Movimientos de: ${conceptName}`, movementsOfConcept);
                 });
             },
-            'export-pdf': () => showPdfPreviewModal(reportId, btn),
             'toggle-diario-view': () => { diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list'; const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons'); if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list'; renderDiarioPage(); },
             'calendar-nav': () => {
                 const direction = actionTarget.dataset.direction;
