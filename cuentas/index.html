@@ -1831,10 +1831,9 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     
     <div id="app-root" class="app-layout">
     <nav class="bottom-nav">
-    <button data-action="navigate" data-page="panel-page" class="bottom-nav__item">
-        <span class="material-icons">dashboard</span>
-        <span class="bottom-nav__label">Panel</span>
-    </button>
+    <button data-action="navigate" data-page="inicio-page" class="bottom-nav__item">
+    <span class="material-icons">home</span> <span class="bottom-nav__label">Inicio</span>
+</button>
     <button data-action="navigate" data-page="diario-page" class="bottom-nav__item">
         <span class="material-icons">receipt_long</span>
         <span class="bottom-nav__label">Diario</span>
@@ -1891,7 +1890,7 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 <!-- FIN: Menú desplegable -->
         <main class="app-layout__main">
             
-            <section id="panel-page" class="view">
+            <section id="inicio-page" class="view">
     
     <!-- INICIO: Nuevo Contenedor para Filtros Globales -->
     <div id="dashboard-global-filters" class="card" style="margin-bottom: var(--sp-4);">
@@ -2450,7 +2449,7 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const PAGE_IDS = {
-            PANEL: 'panel-page',
+            INICIO: 'inicio-page', // <-- CAMBIADO AQUÍ
             DIARIO: 'diario-page',
             INVERSIONES: 'inversiones-page', // <-- AÑADIDO
             PLANIFICACION: 'planificacion-page',
@@ -2458,7 +2457,7 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
             CONFIGURACION: 'configuracion-page',
         };
 	const AIDANAI_HELP_CONTENT = {
-    [PAGE_IDS.PANEL]: {
+    [PAGE_IDS.INICIO]: {
         title: "Tu Torre de Control Financiera",
         content: "¡Bienvenido al Panel! Esta es tu vista de pájaro. De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
     },
@@ -2499,8 +2498,6 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
 	const AVAILABLE_WIDGETS = {
         // EL NUEVO Y ÚNICO WIDGET CON FILTROS
 		'super-centro-operaciones': { title: 'Centro de Operaciones', description: 'Visión completa con filtros, KPIs y análisis de conceptos.', icon: 'query_stats' },
-
-        // EL RESTO DE WIDGETS SE QUEDAN COMO ESTABAN
 		'action-center': { title: 'Centro de Acciones', description: 'Alertas y tareas pendientes.', icon: 'notifications_active' },
 		'emergency-fund': { title: 'Colchón de Emergencia', description: 'Calcula cuántos meses de gastos puedes cubrir con tu dinero líquido.', icon: 'shield' },
 		'fi-progress': { title: 'Independencia Financiera', description: 'Mide tu avance hacia la independencia financiera.', icon: 'flag' },
@@ -3065,7 +3062,7 @@ async function loadCoreData(uid) {
             
             populateAllDropdowns();
             
-            if (select(PAGE_IDS.PANEL)?.classList.contains('view--active')) scheduleDashboardUpdate();
+            if (select(PAGE_IDS.INICIO)?.classList.contains('view--active')) scheduleDashboardUpdate();
             
         }, error => console.error(`Error escuchando ${collectionName}: `, error));
         unsubscribeListeners.push(unsubscribe);
@@ -3099,7 +3096,7 @@ async function loadCoreData(uid) {
             
             // Si el usuario está en la página de Inicio, la actualizamos inmediatamente.
             const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PANEL) {
+            if (activePage && activePage.id === PAGE_IDS.INICIO) {
                 scheduleDashboardUpdate();
             }
         }, error => console.error("Error escuchando movimientos recientes: ", error));
@@ -3736,7 +3733,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.DIARIO, true);
+			navigateTo(PAGE_IDS.INICIO, true);
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -3886,11 +3883,11 @@ const navigateTo = async (pageId, isInitial = false) => {
 `;
     
     if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.PANEL) {
+    if (pageId === PAGE_IDS.INICIO) {
         await Promise.all([loadPresupuestos(), loadInversiones()]);
     }
     const pageRenderers = {
-        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+        [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderInicioPage , actions: standardActions },
         [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
         [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
         [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
@@ -3900,7 +3897,7 @@ const navigateTo = async (pageId, isInitial = false) => {
      if (pageRenderers[pageId]) { 
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-            if (pageId === PAGE_IDS.PANEL) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
             if (pageId === PAGE_IDS.DIARIO) {
     leftSideHTML += `
         <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
@@ -3950,7 +3947,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
 }
 
-    if (pageId === PAGE_IDS.PANEL) {
+    if (pageId === PAGE_IDS.INICIO) {
         setTimeout(scheduleDashboardUpdate, 50);
     }
 };
@@ -5617,8 +5614,8 @@ const renderPatrimonioPage = async () => {
             
             			
         };
-    const renderPanelPage = () => {
-    const container = select(PAGE_IDS.PANEL);
+    const renderInicioPage  = () => {
+    const container = select(PAGE_IDS.INICIO);
     if (!container) return;
 
     // --- ¡LA CORRECCIÓN CLAVE ESTÁ AQUÍ! ---
@@ -6996,7 +6993,7 @@ const updateNetWorthChart = async (saldos) => {
 const scheduleDashboardUpdate = () => {
     // El jefe de obra solo trabaja si la página "Inicio" está abierta.
     const activePage = document.querySelector('.view--active');
-    if (!activePage || activePage.id !== PAGE_IDS.PANEL) {
+    if (!activePage || activePage.id !== PAGE_IDS.INICIO) {
         return;
     }
       
@@ -7009,7 +7006,7 @@ const scheduleDashboardUpdate = () => {
 
 const updateDashboardData = async () => {
     const activePage = document.querySelector('.view--active');
-    if (!activePage || activePage.id !== PAGE_IDS.PANEL) {
+    if (!activePage || activePage.id !== PAGE_IDS.INICIO) {
         return;
     }
 
@@ -9164,7 +9161,7 @@ const attachEventListeners = () => {
             history.pushState({ page: window.history.state?.page }, '', `#${window.history.state?.page || 'panel-page'}`);
             return;
         }
-        const pageToNavigate = event.state ? event.state.page : PAGE_IDS.PANEL;
+        const pageToNavigate = event.state ? event.state.page : PAGE_IDS.INICIO;
         if (pageToNavigate) {
             navigateTo(pageToNavigate, false);
         }
@@ -9289,7 +9286,7 @@ const attachEventListeners = () => {
             },
             'show-aidanai-help': () => {
                 const activeView = document.querySelector('.view--active');
-                const pageId = activeView ? activeView.id : PAGE_IDS.PANEL;
+                const pageId = activeView ? activeView.id : PAGE_IDS.INICIO;
                 showAidanaiModal(pageId);
             },
             'show-concept-drilldown': () => {
@@ -9342,9 +9339,9 @@ const attachEventListeners = () => {
                     toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`;
                 }
                 const activePageEl = selectOne('.view--active');
-                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.PANEL;
+                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO;
                 const pageRenderers = {
-                    [PAGE_IDS.PANEL]: renderPanelPage,
+                    [PAGE_IDS.INICIO]: renderInicioPage ,
                     [PAGE_IDS.DIARIO]: renderDiarioPage,
                     [PAGE_IDS.INVERSIONES]: renderInversionesView,
                     [PAGE_IDS.PLANIFICACION]: renderPlanificacionPage,
