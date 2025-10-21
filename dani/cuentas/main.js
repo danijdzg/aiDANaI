@@ -8178,7 +8178,7 @@ const handleAddConcept = async (btn) => {
      return { tipo: 'Banco', esInversion: false };
  };
 
- const csv_processFile = (file) => {
+  const csv_processFile = (file) => {
      return new Promise((resolve, reject) => {
          const reader = new FileReader();
          reader.onload = (event) => {
@@ -8190,7 +8190,7 @@ const handleAddConcept = async (btn) => {
                      return resolve(null);
                  }
                  
-                 lines.shift();
+                 lines.shift(); // Eliminar la cabecera
 
                  let rowCount = 0, initialCount = 0;
                  const cuentasMap = new Map();
@@ -8237,6 +8237,7 @@ const handleAddConcept = async (btn) => {
                      }
                      
                      if (conceptoLimpio === 'TRASPASO') {
+                         // CAMBIO CLAVE: Incluimos la descripción en el objeto que guardamos para su posterior análisis.
                          potentialTransfers.push({ fecha, nombreCuenta: nombreCuentaLimpio, cantidad, descripcion, originalRow: rowCount });
                      } else {
                          const conceptoActual = conceptosMap.get(conceptoLimpio);
@@ -8247,8 +8248,11 @@ const handleAddConcept = async (btn) => {
                  let matchedTransfersCount = 0;
                  let unmatchedTransfers = [];
                  const transferGroups = new Map();
+                 
                  potentialTransfers.forEach(t => {
-                     const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}`;
+                     // CAMBIO CLAVE: La nueva "llave" para agrupar ahora incluye la descripción.
+                     // Esto asegura que solo traspasos con misma fecha, importe Y descripción se agrupen.
+                     const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}_${t.descripcion}`;
                      if (!transferGroups.has(key)) transferGroups.set(key, []);
                      transferGroups.get(key).push(t);
                  });
@@ -8256,12 +8260,15 @@ const handleAddConcept = async (btn) => {
                  transferGroups.forEach((group) => {
                      const gastos = group.filter(t => t.cantidad < 0);
                      const ingresos = group.filter(t => t.cantidad > 0);
+                     
+                     // Este bucle ahora opera sobre un grupo mucho más específico y fiable.
                      while (gastos.length > 0 && ingresos.length > 0) {
                          const Gasto = gastos.pop();
                          const Ingreso = ingresos.pop();
                          movimientos.push({ id: generateId(), fecha: Gasto.fecha.toISOString(), cantidad: Math.abs(Gasto.cantidad), descripcion: Gasto.descripcion || Ingreso.descripcion || 'Traspaso', tipo: 'traspaso', cuentaOrigenId: cuentasMap.get(Gasto.nombreCuenta).id, cuentaDestinoId: cuentasMap.get(Ingreso.nombreCuenta).id });
                          matchedTransfersCount++;
                      }
+                     // Los que no se emparejan se añaden a la lista de "sin pareja".
                      unmatchedTransfers.push(...gastos, ...ingresos);
                  });
                  
