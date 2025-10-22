@@ -58,7 +58,338 @@ const handleExportFilteredCsv = (btn) => {
         setButtonLoading(btn, false);
     }
 };
+// ▼▼▼ INICIO: BLOQUE DE CÓDIGO RESTAURADO PARA IMPORTACIÓN CSV ▼▼▼
 
+ const csv_parseDate = (dateString) => {
+     if (!dateString) return null;
+     const parts = dateString.split('/');
+     if (parts.length !== 3) return null;
+     const day = parseInt(parts[0], 10);
+	 const month = parseInt(parts[1], 10) - 1;
+	 const year = parseInt(parts[2], 10);
+     if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1970) return null;
+     return new Date(Date.UTC(year, month, day, 12, 0, 0));
+ };
+
+ const csv_parseCurrency = (currencyString) => {
+     if (typeof currencyString !== 'string' || !currencyString) return 0;
+     const number = parseFloat(
+         currencyString
+         .replace('€', '')
+         .trim()
+         .replace(/\./g, '')
+         .replace(',', '.')
+     );
+     return isNaN(number) ? 0 : Math.round(number * 100);
+ };
+
+ const csv_inferType = (name) => {
+     const upperName = name.toUpperCase();
+     if (upperName.includes('TARJETA')) return { tipo: 'Tarjeta', esInversion: false };
+     if (upperName.includes('EFECTIVO')) return { tipo: 'Efectivo', esInversion: false };
+     if (upperName.includes('PENSIÓN')) return { tipo: 'Pensión', esInversion: true };
+     if (upperName.includes('LETRAS')) return { tipo: 'Renta Fija', esInversion: true };
+     if (['FONDO', 'FONDOS'].some(t => upperName.includes(t))) return { tipo: 'Fondos', esInversion: true };
+     if (['TRADEREPUBLIC', 'MYINVESTOR', 'DEGIRO', 'INTERACTIVEBROKERS', 'INDEXACAPITAL', 'COINBASE', 'CRIPTAN', 'KRAKEN', 'BIT2ME', 'N26', 'FREEDOM24', 'DEBLOCK', 'BBVA', 'CIVISLEND', 'HOUSERS', 'URBANITAE', 'MINTOS', 'HAUSERA'].some(b => upperName.includes(b))) return { tipo: 'Broker', esInversion: true };
+     if (upperName.includes('NARANJA') || upperName.includes('AHORRO')) return { tipo: 'Ahorro', esInversion: false };
+     return { tipo: 'Banco', esInversion: false };
+ };
+
+ const csv_processFile = (file) => {
+     return new Promise((resolve, reject) => {
+         const reader = new FileReader();
+         reader.onload = (event) => {
+             try {
+                 const csvData = event.target.result.replace(/^\uFEFF/, '');
+                 const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== '' && line.includes(';'));
+                 if (lines.length <= 1) {
+                     showToast("El archivo CSV está vacío o solo contiene la cabecera.", "warning");
+                     return resolve(null);
+                 }
+                 
+                 lines.shift(); // Eliminar la cabecera
+
+                 let rowCount = 0, initialCount = 0;
+                 const cuentasMap = new Map();
+                 const conceptosMap = new Map();
+                 const movimientos = [];
+                 const potentialTransfers = [];
+                 
+                 for (const line of lines) {
+                     rowCount++;
+                     const columns = line.split(';').map(c => c.trim().replace(/"/g, ''));
+                     const [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion = ''] = columns;
+
+                     if (!fechaStr || !cuentaStr || !conceptoStr || !importeStr) {
+                         console.warn(`Línea inválida o incompleta #${rowCount + 1}. Saltando...`, line);
+                         continue;
+                     }
+                     
+                     const fecha = csv_parseDate(fechaStr);
+                     if (!fecha) {
+                          console.warn(`Fecha inválida en la fila ${rowCount + 1}: ${fechaStr}`);
+                          continue;
+                     }
+
+                     const conceptoLimpio = conceptoStr.trim().toUpperCase().replace(/\s*;-$/, '');
+                     const offBalance = cuentaStr.startsWith('N-');
+                     const nombreCuentaLimpio = cuentaStr.replace(/^(D-|N-)/, '');
+                     const cantidad = csv_parseCurrency(importeStr);
+
+                     if (!cuentasMap.has(nombreCuentaLimpio)) {
+                         const { tipo, esInversion } = csv_inferType(nombreCuentaLimpio);
+                         cuentasMap.set(nombreCuentaLimpio, { id: generateId(), nombre: nombreCuentaLimpio, tipo, saldo: 0, esInversion, offBalance, fechaCreacion: new Date(Date.UTC(2025, 0, 1)).toISOString() });
+                     }
+
+                     if (conceptoLimpio === 'INICIAL') {
+                         initialCount++;
+                         if (!conceptosMap.has('SALDO INICIAL')) conceptosMap.set('SALDO INICIAL', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
+                         const conceptoInicial = conceptosMap.get('SALDO INICIAL');
+                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion: descripcion || 'Existencia Inicial', tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoInicial ? conceptoInicial.id : null });
+                         continue;
+                     }
+
+                     if (conceptoLimpio && conceptoLimpio !== 'TRASPASO' && !conceptosMap.has(conceptoLimpio)) {
+                         conceptosMap.set(conceptoLimpio, { id: generateId(), nombre: toSentenceCase(conceptoLimpio), icon: 'label' });
+                     }
+                     
+                     if (conceptoLimpio === 'TRASPASO') {
+                         potentialTransfers.push({ fecha, nombreCuenta: nombreCuentaLimpio, cantidad, descripcion, originalRow: rowCount });
+                     } else {
+                         const conceptoActual = conceptosMap.get(conceptoLimpio);
+                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion, tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoActual ? conceptoActual.id : null });
+                     }
+                 }
+
+                 let matchedTransfersCount = 0;
+                 let unmatchedTransfers = [];
+                 const transferGroups = new Map();
+                 
+                 potentialTransfers.forEach(t => {
+                     const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}_${t.descripcion}`;
+                     if (!transferGroups.has(key)) transferGroups.set(key, []);
+                     transferGroups.get(key).push(t);
+                 });
+
+                 transferGroups.forEach((group) => {
+                     const gastos = group.filter(t => t.cantidad < 0);
+                     const ingresos = group.filter(t => t.cantidad > 0);
+                     
+                     while (gastos.length > 0 && ingresos.length > 0) {
+                         const Gasto = gastos.pop();
+                         const Ingreso = ingresos.pop();
+                         movimientos.push({ id: generateId(), fecha: Gasto.fecha.toISOString(), cantidad: Math.abs(Gasto.cantidad), descripcion: Gasto.descripcion || Ingreso.descripcion || 'Traspaso', tipo: 'traspaso', cuentaOrigenId: cuentasMap.get(Gasto.nombreCuenta).id, cuentaDestinoId: cuentasMap.get(Ingreso.nombreCuenta).id });
+                         matchedTransfersCount++;
+                     }
+                     unmatchedTransfers.push(...gastos, ...ingresos);
+                 });
+                 
+                 const conceptoInicialId = conceptosMap.has('SALDO INICIAL') ? conceptosMap.get('SALDO INICIAL').id : null;
+                 const finalData = { cuentas: Array.from(cuentasMap.values()), conceptos: Array.from(conceptosMap.values()), movimientos, presupuestos: [], recurrentes: [], inversiones_historial: [], inversion_cashflows: [], config: getInitialDb().config };
+                 const totalMovements = movimientos.filter(m => m.tipo === 'movimiento' && m.conceptoId !== conceptoInicialId).length;
+
+                 resolve({
+                     jsonData: finalData,
+                     stats: { rowCount, accounts: cuentasMap.size, concepts: conceptosMap.size, movements: totalMovements, transfers: matchedTransfersCount, initials: initialCount, unmatched: unmatchedTransfers.length }
+                 });
+
+             } catch (error) {
+                 reject(error);
+             }
+         };
+         reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+         reader.readAsText(file, 'UTF-8');
+     });
+ };
+
+ const showCsvImportWizard = () => {
+     const wizardHTML = `
+     <div id="csv-wizard-content">
+         <div id="csv-wizard-step-1" class="json-wizard-step">
+             <h4>Paso 1: Selecciona tu archivo CSV</h4>
+             <p class="form-label" style="margin-bottom: var(--sp-3);">
+                 Columnas requeridas: <code>FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCIÓN</code>.
+                 <br><strong>Atención:</strong> La importación reemplazará <strong>todos</strong> tus datos actuales.
+             </p>
+             <div id="csv-drop-zone" class="upload-area">
+                 <p>Arrastra tu archivo <code>.csv</code> aquí o <strong>haz clic para seleccionarlo</strong>.</p>
+                 <span id="csv-file-name" class="file-name" style="color: var(--c-success); font-weight: 600; margin-top: 1rem; display: block;"></span>
+             </div>
+             <div id="csv-file-error" class="form-error" style="text-align: center; margin-top: var(--sp-3);"></div>
+             <div class="modal__actions">
+                 <button id="csv-process-btn" class="btn btn--primary btn--full" disabled>Analizar Archivo</button>
+             </div>
+         </div>
+         <div id="csv-wizard-step-2" class="json-wizard-step" style="display: none;">
+             <h4>Paso 2: Revisa y confirma</h4>
+             <p class="form-label" style="margin-bottom: var(--sp-3);">Hemos analizado tu archivo. Si los datos son correctos, pulsa "Importar" para reemplazar tus datos actuales.</p>
+             <div class="results-log" style="display: block; margin-top: 0;">
+                 <h2>Resultados del Análisis</h2>
+                 <ul id="csv-preview-list"></ul>
+             </div>
+             <div class="form-error" style="margin-top: var(--sp-2); text-align: center;"><strong>Atención:</strong> Esta acción es irreversible.</div>
+             <div class="modal__actions" style="justify-content: space-between;">
+                 <button id="csv-wizard-back-btn" class="btn btn--secondary">Atrás</button>
+                 <button id="csv-wizard-import-final" class="btn btn--danger"><span class="material-icons">warning</span>Importar y Reemplazar</button>
+             </div>
+         </div>
+         <div id="csv-wizard-step-3" class="json-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; min-height: 250px;">
+             <div id="csv-import-progress">
+                 <span class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></span>
+                 <h4 style="margin-top: var(--sp-4);">Importando...</h4>
+                 <p>Borrando datos antiguos e importando los nuevos. Por favor, no cierres esta ventana.</p>
+             </div>
+              <div id="csv-import-result" style="display: none;">
+                 <span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span>
+                 <h4 id="csv-result-title" style="margin-top: var(--sp-2);"></h4>
+                 <p id="csv-result-message"></p>
+                 <div class="modal__actions" style="justify: center;">
+                     <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">Finalizar</button>
+                 </div>
+              </div>
+         </div>
+     </div>`;
+     showGenericModal('Asistente de Importación CSV', wizardHTML);
+     setTimeout(() => {
+         let csvFile = null;
+         let processedData = null;
+         const wizardContent = select('csv-wizard-content');
+         if (!wizardContent) return;
+
+         const goToStep = (step) => {
+             wizardContent.querySelectorAll('.json-wizard-step').forEach(s => s.style.display = 'none');
+             wizardContent.querySelector(`#csv-wizard-step-${step}`).style.display = 'flex';
+         };
+
+         const fileInput = document.createElement('input');
+         fileInput.type = 'file'; fileInput.accept = '.csv, text/csv'; fileInput.className = 'hidden';
+         wizardContent.appendChild(fileInput);
+
+         const handleFileSelection = (files) => {
+             const file = files[0];
+             const nameEl = select('csv-file-name'), processBtn = select('csv-process-btn'), errorEl = select('csv-file-error');
+             if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) {
+                 csvFile = file;
+                 nameEl.textContent = `Archivo: ${file.name}`;
+                 processBtn.disabled = false;
+                 errorEl.textContent = '';
+             } else {
+                 csvFile = null;
+                 nameEl.textContent = 'Por favor, selecciona un archivo .csv válido.';
+                 processBtn.disabled = true;
+             }
+         };
+         
+         const dropZone = select('csv-drop-zone');
+         dropZone.addEventListener('click', () => fileInput.click());
+         fileInput.addEventListener('change', () => handleFileSelection(fileInput.files));
+         dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+         dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+         dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFileSelection(e.dataTransfer.files); });
+
+         select('csv-process-btn').addEventListener('click', async (e) => {
+             if (!csvFile) return;
+             const btn = e.target;
+             setButtonLoading(btn, true, 'Analizando...');
+             try {
+                 const result = await csv_processFile(csvFile);
+                 if (result) {
+                     processedData = result.jsonData;
+                     const { stats } = result;
+                     const previewList = select('csv-preview-list');
+                     let html = `
+                         <li><span class="label">Filas Válidas Leídas</span><span class="value">${stats.rowCount}</span></li>
+                         <li><span class="label">Cuentas a Crear</span><span class="value success">${stats.accounts}</span></li>
+                         <li><span class="label">Conceptos a Crear</span><span class="value success">${stats.concepts}</span></li>
+                         <li><span class="label">Saldos Iniciales</span><span class="value">${stats.initials}</span></li>
+                         <li><span class="label">Movimientos (Ingreso/Gasto)</span><span class="value">${stats.movements}</span></li>
+                         <li><span class="label">Transferencias Emparejadas</span><span class="value">${stats.transfers}</span></li>
+                         <li><span class="label">Transferencias sin Pareja</span><span class="value ${stats.unmatched > 0 ? 'danger' : 'success'}">${stats.unmatched}</span></li>
+                     `;
+                     previewList.innerHTML = html;
+                     goToStep(2);
+                 }
+             } catch (error) {
+                 console.error("Error al procesar CSV:", error);
+                 select('csv-file-error').textContent = `Error: ${error.message}`;
+             } finally {
+                 setButtonLoading(btn, false);
+             }
+         });
+
+         select('csv-wizard-back-btn').addEventListener('click', () => goToStep(1));
+         select('csv-wizard-import-final').addEventListener('click', (e) => {
+             if (processedData) handleFinalCsvImport(e.target, processedData, goToStep);
+         });
+     }, 0);
+ };
+
+ const handleFinalCsvImport = async (btn, dataToImport, goToStep) => {
+     goToStep(3);
+     setButtonLoading(btn, true, 'Importando...');
+     try {
+         const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+         for (const collectionName of collectionsToClear) {
+             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
+             if (snapshot.empty) continue;
+             let batch = fbDb.batch();
+             let count = 0;
+             for (const doc of snapshot.docs) {
+                 batch.delete(doc.ref);
+                 count++;
+                 if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+             }
+             if (count > 0) await batch.commit();
+         }
+         
+         for (const collectionName of Object.keys(dataToImport)) {
+             const items = dataToImport[collectionName];
+             if (Array.isArray(items) && items.length > 0) {
+                 let batch = fbDb.batch();
+                 let count = 0;
+                 for (const item of items) {
+                     if (item.id) {
+                         const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
+                         batch.set(docRef, item);
+                         count++;
+                         if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+                     }
+                 }
+                 if (count > 0) await batch.commit();
+             } else if (collectionName === 'config') {
+                 await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
+             }
+         }
+         
+         const resultEl = select('csv-import-result');
+         select('csv-import-progress').style.display = 'none';
+         if(resultEl) {
+             resultEl.style.display = 'block';
+             resultEl.querySelector('#csv-result-title').textContent = '¡Importación Completada!';
+             resultEl.querySelector('#csv-result-message').textContent = 'Los datos se han importado correctamente. La aplicación se recargará.';
+         }
+         
+         hapticFeedback('success');
+         showToast('¡Importación completada!', 'info', 4000);
+         setTimeout(() => location.reload(), 4500);
+
+     } catch (error) {
+         console.error("Error en importación final desde CSV:", error);
+         showToast("Error crítico durante la importación.", "danger", 5000);
+         const resultEl = select('csv-import-result');
+         select('csv-import-progress').style.display = 'none';
+         if(resultEl) {
+             resultEl.style.display = 'block';
+             resultEl.querySelector('#csv-result-title').textContent = '¡Error en la Importación!';
+             resultEl.querySelector('#csv-result-message').textContent = 'Ocurrió un error. Revisa la consola e inténtalo de nuevo.';
+             const iconEl = resultEl.querySelector('.material-icons');
+             if (iconEl) iconEl.style.color = 'var(--c-danger)';
+         }
+         setButtonLoading(btn, false);
+     }
+ };
+ 
+ // ▲▲▲ FIN: BLOQUE DE CÓDIGO RESTAURADO PARA IMPORTACIÓN CSV ▲▲▲
 	import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm'
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
