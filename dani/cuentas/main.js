@@ -63,19 +63,19 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const PAGE_IDS = {
-			INICIO: 'inicio-page', // <-- CAMBIADO
-			DIARIO: 'diario-page',
-			INVERSIONES: 'inversiones-page',
-			ANALISIS: 'analisis-page',       // <-- NUEVO
-			AJUSTES: 'ajustes-page',         // <-- NUEVO
+    PANEL: 'panel-page', // Nuevo nombre
+    MOVIMIENTOS: 'movimientos-page', // Nuevo nombre
+    PLANIFICAR: 'inversiones-page', // Apunta a la página de inversiones temporalmente
+    ANALISIS: 'analisis-page',
+    AJUSTES: 'ajustes-page', // Mantenemos este por si se usa en otro lugar
 };
 
 	const AIDANAI_HELP_CONTENT = {
-    [PAGE_IDS.INICIO]: { // <-- CAMBIADO
+    [PAGE_IDS.PANEL]: { // <-- Usamos el nuevo ID
         title: "Tu Torre de Control Financiera",
         content: "¡Bienvenido al Panel! Esta es tu vista de pájaro. De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
     },
-    [PAGE_IDS.DIARIO]: {
+    [PAGE_IDS.MOVIMIENTOS]: { // <-- Usamos el nuevo ID
         title: "El Libro de la Verdad",
         content: "Aquí está cada céntimo registrado. Es tu historial completo, la verdad absoluta de tus finanzas. <strong>Superpoder secreto:</strong> Desliza cualquier movimiento hacia la <strong>derecha para duplicarlo</strong> (ideal para gastos repetidos) o hacia la <strong>izquierda para borrarlo</strong>. ¡Ahorrarás muchísimo tiempo!"
     },
@@ -304,7 +304,7 @@ const applyDiarioFilters = async () => {
     showToast('Filtros aplicados. Mostrando resultados.', 'info');
     
     // Volvemos a renderizar la página del Diario para que aplique los filtros
-    await renderDiarioPage();
+    await renderMovimientosPage();
 };
 
 // La función que se ejecuta al pulsar "Limpiar Filtros"
@@ -313,7 +313,7 @@ const clearDiarioFilters = async () => {
     select('diario-filters-form').reset();
     hideModal('diario-filters-modal');
     showToast('Filtros eliminados.', 'info');
-    await renderDiarioPage();
+    await renderMovimientosPage();
 };
 
 // ▲▲▲ FIN DEL BLOQUE A PEGAR ▲▲▲
@@ -722,7 +722,7 @@ async function loadCoreData(uid) {
             if (collectionName === 'recurrentes') {
                 dataLoaded.recurrentes = true;
                 const activePage = document.querySelector('.view--active');
-                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderDiarioPage();
+                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderMovimientosPage();
                 if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) renderPlanificacionPage();
             }
             
@@ -1399,7 +1399,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.INICIO, true); // <-- CAMBIADO
+			navigateTo(PAGE_IDS.PANEL, true); // <-- CAMBIADO
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -1559,30 +1559,32 @@ const navigateTo = async (pageId, isInitial = false) => {
     `;
     
     if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.INICIO) {
+    if (pageId === PAGE_IDS.PANEL) { // <-- LÍNEA CAMBIADA
         await Promise.all([loadPresupuestos(), loadInversiones()]);
     }
     const pageRenderers = {
-    [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderInicioPage, actions: standardActions }, // <-- CAMBIADO
-    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-    [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-};
+        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions }, // <-- CAMBIADO
+        [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderMovimientosPage, actions: standardActions }, // <-- CAMBIADO
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderInversionesView, actions: standardActions }, // Usamos 'Planificar' como título
+        [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+    };
      if (pageRenderers[pageId]) { 
-        if (leftEl) {
-            let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
-            if (pageId === PAGE_IDS.DIARIO) {
-                leftSideHTML += `
-                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
-                        <span class="material-icons">filter_list</span>
-                    </button>
-                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-                        <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
-                    </button>
-                `;
-            }
+    if (leftEl) {
+        let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
+        if (pageId === PAGE_IDS.PANEL) { // <-- CAMBIADO DE INICIO A PANEL
+             leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+        }
+        if (pageId === PAGE_IDS.MOVIMIENTOS]) { // <-- CAMBIADO DE DIARIO A MOVIMIENTOS
+            leftSideHTML += `
+                <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
+                    <span class="material-icons">filter_list</span>
+                </button>
+                <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+                    <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+                </button>
+            `;
+        }
             leftEl.innerHTML = leftSideHTML;
         }
         if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
@@ -2905,7 +2907,7 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 };
 
 // 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
-const renderDiarioPage = async () => {
+const renderMovimientosPage = async () => {
     const container = select('diario-page');
     if (!container.querySelector('#diario-view-container')) {
         container.innerHTML = '<div id="diario-view-container"></div>';
@@ -3281,7 +3283,7 @@ const renderPatrimonioPage = async () => {
             
             			
         };
-    const renderInicioPage  = () => {
+    const renderPanelPage = () => {
     const container = select(PAGE_IDS.INICIO);
     if (!container) return;
 
@@ -6855,6 +6857,7 @@ const attachEventListeners = () => {
         const btn = actionTarget.closest('button');
               
         const actions = {
+			'open-add-movement-modal': () => startMovementForm(),
 			 'show-main-menu': () => {
     const menu = document.getElementById('main-menu-popover');
     if (!menu) return;
@@ -6879,16 +6882,7 @@ const attachEventListeners = () => {
         }, 0);
     }
 },
-            'toggle-fab-menu': toggleFabMenu,
-            'open-fab-action': (e) => {
-                const button = e.target.closest('[data-type]');
-                if (!button) return;
-                document.querySelector('.fab-container').classList.remove('fab-container--active');
-                startMovementForm();
-                setTimeout(() => {
-                    setMovimientoFormType(button.dataset.type);
-                }, 50);
-            },
+            
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,	
@@ -6964,7 +6958,7 @@ const attachEventListeners = () => {
                     showDrillDownModal(`Movimientos de: ${conceptName}`, movementsOfConcept);
                 });
             },
-            'toggle-diario-view': () => { diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list'; const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons'); if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list'; renderDiarioPage(); },
+            'toggle-diario-view': () => { diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list'; const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons'); if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list'; renderMovimientosPage(); },
             'calendar-nav': () => {
                 const direction = actionTarget.dataset.direction;
                 if (!(diarioCalendarDate instanceof Date) || isNaN(diarioCalendarDate)) {
@@ -7008,8 +7002,8 @@ const attachEventListeners = () => {
                 const activePageEl = selectOne('.view--active');
                 const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO;
                 const pageRenderers = {
-                    [PAGE_IDS.INICIO]: renderInicioPage ,
-                    [PAGE_IDS.DIARIO]: renderDiarioPage,
+                    [PAGE_IDS.INICIO]: renderPanelPage ,
+                    [PAGE_IDS.DIARIO]: renderMovimientosPage,
                     [PAGE_IDS.INVERSIONES]: renderInversionesView,
                     [PAGE_IDS.ANALISIS]: renderAnalisisPage,
                     [PAGE_IDS.AJUSTES]: renderAjustesPage,
@@ -7433,18 +7427,6 @@ if (diarioContainer) {
                 setButtonLoading(btn, false);
             }
         };
-const toggleFabMenu = () => {
-    const container = document.querySelector('.fab-container');
-    if (!container) return;
-
-    hapticFeedback('medium');
-    container.classList.toggle('fab-container--active');
-
-    // Cierra el menú si se pulsa el overlay
-    const overlay = container.querySelector('.fab-overlay');
-    const closeMenu = () => container.classList.remove('fab-container--active');
-    overlay.addEventListener('click', closeMenu, { once: true });
-};
     
 // =================================================================
 // === INICIO: NUEVA FUNCIÓN PARA CONFIRMAR MOVIMIENTOS RECURRENTES ===
@@ -7925,7 +7907,7 @@ const handleSaveMovement = async (form, btn) => {
         showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
         setButtonLoading(btn, false);
         if (select('diario-page')?.classList.contains('view--active')) {
-             await renderDiarioPage();
+             await renderMovimientosPage();
         }
         return false;
     }
