@@ -1544,6 +1544,7 @@ const navigateTo = async (pageId, isInitial = false) => {
             history.pushState({ page: pageId }, '', `#${pageId}`);
         }
         
+        // --- ¡AQUÍ ESTÁ LA LÍNEA QUE FALTABA! ---
         const navItems = Array.from(selectAll('.bottom-nav__item'));
         const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
         const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
