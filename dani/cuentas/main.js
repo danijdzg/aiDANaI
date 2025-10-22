@@ -58,355 +58,24 @@ const handleExportFilteredCsv = (btn) => {
         setButtonLoading(btn, false);
     }
 };
-// ▼▼▼ INICIO: BLOQUE DE CÓDIGO RESTAURADO PARA IMPORTACIÓN CSV ▼▼▼
 
- const csv_parseDate = (dateString) => {
-     if (!dateString) return null;
-     const parts = dateString.split('/');
-     if (parts.length !== 3) return null;
-     const day = parseInt(parts[0], 10);
-	 const month = parseInt(parts[1], 10) - 1;
-	 const year = parseInt(parts[2], 10);
-     if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1970) return null;
-     return new Date(Date.UTC(year, month, day, 12, 0, 0));
- };
-
- const csv_parseCurrency = (currencyString) => {
-     if (typeof currencyString !== 'string' || !currencyString) return 0;
-     const number = parseFloat(
-         currencyString
-         .replace('€', '')
-         .trim()
-         .replace(/\./g, '')
-         .replace(',', '.')
-     );
-     return isNaN(number) ? 0 : Math.round(number * 100);
- };
-
- const csv_inferType = (name) => {
-     const upperName = name.toUpperCase();
-     if (upperName.includes('TARJETA')) return { tipo: 'Tarjeta', esInversion: false };
-     if (upperName.includes('EFECTIVO')) return { tipo: 'Efectivo', esInversion: false };
-     if (upperName.includes('PENSIÓN')) return { tipo: 'Pensión', esInversion: true };
-     if (upperName.includes('LETRAS')) return { tipo: 'Renta Fija', esInversion: true };
-     if (['FONDO', 'FONDOS'].some(t => upperName.includes(t))) return { tipo: 'Fondos', esInversion: true };
-     if (['TRADEREPUBLIC', 'MYINVESTOR', 'DEGIRO', 'INTERACTIVEBROKERS', 'INDEXACAPITAL', 'COINBASE', 'CRIPTAN', 'KRAKEN', 'BIT2ME', 'N26', 'FREEDOM24', 'DEBLOCK', 'BBVA', 'CIVISLEND', 'HOUSERS', 'URBANITAE', 'MINTOS', 'HAUSERA'].some(b => upperName.includes(b))) return { tipo: 'Broker', esInversion: true };
-     if (upperName.includes('NARANJA') || upperName.includes('AHORRO')) return { tipo: 'Ahorro', esInversion: false };
-     return { tipo: 'Banco', esInversion: false };
- };
-
- const csv_processFile = (file) => {
-     return new Promise((resolve, reject) => {
-         const reader = new FileReader();
-         reader.onload = (event) => {
-             try {
-                 const csvData = event.target.result.replace(/^\uFEFF/, '');
-                 const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== '' && line.includes(';'));
-                 if (lines.length <= 1) {
-                     showToast("El archivo CSV está vacío o solo contiene la cabecera.", "warning");
-                     return resolve(null);
-                 }
-                 
-                 lines.shift(); // Eliminar la cabecera
-
-                 let rowCount = 0, initialCount = 0;
-                 const cuentasMap = new Map();
-                 const conceptosMap = new Map();
-                 const movimientos = [];
-                 const potentialTransfers = [];
-                 
-                 for (const line of lines) {
-                     rowCount++;
-                     const columns = line.split(';').map(c => c.trim().replace(/"/g, ''));
-                     const [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion = ''] = columns;
-
-                     if (!fechaStr || !cuentaStr || !conceptoStr || !importeStr) {
-                         console.warn(`Línea inválida o incompleta #${rowCount + 1}. Saltando...`, line);
-                         continue;
-                     }
-                     
-                     const fecha = csv_parseDate(fechaStr);
-                     if (!fecha) {
-                          console.warn(`Fecha inválida en la fila ${rowCount + 1}: ${fechaStr}`);
-                          continue;
-                     }
-
-                     const conceptoLimpio = conceptoStr.trim().toUpperCase().replace(/\s*;-$/, '');
-                     const offBalance = cuentaStr.startsWith('N-');
-                     const nombreCuentaLimpio = cuentaStr.replace(/^(D-|N-)/, '');
-                     const cantidad = csv_parseCurrency(importeStr);
-
-                     if (!cuentasMap.has(nombreCuentaLimpio)) {
-                         const { tipo, esInversion } = csv_inferType(nombreCuentaLimpio);
-                         cuentasMap.set(nombreCuentaLimpio, { id: generateId(), nombre: nombreCuentaLimpio, tipo, saldo: 0, esInversion, offBalance, fechaCreacion: new Date(Date.UTC(2025, 0, 1)).toISOString() });
-                     }
-
-                     if (conceptoLimpio === 'INICIAL') {
-                         initialCount++;
-                         if (!conceptosMap.has('SALDO INICIAL')) conceptosMap.set('SALDO INICIAL', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
-                         const conceptoInicial = conceptosMap.get('SALDO INICIAL');
-                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion: descripcion || 'Existencia Inicial', tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoInicial ? conceptoInicial.id : null });
-                         continue;
-                     }
-
-                     if (conceptoLimpio && conceptoLimpio !== 'TRASPASO' && !conceptosMap.has(conceptoLimpio)) {
-                         conceptosMap.set(conceptoLimpio, { id: generateId(), nombre: toSentenceCase(conceptoLimpio), icon: 'label' });
-                     }
-                     
-                     if (conceptoLimpio === 'TRASPASO') {
-                         potentialTransfers.push({ fecha, nombreCuenta: nombreCuentaLimpio, cantidad, descripcion, originalRow: rowCount });
-                     } else {
-                         const conceptoActual = conceptosMap.get(conceptoLimpio);
-                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion, tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoActual ? conceptoActual.id : null });
-                     }
-                 }
-
-                 let matchedTransfersCount = 0;
-                 let unmatchedTransfers = [];
-                 const transferGroups = new Map();
-                 
-                 potentialTransfers.forEach(t => {
-                     const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}_${t.descripcion}`;
-                     if (!transferGroups.has(key)) transferGroups.set(key, []);
-                     transferGroups.get(key).push(t);
-                 });
-
-                 transferGroups.forEach((group) => {
-                     const gastos = group.filter(t => t.cantidad < 0);
-                     const ingresos = group.filter(t => t.cantidad > 0);
-                     
-                     while (gastos.length > 0 && ingresos.length > 0) {
-                         const Gasto = gastos.pop();
-                         const Ingreso = ingresos.pop();
-                         movimientos.push({ id: generateId(), fecha: Gasto.fecha.toISOString(), cantidad: Math.abs(Gasto.cantidad), descripcion: Gasto.descripcion || Ingreso.descripcion || 'Traspaso', tipo: 'traspaso', cuentaOrigenId: cuentasMap.get(Gasto.nombreCuenta).id, cuentaDestinoId: cuentasMap.get(Ingreso.nombreCuenta).id });
-                         matchedTransfersCount++;
-                     }
-                     unmatchedTransfers.push(...gastos, ...ingresos);
-                 });
-                 
-                 const conceptoInicialId = conceptosMap.has('SALDO INICIAL') ? conceptosMap.get('SALDO INICIAL').id : null;
-                 const finalData = { cuentas: Array.from(cuentasMap.values()), conceptos: Array.from(conceptosMap.values()), movimientos, presupuestos: [], recurrentes: [], inversiones_historial: [], inversion_cashflows: [], config: getInitialDb().config };
-                 const totalMovements = movimientos.filter(m => m.tipo === 'movimiento' && m.conceptoId !== conceptoInicialId).length;
-
-                 resolve({
-                     jsonData: finalData,
-                     stats: { rowCount, accounts: cuentasMap.size, concepts: conceptosMap.size, movements: totalMovements, transfers: matchedTransfersCount, initials: initialCount, unmatched: unmatchedTransfers.length }
-                 });
-
-             } catch (error) {
-                 reject(error);
-             }
-         };
-         reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
-         reader.readAsText(file, 'UTF-8');
-     });
- };
-
- const showCsvImportWizard = () => {
-     const wizardHTML = `
-     <div id="csv-wizard-content">
-         <div id="csv-wizard-step-1" class="json-wizard-step">
-             <h4>Paso 1: Selecciona tu archivo CSV</h4>
-             <p class="form-label" style="margin-bottom: var(--sp-3);">
-                 Columnas requeridas: <code>FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCIÓN</code>.
-                 <br><strong>Atención:</strong> La importación reemplazará <strong>todos</strong> tus datos actuales.
-             </p>
-             <div id="csv-drop-zone" class="upload-area">
-                 <p>Arrastra tu archivo <code>.csv</code> aquí o <strong>haz clic para seleccionarlo</strong>.</p>
-                 <span id="csv-file-name" class="file-name" style="color: var(--c-success); font-weight: 600; margin-top: 1rem; display: block;"></span>
-             </div>
-             <div id="csv-file-error" class="form-error" style="text-align: center; margin-top: var(--sp-3);"></div>
-             <div class="modal__actions">
-                 <button id="csv-process-btn" class="btn btn--primary btn--full" disabled>Analizar Archivo</button>
-             </div>
-         </div>
-         <div id="csv-wizard-step-2" class="json-wizard-step" style="display: none;">
-             <h4>Paso 2: Revisa y confirma</h4>
-             <p class="form-label" style="margin-bottom: var(--sp-3);">Hemos analizado tu archivo. Si los datos son correctos, pulsa "Importar" para reemplazar tus datos actuales.</p>
-             <div class="results-log" style="display: block; margin-top: 0;">
-                 <h2>Resultados del Análisis</h2>
-                 <ul id="csv-preview-list"></ul>
-             </div>
-             <div class="form-error" style="margin-top: var(--sp-2); text-align: center;"><strong>Atención:</strong> Esta acción es irreversible.</div>
-             <div class="modal__actions" style="justify-content: space-between;">
-                 <button id="csv-wizard-back-btn" class="btn btn--secondary">Atrás</button>
-                 <button id="csv-wizard-import-final" class="btn btn--danger"><span class="material-icons">warning</span>Importar y Reemplazar</button>
-             </div>
-         </div>
-         <div id="csv-wizard-step-3" class="json-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; min-height: 250px;">
-             <div id="csv-import-progress">
-                 <span class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></span>
-                 <h4 style="margin-top: var(--sp-4);">Importando...</h4>
-                 <p>Borrando datos antiguos e importando los nuevos. Por favor, no cierres esta ventana.</p>
-             </div>
-              <div id="csv-import-result" style="display: none;">
-                 <span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span>
-                 <h4 id="csv-result-title" style="margin-top: var(--sp-2);"></h4>
-                 <p id="csv-result-message"></p>
-                 <div class="modal__actions" style="justify: center;">
-                     <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">Finalizar</button>
-                 </div>
-              </div>
-         </div>
-     </div>`;
-     showGenericModal('Asistente de Importación CSV', wizardHTML);
-     setTimeout(() => {
-         let csvFile = null;
-         let processedData = null;
-         const wizardContent = select('csv-wizard-content');
-         if (!wizardContent) return;
-
-         const goToStep = (step) => {
-             wizardContent.querySelectorAll('.json-wizard-step').forEach(s => s.style.display = 'none');
-             wizardContent.querySelector(`#csv-wizard-step-${step}`).style.display = 'flex';
-         };
-
-         const fileInput = document.createElement('input');
-         fileInput.type = 'file'; fileInput.accept = '.csv, text/csv'; fileInput.className = 'hidden';
-         wizardContent.appendChild(fileInput);
-
-         const handleFileSelection = (files) => {
-             const file = files[0];
-             const nameEl = select('csv-file-name'), processBtn = select('csv-process-btn'), errorEl = select('csv-file-error');
-             if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) {
-                 csvFile = file;
-                 nameEl.textContent = `Archivo: ${file.name}`;
-                 processBtn.disabled = false;
-                 errorEl.textContent = '';
-             } else {
-                 csvFile = null;
-                 nameEl.textContent = 'Por favor, selecciona un archivo .csv válido.';
-                 processBtn.disabled = true;
-             }
-         };
-         
-         const dropZone = select('csv-drop-zone');
-         dropZone.addEventListener('click', () => fileInput.click());
-         fileInput.addEventListener('change', () => handleFileSelection(fileInput.files));
-         dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-         dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-         dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFileSelection(e.dataTransfer.files); });
-
-         select('csv-process-btn').addEventListener('click', async (e) => {
-             if (!csvFile) return;
-             const btn = e.target;
-             setButtonLoading(btn, true, 'Analizando...');
-             try {
-                 const result = await csv_processFile(csvFile);
-                 if (result) {
-                     processedData = result.jsonData;
-                     const { stats } = result;
-                     const previewList = select('csv-preview-list');
-                     let html = `
-                         <li><span class="label">Filas Válidas Leídas</span><span class="value">${stats.rowCount}</span></li>
-                         <li><span class="label">Cuentas a Crear</span><span class="value success">${stats.accounts}</span></li>
-                         <li><span class="label">Conceptos a Crear</span><span class="value success">${stats.concepts}</span></li>
-                         <li><span class="label">Saldos Iniciales</span><span class="value">${stats.initials}</span></li>
-                         <li><span class="label">Movimientos (Ingreso/Gasto)</span><span class="value">${stats.movements}</span></li>
-                         <li><span class="label">Transferencias Emparejadas</span><span class="value">${stats.transfers}</span></li>
-                         <li><span class="label">Transferencias sin Pareja</span><span class="value ${stats.unmatched > 0 ? 'danger' : 'success'}">${stats.unmatched}</span></li>
-                     `;
-                     previewList.innerHTML = html;
-                     goToStep(2);
-                 }
-             } catch (error) {
-                 console.error("Error al procesar CSV:", error);
-                 select('csv-file-error').textContent = `Error: ${error.message}`;
-             } finally {
-                 setButtonLoading(btn, false);
-             }
-         });
-
-         select('csv-wizard-back-btn').addEventListener('click', () => goToStep(1));
-         select('csv-wizard-import-final').addEventListener('click', (e) => {
-             if (processedData) handleFinalCsvImport(e.target, processedData, goToStep);
-         });
-     }, 0);
- };
-
- const handleFinalCsvImport = async (btn, dataToImport, goToStep) => {
-     goToStep(3);
-     setButtonLoading(btn, true, 'Importando...');
-     try {
-         const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
-         for (const collectionName of collectionsToClear) {
-             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
-             if (snapshot.empty) continue;
-             let batch = fbDb.batch();
-             let count = 0;
-             for (const doc of snapshot.docs) {
-                 batch.delete(doc.ref);
-                 count++;
-                 if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
-             }
-             if (count > 0) await batch.commit();
-         }
-         
-         for (const collectionName of Object.keys(dataToImport)) {
-             const items = dataToImport[collectionName];
-             if (Array.isArray(items) && items.length > 0) {
-                 let batch = fbDb.batch();
-                 let count = 0;
-                 for (const item of items) {
-                     if (item.id) {
-                         const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
-                         batch.set(docRef, item);
-                         count++;
-                         if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
-                     }
-                 }
-                 if (count > 0) await batch.commit();
-             } else if (collectionName === 'config') {
-                 await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
-             }
-         }
-         
-         const resultEl = select('csv-import-result');
-         select('csv-import-progress').style.display = 'none';
-         if(resultEl) {
-             resultEl.style.display = 'block';
-             resultEl.querySelector('#csv-result-title').textContent = '¡Importación Completada!';
-             resultEl.querySelector('#csv-result-message').textContent = 'Los datos se han importado correctamente. La aplicación se recargará.';
-         }
-         
-         hapticFeedback('success');
-         showToast('¡Importación completada!', 'info', 4000);
-         setTimeout(() => location.reload(), 4500);
-
-     } catch (error) {
-         console.error("Error en importación final desde CSV:", error);
-         showToast("Error crítico durante la importación.", "danger", 5000);
-         const resultEl = select('csv-import-result');
-         select('csv-import-progress').style.display = 'none';
-         if(resultEl) {
-             resultEl.style.display = 'block';
-             resultEl.querySelector('#csv-result-title').textContent = '¡Error en la Importación!';
-             resultEl.querySelector('#csv-result-message').textContent = 'Ocurrió un error. Revisa la consola e inténtalo de nuevo.';
-             const iconEl = resultEl.querySelector('.material-icons');
-             if (iconEl) iconEl.style.color = 'var(--c-danger)';
-         }
-         setButtonLoading(btn, false);
-     }
- };
- 
- // ▲▲▲ FIN: BLOQUE DE CÓDIGO RESTAURADO PARA IMPORTACIÓN CSV ▲▲▲
 	import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm'
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const PAGE_IDS = {
-    PANEL: 'panel-page', // Nuevo nombre
-    MOVIMIENTOS: 'movimientos-page', // Nuevo nombre
-    PLANIFICAR: 'inversiones-page', // Apunta a la página de inversiones temporalmente
-    ANALISIS: 'analisis-page',
-    AJUSTES: 'ajustes-page', // Mantenemos este por si se usa en otro lugar
+			INICIO: 'inicio-page', // <-- CAMBIADO
+			DIARIO: 'diario-page',
+			INVERSIONES: 'inversiones-page',
+			ANALISIS: 'analisis-page',       // <-- NUEVO
+			AJUSTES: 'ajustes-page',         // <-- NUEVO
 };
 
 	const AIDANAI_HELP_CONTENT = {
-    [PAGE_IDS.PANEL]: { // <-- Usamos el nuevo ID
+    [PAGE_IDS.INICIO]: { // <-- CAMBIADO
         title: "Tu Torre de Control Financiera",
         content: "¡Bienvenido al Panel! Esta es tu vista de pájaro. De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
     },
-    [PAGE_IDS.MOVIMIENTOS]: { // <-- Usamos el nuevo ID
+    [PAGE_IDS.DIARIO]: {
         title: "El Libro de la Verdad",
         content: "Aquí está cada céntimo registrado. Es tu historial completo, la verdad absoluta de tus finanzas. <strong>Superpoder secreto:</strong> Desliza cualquier movimiento hacia la <strong>derecha para duplicarlo</strong> (ideal para gastos repetidos) o hacia la <strong>izquierda para borrarlo</strong>. ¡Ahorrarás muchísimo tiempo!"
     },
@@ -635,7 +304,7 @@ const applyDiarioFilters = async () => {
     showToast('Filtros aplicados. Mostrando resultados.', 'info');
     
     // Volvemos a renderizar la página del Diario para que aplique los filtros
-    await renderMovimientosPage();
+    await renderDiarioPage();
 };
 
 // La función que se ejecuta al pulsar "Limpiar Filtros"
@@ -644,7 +313,7 @@ const clearDiarioFilters = async () => {
     select('diario-filters-form').reset();
     hideModal('diario-filters-modal');
     showToast('Filtros eliminados.', 'info');
-    await renderMovimientosPage();
+    await renderDiarioPage();
 };
 
 // ▲▲▲ FIN DEL BLOQUE A PEGAR ▲▲▲
@@ -1053,7 +722,7 @@ async function loadCoreData(uid) {
             if (collectionName === 'recurrentes') {
                 dataLoaded.recurrentes = true;
                 const activePage = document.querySelector('.view--active');
-                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderMovimientosPage();
+                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderDiarioPage();
                 if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) renderPlanificacionPage();
             }
             
@@ -1730,7 +1399,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.PANEL, true); // <-- CAMBIADO
+			navigateTo(PAGE_IDS.INICIO, true); // <-- CAMBIADO
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -1843,7 +1512,7 @@ window.addEventListener('offline', () => {
     }
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN navigateTo CON ESTA VERSIÓN COMPLETA ▼▼▼
+// EN main.js - REEMPLAZA TU FUNCIÓN navigateTo POR ESTA VERSIÓN
 const navigateTo = async (pageId, isInitial = false) => {
     const oldView = document.querySelector('.view--active');
     const newView = select(pageId);
@@ -1853,81 +1522,74 @@ const navigateTo = async (pageId, isInitial = false) => {
 	}
     if (!newView || (oldView && oldView.id === pageId)) return;
 
-    let loadSuccess = true;
-    if (newView.innerHTML.trim() === '') {
-        try {
-            const viewName = pageId.replace('-page', '');
-            const response = await fetch(`views/${viewName}.html`);
-            if (!response.ok) throw new Error(`No se pudo cargar views/${viewName}.html`);
+    // ----- INICIO DE LA NUEVA LÓGICA DE CARGA DE HTML -----
+    try {
+        // 1. Verificamos si la vista ya tiene contenido. Si no, lo cargamos.
+        if (newView.innerHTML.trim() === '') {
+            const response = await fetch(`views/${pageId.replace('-page', '')}.html`);
+            if (!response.ok) throw new Error(`No se pudo cargar views/${pageId.replace('-page', '')}.html`);
             newView.innerHTML = await response.text();
-        } catch (error) {
-            loadSuccess = false;
-            console.error("Error al cargar la vista:", error);
-            newView.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar esta sección.</p></div>`;
         }
+    } catch (error) {
+        console.error("Error al cargar la vista:", error);
+        newView.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar esta sección.</p></div>`;
     }
+    // ----- FIN DE LA NUEVA LÓGICA DE CARGA DE HTML -----
 
     destroyAllCharts();
-
-    if (loadSuccess) {
-        if (!isInitial) hapticFeedback('light');
-        if (!isInitial && window.history.state?.page !== pageId) {
-            history.pushState({ page: pageId }, '', `#${pageId}`);
-        }
-        
-        // --- ¡AQUÍ ESTÁ LA LÍNEA QUE FALTABA! ---
-        const navItems = Array.from(selectAll('.bottom-nav__item'));
-        const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
-        const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-        const isForward = newIndex > oldIndex;
-
-        const actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button');
-        
-        const standardActions = `
-            <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
-                <span class="material-icons">search</span>
-            </button>
-            <button data-action="show-main-menu" class="icon-btn" title="Más opciones" aria-label="Mostrar más opciones">
-                <span class="material-icons">more_vert</span>
-            </button>
-        `;
-        
-        if (pageId === PAGE_IDS.PANEL) {
-            await Promise.all([loadPresupuestos(), loadInversiones()]);
-        }
-
-        const pageRenderers = {
-            [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-            [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderMovimientosPage, actions: standardActions },
-            [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderInversionesView, actions: standardActions },
-            [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
-            [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-        };
-        
-        if (pageRenderers[pageId]) { 
-            if (leftEl) {
-                let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-                if (pageId === PAGE_IDS.PANEL) {
-                     leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
-                }
-                if (pageId === PAGE_IDS.MOVIMIENTOS) {
-                    leftSideHTML += `
-                        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
-                            <span class="material-icons">filter_list</span>
-                        </button>
-                        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-                            <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
-                        </button>
-                    `;
-                }
-                leftEl.innerHTML = leftSideHTML;
-            }
-            if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
-            pageRenderers[pageId].render();
-        }
+    if (!isInitial) hapticFeedback('light');
+	if (!isInitial && window.history.state?.page !== pageId) {
+        history.pushState({ page: pageId }, '', `#${pageId}`);
     }
+    
+    const navItems = Array.from(selectAll('.bottom-nav__item'));
+    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
+    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+    const isForward = newIndex > oldIndex;
 
+    const actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento');
+    
+    const standardActions = `
+        <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
+            <span class="material-icons">search</span>
+        </button>
+        <button data-action="show-main-menu" class="icon-btn" title="Más opciones" aria-label="Mostrar más opciones">
+            <span class="material-icons">more_vert</span>
+        </button>
+    `;
+    
+    if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
+    if (pageId === PAGE_IDS.INICIO) {
+        await Promise.all([loadPresupuestos(), loadInversiones()]);
+    }
+    const pageRenderers = {
+    [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderInicioPage, actions: standardActions }, // <-- CAMBIADO
+    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+    [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
+    [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
+    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+};
+     if (pageRenderers[pageId]) { 
+        if (leftEl) {
+            let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
+            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+            if (pageId === PAGE_IDS.DIARIO) {
+                leftSideHTML += `
+                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
+                        <span class="material-icons">filter_list</span>
+                    </button>
+                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+                        <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+                    </button>
+                `;
+            }
+            leftEl.innerHTML = leftSideHTML;
+        }
+        if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
+        pageRenderers[pageId].render();
+    }
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === pageId));
+    if (fab) fab.classList.toggle('fab--visible', true);
     updateThemeIcon();
     
     newView.classList.add('view--active'); 
@@ -1952,11 +1614,10 @@ const navigateTo = async (pageId, isInitial = false) => {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
-    if (pageId === PAGE_IDS.PANEL) {
+    if (pageId === PAGE_IDS.INICIO) {
         setTimeout(scheduleDashboardUpdate, 50);
     }
 };
-// ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲
         
     const setupTheme = () => { 
     const gridColor = 'rgba(255, 255, 255, 0.1)';
@@ -3243,15 +2904,9 @@ select('virtual-list-content').innerHTML = skeletonHTML;
     movementsObserver.observe(trigger);
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN renderMovimientosPage CON ESTA ▼▼▼
-const renderMovimientosPage = async () => {
-    const container = select('movimientos-page');
-    // Comprobación de seguridad para evitar errores si la vista no se ha cargado
-    if (!container) {
-        console.error("Contenedor 'movimientos-page' no encontrado. La carga del HTML de la vista probablemente falló.");
-        return; // Detiene la función si el contenedor no existe
-    }
-
+// 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
+const renderDiarioPage = async () => {
+    const container = select('diario-page');
     if (!container.querySelector('#diario-view-container')) {
         container.innerHTML = '<div id="diario-view-container"></div>';
     }
@@ -3266,12 +2921,12 @@ const renderMovimientosPage = async () => {
     }
 
     viewContainer.innerHTML = `
-        <div id="pull-to-refresh-indicator"><span class="spinner"></span></div>
         <div id="diario-filter-active-indicator" class="hidden">
             <p>Mostrando resultados filtrados.</p>
             <div>
                 <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">
-                    <span class="material-icons" style="font-size: 14px;">download</span> Exportar
+                    <span class="material-icons" style="font-size: 14px;">download</span>
+                    Exportar
                 </button>
                 <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
             </div>
@@ -3294,11 +2949,13 @@ const renderMovimientosPage = async () => {
     }
     select('virtual-list-content').innerHTML = skeletonHTML;
     
+    // ---- INICIO DE LA LÓGICA CORREGIDA ----
     const scrollTrigger = select('infinite-scroll-trigger');
 
     if (diarioActiveFilters) {
-        if (scrollTrigger) scrollTrigger.classList.add('hidden');
-        if (movementsObserver) movementsObserver.disconnect();
+        // MODO FILTRADO: Ocultamos el scroll infinito y filtramos los datos cacheados.
+        if (scrollTrigger) scrollTrigger.classList.add('hidden'); // Oculta el activador
+        if (movementsObserver) movementsObserver.disconnect(); // Detiene el observador
 
         select('diario-filter-active-indicator').classList.remove('hidden');
         
@@ -3325,6 +2982,7 @@ const renderMovimientosPage = async () => {
         db.movimientos = movementsToDisplay;
 
     } else {
+        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
         if (scrollTrigger) scrollTrigger.classList.remove('hidden');
         select('diario-filter-active-indicator').classList.add('hidden');
         
@@ -3333,10 +2991,11 @@ const renderMovimientosPage = async () => {
         allMovementsLoaded = false;
         isLoadingMoreMovements = false;
         
-        await loadMoreMovements(true);
-        initMovementsObserver();
-        return;
+        await loadMoreMovements(true); // Carga la primera página
+        initMovementsObserver(); // Activa el observador del scroll infinito
+        return; // Salimos aquí porque loadMoreMovements ya actualiza la UI
     }
+    // ---- FIN DE LA LÓGICA CORREGIDA ----
 
     await processMovementsForRunningBalance(db.movimientos, true);
     updateVirtualListUI();
@@ -3352,7 +3011,6 @@ const renderMovimientosPage = async () => {
         }
     }
 };
-// ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲
 		
 	const getYearProgress = () => {
     const now = new Date();
@@ -3623,7 +3281,7 @@ const renderPatrimonioPage = async () => {
             
             			
         };
-    const renderPanelPage = () => {
+    const renderInicioPage  = () => {
     const container = select(PAGE_IDS.INICIO);
     if (!container) return;
 
@@ -7170,7 +6828,7 @@ const attachEventListeners = () => {
             history.pushState({ page: window.history.state?.page }, '', `#${window.history.state?.page || 'panel-page'}`);
             return;
         }
-        const pageToNavigate = event.state ? event.state.page : PAGE_IDS.PANEL; // Usamos PANEL por defecto
+        const pageToNavigate = event.state ? event.state.page : PAGE_IDS.INICIO;
         if (pageToNavigate) {
             navigateTo(pageToNavigate, false);
         }
@@ -7193,30 +6851,58 @@ const attachEventListeners = () => {
         
         if (!actionTarget) return;
 
-        const { action, id, page, type, modalId } = actionTarget.dataset;
+        const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
         const btn = actionTarget.closest('button');
               
         const actions = {
-			'open-add-movement-modal': () => startMovementForm(),
 			 'show-main-menu': () => {
-                const menu = document.getElementById('main-menu-popover');
-                if (!menu) return;
-                menu.classList.toggle('popover-menu--visible');
-                if (menu.classList.contains('popover-menu--visible')) {
-                    setTimeout(() => {
-                        const closeOnClickOutside = (event) => {
-                            if (!menu.contains(event.target) && !event.target.closest('[data-action="show-main-menu"]')) {
-                                menu.classList.remove('popover-menu--visible');
-                                document.removeEventListener('click', closeOnClickOutside);
-                            }
-                        };
-                        document.addEventListener('click', closeOnClickOutside);
-                    }, 0);
+    const menu = document.getElementById('main-menu-popover');
+    if (!menu) return;
+
+    // Muestra u oculta el menú
+    menu.classList.toggle('popover-menu--visible');
+
+    // Si el menú se acaba de hacer visible, preparamos un "detector de clics"
+    if (menu.classList.contains('popover-menu--visible')) {
+        // Usamos un pequeño truco para que este detector no se active con el mismo clic que abrió el menú
+        setTimeout(() => {
+            const closeOnClickOutside = (event) => {
+                // Si se hace clic fuera del menú, lo cerramos
+                if (!menu.contains(event.target) && !event.target.closest('[data-action="show-main-menu"]')) {
+                    menu.classList.remove('popover-menu--visible');
+                    // Importante: una vez cerrado, eliminamos el detector para que no se quede escuchando para siempre
+                    document.removeEventListener('click', closeOnClickOutside);
                 }
+            };
+            // Añadimos el detector a todo el documento
+            document.addEventListener('click', closeOnClickOutside);
+        }, 0);
+    }
+},
+            'toggle-fab-menu': toggleFabMenu,
+            'open-fab-action': (e) => {
+                const button = e.target.closest('[data-type]');
+                if (!button) return;
+                document.querySelector('.fab-container').classList.remove('fab-container--active');
+                startMovementForm();
+                setTimeout(() => {
+                    setMovimientoFormType(button.dataset.type);
+                }, 50);
             },
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,	
+            'toggle-amount-type': () => {
+                const amountInput = select('movimiento-cantidad');
+                const amountGroup = select('movimiento-cantidad-form-group');
+                if (!amountInput || !amountGroup) return;
+                hapticFeedback('light');
+                const currentValue = parseCurrencyString(amountInput.value) || 0;
+                const isCurrentlyGasto = amountGroup.classList.contains('is-gasto');
+                const newValue = currentValue === 0 ? 0 : -currentValue;
+                amountInput.value = newValue.toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                updateAmountTypeUI(!isCurrentlyGasto);
+            },
             'context-edit': () => {
                 hideModal('generic-modal');
                 startMovementForm(id, false);
@@ -7247,11 +6933,27 @@ const attachEventListeners = () => {
                 showAccountMovementsModal(accountId);
             },
             'apply-description-suggestion': (e) => {
-                applyDescriptionSuggestion(e.target.closest('.suggestion-item'));
+                const suggestionItem = e.target.closest('.suggestion-item');
+                if (suggestionItem) {
+                    const { description, conceptoId, cuentaId } = suggestionItem.dataset;
+                    select('movimiento-descripcion').value = toSentenceCase(description); 
+                    select('movimiento-concepto').value = conceptoId;
+                    select('movimiento-cuenta').value = cuentaId;
+                    select('description-suggestions').style.display = 'none';
+                    [select('movimiento-concepto'), select('movimiento-cuenta')].forEach(el => {
+                        const parent = el.closest('.form-group-addon');
+                        if(parent) {
+                            parent.classList.add('field-highlighted');
+                            setTimeout(() => parent.classList.remove('field-highlighted'), 1500);
+                        }
+                    });
+                    select('movimiento-cantidad').focus();
+                    hapticFeedback('light');
+                }
             },
             'show-aidanai-help': () => {
                 const activeView = document.querySelector('.view--active');
-                const pageId = activeView ? activeView.id : PAGE_IDS.PANEL;
+                const pageId = activeView ? activeView.id : PAGE_IDS.INICIO;
                 showAidanaiModal(pageId);
             },
             'show-concept-drilldown': () => {
@@ -7262,12 +6964,7 @@ const attachEventListeners = () => {
                     showDrillDownModal(`Movimientos de: ${conceptName}`, movementsOfConcept);
                 });
             },
-            'toggle-diario-view': () => {
-                diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list';
-                const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons');
-                if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list';
-                renderMovimientosPage();
-            },
+            'toggle-diario-view': () => { diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list'; const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons'); if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list'; renderDiarioPage(); },
             'calendar-nav': () => {
                 const direction = actionTarget.dataset.direction;
                 if (!(diarioCalendarDate instanceof Date) || isNaN(diarioCalendarDate)) {
@@ -7286,45 +6983,8 @@ const attachEventListeners = () => {
                 }
             },
             'toggle-investment-type-filter': () => handleToggleInvestmentTypeFilter(type),
-            'toggle-account-type-filter': () => {
-                hapticFeedback('light');
-                if (deselectedAccountTypesFilter.has(type)) {
-                    deselectedAccountTypesFilter.delete(type);
-                } else {
-                    deselectedAccountTypesFilter.add(type);
-                }
-                renderPatrimonioPage();
-            },
-            'show-help-topic': () => {
-                const topic = actionTarget.dataset.topic;
-                if(topic) {
-                    let title, content;
-                    if (topic === 'tasa-ahorro') {
-                        title = '¿Cómo se calcula la Tasa de Ahorro?';
-                        content = `<p>Mide qué porcentaje de tus ingresos consigues guardar después de cubrir todos tus gastos en el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Saldo Neto del Periodo / Ingresos Totales del Periodo) * 100</code><p style="margin-top: var(--sp-2);">Es el indicador clave de tu capacidad para generar riqueza.</p>`;
-                    } else if (topic === 'patrimonio-neto') {
-                        title = '¿Cómo se calcula el Patrimonio Neto?';
-                        content = `<p>Representa tu riqueza total. Es la suma de todo lo que tienes (activos) menos todo lo que debes (pasivos).</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de los saldos de todas tus cuentas.</code><p style="margin-top: var(--sp-2);"><strong>Importante:</strong> Este valor es siempre tu situación global actual y no se ve afectado por los filtros de fecha del panel.</p>`;
-                    } else if (topic === 'pnl-inversion') {
-                        title = '¿Cómo se calcula el P&L de Inversión?';
-                        content = `<p>P&L son las siglas de "Profits and Losses" (Ganancias y Pérdidas). Mide el <strong>flujo de caja neto</strong> de tus cuentas de inversión durante el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de todos los movimientos en cuentas de inversión.</code><p style="margin-top: var(--sp-2);">No incluye la revalorización de activos que no hayas vendido. Es útil para saber si tus inversiones te están dando dinero (dividendos, ventas) o si estás invirtiendo más capital (compras).</p>`;
-                    } else if (topic === 'progreso-presupuesto') {
-                        title = '¿Cómo se calcula el Progreso del Presupuesto?';
-                        content = `<p>Compara tus gastos reales con tu plan de gastos para el periodo seleccionado.</p><h4>Fórmula:</h4><ol style="list-style-position: inside; padding-left: var(--sp-2);"><li style="margin-bottom: 6px;">Se calcula tu <strong>límite de gasto proporcional</strong> para el periodo (ej. Presupuesto Anual / 12 para un mes).</li><li style="margin-bottom: 6px;">Se comparan tus <strong>gastos reales</strong> del periodo con ese límite.</li></ol><p style="margin-top: var(--sp-2);">Te ayuda a ver si te estás ciñendo a tu plan financiero y a corregir desviaciones a tiempo.</p>`;
-                    } else if (topic === 'colchon-emergencia') {
-                        title = 'Colchón de Emergencia';
-                        content = `<p>Es tu red de seguridad financiera. Mide cuántos meses podrías vivir cubriendo tus gastos si dejaras de tener ingresos hoy mismo.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Dinero Líquido Total / Gasto Mensual Promedio</code><p style="margin-top: var(--sp-2);">Se considera "dinero líquido" el saldo de tus cuentas de tipo Banco, Ahorro y Efectivo.</p>`;
-                    } else if (topic === 'independencia-financiera') {
-                        title = 'Independencia Financiera (I.F.)';
-                        content = `<p>Mide tu progreso para alcanzar el punto en el que tus inversiones podrían cubrir tus gastos para siempre, sin necesidad de trabajar.</p><h4>Fórmula del Objetivo:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Gasto Mensual Promedio * 12) * 30</code><p style="margin-top: var(--sp-2);">El porcentaje muestra qué parte de ese objetivo ya has alcanzado con tu patrimonio neto actual.</p>`;
-                    }
-                    const titleEl = select('help-modal-title');
-                    const bodyEl = select('help-modal-body');
-                    if(titleEl) titleEl.textContent = title;
-                    if(bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`;
-                    showModal('help-modal');
-                }
-            },
+            'toggle-account-type-filter': () => { hapticFeedback('light'); if (deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderPatrimonioPage(); },
+            'show-help-topic': () => { const topic = actionTarget.dataset.topic; if(topic) { let title, content; if (topic === 'tasa-ahorro') { title = '¿Cómo se calcula la Tasa de Ahorro?'; content = `<p>Mide qué porcentaje de tus ingresos consigues guardar después de cubrir todos tus gastos en el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Saldo Neto del Periodo / Ingresos Totales del Periodo) * 100</code><p style="margin-top: var(--sp-2);">Es el indicador clave de tu capacidad para generar riqueza.</p>`; } else if (topic === 'patrimonio-neto') { title = '¿Cómo se calcula el Patrimonio Neto?'; content = `<p>Representa tu riqueza total. Es la suma de todo lo que tienes (activos) menos todo lo que debes (pasivos).</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de los saldos de todas tus cuentas.</code><p style="margin-top: var(--sp-2);"><strong>Importante:</strong> Este valor es siempre tu situación global actual y no se ve afectado por los filtros de fecha del panel.</p>`; } else if (topic === 'pnl-inversion') { title = '¿Cómo se calcula el P&L de Inversión?'; content = `<p>P&L son las siglas de "Profits and Losses" (Ganancias y Pérdidas). Mide el <strong>flujo de caja neto</strong> de tus cuentas de inversión durante el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de todos los movimientos en cuentas de inversión.</code><p style="margin-top: var(--sp-2);">No incluye la revalorización de activos que no hayas vendido. Es útil para saber si tus inversiones te están dando dinero (dividendos, ventas) o si estás invirtiendo más capital (compras).</p>`; } else if (topic === 'progreso-presupuesto') { title = '¿Cómo se calcula el Progreso del Presupuesto?'; content = `<p>Compara tus gastos reales con tu plan de gastos para el periodo seleccionado.</p><h4>Fórmula:</h4><ol style="list-style-position: inside; padding-left: var(--sp-2);"><li style="margin-bottom: 6px;">Se calcula tu <strong>límite de gasto proporcional</strong> para el periodo (ej. Presupuesto Anual / 12 para un mes).</li><li style="margin-bottom: 6px;">Se comparan tus <strong>gastos reales</strong> del periodo con ese límite.</li></ol><p style="margin-top: var(--sp-2);">Te ayuda a ver si te estás ciñendo a tu plan financiero y a corregir desviaciones a tiempo.</p>`; } else if (topic === 'colchon-emergencia') { title = 'Colchón de Emergencia'; content = `<p>Es tu red de seguridad financiera. Mide cuántos meses podrías vivir cubriendo tus gastos si dejaras de tener ingresos hoy mismo.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Dinero Líquido Total / Gasto Mensual Promedio</code><p style="margin-top: var(--sp-2);">Se considera "dinero líquido" el saldo de tus cuentas de tipo Banco, Ahorro y Efectivo.</p>`; } else if (topic === 'independencia-financiera') { title = 'Independencia Financiera (I.F.)'; content = `<p>Mide tu progreso para alcanzar el punto en el que tus inversiones podrían cubrir tus gastos para siempre, sin necesidad de trabajar.</p><h4>Fórmula del Objetivo:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Gasto Mensual Promedio * 12) * 30</code><p style="margin-top: var(--sp-2);">El porcentaje muestra qué parte de ese objetivo ya has alcanzado con tu patrimonio neto actual.</p>`; } const titleEl = select('help-modal-title'); const bodyEl = select('help-modal-body'); if(titleEl) titleEl.textContent = title; if(bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`; showModal('help-modal'); } },
             'configure-dashboard': (e) => { e.preventDefault(); showDashboardConfigModal(); },
             'save-dashboard-config': () => handleSaveDashboardConfig(btn),
             'use-password-instead': () => showPasswordFallback(),
@@ -7332,42 +6992,9 @@ const attachEventListeners = () => {
             'navigate': () => { hapticFeedback('light'); navigateTo(page); },
             'help': showHelpModal,
             'exit': handleExitApp,
-            'forgot-password': (e) => {
-                e.preventDefault();
-                const email = prompt("Por favor, introduce el correo electrónico de tu cuenta para restablecer la contraseña:");
-                if (email) {
-                    firebase.auth().sendPasswordResetEmail(email)
-                        .then(() => showToast('Se ha enviado un correo para restablecer tu contraseña.', 'info', 5000))
-                        .catch((error) => {
-                            console.error("Error al enviar correo de recuperación:", error);
-                            showToast(error.code === 'auth/user-not-found' ? 'No se encontró ninguna cuenta con ese correo.' : 'Error al intentar restablecer la contraseña.', 'danger');
-                        });
-                }
-            },
-            'show-register': (e) => {
-                e.preventDefault();
-                const title = select('login-title');
-                const mainButton = document.querySelector('#login-form button[data-action="login"]');
-                const secondaryAction = document.querySelector('.login-view__secondary-action');
-                if (mainButton.dataset.action === 'login') {
-                    title.textContent = 'Crear una Cuenta Nueva';
-                    mainButton.dataset.action = 'register';
-                    mainButton.textContent = 'Registrarse';
-                    secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`;
-                }
-            },
-            'show-login': (e) => {
-                e.preventDefault();
-                const title = select('login-title');
-                const mainButton = document.querySelector('#login-form button[data-action="register"]');
-                const secondaryAction = document.querySelector('.login-view__secondary-action');
-                if (mainButton.dataset.action === 'register') {
-                    title.textContent = 'Bienvenido de nuevo';
-                    mainButton.dataset.action = 'login';
-                    mainButton.textContent = 'Iniciar Sesión';
-                    secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`;
-                }
-            },
+            'forgot-password': (e) => { e.preventDefault(); const email = prompt("Por favor, introduce el correo electrónico de tu cuenta para restablecer la contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => { showToast('Se ha enviado un correo para restablecer tu contraseña.', 'info', 5000); }).catch((error) => { console.error("Error al enviar correo de recuperación:", error); if (error.code === 'auth/user-not-found') { showToast('No se encontró ninguna cuenta con ese correo.', 'danger'); } else { showToast('Error al intentar restablecer la contraseña.', 'danger'); } }); } },
+            'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
+            'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
             'import-csv': showCsvImportWizard,
             'toggle-ledger': async () => {
                 hapticFeedback('medium');
@@ -7375,14 +7002,14 @@ const attachEventListeners = () => {
                 document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
                 const toggleBtn = select('ledger-toggle-btn');
                 if (toggleBtn) {
-                    toggleBtn.textContent = ` ${isOffBalanceMode ? 'B' : 'A'}`;
+                    toggleBtn.innerHTML = ` ${isOffBalanceMode ? 'B' : 'A'}`;
                     toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`;
                 }
                 const activePageEl = selectOne('.view--active');
-                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.PANEL;
+                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO;
                 const pageRenderers = {
-                    [PAGE_IDS.PANEL]: renderPanelPage,
-                    [PAGE_IDS.MOVIMIENTOS]: renderMovimientosPage,
+                    [PAGE_IDS.INICIO]: renderInicioPage ,
+                    [PAGE_IDS.DIARIO]: renderDiarioPage,
                     [PAGE_IDS.INVERSIONES]: renderInversionesView,
                     [PAGE_IDS.ANALISIS]: renderAnalisisPage,
                     [PAGE_IDS.AJUSTES]: renderAjustesPage,
@@ -7392,29 +7019,11 @@ const attachEventListeners = () => {
                 }
                 showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info');
             },
-            'toggle-off-balance': async () => {
-                const checkbox = target.closest('input[type="checkbox"]');
-                if (!checkbox) return;
-                hapticFeedback('light');
-                await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked });
-            },
+            'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
             'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
-            'delete-movement-from-modal': () => {
-                const isRecurrent = (actionTarget.dataset.isRecurrent === 'true');
-                const idToDelete = select('movimiento-id').value;
-                const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?';
-                showConfirmationModal(message, async () => {
-                    hideModal('movimiento-modal');
-                    await deleteMovementAndAdjustBalance(idToDelete, isRecurrent);
-                });
-            },
-            'swipe-delete-movement': () => {
-                const isRecurrent = actionTarget.dataset.isRecurrent === 'true';
-                showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => {
-                    await deleteMovementAndAdjustBalance(id, isRecurrent);
-                });
-            },
+            'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
+            'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
             'swipe-duplicate-movement': () => {
                 const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id);
                 if (movement) {
@@ -7425,39 +7034,20 @@ const attachEventListeners = () => {
                 hideModal('global-search-modal');
                 startMovementForm(e.target.closest('[data-id]').dataset.id, false);
             },
-            'delete-concepto': async () => {
-                const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get();
-                if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; }
-                showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => {
-                    await deleteDoc('conceptos', id);
-                    hapticFeedback('success');
-                    showToast("Concepto eliminado.");
-                    renderConceptosModalList();
-                });
-            },
-            'delete-cuenta': async () => {
-                const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get();
-                if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; }
-                showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => {
-                    await deleteDoc('cuentas', id);
-                    hapticFeedback('success');
-                    showToast("Cuenta eliminada.");
-                    renderCuentasModalList();
-                });
-            },
-            'close-modal': () => {
-                const closestOverlay = target.closest('.modal-overlay');
-                const effectiveModalId = modalId || (closestOverlay ? closestOverlay.id : null);
-                if (effectiveModalId) hideModal(effectiveModalId);
-            },
+            'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; } showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); renderConceptosModalList(); }); },
+            'delete-cuenta': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; } showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => { await deleteDoc('cuentas', id); hapticFeedback('success'); showToast("Cuenta eliminada."); renderCuentasModalList(); }); },
+            'close-modal': () => { const closestOverlay = target.closest('.modal-overlay'); const effectiveModalId = modalId || (closestOverlay ? closestOverlay.id : null); if (effectiveModalId) hideModal(effectiveModalId); },
             'manage-conceptos': showConceptosModal, 'manage-cuentas': showCuentasModal,
             'save-config': () => handleSaveConfig(btn),
             'export-data': () => handleExportData(btn), 'export-csv': () => handleExportCsv(btn), 'import-data': () => showImportJSONWizard(),
-            'clear-data': () => showConfirmationModal('¿Borrar TODOS tus datos de la nube? Esta acción es IRREVERSIBLE y no se puede deshacer.', async () => {}, 'Confirmación Final de Borrado'),
-            'update-budgets': handleUpdateBudgets, 'logout': () => fbAuth.signOut(), 'delete-account': () => showConfirmationModal('Esto eliminará tu cuenta y todos tus datos de forma PERMANENTE. ¿Estás absolutamente seguro?', async () => {}),
+            'clear-data': () => { showConfirmationModal('¿Borrar TODOS tus datos de la nube? Esta acción es IRREVERSIBLE y no se puede deshacer.', async () => { /* Lógica de borrado aquí */ }, 'Confirmación Final de Borrado'); },
+            'update-budgets': handleUpdateBudgets, 'logout': () => fbAuth.signOut(), 'delete-account': () => { showConfirmationModal('Esto eliminará tu cuenta y todos tus datos de forma PERMANENTE. ¿Estás absolutamente seguro?', async () => { /* Lógica de borrado de cuenta aquí */ }); },
             'manage-investment-accounts': showManageInvestmentAccountsModal, 'update-asset-value': () => showValoracionModal(id),
             'set-investment-chart-mode': () => handleSetInvestmentChartMode(actionTarget.dataset.mode),
-            'global-search': () => showGlobalSearchModal(),
+            'global-search': () => {
+                showGlobalSearchModal();
+                hapticFeedback('medium');
+            },
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
             'duplicate-movement': () => {
@@ -7481,41 +7071,31 @@ const attachEventListeners = () => {
                     'Confirmar Auditoría Completa'
                 );
             }, 'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
-            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(),
-            'set-pin': async () => {
-                const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo.");
-                if (pin === null) return;
-                if (pin === "") {
-                    localStorage.removeItem('pinUserHash');
-                    localStorage.removeItem('pinUserEmail');
-                    showToast('PIN de acceso rápido eliminado.', 'info');
-                    return;
-                }
-                if (!/^\d{4}$/.test(pin)) {
-                    showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger');
-                    return;
-                }
-                const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos.");
-                if (pin !== pinConfirm) {
-                    showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger');
-                    return;
-                }
-                const pinHash = await hashPin(pin);
-                localStorage.setItem('pinUserHash', pinHash);
-                localStorage.setItem('pinUserEmail', currentUser.email);
-                hapticFeedback('success');
-                showToast('¡PIN de acceso rápido configurado con éxito!', 'info');
-            },
+            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo."); if (pin === null) return; if (pin === "") { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); showToast('PIN de acceso rápido eliminado.', 'info'); return; } if (!/^\d{4}$/.test(pin)) { showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger'); return; } const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos."); if (pin !== pinConfirm) { showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger'); return; } const pinHash = await hashPin(pin); localStorage.setItem('pinUserHash', pinHash); localStorage.setItem('pinUserEmail', currentUser.email); hapticFeedback('success'); showToast('¡PIN de acceso rápido configurado con éxito!', 'info'); },
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
             'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
-        };
+            };
         
         if (actions[action]) {
             actions[action](e);
         }
     });
 
+    document.body.addEventListener('toggle', (e) => {
+    const detailsElement = e.target;
+    // Nos aseguramos de que solo reaccione a los acordeones de la página de informes
+    if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) {
+        return;
+    }
+    
+    if (detailsElement.open) {
+        const informeId = detailsElement.id.replace('acordeon-', '');
+        // Llamamos a nuestra nueva función router, que sabe qué hacer con cada ID
+        renderInformeDetallado(informeId);
+    }
+}, true);
+    // ▼▼▼ REEMPLAZA TU BLOQUE 'submit' ENTERO POR ESTE ▼▼▼
     document.body.addEventListener('submit', (e) => {
         e.preventDefault();
         const target = e.target;
@@ -7523,197 +7103,1387 @@ const attachEventListeners = () => {
         const handlers = {
             'login-form': () => {
                 const action = submitter ? submitter.dataset.action : 'login';
-                if (action === 'login') handleLogin(submitter);
-                else if (action === 'register') handleRegister(submitter);
+                if (action === 'login') {
+                    handleLogin(submitter);
+                } else if (action === 'register') {
+                    handleRegister(submitter);
+                }
             },
             'pin-form': handlePinSubmit,
             'form-movimiento': () => handleSaveMovement(target, submitter),
             'add-concepto-form': () => handleAddConcept(submitter),
             'add-cuenta-form': () => handleAddAccount(submitter),
+            
+            // --- ¡AQUÍ ESTÁ LA CONEXIÓN QUE FALTABA! ---
             'informe-cuenta-form': () => handleGenerateInformeCuenta(target, submitter),
+            // --- FIN DE LA CONEXIÓN ---
+
             'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter),
             'form-valoracion': () => handleSaveValoracion(target, submitter),
             'diario-filters-form': applyDiarioFilters
         };
+
         if (handlers[target.id]) {
             handlers[target.id]();
         }
     });
-
-    document.body.addEventListener('input', (e) => {
-        const id = e.target.id;
-        if (id) {
-            clearError(id);
-            if (id === 'movimiento-cantidad') validateField(id, true);
-            if (id === 'movimiento-descripcion') handleDescriptionInput();
-            if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true);
-            if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') {
-                validateField('movimiento-cuenta-origen', true);
-                validateField('movimiento-cuenta-destino', true);
-            }
-            if (id === 'concepto-search-input') {
-                clearTimeout(globalSearchDebounceTimer);
-                globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200);
-            }
-            if (id === 'cuenta-search-input') {
-                clearTimeout(globalSearchDebounceTimer);
-                globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200);
-            }
-        }
-    });
-
+// ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲
+    document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
     document.body.addEventListener('blur', (e) => {
-        const id = e.target.id;
-        if (id) {
-            if (id === 'movimiento-cantidad') validateField('movimiento-cantidad');
-            if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id);
+    const id = e.target.id;
+    if (id) {
+        if (id === 'movimiento-cantidad') validateField('movimiento-cantidad');  
+        if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id);
         }
-    }, true);
-
-    document.body.addEventListener('focusin', (e) => {
-        if (e.target.matches('.pin-input')) { handlePinInputInteraction(); }
-        if (e.target.id === 'movimiento-descripcion') { handleDescriptionInput(); }
-    });
-
+}, true);
+    document.body.addEventListener('focusin', (e) => { if (e.target.matches('.pin-input')) { handlePinInputInteraction(); } if (e.target.id === 'movimiento-descripcion') { handleDescriptionInput(); } });
     document.addEventListener('change', e => {
-        const target = e.target;
-        if (target.id === 'filter-periodo') {
-            const el = select('custom-date-filters');
-            if (el) el.classList.toggle('hidden', target.value !== 'custom');
-        }
-        if (target.id === 'filter-periodo') {
-            const customFiltersEl = select('custom-date-filters');
-            const applyBtnEl = document.querySelector('[data-action="apply-filters"]');
-            const isCustom = target.value === 'custom';
+    const target = e.target;
 
-            if (customFiltersEl) customFiltersEl.classList.toggle('hidden', !isCustom);
-            if (applyBtnEl) applyBtnEl.classList.toggle('hidden', !isCustom);
+    if (target.id === 'filter-periodo') {
+        const el = select('custom-date-filters');
+        if (el) el.classList.toggle('hidden', target.value !== 'custom');
+    }
+    if (target.id === 'filter-periodo') {
+    const customFiltersEl = select('custom-date-filters');
+    const applyBtnEl = document.querySelector('[data-action="apply-filters"]');
+    const isCustom = target.value === 'custom';
 
-            if (!isCustom) {
-                hapticFeedback('light');
-                scheduleDashboardUpdate();
+    if (customFiltersEl) customFiltersEl.classList.toggle('hidden', !isCustom);
+    if (applyBtnEl) applyBtnEl.classList.toggle('hidden', !isCustom);
+
+    if (!isCustom) {
+        hapticFeedback('light');
+        scheduleDashboardUpdate();
+    }
+}
+    if (target.id === 'movimiento-recurrente') {
+        select('recurrent-options').classList.toggle('hidden', !target.checked);
+        if(target.checked && !select('recurrent-next-date').value) {
+            select('recurrent-next-date').value = select('movimiento-fecha').value;
+        }
+    }
+    
+    if (target.id === 'recurrent-frequency') {
+        const endDateGroup = select('recurrent-end-date').closest('.form-group');
+        if (endDateGroup) {
+            endDateGroup.classList.toggle('hidden', target.value === 'once');
+        }
+    }
+});
+    const importFileInput = select('import-file-input'); if (importFileInput) importFileInput.addEventListener('change', (e) => { if(e.target.files) handleJSONFileSelect(e.target.files[0]); });
+    const calculatorGrid = select('calculator-grid'); if (calculatorGrid) calculatorGrid.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
+    const searchInput = select('global-search-input'); if (searchInput) searchInput.addEventListener('input', () => { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => { performGlobalSearch(searchInput.value); }, 250); });
+    document.body.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); e.stopPropagation(); showGlobalSearchModal(); } });
+    const dropZone = select('json-drop-zone'); if (dropZone) { dropZone.addEventListener('click', () => { const el = select('import-file-input'); if (el) el.click() }); dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); }); dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); }); dropZone.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const files = e.dataTransfer.files; if (files && files.length > 0) handleJSONFileSelect(files); }); }
+    const suggestionsBox = select('description-suggestions'); if (suggestionsBox) { suggestionsBox.addEventListener('click', (e) => { const suggestionItem = e.target.closest('.suggestion-item'); if (suggestionItem) { const { description, conceptoId, cuentaId } = suggestionItem.dataset; applyDescriptionSuggestion(description, conceptoId, cuentaId); } }); }
+    const fechaDisplayButton = select('movimiento-fecha-display'); const fechaRealInput = select('movimiento-fecha'); if (fechaDisplayButton && fechaRealInput) { fechaDisplayButton.addEventListener('click', () => fechaRealInput.showPicker()); fechaRealInput.addEventListener('input', () => updateDateDisplay(fechaRealInput)); }
+    const diarioContainer = select('diario-page');
+if (diarioContainer) {
+    const mainScroller = selectOne('.app-layout__main');
+
+    diarioContainer.addEventListener('touchstart', (e) => {
+        if (mainScroller.scrollTop > 0) return;
+
+        ptrState.startY = e.touches[0].clientY;
+        ptrState.isPulling = true;
+        
+        if (e.target.closest('.transaction-card')) {
+            handleInteractionStart(e);
+        }
+    }, { passive: true });
+
+    diarioContainer.addEventListener('touchmove', (e) => {
+        if (!ptrState.isPulling) {
+            handleInteractionMove(e);
+            return;
+        }
+
+        const currentY = e.touches[0].clientY;
+        ptrState.distance = currentY - ptrState.startY;
+
+        if (ptrState.distance > 0) {
+            e.preventDefault(); 
+            
+            const indicator = select('pull-to-refresh-indicator');
+            if (indicator) {
+                indicator.classList.add('visible');
+                const rotation = Math.min(ptrState.distance * 2, 360);
+                indicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`;
             }
         }
-        if (target.id === 'movimiento-recurrente') {
-            select('recurrent-options').classList.toggle('hidden', !target.checked);
-            if(target.checked && !select('recurrent-next-date').value) {
-                select('recurrent-next-date').value = select('movimiento-fecha').value;
+    }, { passive: false });
+
+    diarioContainer.addEventListener('touchend', async (e) => {
+        const indicator = select('pull-to-refresh-indicator');
+
+        if (ptrState.isPulling && ptrState.distance > ptrState.threshold) {
+            hapticFeedback('medium');
+            if (indicator) {
+                indicator.querySelector('.spinner').style.animation = 'spin 1s linear infinite';
             }
+
+            await loadMoreMovements(true);
+
+            setTimeout(() => {
+                if (indicator) {
+                    indicator.classList.remove('visible');
+                    indicator.querySelector('.spinner').style.animation = '';
+                }
+            }, 500);
+
+        } else if (indicator) {
+            indicator.classList.remove('visible');
         }
-        if (target.id === 'recurrent-frequency') {
-            const endDateGroup = select('recurrent-end-date').closest('.form-group');
-            if (endDateGroup) {
-                endDateGroup.classList.toggle('hidden', target.value === 'once');
-            }
-        }
+        
+        ptrState.isPulling = false;
+        ptrState.distance = 0;
+
+        handleInteractionEnd(e);
     });
 
-    const importFileInput = select('import-file-input');
-    if (importFileInput) importFileInput.addEventListener('change', (e) => { if(e.target.files) handleJSONFileSelect(e.target.files[0]); });
-
-    const calculatorGrid = select('calculator-grid');
-    if (calculatorGrid) calculatorGrid.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
-
-    const searchInput = select('global-search-input');
-    if (searchInput) searchInput.addEventListener('input', () => { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => performGlobalSearch(searchInput.value), 250); });
-
-    document.body.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); e.stopPropagation(); showGlobalSearchModal(); } });
-
-    const dropZone = select('json-drop-zone');
-    if (dropZone) {
-        dropZone.addEventListener('click', () => { const el = select('import-file-input'); if (el) el.click(); });
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); });
-        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); });
-        dropZone.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const files = e.dataTransfer.files; if (files && files.length > 0) handleJSONFileSelect(files); });
-    }
-
-    const suggestionsBox = select('description-suggestions');
-    if (suggestionsBox) { suggestionsBox.addEventListener('click', (e) => { const suggestionItem = e.target.closest('.suggestion-item'); if (suggestionItem) applyDescriptionSuggestion(suggestionItem); }); }
-    
-    const fechaDisplayButton = select('movimiento-fecha-display');
-    const fechaRealInput = select('movimiento-fecha');
-    if (fechaDisplayButton && fechaRealInput) {
-        fechaDisplayButton.addEventListener('click', () => fechaRealInput.showPicker());
-        fechaRealInput.addEventListener('input', () => updateDateDisplay(fechaRealInput));
-    }
-    
-    const diarioContainer = select('movimientos-page'); // Corregido de 'diario-page'
-    if (diarioContainer) {
-        const mainScroller = selectOne('.app-layout__main');
-        diarioContainer.addEventListener('touchstart', (e) => {
-            if (mainScroller.scrollTop > 0) return;
-            ptrState.startY = e.touches[0].clientY;
-            ptrState.isPulling = true;
-            if (e.target.closest('.transaction-card')) {
-                handleInteractionStart(e);
-            }
-        }, { passive: true });
-        diarioContainer.addEventListener('touchmove', (e) => {
-            if (!ptrState.isPulling) { handleInteractionMove(e); return; }
-            const currentY = e.touches[0].clientY;
-            ptrState.distance = currentY - ptrState.startY;
-            if (ptrState.distance > 0) {
-                e.preventDefault(); 
-                const indicator = select('pull-to-refresh-indicator');
-                if (indicator) {
-                    indicator.classList.add('visible');
-                    const rotation = Math.min(ptrState.distance * 2, 360);
-                    indicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`;
-                }
-            }
-        }, { passive: false });
-        diarioContainer.addEventListener('touchend', async (e) => {
-            const indicator = select('pull-to-refresh-indicator');
-            if (ptrState.isPulling && ptrState.distance > ptrState.threshold) {
-                hapticFeedback('medium');
-                if (indicator) { indicator.querySelector('.spinner').style.animation = 'spin 1s linear infinite'; }
-                await loadMoreMovements(true);
-                setTimeout(() => {
-                    if (indicator) { indicator.classList.remove('visible'); indicator.querySelector('.spinner').style.animation = ''; }
-                }, 500);
-            } else if (indicator) { indicator.classList.remove('visible'); }
-            ptrState.isPulling = false;
-            ptrState.distance = 0;
-            handleInteractionEnd(e);
-        });
-        diarioContainer.addEventListener('mousedown', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e));
-        diarioContainer.addEventListener('mousemove', handleInteractionMove);
-        diarioContainer.addEventListener('mouseup', handleInteractionEnd);
-        diarioContainer.addEventListener('mouseleave', handleInteractionEnd);
-    }
-
+    diarioContainer.addEventListener('mousedown', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e));
+    diarioContainer.addEventListener('mousemove', handleInteractionMove);
+    diarioContainer.addEventListener('mouseup', handleInteractionEnd);
+    diarioContainer.addEventListener('mouseleave', handleInteractionEnd);
+}
     const mainScroller = selectOne('.app-layout__main');
     if (mainScroller) {
         let scrollRAF = null;
         mainScroller.addEventListener('scroll', () => {
             if (scrollRAF) window.cancelAnimationFrame(scrollRAF);
             scrollRAF = window.requestAnimationFrame(() => {
-                if (diarioViewMode === 'list' && select('movimientos-page')?.classList.contains('view--active')) {
+                if (diarioViewMode === 'list' && select('diario-page')?.classList.contains('view--active')) {
                     renderVisibleItems();
                 }
             });
         }, { passive: true });
     }
-    
     document.body.addEventListener('toggle', (e) => {
-        const detailsElement = e.target;
-        if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) {
-            return;
+    const detailsElement = e.target;
+    if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) {
+        return;
+    }
+    
+    if (detailsElement.open) {
+        const id = detailsElement.id;
+        const informeId = id.replace('acordeon-', '');
+        const container = select(`informe-content-${informeId}`);
+        
+        if (container && container.querySelector('.form-label')) {
+            renderInformeDetallado(informeId);
         }
-        if (detailsElement.open) {
-            const id = detailsElement.id;
-            const informeId = id.replace('acordeon-', '');
-            const container = select(`informe-content-${informeId}`);
-            if (container && container.querySelector('.form-label')) {
-                renderInformeDetallado(informeId);
-            }
-        }
-    }, true);
-}; // <-- ESTA ES LA LLAVE QUE FALTA
+    }
+}, true);
+};
+// =================================================================
+// === FIN: BLOQUE DE CÓDIGO CORREGIDO PARA REEMPLAZAR           ===
+// =================================================================
 
+	const handleSetInvestmentChartMode = (mode) => {
+    if (investmentChartMode === mode) return; // No hacer nada si ya está en ese modo
+    hapticFeedback('light');
+    investmentChartMode = mode; // Actualizamos el estado global
+    
+    // LA SOLUCIÓN:
+    // Aplicamos la misma lógica aquí. Forzamos el redibujado en el contenedor correcto.
+    renderInversionesView();
+};
+            
+        const showImportJSONWizard = () => {
+            jsonWizardState = { file: null, data: null, preview: { counts: {}, meta: {} } };
+            goToJSONStep(1);
+            const errorEl = select('json-file-error');
+            const textEl = select('json-drop-zone-text');
+            if(errorEl) errorEl.textContent = '';
+            if(textEl) textEl.textContent = 'Arrastra tu archivo aquí o haz clic';
+            showModal('json-import-wizard-modal');
+        };
+
+        const goToJSONStep = (stepNumber) => {
+            selectAll('.json-wizard-step').forEach(step => step.style.display = 'none');
+            const targetStep = select(`json-wizard-step-${stepNumber}`);
+            if (targetStep) targetStep.style.display = 'flex';
+        };
+
+        const handleJSONFileSelect = (file) => {
+            const errorEl = select('json-file-error');
+            if(!errorEl) return;
+            errorEl.textContent = '';
+
+            if (!file.type.includes('json')) {
+                errorEl.textContent = 'Error: El archivo debe ser de tipo .json.';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    let data = JSON.parse(event.target.result);
+                    let dataToAnalyze = data;
+
+                    if (data.meta && data.data) {
+                        jsonWizardState.preview.meta = data.meta;
+                        dataToAnalyze = data.data;
+                    } else {
+                        jsonWizardState.preview.meta = { appName: 'Cuentas (Formato Antiguo)', exportDate: 'N/A' };
+                    }
+
+                    if (!dataToAnalyze.cuentas || !dataToAnalyze.conceptos || !dataToAnalyze.movimientos) {
+                        throw new Error("El archivo no tiene la estructura de una copia de seguridad válida.");
+                    }
+
+                    jsonWizardState.data = dataToAnalyze;
+                    
+                    const counts = {};
+                    for (const key in dataToAnalyze) {
+                        if (Array.isArray(dataToAnalyze[key])) {
+                            counts[key] = dataToAnalyze[key].length;
+                        }
+                    }
+                    jsonWizardState.preview.counts = counts;
+                    
+                    renderJSONPreview();
+                    goToJSONStep(2);
+
+                } catch (error) {
+                    console.error("Error al procesar el archivo JSON:", error);
+                    errorEl.textContent = `Error: ${error.message}`;
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        const renderJSONPreview = () => {
+            const previewList = select('json-preview-list');
+            if(!previewList) return;
+            const { counts } = jsonWizardState.preview;
+            
+            const friendlyNames = {
+                cuentas: 'Cuentas', conceptos: 'Conceptos', movimientos: 'Movimientos',
+                presupuestos: 'Presupuestos', recurrentes: 'Recurrentes',
+                inversiones_historial: 'Historial de Inversión', inversion_cashflows: 'Flujos de Capital'
+            };
+            
+            let html = '';
+            for(const key in counts) {
+                if(counts[key] > 0) {
+                    html += `<li><span class="material-icons">check_circle</span> <strong>${counts[key]}</strong> ${friendlyNames[key] || key}</li>`;
+                }
+            }
+            
+            previewList.innerHTML = html || `<li><span class="material-icons">info</span>El archivo parece estar vacío.</li>`;
+        };
+
+        const handleFinalJsonImport = async (btn) => {
+            goToJSONStep(3);
+            setButtonLoading(btn, true, 'Importando...');
+            select('json-import-progress').style.display = 'block';
+            select('json-import-result').style.display = 'none';
+
+            try {
+                const dataToImport = jsonWizardState.data;
+                const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+
+                for (const collectionName of collectionsToClear) {
+                    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
+                    if (snapshot.empty) continue;
+                    let batch = fbDb.batch();
+                    let count = 0;
+                    for (const doc of snapshot.docs) {
+                        batch.delete(doc.ref);
+                        count++;
+                        if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+                    }
+                    if(count > 0) await batch.commit();
+                }
+                
+                for (const collectionName of Object.keys(dataToImport)) {
+                    const items = dataToImport[collectionName];
+                    if (Array.isArray(items) && items.length > 0) {
+                        let batch = fbDb.batch();
+                        let count = 0;
+                        for (const item of items) {
+                            if (item.id) {
+                                const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
+                                batch.set(docRef, item);
+                                count++;
+                                if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+                            }
+                        }
+                        if(count > 0) await batch.commit();
+                    } else if (collectionName === 'config') {
+                        await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
+                    }
+                }
+                
+                select('json-import-progress').style.display = 'none';
+                select('json-import-result').style.display = 'block';
+                select('json-result-message').textContent = `Se han importado los datos correctamente. La aplicación se recargará.`;
+                hapticFeedback('success');
+                
+                setTimeout(() => location.reload(), 4000);
+
+            } catch (error) {
+                console.error("Error durante la importación final:", error);
+                showToast("Error crítico durante la importación.", "danger", 5000);
+                select('json-result-title').textContent = '¡Error en la Importación!';
+                select('json-result-message').textContent = `Ocurrió un error. Por favor, revisa la consola e inténtalo de nuevo.`;
+                select('json-import-result .material-icons').style.color = 'var(--c-danger)';
+                setButtonLoading(btn, false);
+            }
+        };
+const toggleFabMenu = () => {
+    const container = document.querySelector('.fab-container');
+    if (!container) return;
+
+    hapticFeedback('medium');
+    container.classList.toggle('fab-container--active');
+
+    // Cierra el menú si se pulsa el overlay
+    const overlay = container.querySelector('.fab-overlay');
+    const closeMenu = () => container.classList.remove('fab-container--active');
+    overlay.addEventListener('click', closeMenu, { once: true });
+};
+    
 // =================================================================
+// === INICIO: NUEVA FUNCIÓN PARA CONFIRMAR MOVIMIENTOS RECURRENTES ===
+// =================================================================
+const handleConfirmRecurrent = async (id, btn) => {
+    if (btn) setButtonLoading(btn, true);
+
+    const recurrenteIndex = db.recurrentes.findIndex(r => r.id === id);
+    if (recurrenteIndex === -1) {
+        showToast("Error: no se encontró la operación recurrente.", "danger");
+        if (btn) setButtonLoading(btn, false);
+        return;
+    }
+    const recurrente = db.recurrentes[recurrenteIndex];
+
+    try {
+        const newMovementId = generateId();
+        
+        // Lógica optimista (actualización local inmediata)
+        const newMovementData = {
+            id: newMovementId,
+            cantidad: recurrente.cantidad,
+            descripcion: recurrente.descripcion,
+            fecha: new Date().toISOString(), // Se añade con la fecha de hoy
+            tipo: recurrente.tipo,
+            cuentaId: recurrente.cuentaId,
+            conceptoId: recurrente.conceptoId,
+            cuentaOrigenId: recurrente.cuentaOrigenId,
+            cuentaDestinoId: recurrente.cuentaDestinoId
+        };
+        
+        db.movimientos.unshift(newMovementData);
+
+        // === ¡AQUÍ ESTÁ LA MAGIA! ===
+        if (recurrente.frequency === 'once') {
+            // Si es de única vez, lo eliminamos de la lista local de recurrentes.
+            db.recurrentes.splice(recurrenteIndex, 1);
+        } else {
+            // Si es periódico, calculamos la siguiente fecha.
+            const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
+            db.recurrentes[recurrenteIndex].nextDate = nextDueDate.toISOString().slice(0, 10);
+        }
+        
+        // Refrescamos la UI al instante
+        const activePage = document.querySelector('.view--active');
+        if (activePage && activePage.id === PAGE_IDS.DIARIO) {
+            updateLocalDataAndRefreshUI();
+        } else if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+            renderPlanificacionPage();
+        }
+
+        // Sincronización en segundo plano con Firebase
+        const batch = fbDb.batch();
+        const newMovementRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovementId);
+        batch.set(newMovementRef, newMovementData);
+        
+        const recurrenteRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(id);
+
+        // === ¡LA MISMA LÓGICA EN FIREBASE! ===
+        if (recurrente.frequency === 'once') {
+            // Si es de única vez, lo borramos de la base de datos.
+            batch.delete(recurrenteRef);
+        } else {
+            // Si es periódico, actualizamos su próxima fecha.
+            const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
+            batch.update(recurrenteRef, { nextDate: nextDueDate.toISOString().slice(0, 10) });
+        }
+
+        // Ajuste de saldos (esto no cambia)
+        if (recurrente.tipo === 'traspaso') {
+            const origenRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(recurrente.cuentaOrigenId);
+            const destinoRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(recurrente.cuentaDestinoId);
+            batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(-recurrente.cantidad) });
+            batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(recurrente.cantidad) });
+        } else {
+            const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(recurrente.cuentaId);
+            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(recurrente.cantidad) });
+        }
+
+        await batch.commit();
+
+        hapticFeedback('success');
+        showToast("Movimiento añadido desde recurrente.", "info");
+
+    } catch (error) {
+        console.error("Error al confirmar el movimiento recurrente:", error);
+        showToast("No se pudo añadir el movimiento recurrente.", "danger");
+        // En caso de error, podríamos necesitar recargar los datos para asegurar la consistencia.
+    } finally {
+        if (btn) setButtonLoading(btn, false);
+    }
+};
+
+const handleSkipRecurrent = async (id, btn) => {
+    if (btn) setButtonLoading(btn, true);
+
+    const recurrente = db.recurrentes.find(r => r.id === id);
+    if (!recurrente) {
+        showToast("Error: no se encontró la operación recurrente.", "danger");
+        if (btn) setButtonLoading(btn, false);
+        return;
+    }
+
+    try {
+        // === ¡LA MISMA MAGIA OTRA VEZ! ===
+        if (recurrente.frequency === 'once') {
+            // Si es de única vez y lo omitimos, simplemente lo borramos.
+            await deleteDoc('recurrentes', id);
+            showToast("Operación programada eliminada.", "info");
+        } else {
+            // Si es periódico, calculamos la siguiente fecha para omitir la actual.
+            const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
+            await saveDoc('recurrentes', id, { nextDate: nextDueDate.toISOString().slice(0, 10) });
+            showToast("Operación recurrente omitida esta vez.", "info");
+        }
+
+        hapticFeedback('success');
+
+        // La animación de borrado y refresco de UI funciona para ambos casos.
+        const itemEl = select(`pending-recurrente-${id}`);
+        if (itemEl) {
+            itemEl.classList.add('item-deleting');
+            itemEl.addEventListener('animationend', () => {
+                const activePage = document.querySelector('.view--active');
+                if (activePage && activePage.id === PAGE_IDS.DIARIO) {
+                    updateVirtualListUI();
+                } else if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+                    renderPlanificacionPage();
+                } else {
+                    scheduleDashboardUpdate();
+                }
+            }, { once: true });
+        }
+
+    } catch (error) {
+        console.error("Error al omitir el movimiento recurrente:", error);
+        showToast("No se pudo omitir la operación.", "danger");
+    } finally {
+        if (btn) setButtonLoading(btn, false);
+    }
+};
+
+const generateCalendarGrid = (date, dataMap) => {
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
+    
+    const firstDayOffset = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+    
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Obtenemos el número de días del mes de forma segura en UTC.
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    // --- FIN DE LA CORRECCIÓN ---
+
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const monthName = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    
+    let gridHtml = `<div class="calendar-header">
+        <button class="icon-btn" data-action="calendar-nav" data-direction="prev"><span class="material-icons">chevron_left</span></button>
+        <h3 class="calendar-header__title">${monthName}</h3>
+        <button class="icon-btn" data-action="calendar-nav" data-direction="next"><span class="material-icons">chevron_right</span></button>
+    </div>`;
+
+    gridHtml += '<div class="calendar-grid">';
+    const weekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    weekdays.forEach(day => gridHtml += `<div class="calendar-weekday">${day}</div>`);
+
+    let dayOfMonth = 1;
+    for (let i = 0; i < 42; i++) {
+        // La condición del bucle se mantiene, ya que con el `daysInMonth` corregido, debería funcionar.
+        if (i < firstDayOffset || dayOfMonth > daysInMonth) {
+            gridHtml += `<div class="calendar-day empty"></div>`;
+        } else {
+            const currentDate = new Date(Date.UTC(year, month, dayOfMonth));
+            const dateKey = currentDate.toISOString().slice(0, 10);
+            const dayData = dataMap.get(dateKey);
+            
+            let classes = 'calendar-day';
+            if (currentDate.getTime() === today.getTime()) {
+                classes += ' is-today';
+            }
+
+            gridHtml += `<div class="${classes}" data-action="show-day-details" data-date="${dateKey}">
+                <span class="calendar-day__number">${dayOfMonth}</span>`;
+
+            if (dayData) {
+                if (dayData.total !== undefined) {
+                    const totalClass = dayData.total >= 0 ? 'text-positive' : 'text-negative';
+                    if (Math.abs(dayData.total) > 0) {
+                        gridHtml += `<span class="calendar-day__total ${totalClass}">${formatCurrency(dayData.total)}</span>`;
+                    }
+                }
+                if (dayData.markers) {
+                    gridHtml += `<div class="calendar-day__markers">`;
+                    if(dayData.markers.has('income')) gridHtml += `<div class="calendar-day__marker marker--income"></div>`;
+                    if(dayData.markers.has('expense')) gridHtml += `<div class="calendar-day__marker marker--expense"></div>`;
+                    gridHtml += `</div>`;
+                }
+            }
+            
+            gridHtml += `</div>`;
+            dayOfMonth++;
+        }
+    }
+    gridHtml += '</div>';
+    return gridHtml;
+};
+// Reemplaza esta función completa:
+const renderDiarioCalendar = async () => {
+    const container = select('diario-view-container');
+    if (!container) return;
+    
+    container.innerHTML = `<div class="calendar-container skeleton" style="height: 400px;"></div>`;
+
+    try {
+        // Aseguramos que diarioCalendarDate siempre sea un objeto Date válido
+        if (!(diarioCalendarDate instanceof Date) || isNaN(diarioCalendarDate)) {
+            diarioCalendarDate = new Date();
+        }
+        // Forzamos la fecha a mediodía para evitar problemas de zona horaria en los cálculos
+        diarioCalendarDate.setHours(12, 0, 0, 0);
+
+        const year = diarioCalendarDate.getFullYear();
+        const month = diarioCalendarDate.getMonth();
+        
+        const startDate = new Date(Date.UTC(year, month, 1));
+        const endDate = new Date(Date.UTC(year, month + 1, 1)); // El primer instante del siguiente mes
+        
+        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
+            .where('fecha', '>=', startDate.toISOString())
+            .where('fecha', '<', endDate.toISOString())
+            .get();
+
+        const movementsOfMonth = snapshot.docs.map(doc => doc.data());
+        
+        const dataMap = new Map();
+        movementsOfMonth.forEach(m => {
+            const dateKey = m.fecha.slice(0, 10);
+            if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, markers: new Set() });
+            
+            let amount = 0;
+            const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+
+            if (m.tipo === 'traspaso') {
+                if (visibleAccountIds.has(m.cuentaOrigenId) && !visibleAccountIds.has(m.cuentaDestinoId)) amount = -m.cantidad;
+                else if (!visibleAccountIds.has(m.cuentaOrigenId) && visibleAccountIds.has(m.cuentaDestinoId)) amount = m.cantidad;
+            } else {
+                if (visibleAccountIds.has(m.cuentaId)) amount = m.cantidad;
+            }
+
+            if (amount !== 0) {
+                 dataMap.get(dateKey).total += amount;
+                 if (amount > 0) dataMap.get(dateKey).markers.add('income');
+                 if (amount < 0) dataMap.get(dateKey).markers.add('expense');
+            }
+        });
+        
+        container.innerHTML = `<div class="calendar-container" data-context="diario">${generateCalendarGrid(diarioCalendarDate, dataMap)}</div>`;
+    } catch(error) {
+        console.error("Error fetching calendar data:", error);
+        container.innerHTML = `<div class="empty-state"><p class="text-danger">No se pudieron cargar los datos del calendario.</p></div>`;
+    }
+};
+
+
+const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
+    // Revertir el impacto del movimiento antiguo si estamos editando
+    if (oldData) {
+        if (oldData.tipo === 'traspaso') {
+            const origen = db.cuentas.find(c => c.id === oldData.cuentaOrigenId);
+            if (origen) origen.saldo += oldData.cantidad;
+            const destino = db.cuentas.find(c => c.id === oldData.cuentaDestinoId);
+            if (destino) destino.saldo -= oldData.cantidad;
+        } else {
+            const cuenta = db.cuentas.find(c => c.id === oldData.cuentaId);
+            if (cuenta) cuenta.saldo -= oldData.cantidad;
+        }
+    }
+
+    // Aplicar el impacto del nuevo movimiento
+    if (newData.tipo === 'traspaso') {
+        const origen = db.cuentas.find(c => c.id === newData.cuentaOrigenId);
+        if (origen) origen.saldo -= newData.cantidad;
+        const destino = db.cuentas.find(c => c.id === newData.cuentaDestinoId);
+        if (destino) destino.saldo += newData.cantidad;
+    } else {
+        const cuenta = db.cuentas.find(c => c.id === newData.cuentaId);
+        if (cuenta) cuenta.saldo += newData.cantidad;
+    }
+};
+
+const handleSaveMovement = async (form, btn) => {
+    clearAllErrors(form.id);
+    if (!validateMovementForm()) {
+        hapticFeedback('error');
+        showToast('Por favor, revisa los campos marcados en rojo.', 'warning');
+        return false;
+    }
+
+    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
+    setButtonLoading(btn, true);
+
+    const isRecurrent = select('movimiento-recurrente').checked;
+
+    if (isRecurrent) {
+        // La lógica para recurrentes no ha cambiado y sigue siendo correcta.
+        try {
+            const id = select('movimiento-id').value || generateId();
+            
+            // Lógica para determinar la cantidad en recurrentes
+            const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
+            let cantidadRecurrente = Math.round(cantidadPositiva * 100);
+            const tipoRecurrente = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+
+            if (tipoRecurrente === 'gasto') {
+                 cantidadRecurrente = -Math.abs(cantidadRecurrente);
+            } else {
+                 cantidadRecurrente = Math.abs(cantidadRecurrente);
+            }
+            
+            const dataToSave = {
+                id: id,
+                cantidad: tipoRecurrente === 'traspaso' ? Math.abs(cantidadRecurrente) : cantidadRecurrente,
+                descripcion: select('movimiento-descripcion').value.trim(),
+                tipo: tipoRecurrente === 'traspaso' ? 'traspaso' : 'movimiento',
+                cuentaId: select('movimiento-cuenta').value,
+                conceptoId: select('movimiento-concepto').value,
+                cuentaOrigenId: select('movimiento-cuenta-origen').value,
+                cuentaDestinoId: select('movimiento-cuenta-destino').value,
+                frequency: select('recurrent-frequency').value,
+                nextDate: select('recurrent-next-date').value,
+                endDate: select('recurrent-end-date').value || null
+            };
+
+            await saveDoc('recurrentes', id, dataToSave);
+
+            setButtonLoading(btn, false);
+            hapticFeedback('success');
+			triggerSaveAnimation(btn, dataToSave.cantidad >= 0 ? 'green' : 'red');
+            if (!isSaveAndNew) {
+                hideModal('movimiento-modal');
+                showToast(select('movimiento-mode').value === 'new' ? 'Operación programada.' : 'Operación actualizada.');
+            } else {
+                form.reset();
+                setMovimientoFormType('gasto'); // Volver a Gasto por defecto
+                showToast('Operación programada, puedes añadir otra.', 'info');
+                select('movimiento-cantidad').focus();
+            }
+
+            const activePage = document.querySelector('.view--active');
+            if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+                renderPlanificacionPage();
+            }
+            return true;
+
+        } catch (error) {
+            console.error("Error al guardar la operación recurrente:", error);
+            showToast("No se pudo guardar la operación recurrente.", "danger");
+            setButtonLoading(btn, false);
+            return false;
+        }
+
+    } 
+	else {
+    // --- ✅ LÓGICA CORREGIDA PARA MOVIMIENTOS NORMALES (NO RECURRENTES) ---
+    
+    const mode = select('movimiento-mode').value;
+    const movementId = select('movimiento-id').value;
+
+    // --- ✅ INICIO DE LA CORRECCIÓN ---
+    // Usamos el mismo método robusto para obtener el tipo de movimiento
+    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+    // --- ✅ FIN DE LA CORRECCIÓN ---
+    
+    const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
+    let cantidadFinal = Math.round(Math.abs(cantidadPositiva) * 100);
+
+    if (selectedType === 'gasto') {
+        cantidadFinal = -cantidadFinal;
+    } else {
+        // Para 'ingreso' y 'traspaso', la cantidad es positiva
+        cantidadFinal = Math.abs(cantidadFinal);
+    }
+
+    const dataFromForm = {
+        id: movementId || generateId(),
+        cantidad: cantidadFinal,
+        tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
+        descripcion: (() => {
+    const descInput = select('movimiento-descripcion').value.trim();
+    if (selectedType === 'traspaso' && descInput === '') {
+        const origen = select('movimiento-cuenta-origen');
+        const destino = select('movimiento-cuenta-destino');
+        const nombreOrigen = origen.options[origen.selectedIndex]?.text || '?';
+        const nombreDestino = destino.options[destino.selectedIndex]?.text || '?';
+        return `Traspaso de ${nombreOrigen} a ${nombreDestino}`;
+    }
+    return descInput;
+})(),
+        fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
+        cuentaId: select('movimiento-cuenta').value,
+        conceptoId: select('movimiento-concepto').value,
+        cuentaOrigenId: select('movimiento-cuenta-origen').value,
+        cuentaDestinoId: select('movimiento-cuenta-destino').value,
+    };
+
+    try {
+        let oldMovementData = null;
+        if (mode.startsWith('edit')) {
+            oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
+        }
+        
+        applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
+
+        if (mode.startsWith('edit')) {
+            const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
+            if (index !== -1) db.movimientos[index] = dataFromForm;
+        } else {
+            db.movimientos.unshift(dataFromForm);
+            newMovementIdToHighlight = dataFromForm.id;
+        }
+        db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
+
+        updateLocalDataAndRefreshUI();
+        
+        const activePage = document.querySelector('.view--active');
+        if (activePage && activePage.id === PAGE_IDS.DIARIO) {
+            const mainScroller = document.querySelector('.app-layout__main');
+            if (mainScroller) mainScroller.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        await fbDb.runTransaction(async (transaction) => {
+            let oldDataForTx = null;
+            if (mode.startsWith('edit')) {
+                const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
+                const oldDoc = await transaction.get(oldDocRef);
+                if (oldDoc.exists) oldDataForTx = oldDoc.data();
+            }
+            if (oldDataForTx) {
+                if (oldDataForTx.tipo === 'traspaso') {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                } else {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                }
+            }
+            if (dataFromForm.tipo === 'traspaso') {
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            } else {
+                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            }
+            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
+            transaction.set(movRef, dataFromForm);
+        });
+        
+        setButtonLoading(btn, false);
+        hapticFeedback('success');
+        triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+
+        if (!isSaveAndNew) {
+            setTimeout(() => hideModal('movimiento-modal'), 200);
+            showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+        } else {
+            form.reset();
+            setMovimientoFormType('gasto');
+            const today = new Date();
+            const fechaInput = select('movimiento-fecha');
+            fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+            updateDateDisplay(fechaInput);
+            select('movimiento-cantidad').focus();
+        }
+        return true;
+
+    } catch (error) {
+        console.error("Error al guardar el movimiento:", error);
+        showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
+        setButtonLoading(btn, false);
+        if (select('diario-page')?.classList.contains('view--active')) {
+             await renderDiarioPage();
+        }
+        return false;
+    }
+}
+};
+
+/**
+
+Prepara el formulario para duplicar un movimiento existente.
+
+@param {object} movementToDuplicate - El objeto del movimiento que se va a copiar.
+*/
+const handleDuplicateMovement = (movementToDuplicate) => {
+if (!movementToDuplicate) return;
+
+hapticFeedback('medium');
+
+// 1. Abrimos el formulario de edición con los datos del movimiento original.
+// Esto rellena todos los campos por nosotros (cantidad, descripción, etc.).
+startMovementForm(movementToDuplicate.id, false);
+
+// 2. Usamos un pequeño retardo para asegurarnos de que el formulario ya está visible
+// antes de modificarlo para que actúe como "Nuevo" en lugar de "Editar".
+setTimeout(() => {
+// 3. Modificamos el estado del formulario para que sepa que vamos a crear
+// un movimiento NUEVO, no a actualizar el antiguo.
+select('movimiento-mode').value = 'new';
+select('movimiento-id').value = ''; // Borramos el ID antiguo, ¡muy importante!
+select('form-movimiento-title').textContent = 'Duplicar Movimiento';
+
+
+// 4. Ocultamos los botones que no tienen sentido aquí (borrar y duplicar de nuevo).
+ select('delete-movimiento-btn').classList.add('hidden');
+ select('duplicate-movimiento-btn').classList.add('hidden');
+ 
+ // 5. Ponemos la fecha de hoy por defecto, que es lo más común al duplicar.
+ const today = new Date();
+ const fechaInput = select('movimiento-fecha');
+ fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+ updateDateDisplay(fechaInput); // Actualizamos el texto "Hoy"
+
+ showToast('Datos duplicados. Ajusta y guarda.', 'info');
+
+}, 50); // 50 milisegundos es suficiente.
+};
+
+
+const handleAddConcept = async (btn) => { 
+     const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
+     if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
+     const newId = generateId();
+     await saveDoc('conceptos', newId, { id: newId, nombre, icon: 'label' }, btn);
+     hapticFeedback('success'); 
+     showToast('Concepto añadido.');
+     (select('add-concepto-form')).reset(); 
+ };
+ const handleAddAccount = async (btn) => { 
+     const nombre = (select('new-cuenta-nombre')).value.trim(); 
+     const tipo = toSentenceCase((select('new-cuenta-tipo')).value.trim()); 
+     if (!nombre || !tipo) { showToast('El nombre y el tipo son obligatorios.', 'warning'); return; } 
+     const newId = generateId();
+     await saveDoc('cuentas', newId, { id: newId, nombre, tipo, saldo: 0, esInversion: false, offBalance: isOffBalanceMode, fechaCreacion: new Date().toISOString() }, btn);
+     hapticFeedback('success'); 
+     showToast('Cuenta añadida.');
+     (select('add-cuenta-form')).reset();
+ };
+ const handleSaveConfig = async (btn) => { 
+     setButtonLoading(btn, true);
+     const newConfig = { dashboardWidgets: (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS };
+     await fbDb.collection('users').doc(currentUser.uid).set({ config: newConfig }, { merge: true });
+     localStorage.setItem('skipIntro', String(newConfig.skipIntro));
+     setButtonLoading(btn, false);
+     hapticFeedback('success'); showToast('Configuración guardada.'); 
+ };
+ 
+
+          const handleExportData = async (btn) => {
+     if (!currentUser) { showToast("No hay usuario autenticado.", "danger"); return; }
+     setButtonLoading(btn, true, 'Exportando...');
+     try {
+         const dataPayload = {};
+         const collections = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+         
+         for (const collectionName of collections) {
+             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
+             dataPayload[collectionName] = snapshot.docs.map(doc => doc.data());
+         }
+         dataPayload.config = db.config;
+
+         const exportObject = {
+             meta: {
+                 appName: "Cuentas aiDANaI",
+                 version: "2.0.0",
+                 exportDate: new Date().toISOString()
+             },
+             data: dataPayload
+         };
+         
+         const jsonString = JSON.stringify(exportObject, null, 2);
+         const blob = new Blob([jsonString], { type: 'application/json' });
+         const url = URL.createObjectURL(blob);
+         const a = document.createElement('a');
+         a.href = url;
+         a.download = `cuentas_aidanai_backup_${new Date().toISOString().slice(0,10)}.json`;
+         document.body.appendChild(a);
+         a.click();
+         document.body.removeChild(a);
+         URL.revokeObjectURL(url);
+         showToast("Exportación JSON completada.", "info");
+     } catch (error) {
+         console.error("Error al exportar datos:", error);
+         showToast("Error durante la exportación.", "danger");
+     } finally {
+         setButtonLoading(btn, false);
+     }
+ };
+ const formatDateForCsv = (isoDateString) => {
+     if (!isoDateString) return '';
+     const date = new Date(isoDateString);
+     const day = String(date.getUTCDate()).padStart(2, '0');
+     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+     const year = date.getUTCFullYear();
+     return `${day}/${month}/${year}`;
+ };
+
+ const handleExportCsv = async (btn) => {
+     if (!currentUser) { showToast("No hay usuario autenticado.", "danger"); return; }
+     setButtonLoading(btn, true, 'Exportando...');
+     
+     try {
+         const allMovements = await fetchAllMovementsForSearch();
+         const allCuentas = db.cuentas;
+         const allConceptos = db.conceptos;
+
+         const cuentasMap = new Map(allCuentas.map(c => [c.id, c]));
+         const conceptosMap = new Map(allConceptos.map(c => [c.id, c]));
+
+         let csvRows = [];
+         const csvHeader = ['FECHA', 'CUENTA', 'CONCEPTO', 'IMPORTE', 'DESCRIPCIÓN'];
+         csvRows.push(csvHeader.join(';'));
+         
+         for (const cuenta of allCuentas) {
+             const movementsOfAccount = allMovements.filter(m => {
+                 return (m.tipo === 'movimiento' && m.cuentaId === cuenta.id) ||
+                        (m.tipo === 'traspaso' && m.cuentaOrigenId === cuenta.id) ||
+                        (m.tipo === 'traspaso' && m.cuentaDestinoId === cuenta.id);
+             });
+
+             const balanceChange = movementsOfAccount.reduce((sum, m) => {
+                 if (m.tipo === 'movimiento') return sum + m.cantidad;
+                 if (m.tipo === 'traspaso' && m.cuentaOrigenId === cuenta.id) return sum - m.cantidad;
+                 if (m.tipo === 'traspaso' && m.cuentaDestinoId === cuenta.id) return sum + m.cantidad;
+                 return sum;
+             }, 0);
+             
+             const initialBalance = (cuenta.saldo || 0) - balanceChange;
+             
+             if (initialBalance !== 0) {
+                 const cuentaNombre = `${cuenta.offBalance ? 'N-' : ''}${cuenta.nombre}`;
+                 const importeStr = (initialBalance / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
+                 const fechaCreacion = cuenta.fechaCreacion ? formatDateForCsv(cuenta.fechaCreacion) : '01/01/2025';
+
+                 csvRows.push([fechaCreacion, `"${cuentaNombre}"`, 'INICIAL', importeStr, '"Saldo Inicial"'].join(';'));
+             }
+         }
+         
+         const sortedMovements = allMovements.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+         for (const mov of sortedMovements) {
+             const fecha = formatDateForCsv(mov.fecha);
+             const descripcion = `"${mov.descripcion.replace(/"/g, '""')}"`;
+             const importeStr = (mov.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
+
+             if (mov.tipo === 'traspaso') {
+                 const cuentaOrigen = cuentasMap.get(mov.cuentaOrigenId);
+                 const cuentaDestino = cuentasMap.get(mov.cuentaDestinoId);
+                 
+                 if (cuentaOrigen && cuentaDestino) {
+                     const nombreOrigen = `${cuentaOrigen.offBalance ? 'N-' : ''}${cuentaOrigen.nombre}`;
+                     const nombreDestino = `${cuentaDestino.offBalance ? 'N-' : ''}${cuentaDestino.nombre}`;
+                     const importeNegativo = (-mov.cantidad / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 });
+                     
+                     csvRows.push([fecha, `"${nombreOrigen}"`, 'TRASPASO', importeNegativo, descripcion].join(';'));
+                     csvRows.push([fecha, `"${nombreDestino}"`, 'TRASPASO', importeStr, descripcion].join(';'));
+                 }
+             } else {
+                 const cuenta = cuentasMap.get(mov.cuentaId);
+                 const concepto = conceptosMap.get(mov.conceptoId);
+
+                 if (cuenta && concepto && concepto.nombre !== 'Saldo Inicial') {
+                     const nombreCuenta = `${cuenta.offBalance ? 'N-' : ''}${cuenta.nombre}`;
+                     csvRows.push([fecha, `"${nombreCuenta}"`, `"${concepto.nombre}"`, importeStr, descripcion].join(';'));
+                 }
+             }
+         }
+
+         const csvString = csvRows.join('\r\n');
+         const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
+         const url = URL.createObjectURL(blob);
+         const a = document.createElement('a');
+         a.href = url;
+         a.download = `cuentas_aidanai_export_${new Date().toISOString().slice(0,10)}.csv`;
+         document.body.appendChild(a);
+         a.click();
+         document.body.removeChild(a);
+         URL.revokeObjectURL(url);
+         showToast("Exportación CSV completada.", "info");
+         
+     } catch (error) {
+         console.error("Error al exportar datos a CSV:", error);
+         showToast("Error durante la exportación a CSV.", "danger");
+     } finally {
+         setButtonLoading(btn, false);
+     }
+ };
+ const csv_parseDate = (dateString) => {
+     if (!dateString) return null;
+     const parts = dateString.split('/');
+     if (parts.length !== 3) return null;
+     const day = parseInt(parts[0], 10);
+	 const month = parseInt(parts[1], 10) - 1;
+	 const year = parseInt(parts[2], 10);
+     if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1970) return null;
+     return new Date(Date.UTC(year, month, day, 12, 0, 0));
+ };
+
+ const csv_parseCurrency = (currencyString) => {
+     if (typeof currencyString !== 'string' || !currencyString) return 0;
+     const number = parseFloat(
+         currencyString
+         .replace('€', '')
+         .trim()
+         .replace(/\./g, '')
+         .replace(',', '.')
+     );
+     return isNaN(number) ? 0 : Math.round(number * 100);
+ };
+
+ const csv_inferType = (name) => {
+     const upperName = name.toUpperCase();
+     if (upperName.includes('TARJETA')) return { tipo: 'Tarjeta', esInversion: false };
+     if (upperName.includes('EFECTIVO')) return { tipo: 'Efectivo', esInversion: false };
+     if (upperName.includes('PENSIÓN')) return { tipo: 'Pensión', esInversion: true };
+     if (upperName.includes('LETRAS')) return { tipo: 'Renta Fija', esInversion: true };
+     if (['FONDO', 'FONDOS'].some(t => upperName.includes(t))) return { tipo: 'Fondos', esInversion: true };
+     if (['TRADEREPUBLIC', 'MYINVESTOR', 'DEGIRO', 'INTERACTIVEBROKERS', 'INDEXACAPITAL', 'COINBASE', 'CRIPTAN', 'KRAKEN', 'BIT2ME', 'N26', 'FREEDOM24', 'DEBLOCK', 'BBVA', 'CIVISLEND', 'HOUSERS', 'URBANITAE', 'MINTOS', 'HAUSERA'].some(b => upperName.includes(b))) return { tipo: 'Broker', esInversion: true };
+     if (upperName.includes('NARANJA') || upperName.includes('AHORRO')) return { tipo: 'Ahorro', esInversion: false };
+     return { tipo: 'Banco', esInversion: false };
+ };
+
+  const csv_processFile = (file) => {
+     return new Promise((resolve, reject) => {
+         const reader = new FileReader();
+         reader.onload = (event) => {
+             try {
+                 const csvData = event.target.result.replace(/^\uFEFF/, '');
+                 const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== '' && line.includes(';'));
+                 if (lines.length <= 1) {
+                     showToast("El archivo CSV está vacío o solo contiene la cabecera.", "warning");
+                     return resolve(null);
+                 }
+                 
+                 lines.shift(); // Eliminar la cabecera
+
+                 let rowCount = 0, initialCount = 0;
+                 const cuentasMap = new Map();
+                 const conceptosMap = new Map();
+                 const movimientos = [];
+                 const potentialTransfers = [];
+                 
+                 for (const line of lines) {
+                     rowCount++;
+                     const columns = line.split(';').map(c => c.trim().replace(/"/g, ''));
+                     const [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion = ''] = columns;
+
+                     if (!fechaStr || !cuentaStr || !conceptoStr || !importeStr) {
+                         console.warn(`Línea inválida o incompleta #${rowCount + 1}. Saltando...`, line);
+                         continue;
+                     }
+                     
+                     const fecha = csv_parseDate(fechaStr);
+                     if (!fecha) {
+                          console.warn(`Fecha inválida en la fila ${rowCount + 1}: ${fechaStr}`);
+                          continue;
+                     }
+
+                     const conceptoLimpio = conceptoStr.trim().toUpperCase().replace(/\s*;-$/, '');
+                     const offBalance = cuentaStr.startsWith('N-');
+                     const nombreCuentaLimpio = cuentaStr.replace(/^(D-|N-)/, '');
+                     const cantidad = csv_parseCurrency(importeStr);
+
+                     if (!cuentasMap.has(nombreCuentaLimpio)) {
+                         const { tipo, esInversion } = csv_inferType(nombreCuentaLimpio);
+                         cuentasMap.set(nombreCuentaLimpio, { id: generateId(), nombre: nombreCuentaLimpio, tipo, saldo: 0, esInversion, offBalance, fechaCreacion: new Date(Date.UTC(2025, 0, 1)).toISOString() });
+                     }
+
+                     if (conceptoLimpio === 'INICIAL') {
+                         initialCount++;
+                         if (!conceptosMap.has('SALDO INICIAL')) conceptosMap.set('SALDO INICIAL', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
+                         const conceptoInicial = conceptosMap.get('SALDO INICIAL');
+                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion: descripcion || 'Existencia Inicial', tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoInicial ? conceptoInicial.id : null });
+                         continue;
+                     }
+
+                     if (conceptoLimpio && conceptoLimpio !== 'TRASPASO' && !conceptosMap.has(conceptoLimpio)) {
+                         conceptosMap.set(conceptoLimpio, { id: generateId(), nombre: toSentenceCase(conceptoLimpio), icon: 'label' });
+                     }
+                     
+                     if (conceptoLimpio === 'TRASPASO') {
+                         // CAMBIO CLAVE: Incluimos la descripción en el objeto que guardamos para su posterior análisis.
+                         potentialTransfers.push({ fecha, nombreCuenta: nombreCuentaLimpio, cantidad, descripcion, originalRow: rowCount });
+                     } else {
+                         const conceptoActual = conceptosMap.get(conceptoLimpio);
+                         movimientos.push({ id: generateId(), fecha: fecha.toISOString(), cantidad, descripcion, tipo: 'movimiento', cuentaId: cuentasMap.get(nombreCuentaLimpio).id, conceptoId: conceptoActual ? conceptoActual.id : null });
+                     }
+                 }
+
+                 let matchedTransfersCount = 0;
+                 let unmatchedTransfers = [];
+                 const transferGroups = new Map();
+                 
+                 potentialTransfers.forEach(t => {
+                     // CAMBIO CLAVE: La nueva "llave" para agrupar ahora incluye la descripción.
+                     // Esto asegura que solo traspasos con misma fecha, importe Y descripción se agrupen.
+                     const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}_${t.descripcion}`;
+                     if (!transferGroups.has(key)) transferGroups.set(key, []);
+                     transferGroups.get(key).push(t);
+                 });
+
+                 transferGroups.forEach((group) => {
+                     const gastos = group.filter(t => t.cantidad < 0);
+                     const ingresos = group.filter(t => t.cantidad > 0);
+                     
+                     // Este bucle ahora opera sobre un grupo mucho más específico y fiable.
+                     while (gastos.length > 0 && ingresos.length > 0) {
+                         const Gasto = gastos.pop();
+                         const Ingreso = ingresos.pop();
+                         movimientos.push({ id: generateId(), fecha: Gasto.fecha.toISOString(), cantidad: Math.abs(Gasto.cantidad), descripcion: Gasto.descripcion || Ingreso.descripcion || 'Traspaso', tipo: 'traspaso', cuentaOrigenId: cuentasMap.get(Gasto.nombreCuenta).id, cuentaDestinoId: cuentasMap.get(Ingreso.nombreCuenta).id });
+                         matchedTransfersCount++;
+                     }
+                     // Los que no se emparejan se añaden a la lista de "sin pareja".
+                     unmatchedTransfers.push(...gastos, ...ingresos);
+                 });
+                 
+                 const conceptoInicialId = conceptosMap.has('SALDO INICIAL') ? conceptosMap.get('SALDO INICIAL').id : null;
+                 const finalData = { cuentas: Array.from(cuentasMap.values()), conceptos: Array.from(conceptosMap.values()), movimientos, presupuestos: [], recurrentes: [], inversiones_historial: [], inversion_cashflows: [], config: getInitialDb().config };
+                 const totalMovements = movimientos.filter(m => m.tipo === 'movimiento' && m.conceptoId !== conceptoInicialId).length;
+
+                 resolve({
+                     jsonData: finalData,
+                     stats: { rowCount, accounts: cuentasMap.size, concepts: conceptosMap.size, movements: totalMovements, transfers: matchedTransfersCount, initials: initialCount, unmatched: unmatchedTransfers.length }
+                 });
+
+             } catch (error) {
+                 reject(error);
+             }
+         };
+         reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+         reader.readAsText(file, 'UTF-8');
+     });
+ };
+
+ const showCsvImportWizard = () => {
+     const wizardHTML = `
+     <div id="csv-wizard-content">
+         <div id="csv-wizard-step-1" class="json-wizard-step">
+             <h4>Paso 1: Selecciona tu archivo CSV</h4>
+             <p class="form-label" style="margin-bottom: var(--sp-3);">
+                 Columnas requeridas: <code>FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCIÓN</code>.
+                 <br><strong>Atención:</strong> La importación reemplazará <strong>todos</strong> tus datos actuales.
+             </p>
+             <div id="csv-drop-zone" class="upload-area">
+                 <p>Arrastra tu archivo <code>.csv</code> aquí o <strong>haz clic para seleccionarlo</strong>.</p>
+                 <span id="csv-file-name" class="file-name" style="color: var(--c-success); font-weight: 600; margin-top: 1rem; display: block;"></span>
+             </div>
+             <div id="csv-file-error" class="form-error" style="text-align: center; margin-top: var(--sp-3);"></div>
+             <div class="modal__actions">
+                 <button id="csv-process-btn" class="btn btn--primary btn--full" disabled>Analizar Archivo</button>
+             </div>
+         </div>
+
+         <div id="csv-wizard-step-2" class="json-wizard-step" style="display: none;">
+             <h4>Paso 2: Revisa y confirma</h4>
+             <p class="form-label" style="margin-bottom: var(--sp-3);">Hemos analizado tu archivo. Si los datos son correctos, pulsa "Importar" para reemplazar tus datos actuales.</p>
+             <div class="results-log" style="display: block; margin-top: 0;">
+                 <h2>Resultados del Análisis</h2>
+                 <ul id="csv-preview-list"></ul>
+             </div>
+             <div class="form-error" style="margin-top: var(--sp-2); text-align: center;"><strong>Atención:</strong> Esta acción es irreversible.</div>
+             <div class="modal__actions" style="justify-content: space-between;">
+                 <button id="csv-wizard-back-btn" class="btn btn--secondary">Atrás</button>
+                 <button id="csv-wizard-import-final" class="btn btn--danger"><span class="material-icons">warning</span>Importar y Reemplazar</button>
+             </div>
+         </div>
+
+         <div id="csv-wizard-step-3" class="json-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; min-height: 250px;">
+             <div id="csv-import-progress">
+                 <span class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></span>
+                 <h4 style="margin-top: var(--sp-4);">Importando...</h4>
+                 <p>Borrando datos antiguos e importando los nuevos. Por favor, no cierres esta ventana.</p>
+             </div>
+              <div id="csv-import-result" style="display: none;">
+                 <span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span>
+                 <h4 id="csv-result-title" style="margin-top: var(--sp-2);"></h4>
+                 <p id="csv-result-message"></p>
+                 <div class="modal__actions" style="justify: center;">
+                     <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">Finalizar</button>
+                 </div>
+              </div>
+         </div>
+     </div>`;
+
+     showGenericModal('Asistente de Importación CSV', wizardHTML);
+
+     setTimeout(() => {
+         let csvFile = null;
+         let processedData = null;
+         const wizardContent = select('csv-wizard-content');
+         if (!wizardContent) return;
+
+         const goToStep = (step) => {
+             wizardContent.querySelectorAll('.json-wizard-step').forEach(s => s.style.display = 'none');
+             wizardContent.querySelector(`#csv-wizard-step-${step}`).style.display = 'flex';
+         };
+
+         const fileInput = document.createElement('input');
+         fileInput.type = 'file'; fileInput.accept = '.csv, text/csv'; fileInput.className = 'hidden';
+         wizardContent.appendChild(fileInput);
+
+         const handleFileSelection = (files) => {
+             const file = files;
+             const nameEl = select('csv-file-name'), processBtn = select('csv-process-btn'), errorEl = select('csv-file-error');
+             if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) {
+                 csvFile = file;
+                 nameEl.textContent = `Archivo: ${file.name}`;
+                 processBtn.disabled = false;
+                 errorEl.textContent = '';
+             } else {
+                 csvFile = null;
+                 nameEl.textContent = 'Por favor, selecciona un archivo .csv válido.';
+                 processBtn.disabled = true;
+             }
+         };
+         
+         const dropZone = select('csv-drop-zone');
+         dropZone.addEventListener('click', () => fileInput.click());
+         fileInput.addEventListener('change', () => handleFileSelection(fileInput.files));
+         dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+         dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+         dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFileSelection(e.dataTransfer.files); });
+
+         select('csv-process-btn').addEventListener('click', async (e) => {
+             if (!csvFile) return;
+             const btn = e.target;
+             setButtonLoading(btn, true, 'Analizando...');
+             try {
+                 const result = await csv_processFile(csvFile);
+                 if (result) {
+                     processedData = result.jsonData;
+                     const { stats } = result;
+                     const previewList = select('csv-preview-list');
+                     let html = `
+                         <li><span class="label">Filas Válidas Leídas</span><span class="value">${stats.rowCount}</span></li>
+                         <li><span class="label">Cuentas a Crear</span><span class="value success">${stats.accounts}</span></li>
+                         <li><span class="label">Conceptos a Crear</span><span class="value success">${stats.concepts}</span></li>
+                         <li><span class="label">Saldos Iniciales</span><span class="value">${stats.initials}</span></li>
+                         <li><span class="label">Movimientos (Ingreso/Gasto)</span><span class="value">${stats.movements}</span></li>
+                         <li><span class="label">Transferencias Emparejadas</span><span class="value">${stats.transfers}</span></li>
+                         <li><span class="label">Transferencias sin Pareja</span><span class="value ${stats.unmatched > 0 ? 'danger' : 'success'}">${stats.unmatched}</span></li>
+                     `;
+                     previewList.innerHTML = html;
+                     goToStep(2);
+                 }
+             } catch (error) {
+                 console.error("Error al procesar CSV:", error);
+                 select('csv-file-error').textContent = `Error: ${error.message}`;
+             } finally {
+                 setButtonLoading(btn, false);
+             }
+         });
+
+         select('csv-wizard-back-btn').addEventListener('click', () => goToStep(1));
+         select('csv-wizard-import-final').addEventListener('click', (e) => {
+             if (processedData) handleFinalCsvImport(e.target, processedData, goToStep);
+         });
+     }, 0);
+ };
+
+ const handleFinalCsvImport = async (btn, dataToImport, goToStep) => {
+     goToStep(3);
+     setButtonLoading(btn, true, 'Importando...');
+
+     try {
+         const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
+
+         for (const collectionName of collectionsToClear) {
+             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
+             if (snapshot.empty) continue;
+             let batch = fbDb.batch();
+             let count = 0;
+             for (const doc of snapshot.docs) {
+                 batch.delete(doc.ref);
+                 count++;
+                 if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+             }
+             if (count > 0) await batch.commit();
+         }
+         
+         for (const collectionName of Object.keys(dataToImport)) {
+             const items = dataToImport[collectionName];
+             if (Array.isArray(items) && items.length > 0) {
+                 let batch = fbDb.batch();
+                 let count = 0;
+                 for (const item of items) {
+                     if (item.id) {
+                         const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
+                         batch.set(docRef, item);
+                         count++;
+                         if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
+                     }
+                 }
+                 if (count > 0) await batch.commit();
+             } else if (collectionName === 'config') {
+                 await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
+             }
+         }
+         
+         const resultEl = select('csv-import-result');
+         select('csv-import-progress').style.display = 'none';
+         if(resultEl) {
+             resultEl.style.display = 'block';
+             resultEl.querySelector('#csv-result-title').textContent = '¡Importación Completada!';
+             resultEl.querySelector('#csv-result-message').textContent = 'Los datos se han importado correctamente. La aplicación se recargará.';
+         }
+         
+         hapticFeedback('success');
+         showToast('¡Importación completada!', 'info', 4000);
+         setTimeout(() => location.reload(), 4500);
+
+     } catch (error) {
+         console.error("Error en importación final desde CSV:", error);
+         showToast("Error crítico durante la importación.", "danger", 5000);
+         const resultEl = select('csv-import-result');
+         select('csv-import-progress').style.display = 'none';
+         if(resultEl) {
+             resultEl.style.display = 'block';
+             resultEl.querySelector('#csv-result-title').textContent = '¡Error en la Importación!';
+             resultEl.querySelector('#csv-result-message').textContent = 'Ocurrió un error. Revisa la consola e inténtalo de nuevo.';
+             const iconEl = resultEl.querySelector('.material-icons');
+             if (iconEl) iconEl.style.color = 'var(--c-danger)';
+         }
+         setButtonLoading(btn, false);
+     }
+ };
+
+// ==============================================================
 // === INICIO: FUNCIÓN DE BORRADO OPTIMIZADA (v2.0) ===
-// =================================================================
+// ==============================================================
 const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
     const collection = isRecurrent ? 'recurrentes' : 'movimientos';
     const ANIMATION_DURATION = 400; // Debe coincidir con la duración en el CSS (0.4s)
@@ -8325,5 +9095,4 @@ const renderAjustesPage = () => {
     loadConfig(); // Muestra el email del usuario, etc.
     renderPendingRecurrents(); // Muestra los recurrentes pendientes de aprobación
     renderRecurrentsListOnPage(); // Muestra la lista de futuras automaciones
-
 };
