@@ -97,10 +97,8 @@ const handleExportFilteredCsv = (btn) => {
     }
 };
 	const THEMES = {
-    'default': { name: 'Ciber-Neón', icon: 'dark_mode' },
-    'prismatic-glass': { name: 'Prismático', icon: 'light_mode' },
-    'slate-emerald': { name: 'Pizarra Esmeralda', icon: 'contrast' },
-    'solstice-dawn': { name: 'Amanecer Solstice', icon: 'wb_sunny' } // <-- LÍNEA AÑADIDA
+    'premium-midnight': { name: 'Premium Midnight', icon: 'dark_mode' },
+    'crystal-clean': { name: 'Crystal Clean', icon: 'light_mode' },
 };
 	        
 // CÓDIGO CORRECTO Y ÚNICO QUE DEBE QUEDAR EN TU ARCHIVO
@@ -6154,25 +6152,20 @@ const showHelpModal = () => {
 };
  
 	const updateThemeIcon = () => {
-    const themeBtn = select('theme-toggle-btn');
+    // Buscamos el botón en el menú desplegable, que es su nueva ubicación
+    const themeBtn = document.querySelector('button[data-action="toggle-theme"]');
     if (!themeBtn) return;
     
     const iconEl = themeBtn.querySelector('.material-icons');
-    if (!iconEl) return;
+    const labelEl = themeBtn.querySelector('span:last-child');
+    if (!iconEl || !labelEl) return;
 
-    const themeKeys = Object.keys(THEMES);
-    const currentThemeKey = document.body.dataset.theme || 'default';
-    const currentIndex = themeKeys.indexOf(currentThemeKey);
+    const currentThemeKey = document.body.dataset.theme || 'premium-midnight';
+    const nextThemeKey = currentThemeKey === 'premium-midnight' ? 'crystal-clean' : 'premium-midnight';
     
-    // Lógica para el siguiente tema (para el tooltip)
-    const nextIndex = (currentIndex + 1) % themeKeys.length;
-    const nextThemeKey = themeKeys[nextIndex];
-
-    // ¡CORRECCIÓN CLAVE!
-    // 1. El icono muestra el estado ACTUAL.
-    iconEl.textContent = THEMES[currentThemeKey].icon;
-    // 2. El tooltip describe la ACCIÓN a realizar.
-    themeBtn.title = `Cambiar a Tema: ${THEMES[nextThemeKey].name}`;
+    // Actualizamos el icono y el texto del botón
+    iconEl.textContent = THEMES[nextThemeKey].icon; // Muestra el icono del TEMA AL QUE VAS A CAMBIAR
+    labelEl.textContent = `Tema: ${THEMES[nextThemeKey].name}`;
 };
 	// --- ▼▼▼ PEGA ESTAS DOS NUEVAS FUNCIONES COMPLETAS ▼▼▼ ---
 
@@ -6237,25 +6230,18 @@ const calculateFinancialIndependence = (patrimonioNeto, gastoMensualPromedio) =>
 
  // REEMPLAZA LA FUNCIÓN ANTIGUA CON ESTA
 const handleToggleTheme = () => {
-    const themeKeys = Object.keys(THEMES);
-    const currentTheme = document.body.dataset.theme || 'default';
-    const currentIndex = themeKeys.indexOf(currentTheme);
-    const nextIndex = (currentIndex + 1) % themeKeys.length;
-    const newTheme = themeKeys[nextIndex];
+    const currentTheme = document.body.dataset.theme || 'premium-midnight';
+    const newTheme = currentTheme === 'premium-midnight' ? 'crystal-clean' : 'premium-midnight';
 
     document.body.dataset.theme = newTheme;
     localStorage.setItem('appTheme', newTheme);
     hapticFeedback('light');
-    updateThemeIcon(); // No necesita parámetro, ahora es más inteligente
-
-    // Esto es importante para que los gráficos recarguen sus colores
-    if (conceptosChart) conceptosChart.destroy();
-    if (liquidAssetsChart) liquidAssetsChart.destroy();
+    updateThemeIcon(); // Ya no necesita parámetro
     
+    // Forzamos el redibujado de la vista actual para aplicar los colores de los gráficos
     const activePageEl = document.querySelector('.view--active');
-    const activePageId = activePageEl ? activePageEl.id : null;
-    if (activePageId) {
-        navigateTo(activePageId, true);
+    if (activePageEl && activePageEl.id) {
+        navigateTo(activePageEl.id, true); // el 'true' evita la animación de página
     }
 };
         const showConceptosModal = () => { 
