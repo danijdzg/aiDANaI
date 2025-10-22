@@ -97,9 +97,17 @@ const handleExportFilteredCsv = (btn) => {
     }
 };
 	const THEMES = {
-    'premium-midnight': { name: 'Premium Midnight', icon: 'dark_mode' },
-    'crystal-clean': { name: 'Crystal Clean', icon: 'light_mode' },
-};
+        // 1. Nuestro nuevo tema oscuro se llamará 'premium-midnight'
+        'premium-midnight': { name: 'Premium Midnight', icon: 'nightlight_round' }, // Usamos un icono de luna
+
+        // 2. Nuestro nuevo tema claro se llamará 'crystal-clean'
+        'crystal-clean': { name: 'Crystal Clean', icon: 'wb_sunny' } // Usamos un icono de sol
+
+        // 3. Puedes borrar o comentar (añadiendo // al principio) las líneas de los temas
+        //    que ya no vas a usar, para mantener el código limpio.
+        // 'slate-emerald': { name: 'Pizarra Esmeralda', icon: 'contrast' },
+        // 'solstice-dawn': { name: 'Amanecer Solstice', icon: 'brightness_5' }
+    };
 	        
 // CÓDIGO CORRECTO Y ÚNICO QUE DEBE QUEDAR EN TU ARCHIVO
 // PEGA ESTE BLOQUE ÚNICO Y CORRECTO EN SU LUGAR
@@ -3313,25 +3321,24 @@ const TransactionCardComponent = (m, dbData) => {
     if (m.tipo === 'traspaso') {
         const origen = cuentas.find(c => c.id === m.cuentaOrigenId);
         const destino = cuentas.find(c => c.id === m.cuentaDestinoId);
+        // Nueva descripción simplificada
+        const transferDescription = `${(origen?.nombre) || '?'} → ${(destino?.nombre) || '?'}`;
+        // Usamos la descripción original si existe y es diferente de "Traspaso"
+        const mainDescription = (m.descripcion && m.descripcion.toLowerCase() !== 'traspaso') ? escapeHTML(m.descripcion) : 'Traspaso';
+
         cardContentHTML = `
             <div class="transaction-card__indicator transaction-card__indicator--transfer"></div>
             <div class="transaction-card__content">
                 <div class="transaction-card__details">
-                    <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
-                    <div class="transaction-card__description">${formattedDate}</div>
-                    <div class="transaction-card__transfer-details">
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_upward</span> ${(origen?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceOrigen)}</span>
-                        </div>
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_downward</span> ${(destino?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceDestino)}</span>
-                        </div>
-                    </div>
+                    {/* La descripción principal ahora es "Traspaso" o la que pusiste */}
+                    <div class="transaction-card__row-1">${mainDescription}</div>
+                    {/* La línea 2 ahora muestra Origen -> Destino */}
+                    <div class="transaction-card__transfer-details">${escapeHTML(transferDescription)}</div>
                 </div>
                 <div class="transaction-card__figures">
+                    {/* El importe sigue siendo el mismo */}
                     <div class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</div>
+                    {/* Ya no mostramos los saldos aquí */}
                 </div>
             </div>`;
     } else {
@@ -6152,20 +6159,25 @@ const showHelpModal = () => {
 };
  
 	const updateThemeIcon = () => {
-    // Buscamos el botón en el menú desplegable, que es su nueva ubicación
-    const themeBtn = document.querySelector('button[data-action="toggle-theme"]');
+    const themeBtn = select('theme-toggle-btn');
     if (!themeBtn) return;
     
     const iconEl = themeBtn.querySelector('.material-icons');
-    const labelEl = themeBtn.querySelector('span:last-child');
-    if (!iconEl || !labelEl) return;
+    if (!iconEl) return;
 
-    const currentThemeKey = document.body.dataset.theme || 'premium-midnight';
-    const nextThemeKey = currentThemeKey === 'premium-midnight' ? 'crystal-clean' : 'premium-midnight';
+    const themeKeys = Object.keys(THEMES);
+    const currentThemeKey = document.body.dataset.theme || 'default';
+    const currentIndex = themeKeys.indexOf(currentThemeKey);
     
-    // Actualizamos el icono y el texto del botón
-    iconEl.textContent = THEMES[nextThemeKey].icon; // Muestra el icono del TEMA AL QUE VAS A CAMBIAR
-    labelEl.textContent = `Tema: ${THEMES[nextThemeKey].name}`;
+    // Lógica para el siguiente tema (para el tooltip)
+    const nextIndex = (currentIndex + 1) % themeKeys.length;
+    const nextThemeKey = themeKeys[nextIndex];
+
+    // ¡CORRECCIÓN CLAVE!
+    // 1. El icono muestra el estado ACTUAL.
+    iconEl.textContent = THEMES[currentThemeKey].icon;
+    // 2. El tooltip describe la ACCIÓN a realizar.
+    themeBtn.title = `Cambiar a Tema: ${THEMES[nextThemeKey].name}`;
 };
 	// --- ▼▼▼ PEGA ESTAS DOS NUEVAS FUNCIONES COMPLETAS ▼▼▼ ---
 
@@ -6230,18 +6242,25 @@ const calculateFinancialIndependence = (patrimonioNeto, gastoMensualPromedio) =>
 
  // REEMPLAZA LA FUNCIÓN ANTIGUA CON ESTA
 const handleToggleTheme = () => {
-    const currentTheme = document.body.dataset.theme || 'premium-midnight';
-    const newTheme = currentTheme === 'premium-midnight' ? 'crystal-clean' : 'premium-midnight';
+    const themeKeys = Object.keys(THEMES);
+    const currentTheme = document.body.dataset.theme || 'premium-midnight'; // Cambiado a 'premium-midnight'
+    const currentIndex = themeKeys.indexOf(currentTheme);
+    const nextIndex = (currentIndex + 1) % themeKeys.length;
+    const newTheme = themeKeys[nextIndex];
 
     document.body.dataset.theme = newTheme;
     localStorage.setItem('appTheme', newTheme);
     hapticFeedback('light');
-    updateThemeIcon(); // Ya no necesita parámetro
+    updateThemeIcon(); // No necesita parámetro, ahora es más inteligente
+
+    // Esto es importante para que los gráficos recarguen sus colores
+    if (conceptosChart) conceptosChart.destroy();
+    if (liquidAssetsChart) liquidAssetsChart.destroy();
     
-    // Forzamos el redibujado de la vista actual para aplicar los colores de los gráficos
     const activePageEl = document.querySelector('.view--active');
-    if (activePageEl && activePageEl.id) {
-        navigateTo(activePageEl.id, true); // el 'true' evita la animación de página
+    const activePageId = activePageEl ? activePageEl.id : null;
+    if (activePageId) {
+        navigateTo(activePageId, true);
     }
 };
         const showConceptosModal = () => { 

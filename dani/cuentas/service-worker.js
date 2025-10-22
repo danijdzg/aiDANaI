@@ -1,6 +1,6 @@
 // service-worker.js
 
-const CACHE_NAME = 'ctas-aidanai-cache-v2';
+const CACHE_NAME = 'ctas-aidanai-cache-v1';
 // Lista de todos los ficheros que componen la "carcasa" de tu aplicación.
 const URLS_TO_CACHE = [
   '/',
