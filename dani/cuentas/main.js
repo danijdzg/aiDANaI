@@ -1522,22 +1522,24 @@ const navigateTo = async (pageId, isInitial = false) => {
 	}
     if (!newView || (oldView && oldView.id === pageId)) return;
 
-    // ----- INICIO DE LA NUEVA LÓGICA DE CARGA DE HTML -----
-    try {
-        // 1. Verificamos si la vista ya tiene contenido. Si no, lo cargamos.
-        if (newView.innerHTML.trim() === '') {
+    let loadSuccess = true; // Empezamos asumiendo que la carga será exitosa
+    if (newView.innerHTML.trim() === '') {
+        try {
             const viewName = pageId.replace('-page', '');
-			const response = await fetch(`/views/${viewName}.html`);
-            if (!response.ok) throw new Error(`No se pudo cargar /views/${viewName}.html`);
+            const response = await fetch(`views/${viewName}.html`);
+            if (!response.ok) {
+                throw new Error(`No se pudo cargar views/${viewName}.html. Status: ${response.status}`);
+            }
             newView.innerHTML = await response.text();
+        } catch (error) {
+            loadSuccess = false; // Marcamos que la carga falló
+            console.error("Error al cargar la vista:", error);
+            newView.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar esta sección. Asegúrate de que el archivo existe en la carpeta /views y que no hay problemas de conexión.</p></div>`;
         }
-    } catch (error) {
-        console.error("Error al cargar la vista:", error);
-        newView.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar esta sección.</p></div>`;
     }
-    // ----- FIN DE LA NUEVA LÓGICA DE CARGA DE HTML -----
 
     destroyAllCharts();
+	if (loadSuccess) { 
     if (!isInitial) hapticFeedback('light');
 	if (!isInitial && window.history.state?.page !== pageId) {
         history.pushState({ page: pageId }, '', `#${pageId}`);
