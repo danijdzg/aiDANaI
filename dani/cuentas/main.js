@@ -1512,7 +1512,7 @@ window.addEventListener('offline', () => {
     }
 };
 
-// EN main.js - REEMPLAZA TU FUNCIÓN navigateTo POR ESTA VERSIÓN
+// ▼▼▼ REEMPLAZA TU FUNCIÓN navigateTo CON ESTA VERSIÓN COMPLETA ▼▼▼
 const navigateTo = async (pageId, isInitial = false) => {
     const oldView = document.querySelector('.view--active');
     const newView = select(pageId);
@@ -1522,79 +1522,80 @@ const navigateTo = async (pageId, isInitial = false) => {
 	}
     if (!newView || (oldView && oldView.id === pageId)) return;
 
-    let loadSuccess = true; // Empezamos asumiendo que la carga será exitosa
+    let loadSuccess = true;
     if (newView.innerHTML.trim() === '') {
         try {
             const viewName = pageId.replace('-page', '');
             const response = await fetch(`views/${viewName}.html`);
-            if (!response.ok) {
-                throw new Error(`No se pudo cargar views/${viewName}.html. Status: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`No se pudo cargar views/${viewName}.html`);
             newView.innerHTML = await response.text();
         } catch (error) {
-            loadSuccess = false; // Marcamos que la carga falló
+            loadSuccess = false;
             console.error("Error al cargar la vista:", error);
-            newView.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar esta sección. Asegúrate de que el archivo existe en la carpeta /views y que no hay problemas de conexión.</p></div>`;
+            newView.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar esta sección.</p></div>`;
         }
     }
 
     destroyAllCharts();
-	if (loadSuccess) { 
-    if (!isInitial) hapticFeedback('light');
-	if (!isInitial && window.history.state?.page !== pageId) {
-        history.pushState({ page: pageId }, '', `#${pageId}`);
-    }
-    
-    const navItems = Array.from(selectAll('.bottom-nav__item'));
-    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
-    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-    const isForward = newIndex > oldIndex;
 
-    const actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento');
-    
-    const standardActions = `
-        <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
-            <span class="material-icons">search</span>
-        </button>
-        <button data-action="show-main-menu" class="icon-btn" title="Más opciones" aria-label="Mostrar más opciones">
-            <span class="material-icons">more_vert</span>
-        </button>
-    `;
-    
-    if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.PANEL) { // <-- LÍNEA CAMBIADA
-        await Promise.all([loadPresupuestos(), loadInversiones()]);
+    if (loadSuccess) {
+        if (!isInitial) hapticFeedback('light');
+        if (!isInitial && window.history.state?.page !== pageId) {
+            history.pushState({ page: pageId }, '', `#${pageId}`);
+        }
+        
+        const navItems = Array.from(selectAll('.bottom-nav__item'));
+        const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
+        const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+        const isForward = newIndex > oldIndex;
+
+        const actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button');
+        
+        const standardActions = `
+            <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
+                <span class="material-icons">search</span>
+            </button>
+            <button data-action="show-main-menu" class="icon-btn" title="Más opciones" aria-label="Mostrar más opciones">
+                <span class="material-icons">more_vert</span>
+            </button>
+        `;
+        
+        if (pageId === PAGE_IDS.PANEL) {
+            await Promise.all([loadPresupuestos(), loadInversiones()]);
+        }
+
+        const pageRenderers = {
+            [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+            [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderMovimientosPage, actions: standardActions },
+            [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderInversionesView, actions: standardActions },
+            [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
+            [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+        };
+        
+        if (pageRenderers[pageId]) { 
+            if (leftEl) {
+                let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
+                if (pageId === PAGE_IDS.PANEL) {
+                     leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+                }
+                if (pageId === PAGE_IDS.MOVIMIENTOS) {
+                    leftSideHTML += `
+                        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
+                            <span class="material-icons">filter_list</span>
+                        </button>
+                        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+                            <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+                        </button>
+                    `;
+                }
+                leftEl.innerHTML = leftSideHTML;
+            }
+            if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
+            pageRenderers[pageId].render();
+        }
     }
-    const pageRenderers = {
-        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions }, // <-- CAMBIADO
-        [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderMovimientosPage, actions: standardActions }, // <-- CAMBIADO
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderInversionesView, actions: standardActions }, // Usamos 'Planificar' como título
-        [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-    };
-     if (pageRenderers[pageId]) { 
-    if (leftEl) {
-        let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-        if (pageId === PAGE_IDS.PANEL) { // <-- CAMBIADO DE INICIO A PANEL
-             leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
-        }
-        if (pageId === PAGE_IDS.MOVIMIENTOS) {
-            leftSideHTML += `
-                <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
-                    <span class="material-icons">filter_list</span>
-                </button>
-                <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-                    <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
-                </button>
-            `;
-        }
-            leftEl.innerHTML = leftSideHTML;
-        }
-        if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
-        pageRenderers[pageId].render();
-    }
+
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === pageId));
-    if (fab) fab.classList.toggle('fab--visible', true);
     updateThemeIcon();
     
     newView.classList.add('view--active'); 
@@ -1619,10 +1620,11 @@ const navigateTo = async (pageId, isInitial = false) => {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
-    if (pageId === PAGE_IDS.INICIO) {
+    if (pageId === PAGE_IDS.PANEL) {
         setTimeout(scheduleDashboardUpdate, 50);
     }
 };
+// ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲
         
     const setupTheme = () => { 
     const gridColor = 'rgba(255, 255, 255, 0.1)';
@@ -2909,16 +2911,16 @@ select('virtual-list-content').innerHTML = skeletonHTML;
     movementsObserver.observe(trigger);
 };
 
-// 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
+// ▼▼▼ REEMPLAZA TU FUNCIÓN renderMovimientosPage CON ESTA ▼▼▼
 const renderMovimientosPage = async () => {
     const container = select('movimientos-page');
-    // ✅✅ COMPROBACIÓN DE SEGURIDAD
+    // Comprobación de seguridad para evitar errores si la vista no se ha cargado
     if (!container) {
-        console.error("No se encontró el contenedor de la vista 'movimientos-page'. La carga del HTML probablemente falló.");
-        return; // Detiene la ejecución para evitar el error.
+        console.error("Contenedor 'movimientos-page' no encontrado. La carga del HTML de la vista probablemente falló.");
+        return; // Detiene la función si el contenedor no existe
     }
 
-    if (!container.querySelector('#diario-view-container')) { 
+    if (!container.querySelector('#diario-view-container')) {
         container.innerHTML = '<div id="diario-view-container"></div>';
     }
     
@@ -2932,12 +2934,12 @@ const renderMovimientosPage = async () => {
     }
 
     viewContainer.innerHTML = `
+        <div id="pull-to-refresh-indicator"><span class="spinner"></span></div>
         <div id="diario-filter-active-indicator" class="hidden">
             <p>Mostrando resultados filtrados.</p>
             <div>
                 <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">
-                    <span class="material-icons" style="font-size: 14px;">download</span>
-                    Exportar
+                    <span class="material-icons" style="font-size: 14px;">download</span> Exportar
                 </button>
                 <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
             </div>
@@ -2960,13 +2962,11 @@ const renderMovimientosPage = async () => {
     }
     select('virtual-list-content').innerHTML = skeletonHTML;
     
-    // ---- INICIO DE LA LÓGICA CORREGIDA ----
     const scrollTrigger = select('infinite-scroll-trigger');
 
     if (diarioActiveFilters) {
-        // MODO FILTRADO: Ocultamos el scroll infinito y filtramos los datos cacheados.
-        if (scrollTrigger) scrollTrigger.classList.add('hidden'); // Oculta el activador
-        if (movementsObserver) movementsObserver.disconnect(); // Detiene el observador
+        if (scrollTrigger) scrollTrigger.classList.add('hidden');
+        if (movementsObserver) movementsObserver.disconnect();
 
         select('diario-filter-active-indicator').classList.remove('hidden');
         
@@ -2993,7 +2993,6 @@ const renderMovimientosPage = async () => {
         db.movimientos = movementsToDisplay;
 
     } else {
-        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
         if (scrollTrigger) scrollTrigger.classList.remove('hidden');
         select('diario-filter-active-indicator').classList.add('hidden');
         
@@ -3002,11 +3001,10 @@ const renderMovimientosPage = async () => {
         allMovementsLoaded = false;
         isLoadingMoreMovements = false;
         
-        await loadMoreMovements(true); // Carga la primera página
-        initMovementsObserver(); // Activa el observador del scroll infinito
-        return; // Salimos aquí porque loadMoreMovements ya actualiza la UI
+        await loadMoreMovements(true);
+        initMovementsObserver();
+        return;
     }
-    // ---- FIN DE LA LÓGICA CORREGIDA ----
 
     await processMovementsForRunningBalance(db.movimientos, true);
     updateVirtualListUI();
@@ -3022,6 +3020,7 @@ const renderMovimientosPage = async () => {
         }
     }
 };
+// ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲
 		
 	const getYearProgress = () => {
     const now = new Date();
