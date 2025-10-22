@@ -2911,8 +2911,14 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 
 // 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
 const renderMovimientosPage = async () => {
-    const container = select('diario-page');
-    if (!container.querySelector('#diario-view-container')) {
+    const container = select('movimientos-page');
+    // ✅✅ COMPROBACIÓN DE SEGURIDAD
+    if (!container) {
+        console.error("No se encontró el contenedor de la vista 'movimientos-page'. La carga del HTML probablemente falló.");
+        return; // Detiene la ejecución para evitar el error.
+    }
+
+    if (!container.querySelector('#diario-view-container')) { 
         container.innerHTML = '<div id="diario-view-container"></div>';
     }
     

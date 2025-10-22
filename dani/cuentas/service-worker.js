@@ -1,26 +1,22 @@
 // service-worker.js
 
-const CACHE_NAME = 'ctas-aidanai-cache-v1';
+const CACHE_NAME = 'ctas-aidanai-cache-v2';
 // Lista de todos los ficheros que componen la "carcasa" de tu aplicación.
 const URLS_TO_CACHE = [
-  '/',
-  'index.html',
-  'style.css',
-  'main.js',
-  'manifest.json', // Es buena práctica cachear también el manifest
-  'aiDANaI.webp',  // Cachear la imagen principal
-  'icons/android-chrome-192x192.png',
-  'icons/android-chrome-512x512.png',
-  'views/inicio.html', // <-- CAMBIADO,
-  'views/diario.html',
-  'views/inversiones.html',
-  // --- INICIO DE LA CORRECCIÓN ---
-  // Se eliminan los archivos antiguos y se añaden los nuevos.
-  'views/analisis.html',
-  'views/ajustes.html'
-  // --- FIN DE LA CORRECCIÓN ---
+  '/aiDANaI/dani/cuentas/',
+  '/aiDANaI/dani/cuentas/index.html',
+  '/aiDANaI/dani/cuentas/style.css',
+  '/aiDANaI/dani/cuentas/main.js',
+  '/aiDANaI/dani/cuentas/manifest.json',
+  '/aiDANaI/dani/cuentas/aiDANaI.webp',
+  '/aiDANaI/dani/cuentas/icons/android-chrome-192x192.png',
+  '/aiDANaI/dani/cuentas/icons/android-chrome-512x512.png',
+  '/aiDANaI/dani/cuentas/views/panel.html',       // Ruta completa
+  '/aiDANaI/dani/cuentas/views/movimientos.html',  // Ruta completa
+  '/aiDANaI/dani/cuentas/views/inversiones.html',  // Ruta completa
+  '/aiDANaI/dani/cuentas/views/analisis.html',     // Ruta completa
+  '/aiDANaI/dani/cuentas/views/ajustes.html'       // Ruta completa
 ];
-
 // Evento 'install': Se dispara cuando el Service Worker se instala por primera vez.
 self.addEventListener('install', event => {
   // skipWaiting() fuerza al nuevo Service Worker a activarse inmediatamente.
