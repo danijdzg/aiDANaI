@@ -97,17 +97,9 @@ const handleExportFilteredCsv = (btn) => {
     }
 };
 	const THEMES = {
-        // 1. Nuestro nuevo tema oscuro se llamará 'premium-midnight'
-        'premium-midnight': { name: 'Premium Midnight', icon: 'nightlight_round' }, // Usamos un icono de luna
-
-        // 2. Nuestro nuevo tema claro se llamará 'crystal-clean'
-        'crystal-clean': { name: 'Crystal Clean', icon: 'wb_sunny' } // Usamos un icono de sol
-
-        // 3. Puedes borrar o comentar (añadiendo // al principio) las líneas de los temas
-        //    que ya no vas a usar, para mantener el código limpio.
-        // 'slate-emerald': { name: 'Pizarra Esmeralda', icon: 'contrast' },
-        // 'solstice-dawn': { name: 'Amanecer Solstice', icon: 'brightness_5' }
-    };
+    'default': { name: 'Pizarra Esmeralda', icon: 'dark_mode' },
+    'lienzo-claro': { name: 'Lienzo Claro', icon: 'light_mode' }
+};
 	        
 // CÓDIGO CORRECTO Y ÚNICO QUE DEBE QUEDAR EN TU ARCHIVO
 // PEGA ESTE BLOQUE ÚNICO Y CORRECTO EN SU LUGAR
@@ -3321,24 +3313,25 @@ const TransactionCardComponent = (m, dbData) => {
     if (m.tipo === 'traspaso') {
         const origen = cuentas.find(c => c.id === m.cuentaOrigenId);
         const destino = cuentas.find(c => c.id === m.cuentaDestinoId);
-        // Nueva descripción simplificada
-        const transferDescription = `${(origen?.nombre) || '?'} → ${(destino?.nombre) || '?'}`;
-        // Usamos la descripción original si existe y es diferente de "Traspaso"
-        const mainDescription = (m.descripcion && m.descripcion.toLowerCase() !== 'traspaso') ? escapeHTML(m.descripcion) : 'Traspaso';
-
         cardContentHTML = `
             <div class="transaction-card__indicator transaction-card__indicator--transfer"></div>
             <div class="transaction-card__content">
                 <div class="transaction-card__details">
-                    {/* La descripción principal ahora es "Traspaso" o la que pusiste */}
-                    <div class="transaction-card__row-1">${mainDescription}</div>
-                    {/* La línea 2 ahora muestra Origen -> Destino */}
-                    <div class="transaction-card__transfer-details">${escapeHTML(transferDescription)}</div>
+                    <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
+                    <div class="transaction-card__description">${formattedDate}</div>
+                    <div class="transaction-card__transfer-details">
+                        <div class="transaction-card__transfer-row">
+                            <span><span class="material-icons">arrow_upward</span> ${(origen?.nombre) || '?'}</span>
+                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceOrigen)}</span>
+                        </div>
+                        <div class="transaction-card__transfer-row">
+                            <span><span class="material-icons">arrow_downward</span> ${(destino?.nombre) || '?'}</span>
+                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceDestino)}</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="transaction-card__figures">
-                    {/* El importe sigue siendo el mismo */}
                     <div class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</div>
-                    {/* Ya no mostramos los saldos aquí */}
                 </div>
             </div>`;
     } else {
@@ -6243,7 +6236,7 @@ const calculateFinancialIndependence = (patrimonioNeto, gastoMensualPromedio) =>
  // REEMPLAZA LA FUNCIÓN ANTIGUA CON ESTA
 const handleToggleTheme = () => {
     const themeKeys = Object.keys(THEMES);
-    const currentTheme = document.body.dataset.theme || 'premium-midnight'; // Cambiado a 'premium-midnight'
+    const currentTheme = document.body.dataset.theme || 'default';
     const currentIndex = themeKeys.indexOf(currentTheme);
     const nextIndex = (currentIndex + 1) % themeKeys.length;
     const newTheme = themeKeys[nextIndex];
