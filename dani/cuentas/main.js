@@ -1526,8 +1526,9 @@ const navigateTo = async (pageId, isInitial = false) => {
     try {
         // 1. Verificamos si la vista ya tiene contenido. Si no, lo cargamos.
         if (newView.innerHTML.trim() === '') {
-            const response = await fetch(`views/${pageId.replace('-page', '')}.html`);
-            if (!response.ok) throw new Error(`No se pudo cargar views/${pageId.replace('-page', '')}.html`);
+            const viewName = pageId.replace('-page', '');
+			const response = await fetch(`/views/${viewName}.html`);
+            if (!response.ok) throw new Error(`No se pudo cargar /views/${viewName}.html`);
             newView.innerHTML = await response.text();
         }
     } catch (error) {
