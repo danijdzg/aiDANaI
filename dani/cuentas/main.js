@@ -1575,7 +1575,7 @@ const navigateTo = async (pageId, isInitial = false) => {
         if (pageId === PAGE_IDS.PANEL) { // <-- CAMBIADO DE INICIO A PANEL
              leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
         }
-        if (pageId === PAGE_IDS.MOVIMIENTOS]) { // <-- CAMBIADO DE DIARIO A MOVIMIENTOS
+        if (pageId === PAGE_IDS.MOVIMIENTOS]) {
             leftSideHTML += `
                 <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
                     <span class="material-icons">filter_list</span>
