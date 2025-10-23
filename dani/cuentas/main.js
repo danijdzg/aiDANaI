@@ -2156,7 +2156,8 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
     }, 0);
 };
         
-	   const renderBudgetTracking = async () => {
+
+const renderBudgetTracking = async () => {
     const dashboardContainer = select('annual-budget-dashboard');
     const placeholder = select('budget-init-placeholder');
     const yearSelector = select('budget-year-selector');
@@ -2182,15 +2183,34 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
 
     const { percentage: yearProgress, daysPassed, daysRemaining, totalDaysInYear } = getYearProgress();
     
+    // --- INICIO DE LA CORRECCIÓN CLAVE ---
+    
+    // 1. Definimos las fechas del año completo.
     const startDate = new Date(year, 0, 1);
     const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-    let baseQuery = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
+    
+    // 2. Creamos una consulta a Firestore MUCHO MÁS SIMPLE, solo por rango de fecha.
+    //    Esta consulta SIEMPRE funcionará sin necesidad de índices complejos.
+    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
         .where('fecha', '>=', startDate.toISOString())
         .where('fecha', '<=', endDate.toISOString())
-        .where('tipo', '==', 'movimiento');
+        .get();
+
+    // 3. Obtenemos los IDs de las cuentas visibles para la contabilidad actual (A o B).
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
     
-    const visibleAccountIds = getVisibleAccounts().map(c => c.id);
-    const movements = await fetchMovementsInChunks(baseQuery, 'cuentaId', visibleAccountIds);
+    // 4. Filtramos los resultados EN JAVASCRIPT. Es más robusto y eficiente para esta cantidad de datos.
+    const movements = snapshot.docs
+        .map(doc => doc.data())
+        .filter(mov => 
+            mov.tipo === 'movimiento' &&       // Solo nos interesan ingresos y gastos, no traspasos.
+            visibleAccountIds.has(mov.cuentaId) // Solo movimientos de la contabilidad activa.
+        );
+        
+    // --- FIN DE LA CORRECCIÓN CLAVE ---
+
+    // El resto de la función se mantiene EXACTAMENTE IGUAL, ya que la lógica de cálculo
+    // que tenías a partir de aquí ya era correcta.
     
     const monthlyIncomeData = {};
     const monthlyExpenseData = {};
