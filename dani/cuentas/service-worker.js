@@ -50,30 +50,45 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Evento 'fetch': Se dispara CADA VEZ que la app pide un recurso.
+// REEMPLAZA TU self.addEventListener('fetch', ...) con este bloque
 self.addEventListener('fetch', event => {
-  // Solo aplicamos la estrategia de caché para peticiones GET
-  if (event.request.method !== 'GET') {
-    return;
-  }
+    const { request } = event;
 
-  event.respondWith(
-    caches.open(CACHE_NAME).then(cache => {
-      // 1. Intentar obtener el recurso de la red (Estrategia: Network First)
-      return fetch(event.request)
-        .then(networkResponse => {
-          // Si la petición a la red tiene éxito, la guardamos en caché y la devolvemos
-          if (networkResponse.ok) {
-            cache.put(event.request, networkResponse.clone());
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // 2. Si la red falla, buscamos en la caché como respaldo (Offline Fallback)
-          return cache.match(event.request).then(cachedResponse => {
-            return cachedResponse || Response.error();
-          });
-        });
-    })
-  );
+    // No interceptar peticiones que no sean GET
+    if (request.method !== 'GET') {
+        return;
+    }
+
+    // Estrategia para los recursos de la App (CSS, JS, HTML, imágenes)
+    // Stale-While-Revalidate: Sirve desde la caché al instante, y actualiza en segundo plano.
+    if (URLS_TO_CACHE.includes(new URL(request.url).pathname)) {
+        event.respondWith(
+            caches.open(CACHE_NAME).then(cache => {
+                return cache.match(request).then(cachedResponse => {
+                    const fetchPromise = fetch(request).then(networkResponse => {
+                        cache.put(request, networkResponse.clone());
+                        return networkResponse;
+                    });
+                    // Devuelve la respuesta de la caché si existe, si no, espera a la red.
+                    return cachedResponse || fetchPromise;
+                });
+            })
+        );
+        return;
+    }
+
+    // Estrategia para datos de Firebase (Network First)
+    // Siempre intenta obtener los datos más frescos, con fallback a la caché si no hay red.
+    event.respondWith(
+        fetch(request)
+            .then(networkResponse => {
+                return caches.open(CACHE_NAME).then(cache => {
+                    cache.put(request, networkResponse.clone());
+                    return networkResponse;
+                });
+            })
+            .catch(() => {
+                return caches.match(request);
+            })
+    );
 });
