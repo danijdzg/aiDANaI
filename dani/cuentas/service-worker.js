@@ -7,18 +7,15 @@ const URLS_TO_CACHE = [
   'index.html',
   'style.css',
   'main.js',
-  'manifest.json', // Es buena práctica cachear también el manifest
-  'aiDANaI.webp',  // Cachear la imagen principal
+  'manifest.json',
+  'aiDANaI.webp',
   'icons/android-chrome-192x192.png',
   'icons/android-chrome-512x512.png',
-  'views/inicio.html', // <-- CAMBIADO,
+  'views/inicio.html',
   'views/diario.html',
   'views/inversiones.html',
-  // --- INICIO DE LA CORRECCIÓN ---
-  // Se eliminan los archivos antiguos y se añaden los nuevos.
   'views/analisis.html',
   'views/ajustes.html'
-  // --- FIN DE LA CORRECCIÓN ---
 ];
 
 // Evento 'install': Se dispara cuando el Service Worker se instala por primera vez.

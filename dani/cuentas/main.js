@@ -63,15 +63,15 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
         const PAGE_IDS = {
-			INICIO: 'inicio-page', // <-- CAMBIADO
-			DIARIO: 'diario-page',
-			INVERSIONES: 'inversiones-page',
-			ANALISIS: 'analisis-page',       // <-- NUEVO
-			AJUSTES: 'ajustes-page',         // <-- NUEVO
+    INICIO: 'inicio-page',
+    DIARIO: 'diario-page',
+    INVERSIONES: 'inversiones-page', // <-- NUEVO
+    ANALISIS: 'analisis-page',       // Renombrado de Planificar
+    AJUSTES: 'ajustes-page',
 };
 
 	const AIDANAI_HELP_CONTENT = {
-    [PAGE_IDS.INICIO]: { // <-- CAMBIADO
+    [PAGE_IDS.INICIO]: {
         title: "Tu Torre de Control Financiera",
         content: "¡Bienvenido al Panel! Esta es tu vista de pájaro. De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
     },
@@ -83,11 +83,11 @@ const handleExportFilteredCsv = (btn) => {
         title: "Tu Centro de Mando Patrimonial",
         content: "Esta es la joya de la corona, donde tus activos crecen. Sigue el rendimiento de tu portafolio con métricas clave como la <strong>Rentabilidad (P&L)</strong> y la <strong>TIR anualizada</strong>, la métrica que usan los profesionales para saber si una inversión de verdad merece la pena."
     },
-    [PAGE_IDS.ANALISIS]: { // ANTES: Planificación e Informes
+    [PAGE_IDS.ANALISIS]: { // ANTES: Planificación
         title: "El Laboratorio de Estrategia",
         content: "Aquí conviertes tus números en sabiduría. Automatiza tus <strong>gastos recurrentes</strong> (nómina, alquiler), crea <strong>presupuestos anuales</strong> para controlar tus metas y genera <strong>informes detallados</strong> para entender patrones. <strong>Función estrella:</strong> ¡Puedes exportar tus análisis a <strong>PDF</strong>!"
     },
-    [PAGE_IDS.AJUSTES]: { // ANTES: Configuración
+    [PAGE_IDS.AJUSTES]: {
         title: "La Sala de Máquinas",
         content: "Aquí ajustas la app a tu gusto. Gestiona tus cuentas, conceptos y no olvides la función más potente: la <strong>Contabilidad Dual (A/B)</strong>. Úsala para separar tus finanzas personales de un proyecto o negocio. ¡Es como tener dos apps en una!"
     },
@@ -1563,7 +1563,7 @@ const navigateTo = async (pageId, isInitial = false) => {
         await Promise.all([loadPresupuestos(), loadInversiones()]);
     }
     const pageRenderers = {
-    [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderInicioPage, actions: standardActions }, // <-- CAMBIADO
+    [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
     [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
     [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
