@@ -14,7 +14,8 @@ const URLS_TO_CACHE = [
   'views/inicio.html',
   'views/diario.html',
   'views/inversiones.html',
-  'views/analisis.html',
+  'views/planificar.html', // <-- NUEVO
+  'views/analisis.html',    // <-- NUEVO
   'views/ajustes.html'
 ];
 

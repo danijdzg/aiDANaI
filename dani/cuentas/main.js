@@ -65,35 +65,40 @@ const handleExportFilteredCsv = (btn) => {
         const PAGE_IDS = {
     INICIO: 'inicio-page',
     DIARIO: 'diario-page',
-    INVERSIONES: 'inversiones-page', // <-- NUEVO
-    ANALISIS: 'analisis-page',       // Renombrado de Planificar
+    INVERSIONES: 'inversiones-page',
+    ANALISIS: 'analisis-page', // Esta será nuestra nueva página de Informes
+    PLANIFICAR: 'planificar-page', // Añadimos la página que ya creamos
     AJUSTES: 'ajustes-page',
 };
 
 	const AIDANAI_HELP_CONTENT = {
     [PAGE_IDS.INICIO]: {
         title: "Tu Torre de Control Financiera",
-        content: "¡Bienvenido al Panel! Esta es tu vista de pájaro. De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
+        content: "¡Bienvenido al Panel! De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
     },
     [PAGE_IDS.DIARIO]: {
         title: "El Libro de la Verdad",
-        content: "Aquí está cada céntimo registrado. Es tu historial completo, la verdad absoluta de tus finanzas. <strong>Superpoder secreto:</strong> Desliza cualquier movimiento hacia la <strong>derecha para duplicarlo</strong> (ideal para gastos repetidos) o hacia la <strong>izquierda para borrarlo</strong>. ¡Ahorrarás muchísimo tiempo!"
+        content: "Aquí está cada céntimo registrado. Es tu historial completo. <strong>Superpoder secreto:</strong> Desliza cualquier movimiento hacia la <strong>derecha para duplicarlo</strong> o hacia la <strong>izquierda para borrarlo</strong>."
     },
     [PAGE_IDS.INVERSIONES]: {
         title: "Tu Centro de Mando Patrimonial",
-        content: "Esta es la joya de la corona, donde tus activos crecen. Sigue el rendimiento de tu portafolio con métricas clave como la <strong>Rentabilidad (P&L)</strong> y la <strong>TIR anualizada</strong>, la métrica que usan los profesionales para saber si una inversión de verdad merece la pena."
+        content: "Donde tus activos crecen. Sigue el rendimiento con métricas clave como la <strong>Rentabilidad (P&L)</strong> y la <strong>TIR anualizada</strong>, la métrica que usan los profesionales."
     },
-    [PAGE_IDS.ANALISIS]: { // ANTES: Planificación
+    [PAGE_IDS.PLANIFICAR]: {
         title: "El Laboratorio de Estrategia",
-        content: "Aquí conviertes tus números en sabiduría. Automatiza tus <strong>gastos recurrentes</strong> (nómina, alquiler), crea <strong>presupuestos anuales</strong> para controlar tus metas y genera <strong>informes detallados</strong> para entender patrones. <strong>Función estrella:</strong> ¡Puedes exportar tus análisis a <strong>PDF</strong>!"
+        content: "Aquí te pones el sombrero de estratega. Automatiza tus <strong>gastos recurrentes</strong> (nómina, alquiler) y crea <strong>presupuestos anuales</strong> para controlar tus metas."
+    },
+    [PAGE_IDS.ANALISIS]: {
+        title: "El Laboratorio de aiDANaI",
+        content: "Aquí es donde los datos se convierten en sabiduría. Genera <strong>informes detallados</strong> como extractos de cuenta para tomar mejores decisiones."
     },
     [PAGE_IDS.AJUSTES]: {
         title: "La Sala de Máquinas",
-        content: "Aquí ajustas la app a tu gusto. Gestiona tus cuentas, conceptos y no olvides la función más potente: la <strong>Contabilidad Dual (A/B)</strong>. Úsala para separar tus finanzas personales de un proyecto o negocio. ¡Es como tener dos apps en una!"
+        content: "Aquí ajustas la app a tu gusto. Gestiona tus cuentas, conceptos, copias de seguridad y la potente <strong>Contabilidad Dual (A/B)</strong>."
     },
     'default': {
         title: "¡Hola! Soy aiDANaI, tu copiloto",
-        content: "Mi misión es que tomes el control de tu universo financiero. Haz clic en mi icono en cualquier pantalla para obtener consejos útiles como este, adaptados a donde estés."
+        content: "Mi misión es que tomes el control de tu universo financiero. Haz clic en mi icono en cualquier pantalla para obtener consejos útiles como este."
     }
 };
 	const THEMES = {
@@ -105,11 +110,13 @@ const handleExportFilteredCsv = (btn) => {
 // PEGA ESTE BLOQUE ÚNICO Y CORRECTO EN SU LUGAR
 	const AVAILABLE_WIDGETS = {
         'super-centro-operaciones': { title: 'Centro de Operaciones', description: 'Visión completa con filtros, KPIs y análisis de conceptos.', icon: 'query_stats' },
-		'action-center': { title: 'Centro de Acciones', description: 'Alertas y tareas pendientes.', icon: 'notifications_active' },
-		'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto.', icon: 'show_chart' },
-		'patrimonio-structure': { title: 'Patrimonio', description: 'Gráfico interactivo y listado de todas tus cuentas y su peso.', icon: 'account_balance' },
-		
-	};
+        'action-center': { title: 'Centro de Acciones', description: 'Alertas y tareas pendientes.', icon: 'notifications_active' },
+        'net-worth-trend': { title: 'Evolución del Patrimonio', description: 'Gráfico histórico de la variación de tu patrimonio neto.', icon: 'show_chart' },
+        'patrimonio-structure': { title: 'Patrimonio', description: 'Gráfico interactivo y listado de todas tus cuentas y su peso.', icon: 'account_balance' },
+        'emergency-fund': { title: 'Colchón de Emergencia', description: 'Mide tu red de seguridad financiera.', icon: 'shield' },
+        'fi-progress': { title: 'Independencia Financiera', description: 'Sigue tu progreso hacia la libertad financiera.', icon: 'flag' },
+        'informe-personalizado': { title: 'Mi Informe Personalizado', description: 'Un gráfico a tu medida con los datos que más te importan.', icon: 'insights' }
+    };
 const DEFAULT_DASHBOARD_WIDGETS = [
     'super-centro-operaciones', // <-- El widget principal y más completo
     'net-worth-trend',          // Evolución del Patrimonio
@@ -1566,7 +1573,8 @@ const navigateTo = async (pageId, isInitial = false) => {
     [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
     [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-    [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: renderAnalisisPage, actions: standardActions },
+    [PAGE_IDS.ANALISIS]: { title: 'Análisis e Informes', render: renderInformesPage, actions: standardActions }, // <-- NUEVA LÍNEA
+    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions }, // <-- NUEVA LÍNEA
     [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
 };
      if (pageRenderers[pageId]) { 
@@ -4117,35 +4125,23 @@ const renderInicioResumenView = () => {
     resumenContentContainer.innerHTML = widgetOrder.map(widgetId => {
         // La etiqueta es 'data-widget-type'
         switch(widgetId) {
-            case 'super-centro-operaciones':
-                // La función renderDashboardSuperCentroOperaciones() ya devuelve el esqueleto,
-                // solo necesitamos añadirle nuestra etiqueta al div principal.
-                return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
-            
-            case 'net-worth-trend':
-                return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
-            
-            case 'patrimonio-structure':
-               return `<div data-widget-type="patrimonio-structure">
-                           <div class="card" id="patrimonio-widget">
-                               <div id="patrimonio-completo-container">
-                                   <div class="skeleton" style="height:250px;"></div>
-                               </div>
-                           </div>
-                       </div>`;
-            
-            // Repetimos el patrón para los demás widgets...
-            case 'action-center':
-                return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
-            case 'emergency-fund':
-                return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
-            case 'fi-progress':
-                return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
-            case 'informe-personalizado':
-                 return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
-            default:
-                return '';
-        }
+        case 'super-centro-operaciones':
+            return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
+        case 'action-center':
+            return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
+        case 'net-worth-trend':
+            return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
+        case 'patrimonio-structure':
+           return `<div data-widget-type="patrimonio-structure"><div class="card" id="patrimonio-widget"><div id="patrimonio-completo-container"><div class="skeleton" style="height:250px;"></div></div></div></div>`;
+        case 'emergency-fund':
+            return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
+        case 'fi-progress':
+            return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
+        case 'informe-personalizado':
+             return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
+        default:
+            return '';
+    }
     }).join('<div style="height: var(--sp-4);"></div>');
     
     // ¡IMPORTANTE! Después de dibujar los esqueletos, le decimos a nuestro "asistente" que empiece a observar.
