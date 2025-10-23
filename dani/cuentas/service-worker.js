@@ -1,6 +1,6 @@
 // service-worker.js
 
-const CACHE_NAME = 'ctas-dani-aidanai-cache-v1';
+const CACHE_NAME = 'ctas-aidanai-cache-v1';
 const URLS_TO_CACHE = [
   '/',
   'index.html',
@@ -10,14 +10,12 @@ const URLS_TO_CACHE = [
   'aiDANaI.webp',
   'icons/android-chrome-192x192.png',
   'icons/android-chrome-512x512.png',
-  // --- AÑADE ESTAS LÍNEAS ---
   'views/inicio.html',
   'views/diario.html',
   'views/inversiones.html',
-  'views/planificar.html', // Añádela ahora aunque se use en Fase 1
-  'views/analisis.html',
-  'views/ajustes.html'
-  // --- FIN DE LÍNEAS A AÑADIR ---
+  'views/planificar.html', // Correcto, esta es la nueva vista
+  'views/ajustes.html'      // Correcto
+  // La línea de 'views/analisis.html' ha sido eliminada.
 ];
 
 // Evento 'install': Se dispara cuando el Service Worker se instala por primera vez.

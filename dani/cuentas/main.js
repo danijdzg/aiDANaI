@@ -66,8 +66,7 @@ const handleExportFilteredCsv = (btn) => {
     INICIO: 'inicio-page',
     DIARIO: 'diario-page',
     INVERSIONES: 'inversiones-page',
-    ANALISIS: 'analisis-page', // Esta será nuestra nueva página de Informes
-    PLANIFICAR: 'planificar-page', // Añadimos la página que ya creamos
+    PLANIFICAR: 'planificar-page', // La nueva página
     AJUSTES: 'ajustes-page',
 };
 
@@ -1573,8 +1572,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
     [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-    [PAGE_IDS.ANALISIS]: { title: 'Análisis e Informes', render: renderInformesPage, actions: standardActions }, // <-- NUEVA LÍNEA
-    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions }, // <-- NUEVA LÍNEA
+    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
     [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
 };
      if (pageRenderers[pageId]) { 
