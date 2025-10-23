@@ -62,7 +62,7 @@ const handleExportFilteredCsv = (btn) => {
 	import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm'
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
-        const PAGE_IDS = {
+    const PAGE_IDS = {
     INICIO: 'inicio-page',
     DIARIO: 'diario-page',
     INVERSIONES: 'inversiones-page',
@@ -1524,9 +1524,9 @@ const navigateTo = async (pageId, isInitial = false) => {
     const oldView = document.querySelector('.view--active');
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
-	if (oldView && mainScroller) {
+    if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
-	}
+    }
     if (!newView || (oldView && oldView.id === pageId)) return;
 
     // ----- INICIO DE LA NUEVA LÓGICA DE CARGA DE HTML -----
