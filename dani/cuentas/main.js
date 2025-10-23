@@ -6879,6 +6879,9 @@ const attachEventListeners = () => {
         }, 0);
     }
 },
+			'open-main-add-modal': () => {
+        startMovementForm(); 
+    },
             'toggle-fab-menu': toggleFabMenu,
             'open-fab-action': (e) => {
                 const button = e.target.closest('[data-type]');
