@@ -1,6 +1,6 @@
 // service-worker.js
 
-const CACHE_NAME = 'ctas-aidanai-cache-v1';
+const CACHE_NAME = 'ctas-aidanai-cache-v2';
 const URLS_TO_CACHE = [
   '/',
   'index.html',
@@ -13,10 +13,9 @@ const URLS_TO_CACHE = [
   'views/inicio.html',
   'views/diario.html',
   'views/inversiones.html',
-  'views/planificar.html', // Correcto, esta es la nueva vista
-  'views/ajustes.html'      // Correcto
-  // La línea de 'views/analisis.html' ha sido eliminada.
-];
+  'views/planificar.html', 
+  'views/ajustes.html'     
+  ];
 
 // Evento 'install': Se dispara cuando el Service Worker se instala por primera vez.
 self.addEventListener('install', event => {
