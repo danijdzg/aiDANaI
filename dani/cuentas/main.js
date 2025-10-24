@@ -1568,9 +1568,9 @@ const pageRenderers = {
     [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
     [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions }, // <-- ¡NUEVA!
+    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
     [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-    };
+};
 
      if (pageRenderers[pageId]) { 
         if (leftEl) {
@@ -4287,15 +4287,16 @@ const renderInicioResumenView = () => {
 };
 
 
-// CÓDIGO FINAL DE LA FUNCIÓN renderPlanificacionPage
+// main.js - ASEGÚRATE DE QUE ESTA ES LA ÚNICA VERSIÓN DE ESTA FUNCIÓN
+
 const renderPlanificacionPage = () => {
-    const container = select(PAGE_IDS.PLANIFICACION);
+    const container = select(PAGE_IDS.PLANIFICAR);
     if(!container) return;
 
-    // AHORA NO INCLUYE EL APARTADO DE INVERSIONES
+    // HTML que define la estructura de la página: dos acordeones, uno para Recurrentes y otro para Presupuestos.
     container.innerHTML = `
         <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion">
+            <details class="accordion" open>
                 <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
@@ -4317,7 +4318,7 @@ const renderPlanificacionPage = () => {
             </details>
         </div>`;
     
-    // El resto de la función se mantiene igual, llamando a sus funciones de renderizado
+    // Llamamos a las funciones que rellenarán este HTML con datos.
     populateAllDropdowns();
     renderBudgetTracking();
     renderPendingRecurrents();
@@ -9093,42 +9094,6 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
-// Pega estas dos nuevas funciones en cualquier lugar de main.js
-
-const renderPlanificacionPage = () => {
-    const container = select(PAGE_IDS.PLANIFICAR);
-    if(!container) return;
-
-    // HTML que define la estructura de la página: dos acordeones, uno para Recurrentes y otro para Presupuestos.
-    container.innerHTML = `
-        <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion" open>
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div id="pending-recurrents-container"></div>
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">Pulsa en una operación para editarla. Estas son las que se ejecutarán en el futuro.</p>
-                    <div id="recurrentes-list-container"></div>
-                </div>
-            </details>
-        </div>
-        <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">request_quote</span>Presupuestos Anuales</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);"><div class="form-group" style="flex-grow: 1; margin: 0;"><label for="budget-year-selector" class="form-label">Año del Presupuesto</label><select id="budget-year-selector" class="form-select"></select></div><button data-action="update-budgets" class="btn btn--secondary" style="margin-left: var(--sp-3);"><span class="material-icons" style="font-size: 16px;">edit_calendar</span><span>Gestionar</span></button></div><div id="annual-budget-dashboard"><div id="budget-kpi-container" class="kpi-grid"></div><div class="card" style="margin-top: var(--sp-4);"><h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia Ingresos y Gastos</h3><div class="card__content"><div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div></div></div><div id="budget-details-list" style="margin-top: var(--sp-4);"></div></div><div id="budget-init-placeholder" class="empty-state hidden"><span class="material-icons">edit_calendar</span><h3 id="budget-placeholder-title">Define tu Plan Financiero</h3><p id="budget-placeholder-text">Establece límites de gasto y metas de ingreso para tomar el control de tu año. ¡Empieza ahora!</p><button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);"><span class="material-icons" style="font-size: 16px;">add_circle_outline</span><span>Crear Presupuestos</span></button></div></div>
-            </details>
-        </div>`;
-		// Llamamos a las funciones que rellenarán este HTML con datos.
-    populateAllDropdowns();
-    renderBudgetTracking();
-    renderPendingRecurrents();
-    renderRecurrentsListOnPage();
-};
 
 const renderAjustesPage = () => {
     // Esta función prepara la pestaña de Ajustes
