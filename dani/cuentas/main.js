@@ -6894,16 +6894,6 @@ const attachEventListeners = () => {
 			'open-main-add-modal': () => {
         startMovementForm(); 
     },
-            'toggle-fab-menu': toggleFabMenu,
-            'open-fab-action': (e) => {
-                const button = e.target.closest('[data-type]');
-                if (!button) return;
-                document.querySelector('.fab-container').classList.remove('fab-container--active');
-                startMovementForm();
-                setTimeout(() => {
-                    setMovimientoFormType(button.dataset.type);
-                }, 50);
-            },
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,	
