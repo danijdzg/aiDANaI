@@ -3361,11 +3361,11 @@ const renderPatrimonioPage = async () => {
     await Promise.all([loadPresupuestos(), loadInversiones()]);
 };
  
-// =====================================================================
-// === INICIO: PASO 1 - REEMPLAZA ESTA FUNCIÓN POR COMPLETO          ===
-// =====================================================================
+// =================================================================
+// === REEMPLAZA ESTA FUNCIÓN POR COMPLETO EN TU ARCHIVO main.js ===
+// =================================================================
 /**
- * Genera el HTML para una tarjeta de movimiento o traspaso con sus acciones de swipe.
+ * Genera el HTML para una tarjeta de movimiento o traspaso con la nueva estructura compacta.
  * @param {object} m - El objeto del movimiento.
  * @param {object} dbData - Objeto con acceso a `db.cuentas` y `db.conceptos`.
  * @returns {string} El string HTML del componente completo.
@@ -3382,24 +3382,13 @@ const TransactionCardComponent = (m, dbData) => {
         const destino = cuentas.find(c => c.id === m.cuentaDestinoId);
         cardContentHTML = `
             <div class="transaction-card__indicator transaction-card__indicator--transfer"></div>
-            <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
-                    <div class="transaction-card__description">${formattedDate}</div>
-                    <div class="transaction-card__transfer-details">
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_upward</span> ${(origen?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceOrigen)}</span>
-                        </div>
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_downward</span> ${(destino?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceDestino)}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="transaction-card__figures">
-                    <div class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</div>
-                </div>
+            <div class="transaction-card__details">
+                <span class="transaction-card__row-1">${escapeHTML(m.descripcion) || 'Traspaso'}</span>
+                <span class="transaction-card__row-2">${(origen?.nombre) || '?'} → ${(destino?.nombre) || '?'}</span>
+            </div>
+            <div class="transaction-card__figures">
+                <strong class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</strong>
+                <span class="transaction-card__balance">${formattedDate}</span>
             </div>`;
     } else {
         const cuenta = cuentas.find(c => c.id === m.cuentaId);
@@ -3408,33 +3397,24 @@ const TransactionCardComponent = (m, dbData) => {
         const indicatorClass = m.cantidad >= 0 ? 'transaction-card__indicator--income' : 'transaction-card__indicator--expense';
         cardContentHTML = `
             <div class="transaction-card__indicator ${indicatorClass}"></div>
-            <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__row-1">${toSentenceCase(concept?.nombre || 'S/C')}</div>
-                    <div class="transaction-card__row-2">${formattedDate} • ${escapeHTML(m.descripcion)}</div>
-                </div>
-                <div class="transaction-card__figures">
-                    <div class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</div>
-                    <div class="transaction-card__balance">${formatCurrency(m.runningBalance)}</div>
-                    <div class="transaction-card__row-2" style="text-align: right;">${escapeHTML(cuenta?.nombre || 'S/C')}</div>
-                </div>
+            <div class="transaction-card__details">
+                <span class="transaction-card__row-1">${escapeHTML(m.descripcion)}</span>
+                <span class="transaction-card__row-2">${toSentenceCase(concept?.nombre || 'S/C')} • ${escapeHTML(cuenta?.nombre || 'S/C')}</span>
+            </div>
+            <div class="transaction-card__figures">
+                <strong class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</strong>
+                <span class="transaction-card__balance">${formatCurrency(m.runningBalance)}</span>
             </div>`;
     }
     
- // Envolvemos el contenido de la tarjeta con el contenedor de swipe y sus acciones
+    // El contenedor de swipe no cambia
     return `
     <div class="swipe-container list-item-animate">
         <div class="swipe-actions-container left">
-            <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}">
-                <span class="material-icons">content_copy</span>
-                <span>Duplicar</span>
-            </button>
+            <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}"><span class="material-icons">content_copy</span><span>Duplicar</span></button>
         </div>
         <div class="swipe-actions-container right">
-            <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}" data-is-recurrent="false">
-                <span class="material-icons">delete</span>
-                <span>Borrar</span>
-            </button>
+            <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}" data-is-recurrent="false"><span class="material-icons">delete</span><span>Borrar</span></button>
         </div>
         <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
             ${cardContentHTML}
@@ -5800,7 +5780,10 @@ const setMovimientoFormType = (type) => {
         };
 
 
- // ▼▼▼ REEMPLAZA TU FUNCIÓN startMovementForm POR COMPLETO CON ESTA ▼▼▼
+// =============================================================
+// === Y TAMBIÉN REEMPLAZA LA FUNCIÓN startMovementForm        ===
+// =============================================================
+
 const startMovementForm = async (id = null, isRecurrent = false) => {
     hapticFeedback('medium');
     const form = select('form-movimiento');
@@ -5810,7 +5793,7 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
 
     let data = null;
     let mode = 'new';
-    let initialType = 'gasto'; // Por defecto, abrimos en modo "Gasto"
+    let initialType = 'gasto'; 
 
     if (id) {
         try {
@@ -5820,14 +5803,11 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
             if (doc.exists) {
                 data = { id: doc.id, ...doc.data() };
                 mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
-                if (data.tipo === 'traspaso') {
-                    initialType = 'traspaso';
-                } else {
-                    initialType = data.cantidad < 0 ? 'gasto' : 'ingreso';
-                }
+                if (data.tipo === 'traspaso') initialType = 'traspaso';
+                else initialType = data.cantidad < 0 ? 'gasto' : 'ingreso';
             } else {
                 showToast("Error: No se encontró el elemento para editar.", "danger");
-                id = null; // Reseteamos si no se encuentra
+                id = null;
             }
         } catch (error) {
             console.error("Error al cargar datos para editar:", error);
@@ -5836,25 +5816,24 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
         }
     }
 
-    // Llamamos a nuestra nueva función para establecer el estado inicial
     setMovimientoFormType(initialType);
 
     select('movimiento-mode').value = mode;
     select('movimiento-id').value = id || '';
-
-    // El título se gestionará dinámicamente por setMovimientoFormType, pero lo ajustamos para edición
+    
     if (id && data) {
          select('form-movimiento-title').textContent = initialType === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento';
     }
 
-    // La cantidad SIEMPRE se muestra en positivo
-    select('movimiento-cantidad').value = data ? `${(Math.abs(data.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
+    // Adaptación para los placeholders
+    select('movimiento-cantidad').placeholder = "0,00";
+    select('movimiento-descripcion').placeholder = "Descripción (Ej: Compra semanal)";
     
+    select('movimiento-cantidad').value = data ? `${(Math.abs(data.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
     const fechaInput = select('movimiento-fecha');
     const fecha = data && data.fecha ? new Date(data.fecha) : new Date();
     fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
     updateDateDisplay(fechaInput);
-
     select('movimiento-descripcion').value = (data && data.descripcion) || '';
 
     if (data && data.tipo === 'traspaso') {
@@ -5865,7 +5844,6 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
         select('movimiento-concepto').value = data.conceptoId || '';
     }
 
-    // Lógica de recurrentes (sin cambios)
     const recurrenteCheckbox = select('movimiento-recurrente');
     const recurrentOptions = select('recurrent-options');
     if (mode === 'edit-recurrent' && data) {
@@ -5886,7 +5864,6 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
     showModal('movimiento-modal');
     initAmountInput();
     
-    // Si es nuevo, abrimos la calculadora
     if (!id) {
         setTimeout(() => showCalculator(select('movimiento-cantidad')), 150);
     }
