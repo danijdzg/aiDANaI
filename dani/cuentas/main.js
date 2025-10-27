@@ -1519,37 +1519,33 @@ const navigateTo = async (pageId, isInitial = false) => {
     const oldView = document.querySelector('.view--active');
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
+
+    // Guardar la posición del scroll de la vista anterior
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
-    if (!newView || (oldView && oldView.id === pageId)) return;
 
-    // ----- INICIO DE LA NUEVA LÓGICA DE CARGA DE HTML -----
-    try {
-        // 1. Verificamos si la vista ya tiene contenido. Si no, lo cargamos.
-        if (newView.innerHTML.trim() === '') {
-            const response = await fetch(`views/${pageId.replace('-page', '')}.html`);
-            if (!response.ok) throw new Error(`No se pudo cargar views/${pageId.replace('-page', '')}.html`);
-            newView.innerHTML = await response.text();
-        }
-    } catch (error) {
-        console.error("Error al cargar la vista:", error);
-        newView.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar esta sección.</p></div>`;
-    }
-    // ----- FIN DE LA NUEVA LÓGICA DE CARGA DE HTML -----
+    if (!newView || (oldView && oldView.id === pageId)) return;
+    
+    // --- LÓGICA DE CARGA DE VISTAS CORREGIDA ---
+    // Ya no se intenta hacer 'fetch' de archivos HTML. La función de renderizado se encargará de todo.
 
     destroyAllCharts();
+
     if (!isInitial) hapticFeedback('light');
-	if (!isInitial && window.history.state?.page !== pageId) {
+
+    if (!isInitial && window.history.state?.page !== pageId) {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
-    
+
     const navItems = Array.from(selectAll('.bottom-nav__item'));
     const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
     const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
     const isForward = newIndex > oldIndex;
 
-    const actionsEl = select('top-bar-actions'), leftEl = select('top-bar-left-button'), fab = select('fab-add-movimiento');
+    const actionsEl = select('top-bar-actions');
+    const leftEl = select('top-bar-left-button');
+    const fab = select('fab-add-movimiento'); // Asumiendo que pudieras tener un FAB
     
     const standardActions = `
         <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
@@ -1563,19 +1559,19 @@ const navigateTo = async (pageId, isInitial = false) => {
         </button>
     `;
     
-    if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.INICIO) {
-        await Promise.all([loadPresupuestos(), loadInversiones()]);
-    }
-const pageRenderers = {
-    [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
-    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-};
+    // Lazy loading de datos si es necesario
+    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
+    if (pageId === PAGE_IDS.INVERSIONES && !dataLoaded.inversiones) await loadInversiones();
 
-     if (pageRenderers[pageId]) { 
+    const pageRenderers = {
+        [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+    };
+
+    if (pageRenderers[pageId]) { 
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
             if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
@@ -1591,10 +1587,15 @@ const pageRenderers = {
             }
             leftEl.innerHTML = leftSideHTML;
         }
+
         if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
-        pageRenderers[pageId].render();
+        
+        // --- LLAMADA DIRECTA A LA FUNCIÓN DE RENDERIZADO ---
+        // Este es el cambio clave. Ahora llamamos a la función JS que genera el HTML.
+        await pageRenderers[pageId].render();
     }
-    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === pageId));
+    
+    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     if (fab) fab.classList.toggle('fab--visible', true);
     updateThemeIcon();
     
@@ -1616,12 +1617,15 @@ const pageRenderers = {
         oldView.classList.remove('view--active');
     }
 
+    // Restaurar posición de scroll de la nueva vista
     if (mainScroller) {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
     if (pageId === PAGE_IDS.INICIO) {
-        setTimeout(scheduleDashboardUpdate, 50);
+        // En lugar de llamar directamente a la actualización (que puede ser pesada),
+        // usamos el sistema inteligente que ya tienes para que no se solape.
+        scheduleDashboardUpdate();
     }
 };
         
@@ -3307,17 +3311,42 @@ const renderPatrimonioPage = async () => {
             
             			
         };
-    const renderInicioPage  = () => {
+  const renderInicioPage = async () => {
     const container = select(PAGE_IDS.INICIO);
     if (!container) return;
 
-    // --- ¡LA CORRECCIÓN CLAVE ESTÁ AQUÍ! ---
-    // Antes, esta función borraba todo el HTML del panel.
-    // Ahora, ya NO borra nada. Simplemente se asegura de que los widgets
-    // se rendericen dentro del contenedor que ya existe en el HTML.
+    // AÑADIDO: Creamos la estructura HTML base de la página del Panel.
+    // Esto es lo que antes habría hecho el archivo 'inicio.html'.
+    container.innerHTML = `
+        <div class="card card--no-bg" style="padding:0; margin-bottom: 0;">
+            <div class="card__content" style="padding: 0;">
+                <div class="report-filters">
+                    <div class="form-group" style="margin-bottom: var(--sp-2);">
+                        <select id="filter-periodo" class="form-select report-period-selector">
+                            <option value="mes-actual">Este Mes</option>
+                            <option value="año-actual">Este Año</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </div>
+                    <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr;">
+                        <input type="date" id="filter-fecha-inicio" class="form-input">
+                        <input type="date" id="filter-fecha-fin" class="form-input">
+                    </div>
+                     <button class="btn btn--secondary btn--full hidden" data-action="apply-filters" style="margin-top:var(--sp-2)">Aplicar</button>
+                </div>
+            </div>
+        </div>
+        <div id="resumen-content-container">
+             <!-- Los esqueletos de los widgets se cargarán aquí -->
+        </div>
+    `;
     
+    // Las llamadas a otras funciones se mantienen
     populateAllDropdowns();
-    renderInicioResumenView();
+    renderInicioResumenView(); // Esta función rellenará 'resumen-content-container'
+    
+    // Cargamos los datos para que el dashboard pueda pintarse
+    await Promise.all([loadPresupuestos(), loadInversiones()]);
 };
  
 // =====================================================================
