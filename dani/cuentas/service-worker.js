@@ -9,13 +9,8 @@ const URLS_TO_CACHE = [
   'manifest.json',
   'aiDANaI.webp',
   'icons/android-chrome-192x192.png',
-  'icons/android-chrome-512x512.png',
-  'views/inicio.html',
-  'views/diario.html',
-  'views/inversiones.html',
-  'views/planificar.html', 
-  'views/ajustes.html'     
-  ];
+  'icons/android-chrome-512x512.png'
+];
 
 // Evento 'install': Se dispara cuando el Service Worker se instala por primera vez.
 self.addEventListener('install', event => {

@@ -4474,7 +4474,7 @@ const renderRecurrentsListOnPage = () => {
     }
 
     container.innerHTML = upcomingRecurrents.map(r => {
-        const nextDate = new Date(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+        const nextDate = parseDateStringAsUTC(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
         
         // --- ¡AQUÍ ESTÁ LA CORRECCIÓN IMPORTANTE! ---
         const frequencyMap = { once: 'Única vez', daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
@@ -5627,14 +5627,30 @@ const showAccountMovementsModal = async (cId) => {
     showGenericModal(`Movimientos de ${cuenta.nombre}`, `<div style="text-align:center; padding: var(--sp-5);"><span class="spinner"></span><p style="margin-top: var(--sp-3);">Cargando historial...</p></div>`);
 
     try {
-        const movsSnapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').get();
-        const allMovements = movsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // ▼▼▼ ESTA PARTE ES LA NUEVA Y EFICIENTE ▼▼▼
+    const userMovementsRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos');
+    
+    // Creamos tres promesas de consulta, una para cada campo donde puede aparecer el ID de la cuenta.
+    const queryPromises = [
+        userMovementsRef.where('cuentaId', '==', cId).get(),
+        userMovementsRef.where('cuentaOrigenId', '==', cId).get(),
+        userMovementsRef.where('cuentaDestinoId', '==', cId).get()
+    ];
+    
+    // Ejecutamos las tres consultas en paralelo para máxima velocidad.
+    const snapshots = await Promise.all(queryPromises);
+    
+    // Unimos los resultados y eliminamos duplicados usando un Map.
+    const movementsMap = new Map();
+    snapshots.forEach(snapshot => {
+        snapshot.forEach(doc => {
+            if (!movementsMap.has(doc.id)) {
+                movementsMap.set(doc.id, { id: doc.id, ...doc.data() });
+            }
+        });
+    });
 
-        const accountMovements = allMovements.filter(m => 
-            m.cuentaId === cId || 
-            m.cuentaOrigenId === cId || 
-            m.cuentaDestinoId === cId
-        );
+    const accountMovements = Array.from(movementsMap.values());
         
         // ¡LA MAGIA SUCEDE AQUÍ! Usamos nuestra nueva función para preparar los datos.
         if (accountMovements.length > 0) {
@@ -6432,7 +6448,7 @@ const handleToggleTheme = () => {
     list.innerHTML = recurrentes.length === 0 
         ? `<div class="empty-state" style="background:transparent; padding:var(--sp-4) 0; border: none;"><span class="material-icons">event_repeat</span><h3>Sin operaciones programadas</h3><p>Puedes crear una al añadir un nuevo movimiento.</p></div>`
         : recurrentes.map(r => {
-            const nextDate = new Date(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+            const nextDate = parseDateStringAsUTC(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
             
             // --- LA MISMA CORRECCIÓN, APLICADA AQUÍ TAMBIÉN ---
             const frequencyMap = { once: 'Única vez', daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
