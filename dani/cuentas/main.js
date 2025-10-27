@@ -8784,8 +8784,12 @@ const validateField = (id, silent = false) => {
     clearError(id);
     let isValid = true;
     const value = input.value.trim();
-    const traspasoPill = select('mov-type-btn-traspaso');
-    const type = traspasoPill && traspasoPill.classList.contains('filter-pill--active') ? 'traspaso' : 'movimiento';
+    
+    // CORRECCIÓN: Obtenemos el tipo de la misma forma que en el resto de la app
+    const activeTypeButton = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
+    const type = activeTypeButton ? activeTypeButton.dataset.type : 'gasto';
+    const formType = (type === 'traspaso') ? 'traspaso' : 'movimiento';
+
 
     switch (id) {
         case 'movimiento-cantidad':
@@ -8795,23 +8799,24 @@ const validateField = (id, silent = false) => {
             }
             break;
         case 'movimiento-descripcion':
-            if (type !== 'traspaso' && value === '') {
+            // La descripción no es obligatoria para traspasos con autocompletado
+            if (formType === 'movimiento' && value === '') {
                 displayError(id, 'La descripción es obligatoria.'); isValid = false;
             }
             break;
         case 'movimiento-concepto':
-            if (type === 'movimiento' && value === '') {
+            if (formType === 'movimiento' && value === '') {
                 displayError(id, 'El concepto es obligatorio.'); isValid = false;
             }
             break;
         case 'movimiento-cuenta':
-            if (type === 'movimiento' && value === '') {
+            if (formType === 'movimiento' && value === '') {
                 displayError(id, 'La cuenta es obligatoria.'); isValid = false;
             }
             break;
         case 'movimiento-cuenta-origen':
         case 'movimiento-cuenta-destino':
-            if (type === 'traspaso') {
+            if (formType === 'traspaso') {
                 const origen = select('movimiento-cuenta-origen').value;
                 const destino = select('movimiento-cuenta-destino').value;
                 if (value === '') {
@@ -8877,23 +8882,24 @@ const validateField = (id, silent = false) => {
 
 const validateMovementForm = () => {
     let isValid = true;
+    
+    // Obtenemos el tipo de formulario a partir del botón activo
+    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+
+    // Validamos los campos comunes
     if (!validateField('movimiento-cantidad')) isValid = false;
     if (!validateField('movimiento-fecha')) isValid = false;
 
-    // --- ✅ INICIO DE LA CORRECCIÓN ---
-    // En lugar de buscar por un ID, buscamos el botón activo y leemos su 'data-type'
-    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
-    // --- ✅ FIN DE LA CORRECCIÓN ---
-
-    if (selectedType === 'movimiento' || selectedType === 'gasto' || selectedType === 'ingreso') {
+    // Validamos los campos específicos según el tipo
+    if (selectedType === 'traspaso') {
+        if (!validateField('movimiento-cuenta-origen')) isValid = false;
+        if (!validateField('movimiento-cuenta-destino')) isValid = false;
+    } else { // para 'gasto' e 'ingreso'
         if (!validateField('movimiento-descripcion')) isValid = false;
         if (!validateField('movimiento-concepto')) isValid = false;
         if (!validateField('movimiento-cuenta')) isValid = false;
-    } else { // Esto ahora sí se ejecutará cuando el tipo sea 'traspaso'
-        const origenValid = validateField('movimiento-cuenta-origen');
-        const destinoValid = validateField('movimiento-cuenta-destino');
-        if (!origenValid || !destinoValid) isValid = false;
     }
+    
     return isValid;
 };
  
