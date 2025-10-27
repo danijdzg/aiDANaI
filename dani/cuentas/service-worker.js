@@ -2,7 +2,7 @@
 
 const CACHE_NAME = 'ctas-aidanai-cache-v2';
 const URLS_TO_CACHE = [
-  '/',
+  '.',
   'index.html',
   'style.css',
   'main.js',
