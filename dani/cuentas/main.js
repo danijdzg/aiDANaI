@@ -97,8 +97,8 @@ const AIDANAI_HELP_CONTENT = {
     }
 };
 	const THEMES = {
-    'default': { name: 'Pizarra Esmeralda', icon: 'dark_mode' },
-    'lienzo-claro': { name: 'Lienzo Claro', icon: 'light_mode' }
+    'default': { name: 'Neon Blade', icon: 'dark_mode' },
+    'sunset-groove': { name: 'Sunset Groove', icon: 'light_mode' }
 };
 	        
 // CÓDIGO CORRECTO Y ÚNICO QUE DEBE QUEDAR EN TU ARCHIVO
