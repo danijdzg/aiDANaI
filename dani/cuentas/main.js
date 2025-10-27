@@ -869,7 +869,19 @@ async function loadCoreData(uid) {
                 default: return d;
             }
         };
-        
+        const calculatePreviousDueDate = (currentDueDate, frequency) => {
+    const d = new Date(currentDueDate);
+    d.setHours(12, 0, 0, 0); 
+
+    switch (frequency) {
+        case 'daily': return subDays(d, 1);
+        case 'weekly': return subWeeks(d, 1);
+        case 'monthly': return subMonths(d, 1);
+        case 'yearly': return subYears(d, 1);
+        default: return d;
+    }
+};
+		
 		const select = (id) => document.getElementById(id);
 		const selectAll = (s) => document.querySelectorAll(s);
 		const selectOne = (s) => document.querySelector(s);
@@ -5521,19 +5533,31 @@ const showDrillDownModal = (title, movements) => {
            <p>No se han encontrado movimientos para esta selección.</p>
        </div>`
     : movements.map(m => 
+          // Mantenemos la clase de animación 'list-item-animate'
           TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
       )
       .join('')
+      // Cambiamos la acción para que la edición funcione desde dentro del modal
       .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
 
-    // ==============================================================================
-    // === ¡AQUÍ ESTÁ LA LÍNEA DE CÓDIGO CLAVE QUE SOLUCIONA EL PROBLEMA VISUAL! ===
-    // ==============================================================================
-    // Eliminamos la clase que los hacía invisibles (opacity: 0)
-    modalContentHTML = modalContentHTML.replace(/list-item-animate/g, '');
-
-    // Llamamos a la función existente para mostrar el modal con el HTML ya limpio y visible
+    // Llamamos a la función para mostrar el modal
     showGenericModal(title, modalContentHTML);
+    
+    // --- ¡LA MAGIA SUCEDE AQUÍ! ---
+    // Después de que el modal se muestra, activamos la animación en cascada.
+    setTimeout(() => {
+        const modalBody = document.getElementById('generic-modal-body');
+        if (modalBody) {
+            const itemsToAnimate = modalBody.querySelectorAll('.list-item-animate');
+            itemsToAnimate.forEach((item, index) => {
+                // Aplicamos la clase que dispara la animación con un pequeño retraso
+                // para cada elemento, creando el efecto cascada.
+                setTimeout(() => {
+                    item.classList.add('item-enter-active');
+                }, index * 40); // 40 milisegundos de retraso entre cada item
+            });
+        }
+    }, 50); // Un pequeño retardo para asegurar que el modal es visible
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
 
@@ -7967,7 +7991,7 @@ const handleSaveMovement = async (form, btn) => {
 		
 		if (activePage && activePage.id === PAGE_IDS.DIARIO) {
 			// Forzamos una recarga completa de la vista del diario para asegurar la consistencia.
-			await renderDiarioPage(); 
+			 
 		}
         return true;
 
