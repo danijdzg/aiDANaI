@@ -7980,24 +7980,23 @@ select('form-movimiento-title').textContent = 'Duplicar Movimiento';
 
 
 const handleAddConcept = async (btn) => { 
-     const nombre = toSentenceCase((select('new-concepto-nombre')).value.trim());
-     if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; } 
-     const newId = generateId();
-     await saveDoc('conceptos', newId, { id: newId, nombre, icon: 'label' }, btn);
-     hapticFeedback('success'); 
-     showToast('Concepto añadido.');
-     (select('add-concepto-form')).reset(); 
- };
- const handleAddAccount = async (btn) => { 
-     const nombre = (select('new-cuenta-nombre')).value.trim(); 
-     const tipo = toSentenceCase((select('new-cuenta-tipo')).value.trim()); 
-     if (!nombre || !tipo) { showToast('El nombre y el tipo son obligatorios.', 'warning'); return; } 
-     const newId = generateId();
-     await saveDoc('cuentas', newId, { id: newId, nombre, tipo, saldo: 0, esInversion: false, offBalance: isOffBalanceMode, fechaCreacion: new Date().toISOString() }, btn);
-     hapticFeedback('success'); 
-     showToast('Cuenta añadida.');
-     (select('add-cuenta-form')).reset();
- };
+    const nombreInput = select('new-concepto-nombre');
+    const nombre = toSentenceCase(nombreInput.value.trim());
+    if (!nombre) { showToast('El nombre es obligatorio.', 'warning'); return; }
+    
+    // --- LÍNEA AÑADIDA PARA VERIFICAR ---
+    if (db.conceptos.some(c => c.nombre.toLowerCase() === nombre.toLowerCase())) {
+        showToast(`El concepto "${nombre}" ya existe.`, 'danger');
+        return;
+    }
+
+    const newId = generateId();
+    await saveDoc('conceptos', newId, { id: newId, nombre, icon: 'label' }, btn);
+    hapticFeedback('success'); 
+    showToast('Concepto añadido.');
+    (select('add-concepto-form')).reset(); 
+};
+
  const handleSaveConfig = async (btn) => { 
      setButtonLoading(btn, true);
      const newConfig = { dashboardWidgets: (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS };
