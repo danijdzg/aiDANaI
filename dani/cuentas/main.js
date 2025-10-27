@@ -1555,6 +1555,9 @@ const navigateTo = async (pageId, isInitial = false) => {
         <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
             <span class="material-icons">search</span>
         </button>
+        <button id="theme-toggle-btn" data-action="toggle-theme" class="icon-btn" title="Cambiar Tema" aria-label="Cambiar Tema">
+            <span class="material-icons">dark_mode</span>
+        </button>
         <button data-action="show-main-menu" class="icon-btn" title="Más opciones" aria-label="Mostrar más opciones">
             <span class="material-icons">more_vert</span>
         </button>
