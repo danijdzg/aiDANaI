@@ -7923,7 +7923,7 @@ const handleSaveMovement = async (form, btn) => {
             updateDateDisplay(fechaInput);
             select('movimiento-cantidad').focus();
         }
-		const activePage = document.querySelector('.view--active');
+		
 		if (activePage && activePage.id === PAGE_IDS.DIARIO) {
 			// Forzamos una recarga completa de la vista del diario para asegurar la consistencia.
 			await renderDiarioPage(); 
