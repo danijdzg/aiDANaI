@@ -5654,15 +5654,16 @@ const setMovimientoFormType = (type) => {
     hapticFeedback('light');
     const isTraspaso = type === 'traspaso';
 
-    // 1. Obtenemos referencias a los elementos que vamos a colorear
+    // 1. Obtenemos referencias a los elementos
     const titleEl = select('form-movimiento-title');
     const amountGroup = select('movimiento-cantidad-form-group');
+    const mode = select('movimiento-mode').value; // <-- ¡LA CLAVE ESTÁ AQUÍ!
 
-    // Ocultar/mostrar los campos de movimiento vs traspaso
+    // Ocultar/mostrar campos
     select('movimiento-fields').classList.toggle('hidden', isTraspaso);
     select('traspaso-fields').classList.toggle('hidden', !isTraspaso);
 
-    // 2. Reseteamos los colores cada vez que se cambia de tipo
+    // 2. Reseteamos colores
     if (titleEl) {
         titleEl.classList.remove('title--gasto', 'title--ingreso', 'title--traspaso');
     }
@@ -5670,31 +5671,34 @@ const setMovimientoFormType = (type) => {
         amountGroup.classList.remove('is-gasto', 'is-ingreso', 'is-traspaso');
     }
 
-    // 3. Aplicamos los nuevos colores y textos según el tipo seleccionado
+    // 3. Aplicamos colores y el TÍTULO CORRECTO
     if (titleEl && amountGroup) {
+        const isEditing = mode.startsWith('edit');
+        let baseTitle = isEditing ? 'Editar' : 'Nuevo';
+
         switch (type) {
             case 'gasto':
-                titleEl.textContent = 'Nuevo Gasto';
+                titleEl.textContent = `${baseTitle} Gasto`;
                 titleEl.classList.add('title--gasto');
                 amountGroup.classList.add('is-gasto');
                 break;
             case 'ingreso':
-                titleEl.textContent = 'Nuevo Ingreso';
+                titleEl.textContent = `${baseTitle} Ingreso`;
                 titleEl.classList.add('title--ingreso');
                 amountGroup.classList.add('is-ingreso');
                 break;
             case 'traspaso':
-                titleEl.textContent = 'Nuevo Traspaso';
+                titleEl.textContent = `${baseTitle} Traspaso`;
                 titleEl.classList.add('title--traspaso');
                 amountGroup.classList.add('is-traspaso');
-                if (select('movimiento-descripcion').value.trim() === '') {
+                if (!isEditing && select('movimiento-descripcion').value.trim() === '') {
                     select('movimiento-descripcion').value = 'Traspaso';
                 }
                 break;
         }
     }
     
-    // Gestionar la clase activa en los tres botones
+    // Gestionar la clase activa en los botones
     selectAll('[data-action="set-movimiento-type"]').forEach(btn => {
         btn.classList.toggle('filter-pill--active', btn.dataset.type === type);
     });
@@ -7441,18 +7445,6 @@ if (diarioContainer) {
                 setButtonLoading(btn, false);
             }
         };
-const toggleFabMenu = () => {
-    const container = document.querySelector('.fab-container');
-    if (!container) return;
-
-    hapticFeedback('medium');
-    container.classList.toggle('fab-container--active');
-
-    // Cierra el menú si se pulsa el overlay
-    const overlay = container.querySelector('.fab-overlay');
-    const closeMenu = () => container.classList.remove('fab-container--active');
-    overlay.addEventListener('click', closeMenu, { once: true });
-};
     
 // =================================================================
 // === INICIO: NUEVA FUNCIÓN PARA CONFIRMAR MOVIMIENTOS RECURRENTES ===
@@ -7843,16 +7835,17 @@ const handleSaveMovement = async (form, btn) => {
         cantidad: cantidadFinal,
         tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
         descripcion: (() => {
-    const descInput = select('movimiento-descripcion').value.trim();
-    if (selectedType === 'traspaso' && descInput === '') {
-        const origen = select('movimiento-cuenta-origen');
-        const destino = select('movimiento-cuenta-destino');
-        const nombreOrigen = origen.options[origen.selectedIndex]?.text || '?';
-        const nombreDestino = destino.options[destino.selectedIndex]?.text || '?';
-        return `Traspaso de ${nombreOrigen} a ${nombreDestino}`;
-    }
-    return descInput;
-})(),
+        let descInput = select('movimiento-descripcion').value.trim();
+        if (selectedType === 'traspaso' && descInput === '') {
+            const origen = select('movimiento-cuenta-origen');
+            const destino = select('movimiento-cuenta-destino');
+            const nombreOrigen = origen.options[origen.selectedIndex]?.text || '?';
+            const nombreDestino = destino.options[destino.selectedIndex]?.text || '?';
+            // Asignamos el nuevo valor a la variable que se va a retornar
+            descInput = `Traspaso de ${nombreOrigen} a ${nombreDestino}`;
+        }
+        return descInput; // Ahora retorna el valor correcto siempre
+    })(),
         fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
         cuentaId: select('movimiento-cuenta').value,
         conceptoId: select('movimiento-concepto').value,
