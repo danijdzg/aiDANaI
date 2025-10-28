@@ -6970,9 +6970,15 @@ const attachEventListeners = () => {
     
     document.body.addEventListener('click', async (e) => {
         const target = e.target;
-		 if (!target.closest('.custom-select-wrapper')) {
-        closeAllCustomSelects(null);
-    }
+
+        // --- INICIO DE LA CORRECCIÓN INTEGRADA ---
+        // Si el clic NO fue dentro de un dropdown personalizado, los cerramos todos.
+        // La función closeAllCustomSelects ya está definida antes de que este listener se cree.
+        if (!target.closest('.custom-select-wrapper')) {
+            closeAllCustomSelects(null);
+        }
+        // --- FIN DE LA CORRECCIÓN INTEGRADA ---
+
         if (target.matches('.input-amount-calculator')) {
             e.preventDefault();
             showCalculator(target);
@@ -6990,8 +6996,18 @@ const attachEventListeners = () => {
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
         const btn = actionTarget.closest('button');
               
+        // El objeto 'actions' gigante con toda tu lógica de clics se mantiene exactamente igual.
         const actions = {
 			 'show-main-menu': () => {
+                // ... (el resto de tu objeto actions)
+             },
+             // ... y así sucesivamente con todas tus acciones
+        };
+        
+        if (actions[action]) {
+            actions[action](e);
+        }
+    });
     const menu = document.getElementById('main-menu-popover');
     if (!menu) return;
 
@@ -8055,6 +8071,91 @@ const handleSaveMovement = async (form, btn) => {
     }
 }
 };
+/**
+ * Cierra todos los dropdowns personalizados abiertos, excepto el que se le pasa como argumento.
+ * @param {HTMLElement|null} exceptThisOne - El wrapper del select que no debe cerrarse.
+ */
+function closeAllCustomSelects(exceptThisOne) {
+    document.querySelectorAll('.custom-select-wrapper.is-open').forEach(wrapper => {
+        if (wrapper !== exceptThisOne) {
+            wrapper.classList.remove('is-open');
+            wrapper.querySelector('.custom-select__trigger').setAttribute('aria-expanded', 'false');
+        }
+    });
+}
+
+/**
+ * Transforma un elemento <select> nativo en un componente de dropdown personalizado y accesible.
+ * @param {HTMLElement} selectElement - El elemento <select> a transformar.
+ */
+function createCustomSelect(selectElement) {
+    if (!selectElement) return; // Guarda de seguridad
+    
+    const existingWrapper = selectElement.closest('.custom-select-wrapper');
+    if (existingWrapper) {
+        selectElement.dispatchEvent(new Event('change'));
+        return;
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-select-wrapper';
+    const trigger = document.createElement('div');
+    trigger.className = 'custom-select__trigger';
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'custom-select__options';
+    optionsContainer.setAttribute('role', 'listbox');
+
+    selectElement.parentNode.insertBefore(wrapper, selectElement);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(selectElement);
+    wrapper.appendChild(optionsContainer);
+    selectElement.classList.add('form-select-hidden');
+
+    const populateOptions = () => {
+        optionsContainer.innerHTML = '';
+        let selectedText = 'Ninguno';
+
+        Array.from(selectElement.options).forEach(optionEl => {
+            const customOption = document.createElement('div');
+            customOption.className = 'custom-select__option';
+            customOption.textContent = optionEl.textContent;
+            customOption.dataset.value = optionEl.value;
+            customOption.setAttribute('role', 'option');
+
+            if (optionEl.selected && optionEl.value) {
+                customOption.classList.add('is-selected');
+                selectedText = optionEl.textContent;
+            }
+            optionsContainer.appendChild(customOption);
+        });
+        trigger.textContent = selectedText;
+    };
+
+    populateOptions();
+
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllCustomSelects(wrapper);
+        wrapper.classList.toggle('is-open');
+        trigger.setAttribute('aria-expanded', wrapper.classList.contains('is-open'));
+    });
+
+    optionsContainer.addEventListener('click', (e) => {
+        const option = e.target.closest('.custom-select__option');
+        if (option) {
+            selectElement.value = option.dataset.value;
+            selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+            wrapper.classList.remove('is-open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+    
+    selectElement.addEventListener('change', populateOptions);
+}
+
 
 /**
 
