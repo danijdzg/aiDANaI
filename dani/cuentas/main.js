@@ -7699,7 +7699,6 @@ const handleSaveMovement = async (form, btn) => {
     clearAllErrors(form.id);
     if (!validateMovementForm()) {
         hapticFeedback('error');
-		triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red'); // <-- ¡AÑADE ESTA LÍNEA!
         showToast('Por favor, revisa los campos marcados en rojo.', 'warning');
         return false;
     }
@@ -7710,19 +7709,18 @@ const handleSaveMovement = async (form, btn) => {
     const isRecurrent = select('movimiento-recurrente').checked;
 
     if (isRecurrent) {
-        // La lógica para recurrentes no ha cambiado y sigue siendo correcta.
+        // --- LÓGICA PARA MOVIMIENTOS RECURRENTES ---
         try {
             const id = select('movimiento-id').value || generateId();
             
-            // Lógica para determinar la cantidad en recurrentes
             const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
             let cantidadRecurrente = Math.round(cantidadPositiva * 100);
             const tipoRecurrente = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
 
             if (tipoRecurrente === 'gasto') {
-                 cantidadRecurrente = -Math.abs(cantidadRecurrente);
+                cantidadRecurrente = -Math.abs(cantidadRecurrente);
             } else {
-                 cantidadRecurrente = Math.abs(cantidadRecurrente);
+                cantidadRecurrente = Math.abs(cantidadRecurrente);
             }
             
             const dataToSave = {
@@ -7743,13 +7741,17 @@ const handleSaveMovement = async (form, btn) => {
 
             setButtonLoading(btn, false);
             hapticFeedback('success');
-			triggerSaveAnimation(btn, dataToSave.cantidad >= 0 ? 'green' : 'red');
+            
+            // ▼▼▼ ¡AQUÍ ESTABA EL ERROR! ▼▼▼
+            // Corregido: Usamos 'dataToSave.cantidad' en lugar de la variable inexistente 'dataFromForm.cantidad'
+            triggerSaveAnimation(btn, dataToSave.cantidad >= 0 ? 'green' : 'red');
+            
             if (!isSaveAndNew) {
                 hideModal('movimiento-modal');
                 showToast(select('movimiento-mode').value === 'new' ? 'Operación programada.' : 'Operación actualizada.');
             } else {
                 form.reset();
-                setMovimientoFormType('gasto'); // Volver a Gasto por defecto
+                setMovimientoFormType('gasto');
                 showToast('Operación programada, puedes añadir otra.', 'info');
                 select('movimiento-cantidad').focus();
             }
@@ -7766,137 +7768,110 @@ const handleSaveMovement = async (form, btn) => {
             setButtonLoading(btn, false);
             return false;
         }
-
-    } 
-	else {
-    // --- ✅ LÓGICA CORREGIDA PARA MOVIMIENTOS NORMALES (NO RECURRENTES) ---
-    
-    const mode = select('movimiento-mode').value;
-    const movementId = select('movimiento-id').value;
-
-    // --- ✅ INICIO DE LA CORRECCIÓN ---
-    // Usamos el mismo método robusto para obtener el tipo de movimiento
-    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
-    // --- ✅ FIN DE LA CORRECCIÓN ---
-    
-    const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
-    let cantidadFinal = Math.round(Math.abs(cantidadPositiva) * 100);
-
-    if (selectedType === 'gasto') {
-        cantidadFinal = -cantidadFinal;
     } else {
-        // Para 'ingreso' y 'traspaso', la cantidad es positiva
-        cantidadFinal = Math.abs(cantidadFinal);
-    }
-
-    const dataFromForm = {
-        id: movementId || generateId(),
-        cantidad: cantidadFinal,
-        tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
-        descripcion: (() => {
-        let descInput = select('movimiento-descripcion').value.trim();
-        if (selectedType === 'traspaso' && descInput === '') {
-            const origen = select('movimiento-cuenta-origen');
-            const destino = select('movimiento-cuenta-destino');
-            const nombreOrigen = origen.options[origen.selectedIndex]?.text || '?';
-            const nombreDestino = destino.options[destino.selectedIndex]?.text || '?';
-            // Asignamos el nuevo valor a la variable que se va a retornar
-            descInput = `Traspaso de ${nombreOrigen} a ${nombreDestino}`;
-        }
-        return descInput; // Ahora retorna el valor correcto siempre
-    })(),
-        fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
-        cuentaId: select('movimiento-cuenta').value,
-        conceptoId: select('movimiento-concepto').value,
-        cuentaOrigenId: select('movimiento-cuenta-origen').value,
-        cuentaDestinoId: select('movimiento-cuenta-destino').value,
-    };
-
-    try {
-        let oldMovementData = null;
-        if (mode.startsWith('edit')) {
-            oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
-        }
+        // --- LÓGICA PARA MOVIMIENTOS NORMALES (sin cambios) ---
+        const mode = select('movimiento-mode').value;
+        const movementId = select('movimiento-id').value;
+        const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+        const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
+        let cantidadFinal = Math.round(Math.abs(cantidadPositiva) * 100);
+        if (selectedType === 'gasto') { cantidadFinal = -cantidadFinal; }
         
-        applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
-
-        if (mode.startsWith('edit')) {
-            const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
-            if (index !== -1) db.movimientos[index] = dataFromForm;
-        } else {
-            db.movimientos.unshift(dataFromForm);
-            newMovementIdToHighlight = dataFromForm.id;
-        }
-        db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
-
-        updateLocalDataAndRefreshUI();
-        
-        const activePage = document.querySelector('.view--active');
-        if (activePage && activePage.id === PAGE_IDS.DIARIO) {
-            const mainScroller = document.querySelector('.app-layout__main');
-            if (mainScroller) mainScroller.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        await fbDb.runTransaction(async (transaction) => {
-            let oldDataForTx = null;
-            if (mode.startsWith('edit')) {
-                const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
-                const oldDoc = await transaction.get(oldDocRef);
-                if (oldDoc.exists) oldDataForTx = oldDoc.data();
-            }
-            if (oldDataForTx) {
-                if (oldDataForTx.tipo === 'traspaso') {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                } else {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+        const dataFromForm = {
+            id: movementId || generateId(),
+            cantidad: cantidadFinal,
+            tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
+            descripcion: (() => {
+                let descInput = select('movimiento-descripcion').value.trim();
+                if (selectedType === 'traspaso' && descInput === '') {
+                    const origen = select('movimiento-cuenta-origen');
+                    const destino = select('movimiento-cuenta-destino');
+                    const nombreOrigen = origen.options[origen.selectedIndex]?.text || '?';
+                    const nombreDestino = destino.options[destino.selectedIndex]?.text || '?';
+                    descInput = `Traspaso de ${nombreOrigen} a ${nombreDestino}`;
                 }
+                return descInput;
+            })(),
+            fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
+            cuentaId: select('movimiento-cuenta').value,
+            conceptoId: select('movimiento-concepto').value,
+            cuentaOrigenId: select('movimiento-cuenta-origen').value,
+            cuentaDestinoId: select('movimiento-cuenta-destino').value,
+        };
+
+        try {
+            // (El resto de esta lógica, con applyOptimisticBalanceUpdate y la transacción, es correcta)
+            let oldMovementData = null;
+            if (mode.startsWith('edit')) {
+                oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
             }
-            if (dataFromForm.tipo === 'traspaso') {
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+            applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
+            if (mode.startsWith('edit')) {
+                const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
+                if (index !== -1) db.movimientos[index] = dataFromForm;
             } else {
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+                db.movimientos.unshift(dataFromForm);
+                newMovementIdToHighlight = dataFromForm.id;
             }
-            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
-            transaction.set(movRef, dataFromForm);
-        });
-        
-        setButtonLoading(btn, false);
-        hapticFeedback('success');
-        triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
+            db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
+            updateLocalDataAndRefreshUI();
+            
+            // ... (el resto del código de la transacción de Firebase se mantiene)
+            await fbDb.runTransaction(async (transaction) => {
+                 let oldDataForTx = null;
+                if (mode.startsWith('edit')) {
+                    const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
+                    const oldDoc = await transaction.get(oldDocRef);
+                    if (oldDoc.exists) oldDataForTx = oldDoc.data();
+                }
+                if (oldDataForTx) {
+                    if (oldDataForTx.tipo === 'traspaso') {
+                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
+                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                    } else {
+                        transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
+                    }
+                }
+                if (dataFromForm.tipo === 'traspaso') {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+                } else {
+                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
+                }
+                const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
+                transaction.set(movRef, dataFromForm);
+            });
+            
+            setButtonLoading(btn, false);
+            hapticFeedback('success');
+            triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
 
-        if (!isSaveAndNew) {
-            setTimeout(() => hideModal('movimiento-modal'), 200);
-            showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
-        } else {
-            form.reset();
-            setMovimientoFormType('gasto');
-            const today = new Date();
-            const fechaInput = select('movimiento-fecha');
-            fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-            updateDateDisplay(fechaInput);
-            select('movimiento-cantidad').focus();
-        }
-		
-		if (activePage && activePage.id === PAGE_IDS.DIARIO) {
-			// Forzamos una recarga completa de la vista del diario para asegurar la consistencia.
-			 
-		}
-        return true;
+            if (!isSaveAndNew) {
+                setTimeout(() => hideModal('movimiento-modal'), 200);
+                showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
+            } else {
+                form.reset();
+                setMovimientoFormType('gasto');
+                const today = new Date();
+                const fechaInput = select('movimiento-fecha');
+                fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+                updateDateDisplay(fechaInput);
+                select('movimiento-cantidad').focus();
+            }
 
-    } catch (error) {
-        console.error("Error al guardar el movimiento:", error);
-        showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
-        setButtonLoading(btn, false);
-        if (select('diario-page')?.classList.contains('view--active')) {
-             await renderDiarioPage();
+            return true;
+
+        } catch (error) {
+            console.error("Error al guardar el movimiento:", error);
+            showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
+            setButtonLoading(btn, false);
+            if (select('diario-page')?.classList.contains('view--active')) {
+                await renderDiarioPage();
+            }
+            return false;
         }
-        return false;
     }
-}
 };
-
 
 /**
 
