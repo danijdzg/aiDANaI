@@ -5780,11 +5780,11 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
     const form = select('form-movimiento');
     form.reset();
     clearAllErrors(form.id);
-    populateAllDropdowns();
+    populateAllDropdowns(); // Esto prepara los <select> y los personaliza
 
     let data = null;
     let mode = 'new';
-    let initialType = 'gasto'; // Por defecto, abrimos en modo "Gasto"
+    let initialType = 'gasto';
 
     if (id) {
         try {
@@ -5794,14 +5794,10 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
             if (doc.exists) {
                 data = { id: doc.id, ...doc.data() };
                 mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
-                if (data.tipo === 'traspaso') {
-                    initialType = 'traspaso';
-                } else {
-                    initialType = data.cantidad < 0 ? 'gasto' : 'ingreso';
-                }
+                initialType = data.tipo === 'traspaso' ? 'traspaso' : (data.cantidad < 0 ? 'gasto' : 'ingreso');
             } else {
                 showToast("Error: No se encontró el elemento para editar.", "danger");
-                id = null; // Reseteamos si no se encuentra
+                id = null;
             }
         } catch (error) {
             console.error("Error al cargar datos para editar:", error);
@@ -5810,57 +5806,68 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
         }
     }
 
-    // Llamamos a nuestra nueva función para establecer el estado inicial
     setMovimientoFormType(initialType);
-
     select('movimiento-mode').value = mode;
     select('movimiento-id').value = id || '';
 
-    // El título se gestionará dinámicamente por setMovimientoFormType, pero lo ajustamos para edición
-    if (id && data) {
-         select('form-movimiento-title').textContent = initialType === 'traspaso' ? 'Editar Traspaso' : 'Editar Movimiento';
-    }
+    // Rellenar los campos con los datos cargados
+    if (data) {
+        select('movimiento-cantidad').value = `${(Math.abs(data.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}`;
+        
+        const fechaInput = select('movimiento-fecha');
+        const fecha = new Date(data.fecha);
+        fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+        updateDateDisplay(fechaInput);
 
-    // La cantidad SIEMPRE se muestra en positivo
-    select('movimiento-cantidad').value = data ? `${(Math.abs(data.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}` : '';
-    
-    const fechaInput = select('movimiento-fecha');
-    const fecha = data && data.fecha ? new Date(data.fecha) : new Date();
-    fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-    updateDateDisplay(fechaInput);
+        select('movimiento-descripcion').value = data.descripcion || '';
 
-    select('movimiento-descripcion').value = (data && data.descripcion) || '';
+        if (data.tipo === 'traspaso') {
+            select('movimiento-cuenta-origen').value = data.cuentaOrigenId || '';
+            select('movimiento-cuenta-destino').value = data.cuentaDestinoId || '';
+            
+            // ▼▼▼ LA CORRECCIÓN CLAVE PARA TRASPASOS ESTÁ AQUÍ ▼▼▼
+            // Forzamos la actualización visual de los dropdowns personalizados
+            select('movimiento-cuenta-origen').dispatchEvent(new Event('change'));
+            select('movimiento-cuenta-destino').dispatchEvent(new Event('change'));
 
-    if (data && data.tipo === 'traspaso') {
-        select('movimiento-cuenta-origen').value = data.cuentaOrigenId || '';
-        select('movimiento-cuenta-destino').value = data.cuentaDestinoId || '';
-    } else if (data) {
-        select('movimiento-cuenta').value = data.cuentaId || '';
-        select('movimiento-concepto').value = data.conceptoId || '';
-    }
+        } else {
+            select('movimiento-cuenta').value = data.cuentaId || '';
+            select('movimiento-concepto').value = data.conceptoId || '';
+            
+            // ▼▼▼ LA CORRECCIÓN CLAVE PARA GASTO/INGRESO ESTÁ AQUÍ ▼▼▼
+            // Forzamos la actualización visual de los dropdowns personalizados
+            select('movimiento-cuenta').dispatchEvent(new Event('change'));
+            select('movimiento-concepto').dispatchEvent(new Event('change'));
+        }
 
-    // Lógica de recurrentes (sin cambios)
-    const recurrenteCheckbox = select('movimiento-recurrente');
-    const recurrentOptions = select('recurrent-options');
-    if (mode === 'edit-recurrent' && data) {
-        recurrenteCheckbox.checked = true;
-        select('recurrent-frequency').value = data.frequency;
-        select('recurrent-next-date').value = data.nextDate;
-        select('recurrent-end-date').value = data.endDate || '';
-        recurrentOptions.classList.remove('hidden');
+        // Lógica para recurrentes
+        const recurrenteCheckbox = select('movimiento-recurrente');
+        const recurrentOptions = select('recurrent-options');
+        if (mode === 'edit-recurrent') {
+            recurrenteCheckbox.checked = true;
+            select('recurrent-frequency').value = data.frequency;
+            select('recurrent-next-date').value = data.nextDate;
+            select('recurrent-end-date').value = data.endDate || '';
+            recurrentOptions.classList.remove('hidden');
+        } else {
+            recurrenteCheckbox.checked = false;
+            recurrentOptions.classList.add('hidden');
+        }
     } else {
-        recurrenteCheckbox.checked = false;
-        recurrentOptions.classList.add('hidden');
+        // Lógica para un formulario nuevo (sin cambios)
+        const fechaInput = select('movimiento-fecha');
+        const fecha = new Date();
+        fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+        updateDateDisplay(fechaInput);
     }
-
-    select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
-    select('delete-movimiento-btn').dataset.isRecurrent = isRecurrent;
-    select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
     
+    select('delete-movimiento-btn').classList.toggle('hidden', !id || !data);
+    select('delete-movimiento-btn').dataset.isRecurrent = String(isRecurrent);
+    select('duplicate-movimiento-btn').classList.toggle('hidden', !(mode === 'edit-single' && data));
+
     showModal('movimiento-modal');
     initAmountInput();
     
-    // Si es nuevo, abrimos la calculadora
     if (!id) {
         setTimeout(() => showCalculator(select('movimiento-cantidad')), 150);
     }
