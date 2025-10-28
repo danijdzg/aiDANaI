@@ -372,161 +372,117 @@ const clearDiarioFilters = async () => {
        // ▼▼▼ COPIA Y PEGA ESTE BLOQUE ÚNICO EN LUGAR DEL CÓDIGO DE LA CALCULADORA QUE TENGAS ▼▼▼
 
         let calculatorState = {
-            displayValue: '0',
-            operand1: null,
-            operator: null,
-            waitingForNewValue: true,
-            targetInput: null,
-            isVisible: false, 
-            isResultDisplayed: false,
-            historyValue: '', // <-- ¡NUEVA PROPIEDAD para guardar la "chuleta"!
-        };
-        
-        // Actualiza el display del historial
-        const updateCalculatorHistoryDisplay = () => {
-            const historyDisplay = select('calculator-history-display');
-            if (historyDisplay) {
-                historyDisplay.textContent = calculatorState.historyValue;
-            }
-        };
+    displayValue: '0',
+    operand1: null,
+    operator: null,
+    waitingForNewValue: true,
+    targetInput: null,
+    isVisible: false, 
+    isResultDisplayed: false,
+    historyValue: '', // <-- ¡NUEVA! Guarda la operación
+};
 
-        // Mapea las claves a los símbolos visuales
-        const getOperatorSymbol = (key) => {
-            switch(key) {
-                case 'add': return '+';
-                case 'subtract': return '−'; // Usamos un guion más estilizado
-                case 'multiply': return '×';
-                case 'divide': return '÷';
-                default: return '';
-            }
-        };
+// Actualiza el display del historial
+const updateCalculatorHistoryDisplay = () => {
+    const historyDisplay = select('calculator-history-display');
+    if (historyDisplay) historyDisplay.textContent = calculatorState.historyValue;
+};
 
-        // Gestiona qué botón de operador se ve activo
-        const updateActiveOperatorButton = () => {
-            // Primero, quitamos la clase activa de todos
-            selectAll('.calculator-btn.btn-operator').forEach(btn => {
-                btn.classList.remove('btn-operator--active');
-            });
-            
-            // Luego, si hay un operador activo, se la añadimos al botón correspondiente
-            if (calculatorState.operator) {
-                const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
-                if (activeBtn) {
-                    activeBtn.classList.add('btn-operator--active');
-                }
-            }
-        };      
+// Mapea las claves a los símbolos visuales
+const getOperatorSymbol = (key) => ({
+    'add': '+', 'subtract': '−', 'multiply': '×', 'divide': '÷'
+}[key] || '');
 
-        const handleCalculatorInput = (key) => {
-            hapticFeedback('light');
-            let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
-            
-            if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
-                displayValue = '0';
-                isResultDisplayed = false;
-                historyValue = ''; // Limpiamos historial al empezar un nuevo cálculo
-            }
+// Gestiona qué botón de operador se ve activo
+const updateActiveOperatorButton = () => {
+    selectAll('.calculator-btn.btn-operator').forEach(btn => btn.classList.remove('btn-operator--active'));
+    if (calculatorState.operator) {
+        const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
+        if (activeBtn) activeBtn.classList.add('btn-operator--active');
+    }
+};      
 
-            const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
+const handleCalculatorInput = (key) => {
+    hapticFeedback('light');
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
+    
+    if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
+        displayValue = '0';
+        isResultDisplayed = false;
+        historyValue = ''; // Limpiamos historial al empezar un nuevo cálculo
+    }
 
-            if (isOperator) {
+    const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
+
+    if (isOperator) {
+        if (operand1 !== null && operator !== null && !waitingForNewValue) {
+            calculate();
+            displayValue = calculatorState.displayValue; 
+        }
+        operand1 = parseFloat(displayValue.replace(',', '.'));
+        operator = key;
+        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`;
+        waitingForNewValue = true;
+        isResultDisplayed = false;
+    } else {
+        switch(key) {
+            case 'done':
+                hapticFeedback('medium');
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
-                    displayValue = calculatorState.displayValue; 
+                    displayValue = calculatorState.displayValue;
                 }
-                operand1 = parseFloat(displayValue.replace(',', '.'));
-                operator = key;
-                historyValue = `${displayValue} ${getOperatorSymbol(operator)}`; // Actualizamos el historial
-                waitingForNewValue = true;
+                if (calculatorState.targetInput) {
+                    const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
+                    calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
+                        useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 2 
+                    });
+                    // Disparamos eventos para que cualquier otra lógica reaccione
+                    calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    calculatorState.targetInput.dispatchEvent(new Event('blur')); 
+                }
+                historyValue = '';
+                hideCalculator();
+                select('movimiento-descripcion').focus(); // Llevamos al usuario al siguiente paso
+                return;
+            case 'comma':
+                if (waitingForNewValue) {
+                    displayValue = '0,';
+                    waitingForNewValue = false;
+                } else if (!displayValue.includes(',')) displayValue += ',';
                 isResultDisplayed = false;
-            } else {
-                switch(key) {
-                    case 'done':
-                        hapticFeedback('medium');
-                        if (operand1 !== null && operator !== null && !waitingForNewValue) {
-                            calculate();
-                            displayValue = calculatorState.displayValue;
-                        }
-                        
-                        if (calculatorState.targetInput) {
-                            const finalValue = parseFloat(displayValue.replace(',', '.')) || 0;
-                            
-                            calculatorState.targetInput.value = finalValue.toLocaleString('es-ES', { 
-                                useGrouping: false, 
-                                minimumFractionDigits: 2, 
-                                maximumFractionDigits: 2 
-                            });
-
-                            calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            calculatorState.targetInput.dispatchEvent(new Event('blur')); 
-                        }
-                        historyValue = '';
-                        hideCalculator();
-                        select('movimiento-descripcion').focus();
-                        return;
-
-                    case 'comma':
-                        if (waitingForNewValue) {
-                            displayValue = '0,';
-                            waitingForNewValue = false;
-                        } else if (!displayValue.includes(',')) {
-                            displayValue += ',';
-                        }
-                        isResultDisplayed = false;
-                        break;
-                    
-                    case 'clear': 
-                        displayValue = '0'; 
-                        waitingForNewValue = true; 
-                        operand1 = null; 
-                        operator = null; 
-                        isResultDisplayed = false; 
-                        historyValue = ''; // Limpiamos historial
-                        break;
-
-                    case 'backspace': 
-                        if (displayValue.length > 1) {
-                            displayValue = displayValue.slice(0, -1);
-                        } else {
-                            displayValue = '0';
-                            waitingForNewValue = true;
-                        }
-                        isResultDisplayed = false;
-                        break;
-
-                    case 'sign': 
-                        if (displayValue !== '0') { 
-                            displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
-                        }
-                        break;
-                        
-                    default: // Dígitos
-                        if (waitingForNewValue || displayValue === '0') {
-                            displayValue = key;
-                            waitingForNewValue = false;
-                        } else {
-                            displayValue += key;
-                        }
-                        isResultDisplayed = false;
-                        break;
+                break;
+            case 'clear': 
+                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; historyValue = '';
+                break;
+            case 'backspace': 
+                displayValue = displayValue.length > 1 ? displayValue.slice(0, -1) : '0';
+                if (displayValue === '0') waitingForNewValue = true;
+                isResultDisplayed = false;
+                break;
+            case 'sign': 
+                if (displayValue !== '0') displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
+                break;
+            default: // Dígitos
+                if (waitingForNewValue || displayValue === '0') {
+                    displayValue = key;
+                    waitingForNewValue = false;
+                } else if (displayValue.length < 12) { // Límite para evitar desbordes
+                    displayValue += key;
                 }
-            }
-            
-            // Guardamos todos los cambios en el estado global
-            calculatorState.displayValue = displayValue;
-            calculatorState.waitingForNewValue = waitingForNewValue;
-            calculatorState.operand1 = operand1;
-            calculatorState.operator = operator;
-            calculatorState.isResultDisplayed = isResultDisplayed;
-            calculatorState.historyValue = historyValue;
-            
-            // Actualizamos toda la interfaz de la calculadora
-            updateCalculatorDisplay();
-            updateCalculatorHistoryDisplay(); // <-- Llamamos a la nueva función
-            updateActiveOperatorButton(); // <-- Y a esta para el estilo
-        };
+                isResultDisplayed = false;
+                break;
+        }
+    }
+    
+    // Guardamos y actualizamos la UI
+    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue });
+    updateCalculatorDisplay();
+    updateCalculatorHistoryDisplay();
+    updateActiveOperatorButton();
+};
 
-        const calculate = () => {
+const calculate = () => {
             const val1 = calculatorState.operand1;
             const val2 = parseFloat(calculatorState.displayValue.replace(',', '.'));
             if (isNaN(val1) || isNaN(val2) || !calculatorState.operator) return;
@@ -1186,47 +1142,20 @@ const initWidgetObserver = () => {
  * @param {string} color - 'green' para ingresos, 'red' para gastos.
  */
 const triggerSaveAnimation = (fromElement, color) => {
-    // 1. Nos aseguramos de que el elemento de origen existe.
     if (!fromElement) return;
-
-    // 2. Buscamos el punto de partida (botón) y el de llegada (lista de movimientos).
     const startRect = fromElement.getBoundingClientRect();
-    const listElement = select('movimientos-list-container') || select('diario-page'); // Un fallback por si la lista no está visible
+    const listElement = select('movimientos-list-container') || select('diario-page');
     const endRect = listElement.getBoundingClientRect();
-
-    // 3. Calculamos las coordenadas iniciales (el centro del botón que se ha pulsado).
-    const startX = startRect.left + startRect.width / 2;
-    const startY = startRect.top + startRect.height / 2;
-
-    // 4. Calculamos las coordenadas finales (el centro superior de la lista del diario).
-    const endX = endRect.left + endRect.width / 2;
-    const endY = endRect.top;
-
-    // 5. Creamos el elemento "burbuja" en el DOM.
     const bubble = document.createElement('div');
     bubble.className = 'save-animation-bubble';
-    
-    // 6. Le damos el color y la posición inicial.
-    const bubbleColor = color === 'green' ? 'var(--c-success)' : 'var(--c-danger)';
-    bubble.style.backgroundColor = bubbleColor;
-    bubble.style.left = `${startX - 10}px`; // Restamos la mitad de su tamaño (20px / 2)
-    bubble.style.top = `${startY - 10}px`;
-
+    bubble.style.backgroundColor = color === 'green' ? 'var(--c-success)' : 'var(--c-danger)';
+    bubble.style.left = `${startRect.left + startRect.width / 2 - 10}px`;
+    bubble.style.top = `${startRect.top + startRect.height / 2 - 10}px`;
     document.body.appendChild(bubble);
-
-    // 7. ¡LA MAGIA! Forzamos un 'reflow' del navegador. Esto hace que el navegador "vea" la
-    // burbuja en su estado inicial antes de aplicar la animación, lo que es crucial para que la transición funcione.
-    void bubble.offsetWidth; 
-
-    // 8. Aplicamos la animación CSS y las coordenadas finales. El navegador se encargará de la transición.
-    // La animación 'fly-to-list' ya está definida en tu CSS.
+    void bubble.offsetWidth; // Force reflow
     bubble.style.animation = `fly-to-list 0.7s cubic-bezier(0.5, 0, 1, 0.5) forwards`;
-    bubble.style.transform = `translate(${endX - startX}px, ${endY - startY}px) scale(0)`;
-    
-    // 9. Limpieza: Cuando la animación termina, eliminamos la burbuja del DOM para no dejar basura.
-    bubble.addEventListener('animationend', () => {
-        bubble.remove();
-    }, { once: true }); // El { once: true } es una buena práctica para que el listener se elimine solo.
+    bubble.style.transform = `translate(${endRect.left + endRect.width / 2 - (startRect.left + startRect.width / 2)}px, ${endRect.top - (startRect.top + startRect.height / 2)}px) scale(0)`;
+    bubble.addEventListener('animationend', () => bubble.remove(), { once: true });
 };
         const displayError = (id, msg) => { const err = select(`${id}-error`); if (err) { err.textContent = msg; err.setAttribute('role', 'alert'); } const inp = select(id); if (inp) inp.classList.add('form-input--invalid'); };
         const clearError = (id) => { const err = select(`${id}-error`); if (err) { err.textContent = ''; err.removeAttribute('role'); } const inp = select(id); if (inp) inp.classList.remove('form-input--invalid'); };
@@ -3384,32 +3313,6 @@ const TransactionCardComponent = (m, dbData) => {
         const origen = cuentas.find(c => c.id === m.cuentaOrigenId);
         const destino = cuentas.find(c => c.id === m.cuentaDestinoId);
         cardContentHTML = `
-            <div class="transaction-card__indicator transaction-card__indicator--transfer"></div>
-            <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
-                    <div class="transaction-card__description">${formattedDate}</div>
-                    <div class="transaction-card__transfer-details">
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_upward</span> ${(origen?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceOrigen)}</span>
-                        </div>
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_downward</span> ${(destino?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceDestino)}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="transaction-card__figures">
-                    <div class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</div>
-                </div>
-            </div>`;
-    } else {
-        const cuenta = cuentas.find(c => c.id === m.cuentaId);
-        const concept = conceptos.find(c => c.id === m.conceptoId);
-        const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
-        const indicatorClass = m.cantidad >= 0 ? 'transaction-card__indicator--income' : 'transaction-card__indicator--expense';
-        cardContentHTML = `
             <div class="transaction-card__indicator ${indicatorClass}"></div>
             <div class="transaction-card__content">
                 <div class="transaction-card__details">
@@ -3419,24 +3322,21 @@ const TransactionCardComponent = (m, dbData) => {
                 <div class="transaction-card__figures">
                     <div class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</div>
                     <div class="transaction-card__balance">${formatCurrency(m.runningBalance)}</div>
-                    <div class="transaction-card__row-2" style="text-align: right;">${escapeHTML(cuenta?.nombre || 'S/C')}</div>
                 </div>
             </div>`;
     }
     
- // Envolvemos el contenido de la tarjeta con el contenedor de swipe y sus acciones
+    // Envolvemos todo en el contenedor de swipe
     return `
-    <div class="swipe-container list-item-animate">
+    <div class="swipe-container">
         <div class="swipe-actions-container left">
             <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}">
-                <span class="material-icons">content_copy</span>
-                <span>Duplicar</span>
+                <span class="material-icons">content_copy</span><span>Duplicar</span>
             </button>
         </div>
         <div class="swipe-actions-container right">
-            <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}" data-is-recurrent="false">
-                <span class="material-icons">delete</span>
-                <span>Borrar</span>
+            <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}">
+                <span class="material-icons">delete</span><span>Borrar</span>
             </button>
         </div>
         <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
@@ -5605,15 +5505,11 @@ const showCalculator = (targetInput) => {
 
     // ¡LA MAGIA PARA PC!
     if (!isMobileDevice()) {
-        if (calculatorKeyboardHandler) {
-            document.removeEventListener('keydown', calculatorKeyboardHandler);
-        }
+        if (calculatorKeyboardHandler) document.removeEventListener('keydown', calculatorKeyboardHandler);
         
         calculatorKeyboardHandler = (e) => {
-            if ("0123456789,.+-*\/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) {
-                e.preventDefault();
-            }
-
+            if ("0123456789,.+-*\/".includes(e.key) || ['Enter', 'Backspace', 'Escape', 'Delete'].includes(e.key)) e.preventDefault();
+            
             if (e.key >= '0' && e.key <= '9') handleCalculatorInput(e.key);
             else if (e.key === ',' || e.key === '.') handleCalculatorInput('comma');
             else if (e.key === 'Enter') handleCalculatorInput('done');
@@ -5625,7 +5521,6 @@ const showCalculator = (targetInput) => {
             else if (e.key === '*' || e.key.toLowerCase() === 'x') handleCalculatorInput('multiply');
             else if (e.key === '/') handleCalculatorInput('divide');
         };
-
         document.addEventListener('keydown', calculatorKeyboardHandler);
     }
 };
@@ -7813,6 +7708,7 @@ const handleSaveMovement = async (form, btn) => {
     clearAllErrors(form.id);
     if (!validateMovementForm()) {
         hapticFeedback('error');
+		triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red'); // <-- ¡AÑADE ESTA LÍNEA!
         showToast('Por favor, revisa los campos marcados en rojo.', 'warning');
         return false;
     }
