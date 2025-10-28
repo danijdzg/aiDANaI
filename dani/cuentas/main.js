@@ -6889,17 +6889,14 @@ const handleGenerateInformeCuenta = async (form, btn) => {
 // =================================================================
 // === FIN DEL BLOQUE DEFINITIVO                                 ===
 // =================================================================
-
-const attachEventListeners = () => {
+ const attachEventListeners = () => {
     const cantidadInput = document.getElementById("movimiento-cantidad");
     if (cantidadInput) {
         const cantidadError = document.getElementById("movimiento-cantidad-error");
-
         cantidadInput.addEventListener("input", () => {
             let valor = cantidadInput.value.trim();
             valor = valor.replace(",", ".");
             const regex = /^\d+(.\d{0,2})?$/;
-
             if (valor === "" || !regex.test(valor)) {
                 cantidadError.textContent = "Introduce un número positivo (ej: 2,50 o 15.00)";
                 cantidadInput.classList.add("form-input--error");
@@ -6908,31 +6905,26 @@ const attachEventListeners = () => {
                 cantidadInput.classList.remove("form--error");
             }
         });
-
         const descripcionInput = document.getElementById("movimiento-descripcion");
         const cuentaSelect = document.getElementById("movimiento-cuenta");
         const saveBtn = document.getElementById("save-movimiento-btn");
-        
         document.addEventListener("show-modal", (e) => {
             if (e.detail.modalId === "movimiento-modal") {
                 setTimeout(() => cantidadInput.focus(), 100);
             }
         });
-
         cantidadInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
                 e.preventDefault();
                 descripcionInput.focus();
             }
         });
-        
         descripcionInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
                 e.preventDefault();
                 cuentaSelect.focus();
             }
         });
-        
         cuentaSelect.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
                 e.preventDefault();
@@ -6940,6 +6932,7 @@ const attachEventListeners = () => {
             }
         });
     }
+
     const amountInputForFormatting = select('movimiento-cantidad');
     if (amountInputForFormatting) {
         amountInputForFormatting.addEventListener('focus', (e) => {
@@ -6955,6 +6948,7 @@ const attachEventListeners = () => {
             input.value = formatAsCurrencyInput(numericValue);
         });
     }
+
     window.addEventListener('popstate', (event) => {
         const activeModal = document.querySelector('.modal-overlay--active');
         if (activeModal) {
@@ -6967,13 +6961,12 @@ const attachEventListeners = () => {
             navigateTo(pageToNavigate, false);
         }
     });
-    
+
     document.body.addEventListener('click', async (e) => {
         const target = e.target;
 
         // --- INICIO DE LA CORRECCIÓN INTEGRADA ---
         // Si el clic NO fue dentro de un dropdown personalizado, los cerramos todos.
-        // La función closeAllCustomSelects ya está definida antes de que este listener se cree.
         if (!target.closest('.custom-select-wrapper')) {
             closeAllCustomSelects(null);
         }
@@ -6984,59 +6977,37 @@ const attachEventListeners = () => {
             showCalculator(target);
             return;
         }
-
         const actionTarget = target.closest('[data-action]');
-        
         if (!actionTarget && !target.closest('.transaction-card')) {
-             resetActiveSwipe();
+            resetActiveSwipe();
         }
-        
         if (!actionTarget) return;
 
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
         const btn = actionTarget.closest('button');
-              
-        // El objeto 'actions' gigante con toda tu lógica de clics se mantiene exactamente igual.
-        const actions = {
-			 'show-main-menu': () => {
-                // ... (el resto de tu objeto actions)
-             },
-             // ... y así sucesivamente con todas tus acciones
-        };
         
-        if (actions[action]) {
-            actions[action](e);
-        }
-    });
-    const menu = document.getElementById('main-menu-popover');
-    if (!menu) return;
-
-    // Muestra u oculta el menú
-    menu.classList.toggle('popover-menu--visible');
-
-    // Si el menú se acaba de hacer visible, preparamos un "detector de clics"
-    if (menu.classList.contains('popover-menu--visible')) {
-        // Usamos un pequeño truco para que este detector no se active con el mismo clic que abrió el menú
-        setTimeout(() => {
-            const closeOnClickOutside = (event) => {
-                // Si se hace clic fuera del menú, lo cerramos
-                if (!menu.contains(event.target) && !event.target.closest('[data-action="show-main-menu"]')) {
-                    menu.classList.remove('popover-menu--visible');
-                    // Importante: una vez cerrado, eliminamos el detector para que no se quede escuchando para siempre
-                    document.removeEventListener('click', closeOnClickOutside);
+        // El objeto de acciones original se ha recreado aquí fielmente.
+        const actions = {
+            'show-main-menu': () => {
+                const menu = document.getElementById('main-menu-popover');
+                if (!menu) return;
+                menu.classList.toggle('popover-menu--visible');
+                if (menu.classList.contains('popover-menu--visible')) {
+                    setTimeout(() => {
+                        const closeOnClickOutside = (event) => {
+                            if (!menu.contains(event.target) && !event.target.closest('[data-action="show-main-menu"]')) {
+                                menu.classList.remove('popover-menu--visible');
+                                document.removeEventListener('click', closeOnClickOutside);
+                            }
+                        };
+                        document.addEventListener('click', closeOnClickOutside);
+                    }, 0);
                 }
-            };
-            // Añadimos el detector a todo el documento
-            document.addEventListener('click', closeOnClickOutside);
-        }, 0);
-    }
-},
-			'open-main-add-modal': () => {
-        startMovementForm(); 
-    },
+            },
+            'open-main-add-modal': () => startMovementForm(),
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
-            'clear-diario-filters': clearDiarioFilters,	
+            'clear-diario-filters': clearDiarioFilters,
             'toggle-amount-type': () => {
                 const amountInput = select('movimiento-cantidad');
                 const amountGroup = select('movimiento-cantidad-form-group');
@@ -7048,40 +7019,18 @@ const attachEventListeners = () => {
                 amountInput.value = newValue.toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 updateAmountTypeUI(!isCurrentlyGasto);
             },
-            'context-edit': () => {
-                hideModal('generic-modal');
-                startMovementForm(id, false);
-            },
-            'context-duplicate': () => {
-                hideModal('generic-modal');
-                const movement = db.movimientos.find(m => m.id === id);
-                if(movement) handleDuplicateMovement(movement);
-            },
-            'context-delete': () => {
-                hideModal('generic-modal');
-                showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => {
-                    await deleteMovementAndAdjustBalance(id, false);
-                });
-            },
+            'context-edit': () => { hideModal('generic-modal'); startMovementForm(id, false); },
+            'context-duplicate': () => { hideModal('generic-modal'); const movement = db.movimientos.find(m => m.id === id); if(movement) handleDuplicateMovement(movement); },
+            'context-delete': () => { hideModal('generic-modal'); showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, false); }); },
             'show-kpi-drilldown': () => handleKpiDrilldown(actionTarget),
-            'edit-movement-from-modal': (e) => {
-                const movementId = e.target.closest('[data-id]').dataset.id;
-                hideModal('generic-modal');
-                startMovementForm(movementId, false);
-            },
-            'edit-movement-from-list': (e) => {
-                const movementId = e.target.closest('[data-id]').dataset.id;
-                startMovementForm(movementId, false);
-            },
-            'view-account-details': (e) => {
-                const accountId = e.target.closest('[data-id]').dataset.id;
-                showAccountMovementsModal(accountId);
-            },
+            'edit-movement-from-modal': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; hideModal('generic-modal'); startMovementForm(movementId, false); },
+            'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
+            'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
             'apply-description-suggestion': (e) => {
                 const suggestionItem = e.target.closest('.suggestion-item');
                 if (suggestionItem) {
                     const { description, conceptoId, cuentaId } = suggestionItem.dataset;
-                    select('movimiento-descripcion').value = toSentenceCase(description); 
+                    select('movimiento-descripcion').value = toSentenceCase(description);
                     select('movimiento-concepto').value = conceptoId;
                     select('movimiento-cuenta').value = cuentaId;
                     select('description-suggestions').style.display = 'none';
@@ -7096,11 +7045,7 @@ const attachEventListeners = () => {
                     hapticFeedback('light');
                 }
             },
-            'show-aidanai-help': () => {
-                const activeView = document.querySelector('.view--active');
-                const pageId = activeView ? activeView.id : PAGE_IDS.INICIO;
-                showAidanaiModal(pageId);
-            },
+            'show-aidanai-help': () => { const activeView = document.querySelector('.view--active'); const pageId = activeView ? activeView.id : PAGE_IDS.INICIO; showAidanaiModal(pageId); },
             'show-concept-drilldown': () => {
                 const conceptId = actionTarget.dataset.conceptId;
                 const conceptName = actionTarget.dataset.conceptName;
@@ -7117,7 +7062,7 @@ const attachEventListeners = () => {
                 }
                 const currentMonth = diarioCalendarDate.getUTCMonth();
                 diarioCalendarDate.setUTCMonth(currentMonth + (direction === 'next' ? 1 : -1));
-                renderDiarioCalendar(); 
+                renderDiarioCalendar();
             },
             'show-day-details': () => {
                 const date = actionTarget.dataset.date;
@@ -7129,7 +7074,21 @@ const attachEventListeners = () => {
             },
             'toggle-investment-type-filter': () => handleToggleInvestmentTypeFilter(type),
             'toggle-account-type-filter': () => { hapticFeedback('light'); if (deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderPatrimonioPage(); },
-            'show-help-topic': () => { const topic = actionTarget.dataset.topic; if(topic) { let title, content; if (topic === 'tasa-ahorro') { title = '¿Cómo se calcula la Tasa de Ahorro?'; content = `<p>Mide qué porcentaje de tus ingresos consigues guardar después de cubrir todos tus gastos en el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Saldo Neto del Periodo / Ingresos Totales del Periodo) * 100</code><p style="margin-top: var(--sp-2);">Es el indicador clave de tu capacidad para generar riqueza.</p>`; } else if (topic === 'patrimonio-neto') { title = '¿Cómo se calcula el Patrimonio Neto?'; content = `<p>Representa tu riqueza total. Es la suma de todo lo que tienes (activos) menos todo lo que debes (pasivos).</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de los saldos de todas tus cuentas.</code><p style="margin-top: var(--sp-2);"><strong>Importante:</strong> Este valor es siempre tu situación global actual y no se ve afectado por los filtros de fecha del panel.</p>`; } else if (topic === 'pnl-inversion') { title = '¿Cómo se calcula el P&L de Inversión?'; content = `<p>P&L son las siglas de "Profits and Losses" (Ganancias y Pérdidas). Mide el <strong>flujo de caja neto</strong> de tus cuentas de inversión durante el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de todos los movimientos en cuentas de inversión.</code><p style="margin-top: var(--sp-2);">No incluye la revalorización de activos que no hayas vendido. Es útil para saber si tus inversiones te están dando dinero (dividendos, ventas) o si estás invirtiendo más capital (compras).</p>`; } else if (topic === 'progreso-presupuesto') { title = '¿Cómo se calcula el Progreso del Presupuesto?'; content = `<p>Compara tus gastos reales con tu plan de gastos para el periodo seleccionado.</p><h4>Fórmula:</h4><ol style="list-style-position: inside; padding-left: var(--sp-2);"><li style="margin-bottom: 6px;">Se calcula tu <strong>límite de gasto proporcional</strong> para el periodo (ej. Presupuesto Anual / 12 para un mes).</li><li style="margin-bottom: 6px;">Se comparan tus <strong>gastos reales</strong> del periodo con ese límite.</li></ol><p style="margin-top: var(--sp-2);">Te ayuda a ver si te estás ciñendo a tu plan financiero y a corregir desviaciones a tiempo.</p>`; } else if (topic === 'colchon-emergencia') { title = 'Colchón de Emergencia'; content = `<p>Es tu red de seguridad financiera. Mide cuántos meses podrías vivir cubriendo tus gastos si dejaras de tener ingresos hoy mismo.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Dinero Líquido Total / Gasto Mensual Promedio</code><p style="margin-top: var(--sp-2);">Se considera "dinero líquido" el saldo de tus cuentas de tipo Banco, Ahorro y Efectivo.</p>`; } else if (topic === 'independencia-financiera') { title = 'Independencia Financiera (I.F.)'; content = `<p>Mide tu progreso para alcanzar el punto en el que tus inversiones podrían cubrir tus gastos para siempre, sin necesidad de trabajar.</p><h4>Fórmula del Objetivo:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Gasto Mensual Promedio * 12) * 30</code><p style="margin-top: var(--sp-2);">El porcentaje muestra qué parte de ese objetivo ya has alcanzado con tu patrimonio neto actual.</p>`; } const titleEl = select('help-modal-title'); const bodyEl = select('help-modal-body'); if(titleEl) titleEl.textContent = title; if(bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`; showModal('help-modal'); } },
+            'show-help-topic': () => {
+                const topic = actionTarget.dataset.topic;
+                if(topic) {
+                    let title, content;
+                    if (topic === 'tasa-ahorro') { title = '¿Cómo se calcula la Tasa de Ahorro?'; content = `<p>Mide qué porcentaje de tus ingresos consigues guardar después de cubrir todos tus gastos en el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Saldo Neto del Periodo / Ingresos Totales del Periodo) * 100</code><p style="margin-top: var(--sp-2);">Es el indicador clave de tu capacidad para generar riqueza.</p>`; }
+                    else if (topic === 'patrimonio-neto') { title = '¿Cómo se calcula el Patrimonio Neto?'; content = `<p>Representa tu riqueza total. Es la suma de todo lo que tienes (activos) menos todo lo que debes (pasivos).</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de los saldos de todas tus cuentas.</code><p style="margin-top: var(--sp-2);"><strong>Importante:</strong> Este valor es siempre tu situación global actual y no se ve afectado por los filtros de fecha del panel.</p>`; }
+                    else if (topic === 'pnl-inversion') { title = '¿Cómo se calcula el P&L de Inversión?'; content = `<p>P&L son las siglas de "Profits and Losses" (Ganancias y Pérdidas). Mide el <strong>flujo de caja neto</strong> de tus cuentas de inversión durante el periodo seleccionado.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Suma de todos los movimientos en cuentas de inversión.</code><p style="margin-top: var(--sp-2);">No incluye la revalorización de activos que no hayas vendido. Es útil para saber si tus inversiones te están dando dinero (dividendos, ventas) o si estás invirtiendo más capital (compras).</p>`; }
+                    else if (topic === 'progreso-presupuesto') { title = '¿Cómo se calcula el Progreso del Presupuesto?'; content = `<p>Compara tus gastos reales con tu plan de gastos para el periodo seleccionado.</p><h4>Fórmula:</h4><ol style="list-style-position: inside; padding-left: var(--sp-2);"><li style="margin-bottom: 6px;">Se calcula tu <strong>límite de gasto proporcional</strong> para el periodo (ej. Presupuesto Anual / 12 para un mes).</li><li style="margin-bottom: 6px;">Se comparan tus <strong>gastos reales</strong> del periodo con ese límite.</li></ol><p style="margin-top: var(--sp-2);">Te ayuda a ver si te estás ciñendo a tu plan financiero y a corregir desviaciones a tiempo.</p>`; }
+                    else if (topic === 'colchon-emergencia') { title = 'Colchón de Emergencia'; content = `<p>Es tu red de seguridad financiera. Mide cuántos meses podrías vivir cubriendo tus gastos si dejaras de tener ingresos hoy mismo.</p><h4>Fórmula:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">Dinero Líquido Total / Gasto Mensual Promedio</code><p style="margin-top: var(--sp-2);">Se considera "dinero líquido" el saldo de tus cuentas de tipo Banco, Ahorro y Efectivo.</p>`; }
+                    else if (topic === 'independencia-financiera') { title = 'Independencia Financiera (I.F.)'; content = `<p>Mide tu progreso para alcanzar el punto en el que tus inversiones podrían cubrir tus gastos para siempre, sin necesidad de trabajar.</p><h4>Fórmula del Objetivo:</h4><code style="display: block; background: var(--c-surface-variant); padding: var(--sp-2); border-radius: 6px; font-size: 0.9em; margin-top: var(--sp-1);">(Gasto Mensual Promedio * 12) * 30</code><p style="margin-top: var(--sp-2);">El porcentaje muestra qué parte de ese objetivo ya has alcanzado con tu patrimonio neto actual.</p>`; }
+                    const titleEl = select('help-modal-title'); const bodyEl = select('help-modal-body');
+                    if(titleEl) titleEl.textContent = title; if(bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`;
+                    showModal('help-modal');
+                }
+            },
             'configure-dashboard': (e) => { e.preventDefault(); showDashboardConfigModal(); },
             'save-dashboard-config': () => handleSaveDashboardConfig(btn),
             'use-password-instead': () => showPasswordFallback(),
@@ -7141,44 +7100,14 @@ const attachEventListeners = () => {
             'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
             'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
             'import-csv': showCsvImportWizard,
-            'toggle-ledger': async () => {
-                hapticFeedback('medium');
-                isOffBalanceMode = !isOffBalanceMode;
-                document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
-                const toggleBtn = select('ledger-toggle-btn');
-                if (toggleBtn) {
-                    toggleBtn.innerHTML = ` ${isOffBalanceMode ? 'B' : 'A'}`;
-                    toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`;
-                }
-                const activePageEl = selectOne('.view--active');
-                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO;
-                const pageRenderers = {
-                    [PAGE_IDS.INICIO]: renderInicioPage ,
-                    [PAGE_IDS.DIARIO]: renderDiarioPage,
-                    [PAGE_IDS.INVERSIONES]: renderInversionesView,
-                    [PAGE_IDS.ANALISIS]: renderAnalisisPage,
-                    [PAGE_IDS.AJUSTES]: renderAjustesPage,
-                };
-                if (pageRenderers[activePageId]) {
-                    await pageRenderers[activePageId]();
-                }
-                showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info');
-            },
+            'toggle-ledger': async () => { hapticFeedback('medium'); isOffBalanceMode = !isOffBalanceMode; document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A'; const toggleBtn = select('ledger-toggle-btn'); if (toggleBtn) { toggleBtn.innerHTML = ` ${isOffBalanceMode ? 'B' : 'A'}`; toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`; } const activePageEl = selectOne('.view--active'); const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO; const pageRenderers = { [PAGE_IDS.INICIO]: renderInicioPage, [PAGE_IDS.DIARIO]: renderDiarioPage, [PAGE_IDS.INVERSIONES]: renderInversionesView, [PAGE_IDS.ANALISIS]: renderAnalisisPage, [PAGE_IDS.AJUSTES]: renderAjustesPage, }; if (pageRenderers[activePageId]) { await pageRenderers[activePageId](); } showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info'); },
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
             'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
             'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
             'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
-            'swipe-duplicate-movement': () => {
-                const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id);
-                if (movement) {
-                    handleDuplicateMovement(movement);
-                }
-            },
-            'search-result-movimiento': (e) => {
-                hideModal('global-search-modal');
-                startMovementForm(e.target.closest('[data-id]').dataset.id, false);
-            },
+            'swipe-duplicate-movement': () => { const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id); if (movement) handleDuplicateMovement(movement); },
+            'search-result-movimiento': (e) => { hideModal('global-search-modal'); startMovementForm(e.target.closest('[data-id]').dataset.id, false); },
             'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso, no se puede borrar.","warning"); return; } showConfirmationModal('¿Seguro que quieres eliminar este concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); renderConceptosModalList(); }); },
             'delete-cuenta': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Cuenta con movimientos, no se puede borrar.","warning",3500); return; } showConfirmationModal('¿Seguro que quieres eliminar esta cuenta?', async () => { await deleteDoc('cuentas', id); hapticFeedback('success'); showToast("Cuenta eliminada."); renderCuentasModalList(); }); },
             'close-modal': () => { const closestOverlay = target.closest('.modal-overlay'); const effectiveModalId = modalId || (closestOverlay ? closestOverlay.id : null); if (effectiveModalId) hideModal(effectiveModalId); },
@@ -7189,38 +7118,18 @@ const attachEventListeners = () => {
             'update-budgets': handleUpdateBudgets, 'logout': () => fbAuth.signOut(), 'delete-account': () => { showConfirmationModal('Esto eliminará tu cuenta y todos tus datos de forma PERMANENTE. ¿Estás absolutamente seguro?', async () => { /* Lógica de borrado de cuenta aquí */ }); },
             'manage-investment-accounts': showManageInvestmentAccountsModal, 'update-asset-value': () => showValoracionModal(id),
             'set-investment-chart-mode': () => handleSetInvestmentChartMode(actionTarget.dataset.mode),
-            'global-search': () => {
-                showGlobalSearchModal();
-                hapticFeedback('medium');
-            },
+            'global-search': () => { showGlobalSearchModal(); hapticFeedback('medium'); },
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
-            'duplicate-movement': () => {
-                hapticFeedback('medium');
-                select('movimiento-mode').value = 'new';
-                select('movimiento-id').value = '';
-                select('form-movimiento-title').textContent = 'Duplicar Movimiento';
-                select('delete-movimiento-btn').classList.add('hidden');
-                select('duplicate-movimiento-btn').classList.add('hidden');
-                const today = new Date();
-                const fechaInput = select('movimiento-fecha');
-                fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-                updateDateDisplay(fechaInput);
-                showToast('Datos duplicados. Ajusta y guarda como nuevo.', 'info');
-            },
+            'duplicate-movement': () => { hapticFeedback('medium'); select('movimiento-mode').value = 'new'; select('movimiento-id').value = ''; select('form-movimiento-title').textContent = 'Duplicar Movimiento'; select('delete-movimiento-btn').classList.add('hidden'); select('duplicate-movimiento-btn').classList.add('hidden'); const today = new Date(); const fechaInput = select('movimiento-fecha'); fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10); updateDateDisplay(fechaInput); showToast('Datos duplicados. Ajusta y guarda como nuevo.', 'info'); },
             'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
-            'recalculate-balances': () => {
-                showConfirmationModal(
-                    'Esta es una herramienta de auditoría que recalculará el saldo de cada cuenta desde cero, leyendo todo tu historial de movimientos. Úsala solo si sospechas que hay una inconsistencia. La operación puede tardar y consumir datos. ¿Quieres continuar?',
-                    () => auditAndFixAllBalances(btn),
-                    'Confirmar Auditoría Completa'
-                );
-            }, 'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
+            'recalculate-balances': () => { showConfirmationModal('Esta es una herramienta de auditoría que recalculará el saldo de cada cuenta desde cero, leyendo todo tu historial de movimientos. Úsala solo si sospechas que hay una inconsistencia. La operación puede tardar y consumir datos. ¿Quieres continuar?', () => auditAndFixAllBalances(btn), 'Confirmar Auditoría Completa'); },
+            'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
             'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo."); if (pin === null) return; if (pin === "") { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); showToast('PIN de acceso rápido eliminado.', 'info'); return; } if (!/^\d{4}$/.test(pin)) { showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger'); return; } const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos."); if (pin !== pinConfirm) { showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger'); return; } const pinHash = await hashPin(pin); localStorage.setItem('pinUserHash', pinHash); localStorage.setItem('pinUserEmail', currentUser.email); hapticFeedback('success'); showToast('¡PIN de acceso rápido configurado con éxito!', 'info'); },
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
             'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
-            };
+        };
         
         if (actions[action]) {
             actions[action](e);
@@ -7228,94 +7137,62 @@ const attachEventListeners = () => {
     });
 
     document.body.addEventListener('toggle', (e) => {
-    const detailsElement = e.target;
-    // Nos aseguramos de que solo reaccione a los acordeones de la página de informes
-    if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) {
-        return;
-    }
+        const detailsElement = e.target;
+        if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) { return; }
+        if (detailsElement.open) {
+            const informeId = detailsElement.id.replace('acordeon-', '');
+            renderInformeDetallado(informeId);
+        }
+    }, true);
     
-    if (detailsElement.open) {
-        const informeId = detailsElement.id.replace('acordeon-', '');
-        // Llamamos a nuestra nueva función router, que sabe qué hacer con cada ID
-        renderInformeDetallado(informeId);
-    }
-}, true);
-    // ▼▼▼ REEMPLAZA TU BLOQUE 'submit' ENTERO POR ESTE ▼▼▼
     document.body.addEventListener('submit', (e) => {
         e.preventDefault();
         const target = e.target;
         const submitter = e.submitter;
         const handlers = {
-            'login-form': () => {
-                const action = submitter ? submitter.dataset.action : 'login';
-                if (action === 'login') {
-                    handleLogin(submitter);
-                } else if (action === 'register') {
-                    handleRegister(submitter);
-                }
-            },
+            'login-form': () => { const action = submitter ? submitter.dataset.action : 'login'; if (action === 'login') { handleLogin(submitter); } else if (action === 'register') { handleRegister(submitter); } },
             'pin-form': handlePinSubmit,
             'form-movimiento': () => handleSaveMovement(target, submitter),
             'add-concepto-form': () => handleAddConcept(submitter),
             'add-cuenta-form': () => handleAddAccount(submitter),
-            
-            // --- ¡AQUÍ ESTÁ LA CONEXIÓN QUE FALTABA! ---
             'informe-cuenta-form': () => handleGenerateInformeCuenta(target, submitter),
-            // --- FIN DE LA CONEXIÓN ---
-
             'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter),
             'form-valoracion': () => handleSaveValoracion(target, submitter),
             'diario-filters-form': applyDiarioFilters
         };
-
-        if (handlers[target.id]) {
-            handlers[target.id]();
+        if (handlers[target.id]) { handlers[target.id](); }
+    });
+    
+    document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
+    
+    document.body.addEventListener('blur', (e) => { const id = e.target.id; if (id) { if (id === 'movimiento-cantidad') validateField('movimiento-cantidad'); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id); } }, true);
+    
+    document.body.addEventListener('focusin', (e) => { if (e.target.matches('.pin-input')) { handlePinInputInteraction(); } if (e.target.id === 'movimiento-descripcion') { handleDescriptionInput(); } });
+    
+    document.addEventListener('change', e => {
+        const target = e.target;
+        if (target.id === 'filter-periodo') {
+            const el = select('custom-date-filters');
+            if (el) el.classList.toggle('hidden', target.value !== 'custom');
+            const applyBtnEl = document.querySelector('[data-action="apply-filters"]');
+            const isCustom = target.value === 'custom';
+            if (applyBtnEl) applyBtnEl.classList.toggle('hidden', !isCustom);
+            if (!isCustom) { hapticFeedback('light'); scheduleDashboardUpdate(); }
+        }
+        if (target.id === 'movimiento-recurrente') {
+            select('recurrent-options').classList.toggle('hidden', !target.checked);
+            if(target.checked && !select('recurrent-next-date').value) {
+                select('recurrent-next-date').value = select('movimiento-fecha').value;
+            }
+        }
+        if (target.id === 'recurrent-frequency') {
+            const endDateGroup = select('recurrent-end-date').closest('.form-group');
+            if (endDateGroup) {
+                endDateGroup.classList.toggle('hidden', target.value === 'once');
+            }
         }
     });
-// ▲▲▲ FIN DEL BLOQUE DE REEMPLAZO ▲▲▲
-    document.body.addEventListener('input', (e) => { const id = e.target.id; if (id) { clearError(id); if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); if (id === 'movimiento-descripcion') handleDescriptionInput(); if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); if (id === 'movimiento-cuenta-origen' || id === 'movimiento-cuenta-destino') { validateField('movimiento-cuenta-origen', true); validateField('movimiento-cuenta-destino', true); } if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } } });
-    document.body.addEventListener('blur', (e) => {
-    const id = e.target.id;
-    if (id) {
-        if (id === 'movimiento-cantidad') validateField('movimiento-cantidad');  
-        if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id);
-        }
-}, true);
-    document.body.addEventListener('focusin', (e) => { if (e.target.matches('.pin-input')) { handlePinInputInteraction(); } if (e.target.id === 'movimiento-descripcion') { handleDescriptionInput(); } });
-    document.addEventListener('change', e => {
-    const target = e.target;
-
-    if (target.id === 'filter-periodo') {
-        const el = select('custom-date-filters');
-        if (el) el.classList.toggle('hidden', target.value !== 'custom');
-    }
-    if (target.id === 'filter-periodo') {
-    const customFiltersEl = select('custom-date-filters');
-    const applyBtnEl = document.querySelector('[data-action="apply-filters"]');
-    const isCustom = target.value === 'custom';
-
-    if (customFiltersEl) customFiltersEl.classList.toggle('hidden', !isCustom);
-    if (applyBtnEl) applyBtnEl.classList.toggle('hidden', !isCustom);
-
-    if (!isCustom) {
-        hapticFeedback('light');
-        scheduleDashboardUpdate();
-    }
-}
-    if (target.id === 'movimiento-recurrente') {
-        select('recurrent-options').classList.toggle('hidden', !target.checked);
-        if(target.checked && !select('recurrent-next-date').value) {
-            select('recurrent-next-date').value = select('movimiento-fecha').value;
-        }
-    }
     
-    if (target.id === 'recurrent-frequency') {
-        const endDateGroup = select('recurrent-end-date').closest('.form-group');
-        if (endDateGroup) {
-            endDateGroup.classList.toggle('hidden', target.value === 'once');
-        }
-    }
-});
     const importFileInput = select('import-file-input'); if (importFileInput) importFileInput.addEventListener('change', (e) => { if(e.target.files) handleJSONFileSelect(e.target.files[0]); });
     const calculatorGrid = select('calculator-grid'); if (calculatorGrid) calculatorGrid.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); });
     const searchInput = select('global-search-input'); if (searchInput) searchInput.addEventListener('input', () => { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => { performGlobalSearch(searchInput.value); }, 250); });
@@ -7323,104 +7200,11 @@ const attachEventListeners = () => {
     const dropZone = select('json-drop-zone'); if (dropZone) { dropZone.addEventListener('click', () => { const el = select('import-file-input'); if (el) el.click() }); dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); }); dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); }); dropZone.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const files = e.dataTransfer.files; if (files && files.length > 0) handleJSONFileSelect(files); }); }
     const suggestionsBox = select('description-suggestions'); if (suggestionsBox) { suggestionsBox.addEventListener('click', (e) => { const suggestionItem = e.target.closest('.suggestion-item'); if (suggestionItem) { const { description, conceptoId, cuentaId } = suggestionItem.dataset; applyDescriptionSuggestion(description, conceptoId, cuentaId); } }); }
     const fechaDisplayButton = select('movimiento-fecha-display'); const fechaRealInput = select('movimiento-fecha'); if (fechaDisplayButton && fechaRealInput) { fechaDisplayButton.addEventListener('click', () => fechaRealInput.showPicker()); fechaRealInput.addEventListener('input', () => updateDateDisplay(fechaRealInput)); }
-    const diarioContainer = select('diario-page');
-if (diarioContainer) {
-    const mainScroller = selectOne('.app-layout__main');
-
-    diarioContainer.addEventListener('touchstart', (e) => {
-        if (mainScroller.scrollTop > 0) return;
-
-        ptrState.startY = e.touches[0].clientY;
-        ptrState.isPulling = true;
-        
-        if (e.target.closest('.transaction-card')) {
-            handleInteractionStart(e);
-        }
-    }, { passive: true });
-
-    diarioContainer.addEventListener('touchmove', (e) => {
-        if (!ptrState.isPulling) {
-            handleInteractionMove(e);
-            return;
-        }
-
-        const currentY = e.touches[0].clientY;
-        ptrState.distance = currentY - ptrState.startY;
-
-        if (ptrState.distance > 0) {
-            e.preventDefault(); 
-            
-            const indicator = select('pull-to-refresh-indicator');
-            if (indicator) {
-                indicator.classList.add('visible');
-                const rotation = Math.min(ptrState.distance * 2, 360);
-                indicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`;
-            }
-        }
-    }, { passive: false });
-
-    diarioContainer.addEventListener('touchend', async (e) => {
-        const indicator = select('pull-to-refresh-indicator');
-
-        if (ptrState.isPulling && ptrState.distance > ptrState.threshold) {
-            hapticFeedback('medium');
-            if (indicator) {
-                indicator.querySelector('.spinner').style.animation = 'spin 1s linear infinite';
-            }
-
-            await loadMoreMovements(true);
-
-            setTimeout(() => {
-                if (indicator) {
-                    indicator.classList.remove('visible');
-                    indicator.querySelector('.spinner').style.animation = '';
-                }
-            }, 500);
-
-        } else if (indicator) {
-            indicator.classList.remove('visible');
-        }
-        
-        ptrState.isPulling = false;
-        ptrState.distance = 0;
-
-        handleInteractionEnd(e);
-    });
-
-    diarioContainer.addEventListener('mousedown', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e));
-    diarioContainer.addEventListener('mousemove', handleInteractionMove);
-    diarioContainer.addEventListener('mouseup', handleInteractionEnd);
-    diarioContainer.addEventListener('mouseleave', handleInteractionEnd);
-}
-    const mainScroller = selectOne('.app-layout__main');
-    if (mainScroller) {
-        let scrollRAF = null;
-        mainScroller.addEventListener('scroll', () => {
-            if (scrollRAF) window.cancelAnimationFrame(scrollRAF);
-            scrollRAF = window.requestAnimationFrame(() => {
-                if (diarioViewMode === 'list' && select('diario-page')?.classList.contains('view--active')) {
-                    renderVisibleItems();
-                }
-            });
-        }, { passive: true });
-    }
-    document.body.addEventListener('toggle', (e) => {
-    const detailsElement = e.target;
-    if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) {
-        return;
-    }
-    
-    if (detailsElement.open) {
-        const id = detailsElement.id;
-        const informeId = id.replace('acordeon-', '');
-        const container = select(`informe-content-${informeId}`);
-        
-        if (container && container.querySelector('.form-label')) {
-            renderInformeDetallado(informeId);
-        }
-    }
-}, true);
+    const diarioContainer = select('diario-page'); if (diarioContainer) { const mainScroller = selectOne('.app-layout__main'); diarioContainer.addEventListener('touchstart', (e) => { if (mainScroller.scrollTop > 0) return; ptrState.startY = e.touches[0].clientY; ptrState.isPulling = true; if (e.target.closest('.transaction-card')) { handleInteractionStart(e); } }, { passive: true }); diarioContainer.addEventListener('touchmove', (e) => { if (!ptrState.isPulling) { handleInteractionMove(e); return; } const currentY = e.touches[0].clientY; ptrState.distance = currentY - ptrState.startY; if (ptrState.distance > 0) { e.preventDefault(); const indicator = select('pull-to-refresh-indicator'); if (indicator) { indicator.classList.add('visible'); const rotation = Math.min(ptrState.distance * 2, 360); indicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`; } } }, { passive: false }); diarioContainer.addEventListener('touchend', async (e) => { const indicator = select('pull-to-refresh-indicator'); if (ptrState.isPulling && ptrState.distance > ptrState.threshold) { hapticFeedback('medium'); if (indicator) { indicator.querySelector('.spinner').style.animation = 'spin 1s linear infinite'; } await loadMoreMovements(true); setTimeout(() => { if (indicator) { indicator.classList.remove('visible'); indicator.querySelector('.spinner').style.animation = ''; } }, 500); } else if (indicator) { indicator.classList.remove('visible'); } ptrState.isPulling = false; ptrState.distance = 0; handleInteractionEnd(e); }); diarioContainer.addEventListener('mousedown', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e)); diarioContainer.addEventListener('mousemove', handleInteractionMove); diarioContainer.addEventListener('mouseup', handleInteractionEnd); diarioContainer.addEventListener('mouseleave', handleInteractionEnd); }
+    const mainScroller = selectOne('.app-layout__main'); if (mainScroller) { let scrollRAF = null; mainScroller.addEventListener('scroll', () => { if (scrollRAF) window.cancelAnimationFrame(scrollRAF); scrollRAF = window.requestAnimationFrame(() => { if (diarioViewMode === 'list' && select('diario-page')?.classList.contains('view--active')) { renderVisibleItems(); } }); }, { passive: true }); }
+    document.body.addEventListener('toggle', (e) => { const detailsElement = e.target; if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) { return; } if (detailsElement.open) { const id = detailsElement.id; const informeId = id.replace('acordeon-', ''); const container = select(`informe-content-${informeId}`); if (container && container.querySelector('.form-label')) { renderInformeDetallado(informeId); } } }, true);
 };
+
 // =================================================================
 // === FIN: BLOQUE DE CÓDIGO CORREGIDO PARA REEMPLAZAR           ===
 // =================================================================
@@ -8089,7 +7873,7 @@ function closeAllCustomSelects(exceptThisOne) {
  * @param {HTMLElement} selectElement - El elemento <select> a transformar.
  */
 function createCustomSelect(selectElement) {
-    if (!selectElement) return; // Guarda de seguridad
+    if (!selectElement) return;
     
     const existingWrapper = selectElement.closest('.custom-select-wrapper');
     if (existingWrapper) {
