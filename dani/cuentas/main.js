@@ -3354,6 +3354,37 @@ const TransactionCardComponent = (m, dbData) => {
     if (m.tipo === 'traspaso') {
         const origen = cuentas.find(c => c.id === m.cuentaOrigenId);
         const destino = cuentas.find(c => c.id === m.cuentaDestinoId);
+        
+        // CORRECCIÓN: El HTML ahora incluye el indicador DENTRO de este bloque.
+        cardContentHTML = `
+            <div class="transaction-card__indicator transaction-card__indicator--transfer"></div>
+            <div class="transaction-card__content">
+                <div class="transaction-card__details">
+                    <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
+                    <div class="transaction-card__description">${formattedDate}</div>
+                    <div class="transaction-card__transfer-details">
+                        <div class="transaction-card__transfer-row">
+                            <span><span class="material-icons">arrow_upward</span> ${(origen?.nombre) || '?'}</span>
+                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceOrigen)}</span>
+                        </div>
+                        <div class="transaction-card__transfer-row">
+                            <span><span class="material-icons">arrow_downward</span> ${(destino?.nombre) || '?'}</span>
+                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceDestino)}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="transaction-card__figures">
+                    <div class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</div>
+                </div>
+            </div>`;
+    } else {
+        const cuenta = cuentas.find(c => c.id === m.cuentaId);
+        const concept = conceptos.find(c => c.id === m.conceptoId);
+        const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
+        
+        // CORRECCIÓN: La variable 'indicatorClass' se define y se usa solo dentro de este bloque.
+        const indicatorClass = m.cantidad >= 0 ? 'transaction-card__indicator--income' : 'transaction-card__indicator--expense';
+        
         cardContentHTML = `
             <div class="transaction-card__indicator ${indicatorClass}"></div>
             <div class="transaction-card__content">
@@ -3364,21 +3395,24 @@ const TransactionCardComponent = (m, dbData) => {
                 <div class="transaction-card__figures">
                     <div class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</div>
                     <div class="transaction-card__balance">${formatCurrency(m.runningBalance)}</div>
+                    <div class="transaction-card__row-2" style="text-align: right;">${escapeHTML(cuenta?.nombre || 'S/C')}</div>
                 </div>
             </div>`;
     }
     
-    // Envolvemos todo en el contenedor de swipe
+    // El contenedor exterior sigue siendo el mismo, pero ahora solo envuelve el contenido ya completo.
     return `
-    <div class="swipe-container">
+    <div class="swipe-container list-item-animate">
         <div class="swipe-actions-container left">
             <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}">
-                <span class="material-icons">content_copy</span><span>Duplicar</span>
+                <span class="material-icons">content_copy</span>
+                <span>Duplicar</span>
             </button>
         </div>
         <div class="swipe-actions-container right">
-            <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}">
-                <span class="material-icons">delete</span><span>Borrar</span>
+            <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}" data-is-recurrent="false">
+                <span class="material-icons">delete</span>
+                <span>Borrar</span>
             </button>
         </div>
         <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
