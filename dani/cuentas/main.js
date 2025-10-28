@@ -1177,7 +1177,7 @@ const initWidgetObserver = () => {
             if (isLoading) { if (!originalButtonTexts.has(btn)) originalButtonTexts.set(btn, btn.innerHTML); btn.setAttribute('disabled', 'true'); btn.classList.add('btn--loading'); btn.innerHTML = `<span class="spinner"></span> <span>${text}</span>`;
             } else { btn.removeAttribute('disabled'); btn.classList.remove('btn--loading'); if (originalButtonTexts.has(btn)) { btn.innerHTML = originalButtonTexts.get(btn); originalButtonTexts.delete(btn); } }
         };
-		// --- PEGA ESTA NUEVA FUNCIÓN COMPLETA EN TU JAVASCRIPT ---
+// --- PEGA ESTA NUEVA FUNCIÓN COMPLETA EN TU JAVASCRIPT ---
 
 /**
  * Dispara una animación de una "burbuja" que viaja desde un elemento
@@ -1186,26 +1186,27 @@ const initWidgetObserver = () => {
  * @param {string} color - 'green' para ingresos, 'red' para gastos.
  */
 const triggerSaveAnimation = (fromElement, color) => {
+    // 1. Nos aseguramos de que el elemento de origen existe.
     if (!fromElement) return;
 
-    // 1. Encuentra el punto de partida y el de llegada.
+    // 2. Buscamos el punto de partida (botón) y el de llegada (lista de movimientos).
     const startRect = fromElement.getBoundingClientRect();
-    const listElement = select('movimientos-list-container') || select('diario-page');
+    const listElement = select('movimientos-list-container') || select('diario-page'); // Un fallback por si la lista no está visible
     const endRect = listElement.getBoundingClientRect();
 
-    // 2. Calcula las coordenadas iniciales (el centro del botón).
+    // 3. Calculamos las coordenadas iniciales (el centro del botón que se ha pulsado).
     const startX = startRect.left + startRect.width / 2;
     const startY = startRect.top + startRect.height / 2;
 
-    // 3. Calcula las coordenadas finales (el centro superior de la lista).
+    // 4. Calculamos las coordenadas finales (el centro superior de la lista del diario).
     const endX = endRect.left + endRect.width / 2;
     const endY = endRect.top;
 
-    // 4. Crea el elemento "burbuja" en el DOM.
+    // 5. Creamos el elemento "burbuja" en el DOM.
     const bubble = document.createElement('div');
     bubble.className = 'save-animation-bubble';
     
-    // 5. Le da el color y la posición inicial.
+    // 6. Le damos el color y la posición inicial.
     const bubbleColor = color === 'green' ? 'var(--c-success)' : 'var(--c-danger)';
     bubble.style.backgroundColor = bubbleColor;
     bubble.style.left = `${startX - 10}px`; // Restamos la mitad de su tamaño (20px / 2)
@@ -1213,17 +1214,19 @@ const triggerSaveAnimation = (fromElement, color) => {
 
     document.body.appendChild(bubble);
 
-    // 6. ¡LA MAGIA! Forzamos un 'reflow' para que el navegador aplique el estado inicial antes de animar.
+    // 7. ¡LA MAGIA! Forzamos un 'reflow' del navegador. Esto hace que el navegador "vea" la
+    // burbuja en su estado inicial antes de aplicar la animación, lo que es crucial para que la transición funcione.
     void bubble.offsetWidth; 
 
-    // La animación durará 0.7 segundos y se moverá a las coordenadas finales.
+    // 8. Aplicamos la animación CSS y las coordenadas finales. El navegador se encargará de la transición.
+    // La animación 'fly-to-list' ya está definida en tu CSS.
     bubble.style.animation = `fly-to-list 0.7s cubic-bezier(0.5, 0, 1, 0.5) forwards`;
     bubble.style.transform = `translate(${endX - startX}px, ${endY - startY}px) scale(0)`;
     
-    // 7. Limpieza: Cuando la animación termina, eliminamos la burbuja del DOM.
+    // 9. Limpieza: Cuando la animación termina, eliminamos la burbuja del DOM para no dejar basura.
     bubble.addEventListener('animationend', () => {
         bubble.remove();
-    }, { once: true });
+    }, { once: true }); // El { once: true } es una buena práctica para que el listener se elimine solo.
 };
         const displayError = (id, msg) => { const err = select(`${id}-error`); if (err) { err.textContent = msg; err.setAttribute('role', 'alert'); } const inp = select(id); if (inp) inp.classList.add('form-input--invalid'); };
         const clearError = (id) => { const err = select(`${id}-error`); if (err) { err.textContent = ''; err.removeAttribute('role'); } const inp = select(id); if (inp) inp.classList.remove('form-input--invalid'); };
