@@ -6834,14 +6834,18 @@ function closeAllCustomSelects(exceptThisOne) {
  * @param {HTMLElement} selectElement - El elemento <select> a transformar.
  */
 function createCustomSelect(selectElement) {
+    // Guarda de seguridad por si el elemento no existe
     if (!selectElement) return;
 
+    // Evita reinicializar si ya es un dropdown personalizado
     const existingWrapper = selectElement.closest('.custom-select-wrapper');
     if (existingWrapper) {
+        // Si ya existe, simplemente le pedimos que se actualice con el valor actual
         selectElement.dispatchEvent(new Event('change'));
         return;
     }
 
+    // 1. Crear la estructura HTML
     const wrapper = document.createElement('div');
     wrapper.className = 'custom-select-wrapper';
     const trigger = document.createElement('div');
@@ -6853,15 +6857,17 @@ function createCustomSelect(selectElement) {
     optionsContainer.className = 'custom-select__options';
     optionsContainer.setAttribute('role', 'listbox');
 
+    // 2. Mover el <select> original y añadir los nuevos elementos
     selectElement.parentNode.insertBefore(wrapper, selectElement);
     wrapper.appendChild(trigger);
     wrapper.appendChild(selectElement);
     wrapper.appendChild(optionsContainer);
     selectElement.classList.add('form-select-hidden');
 
+    // 3. Función para sincronizar la UI con el estado del <select>
     const populateOptions = () => {
         optionsContainer.innerHTML = '';
-        let selectedText = 'Ninguno';
+        let selectedText = 'Ninguno'; // Texto por defecto si no hay nada seleccionado
 
         Array.from(selectElement.options).forEach(optionEl => {
             const customOption = document.createElement('div');
@@ -6870,17 +6876,22 @@ function createCustomSelect(selectElement) {
             customOption.dataset.value = optionEl.value;
             customOption.setAttribute('role', 'option');
 
+            // Comprobamos si esta es la opción seleccionada
             if (optionEl.selected && optionEl.value) {
                 customOption.classList.add('is-selected');
                 selectedText = optionEl.textContent;
             }
             optionsContainer.appendChild(customOption);
         });
+        
+        // Actualizamos el texto visible
         trigger.textContent = selectedText;
     };
 
+    // La primera vez que se crea, se ejecuta para mostrar el estado inicial
     populateOptions();
 
+    // 4. Añadir Event Listeners para la interacción del usuario
     trigger.addEventListener('click', (e) => {
         e.stopPropagation();
         closeAllCustomSelects(wrapper);
@@ -6891,13 +6902,20 @@ function createCustomSelect(selectElement) {
     optionsContainer.addEventListener('click', (e) => {
         const option = e.target.closest('.custom-select__option');
         if (option) {
+            // Cuando el usuario hace clic, actualizamos el <select> original...
             selectElement.value = option.dataset.value;
+            // ...y disparamos el evento 'change' manualmente
             selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+            
             wrapper.classList.remove('is-open');
             trigger.setAttribute('aria-expanded', 'false');
         }
     });
-
+    
+    // ▼▼▼ ¡ESTA ES LA LÍNEA QUE SOLUCIONA EL BUG! ▼▼▼
+    // Le decimos al componente que "escuche". Si el <select> original cambia
+    // por CUALQUIER motivo (como tu script asignándole un valor), la función
+    // populateOptions() se ejecutará de nuevo para actualizar el texto visible.
     selectElement.addEventListener('change', populateOptions);
 }
 
