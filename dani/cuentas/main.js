@@ -1950,24 +1950,66 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
         };
         
         const populateAllDropdowns = () => {
-            const visibleAccounts = getVisibleAccounts();
-            const populate = (id, data, nameKey, valKey='id', all=false, none=false) => {
-                const el = select(id); if (!el) return; const currentVal = el.value;
-                let opts = all ? '<option value="">Todos</option>' : ''; if (none) opts += '<option value="">Ninguno</option>';
-                [...data].sort((a,b) => (a[nameKey]||"").localeCompare(b[nameKey]||"")).forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
-                el.innerHTML = opts; 
-                const optionsArray = Array.from(el.options);
-                el.value = optionsArray.some(o=>o.value===currentVal) ? currentVal : (optionsArray.length > 0 ? optionsArray[0].value : "");
-            };
-            populate('movimiento-cuenta', visibleAccounts, 'nombre', 'id', false, true);
-            
-            populateTraspasoDropdowns();
-            
-            populate('filter-cuenta', visibleAccounts, 'nombre', 'id', true); 
-            populate('movimiento-concepto', db.conceptos, 'nombre', 'id', false, true); 
-            populate('filter-concepto', db.conceptos, 'nombre', 'id', true);
-            const budgetYearSelect = select('budget-year-selector'); if(budgetYearSelect) { const currentVal = budgetYearSelect.value; const currentYear = new Date().getFullYear(); let years = new Set([currentYear]); (db.presupuestos || []).forEach((p) => years.add(p.ano)); budgetYearSelect.innerHTML = [...years].sort((a,b) => b-a).map(y => `<option value="${y}">${y}</option>`).join(''); if(currentVal && [...years].some(y => y == parseInt(currentVal))) budgetYearSelect.value = currentVal; else budgetYearSelect.value = String(currentYear); }
-        };
+    
+    // --- PARTE 1: Lógica original para rellenar los datos ---
+    
+    const visibleAccounts = getVisibleAccounts();
+    
+    // Función interna para poblar un <select> con datos.
+    const populate = (id, data, nameKey, valKey = 'id', all = false, none = false) => {
+        const el = select(id);
+        if (!el) return;
+        const currentVal = el.value;
+        let opts = all ? '<option value="">Todos</option>' : '';
+        if (none) opts += '<option value="">Ninguno</option>';
+        
+        [...data]
+            .sort((a, b) => (a[nameKey] || "").localeCompare(b[nameKey] || ""))
+            .forEach(i => opts += `<option value="${i[valKey]}">${i[nameKey]}</option>`);
+        
+        el.innerHTML = opts;
+        const optionsArray = Array.from(el.options);
+        el.value = optionsArray.some(o => o.value === currentVal) ? currentVal : (optionsArray.length > 0 ? optionsArray[0].value : "");
+    };
+    
+    // Rellenamos los diferentes selects de la aplicación
+    populate('movimiento-cuenta', visibleAccounts, 'nombre', 'id', false, true);
+    populateTraspasoDropdowns();
+    populate('filter-cuenta', visibleAccounts, 'nombre', 'id', true);
+    populate('movimiento-concepto', db.conceptos, 'nombre', 'id', false, true);
+    populate('filter-concepto', db.conceptos, 'nombre', 'id', true);
+    
+    // Lógica específica para el selector de año del presupuesto
+    const budgetYearSelect = select('budget-year-selector');
+    if (budgetYearSelect) {
+        const currentVal = budgetYearSelect.value;
+        const currentYear = new Date().getFullYear();
+        let years = new Set([currentYear]);
+        (db.presupuestos || []).forEach((p) => years.add(p.ano));
+        budgetYearSelect.innerHTML = [...years].sort((a, b) => b - a).map(y => `<option value="${y}">${y}</option>`).join('');
+        if (currentVal && [...years].some(y => y == parseInt(currentVal))) {
+            budgetYearSelect.value = currentVal;
+        } else {
+            budgetYearSelect.value = String(currentYear);
+        }
+    }
+
+    // --- PARTE 2: Aplicar el estilo personalizado a los selects del formulario ---
+    
+    // Se ejecuta en un timeout para asegurar que el DOM ha sido actualizado por la lógica anterior.
+    setTimeout(() => {
+        // Buscamos los selects por su ID y los transformamos en el componente personalizado.
+        const conceptoSelect = select('movimiento-concepto');
+        const cuentaSelect = select('movimiento-cuenta');
+        const origenSelect = select('movimiento-cuenta-origen');
+        const destinoSelect = select('movimiento-cuenta-destino');
+
+        if (conceptoSelect) createCustomSelect(conceptoSelect);
+        if (cuentaSelect) createCustomSelect(cuentaSelect);
+        if (origenSelect) createCustomSelect(origenSelect);
+        if (destinoSelect) createCustomSelect(destinoSelect);
+    }, 0);
+};
 
         const populateTraspasoDropdowns = () => {
             const traspasoToggle = select('traspaso-show-all-accounts-toggle');
@@ -5254,6 +5296,92 @@ const getDragAfterElement = (container, y) => {
     // ¡La magia final! Movemos el foco al campo de la cantidad.
     select('movimiento-cantidad').focus();
 };
+
+ function createCustomSelect(selectElement) {
+    // Evitar doble inicialización
+    if (selectElement.parentElement.classList.contains('custom-select-wrapper')) {
+        return;
+    }
+
+    // 1. Crear la estructura HTML
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-select-wrapper';
+
+    const trigger = document.createElement('div');
+    trigger.className = 'custom-select__trigger';
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'custom-select__options';
+    optionsContainer.setAttribute('role', 'listbox');
+
+    // 2. Mover el <select> original y añadir los nuevos elementos
+    selectElement.parentNode.insertBefore(wrapper, selectElement);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(selectElement);
+    wrapper.appendChild(optionsContainer);
+    selectElement.classList.add('form-select-hidden');
+
+    // 3. Crear las opciones personalizadas
+    const populateOptions = () => {
+        optionsContainer.innerHTML = '';
+        let selectedText = 'Ninguno'; // Valor por defecto
+
+        Array.from(selectElement.options).forEach(optionEl => {
+            const customOption = document.createElement('div');
+            customOption.className = 'custom-select__option';
+            customOption.textContent = optionEl.textContent;
+            customOption.dataset.value = optionEl.value;
+            customOption.setAttribute('role', 'option');
+
+            if (optionEl.selected) {
+                customOption.classList.add('is-selected');
+                selectedText = optionEl.textContent;
+            }
+
+            optionsContainer.appendChild(customOption);
+        });
+        trigger.textContent = selectedText;
+    };
+
+    populateOptions();
+
+    // 4. Añadir Event Listeners
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        wrapper.classList.toggle('is-open');
+        trigger.setAttribute('aria-expanded', wrapper.classList.contains('is-open'));
+    });
+
+    optionsContainer.addEventListener('click', (e) => {
+        const option = e.target.closest('.custom-select__option');
+        if (option) {
+            // Actualizar el <select> nativo (¡muy importante!)
+            selectElement.value = option.dataset.value;
+
+            // Disparar un evento 'change' para que otra lógica pueda reaccionar
+            selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Actualizar la UI
+            populateOptions();
+            wrapper.classList.remove('is-open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    // Cerrar si se hace clic fuera
+    document.addEventListener('click', () => {
+        if (wrapper.classList.contains('is-open')) {
+            wrapper.classList.remove('is-open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+    
+    // Volver a poblar si el select original cambia
+    selectElement.addEventListener('change', populateOptions);
+}
 
 // =================================================================
 // === INICIO: CÓDIGO UNIFICADO PARA MODALES ARRASTRABLES ===
