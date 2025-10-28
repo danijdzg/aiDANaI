@@ -5331,78 +5331,6 @@ const getDragAfterElement = (container, y) => {
     select('movimiento-cantidad').focus();
 };
 
- function createCustomSelect(selectElement) {
-    // Evita reinicializar si ya es un dropdown personalizado
-    const existingWrapper = selectElement.closest('.custom-select-wrapper');
-    if (existingWrapper) {
-        selectElement.dispatchEvent(new Event('change')); // Simplemente fuerza una actualización visual
-        return;
-    }
-
-    // 1. Crear la estructura HTML
-    const wrapper = document.createElement('div');
-    wrapper.className = 'custom-select-wrapper';
-    const trigger = document.createElement('div');
-    trigger.className = 'custom-select__trigger';
-    trigger.setAttribute('role', 'combobox');
-    trigger.setAttribute('aria-haspopup', 'listbox');
-    trigger.setAttribute('aria-expanded', 'false');
-    const optionsContainer = document.createElement('div');
-    optionsContainer.className = 'custom-select__options';
-    optionsContainer.setAttribute('role', 'listbox');
-
-    // 2. Mover el <select> original y añadir los nuevos elementos
-    selectElement.parentNode.insertBefore(wrapper, selectElement);
-    wrapper.appendChild(trigger);
-    wrapper.appendChild(selectElement);
-    wrapper.appendChild(optionsContainer);
-    selectElement.classList.add('form-select-hidden');
-
-    // 3. Función para sincronizar la UI con el estado del <select>
-    const populateOptions = () => {
-        optionsContainer.innerHTML = '';
-        let selectedText = 'Ninguno'; // Texto por defecto
-
-        Array.from(selectElement.options).forEach(optionEl => {
-            const customOption = document.createElement('div');
-            customOption.className = 'custom-select__option';
-            customOption.textContent = optionEl.textContent;
-            customOption.dataset.value = optionEl.value;
-            customOption.setAttribute('role', 'option');
-
-            if (optionEl.selected && optionEl.value) {
-                customOption.classList.add('is-selected');
-                selectedText = optionEl.textContent;
-            }
-            optionsContainer.appendChild(customOption);
-        });
-        trigger.textContent = selectedText;
-    };
-
-    populateOptions();
-
-    // 4. Añadir Event Listeners
-    trigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeAllCustomSelects(wrapper); // Cierra otros selects antes de abrir este
-        wrapper.classList.toggle('is-open');
-        trigger.setAttribute('aria-expanded', wrapper.classList.contains('is-open'));
-    });
-
-    optionsContainer.addEventListener('click', (e) => {
-        const option = e.target.closest('.custom-select__option');
-        if (option) {
-            selectElement.value = option.dataset.value;
-            selectElement.dispatchEvent(new Event('change', { bubbles: true }));
-            wrapper.classList.remove('is-open');
-            trigger.setAttribute('aria-expanded', 'false');
-        }
-    });
-    
-    // El listener "mágico" que soluciona el bug de "Editar Movimiento"
-    selectElement.addEventListener('change', populateOptions);
-}
-
 // =================================================================
 // === INICIO: CÓDIGO UNIFICADO PARA MODALES ARRASTRABLES ===
 // =================================================================
@@ -6885,6 +6813,94 @@ const handleGenerateInformeCuenta = async (form, btn) => {
         setButtonLoading(btn, false);
     }
 };
+ /**
+ * Cierra todos los dropdowns personalizados abiertos, excepto el que se le pasa como argumento.
+ * @param {HTMLElement|null} exceptThisOne - El wrapper del select que no debe cerrarse.
+ */
+function closeAllCustomSelects(exceptThisOne) {
+    document.querySelectorAll('.custom-select-wrapper.is-open').forEach(wrapper => {
+        if (wrapper !== exceptThisOne) {
+            wrapper.classList.remove('is-open');
+            const trigger = wrapper.querySelector('.custom-select__trigger');
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', 'false');
+            }
+        }
+    });
+}
+
+/**
+ * Transforma un elemento <select> nativo en un componente de dropdown personalizado y accesible.
+ * @param {HTMLElement} selectElement - El elemento <select> a transformar.
+ */
+function createCustomSelect(selectElement) {
+    if (!selectElement) return;
+
+    const existingWrapper = selectElement.closest('.custom-select-wrapper');
+    if (existingWrapper) {
+        selectElement.dispatchEvent(new Event('change'));
+        return;
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-select-wrapper';
+    const trigger = document.createElement('div');
+    trigger.className = 'custom-select__trigger';
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'custom-select__options';
+    optionsContainer.setAttribute('role', 'listbox');
+
+    selectElement.parentNode.insertBefore(wrapper, selectElement);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(selectElement);
+    wrapper.appendChild(optionsContainer);
+    selectElement.classList.add('form-select-hidden');
+
+    const populateOptions = () => {
+        optionsContainer.innerHTML = '';
+        let selectedText = 'Ninguno';
+
+        Array.from(selectElement.options).forEach(optionEl => {
+            const customOption = document.createElement('div');
+            customOption.className = 'custom-select__option';
+            customOption.textContent = optionEl.textContent;
+            customOption.dataset.value = optionEl.value;
+            customOption.setAttribute('role', 'option');
+
+            if (optionEl.selected && optionEl.value) {
+                customOption.classList.add('is-selected');
+                selectedText = optionEl.textContent;
+            }
+            optionsContainer.appendChild(customOption);
+        });
+        trigger.textContent = selectedText;
+    };
+
+    populateOptions();
+
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllCustomSelects(wrapper);
+        wrapper.classList.toggle('is-open');
+        trigger.setAttribute('aria-expanded', wrapper.classList.contains('is-open'));
+    });
+
+    optionsContainer.addEventListener('click', (e) => {
+        const option = e.target.closest('.custom-select__option');
+        if (option) {
+            selectElement.value = option.dataset.value;
+            selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+            wrapper.classList.remove('is-open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    selectElement.addEventListener('change', populateOptions);
+}
+
 
 // =================================================================
 // === FIN DEL BLOQUE DEFINITIVO                                 ===
@@ -7855,90 +7871,6 @@ const handleSaveMovement = async (form, btn) => {
     }
 }
 };
-/**
- * Cierra todos los dropdowns personalizados abiertos, excepto el que se le pasa como argumento.
- * @param {HTMLElement|null} exceptThisOne - El wrapper del select que no debe cerrarse.
- */
-function closeAllCustomSelects(exceptThisOne) {
-    document.querySelectorAll('.custom-select-wrapper.is-open').forEach(wrapper => {
-        if (wrapper !== exceptThisOne) {
-            wrapper.classList.remove('is-open');
-            wrapper.querySelector('.custom-select__trigger').setAttribute('aria-expanded', 'false');
-        }
-    });
-}
-
-/**
- * Transforma un elemento <select> nativo en un componente de dropdown personalizado y accesible.
- * @param {HTMLElement} selectElement - El elemento <select> a transformar.
- */
-function createCustomSelect(selectElement) {
-    if (!selectElement) return;
-    
-    const existingWrapper = selectElement.closest('.custom-select-wrapper');
-    if (existingWrapper) {
-        selectElement.dispatchEvent(new Event('change'));
-        return;
-    }
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'custom-select-wrapper';
-    const trigger = document.createElement('div');
-    trigger.className = 'custom-select__trigger';
-    trigger.setAttribute('role', 'combobox');
-    trigger.setAttribute('aria-haspopup', 'listbox');
-    trigger.setAttribute('aria-expanded', 'false');
-    const optionsContainer = document.createElement('div');
-    optionsContainer.className = 'custom-select__options';
-    optionsContainer.setAttribute('role', 'listbox');
-
-    selectElement.parentNode.insertBefore(wrapper, selectElement);
-    wrapper.appendChild(trigger);
-    wrapper.appendChild(selectElement);
-    wrapper.appendChild(optionsContainer);
-    selectElement.classList.add('form-select-hidden');
-
-    const populateOptions = () => {
-        optionsContainer.innerHTML = '';
-        let selectedText = 'Ninguno';
-
-        Array.from(selectElement.options).forEach(optionEl => {
-            const customOption = document.createElement('div');
-            customOption.className = 'custom-select__option';
-            customOption.textContent = optionEl.textContent;
-            customOption.dataset.value = optionEl.value;
-            customOption.setAttribute('role', 'option');
-
-            if (optionEl.selected && optionEl.value) {
-                customOption.classList.add('is-selected');
-                selectedText = optionEl.textContent;
-            }
-            optionsContainer.appendChild(customOption);
-        });
-        trigger.textContent = selectedText;
-    };
-
-    populateOptions();
-
-    trigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeAllCustomSelects(wrapper);
-        wrapper.classList.toggle('is-open');
-        trigger.setAttribute('aria-expanded', wrapper.classList.contains('is-open'));
-    });
-
-    optionsContainer.addEventListener('click', (e) => {
-        const option = e.target.closest('.custom-select__option');
-        if (option) {
-            selectElement.value = option.dataset.value;
-            selectElement.dispatchEvent(new Event('change', { bubbles: true }));
-            wrapper.classList.remove('is-open');
-            trigger.setAttribute('aria-expanded', 'false');
-        }
-    });
-    
-    selectElement.addEventListener('change', populateOptions);
-}
 
 
 /**
