@@ -5334,31 +5334,31 @@ const getDragAfterElement = (container, y) => {
  function createCustomSelect(selectElement) {
     // Evitar doble inicialización
     if (selectElement.parentElement.classList.contains('custom-select-wrapper')) {
+        // Si ya existe, solo nos aseguramos de que esté actualizado
+        selectElement.dispatchEvent(new Event('change'));
         return;
     }
 
-    // 1. Crear la estructura HTML
+    // 1. Crear la estructura HTML (sin cambios)
     const wrapper = document.createElement('div');
     wrapper.className = 'custom-select-wrapper';
-
     const trigger = document.createElement('div');
     trigger.className = 'custom-select__trigger';
     trigger.setAttribute('role', 'combobox');
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
-
     const optionsContainer = document.createElement('div');
     optionsContainer.className = 'custom-select__options';
     optionsContainer.setAttribute('role', 'listbox');
 
-    // 2. Mover el <select> original y añadir los nuevos elementos
+    // 2. Mover elementos (sin cambios)
     selectElement.parentNode.insertBefore(wrapper, selectElement);
     wrapper.appendChild(trigger);
     wrapper.appendChild(selectElement);
     wrapper.appendChild(optionsContainer);
     selectElement.classList.add('form-select-hidden');
 
-    // 3. Crear las opciones personalizadas
+    // 3. Crear las opciones personalizadas (esta función ahora es clave)
     const populateOptions = () => {
         optionsContainer.innerHTML = '';
         let selectedText = 'Ninguno'; // Valor por defecto
@@ -5370,11 +5370,10 @@ const getDragAfterElement = (container, y) => {
             customOption.dataset.value = optionEl.value;
             customOption.setAttribute('role', 'option');
 
-            if (optionEl.selected) {
+            if (optionEl.selected && optionEl.value) { // Asegurarse de que no sea una opción vacía
                 customOption.classList.add('is-selected');
                 selectedText = optionEl.textContent;
             }
-
             optionsContainer.appendChild(customOption);
         });
         trigger.textContent = selectedText;
@@ -5382,9 +5381,10 @@ const getDragAfterElement = (container, y) => {
 
     populateOptions();
 
-    // 4. Añadir Event Listeners
+    // 4. Añadir Event Listeners (sin cambios en su mayoría)
     trigger.addEventListener('click', (e) => {
         e.stopPropagation();
+        closeAllCustomSelects(wrapper); // Cierra otros selects abiertos
         wrapper.classList.toggle('is-open');
         trigger.setAttribute('aria-expanded', wrapper.classList.contains('is-open'));
     });
@@ -5392,26 +5392,32 @@ const getDragAfterElement = (container, y) => {
     optionsContainer.addEventListener('click', (e) => {
         const option = e.target.closest('.custom-select__option');
         if (option) {
-            // Actualizar el <select> nativo (¡muy importante!)
             selectElement.value = option.dataset.value;
-
-            // Disparar un evento 'change' para que otra lógica pueda reaccionar
-            selectElement.dispatchEvent(new Event('change', { bubbles: true }));
-
-            // Actualizar la UI
-            populateOptions();
+            selectElement.dispatchEvent(new Event('change', { bubbles: true })); // Este 'change' dispara la actualización
             wrapper.classList.remove('is-open');
             trigger.setAttribute('aria-expanded', 'false');
         }
     });
+    
+    // ▼▼▼ ¡LA LÍNEA MÁGICA DE LA CORRECCIÓN ESTÁ AQUÍ! ▼▼▼
+    // Le decimos al componente que vuelva a renderizarse si el <select> nativo cambia por cualquier motivo.
+    selectElement.addEventListener('change', populateOptions);
+}
 
-    // Cerrar si se hace clic fuera
-    document.addEventListener('click', () => {
-        if (wrapper.classList.contains('is-open')) {
+// Función auxiliar para cerrar otros selects al abrir uno nuevo (mejora de UX)
+function closeAllCustomSelects(exceptThisOne) {
+    document.querySelectorAll('.custom-select-wrapper.is-open').forEach(wrapper => {
+        if (wrapper !== exceptThisOne) {
             wrapper.classList.remove('is-open');
-            trigger.setAttribute('aria-expanded', 'false');
+            wrapper.querySelector('.custom-select__trigger').setAttribute('aria-expanded', 'false');
         }
     });
+}
+
+// No te olvides de modificar el listener de documento para que use esta nueva función auxiliar
+document.addEventListener('click', () => {
+    closeAllCustomSelects(null);
+});
     
     // Volver a poblar si el select original cambia
     selectElement.addEventListener('change', populateOptions);
