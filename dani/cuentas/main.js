@@ -4321,7 +4321,7 @@ const renderPlanificacionPage = () => {
     container.innerHTML = `
         <!-- 1. ACORDEÓN DE MOVIMIENTOS RECURRENTES (AHORA CERRADO POR DEFECTO) -->
         <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion"> {/* <-- ¡CAMBIO CLAVE! Hemos eliminado el atributo "open" */}
+            <details class="accordion">
                 <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
