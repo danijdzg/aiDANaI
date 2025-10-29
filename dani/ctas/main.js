@@ -6527,6 +6527,7 @@ const showDashboardConfigModal = () => {
     const savedWidgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
     const widgetOrder = savedWidgetOrder.filter(widgetId => AVAILABLE_WIDGETS[widgetId]);
     
+    // 1. Construimos la lista de widgets activos e inactivos
     let listHtml = widgetOrder.map(widgetId => 
         renderWidgetConfigItem(widgetId, AVAILABLE_WIDGETS[widgetId], true)
     ).join('');
@@ -6536,20 +6537,29 @@ const showDashboardConfigModal = () => {
         .map(widgetId => renderWidgetConfigItem(widgetId, AVAILABLE_WIDGETS[widgetId], false))
         .join('');
 
+    // 2. CORRECCIÓN: Construimos el HTML correcto para el modal de configuración
     const modalHtml = `
-        <div class="aidanai-modal-content">
-            <img src="aiDANaI.webp" alt="Asistente aiDANaI">
-            <h4>${help.title}</h4>
-            <p>${help.content}</p>
-        </div>
+        <p class="form-label" style="margin-bottom: var(--sp-3);">
+            Arrastra para reordenar los módulos de tu Panel. Activa o desactiva los que quieras ver.
+        </p>
+        <div id="widget-config-list">${listHtml}</div>
         <div class="modal__actions">
-            <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">¡Entendido!</button>
+            <button class="btn btn--primary btn--full" data-action="save-dashboard-config">Guardar Configuración</button>
         </div>
     `;
 
-    // Usamos tu función de modales ya existente para mostrar el contenido.
-    showGenericModal("Tu Asistente Personal", modalHtml);
+    // 3. Mostramos el modal correcto con el título correcto
+    showGenericModal('Personalizar Panel', modalHtml);
     hapticFeedback('light');
+    
+    // 4. Activamos la funcionalidad de arrastrar y soltar DESPUÉS de que el modal es visible
+    const list = select('widget-config-list');
+    if (list) {
+        Sortable.create(list, {
+            handle: '.drag-handle', // El icono para arrastrar
+            animation: 150, // Animación suave al soltar
+        });
+    }
 };
     showGenericModal('Personalizar Panel', modalHtml);
 
