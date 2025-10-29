@@ -3299,38 +3299,6 @@ const renderPatrimonioGeneralView = async () => {
         }
     }, 50);
 };
-const renderPatrimonioContent = async () => {
-    const contentContainer = select('patrimonio-content-container');
-    if (!contentContainer) return;
-
-    if (patrimonioViewMode === 'general') {
-        // Muestra la vista de Visión General
-        contentContainer.innerHTML = `<div id="patrimonio-completo-container"></div>`;
-        
-        // ¡LA LLAMADA CORRECTA! Ahora llama a la función que renombramos en el Paso 1.
-        await renderPatrimonioGeneralView(); 
-
-    } else { // 'inversiones'
-        // Muestra la vista detallada de Inversiones (lógica de la antigua pestaña Inversiones)
-        contentContainer.innerHTML = `
-            <details class="accordion" open style="margin-bottom: var(--sp-4);">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">show_chart</span>Evolución del Portafolio</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" id="portfolio-evolution-container" style="padding: var(--sp-3) var(--sp-4);">
-                    <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
-                </div>
-            </details>
-            <div id="portfolio-main-content">
-                <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
-            </div>
-        `;
-        // Llama a las funciones que renderizan el contenido de inversiones
-        await renderPortfolioEvolutionChart('portfolio-evolution-container');
-        await renderPortfolioMainContent('portfolio-main-content');
-    }
-};
         
         const loadConfig = () => { 
             const userEmailEl = select('config-user-email'); 
@@ -4334,18 +4302,43 @@ const renderPatrimonioPage = () => {
     const container = select(PAGE_IDS.PATRIMONIO);
     if (!container) return;
 
-    // Esta función solo dibuja la estructura principal y los botones
+    // Dibuja la estructura principal con los botones y un contenedor vacío
     container.innerHTML = `
         <div class="segmented-control">
             <button class="segmented-control__button ${patrimonioViewMode === 'general' ? 'segmented-control__button--active' : ''}" data-action="set-patrimonio-view" data-view="general">Visión General</button>
             <button class="segmented-control__button ${patrimonioViewMode === 'inversiones' ? 'segmented-control__button--active' : ''}" data-action="set-patrimonio-view" data-view="inversiones">Inversiones</button>
         </div>
         <div id="patrimonio-content-container">
-            <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
+            <div class="skeleton" style="height: 400px; border-radius: var(--border-radius-lg);"></div>
         </div>
     `;
-    // Y luego llama a la función que decide qué contenido mostrar
+    // Llama a la función que rellena el contenido
     renderPatrimonioContent();
+};
+ const renderPatrimonioContent = async () => {
+    const contentContainer = select('patrimonio-content-container');
+    if (!contentContainer) return;
+
+    if (patrimonioViewMode === 'general') {
+        // Para "Visión General", crea el contenedor y llama a la función RENOMBRADA
+        contentContainer.innerHTML = `<div id="patrimonio-completo-container"></div>`;
+        await renderPatrimonioGeneralView(); 
+
+    } else { // 'inversiones'
+        // Para "Inversiones", crea la estructura y llama a las funciones de inversión
+        contentContainer.innerHTML = `
+            <details class="accordion" open style="margin-bottom: var(--sp-4);">
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">show_chart</span>Evolución del Portafolio</h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" id="portfolio-evolution-container" style="padding: var(--sp-3) var(--sp-4);"></div>
+            </details>
+            <div id="portfolio-main-content"></div>
+        `;
+        await renderPortfolioEvolutionChart('portfolio-evolution-container');
+        await renderPortfolioMainContent('portfolio-main-content');
+    }
 };
   // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF      ===
@@ -4828,7 +4821,7 @@ const updateDashboardData = async () => {
     conceptListContainer.innerHTML = listHtml;
 }
 		
-		if (select('patrimonio-completo-container')) { await renderPatrimonioPage(); }
+		if (select('patrimonio-completo-container')) { await renderPatrimonioGeneralView(); }
         if (select('patrimonio-inversiones-container')) { await renderInversionesPage('patrimonio-inversiones-container'); }
         if (select('informe-personalizado-widget')) { await renderInformeWidgetContent(); }
 		
@@ -7008,7 +7001,16 @@ function createCustomSelect(selectElement) {
                 }
             },
             'toggle-investment-type-filter': () => handleToggleInvestmentTypeFilter(type),
-            'toggle-account-type-filter': () => { hapticFeedback('light'); if (deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderPatrimonioPage(); },
+            'toggle-account-type-filter': () => { 
+    hapticFeedback('light'); 
+    if (deselectedAccountTypesFilter.has(type)) { 
+        deselectedAccountTypesFilter.delete(type); 
+    } else { 
+        deselectedAccountTypesFilter.add(type); 
+    }
+    // ¡LA LLAMADA CORRECTA! Debe refrescar solo el contenido, no la página entera.
+    renderPatrimonioGeneralView(); 
+},
             'show-help-topic': () => {
                 const topic = actionTarget.dataset.topic;
                 if(topic) {
