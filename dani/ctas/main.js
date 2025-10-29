@@ -7016,12 +7016,9 @@ function createCustomSelect(selectElement) {
     document.body.addEventListener('click', async (e) => {
         const target = e.target;
 
-        // --- INICIO DE LA CORRECCIÓN INTEGRADA ---
-        // Si el clic NO fue dentro de un dropdown personalizado, los cerramos todos.
         if (!target.closest('.custom-select-wrapper')) {
             closeAllCustomSelects(null);
         }
-        // --- FIN DE LA CORRECCIÓN INTEGRADA ---
 
         if (target.matches('.input-amount-calculator')) {
             e.preventDefault();
@@ -7037,7 +7034,6 @@ function createCustomSelect(selectElement) {
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
         const btn = actionTarget.closest('button');
         
-        // El objeto de acciones original se ha recreado aquí fielmente.
         const actions = {
             'show-main-menu': () => {
                 const menu = document.getElementById('main-menu-popover');
@@ -7081,23 +7077,9 @@ function createCustomSelect(selectElement) {
             'apply-description-suggestion': (e) => {
                 const suggestionItem = e.target.closest('.suggestion-item');
                 if (suggestionItem) {
-                    const { description, conceptoId, cuentaId } = suggestionItem.dataset;
-                    select('movimiento-descripcion').value = toSentenceCase(description);
-                    select('movimiento-concepto').value = conceptoId;
-                    select('movimiento-cuenta').value = cuentaId;
-                    select('description-suggestions').style.display = 'none';
-                    [select('movimiento-concepto'), select('movimiento-cuenta')].forEach(el => {
-                        const parent = el.closest('.form-group-addon');
-                        if(parent) {
-                            parent.classList.add('field-highlighted');
-                            setTimeout(() => parent.classList.remove('field-highlighted'), 1500);
-                        }
-                    });
-                    select('movimiento-cantidad').focus();
-                    hapticFeedback('light');
+                    applyDescriptionSuggestion(suggestionItem);
                 }
             },
-            
             'show-concept-drilldown': () => {
                 const conceptId = actionTarget.dataset.conceptId;
                 const conceptName = actionTarget.dataset.conceptName;
@@ -7169,13 +7151,10 @@ function createCustomSelect(selectElement) {
                 if (activePageId === PAGE_IDS.INICIO) {
                     await scheduleDashboardUpdate();
                 } else {
-                    // ▼▼▼ ¡AQUÍ ESTÁ LA CORRECCIÓN! ▼▼▼
-                    // Eliminamos la referencia a la página "Análisis" que ya no existe
-                    // y añadimos la referencia correcta a "Planificar".
                     const pageRenderers = {
                         [PAGE_IDS.DIARIO]: renderDiarioPage,
                         [PAGE_IDS.INVERSIONES]: renderInversionesView,
-                        [PAGE_IDS.PLANIFICAR]: renderPlanificacionPage, // <-- ¡CORREGIDO!
+                        [PAGE_IDS.PLANIFICAR]: renderPlanificacionPage,
                         [PAGE_IDS.AJUSTES]: renderAjustesPage,
                     };
                     if (pageRenderers[activePageId]) {
@@ -7187,7 +7166,6 @@ function createCustomSelect(selectElement) {
             },
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
-            'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
             'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
             'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
             'swipe-duplicate-movement': () => { const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id); if (movement) handleDuplicateMovement(movement); },
@@ -7288,7 +7266,6 @@ function createCustomSelect(selectElement) {
     const mainScroller = selectOne('.app-layout__main'); if (mainScroller) { let scrollRAF = null; mainScroller.addEventListener('scroll', () => { if (scrollRAF) window.cancelAnimationFrame(scrollRAF); scrollRAF = window.requestAnimationFrame(() => { if (diarioViewMode === 'list' && select('diario-page')?.classList.contains('view--active')) { renderVisibleItems(); } }); }, { passive: true }); }
     document.body.addEventListener('toggle', (e) => { const detailsElement = e.target; if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) { return; } if (detailsElement.open) { const id = detailsElement.id; const informeId = id.replace('acordeon-', ''); const container = select(`informe-content-${informeId}`); if (container && container.querySelector('.form-label')) { renderInformeDetallado(informeId); } } }, true);
 };
-
 // =================================================================
 // === FIN: BLOQUE DE CÓDIGO CORREGIDO PARA REEMPLAZAR           ===
 // =================================================================
@@ -8476,6 +8453,7 @@ const handleAddConcept = async (btn) => {
          setButtonLoading(btn, false);
      }
  };
+
 
 // ==============================================================
 // === INICIO: FUNCIÓN DE BORRADO OPTIMIZADA (v2.0) ===
