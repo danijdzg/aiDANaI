@@ -6559,7 +6559,6 @@ const showDashboardConfigModal = () => {
         handle: '.drag-handle',
         animation: 150,
     });
-};
 
 const renderWidgetConfigItem = (id, details, isEnabled) => `
     <div class="widget-config-item" data-id="${id}">
