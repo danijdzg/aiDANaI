@@ -5022,6 +5022,7 @@ const handleInformeBuilderChange = () => {
 // Guarda la configuración del informe en la base de datos
 const handleSaveInforme = async (btn) => {
     setButtonLoading(btn, true);
+
     const config = {
         title: select('informe-title').value.trim(),
         metrica: select('informe-metrica').value,
@@ -5032,17 +5033,27 @@ const handleSaveInforme = async (btn) => {
         cuentas: Array.from(select('informe-cuentas').selectedOptions).map(opt => opt.value),
         conceptos: Array.from(select('informe-conceptos').selectedOptions).map(opt => opt.value),
     };
-    if (!db.config.savedReports) db.config.savedReports = {};
+
+    if (!db.config.savedReports) {
+        db.config.savedReports = {};
+    }
     db.config.savedReports.main = config;
 
+    // 1. Guardamos la nueva configuración en la base de datos (nuestra fuente de la verdad)
     await fbDb.collection('users').doc(currentUser.uid).set({ config: db.config }, { merge: true });
 
+    // 2. Liberamos el botón y cerramos el modal
     setButtonLoading(btn, false);
     hideModal('generic-modal');
     hapticFeedback('success');
-    showToast('Informe guardado y actualizado en el panel.');
-    select('informe-widget-title').textContent = escapeHTML(config.title);
-    await renderInformeWidgetContent();
+    
+    // 3. Informamos al usuario. El panel se actualizará la próxima vez que se renderice.
+    showToast('Configuración del informe guardada.');
+    
+    // 4. ELIMINAMOS las líneas que causaban el error, ya que intentaban
+    //    actualizar elementos que no están visibles en el DOM en este momento.
+    // select('informe-widget-title').textContent = escapeHTML(config.title); // <-- LÍNEA ELIMINADA (CAUSA DEL ERROR)
+    // await renderInformeWidgetContent(); // <-- LÍNEA ELIMINADA (TAMBIÉN FALLARÍA)
 };
 
 // La función MÁGICA: toma una configuración y devuelve los datos para el gráfico
