@@ -5833,7 +5833,6 @@ const setMovimientoFormType = (type) => {
         };
 
 
- // ▼▼▼ REEMPLAZA TU FUNCIÓN startMovementForm POR COMPLETO CON ESTA ▼▼▼
 const startMovementForm = async (id = null, isRecurrent = false) => {
     hapticFeedback('medium');
     const form = select('form-movimiento');
@@ -5874,32 +5873,40 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
         select('movimiento-cantidad').value = `${(Math.abs(data.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}`;
         
         const fechaInput = select('movimiento-fecha');
-        const fecha = new Date(data.fecha);
-        fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-        updateDateDisplay(fechaInput);
+        
+        // --- INICIO DE LA CORRECCIÓN CLAVE ---
+        // Se determina la fuente de la fecha correcta: 'nextDate' para recurrentes, 'fecha' para normales.
+        const dateStringForInput = isRecurrent ? data.nextDate : data.fecha;
+
+        if (dateStringForInput) {
+            const fecha = new Date(dateStringForInput);
+            // Esta conversión es crucial para que el input type="date" muestre la fecha local correcta.
+            fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+            updateDateDisplay(fechaInput);
+        } else {
+            // Fallback por si la fecha no existe, para evitar el error.
+            console.warn('No se encontró una fecha válida para el elemento a editar:', data);
+            const fecha = new Date();
+            fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+            updateDateDisplay(fechaInput);
+        }
+        // --- FIN DE LA CORRECCIÓN CLAVE ---
 
         select('movimiento-descripcion').value = data.descripcion || '';
 
         if (data.tipo === 'traspaso') {
             select('movimiento-cuenta-origen').value = data.cuentaOrigenId || '';
             select('movimiento-cuenta-destino').value = data.cuentaDestinoId || '';
-            
-            // ▼▼▼ LA CORRECCIÓN CLAVE PARA TRASPASOS ESTÁ AQUÍ ▼▼▼
-            // Forzamos la actualización visual de los dropdowns personalizados
             select('movimiento-cuenta-origen').dispatchEvent(new Event('change'));
             select('movimiento-cuenta-destino').dispatchEvent(new Event('change'));
 
         } else {
             select('movimiento-cuenta').value = data.cuentaId || '';
             select('movimiento-concepto').value = data.conceptoId || '';
-            
-            // ▼▼▼ LA CORRECCIÓN CLAVE PARA GASTO/INGRESO ESTÁ AQUÍ ▼▼▼
-            // Forzamos la actualización visual de los dropdowns personalizados
             select('movimiento-cuenta').dispatchEvent(new Event('change'));
             select('movimiento-concepto').dispatchEvent(new Event('change'));
         }
 
-        // Lógica para recurrentes
         const recurrenteCheckbox = select('movimiento-recurrente');
         const recurrentOptions = select('recurrent-options');
         if (mode === 'edit-recurrent') {
@@ -5913,7 +5920,6 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
             recurrentOptions.classList.add('hidden');
         }
     } else {
-        // Lógica para un formulario nuevo (sin cambios)
         const fechaInput = select('movimiento-fecha');
         const fecha = new Date();
         fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
