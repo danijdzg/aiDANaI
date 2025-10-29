@@ -7197,7 +7197,39 @@ function createCustomSelect(selectElement) {
             'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
             'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
             'import-csv': showCsvImportWizard,
-            'toggle-ledger': async () => { hapticFeedback('medium'); isOffBalanceMode = !isOffBalanceMode; document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A'; const toggleBtn = select('ledger-toggle-btn'); if (toggleBtn) { toggleBtn.innerHTML = ` ${isOffBalanceMode ? 'B' : 'A'}`; toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`; } const activePageEl = selectOne('.view--active'); const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO; const pageRenderers = { [PAGE_IDS.INICIO]: renderInicioPage, [PAGE_IDS.DIARIO]: renderDiarioPage, [PAGE_IDS.INVERSIONES]: renderInversionesView, [PAGE_IDS.ANALISIS]: renderAnalisisPage, [PAGE_IDS.AJUSTES]: renderAjustesPage, }; if (pageRenderers[activePageId]) { await pageRenderers[activePageId](); } showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info'); },
+            'toggle-ledger': async () => {
+                hapticFeedback('medium');
+                isOffBalanceMode = !isOffBalanceMode;
+                document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
+                
+                const toggleBtn = select('ledger-toggle-btn');
+                if (toggleBtn) {
+                    toggleBtn.innerHTML = ` ${isOffBalanceMode ? 'B' : 'A'}`;
+                    toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`;
+                }
+                
+                const activePageEl = selectOne('.view--active');
+                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO;
+
+                if (activePageId === PAGE_IDS.INICIO) {
+                    await scheduleDashboardUpdate();
+                } else {
+                    // ▼▼▼ ¡AQUÍ ESTÁ LA CORRECCIÓN! ▼▼▼
+                    // Eliminamos la referencia a la página "Análisis" que ya no existe
+                    // y añadimos la referencia correcta a "Planificar".
+                    const pageRenderers = {
+                        [PAGE_IDS.DIARIO]: renderDiarioPage,
+                        [PAGE_IDS.INVERSIONES]: renderInversionesView,
+                        [PAGE_IDS.PLANIFICAR]: renderPlanificacionPage, // <-- ¡CORREGIDO!
+                        [PAGE_IDS.AJUSTES]: renderAjustesPage,
+                    };
+                    if (pageRenderers[activePageId]) {
+                        await pageRenderers[activePageId]();
+                    }
+                }
+                
+                showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info');
+            },
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
             'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
