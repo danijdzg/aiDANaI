@@ -5838,7 +5838,7 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
     const form = select('form-movimiento');
     form.reset();
     clearAllErrors(form.id);
-    populateAllDropdowns(); // Esto prepara los <select> y los personaliza
+    populateAllDropdowns();
 
     let data = null;
     let mode = 'new';
@@ -5868,12 +5868,10 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
     select('movimiento-mode').value = mode;
     select('movimiento-id').value = id || '';
 
-    // Rellenar los campos con los datos cargados
     if (data) {
         select('movimiento-cantidad').value = `${(Math.abs(data.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}`;
         
         const fechaInput = select('movimiento-fecha');
-        
         const dateStringForInput = isRecurrent ? data.nextDate : data.fecha;
 
         if (dateStringForInput) {
@@ -5881,7 +5879,6 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
             fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
             updateDateDisplay(fechaInput);
         } else {
-            console.warn('No se encontró una fecha válida para el elemento a editar:', data);
             const fecha = new Date();
             fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
             updateDateDisplay(fechaInput);
@@ -5894,7 +5891,6 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
             select('movimiento-cuenta-destino').value = data.cuentaDestinoId || '';
             select('movimiento-cuenta-origen').dispatchEvent(new Event('change'));
             select('movimiento-cuenta-destino').dispatchEvent(new Event('change'));
-
         } else {
             select('movimiento-cuenta').value = data.cuentaId || '';
             select('movimiento-concepto').value = data.conceptoId || '';
@@ -5913,7 +5909,7 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
         } else {
             recurrenteCheckbox.checked = false;
             recurrentOptions.classList.add('hidden');
-        } // <<<--- ¡EL PUNTO Y COMA ERRANTE HA SIDO ELIMINADO AQUÍ! ---<<<
+        }
     } else {
         const fechaInput = select('movimiento-fecha');
         const fecha = new Date();
