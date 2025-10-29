@@ -6561,14 +6561,6 @@ const showDashboardConfigModal = () => {
         });
     }
 };
-    showGenericModal('Personalizar Panel', modalHtml);
-
-    const list = select('widget-config-list');
-    
-    Sortable.create(list, {
-        handle: '.drag-handle',
-        animation: 150,
-    });
 
 const renderWidgetConfigItem = (id, details, isEnabled) => `
     <div class="widget-config-item" data-id="${id}">
