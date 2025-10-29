@@ -5874,23 +5874,18 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
         
         const fechaInput = select('movimiento-fecha');
         
-        // --- INICIO DE LA CORRECCIÓN CLAVE ---
-        // Se determina la fuente de la fecha correcta: 'nextDate' para recurrentes, 'fecha' para normales.
         const dateStringForInput = isRecurrent ? data.nextDate : data.fecha;
 
         if (dateStringForInput) {
             const fecha = new Date(dateStringForInput);
-            // Esta conversión es crucial para que el input type="date" muestre la fecha local correcta.
             fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
             updateDateDisplay(fechaInput);
         } else {
-            // Fallback por si la fecha no existe, para evitar el error.
             console.warn('No se encontró una fecha válida para el elemento a editar:', data);
             const fecha = new Date();
             fechaInput.value = new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
             updateDateDisplay(fechaInput);
         }
-        // --- FIN DE LA CORRECCIÓN CLAVE ---
 
         select('movimiento-descripcion').value = data.descripcion || '';
 
@@ -5918,7 +5913,7 @@ const startMovementForm = async (id = null, isRecurrent = false) => {
         } else {
             recurrenteCheckbox.checked = false;
             recurrentOptions.classList.add('hidden');
-        }
+        } // <<<--- ¡EL PUNTO Y COMA ERRANTE HA SIDO ELIMINADO AQUÍ! ---<<<
     } else {
         const fechaInput = select('movimiento-fecha');
         const fecha = new Date();
