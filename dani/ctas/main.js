@@ -3299,17 +3299,19 @@ const renderPatrimonioGeneralView = async () => {
         }
     }, 50);
 };
-
 const renderPatrimonioContent = async () => {
     const contentContainer = select('patrimonio-content-container');
     if (!contentContainer) return;
 
     if (patrimonioViewMode === 'general') {
+        // Muestra la vista de Visión General
         contentContainer.innerHTML = `<div id="patrimonio-completo-container"></div>`;
-        // ¡AQUÍ ESTÁ LA LLAMADA CORRECTA A LA FUNCIÓN RENOMBRADA!
-        await renderPatrimonioGeneralView();
+        
+        // ¡LA LLAMADA CORRECTA! Ahora llama a la función que renombramos en el Paso 1.
+        await renderPatrimonioGeneralView(); 
+
     } else { // 'inversiones'
-        // Esta es la lógica de la antigua página de Inversiones
+        // Muestra la vista detallada de Inversiones (lógica de la antigua pestaña Inversiones)
         contentContainer.innerHTML = `
             <details class="accordion" open style="margin-bottom: var(--sp-4);">
                 <summary>
@@ -3322,11 +3324,13 @@ const renderPatrimonioContent = async () => {
             </details>
             <div id="portfolio-main-content">
                 <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
-            </div>`;
+            </div>
+        `;
+        // Llama a las funciones que renderizan el contenido de inversiones
         await renderPortfolioEvolutionChart('portfolio-evolution-container');
         await renderPortfolioMainContent('portfolio-main-content');
     }
-};         
+};
         
         const loadConfig = () => { 
             const userEmailEl = select('config-user-email'); 
@@ -4330,6 +4334,7 @@ const renderPatrimonioPage = () => {
     const container = select(PAGE_IDS.PATRIMONIO);
     if (!container) return;
 
+    // Esta función solo dibuja la estructura principal y los botones
     container.innerHTML = `
         <div class="segmented-control">
             <button class="segmented-control__button ${patrimonioViewMode === 'general' ? 'segmented-control__button--active' : ''}" data-action="set-patrimonio-view" data-view="general">Visión General</button>
@@ -4339,6 +4344,7 @@ const renderPatrimonioPage = () => {
             <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
         </div>
     `;
+    // Y luego llama a la función que decide qué contenido mostrar
     renderPatrimonioContent();
 };
   // =================================================================
