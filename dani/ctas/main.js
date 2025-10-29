@@ -656,8 +656,8 @@ async function loadCoreData(uid) {
             if (collectionName === 'recurrentes') {
                 dataLoaded.recurrentes = true;
                 const activePage = document.querySelector('.view--active');
-                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderMovimientosPage();
-                if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) renderAnalisisPage();
+                if (activePage && (activePage.id === PAGE_IDS.MOVIMIENTOS)) renderMovimientosPage();
+				if (activePage && (activePage.id === PAGE_IDS.ANALISIS)) renderAnalisisPage();
             }
             
             populateAllDropdowns();
@@ -1321,7 +1321,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.DIARIO, true); // <-- CAMBIADO
+			navigateTo(PAGE_IDS.INICIO, true); // <-- CAMBIADO
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -2900,56 +2900,89 @@ const renderMovimientosPage = async () => {
     const container = select('movimientos-page');
     if (!container) return;
 
-    // Estructura principal con el segmented control
     container.innerHTML = `
         <div class="segmented-control">
             <button class="segmented-control__button ${movimientosViewMode === 'historial' ? 'segmented-control__button--active' : ''}" data-action="set-movimientos-view" data-view="historial">Historial</button>
             <button class="segmented-control__button ${movimientosViewMode === 'recurrentes' ? 'segmented-control__button--active' : ''}" data-action="set-movimientos-view" data-view="recurrentes">Recurrentes</button>
         </div>
-        <div id="movimientos-content-container"></div>
+        <div id="movimientos-content-container" style="flex-grow: 1; display: flex; flex-direction: column;"></div>
     `;
 
-    await renderMovimientosContent(); // Llama a la función que rellena el contenido
+    await renderMovimientosContent();
 };
 
-// AÑADE esta nueva función justo debajo de renderMovimientosPage
 const renderMovimientosContent = async () => {
     const contentContainer = select('movimientos-content-container');
     if (!contentContainer) return;
 
     if (movimientosViewMode === 'historial') {
-        // La lógica del antiguo 'renderDiarioPage' va aquí
+        // Esta es la lógica COMPLETA del antiguo renderDiarioPage
         contentContainer.innerHTML = `
-            <div id="diario-filter-active-indicator" class="hidden">...</div>
-            <div id="movimientos-list-container">
+            <div id="diario-filter-active-indicator" class="hidden">
+                <p>Mostrando resultados filtrados.</p>
+                <div>
+                    <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;"><span class="material-icons" style="font-size: 14px;">download</span>Exportar</button>
+                    <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
+                </div>
+            </div>
+            <div id="movimientos-list-container" style="flex-grow: 1;">
                 <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
             </div>
-            <div id="infinite-scroll-trigger" style="height: 50px;"></div> 
-            <div id="empty-movimientos" class="empty-state hidden">...</div>
+            <div id="infinite-scroll-trigger" style="height: 50px;"></div>
+            <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
+                <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos.</p>
+            </div>
         `;
         
-        // Re-asignamos los elementos de la lista virtual
         vList.scrollerEl = selectOne('.app-layout__main');
         vList.sizerEl = select('virtual-list-sizer');
         vList.contentEl = select('virtual-list-content');
 
-        // Y lanzamos la carga de movimientos como antes
-        db.movimientos = [];
-        lastVisibleMovementDoc = null;
-        allMovementsLoaded = false;
-        isLoadingMoreMovements = false;
-        await loadMoreMovements(true);
-        initMovementsObserver();
+        // La lógica de carga de datos que ya tenías, que está perfecta
+        if (diarioActiveFilters) {
+            if (movementsObserver) movementsObserver.disconnect();
+            select('diario-filter-active-indicator').classList.remove('hidden');
+            if (allDiarioMovementsCache.length === 0) allDiarioMovementsCache = await fetchAllMovementsForHistory();
+            
+            const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
+            db.movimientos = allDiarioMovementsCache.filter(m => {
+                if (startDate && m.fecha < startDate) return false;
+                if (endDate && m.fecha > endDate) return false;
+                if (description && !m.descripcion.toLowerCase().includes(description)) return false;
+                const cantidadEuros = m.cantidad / 100;
+                if (minAmount && cantidadEuros < parseFloat(minAmount)) return false;
+                if (maxAmount && cantidadEuros > parseFloat(maxAmount)) return false;
+                if (cuentas.length > 0) {
+                    if (m.tipo === 'traspaso' && !cuentas.includes(m.cuentaOrigenId) && !cuentas.includes(m.cuentaDestinoId)) return false;
+                    if (m.tipo === 'movimiento' && !cuentas.includes(m.cuentaId)) return false;
+                }
+                if (conceptos.length > 0 && m.tipo === 'movimiento' && !conceptos.includes(m.conceptoId)) return false;
+                return true;
+            });
+            await processMovementsForRunningBalance(db.movimientos, true);
+            updateVirtualListUI();
+
+        } else {
+            select('diario-filter-active-indicator').classList.add('hidden');
+            db.movimientos = [];
+            lastVisibleMovementDoc = null;
+            allMovementsLoaded = false;
+            isLoadingMoreMovements = false;
+            await loadMoreMovements(true);
+            initMovementsObserver();
+        }
     } else { // 'recurrentes'
-        
         contentContainer.innerHTML = `
             <div id="pending-recurrents-container" style="padding: 0 var(--sp-4);"></div>
-            <div style="padding: 0 var(--sp-4);"><p class="form-label" style="margin-bottom: var(--sp-3);">Operaciones programadas para el futuro. Pulsa para editar.</p></div>
-            <div id="recurrentes-list-container" style="padding: 0 var(--sp-4);"></div>
+            <div style="padding: 0 var(--sp-4);">
+                <p class="form-label" style="margin-bottom: var(--sp-3);">Operaciones programadas para el futuro. Pulsa para editar.</p>
+                <div id="recurrentes-list-container"></div>
+            </div>
         `;
-               
+        renderPendingRecurrents(); // Llama a tu función existente
+        renderRecurrentsListOnPage(); // Llama a tu función existente
     }
-}
+};
 
 // AÑADE este nuevo event listener en attachEventListeners
 document.body.addEventListener('click', e => {
@@ -3227,19 +3260,28 @@ const renderPatrimonioContent = async () => {
     if (!contentContainer) return;
 
     if (patrimonioViewMode === 'general') {
-        // La lógica del widget de Patrimonio
         contentContainer.innerHTML = `<div id="patrimonio-completo-container"></div>`;
-        await renderPatrimonioGeneralView(); // Esta es la función que renderiza la lista de todas las cuentas
+        // ¡AQUÍ ESTÁ LA LLAMADA CORRECTA A LA FUNCIÓN RENOMBRADA!
+        await renderPatrimonioGeneralView();
     } else { // 'inversiones'
-        // La lógica de la antigua 'Inversiones'
+        // Esta es la lógica de la antigua página de Inversiones
         contentContainer.innerHTML = `
-            <details class="accordion" open style="margin-bottom: var(--sp-4);">...</details>
-            <div id="portfolio-main-content">...</div>
-        `;
+            <details class="accordion" open style="margin-bottom: var(--sp-4);">
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">show_chart</span>Evolución del Portafolio</h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" id="portfolio-evolution-container" style="padding: var(--sp-3) var(--sp-4);">
+                    <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
+                </div>
+            </details>
+            <div id="portfolio-main-content">
+                <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
+            </div>`;
         await renderPortfolioEvolutionChart('portfolio-evolution-container');
         await renderPortfolioMainContent('portfolio-main-content');
     }
-}                
+};         
         
         const loadConfig = () => { 
             const userEmailEl = select('config-user-email'); 
@@ -4188,7 +4230,6 @@ const renderAnalisisPage = () => {
     if (!container) return;
 
     container.innerHTML = `
-        <!-- Acordeón de Presupuestos Anuales -->
         <div class="card card--no-bg accordion-wrapper">
             <details class="accordion" open>
                 <summary>
@@ -4196,13 +4237,32 @@ const renderAnalisisPage = () => {
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
                 <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <!-- El contenido de los presupuestos se renderizará aquí -->
-                    <div id="annual-budget-container"></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
+                        <div class="form-group" style="flex-grow: 1; margin: 0;">
+                            <label for="budget-year-selector" class="form-label">Año del Presupuesto</label>
+                            <select id="budget-year-selector" class="form-select"></select>
+                        </div>
+                        <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: var(--sp-3);">
+                            <span class="material-icons" style="font-size: 16px;">edit_calendar</span><span>Gestionar</span>
+                        </button>
+                    </div>
+                    <div id="annual-budget-dashboard" class="hidden">
+                        <div id="budget-kpi-container" class="kpi-grid"></div>
+                        <div class="card" style="margin-top: var(--sp-4);">
+                            <h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia Ingresos y Gastos</h3>
+                            <div class="card__content"><div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div></div>
+                        </div>
+                        <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
+                    </div>
+                    <div id="budget-init-placeholder" class="empty-state hidden">
+                        <span class="material-icons">edit_calendar</span>
+                        <h3 id="budget-placeholder-title"></h3>
+                        <p id="budget-placeholder-text"></p>
+                        <button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);"><span class="material-icons" style="font-size: 16px;">add_circle_outline</span><span>Crear Presupuestos</span></button>
+                    </div>
                 </div>
             </details>
         </div>
-
-        <!-- Acordeón de Informes Personalizados -->
         <div class="card card--no-bg accordion-wrapper">
             <details class="accordion">
                 <summary>
@@ -4211,35 +4271,17 @@ const renderAnalisisPage = () => {
                 </summary>
                 <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                     <p class="form-label" style="margin-bottom: var(--sp-3);">Crea gráficos personalizados para analizar exactamente lo que te importa.</p>
-                    <button class="btn btn--secondary btn--full" data-action="show-informe-builder">
-                        <span class="material-icons">edit</span>
-                        <span>Configurar Mi Informe</span>
-                    </button>
+                    <button class="btn btn--secondary btn--full" data-action="show-informe-builder"><span class="material-icons">edit</span><span>Configurar Mi Informe</span></button>
                 </div>
             </details>
         </div>
     `;
-    
-    // Contenedor para el dashboard de presupuestos
-    select('annual-budget-container').innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
-            <div class="form-group" style="flex-grow: 1; margin: 0;">
-                <label for="budget-year-selector" class="form-label">Año</label>
-                <select id="budget-year-selector" class="form-select"></select>
-            </div>
-            <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: var(--sp-3);">
-                <span class="material-icons" style="font-size: 16px;">edit_calendar</span><span>Gestionar</span>
-            </button>
-        </div>
-        <div id="annual-budget-dashboard">...</div>
-        <div id="budget-init-placeholder" class="empty-state hidden">...</div>
-    `;
 
     populateAllDropdowns();
-    renderBudgetTracking(); // Esta función ya la tienes y funciona perfecto aquí.
+    renderBudgetTracking();
 };
 
- const renderPatrimonioPage = () => {
+const renderPatrimonioPage = () => {
     const container = select(PAGE_IDS.PATRIMONIO);
     if (!container) return;
 
@@ -4252,7 +4294,6 @@ const renderAnalisisPage = () => {
             <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
         </div>
     `;
-
     renderPatrimonioContent();
 };
   // =================================================================
@@ -6978,6 +7019,20 @@ function createCustomSelect(selectElement) {
             'update-budgets': handleUpdateBudgets, 'logout': () => fbAuth.signOut(), 'delete-account': () => { showConfirmationModal('Esto eliminará tu cuenta y todos tus datos de forma PERMANENTE. ¿Estás absolutamente seguro?', async () => { /* Lógica de borrado de cuenta aquí */ }); },
             'manage-investment-accounts': showManageInvestmentAccountsModal, 'update-asset-value': () => showValoracionModal(id),
             'set-investment-chart-mode': () => handleSetInvestmentChartMode(actionTarget.dataset.mode),
+			 'set-movimientos-view': () => {
+    const view = actionTarget.dataset.view;
+    if (movimientosViewMode !== view) {
+        movimientosViewMode = view;
+        renderMovimientosPage(); // Re-renderiza la pestaña de movimientos
+    }
+},
+'set-patrimonio-view': () => {
+    const view = actionTarget.dataset.view;
+    if (patrimonioViewMode !== view) {
+        patrimonioViewMode = view;
+        renderPatrimonioPage(); // Re-renderiza la pestaña de patrimonio
+    }
+},
             'global-search': () => { showGlobalSearchModal(); hapticFeedback('medium'); },
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
