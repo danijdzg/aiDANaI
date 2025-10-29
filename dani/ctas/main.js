@@ -71,32 +71,7 @@ const PAGE_IDS = {
     AJUSTES: 'ajustes-page',
 };
 
-const AIDANAI_HELP_CONTENT = {
-    [PAGE_IDS.INICIO]: {
-        title: "Tu Torre de Control Financiera",
-        content: "¡Bienvenido al Panel! De un solo vistazo, tienes el pulso de tu situación. <strong>Consejo PRO:</strong> Los 'Widgets' son tus asesores personales. Puedes personalizarlos, reordenarlos y hacer clic en casi todo para ver más detalles. ¡Toca una barra del gráfico para ver la magia!"
-    },
-    [PAGE_IDS.DIARIO]: {
-        title: "El Libro de la Verdad",
-        content: "Aquí está cada céntimo registrado. Es tu historial completo. <strong>Superpoder secreto:</strong> Desliza cualquier movimiento hacia la <strong>derecha para duplicarlo</strong> o hacia la <strong>izquierda para borrarlo</strong>."
-    },
-    [PAGE_IDS.INVERSIONES]: {
-        title: "Tu Centro de Mando Patrimonial",
-        content: "Donde tus activos crecen. Sigue el rendimiento con métricas clave como la <strong>Rentabilidad (P&L)</strong> y la <strong>TIR anualizada</strong>, la métrica que usan los profesionales."
-    },
-    [PAGE_IDS.PLANIFICAR]: { // <-- ¡NUEVO CONTENIDO!
-        title: "El Laboratorio de Estrategia",
-        content: "Aquí te pones el sombrero de estratega. Automatiza tus <strong>gastos recurrentes</strong> (nómina, alquiler) y crea <strong>presupuestos anuales</strong> para controlar tus metas."
-    },
-    [PAGE_IDS.AJUSTES]: {
-        title: "La Sala de Máquinas",
-        content: "Aquí ajustas la app a tu gusto. Gestiona tus cuentas, conceptos, copias de seguridad y la potente <strong>Contabilidad Dual (A/B)</strong>."
-    },
-    'default': {
-        title: "¡Hola! Soy aiDANaI, tu copiloto",
-        content: "Mi misión es que tomes el control de tu universo financiero. Haz clic en mi icono en cualquier pantalla para obtener consejos útiles como este."
-    }
-};
+
 	const THEMES = {
     'default': { name: 'Neon Blade', icon: 'dark_mode' },
     'sunset-groove': { name: 'Sunset Groove', icon: 'light_mode' }
@@ -5507,27 +5482,6 @@ const hideModal = (id) => {
 // === FIN: CÓDIGO UNIFICADO PARA MODALES ARRASTRABLES ===
 // =================================================================
 
-	const showAidanaiModal = (pageId) => {
-    // Busca el contenido de ayuda para la página actual, o usa el por defecto si no lo encuentra.
-    const help = AIDANAI_HELP_CONTENT[pageId] || AIDANAI_HELP_CONTENT['default'];
-    
-    // Formateamos el contenido con nuestro estilo personalizado.
-    const modalHtml = `
-        <div class="aidanai-modal-content">
-            <img src="aiDANaI.webp" alt="Asistente aiDANaI">
-            <h4>${help.title}</h4>
-            <p>${help.content}</p>
-        </div>
-        <div class="modal__actions">
-            <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">¡Entendido!</button>
-        </div>
-    `;
-
-    // Usamos tu función de modales ya existente para mostrar el contenido.
-    showGenericModal("Tu Asistente Personal", modalHtml);
-    hapticFeedback('light');
-};	
-		
 
         const closeCalculatorOnClickOutside = (e) => {
             const calculatorEl = select('calculator-ui');
@@ -6177,9 +6131,9 @@ const showHelpModal = () => {
     <p style="color: var(--c-primary); font-weight: 600;">Donde la claridad se convierte en poder.</p>
 </div>
 
-<h4>¡Hola! Soy aiDANaI, tu copiloto financiero personal. ¡Abróchate el cinturón!</h4>
-<p>Si alguna vez has sentido que tu dinero tiene vida propia, que aparece y desaparece como por arte de magia, has llegado al lugar perfecto. Manejar las finanzas es como ser el director de una orquesta: cada instrumento (tus cuentas) debe sonar en armonía para crear una sinfonía de prosperidad. Y yo, aiDANaI, te entrego la batuta.</p>
-<p>He diseñado esta herramienta para que sea tu GPS financiero, no un examinador severo. Olvídate de hojas de cálculo que dan más miedo que la factura de la luz en invierno. Aquí todo está pensado para que, en menos de cinco minutos, te sientas como el CEO de tu propio banco personal. ¿Listo/a para tomar el control? ¡Vamos allá!</p>
+<h4>¡Bienvenido a tu copiloto financiero personal!</h4>
+<p>Si alguna vez has sentido que tu dinero tiene vida propia, que aparece y desaparece como por arte de magia, has llegado al lugar perfecto. Manejar las finanzas es como ser el director de una orquesta: cada instrumento (tus cuentas) debe sonar en armonía para crear una sinfonía de prosperidad. Esta aplicación te entrega la batuta.</p>
+<p>Ha sido diseñada para ser tu GPS financiero, no un examinador severo. Olvídate de hojas de cálculo complejas. Aquí todo está pensado para que, en menos de cinco minutos, te sientas como el CEO de tu propio banco personal. ¿Listo/a para tomar el control? ¡Vamos allá!</p>
 
 <h3><span class="material-icons">explore</span>El Gran Tour: Un Paseo por Tu Imperio</h3>
 <p>Cada pestaña de la aplicación es un departamento de tu imperio financiero, diseñado para responder a una pregunta clave sobre tu dinero:</p>
@@ -6187,45 +6141,38 @@ const showHelpModal = () => {
 <details class="accordion" style="margin-bottom: var(--sp-2);">
     <summary><span class="material-icons" style="margin-right:8px">dashboard</span><strong>1. Panel: ¿Cómo voy hoy? (La Torre de Control)</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Esta es tu <strong>vista de pájaro</strong>. De un solo vistazo, tienes el pulso de tu situación. Es tu panel personalizable con los famosos "Widgets", que son como tus asesores personales que nunca duermen. Puedes activarlos, desactivarlos y reordenarlos a tu antojo desde el botón de personalizar.</p>
-        <p><strong>Consejo de aiDANaI:</strong> ¡No te quedes en la superficie! Haz clic en las barras de los gráficos. Si tocas la barra de "Comida" en el gráfico de conceptos, ¡PUM! Verás todos los movimientos de comida de ese periodo. Es interactivo, ¡explóralo!</p>
+        <p>Esta es tu <strong>vista de pájaro</strong>. De un solo vistazo, tienes el pulso de tu situación. Es tu panel personalizable con "Widgets", que son como tus asesores personales. Puedes activarlos, desactivarlos y reordenarlos desde el botón <span class="material-icons" style="font-size:1em; vertical-align:bottom;">dashboard_customize</span> en la barra superior.</p>
+        <p><strong>Consejo de experto:</strong> ¡No te quedes en la superficie! La mayoría de los datos son interactivos. Haz clic en las barras de los gráficos (por ejemplo, en la barra de "Comida" en el gráfico de conceptos) y verás un desglose de todos los movimientos de esa categoría para el periodo seleccionado.</p>
     </div>
 </details>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
     <summary><span class="material-icons" style="margin-right:8px">receipt_long</span><strong>2. Diario: ¿Qué ha pasado exactamente? (El Libro de la Verdad)</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Tu <strong>diario financiero</strong>, el registro notarial de cada céntimo. Aquí es donde buceas en tu historial completo. Es la verdad absoluta de tus finanzas, sin trampa ni cartón.</p>
-        <p><strong>Superpoder secreto:</strong> ¡El Gesto Mágico! Desliza cualquier movimiento hacia la <strong>derecha para duplicarlo</strong> (perfecto para ese café que te tomas cada mañana) o hacia la <strong>izquierda para borrarlo</strong>. Te garantizo que esto te ahorrará horas a lo largo del año.</p>
+        <p>Este es tu <strong>historial financiero completo</strong>, el registro notarial de cada céntimo. Es la verdad absoluta de tus finanzas, sin trampa ni cartón.</p>
+        <p><strong>Superpoder secreto:</strong> ¡El Gesto Mágico! En un dispositivo móvil, desliza cualquier movimiento hacia la <strong>derecha para duplicarlo</strong> (perfecto para ese café que te tomas cada mañana) o hacia la <strong>izquierda para borrarlo</strong>. Esto te ahorrará horas a lo largo del año.</p>
     </div>
 </details>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">rocket_launch</span><strong>3. Inversiones: ¿Mi dinero está trabajando para mí? (El Motor de Riqueza)</strong></summary>
+    <summary><span class="material-icons" style="margin-right:8px">edit_calendar</span><strong>3. Planificar: ¿Cuál es mi plan de futuro? (La Sala de Estrategia)</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>¡La joya de la corona! Esta es la sección dedicada exclusivamente a tu portafolio. Analiza tus inversiones como un profesional con métricas clave que te harán sentir como un magnate de Wall Street:</p>
+        <p>Aquí te pones el sombrero de estratega. Es donde le dices a tu dinero qué hacer, en lugar de preguntarte a dónde se ha ido a final de mes. Domina tu futuro con dos herramientas clave:</p>
+         <ul>
+            <li><strong>Movimientos Recurrentes:</strong> ¡Automatiza tu vida! Registra tu nómina, el alquiler, Netflix, el gimnasio... La app los tendrá listos para ti cada mes en la sección "Diario" para que los confirmes con un solo clic. Se acabó teclear lo mismo una y otra vez.</li>
+            <li><strong>Presupuestos Anuales:</strong> ¡Tu plan de batalla! Define cuánto quieres gastar o ingresar por categoría al año. La app te mostrará proyecciones y te dirá si vas por buen camino para tus metas o si te estás pasando con los pedidos a domicilio.</li>
+        </ul>
+    </div>
+</details>
+
+<details class="accordion" style="margin-bottom: var(--sp-2);">
+    <summary><span class="material-icons" style="margin-right:8px">rocket_launch</span><strong>4. Inversiones: ¿Mi dinero está trabajando para mí? (El Motor de Riqueza)</strong></summary>
+    <div class="accordion__content" style="padding-top: var(--sp-2);">
+        <p>Esta es la sección dedicada a tu portafolio. Analiza tus inversiones como un profesional con métricas clave que te darán una claridad total:</p>
         <ul>
-            <li><strong>P&L (Ganancias y Pérdidas):</strong> Es el "marcador" del partido. Te dice, en euros contantes y sonantes (y en porcentaje), si vas ganando o perdiendo. Simple y brutalmente honesto.</li>
+            <li><strong>P&L (Ganancias y Pérdidas):</strong> Es el "marcador" del partido. Te dice, en euros y en porcentaje, si vas ganando o perdiendo basándose en la diferencia entre el valor de mercado que introduces y el capital que has aportado. Simple y honesto.</li>
             <li><strong>TIR (Tasa Interna de Retorno):</strong> ¡El indicador definitivo! Olvídate de porcentajes confusos. La TIR te dice la rentabilidad <strong>anualizada real</strong> de tu dinero, teniendo en cuenta CUÁNDO y CUÁNTO has invertido. Es la métrica que usan los profesionales para saber si una inversión de verdad merece la pena.</li>
         </ul>
-    </div>
-</details>
-                
-<details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">edit_calendar</span><strong>4. Planificar: ¿Cuál es mi plan de futuro? (La Sala de Estrategia)</strong></summary>
-    <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Aquí te pones el sombrero de estratega. Es donde le dices a tu dinero qué hacer, en lugar de preguntarte a dónde se ha ido a final de mes. Domina tu futuro con dos herramientas letales:</p>
-         <ul>
-            <li><strong>Movimientos Recurrentes:</strong> ¡Automatiza tu vida! Registra tu nómina, el alquiler, Netflix, el gimnasio... y la app los tendrá listos para ti cada mes. Se acabó el teclear lo mismo una y otra vez.</li>
-            <li><strong>Presupuestos Anuales:</strong> ¡Tu plan de batalla! Define cuánto quieres gastar o ingresar por categoría al año. La app te mostrará proyecciones y te dirá si vas por buen camino para comprarte ese capricho o si te estás pasando con los pedidos a domicilio.</li>
-        </ul>
-    </div>
-</details>
-
-<details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary><span class="material-icons" style="margin-right:8px">analytics</span><strong>5. Informes: ¿Qué puedo aprender? (El Laboratorio de aiDANaI)</strong></summary>
-    <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Aquí es donde los datos se convierten en sabiduría. Genera análisis detallados para tomar mejores decisiones. ¿Quieres saber cómo ha evolucionado tu patrimonio o en qué gastaste más el verano pasado? Este es tu sitio. ¡Incluso puedes exportar los informes a un elegante <strong>PDF</strong> para revisarlos con un café o impresionar a quien tú quieras!</p>
     </div>
 </details>
 
@@ -6238,37 +6185,37 @@ const showHelpModal = () => {
     <p><strong>Ejemplos que te cambiarán la vida:</strong></p>
     <ul>
         <li><strong>Contabilidad A (Personal):</strong> Tu vida diaria, tus gastos, tu nómina, la compra semanal.</li>
-        <li><strong>Contabilidad B (Proyecto):</strong> Las cuentas de tu pequeño negocio como freelance, la reforma de casa, las finanzas de la comunidad de vecinos, o incluso ese viaje épico con amigos para que nadie se haga el loco con los gastos. ¡Todo separado, ordenado y sin mezclar churras con merinas!</li>
+        <li><strong>Contabilidad B (Proyecto):</strong> Las finanzas de tu pequeño negocio, la reforma de casa, la gestión de una comunidad de vecinos, o incluso ese viaje épico con amigos para que nadie se haga el loco con los gastos. ¡Todo separado y sin mezclar!</li>
     </ul>
     </div>
 </details>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
     <summary>🔍 <strong>Búsqueda Global (Atajo: Ctrl/Cmd + K)</strong></summary>
-    <div class="accordion__content" style="padding-top: var(--sp-2);"><p>Pulsa el icono de la lupa (o el atajo de teclado si estás en un ordenador) y desata su poder. Escribe lo que sea: "pizza", "nómina", "alquiler", "Amazon"... La búsqueda te mostrará al instante movimientos, cuentas o conceptos relacionados. ¡Es la forma más rápida de encontrar cualquier cosa en segundos!</p></div>
+    <div class="accordion__content" style="padding-top: var(--sp-2);"><p>Pulsa el icono de la lupa (o el atajo de teclado en un ordenador) y desata su poder. Escribe lo que sea: "pizza", "nómina", "alquiler", "Amazon"... La búsqueda te mostrará al instante movimientos, cuentas o conceptos relacionados. ¡Es la forma más rápida de encontrar cualquier cosa en segundos!</p></div>
 </details>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
-    <summary>🧠 <strong>Autocompletado Inteligente: Mi Cerebro a Tu Servicio</strong></summary>
+    <summary>🧠 <strong>Autocompletado Inteligente: El Copiloto Automático</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>Cuando añadas un movimiento, empieza a escribir la descripción. Verás que te sugiero conceptos y cuentas basándome en tus hábitos. Si siempre que escribes "Mercadona" lo asocias al concepto "Supermercado" y a tu "Tarjeta de Débito", yo lo aprenderé. Con el tiempo, rellenaré los campos por ti. ¡Tu tiempo es oro!</p>
+        <p>Cuando añadas un movimiento, empieza a escribir la descripción. Verás que te sugiero conceptos y cuentas basándome en tus hábitos. Si siempre que escribes "Mercadona" lo asocias al concepto "Supermercado" y a tu "Tarjeta de Débito", la aplicación lo aprenderá. Con el tiempo, rellenará los campos por ti. ¡Tu tiempo es oro!</p>
     </div>
 </details>
 
 <details class="accordion" style="margin-bottom: var(--sp-2);">
     <summary>🔄 <strong>Importación Mágica desde CSV: El Puente Definitivo</strong></summary>
     <div class="accordion__content" style="padding-top: var(--sp-2);">
-        <p>¿Vienes de otra app o de una hoja de cálculo? ¡No hay problema! Ve a <strong>Ajustes > Copia de Seguridad > Importar CSV</strong>. Solo necesitas un archivo con 5 columnas en este orden exacto (¡no te olvides la cabecera!):</p>
+        <p>¿Vienes de otra app o de una hoja de cálculo? ¡No hay problema! Ve a <strong>Ajustes > Importar desde CSV</strong>. Solo necesitas un archivo con 5 columnas en este orden exacto (con cabecera incluida):</p>
         <code>FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCIÓN</code>
-        <p>Soy tan listo que si una cuenta o concepto no existe, ¡lo crearé automáticamente por ti! Usa estas palabras mágicas en la columna de concepto para desatar todo mi poder:</p>
+        <p>La aplicación es tan inteligente que si una cuenta o concepto no existe, ¡lo creará automáticamente por ti! Usa estas palabras mágicas en la columna de concepto para desatar todo su poder:</p>
         <ul>
             <li>Usa <code>INICIAL</code> para establecer el saldo de partida de una cuenta en una fecha concreta.</li>
-            <li>Usa <code>TRASPASO</code> para que empareje movimientos entre cuentas como un detective financiero.</li>
+            <li>Usa <code>TRASPASO</code> para que empareje automáticamente los movimientos entre tus cuentas.</li>
         </ul>
     </div>
 </details>
 
-<p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">¡Explora, registra y toma el control definitivo de tu futuro financiero! Estás al mando, y yo, aiDANaI, estoy aquí para asegurarme de que ganes la partida.</p>
+<p style="text-align: center; margin-top: var(--sp-5); font-style: italic; color: var(--c-on-surface-secondary);">¡Explora, registra y toma el control definitivo de tu futuro financiero! Estás al mando.</p>
         `;
     }
     
@@ -6590,11 +6537,20 @@ const showDashboardConfigModal = () => {
         .join('');
 
     const modalHtml = `
-        <p class="form-label">Activa, desactiva y reordena los elementos que quieres ver en tu panel de control.</p>
-        <div id="widget-config-list" style="margin-top: var(--sp-4);">${listHtml}</div>
+        <div class="aidanai-modal-content">
+            <img src="aiDANaI.webp" alt="Asistente aiDANaI">
+            <h4>${help.title}</h4>
+            <p>${help.content}</p>
+        </div>
         <div class="modal__actions">
-            <button class="btn btn--primary btn--full" data-action="save-dashboard-config">Guardar Cambios</button>
-        </div>`;
+            <button class="btn btn--primary" data-action="close-modal" data-modal-id="generic-modal">¡Entendido!</button>
+        </div>
+    `;
+
+    // Usamos tu función de modales ya existente para mostrar el contenido.
+    showGenericModal("Tu Asistente Personal", modalHtml);
+    hapticFeedback('light');
+};
     showGenericModal('Personalizar Panel', modalHtml);
 
     const list = select('widget-config-list');
@@ -7142,7 +7098,7 @@ function createCustomSelect(selectElement) {
                     hapticFeedback('light');
                 }
             },
-            'show-aidanai-help': () => { const activeView = document.querySelector('.view--active'); const pageId = activeView ? activeView.id : PAGE_IDS.INICIO; showAidanaiModal(pageId); },
+            
             'show-concept-drilldown': () => {
                 const conceptId = actionTarget.dataset.conceptId;
                 const conceptName = actionTarget.dataset.conceptName;
