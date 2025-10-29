@@ -4525,14 +4525,15 @@ const renderRecurrentsListOnPage = () => {
     container.innerHTML = upcomingRecurrents.map(r => {
         const nextDate = parseDateStringAsUTC(r.nextDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
         
-        // --- ¡AQUÍ ESTÁ LA CORRECCIÓN IMPORTANTE! ---
         const frequencyMap = { once: 'Única vez', daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual', yearly: 'Anual' };
         
         const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
         const icon = r.cantidad >= 0 ? 'south_west' : 'north_east';
         
+        // ▼▼▼ ¡LA ÚNICA LÍNEA QUE CAMBIA ES LA SIGUIENTE! ▼▼▼
+        // Hemos añadido: data-action="edit-recurrente" y data-id="${r.id}" al div principal.
         return `
-        <div class="modal__list-item" id="page-recurrente-item-${r.id}" data-action="edit-recurrente" data-id="${r.id}" style="cursor: pointer;">
+        <div class="modal__list-item" id="page-recurrente-item-${r.id}" data-action="edit-recurrente" data-id="${r.id}">
             <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
                 <span class="material-icons ${amountClass}" style="font-size: 20px;">${icon}</span>
                 <div style="display: flex; flex-direction: column; min-width: 0;">
@@ -7124,6 +7125,7 @@ function createCustomSelect(selectElement) {
             'show-kpi-drilldown': () => handleKpiDrilldown(actionTarget),
             'edit-movement-from-modal': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; hideModal('generic-modal'); startMovementForm(movementId, false); },
             'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
+			'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
             'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
             'apply-description-suggestion': (e) => {
                 const suggestionItem = e.target.closest('.suggestion-item');
