@@ -3294,35 +3294,15 @@ const renderPatrimonioPage = async () => {
         
         const loadConfig = () => { 
             const userEmailEl = select('config-user-email'); 
-            if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;
-            
-            			
+            if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
+		
   const renderInicioPage = async () => {
     const container = select(PAGE_IDS.INICIO);
     if (!container) return;
 
-    // AÑADIDO: Creamos la estructura HTML base de la página del Panel.
-    // Esto es lo que antes habría hecho el archivo 'inicio.html'.
+    // AHORA ESTA FUNCIÓN SOLO CREA EL CONTENEDOR PRINCIPAL PARA LOS WIDGETS
     container.innerHTML = `
-        <div class="card card--no-bg" style="padding:0; margin-bottom: 0;">
-            <div class="card__content" style="padding: 0;">
-                <div class="report-filters">
-                    <div class="form-group" style="margin-bottom: var(--sp-2);">
-                        <select id="filter-periodo" class="form-select report-period-selector">
-                            <option value="mes-actual">Este Mes</option>
-                            <option value="año-actual">Este Año</option>
-                            <option value="custom">Personalizado</option>
-                        </select>
-                    </div>
-                    <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr;">
-                        <input type="date" id="filter-fecha-inicio" class="form-input">
-                        <input type="date" id="filter-fecha-fin" class="form-input">
-                    </div>
-                     <button class="btn btn--secondary btn--full hidden" data-action="apply-filters" style="margin-top:var(--sp-2)">Aplicar</button>
-                </div>
-            </div>
-        </div>
         <div id="resumen-content-container">
              <!-- Los esqueletos de los widgets se cargarán aquí -->
         </div>
@@ -4033,6 +4013,25 @@ const renderDashboardSuperCentroOperaciones = () => {
                             <div id="kpi-pnl-inversion-comparison" class="kpi-item__comparison">Rentabilidad total</div>
                         </div>
                     </div>
+
+                    <hr style="border-color: var(--c-outline); opacity: 0.5; margin: var(--sp-5) 0;">
+
+                    <!-- ▼▼▼ BLOQUE DE FILTROS MOVIDO AQUÍ ▼▼▼ -->
+                    <div class="report-filters">
+                        <div class="form-group" style="margin-bottom: var(--sp-2);">
+                            <select id="filter-periodo" class="form-select report-period-selector">
+                                <option value="mes-actual">Este Mes</option>
+                                <option value="año-actual">Este Año</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                        </div>
+                        <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr;">
+                            <input type="date" id="filter-fecha-inicio" class="form-input">
+                            <input type="date" id="filter-fecha-fin" class="form-input">
+                        </div>
+                        <button class="btn btn--secondary btn--full hidden" data-action="apply-filters" style="margin-top:var(--sp-2)">Aplicar</button>
+                    </div>
+                    <!-- ▲▲▲ FIN DEL BLOQUE DE FILTROS MOVIDO ▲▲▲ -->
 
                     <hr style="border-color: var(--c-outline); opacity: 0.5; margin: var(--sp-5) 0;">
 
