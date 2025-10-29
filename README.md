@@ -1,10 +1,8 @@
 https://danijdzg.github.io/aiDANaI/cuentas/
 
-
-
 https://danijdzg.github.io/aiDANaI/dani/agenda/
 
-https://danijdzg.github.io/aiDANaI/dani/cuentas/
+https://danijdzg.github.io/aiDANaI/dani/ctas/
 
 https://danijdzg.github.io/aiDANaI/dani/gympadel/
 
