@@ -7769,65 +7769,79 @@ const handleSaveMovement = async (form, btn) => {
     const isRecurrent = select('movimiento-recurrente').checked;
 
     if (isRecurrent) {
-        // --- LÓGICA PARA MOVIMIENTOS RECURRENTES ---
-        try {
-            const id = select('movimiento-id').value || generateId();
-            
-            const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
-            let cantidadRecurrente = Math.round(cantidadPositiva * 100);
-            const tipoRecurrente = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+    // --- LÓGICA CORREGIDA Y ROBUSTA PARA MOVIMIENTOS RECURRENTES ---
+    try {
+        const id = select('movimiento-id').value || generateId();
+        const tipoRecurrente = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+        const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
+        const cantidadEnCentimos = Math.round(cantidadPositiva * 100);
 
-            if (tipoRecurrente === 'gasto') {
-                cantidadRecurrente = -Math.abs(cantidadRecurrente);
-            } else {
-                cantidadRecurrente = Math.abs(cantidadRecurrente);
-            }
-            
-            const dataToSave = {
-                id: id,
-                cantidad: tipoRecurrente === 'traspaso' ? Math.abs(cantidadRecurrente) : cantidadRecurrente,
-                descripcion: select('movimiento-descripcion').value.trim(),
-                tipo: tipoRecurrente === 'traspaso' ? 'traspaso' : 'movimiento',
-                cuentaId: select('movimiento-cuenta').value,
-                conceptoId: select('movimiento-concepto').value,
+        // 1. Preparamos el objeto base con los datos comunes
+        const dataToSave = {
+            id: id,
+            descripcion: select('movimiento-descripcion').value.trim(),
+            frequency: select('recurrent-frequency').value,
+            nextDate: select('recurrent-next-date').value,
+            endDate: select('recurrent-end-date').value || null,
+        };
+
+        // 2. Añadimos los campos específicos según el tipo de movimiento
+        if (tipoRecurrente === 'traspaso') {
+            Object.assign(dataToSave, {
+                tipo: 'traspaso',
+                cantidad: Math.abs(cantidadEnCentimos),
                 cuentaOrigenId: select('movimiento-cuenta-origen').value,
                 cuentaDestinoId: select('movimiento-cuenta-destino').value,
-                frequency: select('recurrent-frequency').value,
-                nextDate: select('recurrent-next-date').value,
-                endDate: select('recurrent-end-date').value || null
-            };
-
-            await saveDoc('recurrentes', id, dataToSave);
-
-            setButtonLoading(btn, false);
-            hapticFeedback('success');
-            
-            // ▼▼▼ ¡AQUÍ ESTABA EL ERROR! ▼▼▼
-            // Corregido: Usamos 'dataToSave.cantidad' en lugar de la variable inexistente 'dataFromForm.cantidad'
-            triggerSaveAnimation(btn, dataToSave.cantidad >= 0 ? 'green' : 'red');
-            
-            if (!isSaveAndNew) {
-                hideModal('movimiento-modal');
-                showToast(select('movimiento-mode').value === 'new' ? 'Operación programada.' : 'Operación actualizada.');
-            } else {
-                form.reset();
-                setMovimientoFormType('gasto');
-                showToast('Operación programada, puedes añadir otra.', 'info');
-                select('movimiento-cantidad').focus();
-            }
-
-            const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
-                renderPlanificacionPage();
-            }
-            return true;
-
-        } catch (error) {
-            console.error("Error al guardar la operación recurrente:", error);
-            showToast("No se pudo guardar la operación recurrente.", "danger");
-            setButtonLoading(btn, false);
-            return false;
+                // Nos aseguramos de limpiar los campos que no se usan
+                cuentaId: null,
+                conceptoId: null,
+            });
+        } else { // Es 'gasto' o 'ingreso'
+            Object.assign(dataToSave, {
+                tipo: 'movimiento',
+                cantidad: tipoRecurrente === 'gasto' ? -Math.abs(cantidadEnCentimos) : Math.abs(cantidadEnCentimos),
+                cuentaId: select('movimiento-cuenta').value,
+                conceptoId: select('movimiento-concepto').value,
+                // Limpiamos los campos de traspaso
+                cuentaOrigenId: null,
+                cuentaDestinoId: null,
+            });
         }
+        
+        // 3. Guardamos en la base de datos
+        await saveDoc('recurrentes', id, dataToSave);
+
+        // 4. El resto de la lógica para la UI se mantiene igual
+        setButtonLoading(btn, false);
+        hapticFeedback('success');
+        triggerSaveAnimation(btn, dataToSave.cantidad >= 0 ? 'green' : 'red');
+        
+        if (!isSaveAndNew) {
+            hideModal('movimiento-modal');
+            showToast(select('movimiento-mode').value.startsWith('edit') ? 'Operación programada actualizada.' : 'Operación programada.');
+        } else {
+            form.reset();
+            setMovimientoFormType('gasto');
+            showToast('Operación guardada, puedes añadir otra.', 'info');
+            select('movimiento-cantidad').focus();
+        }
+
+        // Refrescamos la vista de planificación para ver los cambios
+        const activePage = document.querySelector('.view--active');
+        if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+            renderPlanificacionPage();
+        } else if (activePage && activePage.id === PAGE_IDS.DIARIO) {
+            renderDiarioPage(); // También refresca el diario por si hay pendientes
+        }
+        return true;
+
+    } catch (error) {
+        console.error("Error al guardar la operación recurrente:", error);
+        showToast("No se pudo guardar la operación recurrente.", "danger");
+        setButtonLoading(btn, false);
+        return false;
+    }
+}
     } else {
         // --- LÓGICA PARA MOVIMIENTOS NORMALES (sin cambios) ---
         const mode = select('movimiento-mode').value;
