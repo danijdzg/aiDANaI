@@ -2542,19 +2542,19 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                 
                 <!-- NUEVO: Ahora las acciones están mejor organizadas y con el botón Editar -->
                 <div class="acciones-recurrentes-corregidas">
-                    <button class="btn btn--secondary" data-action="edit-recurrente-from-pending" data-id="${r.id}" title="Editar antes de añadir" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">edit</span>
-                        <span>Editar</span>
-                    </button>
-                    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">skip_next</span>
-                        <span>No añadir</span>
-                    </button>
-                    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">check</span>
-                        <span>Añadir Ahora</span>
-                    </button>
-                </div>
+    <button class="btn btn--secondary" data-action="edit-recurrente-from-pending" data-id="${r.id}" title="Editar antes de añadir" style="padding: 4px 8px; font-size: 0.7rem;">
+        <span class="material-icons" style="font-size: 14px;">edit</span>
+        <span>Editar</span>
+    </button>
+    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
+        <span class="material-icons" style="font-size: 14px;">skip_next</span>
+        <span>No añadir</span>
+    </button>
+    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
+        <span class="material-icons" style="font-size: 14px;">check</span>
+        <span>Añadir Ahora</span>
+    </button>
+</div>
             </div>
             <div class="transaction-card__figures">
                 <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
@@ -4534,15 +4534,15 @@ const renderRecurrentsListOnPage = () => {
         // Hemos añadido: data-action="edit-recurrente" y data-id="${r.id}" al div principal.
         return `
         <div class="modal__list-item" id="page-recurrente-item-${r.id}" data-action="edit-recurrente" data-id="${r.id}">
-            <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
-                <span class="material-icons ${amountClass}" style="font-size: 20px;">${icon}</span>
-                <div style="display: flex; flex-direction: column; min-width: 0;">
-                    <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(r.descripcion)}</span>
-                    <small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">Próximo: ${nextDate} (${frequencyMap[r.frequency] || 'N/A'})</small>
-                </div>
-            </div>
-            <strong class="${amountClass}" style="margin-right: var(--sp-2);">${formatCurrency(r.cantidad)}</strong>
-        </div>`;
+			<div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
+				<span class="material-icons ${amountClass}" style="font-size: 20px;">${icon}</span>
+				<div style="display: flex; flex-direction: column; min-width: 0;">
+					<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(r.descripcion)}</span>
+				<small style="color: var(--c-on-surface-secondary); font-size: var(--fs-xs);">Próximo: ${nextDate} (${frequencyMap[r.frequency] || 'N/A'})</small>
+			</div>
+		</div>
+		<strong class="${amountClass}" style="margin-right: var(--sp-2);">${formatCurrency(r.cantidad)}</strong>
+	</div>`;
     }).join('');
 };
 
@@ -7229,7 +7229,7 @@ function createCustomSelect(selectElement) {
             'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo."); if (pin === null) return; if (pin === "") { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); showToast('PIN de acceso rápido eliminado.', 'info'); return; } if (!/^\d{4}$/.test(pin)) { showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger'); return; } const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos."); if (pin !== pinConfirm) { showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger'); return; } const pinHash = await hashPin(pin); localStorage.setItem('pinUserHash', pinHash); localStorage.setItem('pinUserEmail', currentUser.email); hapticFeedback('success'); showToast('¡PIN de acceso rápido configurado con éxito!', 'info'); },
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
-            'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
+			'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
         };
         
         if (actions[action]) {

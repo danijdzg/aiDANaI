@@ -1,6 +1,6 @@
 // service-worker.js
 
-const CACHE_NAME = 'ctas-aidanai-cache-v2';
+const CACHE_NAME = 'ctas-aidanai';
 const URLS_TO_CACHE = [
   '.',
   'index.html',
