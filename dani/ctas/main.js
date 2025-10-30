@@ -2901,7 +2901,7 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 
 // 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
 const renderDiarioPage = async () => {
-    const container = select('diario-page');
+    const container = select(PAGE_IDS.MOVIMIENTOS); 
     if (!container.querySelector('#diario-view-container')) {
         container.innerHTML = '<div id="diario-view-container"></div>';
     }
