@@ -4472,7 +4472,6 @@ const renderPlanificacionCalendario = async () => {
     }
 };
 
-let planificacionCalendarDate = new Date(); // Variable para controlar el mes del calendario
 
 const renderPlanificacionCalendario = async () => {
     const container = select('planificacion-calendario-container');
