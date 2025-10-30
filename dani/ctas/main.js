@@ -7982,7 +7982,7 @@ const handleAddConcept = async (btn) => {
 
          const exportObject = {
              meta: {
-                 appName: "CtasDani",
+                 appName: "DaniCtas",
                  version: "3.0.0",
                  exportDate: new Date().toISOString()
              },
