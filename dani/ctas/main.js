@@ -64,10 +64,13 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
 const PAGE_IDS = {
-    RESUMEN: 'resumen-page',         // Antes 'inicio-page'
-    MOVIMIENTOS: 'movimientos-page',   // Antes 'diario-page'
-    PLANIFICACION: 'planificacion-page', // Mismo ID, nuevo concepto
-    ACTIVOS: 'activos-page',           // Antes 'inversiones-page'
+    RESUMEN: 'resumen-page',
+    
+    // ▼▼▼ VERIFICA ESTA LÍNEA ▼▼▼
+    MOVIMIENTOS: 'movimientos-page',
+    
+    PLANIFICACION: 'planificacion-page',
+    ACTIVOS: 'activos-page',
     AJUSTES: 'ajustes-page',
 };
 
@@ -1440,16 +1443,22 @@ const navigateTo = async (pageId, isInitial = false) => {
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
 
-    // Guardar la posición del scroll de la vista anterior
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
 
     if (!newView || (oldView && oldView.id === pageId)) return;
     
-    // --- LÓGICA DE CARGA DE VISTAS CORREGIDA ---
-    // Ya no se intenta hacer 'fetch' de archivos HTML. La función de renderizado se encargará de todo.
+    // --- INICIO DE LA LÓGICA REORDENADA ---
 
+    // 1. PRIMERO, actualizamos el estado de la UI (clases CSS)
+    if (oldView) {
+        oldView.classList.remove('view--active');
+    }
+    newView.classList.add('view--active');
+    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+
+    // 2. SEGUNDO, limpiamos gráficos y actualizamos el historial de navegación
     destroyAllCharts();
 
     if (!isInitial) hapticFeedback('light');
@@ -1458,15 +1467,9 @@ const navigateTo = async (pageId, isInitial = false) => {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    const navItems = Array.from(selectAll('.bottom-nav__item'));
-    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
-    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-    const isForward = newIndex > oldIndex;
-
+    // 3. TERCERO, preparamos las barras de navegación y los datos necesarios
     const actionsEl = select('top-bar-actions');
     const leftEl = select('top-bar-left-button');
-    const fab = select('fab-add-movimiento'); // Asumiendo que pudieras tener un FAB
-    
     const standardActions = `
         <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
             <span class="material-icons">search</span>
@@ -1479,21 +1482,17 @@ const navigateTo = async (pageId, isInitial = false) => {
         </button>
     `;
     
-    // Lazy loading de datos si es necesario
-    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.INVERSIONES && !dataLoaded.inversiones) await loadInversiones();
+    if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
+    if (pageId === PAGE_IDS.ACTIVOS && !dataLoaded.inversiones) await loadInversiones();
 
     const pageRenderers = {
-    [PAGE_IDS.RESUMEN]: { title: 'Resumen', render: renderInicioPage, actions: standardActions },
-    [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderDiarioPage, actions: standardActions },
-    
-    // ▼▼▼ ¡ESTA ES LA LÍNEA CORREGIDA! ▼▼▼
-    [PAGE_IDS.ACTIVOS]: { title: 'Activos', render: renderActivosPage, actions: standardActions }, 
-    
-    [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-};
-
+        [PAGE_IDS.RESUMEN]: { title: 'Resumen', render: renderInicioPage, actions: standardActions },
+        [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.ACTIVOS]: { title: 'Activos', render: renderActivosPage, actions: standardActions },
+        [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+    };
+	// 4. CUARTO, y solo ahora que la vista está garantizada en el DOM, llamamos a la función de renderizado.
     if (pageRenderers[pageId]) { 
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
@@ -1517,14 +1516,14 @@ const navigateTo = async (pageId, isInitial = false) => {
         // Este es el cambio clave. Ahora llamamos a la función JS que genera el HTML.
         await pageRenderers[pageId].render();
     }
-    
-    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
-    if (fab) fab.classList.toggle('fab--visible', true);
+    // 5. QUINTO, gestionamos las animaciones y el scroll
     updateThemeIcon();
-    
-    newView.classList.add('view--active'); 
-    
+
     if (oldView && !isInitial) {
+        const navItems = Array.from(selectAll('.bottom-nav__item'));
+        const oldIndex = navItems.findIndex(item => item.dataset.page === oldView.id);
+        const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+        const isForward = newIndex > oldIndex;
         const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
         const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
 
@@ -1532,22 +1531,16 @@ const navigateTo = async (pageId, isInitial = false) => {
         oldView.classList.add(outClass);
 
         oldView.addEventListener('animationend', () => {
-            oldView.classList.remove('view--active', outClass);
+            oldView.classList.remove(outClass);
             newView.classList.remove(inClass);
         }, { once: true });
-
-    } else if (oldView) {
-        oldView.classList.remove('view--active');
     }
-
-    // Restaurar posición de scroll de la nueva vista
+    
     if (mainScroller) {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
-    if (pageId === PAGE_IDS.INICIO) {
-        // En lugar de llamar directamente a la actualización (que puede ser pesada),
-        // usamos el sistema inteligente que ya tienes para que no se solape.
+    if (pageId === PAGE_IDS.RESUMEN) {
         scheduleDashboardUpdate();
     }
 };
@@ -2901,11 +2894,19 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 
 // 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
 const renderDiarioPage = async () => {
-    const container = select(PAGE_IDS.MOVIMIENTOS); 
+    // ▼▼▼ ¡LA LÍNEA CLAVE! ▼▼▼
+    const container = select(PAGE_IDS.MOVIMIENTOS);
+    
+    // Guarda de seguridad: Si el contenedor no existe en el DOM, no continuamos.
+    if (!container) {
+        console.error("Error crítico: El contenedor para la página de Movimientos no fue encontrado en el DOM.");
+        return; 
+    }
+
     if (!container.querySelector('#diario-view-container')) {
         container.innerHTML = '<div id="diario-view-container"></div>';
     }
-    
+
     const viewContainer = select('diario-view-container');
     if (!viewContainer) return;
 
