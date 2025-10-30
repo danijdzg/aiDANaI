@@ -4136,29 +4136,35 @@ const renderInicioResumenView = () => {
 
     destroyAllCharts();
 
-    const widgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
+    // --- INICIO DE LA CORRECCIÓN CLAVE ---
+    // Si db.config o los widgets no están definidos todavía, usamos la lista por defecto.
+    // Esto evita que la pantalla se quede en blanco en la carga inicial.
+    const widgetOrder = (db.config && db.config.dashboardWidgets) 
+                        ? db.config.dashboardWidgets 
+                        : DEFAULT_DASHBOARD_WIDGETS;
+    // --- FIN DE LA CORRECCIÓN CLAVE ---
 
-    // AHORA, esta función solo imprime los esqueletos con una etiqueta especial.
     resumenContentContainer.innerHTML = widgetOrder.map(widgetId => {
-        // La etiqueta es 'data-widget-type'
+        if (!AVAILABLE_WIDGETS[widgetId]) return ''; // Guarda de seguridad por si un widget ya no existe
+        
         switch(widgetId) {
-        case 'super-centro-operaciones':
-            return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
-        case 'action-center':
-            return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
-        case 'net-worth-trend':
-            return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
-        case 'patrimonio-structure':
-           return `<div data-widget-type="patrimonio-structure"><div class="card" id="patrimonio-widget"><div id="patrimonio-completo-container"><div class="skeleton" style="height:250px;"></div></div></div></div>`;
-        case 'emergency-fund':
-            return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
-        case 'fi-progress':
-            return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
-        case 'informe-personalizado':
-             return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
-        default:
-            return '';
-    }
+            case 'super-centro-operaciones':
+                return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
+            case 'action-center':
+                return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
+            case 'net-worth-trend':
+                return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
+            case 'patrimonio-structure':
+                return `<div data-widget-type="patrimonio-structure"><div class="card" id="patrimonio-widget"><div id="patrimonio-completo-container"><div class="skeleton" style="height:250px;"></div></div></div></div>`;
+            case 'emergency-fund':
+                return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
+            case 'fi-progress':
+                return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
+            case 'informe-personalizado':
+                return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
+            default:
+                return '';
+        }
     }).join('<div style="height: var(--sp-4);"></div>');
     
     // ¡IMPORTANTE! Después de dibujar los esqueletos, le decimos a nuestro "asistente" que empiece a observar.
@@ -4464,6 +4470,107 @@ const renderPlanificacionCalendario = async () => {
         console.error("Error al renderizar el calendario de planificación:", error);
         container.innerHTML = `<p class="text-danger">Error al cargar el calendario.</p>`;
     }
+};
+
+let planificacionCalendarDate = new Date(); // Variable para controlar el mes del calendario
+
+const renderPlanificacionCalendario = async () => {
+    const container = select('planificacion-calendario-container');
+    if (!container) return;
+    container.innerHTML = `<div class="calendar-container skeleton" style="height: 350px;"></div>`;
+    
+    try {
+        if (!(planificacionCalendarDate instanceof Date) || isNaN(planificacionCalendarDate)) {
+            planificacionCalendarDate = new Date();
+        }
+        planificacionCalendarDate.setHours(12, 0, 0, 0);
+
+        const year = planificacionCalendarDate.getFullYear();
+        const month = planificacionCalendarDate.getMonth();
+        const startDate = new Date(Date.UTC(year, month, 1));
+        const endDate = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59));
+        
+        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
+            .where('fecha', '>=', startDate.toISOString())
+            .where('fecha', '<=', endDate.toISOString()).get();
+        const movementsOfMonth = snapshot.docs.map(doc => doc.data());
+
+        const dataMap = new Map();
+        const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+        
+        movementsOfMonth.forEach(m => {
+            const dateKey = m.fecha.slice(0, 10);
+            if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, recurrentes: [] });
+            dataMap.get(dateKey).total += calculateMovementAmount(m, visibleAccountIds);
+        });
+
+        (db.recurrentes || []).forEach(r => {
+            const nextDate = parseDateStringAsUTC(r.nextDate);
+            if (nextDate && nextDate.getUTCFullYear() === year && nextDate.getUTCMonth() === month) {
+                const dateKey = r.nextDate;
+                if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, recurrentes: [] });
+                dataMap.get(dateKey).recurrentes.push(r);
+            }
+        });
+
+        container.innerHTML = generatePlanificacionCalendarGrid(planificacionCalendarDate, dataMap);
+
+    } catch(error) {
+        console.error("Error al renderizar el calendario de planificación:", error);
+        container.innerHTML = `<p class="text-danger">Error al cargar el calendario.</p>`;
+    }
+};
+
+const generatePlanificacionCalendarGrid = (date, dataMap) => {
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
+    const firstDayOffset = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const monthName = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    
+    let gridHtml = `<div class="calendar-header">
+        <button class="icon-btn" data-action="plan-calendar-nav" data-direction="prev"><span class="material-icons">chevron_left</span></button>
+        <h3 class="calendar-header__title">${monthName}</h3>
+        <button class="icon-btn" data-action="plan-calendar-nav" data-direction="next"><span class="material-icons">chevron_right</span></button>
+    </div>`;
+    gridHtml += '<div class="calendar-grid">';
+    ['L', 'M', 'X', 'J', 'V', 'S', 'D'].forEach(day => gridHtml += `<div class="calendar-weekday">${day}</div>`);
+
+    let dayOfMonth = 1;
+    for (let i = 0; i < 42; i++) {
+        if (i < firstDayOffset || dayOfMonth > daysInMonth) {
+            gridHtml += `<div class="calendar-day empty"></div>`;
+        } else {
+            const currentDate = new Date(Date.UTC(year, month, dayOfMonth));
+            const dateKey = currentDate.toISOString().slice(0, 10);
+            const dayData = dataMap.get(dateKey);
+            let classes = 'calendar-day';
+            if (currentDate.getTime() === today.getTime()) classes += ' is-today';
+
+            gridHtml += `<div class="${classes}" data-action="show-day-details" data-date="${dateKey}">
+                <span class="calendar-day__number">${dayOfMonth}</span>`;
+
+            if (dayData) {
+                if (dayData.total) {
+                    const totalClass = dayData.total >= 0 ? 'text-positive' : 'text-negative';
+                    gridHtml += `<span class="calendar-day__total ${totalClass}">${formatCurrency(dayData.total)}</span>`;
+                }
+                if (dayData.recurrentes.length > 0) {
+                    gridHtml += `<div class="calendar-day__markers">`;
+                    dayData.recurrentes.slice(0, 3).forEach(r => {
+                        const markerClass = r.cantidad >= 0 ? 'marker--income' : 'marker--expense';
+                        gridHtml += `<div class="calendar-day__marker ${markerClass}" style="border: 1px solid var(--c-on-surface-secondary);"></div>`;
+                    });
+                    gridHtml += `</div>`;
+                }
+            }
+            gridHtml += `</div>`;
+            dayOfMonth++;
+        }
+    }
+    gridHtml += '</div>';
+    return gridHtml;
 };
 
 // NECESITARÁS una versión ligeramente modificada de tu generador de grid
@@ -7108,6 +7215,14 @@ function createCustomSelect(selectElement) {
         const btn = actionTarget.closest('button');
         
         const actions = {
+			 'manage-recurrentes': showRecurrentesModal, // <-- AÑADE ESTA LÍNEA
+
+    'plan-calendar-nav': () => { // <-- AÑADE ESTE BLOQUE ENTERO
+        const direction = actionTarget.dataset.direction;
+        const currentMonth = planificacionCalendarDate.getUTCMonth();
+        planificacionCalendarDate.setUTCMonth(currentMonth + (direction === 'next' ? 1 : -1));
+        renderPlanificacionCalendario();
+    },
             'show-main-menu': () => {
                 const menu = document.getElementById('main-menu-popover');
                 if (!menu) return;
