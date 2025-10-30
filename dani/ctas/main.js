@@ -64,11 +64,11 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
 const PAGE_IDS = {
-    CUENTAS: 'cuentas-page',     // ¡NUEVA! La pantalla principal.
-    INFORME: 'informe-page',     // Renombrada desde 'inicio-page'.
-    PLANIFICAR: 'planificar-page',
+    INICIO: 'inicio-page',
+    DIARIO: 'diario-page',
+    INVERSIONES: 'inversiones-page',
+    PLANIFICAR: 'planificar-page', // ¡La nueva página!
     AJUSTES: 'ajustes-page',
-    DIARIO_DETALLE: 'diario-page' // 'diario-page' ahora es para los detalles de una cuenta.
 };
 
 
@@ -295,7 +295,7 @@ const clearDiarioFilters = async () => {
 };
 
 // ▲▲▲ FIN DEL BLOQUE A PEGAR ▲▲▲
-        let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), pageScrollPositions = {};
+        let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), deselectedAccountTypesFilter = new Set();
 		let ptrState = {
 			startY: 0,
 			isPulling: false,
@@ -1305,27 +1305,26 @@ window.addEventListener('offline', () => {
     syncState = 'error';
     updateSyncStatusIcon();
 });
-const startMainApp = async () => {
-    const loginScreen = select('login-screen');
-    const pinLoginScreen = select('pin-login-screen');
-    const appRoot = select('app-root');
+    const startMainApp = async () => {
+            const loginScreen = select('login-screen');
+            const pinLoginScreen = select('pin-login-screen');
+            const appRoot = select('app-root');
 
-    if (loginScreen) loginScreen.classList.remove('login-view--visible');
-    if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
-    if (appRoot) appRoot.classList.add('app-layout--visible');
-    
-    populateAllDropdowns();
-    loadConfig();
-    measureListItemHeights();
-    updateSyncStatusIcon();
-    buildIntelligentIndex();
-    
-    navigateTo(PAGE_IDS.CUENTAS, true); // <-- ARRANQUE EN LA NUEVA PANTALLA
+            if (loginScreen) loginScreen.classList.remove('login-view--visible');
+            if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
+            if (appRoot) appRoot.classList.add('app-layout--visible');
             
-    updateThemeIcon(localStorage.getItem('appTheme') || 'default');
-    isInitialLoadComplete = true;
-};
-
+            populateAllDropdowns();
+            loadConfig();
+            
+            measureListItemHeights();
+            
+            updateSyncStatusIcon();
+            buildIntelligentIndex();
+			navigateTo(PAGE_IDS.DIARIO, true); // <-- CAMBIADO
+            updateThemeIcon(localStorage.getItem('appTheme') || 'default');
+            isInitialLoadComplete = true;
+			};
 
         
     const showLoginScreen = () => {
@@ -1436,178 +1435,120 @@ const startMainApp = async () => {
 };
 
 // EN main.js - REEMPLAZA TU FUNCIÓN navigateTo POR ESTA VERSIÓN
-const navigateTo = async (pageId, isInitial = false, context = {}) => {
-    const mainScroller = selectOne('.app-layout__main');
+const navigateTo = async (pageId, isInitial = false) => {
     const oldView = document.querySelector('.view--active');
-    
-    if (oldView && oldView.id !== PAGE_IDS.DIARIO_DETALLE) {
+    const newView = select(pageId);
+    const mainScroller = selectOne('.app-layout__main');
+
+    // Guardar la posición del scroll de la vista anterior
+    if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
 
-    if (!isInitial) hapticFeedback('light');
-
-    if (!isInitial && (window.history.state?.page !== pageId || JSON.stringify(window.history.state?.context) !== JSON.stringify(context))) {
-        history.pushState({ page: pageId, context }, '', `#${pageId}`);
-    }
-
-    const pageRenderers = {
-        [PAGE_IDS.CUENTAS]: { title: 'Cuentas', render: renderCuentasPage },
-        [PAGE_IDS.INFORME]: { title: 'Informe', render: renderInformePage },
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage },
-        [PAGE_IDS.DIARIO_DETALLE]: { title: context.cuentaNombre || 'Detalles', render: () => renderCuentaDetalleView(context.cuentaId), back: PAGE_IDS.CUENTAS }
-    };
-
-    const newView = select(pageId);
-    if (!newView || (oldView && oldView.id === pageId && !pageRenderers[pageId].back)) return;
+    if (!newView || (oldView && oldView.id === pageId)) return;
+    
+    // --- LÓGICA DE CARGA DE VISTAS CORREGIDA ---
+    // Ya no se intenta hacer 'fetch' de archivos HTML. La función de renderizado se encargará de todo.
 
     destroyAllCharts();
 
-    const leftButton = select('top-bar-left-button');
-    const titleEl = select('top-bar-title');
+    if (!isInitial) hapticFeedback('light');
+
+    if (!isInitial && window.history.state?.page !== pageId) {
+        history.pushState({ page: pageId }, '', `#${pageId}`);
+    }
+
+    const navItems = Array.from(selectAll('.bottom-nav__item'));
+    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
+    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+    const isForward = newIndex > oldIndex;
+
+    const actionsEl = select('top-bar-actions');
+    const leftEl = select('top-bar-left-button');
+    const fab = select('fab-add-movimiento'); // Asumiendo que pudieras tener un FAB
     
-    if (pageRenderers[pageId]) {
-        const pageInfo = pageRenderers[pageId];
-        titleEl.textContent = pageInfo.title;
+    const standardActions = `
+        <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
+            <span class="material-icons">search</span>
+        </button>
+        <button id="theme-toggle-btn" data-action="toggle-theme" class="icon-btn" title="Cambiar Tema" aria-label="Cambiar Tema">
+            <span class="material-icons">dark_mode</span>
+        </button>
+        <button data-action="show-main-menu" class="icon-btn" title="Más opciones" aria-label="Mostrar más opciones">
+            <span class="material-icons">more_vert</span>
+        </button>
+    `;
+    
+    // Lazy loading de datos si es necesario
+    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
+    if (pageId === PAGE_IDS.INVERSIONES && !dataLoaded.inversiones) await loadInversiones();
 
-        if (pageInfo.back) {
-            leftButton.innerHTML = `<button class="icon-btn" data-action="navigate" data-page="${pageInfo.back}"><span class="material-icons">arrow_back</span></button>`;
-        } else {
-            leftButton.innerHTML = '';
+    const pageRenderers = {
+        [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+    };
+
+    if (pageRenderers[pageId]) { 
+        if (leftEl) {
+            let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
+            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+            if (pageId === PAGE_IDS.DIARIO) {
+                leftSideHTML += `
+                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
+                        <span class="material-icons">filter_list</span>
+                    </button>
+                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+                        <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+                    </button>
+                `;
+            }
+            leftEl.innerHTML = leftSideHTML;
         }
-        
-        if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
 
-        await pageInfo.render();
+        if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
+        
+        // --- LLAMADA DIRECTA A LA FUNCIÓN DE RENDERIZADO ---
+        // Este es el cambio clave. Ahora llamamos a la función JS que genera el HTML.
+        await pageRenderers[pageId].render();
     }
     
-    if (oldView) {
-        const isSubView = !!pageRenderers[pageId]?.back;
-        const wasSubView = oldView.id === PAGE_IDS.DIARIO_DETALLE;
-
-        // Limpiamos clases de animación anteriores
-        oldView.className = 'view';
-        newView.className = 'view';
-
-        if(isSubView) {
-            oldView.classList.add('view-transition-out-forward');
-            newView.classList.add('view-transition-in-forward');
-        } else if (wasSubView) {
-            oldView.classList.add('view-transition-out-backward');
-            newView.classList.add('view-transition-in-backward');
-        }
-        
-        newView.classList.add('view--active');
-
-        setTimeout(() => { // Usamos un timeout para asegurar que la animación se complete
-            oldView.classList.remove('view--active', 'view-transition-out-forward', 'view-transition-out-backward');
-            newView.classList.remove('view-transition-in-forward', 'view-transition-in-backward');
-        }, 350);
-    } else {
-        newView.classList.add('view--active');
-    }
+    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+    if (fab) fab.classList.toggle('fab--visible', true);
+    updateThemeIcon();
     
-    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === pageId));
+    newView.classList.add('view--active'); 
+    
+    if (oldView && !isInitial) {
+        const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
+        const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
 
-    if (!pageRenderers[pageId]?.back) {
+        newView.classList.add(inClass);
+        oldView.classList.add(outClass);
+
+        oldView.addEventListener('animationend', () => {
+            oldView.classList.remove('view--active', outClass);
+            newView.classList.remove(inClass);
+        }, { once: true });
+
+    } else if (oldView) {
+        oldView.classList.remove('view--active');
+    }
+
+    // Restaurar posición de scroll de la nueva vista
+    if (mainScroller) {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
-    } else {
-        mainScroller.scrollTop = 0;
+    }
+
+    if (pageId === PAGE_IDS.INICIO) {
+        // En lugar de llamar directamente a la actualización (que puede ser pesada),
+        // usamos el sistema inteligente que ya tienes para que no se solape.
+        scheduleDashboardUpdate();
     }
 };
-   async function renderCuentasPage() {
-    const container = select(PAGE_IDS.CUENTAS);
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="accounts-summary skeleton" style="height: 80px; margin: var(--sp-4) var(--sp-4) 0 var(--sp-4);"></div>
-        <div class="skeleton-account-group" style="padding-top: var(--sp-5);">
-            <h3 class="account-group__title skeleton" style="width: 120px; height: 16px; margin: 0 var(--sp-4) var(--sp-2) var(--sp-4);"></h3>
-            <div class="skeleton-account-card"><div class="skeleton skeleton-icon"></div><div class="skeleton-details"><div class="skeleton skeleton-line-1"></div><div class="skeleton skeleton-line-2"></div></div><div class="skeleton skeleton-balance"></div></div>
-            <div class="skeleton-account-card"><div class="skeleton skeleton-icon"></div><div class="skeleton-details"><div class="skeleton skeleton-line-1"></div><div class="skeleton skeleton-line-2"></div></div><div class="skeleton skeleton-balance"></div></div>
-        </div>`;
-
-    const saldos = await getSaldos();
-    const visibleAccounts = getVisibleAccounts();
-    const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
-
-    const groupedAccounts = visibleAccounts.reduce((acc, cuenta) => {
-        const tipo = toSentenceCase(cuenta.tipo || 'General');
-        if (!acc[tipo]) acc[tipo] = [];
-        acc[tipo].push(cuenta);
-        return acc;
-    }, {});
-
-    let html = `<div class="accounts-summary"><h4 class="accounts-summary__label">Patrimonio Neto Total</h4><strong class="accounts-summary__total">${formatCurrency(patrimonioNeto)}</strong></div>`;
-    
-    const sortedGroups = Object.keys(groupedAccounts).sort();
-
-    for (const groupName of sortedGroups) {
-        html += `<h3 class="account-group__title">${groupName}</h3>`;
-        const accountsInGroup = groupedAccounts[groupName].sort((a,b) => a.nombre.localeCompare(b.nombre));
         
-        for (const cuenta of accountsInGroup) {
-            html += `
-                <div class="account-card" data-action="view-account-detail" data-id="${cuenta.id}" data-name="${escapeHTML(cuenta.nombre)}">
-                    <div class="account-card__icon"><span class="material-icons">${cuenta.esInversion ? 'rocket_launch' : 'wallet'}</span></div>
-                    <div class="account-card__details"><p class="account-card__name">${escapeHTML(cuenta.nombre)}</p></div>
-                    <strong class="account-card__balance ${saldos[cuenta.id] >= 0 ? '' : 'text-negative'}">${formatCurrency(saldos[cuenta.id] || 0)}</strong>
-                </div>`;
-        }
-    }
-    container.innerHTML = html;
-}
-
-// ▼▼▼ AÑADE ESTA NUEVA FUNCIÓN PARA LA VISTA DE DETALLE DE CUENTA ▼▼▼
-
-async function renderCuentaDetalleView(cuentaId) {
-    const container = select(PAGE_IDS.DIARIO_DETALLE);
-    if (!container) return;
-
-    container.innerHTML = `<div id="movimientos-list-container"><div id="virtual-list-sizer"><div id="virtual-list-content"></div></div></div>`;
-
-    vList.scrollerEl = selectOne('.app-layout__main');
-    vList.sizerEl = select('virtual-list-sizer');
-    vList.contentEl = select('virtual-list-content');
-    
-    let skeletonHTML = Array(7).fill('<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>').join('');
-    vList.contentEl.innerHTML = skeletonHTML;
-    
-    const todosLosMovimientos = await fetchAllMovementsForHistory();
-    const movimientosDeLaCuenta = todosLosMovimientos.filter(m => (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId));
-    
-    db.movimientos = movimientosDeLaCuenta;
-    
-    recalculateAndApplyRunningBalances(db.movimientos, db.cuentas);
-    
-    updateVirtualListUI();
-
-    if (db.movimientos.length === 0) {
-        const cuenta = getVisibleAccounts().find(c => c.id === cuentaId);
-        container.innerHTML = `<div class="empty-state" style="margin-top: var(--sp-6);">
-            <span class="material-icons">history</span><h3>Sin Movimientos</h3>
-            <p>Aún no hay transacciones registradas para la cuenta <strong>${cuenta ? escapeHTML(cuenta.nombre) : ''}</strong>.</p>
-        </div>`;
-    }
-}
-
-/**
- * Renombrada desde renderInicioPage. Ahora se encarga de la pestaña "Informe".
- * Su contenido (renderizar widgets del dashboard) no ha cambiado.
- */
-const renderInformePage = () => {
-    const container = select(PAGE_IDS.INFORME);
-    if (!container) return;
-
-    container.innerHTML = `<div id="resumen-content-container"></div>`;
-    
-    populateAllDropdowns();
-    renderInicioResumenView(); // Esta función que ya tenías sigue siendo la que dibuja los widgets
-    
-    Promise.all([loadPresupuestos(), loadInversiones()]);
-};
-
-	 
     const setupTheme = () => { 
     const gridColor = 'rgba(255, 255, 255, 0.1)';
     const textColor = '#FFFFFF';
@@ -7075,21 +7016,24 @@ function createCustomSelect(selectElement) {
     });
 
     document.body.addEventListener('click', async (e) => {
-        const actionTarget = e.target.closest('[data-action]');
+        const target = e.target;
+
+        if (!target.closest('.custom-select-wrapper')) {
+            closeAllCustomSelects(null);
+        }
+
+        if (target.matches('.input-amount-calculator')) {
+            e.preventDefault();
+            showCalculator(target);
+            return;
+        }
+        const actionTarget = target.closest('[data-action]');
+        if (!actionTarget && !target.closest('.transaction-card')) {
+            resetActiveSwipe();
+        }
         if (!actionTarget) return;
 
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
-        const btn = actionTarget.closest('button');
-        
-        const actions = {
-            'view-account-detail': () => {
-                const cuentaId = actionTarget.dataset.id;
-                const cuentaNombre = actionTarget.dataset.name;
-                navigateTo(PAGE_IDS.DIARIO_DETALLE, false, { cuentaId, cuentaNombre });
-            },
-            'navigate': () => {
-                navigateTo(page);
-            },
         const btn = actionTarget.closest('button');
         
         const actions = {
@@ -7131,12 +7075,7 @@ function createCustomSelect(selectElement) {
             'edit-movement-from-modal': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; hideModal('generic-modal'); startMovementForm(movementId, false); },
             'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
 			'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
-            
-			'view-account-detail': () => {
-        const cuentaId = actionTarget.dataset.id;
-        const cuentaNombre = actionTarget.dataset.name;
-        navigateTo(PAGE_IDS.DIARIO_DETALLE, false, { cuentaId, cuentaNombre });
-    },
+            'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
             'apply-description-suggestion': (e) => {
                 const suggestionItem = e.target.closest('.suggestion-item');
                 if (suggestionItem) {
