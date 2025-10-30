@@ -295,7 +295,7 @@ const clearDiarioFilters = async () => {
 };
 
 // ▲▲▲ FIN DEL BLOQUE A PEGAR ▲▲▲
-        let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), deselectedAccountTypesFilter = new Set();
+        let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), pageScrollPositions = {};
 		let ptrState = {
 			startY: 0,
 			isPulling: false,
@@ -1305,7 +1305,7 @@ window.addEventListener('offline', () => {
     syncState = 'error';
     updateSyncStatusIcon();
 });
-    const startMainApp = async () => {
+const startMainApp = async () => {
     const loginScreen = select('login-screen');
     const pinLoginScreen = select('pin-login-screen');
     const appRoot = select('app-root');
@@ -1320,7 +1320,7 @@ window.addEventListener('offline', () => {
     updateSyncStatusIcon();
     buildIntelligentIndex();
     
-    navigateTo(PAGE_IDS.CUENTAS, true); // <-- ¡CAMBIO CLAVE!
+    navigateTo(PAGE_IDS.CUENTAS, true); // <-- ARRANQUE EN LA NUEVA PANTALLA
             
     updateThemeIcon(localStorage.getItem('appTheme') || 'default');
     isInitialLoadComplete = true;
@@ -1481,32 +1481,35 @@ const navigateTo = async (pageId, isInitial = false, context = {}) => {
         await pageInfo.render();
     }
     
-    // Transiciones y estado activo
     if (oldView) {
-        const isSubView = !!pageRenderers[pageId].back;
+        const isSubView = !!pageRenderers[pageId]?.back;
         const wasSubView = oldView.id === PAGE_IDS.DIARIO_DETALLE;
 
-        if (isSubView) { // Navegando hacia un detalle
+        // Limpiamos clases de animación anteriores
+        oldView.className = 'view';
+        newView.className = 'view';
+
+        if(isSubView) {
             oldView.classList.add('view-transition-out-forward');
             newView.classList.add('view-transition-in-forward');
-        } else if (wasSubView) { // Volviendo de un detalle
+        } else if (wasSubView) {
             oldView.classList.add('view-transition-out-backward');
             newView.classList.add('view-transition-in-backward');
         }
         
         newView.classList.add('view--active');
 
-        oldView.addEventListener('animationend', () => {
+        setTimeout(() => { // Usamos un timeout para asegurar que la animación se complete
             oldView.classList.remove('view--active', 'view-transition-out-forward', 'view-transition-out-backward');
             newView.classList.remove('view-transition-in-forward', 'view-transition-in-backward');
-        }, { once: true });
+        }, 350);
     } else {
         newView.classList.add('view--active');
     }
     
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === pageId));
 
-    if (!pageRenderers[pageId].back) {
+    if (!pageRenderers[pageId]?.back) {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     } else {
         mainScroller.scrollTop = 0;
@@ -1516,54 +1519,27 @@ const navigateTo = async (pageId, isInitial = false, context = {}) => {
     const container = select(PAGE_IDS.CUENTAS);
     if (!container) return;
 
-    // Esqueleto de carga para una UX fluida
     container.innerHTML = `
-        <div class="accounts-summary skeleton" style="height: 80px;"></div>
-        <div class="skeleton-account-group">
-            <h3 class="account-group__title skeleton" style="width: 120px; height: 16px;"></h3>
-            <div class="skeleton-account-card">
-                <div class="skeleton skeleton-icon"></div>
-                <div class="skeleton-details">
-                    <div class="skeleton skeleton-line-1"></div>
-                    <div class="skeleton skeleton-line-2"></div>
-                </div>
-                <div class="skeleton skeleton-balance"></div>
-            </div>
-             <div class="skeleton-account-card">
-                <div class="skeleton skeleton-icon"></div>
-                <div class="skeleton-details">
-                    <div class="skeleton skeleton-line-1"></div>
-                    <div class="skeleton skeleton-line-2"></div>
-                </div>
-                <div class="skeleton skeleton-balance"></div>
-            </div>
-        </div>
-    `;
+        <div class="accounts-summary skeleton" style="height: 80px; margin: var(--sp-4) var(--sp-4) 0 var(--sp-4);"></div>
+        <div class="skeleton-account-group" style="padding-top: var(--sp-5);">
+            <h3 class="account-group__title skeleton" style="width: 120px; height: 16px; margin: 0 var(--sp-4) var(--sp-2) var(--sp-4);"></h3>
+            <div class="skeleton-account-card"><div class="skeleton skeleton-icon"></div><div class="skeleton-details"><div class="skeleton skeleton-line-1"></div><div class="skeleton skeleton-line-2"></div></div><div class="skeleton skeleton-balance"></div></div>
+            <div class="skeleton-account-card"><div class="skeleton skeleton-icon"></div><div class="skeleton-details"><div class="skeleton skeleton-line-1"></div><div class="skeleton skeleton-line-2"></div></div><div class="skeleton skeleton-balance"></div></div>
+        </div>`;
 
-    // Obtenemos los saldos y las cuentas
     const saldos = await getSaldos();
     const visibleAccounts = getVisibleAccounts();
     const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
 
-    // Agrupamos las cuentas por tipo (Líquido, Inversión, Deuda, etc.)
     const groupedAccounts = visibleAccounts.reduce((acc, cuenta) => {
         const tipo = toSentenceCase(cuenta.tipo || 'General');
-        if (!acc[tipo]) {
-            acc[tipo] = [];
-        }
+        if (!acc[tipo]) acc[tipo] = [];
         acc[tipo].push(cuenta);
         return acc;
     }, {});
 
-    // Construimos el HTML final
-    let html = `
-        <div class="accounts-summary">
-            <h4 class="accounts-summary__label">Patrimonio Neto Total</h4>
-            <strong class="accounts-summary__total">${formatCurrency(patrimonioNeto)}</strong>
-        </div>
-    `;
+    let html = `<div class="accounts-summary"><h4 class="accounts-summary__label">Patrimonio Neto Total</h4><strong class="accounts-summary__total">${formatCurrency(patrimonioNeto)}</strong></div>`;
     
-    // Ordenamos los grupos para una vista consistente
     const sortedGroups = Object.keys(groupedAccounts).sort();
 
     for (const groupName of sortedGroups) {
@@ -1574,17 +1550,11 @@ const navigateTo = async (pageId, isInitial = false, context = {}) => {
             html += `
                 <div class="account-card" data-action="view-account-detail" data-id="${cuenta.id}" data-name="${escapeHTML(cuenta.nombre)}">
                     <div class="account-card__icon"><span class="material-icons">${cuenta.esInversion ? 'rocket_launch' : 'wallet'}</span></div>
-                    <div class="account-card__details">
-                        <p class="account-card__name">${escapeHTML(cuenta.nombre)}</p>
-                    </div>
-                    <strong class="account-card__balance ${saldos[cuenta.id] >= 0 ? '' : 'text-negative'}">
-                        ${formatCurrency(saldos[cuenta.id] || 0)}
-                    </strong>
-                </div>
-            `;
+                    <div class="account-card__details"><p class="account-card__name">${escapeHTML(cuenta.nombre)}</p></div>
+                    <strong class="account-card__balance ${saldos[cuenta.id] >= 0 ? '' : 'text-negative'}">${formatCurrency(saldos[cuenta.id] || 0)}</strong>
+                </div>`;
         }
     }
-    
     container.innerHTML = html;
 }
 
@@ -1594,42 +1564,28 @@ async function renderCuentaDetalleView(cuentaId) {
     const container = select(PAGE_IDS.DIARIO_DETALLE);
     if (!container) return;
 
-    // Mostramos un esqueleto mientras cargan los datos
-    container.innerHTML = `
-        <div id="movimientos-list-container">
-            <div id="virtual-list-sizer"><div id="virtual-list-content">
-                ${Array(5).fill('<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>').join('')}
-            </div></div>
-        </div>
-    `;
-    
-    // Configura la lista virtual para el contenedor de detalle
+    container.innerHTML = `<div id="movimientos-list-container"><div id="virtual-list-sizer"><div id="virtual-list-content"></div></div></div>`;
+
     vList.scrollerEl = selectOne('.app-layout__main');
     vList.sizerEl = select('virtual-list-sizer');
     vList.contentEl = select('virtual-list-content');
     
-    // ¡LA CLAVE! Filtramos los movimientos solo para esta cuenta
-    const todosLosMovimientos = await fetchAllMovementsForHistory();
-    const movimientosDeLaCuenta = todosLosMovimientos.filter(m => 
-        (m.cuentaId === cuentaId) || 
-        (m.cuentaOrigenId === cuentaId) || 
-        (m.cuentaDestinoId === cuentaId)
-    );
+    let skeletonHTML = Array(7).fill('<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>').join('');
+    vList.contentEl.innerHTML = skeletonHTML;
     
-    // Asignamos estos movimientos filtrados a 'db.movimientos' temporalmente
+    const todosLosMovimientos = await fetchAllMovementsForHistory();
+    const movimientosDeLaCuenta = todosLosMovimientos.filter(m => (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId));
+    
     db.movimientos = movimientosDeLaCuenta;
     
-    // Recalculamos los saldos para esta lista específica
-    await processMovementsForRunningBalance(db.movimientos, true);
+    recalculateAndApplyRunningBalances(db.movimientos, db.cuentas);
     
-    // Renderizamos la lista virtual con los datos filtrados
     updateVirtualListUI();
 
     if (db.movimientos.length === 0) {
         const cuenta = getVisibleAccounts().find(c => c.id === cuentaId);
-        container.innerHTML = `<div class="empty-state" style="margin: 0 var(--sp-4);">
-            <span class="material-icons">history</span>
-            <h3>Sin Movimientos</h3>
+        container.innerHTML = `<div class="empty-state" style="margin-top: var(--sp-6);">
+            <span class="material-icons">history</span><h3>Sin Movimientos</h3>
             <p>Aún no hay transacciones registradas para la cuenta <strong>${cuenta ? escapeHTML(cuenta.nombre) : ''}</strong>.</p>
         </div>`;
     }
@@ -1640,8 +1596,6 @@ async function renderCuentaDetalleView(cuentaId) {
  * Su contenido (renderizar widgets del dashboard) no ha cambiado.
  */
 const renderInformePage = () => {
-    // Esta función es tu antigua `renderInicioPage`. La renombramos para que coincida.
-    // Su lógica interna para renderizar los widgets es correcta.
     const container = select(PAGE_IDS.INFORME);
     if (!container) return;
 
@@ -1650,7 +1604,6 @@ const renderInformePage = () => {
     populateAllDropdowns();
     renderInicioResumenView(); // Esta función que ya tenías sigue siendo la que dibuja los widgets
     
-    // Carga de datos para el dashboard (se mantiene igual)
     Promise.all([loadPresupuestos(), loadInversiones()]);
 };
 
@@ -7122,32 +7075,21 @@ function createCustomSelect(selectElement) {
     });
 
     document.body.addEventListener('click', async (e) => {
-        const target = e.target;
-
-        if (!target.closest('.custom-select-wrapper')) {
-            closeAllCustomSelects(null);
-        }
-
-        if (target.matches('.input-amount-calculator')) {
-            e.preventDefault();
-            showCalculator(target);
-            return;
-        }
-        const actionTarget = target.closest('[data-action]');
-        if (!actionTarget && !target.closest('.transaction-card')) {
-            resetActiveSwipe();
-        }
-		const actionTarget = e.target.closest('[data-action]');
+        const actionTarget = e.target.closest('[data-action]');
         if (!actionTarget) return;
 
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
-		if (action === 'view-account-detail') {
-        const cuentaId = actionTarget.dataset.id;
-        const cuentaNombre = actionTarget.dataset.name;
-        navigateTo(PAGE_IDS.DIARIO_DETALLE, false, { cuentaId, cuentaNombre });
-    } else if (action === 'navigate') {
-        navigateTo(page);
-    }
+        const btn = actionTarget.closest('button');
+        
+        const actions = {
+            'view-account-detail': () => {
+                const cuentaId = actionTarget.dataset.id;
+                const cuentaNombre = actionTarget.dataset.name;
+                navigateTo(PAGE_IDS.DIARIO_DETALLE, false, { cuentaId, cuentaNombre });
+            },
+            'navigate': () => {
+                navigateTo(page);
+            },
         const btn = actionTarget.closest('button');
         
         const actions = {
@@ -7189,7 +7131,7 @@ function createCustomSelect(selectElement) {
             'edit-movement-from-modal': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; hideModal('generic-modal'); startMovementForm(movementId, false); },
             'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
 			'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
-            'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
+            
 			'view-account-detail': () => {
         const cuentaId = actionTarget.dataset.id;
         const cuentaNombre = actionTarget.dataset.name;
