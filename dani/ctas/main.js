@@ -659,13 +659,15 @@ async function loadCoreData(uid) {
             if (collectionName === 'recurrentes') {
                 dataLoaded.recurrentes = true;
                 const activePage = document.querySelector('.view--active');
-                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderDiarioPage();
+                // CORRECCIÓN: Usamos PAGE_IDS.MOVIMIENTOS en lugar de .DIARIO
+                if (activePage && (activePage.id === PAGE_IDS.MOVIMIENTOS)) renderDiarioPage();
                 if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) renderPlanificacionPage();
             }
             
             populateAllDropdowns();
             
-            if (select(PAGE_IDS.INICIO)?.classList.contains('view--active')) scheduleDashboardUpdate();
+            // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN en lugar de .INICIO
+            if (select(PAGE_IDS.RESUMEN)?.classList.contains('view--active')) scheduleDashboardUpdate();
             
         }, error => console.error(`Error escuchando ${collectionName}: `, error));
         unsubscribeListeners.push(unsubscribe);
@@ -678,34 +680,23 @@ async function loadCoreData(uid) {
     }, error => console.error("Error escuchando la configuración del usuario: ", error));
     unsubscribeListeners.push(unsubConfig);
 
-    // =====================================================================
-    // === INICIO: LÓGICA DE CARGA INTELIGENTE PARA EL DASHBOARD (EL MANANTIAL) ===
-    // =====================================================================
-    // Desconectamos cualquier listener anterior para evitar duplicados al iniciar sesión de nuevo.
     if (unsubscribeRecientesListener) unsubscribeRecientesListener();
 
-    // Creamos una consulta para los últimos 3 meses de movimientos. Esto es suficiente
-    // para los cálculos de "vs mes anterior" y "vs año anterior" del dashboard.
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
     
-    // Este listener mantendrá nuestra caché `recentMovementsCache` siempre actualizada en tiempo real.
     unsubscribeRecientesListener = userRef.collection('movimientos')
         .where('fecha', '>=', threeMonthsAgo.toISOString())
         .onSnapshot(snapshot => {
             console.log("Listener de recientes: Datos actualizados en la caché.");
-            // Actualizamos la caché con los datos más frescos.
             recentMovementsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // Si el usuario está en la página de Inicio, la actualizamos inmediatamente.
             const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.INICIO) {
+            // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN en lugar de .INICIO
+            if (activePage && activePage.id === PAGE_IDS.RESUMEN) {
                 scheduleDashboardUpdate();
             }
         }, error => console.error("Error escuchando movimientos recientes: ", error));
-    // ===================================================================
-    // === FIN: LÓGICA DE CARGA INTELIGENTE ==============================
-    // ===================================================================
                         
     buildDescriptionIndex();
     startMainApp();
@@ -1449,16 +1440,12 @@ const navigateTo = async (pageId, isInitial = false) => {
 
     if (!newView || (oldView && oldView.id === pageId)) return;
     
-    // --- INICIO DE LA LÓGICA REORDENADA ---
-
-    // 1. PRIMERO, actualizamos el estado de la UI (clases CSS)
     if (oldView) {
         oldView.classList.remove('view--active');
     }
     newView.classList.add('view--active');
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
 
-    // 2. SEGUNDO, limpiamos gráficos y actualizamos el historial de navegación
     destroyAllCharts();
 
     if (!isInitial) hapticFeedback('light');
@@ -1467,7 +1454,6 @@ const navigateTo = async (pageId, isInitial = false) => {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // 3. TERCERO, preparamos las barras de navegación y los datos necesarios
     const actionsEl = select('top-bar-actions');
     const leftEl = select('top-bar-left-button');
     const standardActions = `
@@ -1492,12 +1478,14 @@ const navigateTo = async (pageId, isInitial = false) => {
         [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
         [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
     };
-	// 4. CUARTO, y solo ahora que la vista está garantizada en el DOM, llamamos a la función de renderizado.
-    if (pageRenderers[pageId]) { 
+    
+	if (pageRenderers[pageId]) { 
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
-            if (pageId === PAGE_IDS.DIARIO) {
+            // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN en lugar de .INICIO
+            if (pageId === PAGE_IDS.RESUMEN) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+            // CORRECCIÓN: Usamos PAGE_IDS.MOVIMIENTOS en lugar de .DIARIO
+            if (pageId === PAGE_IDS.MOVIMIENTOS) {
                 leftSideHTML += `
                     <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
                         <span class="material-icons">filter_list</span>
@@ -1512,11 +1500,9 @@ const navigateTo = async (pageId, isInitial = false) => {
 
         if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
         
-        // --- LLAMADA DIRECTA A LA FUNCIÓN DE RENDERIZADO ---
-        // Este es el cambio clave. Ahora llamamos a la función JS que genera el HTML.
         await pageRenderers[pageId].render();
     }
-    // 5. QUINTO, gestionamos las animaciones y el scroll
+    
     updateThemeIcon();
 
     if (oldView && !isInitial) {
@@ -1540,9 +1526,22 @@ const navigateTo = async (pageId, isInitial = false) => {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
+    // CORRECCIÓN FINAL: Unificamos el schedule con el ID correcto
     if (pageId === PAGE_IDS.RESUMEN) {
         scheduleDashboardUpdate();
     }
+};
+
+// ▼▼▼ Y FINALMENTE, REEMPLAZA TU FUNCIÓN scheduleDashboardUpdate ▼▼▼
+const scheduleDashboardUpdate = () => {
+    const activePage = document.querySelector('.view--active');
+    // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN para que el panel se actualice
+    if (!activePage || activePage.id !== PAGE_IDS.RESUMEN) {
+        return;
+    }
+    
+    clearTimeout(dashboardUpdateDebounceTimer);
+    dashboardUpdateDebounceTimer = setTimeout(updateDashboardData, 50);
 };
         
     const setupTheme = () => { 
@@ -2894,10 +2893,9 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 
 // 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
 const renderDiarioPage = async () => {
-    // ▼▼▼ ¡LA LÍNEA CLAVE! ▼▼▼
+    // CORRECCIÓN CLAVE: Apuntamos al ID correcto PAGE_IDS.MOVIMIENTOS, que corresponde a 'movimientos-page'.
     const container = select(PAGE_IDS.MOVIMIENTOS);
     
-    // Guarda de seguridad: Si el contenedor no existe en el DOM, no continuamos.
     if (!container) {
         console.error("Error crítico: El contenedor para la página de Movimientos no fue encontrado en el DOM.");
         return; 
@@ -2945,13 +2943,11 @@ const renderDiarioPage = async () => {
     }
     select('virtual-list-content').innerHTML = skeletonHTML;
     
-    // ---- INICIO DE LA LÓGICA CORREGIDA ----
     const scrollTrigger = select('infinite-scroll-trigger');
 
     if (diarioActiveFilters) {
-        // MODO FILTRADO: Ocultamos el scroll infinito y filtramos los datos cacheados.
-        if (scrollTrigger) scrollTrigger.classList.add('hidden'); // Oculta el activador
-        if (movementsObserver) movementsObserver.disconnect(); // Detiene el observador
+        if (scrollTrigger) scrollTrigger.classList.add('hidden');
+        if (movementsObserver) movementsObserver.disconnect();
 
         select('diario-filter-active-indicator').classList.remove('hidden');
         
@@ -2978,7 +2974,6 @@ const renderDiarioPage = async () => {
         db.movimientos = movementsToDisplay;
 
     } else {
-        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
         if (scrollTrigger) scrollTrigger.classList.remove('hidden');
         select('diario-filter-active-indicator').classList.add('hidden');
         
@@ -2987,11 +2982,10 @@ const renderDiarioPage = async () => {
         allMovementsLoaded = false;
         isLoadingMoreMovements = false;
         
-        await loadMoreMovements(true); // Carga la primera página
-        initMovementsObserver(); // Activa el observador del scroll infinito
-        return; // Salimos aquí porque loadMoreMovements ya actualiza la UI
+        await loadMoreMovements(true);
+        initMovementsObserver();
+        return;
     }
-    // ---- FIN DE LA LÓGICA CORREGIDA ----
 
     await processMovementsForRunningBalance(db.movimientos, true);
     updateVirtualListUI();
@@ -3277,7 +3271,7 @@ const renderPatrimonioPage = async () => {
         };
 		
   const renderInicioPage = async () => {
-    // CORRECCIÓN CLAVE: Apuntamos al ID correcto: PAGE_IDS.RESUMEN
+    // CORRECCIÓN: Apuntamos al ID correcto: PAGE_IDS.RESUMEN
     const container = select(PAGE_IDS.RESUMEN);
     if (!container) {
         console.error("Contenedor de Resumen no encontrado. No se puede renderizar.");
