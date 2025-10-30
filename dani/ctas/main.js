@@ -1486,10 +1486,13 @@ const navigateTo = async (pageId, isInitial = false) => {
     const pageRenderers = {
     [PAGE_IDS.RESUMEN]: { title: 'Resumen', render: renderInicioPage, actions: standardActions },
     [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderDiarioPage, actions: standardActions },
-    [PAGE_IDS.ACTIVOS]: { title: 'Activos', render: renderInversionesView, actions: standardActions },
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-    };
+    
+    // ▼▼▼ ¡ESTA ES LA LÍNEA CORREGIDA! ▼▼▼
+    [PAGE_IDS.ACTIVOS]: { title: 'Activos', render: renderActivosPage, actions: standardActions }, 
+    
+    [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+};
 
     if (pageRenderers[pageId]) { 
         if (leftEl) {
@@ -2312,7 +2315,7 @@ const renderBudgetTracking = async () => {
     // LA SOLUCIÓN:
     // Ya no buscamos el contenedor, simplemente llamamos a la función de
     // renderizado con el ID correcto para la pestaña de Inversiones.
-    renderInversionesView();
+    renderActivosPage();
 };
 
 // ====================================================================================
@@ -7222,7 +7225,7 @@ function createCustomSelect(selectElement) {
                 } else {
                     const pageRenderers = {
                         [PAGE_IDS.DIARIO]: renderDiarioPage,
-                        [PAGE_IDS.INVERSIONES]: renderInversionesView,
+                        [PAGE_IDS.INVERSIONES]: renderActivosPage,
                         [PAGE_IDS.PLANIFICAR]: renderPlanificacionPage,
                         [PAGE_IDS.AJUSTES]: renderAjustesPage,
                     };
@@ -7353,7 +7356,7 @@ function createCustomSelect(selectElement) {
     
     // LA SOLUCIÓN:
     // Aplicamos la misma lógica aquí. Forzamos el redibujado en el contenedor correcto.
-    renderInversionesView();
+    renderActivosPage();
 };
             
         const showImportJSONWizard = () => {
