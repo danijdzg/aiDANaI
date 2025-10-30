@@ -2893,15 +2893,11 @@ const loadMoreMovements = async (isInitial = false) => {
 // ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
 
 const renderDiarioPage = async () => {
-    // =========================================================================
-    // === INICIO: GUARDA DE SEGURIDAD DEFINITIVA CONTRA RENDERIZADO MÚLTIPLE ===
-    // =========================================================================
     if (isDiarioPageRendering) {
         console.log("BLOQUEADO: Intento de re-renderizar el Diario mientras ya estaba en proceso.");
-        return; // Si ya se está renderizando, no hacemos NADA.
+        return;
     }
-    isDiarioPageRendering = true; // Marcamos que hemos empezado.
-    // =========================================================================
+    isDiarioPageRendering = true;
 
     try {
         const container = select('diario-page');
@@ -2986,11 +2982,8 @@ const renderDiarioPage = async () => {
         console.error("Error crítico renderizando la página del diario:", error);
         // Si hay un error, es crucial liberar la guarda para poder intentarlo de nuevo.
     } finally {
-        // =====================================================================
-        // === PAso FINAL: Liberamos la guarda para permitir futuros renders ===
-        // =====================================================================
+       
         isDiarioPageRendering = false;
-        // =====================================================================
     }
 };
 		
@@ -7127,35 +7120,28 @@ function createCustomSelect(selectElement) {
             'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
             'import-csv': showCsvImportWizard,
             'toggle-ledger': async () => {
-                hapticFeedback('medium');
-                isOffBalanceMode = !isOffBalanceMode;
-                document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
-                
-                const toggleBtn = select('ledger-toggle-btn');
-                if (toggleBtn) {
-                    toggleBtn.innerHTML = ` ${isOffBalanceMode ? 'B' : 'A'}`;
-                    toggleBtn.title = `Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}`;
-                }
-                
-                const activePageEl = selectOne('.view--active');
-                const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.INICIO;
+    hapticFeedback('medium');
+    
+    // 1. Cambiamos el estado global
+    isOffBalanceMode = !isOffBalanceMode;
+    document.body.dataset.ledgerMode = isOffBalanceMode ? 'B' : 'A';
 
-                if (activePageId === PAGE_IDS.INICIO) {
-                    await scheduleDashboardUpdate();
-                } else {
-                    const pageRenderers = {
-                        [PAGE_IDS.DIARIO]: renderDiarioPage,
-                        [PAGE_IDS.INVERSIONES]: renderInversionesView,
-                        [PAGE_IDS.PLANIFICAR]: renderPlanificacionPage,
-                        [PAGE_IDS.AJUSTES]: renderAjustesPage,
-                    };
-                    if (pageRenderers[activePageId]) {
-                        await pageRenderers[activePageId]();
-                    }
-                }
-                
-                showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info');
-            },
+    // 2. Notificamos al usuario
+    showToast(`Mostrando Contabilidad ${isOffBalanceMode ? 'B' : 'A'}.`, 'info');
+
+    // 3. Obtenemos la página activa
+    const activePageEl = document.querySelector('.view--active');
+    const activePageId = activePageEl ? activePageEl.id : PAGE_IDS.DIARIO;
+
+    // 4. Forzamos una navegación a la misma página.
+    // Esto es más robusto que llamar a la función de renderizado directamente,
+    // ya que `navigateTo` se encarga de todo el ciclo de vida:
+    // - Destruye gráficos antiguos.
+    // - Re-renderiza la barra superior completa.
+    // - Llama a la función de renderizado correcta, que ahora contendrá la lógica de reseteo.
+    // - Gestiona las animaciones de transición.
+    await navigateTo(activePageId, true); // El `true` evita animaciones y la entrada al historial.
+},
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
             'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
