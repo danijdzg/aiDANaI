@@ -1129,15 +1129,26 @@ const triggerSaveAnimation = (fromElement, color) => {
     const startRect = fromElement.getBoundingClientRect();
     const listElement = select('movimientos-list-container') || select('diario-page');
     const endRect = listElement.getBoundingClientRect();
+
     const bubble = document.createElement('div');
     bubble.className = 'save-animation-bubble';
     bubble.style.backgroundColor = color === 'green' ? 'var(--c-success)' : 'var(--c-danger)';
     bubble.style.left = `${startRect.left + startRect.width / 2 - 10}px`;
     bubble.style.top = `${startRect.top + startRect.height / 2 - 10}px`;
     document.body.appendChild(bubble);
-    void bubble.offsetWidth; // Force reflow
-    bubble.style.animation = `fly-to-list 0.7s cubic-bezier(0.5, 0, 1, 0.5) forwards`;
-    bubble.style.transform = `translate(${endRect.left + endRect.width / 2 - (startRect.left + startRect.width / 2)}px, ${endRect.top - (startRect.top + startRect.height / 2)}px) scale(0)`;
+
+    requestAnimationFrame(() => {
+        bubble.style.animation = `fly-to-list 0.7s cubic-bezier(0.5, 0, 1, 0.5) forwards`;
+        
+        // Calculamos el destino: el centro superior de la lista visible
+        const endX = endRect.left + endRect.width / 2;
+        const endY = endRect.top; // Apuntamos a la parte de arriba
+        const startX = startRect.left + startRect.width / 2;
+        const startY = startRect.top + startRect.height / 2;
+        
+        bubble.style.transform = `translate(${endX - startX}px, ${endY - startY}px) scale(0)`;
+    });
+
     bubble.addEventListener('animationend', () => bubble.remove(), { once: true });
 };
         const displayError = (id, msg) => { const err = select(`${id}-error`); if (err) { err.textContent = msg; err.setAttribute('role', 'alert'); } const inp = select(id); if (inp) inp.classList.add('form-input--invalid'); };
@@ -2032,7 +2043,34 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
             </div>
         </div>`;
     showGenericModal('Gestionar Presupuestos Anuales', initialHtml);
+	const renderAidanaiHelp = () => {
+    // Lógica de análisis simple pero de alto impacto
+    const { current } = getFilteredMovements(false); // Obtiene movimientos del periodo
+    const gastoTotal = Math.abs(current.filter(m => m.cantidad < 0).reduce((sum, m) => sum + m.cantidad, 0));
+    
+    const topGasto = Object.entries(current.reduce((acc, mov) => {
+        if (mov.cantidad < 0 && mov.conceptoId) {
+            acc[mov.conceptoId] = (acc[mov.conceptoId] || 0) + Math.abs(mov.cantidad);
+        }
+        return acc;
+    }, {})).sort((a, b) => b[1] - a[1])[0];
 
+    let insight = "Aún no tengo suficientes datos para darte un consejo. ¡Sigue añadiendo movimientos!";
+    if (topGasto) {
+        const conceptoNombre = db.conceptos.find(c => c.id === topGasto[0])?.nombre || 'desconocido';
+        const porcentaje = (topGasto[1] / gastoTotal) * 100;
+        insight = `He analizado tus movimientos del periodo. Tu mayor área de gasto es <strong>"${conceptoNombre}"</strong>, representando un <strong>${porcentaje.toFixed(0)}%</strong> de tus gastos totales. ¡Un buen punto de partida para optimizar!`;
+    }
+
+    const html = `
+        <div class="aidanai-modal-content">
+            <img src="aiDANaI.webp" alt="Asistente aiDANaI">
+            <h4>Tu Asistente Personal</h4>
+            <p>${insight}</p>
+        </div>`;
+        
+    showGenericModal('Análisis Rápido de aiDANaI', html);
+};
     const renderYearForm = (year) => {
         const container = select('budgets-form-container');
         if (!container) return;
@@ -7027,6 +7065,8 @@ function createCustomSelect(selectElement) {
         const btn = actionTarget.closest('button');
         
         const actions = {
+			'show-aidanai-help': () => renderAidanaiHelp(),
+};
             'show-main-menu': () => {
                 const menu = document.getElementById('main-menu-popover');
                 if (!menu) return;
