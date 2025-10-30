@@ -7982,8 +7982,8 @@ const handleAddConcept = async (btn) => {
 
          const exportObject = {
              meta: {
-                 appName: "Cuentas aiDANaI",
-                 version: "2.0.0",
+                 appName: "CtasDani",
+                 version: "3.0.0",
                  exportDate: new Date().toISOString()
              },
              data: dataPayload
