@@ -3277,21 +3277,49 @@ const renderPatrimonioPage = async () => {
         };
 		
   const renderInicioPage = async () => {
-    const container = select(PAGE_IDS.INICIO);
-    if (!container) return;
+    // CORRECCIÓN CLAVE: Apuntamos al ID correcto: PAGE_IDS.RESUMEN
+    const container = select(PAGE_IDS.RESUMEN);
+    if (!container) {
+        console.error("Contenedor de Resumen no encontrado. No se puede renderizar.");
+        return;
+    }
 
-    // AHORA ESTA FUNCIÓN SOLO CREA EL CONTENEDOR PRINCIPAL PARA LOS WIDGETS
-    container.innerHTML = `
-        <div id="resumen-content-container">
-             <!-- Los esqueletos de los widgets se cargarán aquí -->
-        </div>
-    `;
+    // Limpiamos los gráficos antiguos antes de dibujar nada nuevo
+    destroyAllCharts();
+
+    // Usamos la configuración del usuario o la por defecto, de forma segura
+    const widgetOrder = (db.config && db.config.dashboardWidgets) 
+                        ? db.config.dashboardWidgets 
+                        : DEFAULT_DASHBOARD_WIDGETS;
+
+    // Construimos el HTML con los esqueletos de los widgets
+    container.innerHTML = widgetOrder.map(widgetId => {
+        if (!AVAILABLE_WIDGETS[widgetId]) return ''; 
+        
+        switch(widgetId) {
+            case 'super-centro-operaciones':
+                return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
+            case 'action-center':
+                return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
+            case 'net-worth-trend':
+                return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
+            case 'patrimonio-structure':
+                return `<div data-widget-type="patrimonio-structure"><div class="card" id="patrimonio-widget"><div id="patrimonio-completo-container"><div class="skeleton" style="height:250px;"></div></div></div></div>`;
+            case 'emergency-fund':
+                return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
+            case 'fi-progress':
+                return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
+            case 'informe-personalizado':
+                return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
+            default:
+                return '';
+        }
+    }).join('<div style="height: var(--sp-4);"></div>');
     
-    // Las llamadas a otras funciones se mantienen
-    populateAllDropdowns();
-    renderInicioResumenView(); // Esta función rellenará 'resumen-content-container'
+    // Iniciamos el observador que cargará el contenido real de los widgets
+    initWidgetObserver();
     
-    // Cargamos los datos para que el dashboard pueda pintarse
+    // Precargamos los datos necesarios para el dashboard en segundo plano
     await Promise.all([loadPresupuestos(), loadInversiones()]);
 };
  
@@ -4293,21 +4321,20 @@ const renderInicioResumenView = () => {
 
 
 
-const renderPlanificacionPage = async () => {
+const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICACION);
     if (!container) return;
 
-    // Estructura HTML principal de la nueva página de Planificación
     container.innerHTML = `
         <!-- 1. Calendario de Flujo de Caja (Pasado y Futuro) -->
         <div class="card" style="margin-bottom: var(--sp-4);">
             <h3 class="card__title"><span class="material-icons">calendar_month</span>Calendario Financiero</h3>
             <div class="card__content" id="planificacion-calendario-container">
-                <div class="calendar-container skeleton" style="height: 350px;"></div>
+                <!-- El calendario se dibujará aquí por la función JS -->
             </div>
         </div>
 
-        <!-- 2. Sección de Presupuestos (se mantiene la lógica existente) -->
+        <!-- 2. Sección de Presupuestos -->
         <div class="card card--no-bg accordion-wrapper">
             <details class="accordion" open>
                 <summary>
@@ -4315,7 +4342,6 @@ const renderPlanificacionPage = async () => {
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
                 <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <!-- El HTML y la lógica de presupuestos que ya tienes va aquí. No necesita cambios. -->
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
                         <div class="form-group" style="flex-grow: 1; margin: 0;">
                             <label for="budget-year-selector" class="form-label">Año</label>
@@ -4326,27 +4352,20 @@ const renderPlanificacionPage = async () => {
                         </button>
                     </div>
                     <div id="annual-budget-dashboard">
-                        <div id="budget-kpi-container" class="kpi-grid"></div>
-                        <div class="card" style="margin-top: var(--sp-4);">
-                            <h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia Ingresos y Gastos</h3>
-                            <div class="card__content">
-                                <div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div>
-                            </div>
-                        </div>
-                        <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
+                         <div id="budget-kpi-container" class="kpi-grid"></div>
+                         <div class="card" style="margin-top: var(--sp-4);"><h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia</h3><div class="card__content"><div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div></div></div>
+                         <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
                     </div>
                     <div id="budget-init-placeholder" class="empty-state hidden">
                         <span class="material-icons">edit_calendar</span>
                         <h3 id="budget-placeholder-title">Define tu Plan Financiero</h3>
-                        <p id="budget-placeholder-text">Establece límites de gasto y metas de ingreso para tomar el control de tu año. ¡Empieza ahora!</p>
-                        <button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);">
-                            <span class="material-icons" style="font-size: 16px;">add_circle_outline</span><span>Crear Presupuestos</span>
-                        </button>
+                        <p id="budget-placeholder-text">Establece límites de gasto y metas de ingreso.</p>
+                        <button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);"><span>Crear Presupuestos</span></button>
                     </div>
                 </div>
             </details>
         </div>
-
+        
         <!-- 3. Acceso a la gestión de recurrentes -->
         <div class="card" style="margin-top: var(--sp-4);">
              <button class="settings-item" data-action="manage-recurrentes">
@@ -4357,11 +4376,10 @@ const renderPlanificacionPage = async () => {
         </div>
     `;
     
-    // Llamamos a las funciones que rellenarán este HTML con datos.
-    populateAllDropdowns(); // <-- Esta función rellenará el nuevo selector de cuentas.
-    renderBudgetTracking();
-    renderPendingRecurrents();
-    renderRecurrentsListOnPage();
+    // Disparamos la renderización de las sub-secciones
+    populateAllDropdowns();
+    renderBudgetTracking(); 
+    renderPlanificacionCalendario(); // ¡Ahora esta llamada funcionará!
 };
  let activosViewMode = 'portafolio'; // 'portafolio' o 'patrimonio'
 
@@ -4835,14 +4853,13 @@ const updateNetWorthChart = async (saldos) => {
 };
 
 const scheduleDashboardUpdate = () => {
-    // El jefe de obra solo trabaja si la página "Inicio" está abierta.
     const activePage = document.querySelector('.view--active');
-    if (!activePage || activePage.id !== PAGE_IDS.INICIO) {
+    // ▼▼▼ CORRIGE ESTA LÍNEA ▼▼▼
+    if (!activePage || activePage.id !== PAGE_IDS.RESUMEN) { // Antes era PAGE_IDS.INICIO
         return;
     }
-      
+    
     clearTimeout(dashboardUpdateDebounceTimer);
-        
     dashboardUpdateDebounceTimer = setTimeout(updateDashboardData, 50);
 };
 
