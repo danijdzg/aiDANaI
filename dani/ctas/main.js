@@ -6514,11 +6514,6 @@ const handleToggleTheme = () => {
             renderCuentasModalList();
         };
 
-        const showRecurrentesModal = () => {
-            let html = `<p class="form-label" style="margin-bottom: var(--sp-3);">Aquí puedes ver y gestionar tus operaciones programadas. Se crearán automáticamente en su fecha de ejecución.</p><div id="recurrentes-modal-list"></div>`;
-            showGenericModal('Gestionar Movimientos Recurrentes', html);
-            renderRecurrentesModalList();
-        };
 				
         const renderRecurrentesModalList = () => {
     const list = select('recurrentes-modal-list');
