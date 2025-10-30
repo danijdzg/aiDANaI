@@ -3542,9 +3542,6 @@ async function renderPortfolioEvolutionChart(targetContainerId) {
     });
 }
  
-// =================================================================
-// === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES (v2.0) ===
-// =================================================================
 
 // Esta variable global evitará errores de "Canvas en uso"
 let informeActivoChart = null;
