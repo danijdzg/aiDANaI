@@ -4526,30 +4526,6 @@ const generatePlanificacionCalendarGrid = (date, dataMap) => {
     return gridHtml;
 };
 
-// NECESITARÁS una versión ligeramente modificada de tu generador de grid
-const generatePlanificacionCalendarGrid = (date, dataMap) => {
-    // ... (el código es casi idéntico a tu `generateCalendarGrid`, pero con una adición) ...
-    // Dentro del bucle `for` que genera los días, al final, ANTES de cerrar el `</div>` del día:
-    /*
-    ...
-    const dayData = dataMap.get(dateKey);
-    // ... código para el número y el total ...
-    
-    if (dayData && dayData.recurrentes.length > 0) {
-        gridHtml += `<div class="calendar-day__markers">`;
-        dayData.recurrentes.forEach(r => {
-            const markerClass = r.cantidad >= 0 ? 'marker--income' : 'marker--expense';
-            // Añadimos un borde para diferenciarlo de un movimiento pasado
-            gridHtml += `<div class="calendar-day__marker ${markerClass}" style="border: 1px solid var(--c-on-surface-tertiary);"></div>`;
-        });
-        gridHtml += `</div>`;
-    }
-
-    gridHtml += `</div>`; // Cierre del .calendar-day
-    ...
-    */
-   return "Implementa la lógica del calendario aquí, similar a `generateCalendarGrid` pero añadiendo marcadores para recurrentes."; // Placeholder para brevedad
-};
   // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF      ===
 // =================================================================
