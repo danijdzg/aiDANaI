@@ -654,11 +654,17 @@ async function loadCoreData(uid) {
             db[collectionName] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
             if (collectionName === 'recurrentes') {
-                dataLoaded.recurrentes = true;
-                const activePage = document.querySelector('.view--active');
-                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderDiarioPage();
-                if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) renderPlanificacionPage();
-            }
+    dataLoaded.recurrentes = true;
+    const activePage = document.querySelector('.view--active');
+    if (activePage && (activePage.id === PAGE_IDS.DIARIO)) {
+        // En lugar de recargar todo, solo actualizamos la UI de la lista virtual.
+        // Esto es instantáneo y no vuelve a pedir datos a la BBDD.
+        updateVirtualListUI(); 
+    }
+    if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) {
+        renderPlanificacionPage();
+    }
+}
             
             populateAllDropdowns();
             
@@ -2802,10 +2808,25 @@ const filterMovementsByLedger = (movements) => {
 // ===============================================================
 
 const loadMoreMovements = async (isInitial = false) => {
-    if (isLoadingMoreMovements || allMovementsLoaded) return;
-
-    isLoadingMoreMovements = true;
-    const loadMoreBtn = select('load-more-btn');
+    if (diarioActiveFilters) {
+        // ... tu código de filtrado
+    } else {
+        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
+        if (scrollTrigger) scrollTrigger.classList.remove('hidden');
+        select('diario-filter-active-indicator').classList.add('hidden');
+        
+        // --- INICIO DE LA MODIFICACIÓN CLAVE ---
+        db.movimientos = [];
+        lastVisibleMovementDoc = null;
+        allMovementsLoaded = false;
+        isLoadingMoreMovements = false; // <-- AÑADE ESTA LÍNEA AQUÍ
+        // --- FIN DE LA MODIFICACIÓN CLAVE ---
+        
+        await loadMoreMovements(true); 
+        initMovementsObserver();
+        return; 
+    }
+const loadMoreBtn = select('load-more-btn');
     if (isInitial) {
         // En la carga inicial, usamos un esqueleto.
         let skeletonHTML = '';
