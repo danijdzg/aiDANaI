@@ -4846,16 +4846,6 @@ const updateNetWorthChart = async (saldos) => {
     });
 };
 
-const scheduleDashboardUpdate = () => {
-    const activePage = document.querySelector('.view--active');
-    // ▼▼▼ CORRIGE ESTA LÍNEA ▼▼▼
-    if (!activePage || activePage.id !== PAGE_IDS.RESUMEN) { // Antes era PAGE_IDS.INICIO
-        return;
-    }
-    
-    clearTimeout(dashboardUpdateDebounceTimer);
-    dashboardUpdateDebounceTimer = setTimeout(updateDashboardData, 50);
-};
 
 // ▼▼▼ REEMPLAZA TODA TU FUNCIÓN updateDashboardData CON ESTA VERSIÓN FINALÍSIMA Y VERIFICADA ▼▼▼
 
