@@ -2808,44 +2808,21 @@ const filterMovementsByLedger = (movements) => {
 // ===============================================================
 
 const loadMoreMovements = async (isInitial = false) => {
-    if (diarioActiveFilters) {
-        // ... tu código de filtrado
-    } else {
-        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
-        if (scrollTrigger) scrollTrigger.classList.remove('hidden');
-        select('diario-filter-active-indicator').classList.add('hidden');
-        
-        // --- INICIO DE LA MODIFICACIÓN CLAVE ---
-        db.movimientos = [];
-        lastVisibleMovementDoc = null;
-        allMovementsLoaded = false;
-        isLoadingMoreMovements = false; // <-- AÑADE ESTA LÍNEA AQUÍ
-        // --- FIN DE LA MODIFICACIÓN CLAVE ---
-        
-        await loadMoreMovements(true); 
-        initMovementsObserver();
-        return; 
-    }
-const loadMoreBtn = select('load-more-btn');
+    if (isLoadingMoreMovements || allMovementsLoaded) return;
+
+    isLoadingMoreMovements = true;
+    const loadMoreBtn = select('load-more-btn'); // Esto se usaba para el botón, lo mantenemos por si vuelve.
+
+    // La lógica de mostrar esqueletos o el spinner del botón pertenece a renderDiarioPage,
+    // pero la dejamos aquí condicionada para no romper nada si se usa en otro contexto.
     if (isInitial) {
-        // En la carga inicial, usamos un esqueleto.
         let skeletonHTML = '';
-for (let i = 0; i < 5; i++) {
-    skeletonHTML += `
-        <div class="skeleton-card">
-            <div class="skeleton skeleton-card__indicator"></div>
-            <div class="skeleton-card__content">
-                <div>
-                    <div class="skeleton skeleton-card__line skeleton-card__line--sm"></div>
-                    <div class="skeleton skeleton-card__line skeleton-card__line--xs"></div>
-                </div>
-                <div class="skeleton skeleton-card__amount"></div>
-            </div>
-        </div>`;
-}
-select('virtual-list-content').innerHTML = skeletonHTML;
+        for (let i = 0; i < 7; i++) {
+            skeletonHTML += `<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>`;
+        }
+        const contentEl = select('virtual-list-content');
+        if(contentEl) contentEl.innerHTML = skeletonHTML;
     } else if (loadMoreBtn) {
-        // En las cargas subsecuentes, ponemos el botón en estado de carga.
         setButtonLoading(loadMoreBtn, true, 'Cargando...');
     }
 
@@ -2853,7 +2830,6 @@ select('virtual-list-content').innerHTML = skeletonHTML;
         let newMovementsChunk = [];
         let fetchedFilteredCount = 0;
 
-        // El bucle para obtener suficientes movimientos VISIBLES sigue siendo una excelente idea.
         while (fetchedFilteredCount < 50 && !allMovementsLoaded) {
             const rawMovsFromDB = await fetchMovementsPage(lastVisibleMovementDoc);
             if (rawMovsFromDB.length === 0) break;
@@ -2862,15 +2838,11 @@ select('virtual-list-content').innerHTML = skeletonHTML;
             fetchedFilteredCount += filteredBatch.length;
         }
         
-        // Añadimos los nuevos movimientos a la caché local.
         if (newMovementsChunk.length > 0) {
             db.movimientos.push(...newMovementsChunk);
-            // Volvemos a procesar los balances acumulados sobre la lista completa
             await processMovementsForRunningBalance(db.movimientos, true);
         }
 
-        // ¡LLAMADA ÚNICA! Una vez tenemos la lista completa (antiguos + nuevos),
-        // llamamos a la función de renderizado para que reconstruya la UI.
         updateVirtualListUI();
 
     } catch (error) {
@@ -2879,7 +2851,7 @@ select('virtual-list-content').innerHTML = skeletonHTML;
     } finally {
         isLoadingMoreMovements = false;
         if (loadMoreBtn) {
-            setButtonLoading(loadMoreBtn, false); // Restaura el botón
+            setButtonLoading(loadMoreBtn, false);
         }
     }
 };
@@ -2917,7 +2889,8 @@ select('virtual-list-content').innerHTML = skeletonHTML;
     movementsObserver.observe(trigger);
 };
 
-// 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
+// ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage CON ESTA VERSIÓN FINAL ▼▼▼
+
 const renderDiarioPage = async () => {
     const container = select('diario-page');
     if (!container.querySelector('#diario-view-container')) {
@@ -2955,20 +2928,14 @@ const renderDiarioPage = async () => {
     vList.scrollerEl = selectOne('.app-layout__main');
     vList.sizerEl = select('virtual-list-sizer');
     vList.contentEl = select('virtual-list-content');
-
-    let skeletonHTML = '';
-    for (let i = 0; i < 7; i++) {
-        skeletonHTML += `<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>`;
-    }
-    select('virtual-list-content').innerHTML = skeletonHTML;
     
-    // ---- INICIO DE LA LÓGICA CORREGIDA ----
+    // AQUÍ DEFINIMOS la variable y es visible en todo el resto de la función
     const scrollTrigger = select('infinite-scroll-trigger');
 
     if (diarioActiveFilters) {
         // MODO FILTRADO: Ocultamos el scroll infinito y filtramos los datos cacheados.
-        if (scrollTrigger) scrollTrigger.classList.add('hidden'); // Oculta el activador
-        if (movementsObserver) movementsObserver.disconnect(); // Detiene el observador
+        if (scrollTrigger) scrollTrigger.classList.add('hidden');
+        if (movementsObserver) movementsObserver.disconnect();
 
         select('diario-filter-active-indicator').classList.remove('hidden');
         
@@ -2976,8 +2943,9 @@ const renderDiarioPage = async () => {
             allDiarioMovementsCache = await fetchAllMovementsForHistory();
         }
 
+        // (El resto de la lógica de filtrado se mantiene igual...)
         const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
-        const movementsToDisplay = allDiarioMovementsCache.filter(m => {
+        db.movimientos = allDiarioMovementsCache.filter(m => {
             if (startDate && m.fecha < startDate) return false;
             if (endDate && m.fecha > endDate) return false;
             if (description && !m.descripcion.toLowerCase().includes(description)) return false;
@@ -2991,8 +2959,6 @@ const renderDiarioPage = async () => {
             if (conceptos.length > 0 && m.tipo === 'movimiento' && !conceptos.includes(m.conceptoId)) return false;
             return true;
         });
-        
-        db.movimientos = movementsToDisplay;
 
     } else {
         // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
@@ -3002,13 +2968,12 @@ const renderDiarioPage = async () => {
         db.movimientos = [];
         lastVisibleMovementDoc = null;
         allMovementsLoaded = false;
-        isLoadingMoreMovements = false;
+        isLoadingMoreMovements = false; 
         
-        await loadMoreMovements(true); // Carga la primera página
-        initMovementsObserver(); // Activa el observador del scroll infinito
-        return; // Salimos aquí porque loadMoreMovements ya actualiza la UI
+        await loadMoreMovements(true);
+        initMovementsObserver();
+        return; 
     }
-    // ---- FIN DE LA LÓGICA CORREGIDA ----
 
     await processMovementsForRunningBalance(db.movimientos, true);
     updateVirtualListUI();
