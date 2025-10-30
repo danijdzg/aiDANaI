@@ -64,11 +64,11 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
 const PAGE_IDS = {
-    INICIO: 'inicio-page',
-    DIARIO: 'diario-page',
-    INVERSIONES: 'inversiones-page',
-    PLANIFICAR: 'planificar-page', // ¡La nueva página!
+    CUENTAS: 'cuentas-page',     // <-- ¡NUEVA!
+    INFORME: 'informe-page',     // Renombrada desde 'inicio-page'
+    PLANIFICAR: 'planificar-page',
     AJUSTES: 'ajustes-page',
+    DIARIO_DETALLE: 'diario-page' // 'diario-page' ahora es para detalles
 };
 
 
@@ -1321,7 +1321,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.DIARIO, true); // <-- CAMBIADO
+			navigateTo(PAGE_IDS.CUENTAS, true); // <-- CAMBIADO
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -1435,120 +1435,197 @@ window.addEventListener('offline', () => {
 };
 
 // EN main.js - REEMPLAZA TU FUNCIÓN navigateTo POR ESTA VERSIÓN
-const navigateTo = async (pageId, isInitial = false) => {
-    const oldView = document.querySelector('.view--active');
-    const newView = select(pageId);
+const navigateTo = async (pageId, isInitial = false, context = {}) => {
     const mainScroller = selectOne('.app-layout__main');
-
-    // Guardar la posición del scroll de la vista anterior
-    if (oldView && mainScroller) {
+    const oldView = document.querySelector('.view--active');
+    
+    if (oldView && oldView.id !== PAGE_IDS.DIARIO_DETALLE) { // No guardamos scroll para sub-vistas
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
 
-    if (!newView || (oldView && oldView.id === pageId)) return;
-    
-    // --- LÓGICA DE CARGA DE VISTAS CORREGIDA ---
-    // Ya no se intenta hacer 'fetch' de archivos HTML. La función de renderizado se encargará de todo.
+    if (!isInitial) hapticFeedback('light');
+
+    // Gestión del historial del navegador (simplificada)
+    if (!isInitial && window.history.state?.page !== pageId) {
+        history.pushState({ page: pageId, context }, '', `#${pageId}`);
+    }
+
+    // Funciones que renderizan cada página principal
+    const pageRenderers = {
+        [PAGE_IDS.CUENTAS]: { title: 'Cuentas', render: renderCuentasPage, icon: 'account_balance_wallet' },
+        [PAGE_IDS.INFORME]: { title: 'Informe', render: renderInformePage, icon: 'insights' },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, icon: 'edit_calendar' },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, icon: 'settings' },
+        [PAGE_IDS.DIARIO_DETALLE]: { title: context.cuentaNombre || 'Detalles', render: () => renderCuentaDetalleView(context.cuentaId), back: PAGE_IDS.CUENTAS }
+    };
+
+    const newView = select(pageId);
+    if (!newView) return;
+
+    if (oldView && oldView.id === pageId && !pageRenderers[pageId].back) return;
 
     destroyAllCharts();
 
-    if (!isInitial) hapticFeedback('light');
-
-    if (!isInitial && window.history.state?.page !== pageId) {
-        history.pushState({ page: pageId }, '', `#${pageId}`);
-    }
-
-    const navItems = Array.from(selectAll('.bottom-nav__item'));
-    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
-    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-    const isForward = newIndex > oldIndex;
-
+    // Actualizar la barra superior (Top Bar)
+    const leftButton = select('top-bar-left-button');
+    const titleEl = select('top-bar-title');
     const actionsEl = select('top-bar-actions');
-    const leftEl = select('top-bar-left-button');
-    const fab = select('fab-add-movimiento'); // Asumiendo que pudieras tener un FAB
     
-    const standardActions = `
-        <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
-            <span class="material-icons">search</span>
-        </button>
-        <button id="theme-toggle-btn" data-action="toggle-theme" class="icon-btn" title="Cambiar Tema" aria-label="Cambiar Tema">
-            <span class="material-icons">dark_mode</span>
-        </button>
-        <button data-action="show-main-menu" class="icon-btn" title="Más opciones" aria-label="Mostrar más opciones">
-            <span class="material-icons">more_vert</span>
-        </button>
-    `;
-    
-    // Lazy loading de datos si es necesario
-    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.INVERSIONES && !dataLoaded.inversiones) await loadInversiones();
+    if (pageRenderers[pageId]) {
+        const pageInfo = pageRenderers[pageId];
+        titleEl.textContent = pageInfo.title;
 
-    const pageRenderers = {
-        [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
-        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-        [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-    };
-
-    if (pageRenderers[pageId]) { 
-        if (leftEl) {
-            let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
-            if (pageId === PAGE_IDS.DIARIO) {
-                leftSideHTML += `
-                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
-                        <span class="material-icons">filter_list</span>
-                    </button>
-                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-                        <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
-                    </button>
-                `;
-            }
-            leftEl.innerHTML = leftSideHTML;
+        if (pageInfo.back) { // Si es una sub-vista, muestra el botón de "Atrás"
+            leftButton.innerHTML = `<button class="icon-btn" data-action="navigate" data-page="${pageInfo.back}"><span class="material-icons">arrow_back</span></button>`;
+        } else {
+            leftButton.innerHTML = ''; // Limpia el botón de "Atrás" para páginas principales
         }
-
-        if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
         
-        // --- LLAMADA DIRECTA A LA FUNCIÓN DE RENDERIZADO ---
-        // Este es el cambio clave. Ahora llamamos a la función JS que genera el HTML.
-        await pageRenderers[pageId].render();
+        // Lazy loading de datos si es necesario (se mantiene tu lógica)
+        if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
+
+        await pageInfo.render();
     }
     
-    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
-    if (fab) fab.classList.toggle('fab--visible', true);
-    updateThemeIcon();
+    // Transiciones visuales (tu lógica es buena, la mantenemos)
+    if (oldView) oldView.classList.remove('view--active');
+    newView.classList.add('view--active');
     
-    newView.classList.add('view--active'); 
-    
-    if (oldView && !isInitial) {
-        const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
-        const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
+    // Resaltar el icono activo en la barra inferior
+    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === pageId));
 
-        newView.classList.add(inClass);
-        oldView.classList.add(outClass);
-
-        oldView.addEventListener('animationend', () => {
-            oldView.classList.remove('view--active', outClass);
-            newView.classList.remove(inClass);
-        }, { once: true });
-
-    } else if (oldView) {
-        oldView.classList.remove('view--active');
-    }
-
-    // Restaurar posición de scroll de la nueva vista
-    if (mainScroller) {
+    // Restaurar posición de scroll
+    if (!pageRenderers[pageId].back) {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
-    }
-
-    if (pageId === PAGE_IDS.INICIO) {
-        // En lugar de llamar directamente a la actualización (que puede ser pesada),
-        // usamos el sistema inteligente que ya tienes para que no se solape.
-        scheduleDashboardUpdate();
+    } else {
+        mainScroller.scrollTop = 0; // Siempre al inicio en vistas de detalle
     }
 };
+   async function renderCuentasPage() {
+    const container = select(PAGE_IDS.CUENTAS);
+    if (!container) return;
+
+    // Esqueleto de carga para una UX fluida
+    container.innerHTML = `
+        <div class="accounts-summary skeleton" style="height: 80px;"></div>
+        <div class="skeleton-account-group">
+            <h3 class="account-group__title skeleton" style="width: 120px; height: 16px;"></h3>
+            <div class="skeleton-account-card">
+                <div class="skeleton skeleton-icon"></div>
+                <div class="skeleton-details">
+                    <div class="skeleton skeleton-line-1"></div>
+                    <div class="skeleton skeleton-line-2"></div>
+                </div>
+                <div class="skeleton skeleton-balance"></div>
+            </div>
+             <div class="skeleton-account-card">
+                <div class="skeleton skeleton-icon"></div>
+                <div class="skeleton-details">
+                    <div class="skeleton skeleton-line-1"></div>
+                    <div class="skeleton skeleton-line-2"></div>
+                </div>
+                <div class="skeleton skeleton-balance"></div>
+            </div>
+        </div>
+    `;
+
+    // Obtenemos los saldos y las cuentas
+    const saldos = await getSaldos();
+    const visibleAccounts = getVisibleAccounts();
+    const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+
+    // Agrupamos las cuentas por tipo (Líquido, Inversión, Deuda, etc.)
+    const groupedAccounts = visibleAccounts.reduce((acc, cuenta) => {
+        const tipo = toSentenceCase(cuenta.tipo || 'General');
+        if (!acc[tipo]) {
+            acc[tipo] = [];
+        }
+        acc[tipo].push(cuenta);
+        return acc;
+    }, {});
+
+    // Construimos el HTML final
+    let html = `
+        <div class="accounts-summary">
+            <h4 class="accounts-summary__label">Patrimonio Neto Total</h4>
+            <strong class="accounts-summary__total">${formatCurrency(patrimonioNeto)}</strong>
+        </div>
+    `;
+    
+    // Ordenamos los grupos para una vista consistente
+    const sortedGroups = Object.keys(groupedAccounts).sort();
+
+    for (const groupName of sortedGroups) {
+        html += `<h3 class="account-group__title">${groupName}</h3>`;
+        const accountsInGroup = groupedAccounts[groupName].sort((a,b) => a.nombre.localeCompare(b.nombre));
         
+        for (const cuenta of accountsInGroup) {
+            html += `
+                <div class="account-card" data-action="view-account-detail" data-id="${cuenta.id}" data-name="${escapeHTML(cuenta.nombre)}">
+                    <div class="account-card__icon"><span class="material-icons">${cuenta.esInversion ? 'rocket_launch' : 'wallet'}</span></div>
+                    <div class="account-card__details">
+                        <p class="account-card__name">${escapeHTML(cuenta.nombre)}</p>
+                    </div>
+                    <strong class="account-card__balance ${saldos[cuenta.id] >= 0 ? '' : 'text-negative'}">
+                        ${formatCurrency(saldos[cuenta.id] || 0)}
+                    </strong>
+                </div>
+            `;
+        }
+    }
+    
+    container.innerHTML = html;
+}
+
+// ▼▼▼ AÑADE ESTA NUEVA FUNCIÓN PARA LA VISTA DE DETALLE DE CUENTA ▼▼▼
+
+async function renderCuentaDetalleView(cuentaId) {
+    const container = select(PAGE_IDS.DIARIO_DETALLE);
+    if (!container) return;
+
+    // Mostramos un esqueleto mientras cargan los datos
+    container.innerHTML = `
+        <div id="movimientos-list-container">
+            <div id="virtual-list-sizer"><div id="virtual-list-content">
+                ${Array(5).fill('<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>').join('')}
+            </div></div>
+        </div>
+    `;
+    
+    // Configura la lista virtual para el contenedor de detalle
+    vList.scrollerEl = selectOne('.app-layout__main');
+    vList.sizerEl = select('virtual-list-sizer');
+    vList.contentEl = select('virtual-list-content');
+    
+    // ¡LA CLAVE! Filtramos los movimientos solo para esta cuenta
+    const todosLosMovimientos = await fetchAllMovementsForHistory();
+    const movimientosDeLaCuenta = todosLosMovimientos.filter(m => 
+        (m.cuentaId === cuentaId) || 
+        (m.cuentaOrigenId === cuentaId) || 
+        (m.cuentaDestinoId === cuentaId)
+    );
+    
+    // Asignamos estos movimientos filtrados a 'db.movimientos' temporalmente
+    db.movimientos = movimientosDeLaCuenta;
+    
+    // Recalculamos los saldos para esta lista específica
+    await processMovementsForRunningBalance(db.movimientos, true);
+    
+    // Renderizamos la lista virtual con los datos filtrados
+    updateVirtualListUI();
+
+    if (db.movimientos.length === 0) {
+        const cuenta = getVisibleAccounts().find(c => c.id === cuentaId);
+        container.innerHTML = `<div class="empty-state" style="margin: 0 var(--sp-4);">
+            <span class="material-icons">history</span>
+            <h3>Sin Movimientos</h3>
+            <p>Aún no hay transacciones registradas para la cuenta <strong>${cuenta ? escapeHTML(cuenta.nombre) : ''}</strong>.</p>
+        </div>`;
+    }
+}
+
+
+	 
     const setupTheme = () => { 
     const gridColor = 'rgba(255, 255, 255, 0.1)';
     const textColor = '#FFFFFF';
@@ -7076,6 +7153,11 @@ function createCustomSelect(selectElement) {
             'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
 			'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
             'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
+			'view-account-detail': () => {
+        const cuentaId = actionTarget.dataset.id;
+        const cuentaNombre = actionTarget.dataset.name;
+        navigateTo(PAGE_IDS.DIARIO_DETALLE, false, { cuentaId, cuentaNombre });
+    },
             'apply-description-suggestion': (e) => {
                 const suggestionItem = e.target.closest('.suggestion-item');
                 if (suggestionItem) {
