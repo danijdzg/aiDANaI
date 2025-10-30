@@ -64,13 +64,10 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
 const PAGE_IDS = {
-    RESUMEN: 'resumen-page',
-    
-    // ▼▼▼ VERIFICA ESTA LÍNEA ▼▼▼
-    MOVIMIENTOS: 'movimientos-page',
-    
-    PLANIFICACION: 'planificacion-page',
-    ACTIVOS: 'activos-page',
+    INICIO: 'inicio-page',
+    DIARIO: 'diario-page',
+    INVERSIONES: 'inversiones-page',
+    PLANIFICAR: 'planificar-page', // ¡La nueva página!
     AJUSTES: 'ajustes-page',
 };
 
@@ -659,15 +656,13 @@ async function loadCoreData(uid) {
             if (collectionName === 'recurrentes') {
                 dataLoaded.recurrentes = true;
                 const activePage = document.querySelector('.view--active');
-                // CORRECCIÓN: Usamos PAGE_IDS.MOVIMIENTOS en lugar de .DIARIO
-                if (activePage && (activePage.id === PAGE_IDS.MOVIMIENTOS)) renderDiarioPage();
+                if (activePage && (activePage.id === PAGE_IDS.DIARIO)) renderDiarioPage();
                 if (activePage && (activePage.id === PAGE_IDS.PLANIFICACION)) renderPlanificacionPage();
             }
             
             populateAllDropdowns();
             
-            // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN en lugar de .INICIO
-            if (select(PAGE_IDS.RESUMEN)?.classList.contains('view--active')) scheduleDashboardUpdate();
+            if (select(PAGE_IDS.INICIO)?.classList.contains('view--active')) scheduleDashboardUpdate();
             
         }, error => console.error(`Error escuchando ${collectionName}: `, error));
         unsubscribeListeners.push(unsubscribe);
@@ -680,23 +675,34 @@ async function loadCoreData(uid) {
     }, error => console.error("Error escuchando la configuración del usuario: ", error));
     unsubscribeListeners.push(unsubConfig);
 
+    // =====================================================================
+    // === INICIO: LÓGICA DE CARGA INTELIGENTE PARA EL DASHBOARD (EL MANANTIAL) ===
+    // =====================================================================
+    // Desconectamos cualquier listener anterior para evitar duplicados al iniciar sesión de nuevo.
     if (unsubscribeRecientesListener) unsubscribeRecientesListener();
 
+    // Creamos una consulta para los últimos 3 meses de movimientos. Esto es suficiente
+    // para los cálculos de "vs mes anterior" y "vs año anterior" del dashboard.
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
     
+    // Este listener mantendrá nuestra caché `recentMovementsCache` siempre actualizada en tiempo real.
     unsubscribeRecientesListener = userRef.collection('movimientos')
         .where('fecha', '>=', threeMonthsAgo.toISOString())
         .onSnapshot(snapshot => {
             console.log("Listener de recientes: Datos actualizados en la caché.");
+            // Actualizamos la caché con los datos más frescos.
             recentMovementsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
+            // Si el usuario está en la página de Inicio, la actualizamos inmediatamente.
             const activePage = document.querySelector('.view--active');
-            // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN en lugar de .INICIO
-            if (activePage && activePage.id === PAGE_IDS.RESUMEN) {
+            if (activePage && activePage.id === PAGE_IDS.INICIO) {
                 scheduleDashboardUpdate();
             }
         }, error => console.error("Error escuchando movimientos recientes: ", error));
+    // ===================================================================
+    // === FIN: LÓGICA DE CARGA INTELIGENTE ==============================
+    // ===================================================================
                         
     buildDescriptionIndex();
     startMainApp();
@@ -1315,7 +1321,7 @@ window.addEventListener('offline', () => {
             
             updateSyncStatusIcon();
             buildIntelligentIndex();
-			navigateTo(PAGE_IDS.RESUMEN, true);
+			navigateTo(PAGE_IDS.DIARIO, true); // <-- CAMBIADO
             updateThemeIcon(localStorage.getItem('appTheme') || 'default');
             isInitialLoadComplete = true;
 			};
@@ -1434,17 +1440,15 @@ const navigateTo = async (pageId, isInitial = false) => {
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
 
+    // Guardar la posición del scroll de la vista anterior
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
 
     if (!newView || (oldView && oldView.id === pageId)) return;
     
-    if (oldView) {
-        oldView.classList.remove('view--active');
-    }
-    newView.classList.add('view--active');
-    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+    // --- LÓGICA DE CARGA DE VISTAS CORREGIDA ---
+    // Ya no se intenta hacer 'fetch' de archivos HTML. La función de renderizado se encargará de todo.
 
     destroyAllCharts();
 
@@ -1454,8 +1458,15 @@ const navigateTo = async (pageId, isInitial = false) => {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
+    const navItems = Array.from(selectAll('.bottom-nav__item'));
+    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
+    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+    const isForward = newIndex > oldIndex;
+
     const actionsEl = select('top-bar-actions');
     const leftEl = select('top-bar-left-button');
+    const fab = select('fab-add-movimiento'); // Asumiendo que pudieras tener un FAB
+    
     const standardActions = `
         <button data-action="global-search" class="icon-btn" title="Búsqueda Global (Cmd/Ctrl+K)" aria-label="Búsqueda Global">
             <span class="material-icons">search</span>
@@ -1468,24 +1479,23 @@ const navigateTo = async (pageId, isInitial = false) => {
         </button>
     `;
     
-    if (pageId === PAGE_IDS.PLANIFICACION && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.ACTIVOS && !dataLoaded.inversiones) await loadInversiones();
+    // Lazy loading de datos si es necesario
+    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
+    if (pageId === PAGE_IDS.INVERSIONES && !dataLoaded.inversiones) await loadInversiones();
 
     const pageRenderers = {
-        [PAGE_IDS.RESUMEN]: { title: 'Resumen', render: renderInicioPage, actions: standardActions },
-        [PAGE_IDS.MOVIMIENTOS]: { title: 'Movimientos', render: renderDiarioPage, actions: standardActions },
-        [PAGE_IDS.ACTIVOS]: { title: 'Activos', render: renderActivosPage, actions: standardActions },
-        [PAGE_IDS.PLANIFICACION]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+        [PAGE_IDS.INICIO]: { title: 'Panel', render: renderInicioPage, actions: standardActions },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
         [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
     };
-    
-	if (pageRenderers[pageId]) { 
+
+    if (pageRenderers[pageId]) { 
         if (leftEl) {
             let leftSideHTML = `<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar a Contabilidad ${isOffBalanceMode ? 'A' : 'B'}"> ${isOffBalanceMode ? 'B' : 'A'}</button><span id="page-title-display">${pageRenderers[pageId].title}</span>`;
-            // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN en lugar de .INICIO
-            if (pageId === PAGE_IDS.RESUMEN) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
-            // CORRECCIÓN: Usamos PAGE_IDS.MOVIMIENTOS en lugar de .DIARIO
-            if (pageId === PAGE_IDS.MOVIMIENTOS) {
+            if (pageId === PAGE_IDS.INICIO) leftSideHTML += `<button data-action="configure-dashboard" class="icon-btn" title="Personalizar qué se ve en el Panel" style="margin-left: 8px;"><span class="material-icons">dashboard_customize</span></button>`;
+            if (pageId === PAGE_IDS.DIARIO) {
                 leftSideHTML += `
                     <button data-action="show-diario-filters" class="icon-btn" title="Filtrar y Buscar" style="margin-left: 8px;">
                         <span class="material-icons">filter_list</span>
@@ -1500,16 +1510,18 @@ const navigateTo = async (pageId, isInitial = false) => {
 
         if (actionsEl) actionsEl.innerHTML = pageRenderers[pageId].actions;
         
+        // --- LLAMADA DIRECTA A LA FUNCIÓN DE RENDERIZADO ---
+        // Este es el cambio clave. Ahora llamamos a la función JS que genera el HTML.
         await pageRenderers[pageId].render();
     }
     
+    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+    if (fab) fab.classList.toggle('fab--visible', true);
     updateThemeIcon();
-
+    
+    newView.classList.add('view--active'); 
+    
     if (oldView && !isInitial) {
-        const navItems = Array.from(selectAll('.bottom-nav__item'));
-        const oldIndex = navItems.findIndex(item => item.dataset.page === oldView.id);
-        const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-        const isForward = newIndex > oldIndex;
         const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
         const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
 
@@ -1517,31 +1529,24 @@ const navigateTo = async (pageId, isInitial = false) => {
         oldView.classList.add(outClass);
 
         oldView.addEventListener('animationend', () => {
-            oldView.classList.remove(outClass);
+            oldView.classList.remove('view--active', outClass);
             newView.classList.remove(inClass);
         }, { once: true });
+
+    } else if (oldView) {
+        oldView.classList.remove('view--active');
     }
-    
+
+    // Restaurar posición de scroll de la nueva vista
     if (mainScroller) {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
-    // CORRECCIÓN FINAL: Unificamos el schedule con el ID correcto
-    if (pageId === PAGE_IDS.RESUMEN) {
+    if (pageId === PAGE_IDS.INICIO) {
+        // En lugar de llamar directamente a la actualización (que puede ser pesada),
+        // usamos el sistema inteligente que ya tienes para que no se solape.
         scheduleDashboardUpdate();
     }
-};
-
-// ▼▼▼ Y FINALMENTE, REEMPLAZA TU FUNCIÓN scheduleDashboardUpdate ▼▼▼
-const scheduleDashboardUpdate = () => {
-    const activePage = document.querySelector('.view--active');
-    // CORRECCIÓN: Usamos PAGE_IDS.RESUMEN para que el panel se actualice
-    if (!activePage || activePage.id !== PAGE_IDS.RESUMEN) {
-        return;
-    }
-    
-    clearTimeout(dashboardUpdateDebounceTimer);
-    dashboardUpdateDebounceTimer = setTimeout(updateDashboardData, 50);
 };
         
     const setupTheme = () => { 
@@ -2307,7 +2312,7 @@ const renderBudgetTracking = async () => {
     // LA SOLUCIÓN:
     // Ya no buscamos el contenedor, simplemente llamamos a la función de
     // renderizado con el ID correcto para la pestaña de Inversiones.
-    renderActivosPage();
+    renderInversionesView();
 };
 
 // ====================================================================================
@@ -2893,18 +2898,11 @@ select('virtual-list-content').innerHTML = skeletonHTML;
 
 // 🟢 REEMPLAZA LA FUNCIÓN COMPLETA CON ESTA VERSIÓN
 const renderDiarioPage = async () => {
-    // CORRECCIÓN CLAVE: Apuntamos al ID correcto PAGE_IDS.MOVIMIENTOS, que corresponde a 'movimientos-page'.
-    const container = select(PAGE_IDS.MOVIMIENTOS);
-    
-    if (!container) {
-        console.error("Error crítico: El contenedor para la página de Movimientos no fue encontrado en el DOM.");
-        return; 
-    }
-
+    const container = select('diario-page');
     if (!container.querySelector('#diario-view-container')) {
         container.innerHTML = '<div id="diario-view-container"></div>';
     }
-
+    
     const viewContainer = select('diario-view-container');
     if (!viewContainer) return;
 
@@ -2943,11 +2941,13 @@ const renderDiarioPage = async () => {
     }
     select('virtual-list-content').innerHTML = skeletonHTML;
     
+    // ---- INICIO DE LA LÓGICA CORREGIDA ----
     const scrollTrigger = select('infinite-scroll-trigger');
 
     if (diarioActiveFilters) {
-        if (scrollTrigger) scrollTrigger.classList.add('hidden');
-        if (movementsObserver) movementsObserver.disconnect();
+        // MODO FILTRADO: Ocultamos el scroll infinito y filtramos los datos cacheados.
+        if (scrollTrigger) scrollTrigger.classList.add('hidden'); // Oculta el activador
+        if (movementsObserver) movementsObserver.disconnect(); // Detiene el observador
 
         select('diario-filter-active-indicator').classList.remove('hidden');
         
@@ -2974,6 +2974,7 @@ const renderDiarioPage = async () => {
         db.movimientos = movementsToDisplay;
 
     } else {
+        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
         if (scrollTrigger) scrollTrigger.classList.remove('hidden');
         select('diario-filter-active-indicator').classList.add('hidden');
         
@@ -2982,10 +2983,11 @@ const renderDiarioPage = async () => {
         allMovementsLoaded = false;
         isLoadingMoreMovements = false;
         
-        await loadMoreMovements(true);
-        initMovementsObserver();
-        return;
+        await loadMoreMovements(true); // Carga la primera página
+        initMovementsObserver(); // Activa el observador del scroll infinito
+        return; // Salimos aquí porque loadMoreMovements ya actualiza la UI
     }
+    // ---- FIN DE LA LÓGICA CORREGIDA ----
 
     await processMovementsForRunningBalance(db.movimientos, true);
     updateVirtualListUI();
@@ -3271,49 +3273,21 @@ const renderPatrimonioPage = async () => {
         };
 		
   const renderInicioPage = async () => {
-    // CORRECCIÓN: Apuntamos al ID correcto: PAGE_IDS.RESUMEN
-    const container = select(PAGE_IDS.RESUMEN);
-    if (!container) {
-        console.error("Contenedor de Resumen no encontrado. No se puede renderizar.");
-        return;
-    }
+    const container = select(PAGE_IDS.INICIO);
+    if (!container) return;
 
-    // Limpiamos los gráficos antiguos antes de dibujar nada nuevo
-    destroyAllCharts();
-
-    // Usamos la configuración del usuario o la por defecto, de forma segura
-    const widgetOrder = (db.config && db.config.dashboardWidgets) 
-                        ? db.config.dashboardWidgets 
-                        : DEFAULT_DASHBOARD_WIDGETS;
-
-    // Construimos el HTML con los esqueletos de los widgets
-    container.innerHTML = widgetOrder.map(widgetId => {
-        if (!AVAILABLE_WIDGETS[widgetId]) return ''; 
-        
-        switch(widgetId) {
-            case 'super-centro-operaciones':
-                return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
-            case 'action-center':
-                return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
-            case 'net-worth-trend':
-                return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
-            case 'patrimonio-structure':
-                return `<div data-widget-type="patrimonio-structure"><div class="card" id="patrimonio-widget"><div id="patrimonio-completo-container"><div class="skeleton" style="height:250px;"></div></div></div></div>`;
-            case 'emergency-fund':
-                return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
-            case 'fi-progress':
-                return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
-            case 'informe-personalizado':
-                return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
-            default:
-                return '';
-        }
-    }).join('<div style="height: var(--sp-4);"></div>');
+    // AHORA ESTA FUNCIÓN SOLO CREA EL CONTENEDOR PRINCIPAL PARA LOS WIDGETS
+    container.innerHTML = `
+        <div id="resumen-content-container">
+             <!-- Los esqueletos de los widgets se cargarán aquí -->
+        </div>
+    `;
     
-    // Iniciamos el observador que cargará el contenido real de los widgets
-    initWidgetObserver();
+    // Las llamadas a otras funciones se mantienen
+    populateAllDropdowns();
+    renderInicioResumenView(); // Esta función rellenará 'resumen-content-container'
     
-    // Precargamos los datos necesarios para el dashboard en segundo plano
+    // Cargamos los datos para que el dashboard pueda pintarse
     await Promise.all([loadPresupuestos(), loadInversiones()]);
 };
  
@@ -3564,6 +3538,9 @@ async function renderPortfolioEvolutionChart(targetContainerId) {
     });
 }
  
+// =================================================================
+// === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES (v2.0) ===
+// =================================================================
 
 // Esta variable global evitará errores de "Canvas en uso"
 let informeActivoChart = null;
@@ -4155,35 +4132,29 @@ const renderInicioResumenView = () => {
 
     destroyAllCharts();
 
-    // --- INICIO DE LA CORRECCIÓN CLAVE ---
-    // Si db.config o los widgets no están definidos todavía, usamos la lista por defecto.
-    // Esto evita que la pantalla se quede en blanco en la carga inicial.
-    const widgetOrder = (db.config && db.config.dashboardWidgets) 
-                        ? db.config.dashboardWidgets 
-                        : DEFAULT_DASHBOARD_WIDGETS;
-    // --- FIN DE LA CORRECCIÓN CLAVE ---
+    const widgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
 
+    // AHORA, esta función solo imprime los esqueletos con una etiqueta especial.
     resumenContentContainer.innerHTML = widgetOrder.map(widgetId => {
-        if (!AVAILABLE_WIDGETS[widgetId]) return ''; // Guarda de seguridad por si un widget ya no existe
-        
+        // La etiqueta es 'data-widget-type'
         switch(widgetId) {
-            case 'super-centro-operaciones':
-                return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
-            case 'action-center':
-                return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
-            case 'net-worth-trend':
-                return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
-            case 'patrimonio-structure':
-                return `<div data-widget-type="patrimonio-structure"><div class="card" id="patrimonio-widget"><div id="patrimonio-completo-container"><div class="skeleton" style="height:250px;"></div></div></div></div>`;
-            case 'emergency-fund':
-                return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
-            case 'fi-progress':
-                return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
-            case 'informe-personalizado':
-                return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
-            default:
-                return '';
-        }
+        case 'super-centro-operaciones':
+            return `<div data-widget-type="super-centro-operaciones">${renderDashboardSuperCentroOperaciones()}</div>`;
+        case 'action-center':
+            return `<div data-widget-type="action-center">${renderDashboardActionCenter()}</div>`;
+        case 'net-worth-trend':
+            return `<div data-widget-type="net-worth-trend">${renderDashboardNetWorthTrend()}</div>`;
+        case 'patrimonio-structure':
+           return `<div data-widget-type="patrimonio-structure"><div class="card" id="patrimonio-widget"><div id="patrimonio-completo-container"><div class="skeleton" style="height:250px;"></div></div></div></div>`;
+        case 'emergency-fund':
+            return `<div data-widget-type="emergency-fund">${renderDashboardEmergencyFund()}</div>`;
+        case 'fi-progress':
+            return `<div data-widget-type="fi-progress">${renderDashboardFIProgress()}</div>`;
+        case 'informe-personalizado':
+             return `<div data-widget-type="informe-personalizado">${renderDashboardInformeWidget()}</div>`;
+        default:
+            return '';
+    }
     }).join('<div style="height: var(--sp-4);"></div>');
     
     // ¡IMPORTANTE! Después de dibujar los esqueletos, le decimos a nuestro "asistente" que empiece a observar.
@@ -4314,23 +4285,32 @@ const renderInicioResumenView = () => {
 };
 
 
+// main.js - ASEGÚRATE DE QUE ESTA ES LA ÚNICA VERSIÓN DE ESTA FUNCIÓN
 
 const renderPlanificacionPage = () => {
-    const container = select(PAGE_IDS.PLANIFICACION);
-    if (!container) return;
+    const container = select(PAGE_IDS.PLANIFICAR);
+    if(!container) return;
 
+    // HTML que define la estructura de la página con los 3 acordeones.
     container.innerHTML = `
-        <!-- 1. Calendario de Flujo de Caja (Pasado y Futuro) -->
-        <div class="card" style="margin-bottom: var(--sp-4);">
-            <h3 class="card__title"><span class="material-icons">calendar_month</span>Calendario Financiero</h3>
-            <div class="card__content" id="planificacion-calendario-container">
-                <!-- El calendario se dibujará aquí por la función JS -->
-            </div>
+        <!-- 1. ACORDEÓN DE MOVIMIENTOS RECURRENTES (AHORA CERRADO POR DEFECTO) -->
+        <div class="card card--no-bg accordion-wrapper">
+            <details class="accordion">
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                    <div id="pending-recurrents-container"></div>
+                    <p class="form-label" style="margin-bottom: var(--sp-3);">Pulsa en una operación para editarla. Estas son las que se ejecutarán en el futuro.</p>
+                    <div id="recurrentes-list-container"></div>
+                </div>
+            </details>
         </div>
 
-        <!-- 2. Sección de Presupuestos -->
+        <!-- 2. ACORDEÓN DE PRESUPUESTOS ANUALES (SIN CAMBIOS) -->
         <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion" open>
+            <details class="accordion">
                 <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">request_quote</span>Presupuestos Anuales</h3>
                     <span class="material-icons accordion__icon">expand_more</span>
@@ -4338,7 +4318,7 @@ const renderPlanificacionPage = () => {
                 <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
                         <div class="form-group" style="flex-grow: 1; margin: 0;">
-                            <label for="budget-year-selector" class="form-label">Año</label>
+                            <label for="budget-year-selector" class="form-label">Año del Presupuesto</label>
                             <select id="budget-year-selector" class="form-select"></select>
                         </div>
                         <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: var(--sp-3);">
@@ -4346,195 +4326,94 @@ const renderPlanificacionPage = () => {
                         </button>
                     </div>
                     <div id="annual-budget-dashboard">
-                         <div id="budget-kpi-container" class="kpi-grid"></div>
-                         <div class="card" style="margin-top: var(--sp-4);"><h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia</h3><div class="card__content"><div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div></div></div>
-                         <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
+                        <div id="budget-kpi-container" class="kpi-grid"></div>
+                        <div class="card" style="margin-top: var(--sp-4);">
+                            <h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia Ingresos y Gastos</h3>
+                            <div class="card__content">
+                                <div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div>
+                            </div>
+                        </div>
+                        <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
                     </div>
                     <div id="budget-init-placeholder" class="empty-state hidden">
                         <span class="material-icons">edit_calendar</span>
                         <h3 id="budget-placeholder-title">Define tu Plan Financiero</h3>
-                        <p id="budget-placeholder-text">Establece límites de gasto y metas de ingreso.</p>
-                        <button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);"><span>Crear Presupuestos</span></button>
+                        <p id="budget-placeholder-text">Establece límites de gasto y metas de ingreso para tomar el control de tu año. ¡Empieza ahora!</p>
+                        <button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);">
+                            <span class="material-icons" style="font-size: 16px;">add_circle_outline</span><span>Crear Presupuestos</span>
+                        </button>
                     </div>
                 </div>
             </details>
         </div>
-        
-        <!-- 3. Acceso a la gestión de recurrentes -->
-        <div class="card" style="margin-top: var(--sp-4);">
-             <button class="settings-item" data-action="manage-recurrentes">
-                <span class="material-icons">event_repeat</span>
-                <span class="settings-item__label">Gestionar Movimientos Recurrentes</span>
-                <span class="material-icons">chevron_right</span>
-            </button>
+
+        <!-- 3. ¡NUEVO ACORDEÓN! EXTRACTO DE CUENTA / CARTILLA -->
+        <div class="card card--no-bg accordion-wrapper">
+            <details id="acordeon-extracto_cuenta" class="accordion informe-acordeon">
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
+                        <span class="material-icons">wysiwyg</span>
+                        <span>Extracto de Cuenta (Cartilla)</span>
+                    </h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                    <div id="informe-content-extracto_cuenta">
+                         <form id="informe-cuenta-form" novalidate>
+                            <div class="form-group">
+                                <label for="informe-cuenta-select" class="form-label">Selecciona una cuenta para ver su historial completo:</label>
+                                <select id="informe-cuenta-select" class="form-select" required></select>
+                            </div>
+                            <button type="submit" class="btn btn--primary btn--full">Generar Extracto</button>
+                        </form>
+                        <div id="informe-resultado-container" style="margin-top: var(--sp-4);"></div>
+                    </div>
+                </div>
+            </details>
         </div>
     `;
     
-    // Disparamos la renderización de las sub-secciones
-    populateAllDropdowns();
-    renderBudgetTracking(); 
-    renderPlanificacionCalendario(); // ¡Ahora esta llamada funcionará!
+    // Llamamos a las funciones que rellenarán este HTML con datos.
+    populateAllDropdowns(); // <-- Esta función rellenará el nuevo selector de cuentas.
+    renderBudgetTracking();
+    renderPendingRecurrents();
+    renderRecurrentsListOnPage();
 };
- let activosViewMode = 'portafolio'; // 'portafolio' o 'patrimonio'
-
-const renderActivosPage = async () => {
-    const container = select(PAGE_IDS.ACTIVOS);
+ const renderInversionesView = () => {
+    const container = select(PAGE_IDS.INVERSIONES);
     if (!container) return;
 
+    // Ahora esta función se encarga de TODO: crea el esqueleto y llama a las funciones que lo rellenan.
     container.innerHTML = `
-        <div class="filter-pills" style="justify-content: center; margin-bottom: var(--sp-4);">
-            <button class="filter-pill ${activosViewMode === 'portafolio' ? 'filter-pill--active' : ''}" data-action="set-activos-view" data-view="portafolio">
-                <span class="material-icons" style="font-size: 16px; margin-right: 4px;">trending_up</span>
-                Rendimiento (Portafolio)
-            </button>
-            <button class="filter-pill ${activosViewMode === 'patrimonio' ? 'filter-pill--active' : ''}" data-action="set-activos-view" data-view="patrimonio">
-                <span class="material-icons" style="font-size: 16px; margin-right: 4px;">account_balance</span>
-                Composición (Patrimonio)
-            </button>
-        </div>
+        <div id="inversiones-content-container">
+            <!-- Nuevo Acordeón para el Gráfico de Evolución -->
+            <details class="accordion" open style="margin-bottom: var(--sp-4);">
+                <summary>
+                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
+                        <span class="material-icons">show_chart</span>
+                        Evolución del Portafolio
+                    </h3>
+                    <span class="material-icons accordion__icon">expand_more</span>
+                </summary>
+                <div class="accordion__content" id="portfolio-evolution-container" style="padding: var(--sp-3) var(--sp-4);">
+                    <!-- Esqueleto de carga para el gráfico de evolución -->
+                    <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
+                </div>
+            </details>
 
-        <div id="activos-content-container">
-            <!-- El contenido de la pestaña se cargará aquí -->
-            <div class="skeleton" style="height: 400px; border-radius: var(--border-radius-lg);"></div>
+            <!-- El resto de tu HTML de la página de Inversiones se generará después -->
+            <div id="portfolio-main-content">
+                <!-- Esqueleto de carga para el resto de la página -->
+                <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
+            </div>
         </div>
     `;
-    
-    // Carga el contenido de la pestaña activa
-    await renderActivosContent();
-};
-
-// AÑADE esta nueva función para gestionar el contenido de las pestañas
-const renderActivosContent = async () => {
-    const contentContainer = select('activos-content-container');
-    if (!contentContainer) return;
-    
-    if (activosViewMode === 'portafolio') {
-        // El contenido de esta vista es generado por tus funciones de Inversiones existentes
-        contentContainer.innerHTML = `
-            <div id="portfolio-evolution-container"></div>
-            <div id="portfolio-main-content" style="margin-top: var(--sp-4);"></div>
-        `;
+	    // Llamamos a las dos funciones que rellenarán cada parte.
+    setTimeout(async () => {
         await renderPortfolioEvolutionChart('portfolio-evolution-container');
         await renderPortfolioMainContent('portfolio-main-content');
-    } else { // modo 'patrimonio'
-        // El contenido de esta vista es generado por tu función renderPatrimonioPage
-        contentContainer.innerHTML = `<div class="card"><div id="patrimonio-completo-container"></div></div>`;
-        await renderPatrimonioPage();
-    }
+    }, 50);
 };
- // Función auxiliar para el nuevo listener
-const showRecurrentesModal = () => {
-     let html = `<p class="form-label" style="margin-bottom: var(--sp-3);">Aquí puedes ver y gestionar tus operaciones programadas. Se crearán automáticamente en su fecha de ejecución.</p><div id="recurrentes-modal-list"></div>`;
-     showGenericModal('Gestionar Movimientos Recurrentes', html);
-     renderRecurrentesModalList(); // Esta función ya la tienes.
-};
-  let planificacionCalendarDate = new Date(); // Variable para controlar el mes del calendario
-
-const renderPlanificacionCalendario = async () => {
-    const container = select('planificacion-calendario-container');
-    if (!container) return;
-    container.innerHTML = `<div class="calendar-container skeleton" style="height: 350px;"></div>`;
-    
-    try {
-        // Lógica para obtener movimientos del mes (similar a tu vista de calendario actual)
-        const year = planificacionCalendarDate.getFullYear();
-        const month = planificacionCalendarDate.getMonth();
-        const startDate = new Date(Date.UTC(year, month, 1));
-        const endDate = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59));
-        
-        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-            .where('fecha', '>=', startDate.toISOString())
-            .where('fecha', '<=', endDate.toISOString())
-            .get();
-        const movementsOfMonth = snapshot.docs.map(doc => doc.data());
-
-        // Procesamos los datos en un mapa para el calendario
-        const dataMap = new Map();
-        const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-        
-        // 1. Añadir movimientos pasados
-        movementsOfMonth.forEach(m => {
-            const dateKey = m.fecha.slice(0, 10);
-            if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, markers: new Set(), recurrentes: [] });
-            const amount = calculateMovementAmount(m, visibleAccountIds);
-            if (amount !== 0) {
-                dataMap.get(dateKey).total += amount;
-            }
-        });
-
-        // 2. ¡LA MAGIA! Añadir recurrentes futuros
-        (db.recurrentes || []).forEach(r => {
-            const nextDate = new Date(r.nextDate + 'T12:00:00Z');
-            if (nextDate.getFullYear() === year && nextDate.getMonth() === month) {
-                const dateKey = r.nextDate;
-                if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, markers: new Set(), recurrentes: [] });
-                dataMap.get(dateKey).recurrentes.push(r);
-            }
-        });
-
-        // Renderizamos el calendario
-        container.innerHTML = generatePlanificacionCalendarGrid(planificacionCalendarDate, dataMap);
-
-    } catch(error) {
-        console.error("Error al renderizar el calendario de planificación:", error);
-        container.innerHTML = `<p class="text-danger">Error al cargar el calendario.</p>`;
-    }
-};
-
-
-
-const generatePlanificacionCalendarGrid = (date, dataMap) => {
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth();
-    const firstDayOffset = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
-    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-    const monthName = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    
-    let gridHtml = `<div class="calendar-header">
-        <button class="icon-btn" data-action="plan-calendar-nav" data-direction="prev"><span class="material-icons">chevron_left</span></button>
-        <h3 class="calendar-header__title">${monthName}</h3>
-        <button class="icon-btn" data-action="plan-calendar-nav" data-direction="next"><span class="material-icons">chevron_right</span></button>
-    </div>`;
-    gridHtml += '<div class="calendar-grid">';
-    ['L', 'M', 'X', 'J', 'V', 'S', 'D'].forEach(day => gridHtml += `<div class="calendar-weekday">${day}</div>`);
-
-    let dayOfMonth = 1;
-    for (let i = 0; i < 42; i++) {
-        if (i < firstDayOffset || dayOfMonth > daysInMonth) {
-            gridHtml += `<div class="calendar-day empty"></div>`;
-        } else {
-            const currentDate = new Date(Date.UTC(year, month, dayOfMonth));
-            const dateKey = currentDate.toISOString().slice(0, 10);
-            const dayData = dataMap.get(dateKey);
-            let classes = 'calendar-day';
-            if (currentDate.getTime() === today.getTime()) classes += ' is-today';
-
-            gridHtml += `<div class="${classes}" data-action="show-day-details" data-date="${dateKey}">
-                <span class="calendar-day__number">${dayOfMonth}</span>`;
-
-            if (dayData) {
-                if (dayData.total) {
-                    const totalClass = dayData.total >= 0 ? 'text-positive' : 'text-negative';
-                    gridHtml += `<span class="calendar-day__total ${totalClass}">${formatCurrency(dayData.total)}</span>`;
-                }
-                if (dayData.recurrentes.length > 0) {
-                    gridHtml += `<div class="calendar-day__markers">`;
-                    dayData.recurrentes.slice(0, 3).forEach(r => {
-                        const markerClass = r.cantidad >= 0 ? 'marker--income' : 'marker--expense';
-                        gridHtml += `<div class="calendar-day__marker ${markerClass}" style="border: 1px solid var(--c-on-surface-secondary);"></div>`;
-                    });
-                    gridHtml += `</div>`;
-                }
-            }
-            gridHtml += `</div>`;
-            dayOfMonth++;
-        }
-    }
-    gridHtml += '</div>';
-    return gridHtml;
-};
-
   // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF      ===
 // =================================================================
@@ -4846,6 +4725,17 @@ const updateNetWorthChart = async (saldos) => {
     });
 };
 
+const scheduleDashboardUpdate = () => {
+    // El jefe de obra solo trabaja si la página "Inicio" está abierta.
+    const activePage = document.querySelector('.view--active');
+    if (!activePage || activePage.id !== PAGE_IDS.INICIO) {
+        return;
+    }
+      
+    clearTimeout(dashboardUpdateDebounceTimer);
+        
+    dashboardUpdateDebounceTimer = setTimeout(updateDashboardData, 50);
+};
 
 // ▼▼▼ REEMPLAZA TODA TU FUNCIÓN updateDashboardData CON ESTA VERSIÓN FINALÍSIMA Y VERIFICADA ▼▼▼
 
@@ -6552,6 +6442,11 @@ const handleToggleTheme = () => {
             renderCuentasModalList();
         };
 
+        const showRecurrentesModal = () => {
+            let html = `<p class="form-label" style="margin-bottom: var(--sp-3);">Aquí puedes ver y gestionar tus operaciones programadas. Se crearán automáticamente en su fecha de ejecución.</p><div id="recurrentes-modal-list"></div>`;
+            showGenericModal('Gestionar Movimientos Recurrentes', html);
+            renderRecurrentesModalList();
+        };
 				
         const renderRecurrentesModalList = () => {
     const list = select('recurrentes-modal-list');
@@ -7142,14 +7037,6 @@ function createCustomSelect(selectElement) {
         const btn = actionTarget.closest('button');
         
         const actions = {
-			 'manage-recurrentes': showRecurrentesModal, // <-- AÑADE ESTA LÍNEA
-
-    'plan-calendar-nav': () => { // <-- AÑADE ESTE BLOQUE ENTERO
-        const direction = actionTarget.dataset.direction;
-        const currentMonth = planificacionCalendarDate.getUTCMonth();
-        planificacionCalendarDate.setUTCMonth(currentMonth + (direction === 'next' ? 1 : -1));
-        renderPlanificacionCalendario();
-    },
             'show-main-menu': () => {
                 const menu = document.getElementById('main-menu-popover');
                 if (!menu) return;
@@ -7268,7 +7155,7 @@ function createCustomSelect(selectElement) {
                 } else {
                     const pageRenderers = {
                         [PAGE_IDS.DIARIO]: renderDiarioPage,
-                        [PAGE_IDS.INVERSIONES]: renderActivosPage,
+                        [PAGE_IDS.INVERSIONES]: renderInversionesView,
                         [PAGE_IDS.PLANIFICAR]: renderPlanificacionPage,
                         [PAGE_IDS.AJUSTES]: renderAjustesPage,
                     };
@@ -7295,13 +7182,6 @@ function createCustomSelect(selectElement) {
             'update-budgets': handleUpdateBudgets, 'logout': () => fbAuth.signOut(), 'delete-account': () => { showConfirmationModal('Esto eliminará tu cuenta y todos tus datos de forma PERMANENTE. ¿Estás absolutamente seguro?', async () => { /* Lógica de borrado de cuenta aquí */ }); },
             'manage-investment-accounts': showManageInvestmentAccountsModal, 'update-asset-value': () => showValoracionModal(id),
             'set-investment-chart-mode': () => handleSetInvestmentChartMode(actionTarget.dataset.mode),
-			 'set-activos-view': () => {
-    const view = actionTarget.dataset.view;
-    if (activosViewMode !== view) {
-        activosViewMode = view;
-        renderActivosPage(); // Vuelve a dibujar toda la página para cambiar de pestaña
-    }
-},
             'global-search': () => { showGlobalSearchModal(); hapticFeedback('medium'); },
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
@@ -7399,7 +7279,7 @@ function createCustomSelect(selectElement) {
     
     // LA SOLUCIÓN:
     // Aplicamos la misma lógica aquí. Forzamos el redibujado en el contenedor correcto.
-    renderActivosPage();
+    renderInversionesView();
 };
             
         const showImportJSONWizard = () => {
