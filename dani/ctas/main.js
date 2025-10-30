@@ -64,11 +64,11 @@ const handleExportFilteredCsv = (btn) => {
         
         const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
 const PAGE_IDS = {
-    CUENTAS: 'cuentas-page',     // <-- ¡NUEVA!
-    INFORME: 'informe-page',     // Renombrada desde 'inicio-page'
+    CUENTAS: 'cuentas-page',     // ¡NUEVA! La pantalla principal.
+    INFORME: 'informe-page',     // Renombrada desde 'inicio-page'.
     PLANIFICAR: 'planificar-page',
     AJUSTES: 'ajustes-page',
-    DIARIO_DETALLE: 'diario-page' // 'diario-page' ahora es para detalles
+    DIARIO_DETALLE: 'diario-page' // 'diario-page' ahora es para los detalles de una cuenta.
 };
 
 
@@ -1306,25 +1306,26 @@ window.addEventListener('offline', () => {
     updateSyncStatusIcon();
 });
     const startMainApp = async () => {
-            const loginScreen = select('login-screen');
-            const pinLoginScreen = select('pin-login-screen');
-            const appRoot = select('app-root');
+    const loginScreen = select('login-screen');
+    const pinLoginScreen = select('pin-login-screen');
+    const appRoot = select('app-root');
 
-            if (loginScreen) loginScreen.classList.remove('login-view--visible');
-            if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
-            if (appRoot) appRoot.classList.add('app-layout--visible');
+    if (loginScreen) loginScreen.classList.remove('login-view--visible');
+    if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
+    if (appRoot) appRoot.classList.add('app-layout--visible');
+    
+    populateAllDropdowns();
+    loadConfig();
+    measureListItemHeights();
+    updateSyncStatusIcon();
+    buildIntelligentIndex();
+    
+    navigateTo(PAGE_IDS.CUENTAS, true); // <-- ¡CAMBIO CLAVE!
             
-            populateAllDropdowns();
-            loadConfig();
-            
-            measureListItemHeights();
-            
-            updateSyncStatusIcon();
-            buildIntelligentIndex();
-			navigateTo(PAGE_IDS.CUENTAS, true); // <-- CAMBIADO
-            updateThemeIcon(localStorage.getItem('appTheme') || 'default');
-            isInitialLoadComplete = true;
-			};
+    updateThemeIcon(localStorage.getItem('appTheme') || 'default');
+    isInitialLoadComplete = true;
+};
+
 
         
     const showLoginScreen = () => {
@@ -1439,66 +1440,76 @@ const navigateTo = async (pageId, isInitial = false, context = {}) => {
     const mainScroller = selectOne('.app-layout__main');
     const oldView = document.querySelector('.view--active');
     
-    if (oldView && oldView.id !== PAGE_IDS.DIARIO_DETALLE) { // No guardamos scroll para sub-vistas
+    if (oldView && oldView.id !== PAGE_IDS.DIARIO_DETALLE) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
 
     if (!isInitial) hapticFeedback('light');
 
-    // Gestión del historial del navegador (simplificada)
-    if (!isInitial && window.history.state?.page !== pageId) {
+    if (!isInitial && (window.history.state?.page !== pageId || JSON.stringify(window.history.state?.context) !== JSON.stringify(context))) {
         history.pushState({ page: pageId, context }, '', `#${pageId}`);
     }
 
-    // Funciones que renderizan cada página principal
     const pageRenderers = {
-        [PAGE_IDS.CUENTAS]: { title: 'Cuentas', render: renderCuentasPage, icon: 'account_balance_wallet' },
-        [PAGE_IDS.INFORME]: { title: 'Informe', render: renderInformePage, icon: 'insights' },
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, icon: 'edit_calendar' },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, icon: 'settings' },
+        [PAGE_IDS.CUENTAS]: { title: 'Cuentas', render: renderCuentasPage },
+        [PAGE_IDS.INFORME]: { title: 'Informe', render: renderInformePage },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage },
         [PAGE_IDS.DIARIO_DETALLE]: { title: context.cuentaNombre || 'Detalles', render: () => renderCuentaDetalleView(context.cuentaId), back: PAGE_IDS.CUENTAS }
     };
 
     const newView = select(pageId);
-    if (!newView) return;
-
-    if (oldView && oldView.id === pageId && !pageRenderers[pageId].back) return;
+    if (!newView || (oldView && oldView.id === pageId && !pageRenderers[pageId].back)) return;
 
     destroyAllCharts();
 
-    // Actualizar la barra superior (Top Bar)
     const leftButton = select('top-bar-left-button');
     const titleEl = select('top-bar-title');
-    const actionsEl = select('top-bar-actions');
     
     if (pageRenderers[pageId]) {
         const pageInfo = pageRenderers[pageId];
         titleEl.textContent = pageInfo.title;
 
-        if (pageInfo.back) { // Si es una sub-vista, muestra el botón de "Atrás"
+        if (pageInfo.back) {
             leftButton.innerHTML = `<button class="icon-btn" data-action="navigate" data-page="${pageInfo.back}"><span class="material-icons">arrow_back</span></button>`;
         } else {
-            leftButton.innerHTML = ''; // Limpia el botón de "Atrás" para páginas principales
+            leftButton.innerHTML = '';
         }
         
-        // Lazy loading de datos si es necesario (se mantiene tu lógica)
         if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
 
         await pageInfo.render();
     }
     
-    // Transiciones visuales (tu lógica es buena, la mantenemos)
-    if (oldView) oldView.classList.remove('view--active');
-    newView.classList.add('view--active');
+    // Transiciones y estado activo
+    if (oldView) {
+        const isSubView = !!pageRenderers[pageId].back;
+        const wasSubView = oldView.id === PAGE_IDS.DIARIO_DETALLE;
+
+        if (isSubView) { // Navegando hacia un detalle
+            oldView.classList.add('view-transition-out-forward');
+            newView.classList.add('view-transition-in-forward');
+        } else if (wasSubView) { // Volviendo de un detalle
+            oldView.classList.add('view-transition-out-backward');
+            newView.classList.add('view-transition-in-backward');
+        }
+        
+        newView.classList.add('view--active');
+
+        oldView.addEventListener('animationend', () => {
+            oldView.classList.remove('view--active', 'view-transition-out-forward', 'view-transition-out-backward');
+            newView.classList.remove('view-transition-in-forward', 'view-transition-in-backward');
+        }, { once: true });
+    } else {
+        newView.classList.add('view--active');
+    }
     
-    // Resaltar el icono activo en la barra inferior
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === pageId));
 
-    // Restaurar posición de scroll
     if (!pageRenderers[pageId].back) {
         mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     } else {
-        mainScroller.scrollTop = 0; // Siempre al inicio en vistas de detalle
+        mainScroller.scrollTop = 0;
     }
 };
    async function renderCuentasPage() {
@@ -1624,6 +1635,24 @@ async function renderCuentaDetalleView(cuentaId) {
     }
 }
 
+/**
+ * Renombrada desde renderInicioPage. Ahora se encarga de la pestaña "Informe".
+ * Su contenido (renderizar widgets del dashboard) no ha cambiado.
+ */
+const renderInformePage = () => {
+    // Esta función es tu antigua `renderInicioPage`. La renombramos para que coincida.
+    // Su lógica interna para renderizar los widgets es correcta.
+    const container = select(PAGE_IDS.INFORME);
+    if (!container) return;
+
+    container.innerHTML = `<div id="resumen-content-container"></div>`;
+    
+    populateAllDropdowns();
+    renderInicioResumenView(); // Esta función que ya tenías sigue siendo la que dibuja los widgets
+    
+    // Carga de datos para el dashboard (se mantiene igual)
+    Promise.all([loadPresupuestos(), loadInversiones()]);
+};
 
 	 
     const setupTheme = () => { 
@@ -7108,9 +7137,17 @@ function createCustomSelect(selectElement) {
         if (!actionTarget && !target.closest('.transaction-card')) {
             resetActiveSwipe();
         }
+		const actionTarget = e.target.closest('[data-action]');
         if (!actionTarget) return;
 
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
+		if (action === 'view-account-detail') {
+        const cuentaId = actionTarget.dataset.id;
+        const cuentaNombre = actionTarget.dataset.name;
+        navigateTo(PAGE_IDS.DIARIO_DETALLE, false, { cuentaId, cuentaNombre });
+    } else if (action === 'navigate') {
+        navigateTo(page);
+    }
         const btn = actionTarget.closest('button');
         
         const actions = {
