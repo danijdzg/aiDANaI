@@ -4473,52 +4473,6 @@ const renderPlanificacionCalendario = async () => {
 };
 
 
-const renderPlanificacionCalendario = async () => {
-    const container = select('planificacion-calendario-container');
-    if (!container) return;
-    container.innerHTML = `<div class="calendar-container skeleton" style="height: 350px;"></div>`;
-    
-    try {
-        if (!(planificacionCalendarDate instanceof Date) || isNaN(planificacionCalendarDate)) {
-            planificacionCalendarDate = new Date();
-        }
-        planificacionCalendarDate.setHours(12, 0, 0, 0);
-
-        const year = planificacionCalendarDate.getFullYear();
-        const month = planificacionCalendarDate.getMonth();
-        const startDate = new Date(Date.UTC(year, month, 1));
-        const endDate = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59));
-        
-        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-            .where('fecha', '>=', startDate.toISOString())
-            .where('fecha', '<=', endDate.toISOString()).get();
-        const movementsOfMonth = snapshot.docs.map(doc => doc.data());
-
-        const dataMap = new Map();
-        const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-        
-        movementsOfMonth.forEach(m => {
-            const dateKey = m.fecha.slice(0, 10);
-            if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, recurrentes: [] });
-            dataMap.get(dateKey).total += calculateMovementAmount(m, visibleAccountIds);
-        });
-
-        (db.recurrentes || []).forEach(r => {
-            const nextDate = parseDateStringAsUTC(r.nextDate);
-            if (nextDate && nextDate.getUTCFullYear() === year && nextDate.getUTCMonth() === month) {
-                const dateKey = r.nextDate;
-                if (!dataMap.has(dateKey)) dataMap.set(dateKey, { total: 0, recurrentes: [] });
-                dataMap.get(dateKey).recurrentes.push(r);
-            }
-        });
-
-        container.innerHTML = generatePlanificacionCalendarGrid(planificacionCalendarDate, dataMap);
-
-    } catch(error) {
-        console.error("Error al renderizar el calendario de planificación:", error);
-        container.innerHTML = `<p class="text-danger">Error al cargar el calendario.</p>`;
-    }
-};
 
 const generatePlanificacionCalendarGrid = (date, dataMap) => {
     const year = date.getUTCFullYear();
