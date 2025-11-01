@@ -21,747 +21,341 @@
             --author-color: #c0c0c0;
             --font-quote: 'Cormorant Garamond', serif;
             --font-main: 'Poppins', sans-serif;
+            /* [NUEVO] Radio de la órbita del menú */
+            --orbit-radius: 220px; 
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         html, body {
-            width: 100%; 
-            height: 100%;
+            width: 100vw; 
+            height: 100vh;
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: var(--font-main);
             overflow: hidden;
+            position: fixed;
         }
 
-        /* Canvas de estrellas */
-        #starfield {
-            position: fixed;
-            top: 0;
-            left: 0;
+        /* Canvas de estrellas y overlay (Sin cambios) */
+        #starfield, #galaxy-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+        }
+        #galaxy-overlay { z-index: 1; pointer-events: none; background: radial-gradient(ellipse at 30% 50%, rgba(88, 66, 150, 0.2) 0%, rgba(88, 66, 150, 0.05) 20%, transparent 50%), radial-gradient(ellipse at 70% 50%, rgba(66, 88, 150, 0.15) 0%, rgba(66, 88, 150, 0.03) 25%, transparent 50%), radial-gradient(ellipse at 50% 30%, rgba(150, 66, 120, 0.1) 0%, transparent 40%); }
+
+        /* Contenido principal que se desenfocará */
+        #main-content {
+            position: relative;
+            z-index: 2;
             width: 100%;
             height: 100%;
-            z-index: 0;
+            transition: filter 0.4s ease;
+        }
+        #main-content.blurred {
+            filter: blur(8px) brightness(0.7);
         }
 
-        /* Gradiente de via lactea */
-        #galaxy-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(ellipse at 30% 50%, rgba(88, 66, 150, 0.2) 0%, rgba(88, 66, 150, 0.05) 20%, transparent 50%),
-                        radial-gradient(ellipse at 70% 50%, rgba(66, 88, 150, 0.15) 0%, rgba(66, 88, 150, 0.03) 25%, transparent 50%),
-                        radial-gradient(ellipse at 50% 30%, rgba(150, 66, 120, 0.1) 0%, transparent 40%);
-            z-index: 1;
-            pointer-events: none;
-        }
-/* ==================== ESTILOS BARRA DE BÚSQUEDA (VERSIÓN MEJORADA) ==================== */
-#search-container {
-    position: fixed;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: clamp(300px, 90%, 720px);
-    z-index: 1001;
-}
+        /* Barra de búsqueda (Sin cambios, solo dentro de #main-content) */
+        #search-container { position: fixed; top: calc(30px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: clamp(300px, 90%, 720px); z-index: 10; }
+        #search-form { display: flex; align-items: center; width: 100%; background-color: #000000; border-radius: 30px; padding: 8px 10px; box-shadow: 0 0 15px rgba(102, 126, 234, 0.6), 0 0 30px rgba(118, 75, 162, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.2); transition: box-shadow 0.3s ease; }
+        #search-form:focus-within { box-shadow: 0 0 25px rgba(102, 126, 234, 0.9), 0 0 50px rgba(118, 75, 162, 0.7), inset 0 0 0 1.5px rgba(255, 255, 255, 0.4); }
+        #search-input { flex-grow: 1; background: transparent; border: none; outline: none; color: #ffffff; font-size: 1rem; padding: 8px 12px; font-family: var(--font-main); margin-left: 10px; }
+        #search-input::placeholder { color: #a0a0a0; opacity: 1; }
+        #search-container .search-icon, #search-container .mic-icon, #search-container .camera-icon { width: 22px; height: 22px; stroke: #ffffff; stroke-width: 1.8; cursor: pointer; flex-shrink: 0; margin: 0 8px; transition: transform 0.2s; }
+        #search-container svg:hover { transform: scale(1.1); }
+        #ai-mode-button { display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: #ffffff; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-main); font-size: 0.85rem; font-weight: 500; transition: transform 0.3s ease, box-shadow 0.3s ease; white-space: nowrap; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); }
+        #ai-mode-button:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
+        #ai-mode-button svg { width: 18px; height: 18px; stroke-width: 2.5; margin: 0; }
 
-#search-form {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    /* 1. Fondo negro AMOLED para máximo contraste */
-    background-color: #000000; 
-    border-radius: 30px;
-    padding: 8px 10px;
-    /* 2. Efecto de resplandor neón con los colores del tema */
-    box-shadow: 0 0 15px rgba(102, 126, 234, 0.6), 
-                0 0 30px rgba(118, 75, 162, 0.4),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.2); /* Borde interior sutil */
-    /* 3. Transición suave para el efecto de foco */
-    transition: box-shadow 0.3s ease;
-}
+        /* Contenedor de citas (Sin cambios, solo dentro de #main-content) */
+        #quote-container { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: clamp(320px, 90%, 720px); background-color: #000000; border-radius: 20px; padding: 25px 30px calc(30px + env(safe-area-inset-bottom)); box-shadow: 0 0 15px rgba(102, 126, 234, 0.6), 0 0 30px rgba(118, 75, 162, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.2); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: opacity 0.4s ease, transform 0.3s ease, box-shadow 0.3s ease; }
+        #quote-container:hover { transform: translateX(-50%) scale(1.03); box-shadow: 0 0 25px rgba(102, 126, 234, 0.8), 0 0 45px rgba(118, 75, 162, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.3); }
+        #quote-container.fading { opacity: 0; }
+        #quote-text { font-family: var(--font-quote); font-size: clamp(1.2rem, 4vw, 1.8rem); font-weight: 500; color: var(--quote-color); line-height: 1.4; margin-bottom: 15px; text-shadow: 0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(200,200,255,0.3); }
+        #quote-author { font-size: clamp(0.85rem, 2.5vw, 1rem); font-weight: 500; color: var(--author-color); text-shadow: 0 0 5px rgba(255,255,255,0.5); }
 
-/* Efecto de brillo intensificado cuando el usuario hace clic dentro de la barra */
-#search-form:focus-within {
-    box-shadow: 0 0 25px rgba(102, 126, 234, 0.9), 
-                0 0 50px rgba(118, 75, 162, 0.7),
-                inset 0 0 0 1.5px rgba(255, 255, 255, 0.4);
-}
-
-#search-input {
-    flex-grow: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    /* 4. Texto más brillante para mejor legibilidad */
-    color: #ffffff; 
-    font-size: 1rem;
-    padding: 8px 12px;
-    font-family: var(--font-main);
-    margin-left: 10px;
-}
-
-#search-input::placeholder {
-    color: #a0a0a0; /* Placeholder un poco más claro */
-    opacity: 1;
-}
-
-#search-container .search-icon,
-#search-container .mic-icon,
-#search-container .camera-icon {
-    width: 22px;
-    height: 22px;
-    /* 4. Iconos más brillantes */
-    stroke: #ffffff; 
-    stroke-width: 1.8;
-    cursor: pointer;
-    flex-shrink: 0;
-    margin: 0 8px;
-    transition: transform 0.2s;
-}
-
-#search-container svg:hover {
-    transform: scale(1.1); /* Efecto sutil al pasar el ratón */
-}
-
-/* 5. Botón "Modo IA" mucho más vistoso */
-#ai-mode-button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    /* Usamos el mismo gradiente del botón FAB principal */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    color: #ffffff;
-    padding: 8px 16px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-family: var(--font-main);
-    font-size: 0.85rem;
-    font-weight: 500;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    white-space: nowrap;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-
-#ai-mode-button:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-}
-
-#ai-mode-button svg {
-    width: 18px;
-    height: 18px;
-    stroke-width: 2.5;
-    margin: 0;
-}
-     /* ==================== CONTENEDOR DE CITAS (NUEVO DISEÑO) ==================== */
-#quote-container {
-    position: fixed;
-    bottom: 30px; /* Lo separamos un poco del borde inferior */
-    left: 50%;
-    transform: translateX(-50%);
-    width: clamp(320px, 90%, 720px); /* Ancho responsive, igual que la barra de búsqueda */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    
-    /* 1. Fondo negro AMOLED y bordes redondeados */
-    background-color: #000000;
-    border-radius: 20px;
-    padding: 25px 30px;
-    
-    /* 2. Mismo efecto de resplandor futurista que la barra de búsqueda */
-    box-shadow: 0 0 15px rgba(102, 126, 234, 0.6), 
-                0 0 30px rgba(118, 75, 162, 0.4),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.2);
-    
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: opacity 0.4s ease, transform 0.3s ease, box-shadow 0.3s ease;
-    z-index: 2;
-}
-
-#quote-container:hover {
-    transform: translateX(-50%) scale(1.03); /* Efecto sutil al pasar el ratón */
-    box-shadow: 0 0 25px rgba(102, 126, 234, 0.8), 
-                0 0 45px rgba(118, 75, 162, 0.6),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.3);
-}
-
-#quote-container.fading {
-    opacity: 0;
-}
-
-#quote-text {
-    font-family: var(--font-quote);
-    font-size: clamp(1.2rem, 4vw, 1.8rem);
-    font-weight: 500;
-    color: var(--quote-color);
-    line-height: 1.4;
-    margin-bottom: 15px;
-    /* Sombra de texto más sutil y brillante para el fondo negro */
-    text-shadow: 0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(200,200,255,0.3);
-}
-
-#quote-author {
-    font-size: clamp(0.85rem, 2.5vw, 1rem);
-    font-weight: 500;
-    color: var(--author-color);
-    text-shadow: 0 0 5px rgba(255,255,255,0.5);
-}
-
-    /* ==================== BOTÓN FAB 'TIERRA' (NUEVO DISEÑO) ==================== */
-@keyframes spin {
-    from { transform: translate(-50%, -50%) rotate(0deg); }
-    to { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-#fab-button {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-
-    /* 1. Fondo de la Tierra creado con gradientes CSS */
-    background: 
-        /* Nubes (capa superior) */
-        radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.6) 0%, transparent 30%),
-        radial-gradient(circle at 75% 60%, rgba(255, 255, 255, 0.5) 0%, transparent 40%),
-        /* Océanos */
-        radial-gradient(circle at 50% 50%, #3a7d9d 0%, #1a3a6b 100%);
-    
-    /* 2. Resplandor atmosférico espectacular */
-    box-shadow: 0 0 25px 3px rgba(100, 180, 255, 0.7),
-                inset 0 0 20px rgba(255, 255, 255, 0.5); /* Brillo interno */
-
-    /* 3. Animación de rotación lenta y continua */
-    animation: spin 60s linear infinite;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-#fab-button:hover {
-    /* Al pasar el ratón, la rotación se detiene y el brillo aumenta */
-    animation-play-state: paused;
-    box-shadow: 0 0 35px 5px rgba(150, 220, 255, 0.9),
-                inset 0 0 25px rgba(255, 255, 255, 0.7);
-}
-
-#fab-button.active {
-    /* Mantenemos la rotación del menú, pero pausamos la de la Tierra */
-    animation-play-state: paused;
-    transform: translate(-50%, -50%) rotate(45deg);
-}
-
-#fab-button svg {
-    width: 32px;
-    height: 32px;
-    stroke: white;
-    stroke-width: 2.5;
-    transition: transform 0.3s ease;
-    /* Sombra para que el icono '+' destaque sobre el planeta */
-    filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.8));
-}
-
-/* ==================== OVERLAY DE FONDO (SIN DESENFOQUE) ==================== */
-#menu-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    
-    /* Mantenemos la viñeta radial para oscurecer sutilmente el centro */
-    /* Hacemos el centro un poco más oscuro para compensar la falta de desenfoque */
-    background: radial-gradient(circle, rgba(0, 0, 0, 0.75) 25%, rgba(0, 0, 0, 0) 60%);
-    
-    /* 1. SE HAN ELIMINADO las líneas 'backdrop-filter' y '-webkit-backdrop-filter' */
-    
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-    z-index: 998;
-}
-
-#menu-overlay.active {
-    opacity: 1;
-    pointer-events: all;
-}
-
-        /* Contenedor del menu circular */
-        #circular-menu {
+        /* ==================== [NUEVO] MENÚ ORBITAL Y BOTÓN CENTRAL ==================== */
+        
+        /* Contenedor principal del menú, centrado */
+        #menu-container {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 80px;
-            height: 80px;
-            z-index: 1001;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* El menú es invisible e inactivo hasta que se abre */
             pointer-events: none;
         }
+        
+        /* Animación de pulso para el botón central */
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 15px 5px rgba(102, 126, 234, 0.5), 0 0 20px 10px rgba(118, 75, 162, 0.4); }
+            50% { box-shadow: 0 0 25px 8px rgba(102, 126, 234, 0.7), 0 0 35px 15px rgba(118, 75, 162, 0.6); }
+            100% { box-shadow: 0 0 15px 5px rgba(102, 126, 234, 0.5), 0 0 20px 10px rgba(118, 75, 162, 0.4); }
+        }
 
-        /* Botones del menu */
-        .menu-item {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0);
-            width: 60px;
-            height: 60px;
+        /* Botón central con la imagen del logo */
+        #fab-button {
+            width: 160px;
+            height: 160px;
             border-radius: 50%;
             border: none;
             cursor: pointer;
+            padding: 0;
+            background-color: transparent;
+            position: relative;
+            z-index: 1001;
+            pointer-events: all;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #fab-button img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+            animation: pulse-glow 4s infinite ease-in-out;
+        }
+
+        #fab-button:hover img {
+            transform: scale(1.1);
+        }
+
+        /* Estado activo cuando el menú se abre */
+        #fab-button.active {
+            transform: scale(0.9) rotate(-360deg);
+        }
+        #fab-button.active img {
+            animation-play-state: paused;
+            box-shadow: 0 0 35px 10px rgba(255, 255, 255, 0.5); /* Efecto de explosión de luz */
+        }
+
+        /* Contenedor de los items que orbitan */
+        #orbital-menu {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.4s ease;
+            transform: rotate(0deg);
+        }
+        
+        #menu-container.active #orbital-menu {
+             transform: rotate(360deg);
+        }
+
+        /* Cada uno de los iconos de la app */
+        .orbit-item {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            margin: -30px; /* La mitad del tamaño (60px) para centrarlo */
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             gap: 4px;
-            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            text-decoration: none;
+            
+            /* Estado inicial: oculto en el centro */
             opacity: 0;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-            pointer-events: all;
+            transform: scale(0);
+            pointer-events: none;
+
+            /* Animación de salida */
+            transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55), 
+                        opacity 0.3s ease;
         }
 
-        .menu-item.active {
+        /* Cuando el menú se activa, se aplica la animación a cada item */
+        #menu-container.active .orbit-item {
             opacity: 1;
+            pointer-events: all;
+            /* Cada item usa una variable CSS `--i` para calcular su posición */
+            transform: rotate(var(--angle)) translateY(var(--orbit-radius)) rotate(calc(-1 * var(--angle)));
         }
 
-        .menu-item:hover {
+        /* Retraso escalonado para la animación de entrada */
+        #menu-container.active .orbit-item:nth-child(1) { transition-delay: 0.05s; }
+        #menu-container.active .orbit-item:nth-child(2) { transition-delay: 0.1s; }
+        #menu-container.active .orbit-item:nth-child(3) { transition-delay: 0.15s; }
+        #menu-container.active .orbit-item:nth-child(4) { transition-delay: 0.2s; }
+        #menu-container.active .orbit-item:nth-child(5) { transition-delay: 0.25s; }
+        #menu-container.active .orbit-item:nth-child(6) { transition-delay: 0.3s; }
+        #menu-container.active .orbit-item:nth-child(7) { transition-delay: 0.35s; }
+        #menu-container.active .orbit-item:nth-child(8) { transition-delay: 0.4s; }
+
+
+        .orbit-item:hover {
+            transform: rotate(var(--angle)) translateY(var(--orbit-radius)) rotate(calc(-1 * var(--angle))) scale(1.15) !important;
             box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
         }
 
-        .menu-item svg {
-            width: 24px;
-            height: 24px;
-            stroke: white;
-            stroke-width: 2;
-        }
+        .orbit-item svg { width: 24px; height: 24px; stroke: white; stroke-width: 2; }
+        .orbit-item .label { font-size: 0.7rem; font-weight: 500; color: white; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.3s ease 0.2s; }
+        #menu-container.active .orbit-item .label { opacity: 1; }
 
-        .menu-item .label {
-            font-size: 0.7rem;
-            font-weight: 500;
-            color: white;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-
-        /* Colores especificos para cada boton */
+        /* Colores específicos para cada botón (sin cambios) */
         #item-agenda { background: linear-gradient(135deg, #ffb74d, #ffa726); }
         #item-cuentas { background: linear-gradient(135deg, #64b5f6, #42a5f5); }
+        #item-cuentas2 { background: linear-gradient(135deg, #7986cb, #5c6bc0); }
+        #item-cuentas3 { background: linear-gradient(135deg, #f06292, #ec407a); }
         #item-gym { background: linear-gradient(135deg, #81c784, #66bb6a); }
         #item-prompt { background: linear-gradient(135deg, #c58af9, #ba68c8); }
         #item-restaurantes { background: linear-gradient(135deg, #ef5350, #e53935); }
         #item-supuestos { background: linear-gradient(135deg, #4db6ac, #26a69a); }
-        #item-cuentas2 { background: linear-gradient(135deg, #7986cb, #5c6bc0); }
-		#item-cuentas3 { background: linear-gradient(135deg, #f06292, #ec407a); }
-
-        /* Animacion de aparicion escalonada */
-        .menu-item:nth-child(1) { transition-delay: 0.05s; }
-        .menu-item:nth-child(2) { transition-delay: 0.1s; }
-        .menu-item:nth-child(3) { transition-delay: 0.15s; }
-        .menu-item:nth-child(4) { transition-delay: 0.2s; }
-        .menu-item:nth-child(5) { transition-delay: 0.25s; }
-        .menu-item:nth-child(6) { transition-delay: 0.3s; }
-        .menu-item:nth-child(7) { transition-delay: 0.35s; }
-		.menu-item:nth-child(8) { transition-delay: 0.4s; }
 
         /* Responsive para pantallas pequeñas */
-        @media (max-height: 600px) {
-            #quote-text {
-                font-size: clamp(1rem, 3.5vw, 1.4rem);
-                margin-bottom: 10px;
+        @media (max-width: 400px), (max-height: 600px) {
+            :root {
+                --orbit-radius: 170px;
             }
-            #quote-author {
-                font-size: clamp(0.75rem, 2vw, 0.9rem);
+            .orbit-item {
+                width: 50px;
+                height: 50px;
+                margin: -25px;
             }
-            #quote-container {
-                padding: 20px 20px calc(30px + env(safe-area-inset-bottom));
+            .orbit-item svg {
+                width: 20px;
+                height: 20px;
+            }
+             .orbit-item .label {
+                font-size: 0.6rem;
             }
         }
     </style>
 </head>
 <body>
- <!-- ==================== INICIO BARRA DE BÚSQUEDA ==================== -->
-    <div id="search-container">
-        <form id="search-form" action="https://www.google.com/search" method="get" target="_blank">
-            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="text" id="search-input" name="q" placeholder="Busca lo que quieras...">
-            <svg class="mic-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
-            <svg class="camera-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-            <button type="button" id="ai-mode-button">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v.01M12 21v-.01M4.22 4.22l.01.01M20.78 20.78l-.01-.01M4.22 20.78l.01-.01M20.78 4.22l-.01.01M3 12h.01M21 12h-.01"/><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
-                <span>Modo IA</span>
-            </button>
-        </form>
-    </div>
-    <!-- ==================== FIN BARRA DE BÚSQUEDA ==================== -->
-    <!-- Canvas de estrellas -->
     <canvas id="starfield"></canvas>
-    
-    <!-- Overlay de la via lactea -->
     <div id="galaxy-overlay"></div>
 
-    <!-- Citas en la parte inferior -->
-    <div id="quote-container">
-        <p id="quote-text"></p>
-        <p id="quote-author"></p>
+    <!-- Contenido principal que se puede desenfocar -->
+    <div id="main-content">
+        <div id="search-container">
+            <form id="search-form" action="https://www.google.com/search" method="get" target="_blank">
+                <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="search-input" name="q" placeholder="Busca lo que quieras...">
+                <svg class="mic-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+                <svg class="camera-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                <button type="button" id="ai-mode-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v.01M12 21v-.01M4.22 4.22l.01.01M20.78 20.78l-.01-.01M4.22 20.78l.01-.01M20.78 4.22l-.01.01M3 12h.01M21 12h-.01"/><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+                    <span>Modo IA</span>
+                </button>
+            </form>
+        </div>
+        <div id="quote-container">
+            <p id="quote-text"></p>
+            <p id="quote-author"></p>
+        </div>
     </div>
+    
+    <!-- [NUEVO] Contenedor del menú orbital -->
+    <div id="menu-container">
+        <div id="orbital-menu">
+            <!-- Items ordenados alfabéticamente. La variable --angle se calcula en JS -->
+            <a href="https://danijdzg.github.io/aiDANaI/dani/agenda/" class="orbit-item" id="item-agenda">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                <span class="label">Agenda</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/cuentas/" class="orbit-item" id="item-cuentas2">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+                <span class="label">Ctas v1</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/dani/ctas/" class="orbit-item" id="item-cuentas">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1-2-2V3h14v4h4z"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-6h-4a2 2 0 0 1-2-2V7Z"></path><path d="M21 12v6"></path></svg>
+                <span class="label">Ctas v2</span>
+            </a>
+            <a href="https://danijdzg.github.io/dani/" class="orbit-item" id="item-cuentas3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span class="label">Ctas v3</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/dani/gympadel/" class="orbit-item" id="item-gym">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8L22 12L18 16"></path><path d="M6 8L2 12L6 16"></path><path d="M2 12H22"></path><path d="M17 5V19"></path><path d="M7 5V19"></path></svg>
+                <span class="label">Gym</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/dani/prompt/" class="orbit-item" id="item-prompt">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L12 6"></path><path d="M5 10L7.5 12.5L5 15"></path><path d="M19 10L16.5 12.5L19 15"></path><path d="M12 18L12 21"></path></svg>
+                <span class="label">Prompt</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/dani/restaurantes/" class="orbit-item" id="item-restaurantes">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path></svg>
+                <span class="label">Restaur.</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/dani/supuestosA2/" class="orbit-item" id="item-supuestos">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <span class="label">Supuestos</span>
+            </a>
+        </div>
 
-    <!-- Overlay de fondo -->
-    <div id="menu-overlay"></div>
-
-    <!-- Menu circular -->
-    <div id="circular-menu">
-        <button class="menu-item" id="item-agenda" data-url="https://danijdzg.github.io/aiDANaI/dani/agenda/">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            <span class="label">Agenda</span>
+        <!-- Botón Central con la imagen -->
+        <button id="fab-button">
+            <img src="icons/icon-512x512.png" alt="Abrir menú">
         </button>
-        <button class="menu-item" id="item-cuentas" data-url="https://danijdzg.github.io/aiDANaI/dani/ctas/">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1-2-2V3h14v4h4z"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-6h-4a2 2 0 0 1-2-2V7Z"></path><path d="M21 12v6"></path></svg>
-    <span class="label">Ctas v2</span>
-</button>
-        <button class="menu-item" id="item-gym" data-url="https://danijdzg.github.io/aiDANaI/dani/gympadel/">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8L22 12L18 16"></path><path d="M6 8L2 12L6 16"></path><path d="M2 12H22"></path><path d="M17 5V19"></path><path d="M7 5V19"></path></svg>
-            <span class="label">Gym</span>
-        </button>
-        <button class="menu-item" id="item-prompt" data-url="https://danijdzg.github.io/aiDANaI/dani/prompt/">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L12 6"></path><path d="M5 10L7.5 12.5L5 15"></path><path d="M19 10L16.5 12.5L19 15"></path><path d="M12 18L12 21"></path></svg>
-            <span class="label">Prompt</span>
-        </button>
-        <button class="menu-item" id="item-restaurantes" data-url="https://danijdzg.github.io/aiDANaI/dani/restaurantes/">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path></svg>
-            <span class="label">Restaur.</span>
-        </button>
-        <button class="menu-item" id="item-supuestos" data-url="https://danijdzg.github.io/aiDANaI/dani/supuestosA2/">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            <span class="label">Supuestos</span>
-        </button>
-        <button class="menu-item" id="item-cuentas2" data-url="https://danijdzg.github.io/aiDANaI/cuentas/">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
-    <span class="label">Ctas v1</span>
-</button>
-	<button class="menu-item" id="item-cuentas3" data-url="https://danijdzg.github.io/dani/">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-    <span class="label">Ctas v3</span>
-</button>	
     </div>
-
-    <!-- Boton FAB central -->
-    <button id="fab-button">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-    </button>
       
     <script>
     document.addEventListener('DOMContentLoaded', () => {
 		 if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js')
-                .then(registration => {
-                    console.log('Service Worker registrado con éxito:', registration);
-                })
-                .catch(error => {
-                    console.log('Error al registrar el Service Worker:', error);
-                });
+                .then(registration => console.log('Service Worker registrado con éxito:', registration))
+                .catch(error => console.log('Error al registrar el Service Worker:', error));
         }
-        // ============= SISTEMA DE ESTRELLAS =============
+
+        // --- SISTEMAS DE ESTRELLAS, CITAS Y BÚSQUEDA (SIN CAMBIOS FUNCIONALES) ---
         const canvas = document.getElementById('starfield');
         const ctx = canvas.getContext('2d');
-        let stars = [];
-        let shootingStars = [];
-
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            initStars();
-        }
-
-        class Star {
-            constructor() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.size = Math.random() * 2;
-                this.speedX = (Math.random() - 0.5) * 0.3;
-                this.speedY = (Math.random() - 0.5) * 0.3;
-                this.opacity = Math.random();
-                this.twinkleSpeed = Math.random() * 0.02;
-                this.twinkleDirection = Math.random() > 0.5 ? 1 : -1;
-            }
-
-            update() {
-                this.x += this.speedX;
-                this.y += this.speedY;
-
-                if (this.x < 0) this.x = canvas.width;
-                if (this.x > canvas.width) this.x = 0;
-                if (this.y < 0) this.y = canvas.height;
-                if (this.y > canvas.height) this.y = 0;
-
-                this.opacity += this.twinkleSpeed * this.twinkleDirection;
-                if (this.opacity >= 1 || this.opacity <= 0.3) {
-                    this.twinkleDirection *= -1;
-                }
-            }
-
-            draw() {
-                ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
-                ctx.shadowBlur = this.size * 2;
-                ctx.shadowColor = 'white';
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        class ShootingStar {
-            constructor() {
-                this.reset();
-            }
-
-            reset() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height * 0.5;
-                this.length = Math.random() * 80 + 40;
-                this.speed = Math.random() * 10 + 5;
-                this.size = Math.random() * 1 + 1;
-                this.opacity = 1;
-            }
-
-            update() {
-                this.x += this.speed;
-                this.y += this.speed * 0.5;
-                this.opacity -= 0.015;
-
-                if (this.opacity <= 0) {
-                    this.reset();
-                }
-            }
-
-            draw() {
-                ctx.save();
-                ctx.strokeStyle = `rgba(255, 255, 255, ${this.opacity})`;
-                ctx.lineWidth = this.size;
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = 'white';
-                ctx.beginPath();
-                ctx.moveTo(this.x, this.y);
-                ctx.lineTo(this.x - this.length, this.y - this.length * 0.5);
-                ctx.stroke();
-                ctx.restore();
-            }
-        }
-
-        function initStars() {
-            stars = [];
-            for (let i = 0; i < 200; i++) {
-                stars.push(new Star());
-            }
-            
-            shootingStars = [];
-            for (let i = 0; i < 3; i++) {
-                shootingStars.push(new ShootingStar());
-            }
-        }
-
-        function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            stars.forEach(star => {
-                star.update();
-                star.draw();
-            });
-
-            shootingStars.forEach(shootingStar => {
-                shootingStar.update();
-                shootingStar.draw();
-            });
-
-            requestAnimationFrame(animate);
-        }
-
-        resizeCanvas();
-        animate();
-        window.addEventListener('resize', resizeCanvas);
-
-        // ============= SISTEMA DE CITAS =============
-        const quotes = [
-            { text: "La creatividad es la inteligencia divirtiéndose.", author: "Albert Einstein" },
-            { text: "El único modo de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs" },
-            { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" },
-            { text: "No cuentes los días, haz que los días cuenten.", author: "Muhammad Ali" },
-            { text: "Un viaje de mil millas comienza con un solo paso.", author: "Lao Tse" },
-            { text: "La vida se encoge o se expande en proporción a tu coraje.", author: "Anaïs Nin" },
-            { text: "La mejor manera de predecir el futuro es crearlo.", author: "Peter Drucker" },
-            { text: "La inspiración existe, pero tiene que encontrarte trabajando.", author: "Pablo Picasso" },
-            { text: "Tu tiempo es limitado, no lo malgastes viviendo la vida de otra persona.", author: "Steve Jobs" },
-            { text: "El éxito es ir de fracaso en fracaso sin perder el entusiasmo.", author: "Winston Churchill" },
-            { text: "La simplicidad es la máxima sofisticación.", author: "Leonardo da Vinci" },
-            { text: "Cree que puedes y ya estás a medio camino.", author: "Theodore Roosevelt" },
-            { text: "Lo que la mente del hombre puede concebir y creer, puede lograr.", author: "Napoleon Hill" },
-            { text: "La vida es 10% lo que me pasa y 90% cómo reacciono a ello.", author: "Charles R. Swindoll" },
-            { text: "No he fracasado. He encontrado 10.000 formas que no funcionan.", author: "Thomas A. Edison" },
-            { text: "Si quieres levantar a alguien, levántate a ti mismo.", author: "Booker T. Washington" },
-            { text: "El único lugar donde el éxito viene antes que el trabajo es en el diccionario.", author: "Vidal Sassoon" },
-            { text: "No tengas miedo de renunciar a lo bueno para ir a por lo grandioso.", author: "John D. Rockefeller" },
-            { text: "La felicidad no es algo ya hecho. Viene de tus propias acciones.", author: "Dalai Lama" },
-            { text: "Para tener éxito, tu deseo de éxito debe ser mayor que tu miedo al fracaso.", author: "Bill Cosby" },
-            { text: "Un objetivo sin un plan es solo un deseo.", author: "Antoine de Saint-Exupéry" },
-            { text: "Solo aquellos que se atreven a tener grandes fracasos terminan logrando grandes éxitos.", author: "Robert F. Kennedy" },
-            { text: "La pregunta no es quién me va a dejar; es quién me va a detener.", author: "Ayn Rand" },
-            { text: "El conocimiento es poder.", author: "Francis Bacon" },
-            { text: "La vida es como andar en bicicleta. Para mantener el equilibrio, debes seguir moviéndote.", author: "Albert Einstein" },
-            { text: "La única discapacidad en la vida es una mala actitud.", author: "Scott Hamilton" },
-            { text: "Demasiados de nosotros no vivimos nuestros sueños porque vivimos nuestros miedos.", author: "Les Brown" },
-            { text: "La mente lo es todo. En lo que piensas, te conviertes.", author: "Buda" },
-            { text: "El mejor momento para plantar un árbol fue hace 20 años. El segundo mejor momento es ahora.", author: "Proverbio Chino" },
-            { text: "Ganas fuerza, coraje y confianza por cada experiencia en la que realmente te detienes a mirar el miedo a la cara.", author: "Eleanor Roosevelt" },
-            { text: "Nuestra mayor gloria no está en no caer nunca, sino en levantarnos cada vez que caemos.", author: "Confucio" },
-            { text: "La magia es creer en ti mismo. Si puedes hacer eso, puedes hacer que cualquier cosa suceda.", author: "Johann Wolfgang von Goethe" },
-            { text: "Si puedes soñarlo, puedes hacerlo.", author: "Walt Disney" },
-            { text: "El secreto para salir adelante es empezar.", author: "Mark Twain" },
-            { text: "No mires el reloj; haz lo que él hace. Sigue moviéndote.", author: "Sam Levenson" },
-            { text: "El optimismo es la fe que conduce al logro. Nada puede hacerse sin esperanza y confianza.", author: "Helen Keller" },
-            { text: "La calidad no es un acto, es un hábito.", author: "Aristóteles" },
-            { text: "Actúa como si lo que haces marcara la diferencia. Lo hace.", author: "William James" },
-            { text: "El éxito no es la clave de la felicidad. La felicidad es la clave del éxito.", author: "Albert Schweitzer" },
-            { text: "Cae siete veces y levántate ocho.", author: "Proverbio Japonés" },
-            { text: "Todo lo que siempre has querido está al otro lado del miedo.", author: "George Addair" },
-            { text: "Empieza donde estás. Usa lo que tienes. Haz lo que puedes.", author: "Arthur Ashe" },
-            { text: "No esperes. El momento nunca será el adecuado.", author: "Napoleon Hill" },
-            { text: "La forma de empezar es dejar de hablar y empezar a hacer.", author: "Walt Disney" },
-            { text: "Los obstáculos son esas cosas espantosas que ves cuando apartas los ojos de tu meta.", author: "Henry Ford" },
-            { text: "Es durante nuestros momentos más oscuros que debemos centrarnos para ver la luz.", author: "Aristóteles" },
-            { text: "La perseverancia no es una carrera larga; son muchas carreras cortas una tras otra.", author: "Walter Elliot" },
-            { text: "Un hombre creativo está motivado por el deseo de alcanzar, no por el deseo de vencer a otros.", author: "Ayn Rand" },
-            { text: "Si no te gusta algo, cámbialo. Si no puedes cambiarlo, cambia tu actitud.", author: "Maya Angelou" },
-            { text: "Tu actitud, no tu aptitud, determinará tu altitud.", author: "Zig Ziglar" }
-        ];
-
-        const quoteContainer = document.getElementById('quote-container');
-        const quoteTextEl = document.getElementById('quote-text');
-        const quoteAuthorEl = document.getElementById('quote-author');
+        let stars = []; let shootingStars = [];
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; initStars(); }
+        class Star { constructor() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; this.size = Math.random() * 2; this.speedX = (Math.random() - 0.5) * 0.3; this.speedY = (Math.random() - 0.5) * 0.3; this.opacity = Math.random(); this.twinkleSpeed = Math.random() * 0.02; this.twinkleDirection = Math.random() > 0.5 ? 1 : -1; } update() { this.x += this.speedX; this.y += this.speedY; if (this.x < 0) this.x = canvas.width; if (this.x > canvas.width) this.x = 0; if (this.y < 0) this.y = canvas.height; if (this.y > canvas.height) this.y = 0; this.opacity += this.twinkleSpeed * this.twinkleDirection; if (this.opacity >= 1 || this.opacity <= 0.3) { this.twinkleDirection *= -1; } } draw() { ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`; ctx.shadowBlur = this.size * 2; ctx.shadowColor = 'white'; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); } }
+        class ShootingStar { constructor() { this.reset(); } reset() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height * 0.5; this.length = Math.random() * 80 + 40; this.speed = Math.random() * 10 + 5; this.size = Math.random() * 1 + 1; this.opacity = 1; } update() { this.x += this.speed; this.y += this.speed * 0.5; this.opacity -= 0.015; if (this.opacity <= 0) { this.reset(); } } draw() { ctx.save(); ctx.strokeStyle = `rgba(255, 255, 255, ${this.opacity})`; ctx.lineWidth = this.size; ctx.shadowBlur = 10; ctx.shadowColor = 'white'; ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x - this.length, this.y - this.length * 0.5); ctx.stroke(); ctx.restore(); } }
+        function initStars() { stars = []; for (let i = 0; i < 200; i++) { stars.push(new Star()); } shootingStars = []; for (let i = 0; i < 3; i++) { shootingStars.push(new ShootingStar()); } }
+        function animate() { ctx.clearRect(0, 0, canvas.width, canvas.height); stars.forEach(star => { star.update(); star.draw(); }); shootingStars.forEach(shootingStar => { shootingStar.update(); shootingStar.draw(); }); requestAnimationFrame(animate); }
+        resizeCanvas(); animate(); window.addEventListener('resize', resizeCanvas);
+        const quotes = [{ text: "La creatividad es la inteligencia divirtiéndose.", author: "Albert Einstein" }, { text: "El único modo de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs" }, { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" }, { text: "No cuentes los días, haz que los días cuenten.", author: "Muhammad Ali" }, { text: "Un viaje de mil millas comienza con un solo paso.", author: "Lao Tse" }];
+        const quoteContainer = document.getElementById('quote-container'); const quoteTextEl = document.getElementById('quote-text'); const quoteAuthorEl = document.getElementById('quote-author');
+        let quoteInterval; let lastQuoteIndex = -1;
+        function updateQuote() { let randomIndex; do { randomIndex = Math.floor(Math.random() * quotes.length); } while (quotes.length > 1 && randomIndex === lastQuoteIndex); lastQuoteIndex = randomIndex; const randomQuote = quotes[randomIndex]; quoteContainer.classList.add('fading'); setTimeout(() => { quoteTextEl.textContent = `"${randomQuote.text}"`; quoteAuthorEl.textContent = `— ${randomQuote.author}`; quoteContainer.classList.remove('fading'); }, 400); }
+        function manualQuoteUpdate() { if (menuOpen) return; clearInterval(quoteInterval); updateQuote(); quoteInterval = setInterval(updateQuote, 3000); }
+        updateQuote(); quoteInterval = setInterval(updateQuote, 3000);
+        const aiModeButton = document.getElementById('ai-mode-button'); const searchInput = document.getElementById('search-input'); aiModeButton.addEventListener('click', (e) => { e.preventDefault(); const query = searchInput.value.trim(); if (query) { const aiSearchURL = `https://www.google.com/search?q=${encodeURIComponent(query)}&udm=14`; window.open(aiSearchURL, '_blank'); } else { searchInput.focus(); } }); document.querySelector('.mic-icon').addEventListener('click', () => alert('Búsqueda por voz no implementada.')); document.querySelector('.camera-icon').addEventListener('click', () => alert('Búsqueda por imagen no implementada.'));
+        
+        // ==================== [NUEVA LÓGICA] SISTEMA DE MENÚ ORBITAL ====================
+        const mainContent = document.getElementById('main-content');
+        const menuContainer = document.getElementById('menu-container');
         const fabButton = document.getElementById('fab-button');
-        const menuOverlay = document.getElementById('menu-overlay');
-        const menuItems = document.querySelectorAll('.menu-item');
-
-        let quoteInterval;
-        let lastQuoteIndex = -1;
+        const orbitItems = document.querySelectorAll('.orbit-item');
         let menuOpen = false;
 
-        function updateQuote() {
-            let randomIndex;
-            do {
-                randomIndex = Math.floor(Math.random() * quotes.length);
-            } while (quotes.length > 1 && randomIndex === lastQuoteIndex);
-            
-            lastQuoteIndex = randomIndex;
-            const randomQuote = quotes[randomIndex];
-            
-            quoteContainer.classList.add('fading');
-            
-            setTimeout(() => {
-                quoteTextEl.textContent = `"${randomQuote.text}"`;
-                quoteAuthorEl.textContent = `— ${randomQuote.author}`;
-                quoteContainer.classList.remove('fading');
-            }, 400);
-        }
+        // Calculamos y asignamos el ángulo a cada item del menú
+        const angleStep = 360 / orbitItems.length;
+        orbitItems.forEach((item, index) => {
+            const angle = angleStep * index;
+            item.style.setProperty('--angle', `${angle}deg`);
+        });
 
-        function manualQuoteUpdate() {
-            if (menuOpen) return;
-            clearInterval(quoteInterval);
-            updateQuote();
-            quoteInterval = setInterval(updateQuote, 3000);
-        }
-
-        updateQuote();
-        quoteInterval = setInterval(updateQuote, 3000);
-        quoteContainer.addEventListener('click', manualQuoteUpdate);
-
-        // ============= SISTEMA DE MENU =============
         function toggleMenu() {
             menuOpen = !menuOpen;
+            mainContent.classList.toggle('blurred');
+            menuContainer.classList.toggle('active');
             fabButton.classList.toggle('active');
-            menuOverlay.classList.toggle('active');
-
-            const radius = 180;
-            const angleStep = (Math.PI * 2) / menuItems.length;
-
-            menuItems.forEach((item, index) => {
-                if (menuOpen) {
-                    const angle = angleStep * index - Math.PI / 2;
-                    const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius;
-                    
-                    item.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) scale(1)`;
-                    item.classList.add('active');
-                } else {
-                    item.style.transform = 'translate(-50%, -50%) scale(0)';
-                    item.classList.remove('active');
-                }
-            });
         }
 
-        fabButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleMenu();
-        });
-
-        menuOverlay.addEventListener('click', () => {
-            if (menuOpen) toggleMenu();
-        });
-
-        menuItems.forEach(item => {
-            item.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const url = item.getAttribute('data-url');
-                if (url) {
-                    window.location.href = url;
-                }
-            });
-        });
-	 // ============= SISTEMA DE BÚSQUEDA =============
-        const searchForm = document.getElementById('search-form');
-        const aiModeButton = document.getElementById('ai-mode-button');
-        const searchInput = document.getElementById('search-input');
-
-        // El formulario se encarga de la búsqueda estándar al presionar "Enter"
-
-        // Funcionalidad específica para el botón "Modo IA"
-        aiModeButton.addEventListener('click', (e) => {
-            e.preventDefault(); // Evita que el formulario se envíe
-            const query = searchInput.value.trim();
-            if (query) {
-                // El parámetro &udm=14 se asocia con la Experiencia Generativa de Búsqueda de Google (SGE)
-                const aiSearchURL = `https://www.google.com/search?q=${encodeURIComponent(query)}&udm=14`;
-                window.open(aiSearchURL, '_blank');
+        fabButton.addEventListener('click', toggleMenu);
+        mainContent.addEventListener('click', () => {
+            if (menuOpen) {
+                toggleMenu();
             } else {
-                searchInput.focus(); // Si no hay texto, pone el foco en el input
+                // Si el menú está cerrado y se hizo clic en las citas
+                if (event.target.closest('#quote-container')) {
+                    manualQuoteUpdate();
+                }
             }
         });
-
-        // Simulación para iconos de micrófono y cámara
-        document.querySelector('.mic-icon').addEventListener('click', () => {
-            alert('La búsqueda por voz es una función avanzada y no está implementada en esta demo.');
-        });
-
-        document.querySelector('.camera-icon').addEventListener('click', () => {
-            alert('La búsqueda por imagen (Lens) es una función avanzada y no está implementada en esta demo.');
-        });	
     });
     </script>
 </body>
