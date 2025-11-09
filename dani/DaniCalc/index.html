@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
-    <title>DaniCalc Portarrollos</title>
+    <title>DaniCalc - El Referente</title>
     
-    <!-- PWA Manifest y Meta Tags -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="icon-192x192.png">
@@ -13,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
     
     <style>
@@ -21,155 +20,68 @@
             --bg-color: #000000;
             --primary-text: #ffffff;
             --secondary-text: #bebebe;
+            --accent-blue-highlight: #007aff;
+            --accent-green: #30e3ca; /* Color para el signo = */
             
-            --btn-dark-grey: #333333;
-            --btn-dark-grey-active: #737373;
-            --btn-light-grey: #a5a5a5;
-            --btn-light-grey-active: #d9d9d9;
-            --btn-light-grey-text: #000000;
-            --btn-orange: #ff9500;
-            --btn-orange-active: #fcc280;
-            --btn-orange-text-active: #ff9500;
-
+            --btn-dark-grey: #333333; --btn-dark-grey-active: #737373;
+            --btn-light-grey: #a5a5a5; --btn-light-grey-active: #d9d9d9; --btn-light-grey-text: #000000;
+            --btn-orange: #ff9500; --btn-orange-active: #fcc280; --btn-orange-text-active: #ff9500;
             --spacing: 14px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html { height: 100%; font-family: 'Poppins', -apple-system, sans-serif; }
-        body { height: 100%; width: 100%; overflow: hidden; color: var(--primary-text); background: var(--bg-color); }
-
-        /* === LA ESTRUCTURA PRINCIPAL: FLEXBOX AL RESCATE === */
-        .app-container {
-            width: 100%; height: 100%;
-            display: flex;
-            flex-direction: column; /* Apila el portarrollos encima del teclado */
-            background: var(--bg-color);
-        }
-
-        /* --- 1. ZONA DEL PORTARROLLOS (Pantalla y Historial) --- */
-        .paper-roll-container {
-            flex: 1; /* ¡CLAVE! Ocupa todo el espacio sobrante */
-            display: flex;
-            flex-direction: column;
-            padding: env(safe-area-inset-top) 25px 0 25px;
-            overflow: hidden; /* Evita que el contenido se desborde */
-        }
-
-        #history-list {
-            flex: 1;
-            list-style: none;
-            overflow-y: auto; /* Permite scroll */
-            display: flex;
-            flex-direction: column-reverse; /* ¡CLAVE! Muestra el último item abajo */
-            scrollbar-width: none; /* Oculta scrollbar */
-        }
+        body { height: 100vh; width: 100%; overflow: hidden; color: var(--primary-text); background: var(--bg-color); }
+        .app-container { width: 100%; height: 100%; display: flex; flex-direction: column; }
+        .paper-roll-container { flex: 1; display: flex; flex-direction: column; padding: env(safe-area-inset-top) 25px 0 25px; overflow: hidden; min-height: 0; }
+        #history-list { flex: 1; list-style: none; overflow-y: auto; display: flex; flex-direction: column-reverse; scrollbar-width: none; mask-image: linear-gradient(to top, black 85%, transparent 100%); }
         #history-list::-webkit-scrollbar { display: none; }
-        /* Efecto de difuminado para indicar que hay más historial arriba */
-        .paper-roll-container { mask-image: linear-gradient(to top, black 85%, transparent 100%); }
-        
-        #history-list li {
-            text-align: right;
-            padding: 10px 0;
-            border-bottom: 1px dotted #222;
-        }
-        #history-list .history-expression { color: var(--secondary-text); font-size: 1.1rem; }
-        #history-list .history-result { font-size: 2rem; font-weight: 500; }
-
-        .display-wrapper { padding: 15px 0; flex-shrink: 0; }
-        .main-display {
-            font-size: 3.5rem; font-weight: 300;
-            text-align: right; word-wrap: break-word; outline: none;
-            min-height: 50px;
-        }
+        #history-list li { text-align: right; padding: 12px 5px; cursor: pointer; border-bottom: 1px solid #1a1a1a; transition: background-color 0.2s; display: flex; justify-content: flex-end; align-items: center; }
+        #history-list li:hover { background-color: #111; }
+        .history-expression, .history-result { outline: none; transition: all 0.2s ease; }
+        .history-expression { color: var(--secondary-text); font-size: 1.1rem; }
+        .history-result { font-size: 2.1rem; font-weight: 500; }
+        .history-expression[contenteditable="true"] { background-color: #222; padding: 5px; border-radius: 5px; color: var(--primary-text); caret-color: var(--accent-blue-highlight); }
+        .equals-sign { color: var(--accent-green); font-size: 1.8rem; font-weight: 500; margin: 0 10px; }
+        .display-wrapper { padding: 15px 0 5px 0; border-bottom: 1px solid #444; }
+        .main-display { font-size: 4rem; font-weight: 300; text-align: right; word-wrap: break-word; outline: none; min-height: 55px; }
         .main-display:empty::before { content: "0"; }
-
-        /* --- 2. ZONA DE LA CALCULADORA (Teclado) --- */
-        .calculator {
-            flex-shrink: 0; /* No permite que se encoja */
-            height: 50vh; /* ¡CLAVE! Ocupa la mitad de la pantalla en móvil */
-            display: flex;
-            flex-direction: column;
-            padding: 0 var(--spacing) calc(var(--spacing) + env(safe-area-inset-bottom));
-            transition: all 0.3s ease-in-out;
-        }
-        .keypad {
-            flex-grow: 1; display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: repeat(5, 1fr);
-            gap: var(--spacing);
-        }
-        .keypad button {
-            border-radius: 50%; aspect-ratio: 1 / 1; border: none;
-            font-size: 1.8rem; font-weight: 500; cursor: pointer;
-            color: var(--primary-text);
-            transition: background-color 0.15s ease;
-        }
+        .calculator { flex-shrink: 0; padding: 0 var(--spacing) calc(var(--spacing) + env(safe-area-inset-bottom)); transition: all 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+        .keypad { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(5, 1fr); gap: var(--spacing); }
+        .keypad button { border-radius: 50%; aspect-ratio: 1 / 1; border: none; font-size: 1.8rem; font-weight: 500; cursor: pointer; color: var(--primary-text); transition: background-color 0.15s ease; }
         .keypad button:active { transition-duration: 0s; }
-        .keypad .number-key { background-color: var(--btn-dark-grey); }
-        .keypad .number-key:active, .keypad .number-key.active { background-color: var(--btn-dark-grey-active); }
-        .keypad .function { background-color: var(--btn-light-grey); color: var(--btn-light-grey-text); }
-        .keypad .function:active, .keypad .function.active { background-color: var(--btn-light-grey-active); }
-        .keypad .operator { background-color: var(--btn-orange); }
-        .keypad .operator:active, .keypad .operator.active { background-color: var(--btn-orange-active); color: var(--btn-orange); }
+        .keypad .number-key { background-color: var(--btn-dark-grey); } .keypad .number-key:active { background-color: var(--btn-dark-grey-active); }
+        .keypad .function { background-color: var(--btn-light-grey); color: var(--btn-light-grey-text); } .keypad .function:active { background-color: var(--btn-light-grey-active); }
+        .keypad .operator { background-color: var(--btn-orange); } .keypad .operator:active { background-color: var(--btn-orange-active); color: var(--btn-orange); }
         .keypad .zero { grid-column: span 2; border-radius: 50px; aspect-ratio: auto; text-align: left; padding-left: 30px; }
-
-        /* Botón para ocultar teclado, se posiciona en el portarrollos */
-        #toggle-keypad-btn { display: none; /* Oculto en móvil */ }
-
-        /* --- MODO DESKTOP Y PANTALLAS ANCHAS --- */
-        @media (min-width: 550px) {
-            body { padding: 20px; }
-            .app-container {
-                max-width: 400px; max-height: 850px;
-                border-radius: 40px;
-                box-shadow: 0 0 50px rgba(255, 255, 255, 0.1);
-            }
-            .paper-roll-container {
-                position: relative; /* Para posicionar el botón */
-            }
-            #toggle-keypad-btn {
-                display: block; position: absolute;
-                bottom: 10px; left: 50%;
-                transform: translateX(-50%);
-                background: #111; border: 1px solid #333;
-                color: #888; padding: 5px 15px;
-                border-radius: 20px; cursor: pointer;
-                font-size: 0.8rem; opacity: 0.7; transition: all 0.2s;
-            }
-            #toggle-keypad-btn:hover { opacity: 1; color: #fff; border-color: #555; }
-            
-            /* Lógica de ocultar teclado */
-            .app-container.keypad-hidden .calculator {
-                height: 0; padding: 0; opacity: 0; visibility: hidden;
-            }
-            .app-container.keypad-hidden #toggle-keypad-btn {
-                background: var(--btn-orange); color: var(--btn-light-grey-text);
-                opacity: 1; border-color: transparent;
-            }
-             .main-display[contenteditable="true"] {
-                caret-color: var(--btn-orange);
-                background: #111; padding: 10px; border-radius: 10px;
-             }
+        #toggle-keypad-btn { display: none; }
+        @media (min-width: 600px) and (min-height: 700px) {
+            body { padding: 20px; display: flex; justify-content: center; align-items: center; }
+            .app-container { max-width: 420px; height: 95vh; max-height: 900px; border-radius: 40px; box-shadow: 0 0 60px rgba(255, 255, 255, 0.1); }
+            .paper-roll-container { position: relative; }
+            #toggle-keypad-btn { display: block; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #1a1a1a; border: 1px solid #444; color: #aaa; padding: 5px 15px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; opacity: 0.8; transition: all 0.2s; }
+            #toggle-keypad-btn:hover { opacity: 1; color: #fff; }
+            .app-container.keypad-hidden .calculator { transform: translateY(100%); opacity: 0; visibility: hidden; height: 0; padding: 0; margin: 0; }
+            .app-container.keypad-hidden #toggle-keypad-btn { background: var(--btn-orange); color: #000; opacity: 1; border-color: transparent; }
+            .main-display[contenteditable="true"] { caret-color: var(--btn-orange); background: #111; padding: 10px; border-radius: 10px; }
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <!-- Contenedor Superior: Portarrollos + Pantalla -->
         <div class="paper-roll-container">
-            <ul id="history-list">
-                <!-- Las operaciones se añaden aquí con JS -->
-            </ul>
+            <ul id="history-list"></ul>
             <div class="display-wrapper">
                 <div class="main-display" id="main-display" contenteditable="false"></div>
             </div>
-            <button id="toggle-keypad-btn">Mostrar/Ocultar Teclado</button>
+            <button id="toggle-keypad-btn">Ocultar Teclado</button>
         </div>
         
-        <!-- Contenedor Inferior: Teclado -->
         <div class="calculator">
-            <div class="keypad">
-                <button class="function" id="clear-btn" data-key="Escape" onclick="handleClear()">AC</button><button class="function" data-key="(" onclick="appendSymbol('(')">(</button><button class="function" data-key=")" onclick="appendSymbol(')')">)</button><button class="operator" data-key="/" onclick="appendSymbol('÷')">÷</button><button class="number-key" data-key="7" onclick="appendSymbol('7')">7</button><button class="number-key" data-key="8" onclick="appendSymbol('8')">8</button><button class="number-key" data-key="9" onclick="appendSymbol('9')">9</button><button class="operator" data-key="*" onclick="appendSymbol('×')">×</button><button class="number-key" data-key="4" onclick="appendSymbol('4')">4</button><button class="number-key" data-key="5" onclick="appendSymbol('5')">5</button><button class="number-key" data-key="6" onclick="appendSymbol('6')">6</button><button class="operator" data-key="-" onclick="appendSymbol('-')">−</button><button class="number-key" data-key="1" onclick="appendSymbol('1')">1</button><button class="number-key" data-key="2" onclick="appendSymbol('2')">2</button><button class="number-key" data-key="3" onclick="appendSymbol('3')">3</button><button class="operator" data-key="+" onclick="appendSymbol('+')">+</button><button class="number-key zero" data-key="0" onclick="appendSymbol('0')">0</button><button class="number-key" data-key="." onclick="appendSymbol('.')">.</button><button class="operator" data-key="Enter" onclick="calculate()">=</button>
+             <div class="keypad">
+                <button class="function" id="clear-btn" data-key="Escape" onclick="handleClear()">AC</button><button class="function" data-key="(" onclick="appendSymbol('(')">(</button><button class="function" data-key=")" onclick="appendSymbol(')')">)</button><button class="operator" data-key="/" onclick="appendSymbol('÷')">÷</button><button class="number-key" data-key="7" onclick="appendSymbol('7')">7</button><button class="number-key" data-key="8" onclick="appendSymbol('8')">8</button><button class="number-key" data-key="9" onclick="appendSymbol('9')">9</button><button class="operator" data-key="*" onclick="appendSymbol('×')">×</button><button class="number-key" data-key="4" onclick="appendSymbol('4')">4</button><button class="number-key" data-key="5" onclick="appendSymbol('5')">5</button><button class="number-key" data-key="6" onclick="appendSymbol('6')">6</button><button class="operator" data-key="-" onclick="appendSymbol('-')">−</button><button class="number-key" data-key="1" onclick="appendSymbol('1')">1</button><button class="number-key" data-key="2" onclick="appendSymbol('2')">2</button><button class="number-key" data-key="3" onclick="appendSymbol('3')">3</button><button class="operator" data-key="+" onclick="appendSymbol('+')">+</button><button class="number-key zero" data-key="0" onclick="appendSymbol('0')">0</button>
+                <button class="number-key" data-key="." onclick="appendSymbol('.')">.</button>
+                <button class="operator" data-key="Enter" onclick="calculate()">=</button>
             </div>
         </div>
     </div>
@@ -182,102 +94,140 @@
         const toggleKeypadBtn = document.getElementById('toggle-keypad-btn');
         const clearBtn = document.getElementById('clear-btn');
         
-        // App State
         let expression = '';
-        let calculationDone = false;
-        
-        // --- LOGIC ---
-        function handleClear() {
-            expression = '';
-            calculationDone = false;
-            updateDisplay();
+        let history = []; 
+
+        // --- LÓGICA DE VISUALIZACIÓN DE NÚMEROS CORREGIDA ---
+
+        function formatNumber(numStr) {
+            if (typeof numStr !== 'string') numStr = String(numStr);
+            if (!numStr || numStr === 'Error' || numStr === 'Expresión no válida') return numStr;
+            let [integerPart, decimalPart] = numStr.split('.');
+            integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            if (decimalPart !== undefined) {
+                return `${integerPart},${decimalPart}`;
+            }
+            return integerPart;
         }
 
-        function appendSymbol(symbol) {
-            const isOperator = ['+', '-', '×', '÷'].includes(symbol);
-            if (calculationDone && !isOperator && symbol !== '.') expression = '';
-            if (calculationDone && isOperator) expression = getResultFromDisplay();
-            calculationDone = false;
-            
-            if (expression.length > 20) return; // Limitar longitud
-            if (expression === '0' && symbol === '0') return;
-            if (expression === '0' && symbol !== '.') expression = '';
+        // NUEVA FUNCIÓN INTELIGENTE PARA MOSTRAR LA EXPRESIÓN COMPLETA
+        function formatExpressionForDisplay(expr) {
+            if (!expr) return '0';
+            // Esta expresión regular separa la cadena en números y operadores
+            const parts = expr.split(/([+\-×÷()])/);
+            const formattedParts = parts.map(part => {
+                // Si la parte es un número (no un operador), la formateamos
+                if (!isNaN(parseFloat(part)) && isFinite(part)) {
+                    return formatNumber(part);
+                }
+                // Si es un operador o un paréntesis, lo dejamos como está
+                return part;
+            });
+            return formattedParts.join('');
+        }
+        
+        function deformatNumber(numStr) { return numStr.replace(/\./g, '').replace(/,/g, '.'); }
 
+        // --- CORE CALCULATOR LOGIC ---
+        function handleClear() { expression = ''; updateDisplay(); }
+        function backspace() { expression = expression.slice(0, -1); updateDisplay(); }
+
+        function appendSymbol(symbol) {
+            if (symbol === '.') {
+                const segments = expression.split(/[+\-×÷()]/);
+                const currentNumberSegment = segments[segments.length - 1];
+                if (currentNumberSegment.includes('.')) { return; }
+            }
+            if (expression.length >= 24) return;
             expression += symbol;
             updateDisplay();
         }
 
-        function getResultFromDisplay() {
-             return mainDisplay.innerText.replace(/,/g, '.'); // Convierte comas de vuelta a puntos
-        }
-        
         function updateDisplay() {
-            mainDisplay.innerText = expression === '' ? '' : expression.replace(/\./g, ',');
+            mainDisplay.innerText = formatExpressionForDisplay(expression);
             clearBtn.innerText = expression === '' ? 'AC' : 'C';
         }
         
-        function calculate() {
-            let exprToEval = mainDisplay.isContentEditable ? mainDisplay.innerText.replace(/,/g, '.') : expression;
-            if (exprToEval.trim() === '') return;
+        function evaluateExpression(expr) {
             try {
-                const evalExpr = exprToEval.replace(/×/g, '*').replace(/÷/g, '/');
-                if (/[^0-9\.\+\-\*\/(\)\s]/.test(evalExpr)) throw new Error("Invalid");
-                const result = new Function('return ' + evalExpr)();
-                if (isNaN(result) || !isFinite(result)) throw new Error("Error");
+                const sanitizedExpr = expr.replace(/×/g, '*').replace(/÷/g, '/');
+                if (/[^0-9\.\+\-\*\/(\)\s]/.test(sanitizedExpr)) return { error: "Expresión no válida" };
+                const result = new Function('return ' + sanitizedExpr)();
+                if (isNaN(result) || !isFinite(result)) return { error: "Error" };
+                return { result: parseFloat(result.toPrecision(15)) };
+            } catch { return { error: "Error de Sintaxis" }; }
+        }
 
-                let formattedResult = parseFloat(result.toPrecision(15));
-                
-                addToHistory(exprToEval.replace(/\*/g, '×').replace(/\//g, '÷'), formattedResult);
-                
-                expression = formattedResult.toString();
-                mainDisplay.innerText = expression.replace(/\./g, ',');
-                calculationDone = true;
+        function calculate() {
+            if (expression.trim() === '' || /[+\-×÷]$/.test(expression)) return;
+            const { result, error } = evaluateExpression(expression);
+            if (error) { mainDisplay.innerText = error; expression = ''; }
+            else { addToHistory(expression, result); expression = result.toString(); updateDisplay(); }
+        }
 
-            } catch (error) {
-                mainDisplay.innerText = 'Error';
-                expression = '';
+        // --- INTERACTIVE PAPER ROLL ---
+        function addToHistory(expr, res) {
+            const newEntry = { id: Date.now(), expression: expr.replace(/\*/g, '×').replace(/\//g, '÷'), result: res };
+            history.unshift(newEntry);
+            if (history.length > 50) history.pop();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            history.forEach(entry => {
+                const li = document.createElement('li');
+                li.dataset.id = entry.id;
+                li.innerHTML = `
+                    <div class="history-expression">${formatExpressionForDisplay(entry.expression)}</div>
+                    <span class="equals-sign">=</span>
+                    <div class="history-result">${formatNumber(entry.result.toString())}</div>
+                `;
+                historyList.appendChild(li);
+            });
+        }
+        
+        historyList.addEventListener('click', (e) => { if (e.target.classList.contains('history-expression')) enableEditMode(e.target); });
+
+        function enableEditMode(element) {
+            element.contentEditable = true; element.focus();
+            document.execCommand('selectAll', false, null);
+            const finishEditing = (e) => {
+                if (e.type === 'keydown' && e.key !== 'Enter') return;
+                e.preventDefault(); element.contentEditable = false;
+                recalculateFromHistory(element);
+                element.removeEventListener('blur', finishEditing); element.removeEventListener('keydown', finishEditing);
+            };
+            element.addEventListener('blur', finishEditing); element.addEventListener('keydown', finishEditing);
+        }
+        
+        function recalculateFromHistory(element) {
+            const li = element.closest('li'); const entryId = Number(li.dataset.id);
+            const newExpression = deformatNumber(element.innerText);
+            const { result, error } = evaluateExpression(newExpression);
+            const historyEntry = history.find(h => h.id === entryId);
+
+            if (error) { li.querySelector('.history-result').innerText = error; if (historyEntry) { historyEntry.result = error; historyEntry.expression = newExpression; } }
+            else {
+                li.querySelector('.history-result').innerText = formatNumber(result.toString());
+                expression = result.toString(); updateDisplay();
+                if (historyEntry) { historyEntry.expression = newExpression; historyEntry.result = result; }
             }
         }
-        
-        function addToHistory(expr, result) {
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <span class="history-expression">${expr}</span>
-                <span class="history-result">${result.toString().replace(/\./g, ',')}</span>
-            `;
-            historyList.prepend(li); // Añade el nuevo item al principio (que es abajo visualmente)
-            if (historyList.children.length > 50) historyList.lastChild.remove();
-        }
-        
-        // --- EVENT HANDLERS ---
-        toggleKeypadBtn.addEventListener('click', () => {
-            const isHidden = appContainer.classList.toggle('keypad-hidden');
-            mainDisplay.contentEditable = isHidden;
-            if (isHidden) mainDisplay.focus();
+
+        // --- DESKTOP AND KEYBOARD ---
+        toggleKeypadBtn.addEventListener('click', () => { 
+            appContainer.classList.toggle('keypad-hidden');
+            mainDisplay.contentEditable = appContainer.classList.contains('keypad-hidden'); 
         });
-
-        mainDisplay.addEventListener('input', () => { if (mainDisplay.isContentEditable) expression = mainDisplay.innerText.replace(/,/g, '.'); updateDisplay(); });
-
-        document.addEventListener('keydown', (event) => {
-            const { key } = event;
-            if (mainDisplay.isContentEditable && key !== 'Enter' && key !== 'Escape') return;
-            event.preventDefault();
-            
-            if (key === 'Enter') {
-                calculate();
-            } else if (key === 'Escape') {
-                handleClear();
-            } else if (key === 'Backspace') {
-                expression = expression.slice(0, -1);
-                updateDisplay();
-            } else {
-                const button = document.querySelector(`button[data-key="${key}"]`);
-                if (button) {
-                    button.click();
-                    button.classList.add('active');
-                    setTimeout(() => button.classList.remove('active'), 100);
-                }
-            }
+        
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement.contentEditable === 'true' && e.key !== 'Enter') return;
+            e.preventDefault();
+            if (e.key === 'Backspace') { backspace(); return; }
+            if (e.key === ',') { e.key = '.'; } // Permitir la coma del teclado numérico
+            const button = document.querySelector(`button[data-key="${e.key}"]`);
+            if (button) button.click();
         });
         
         updateDisplay();
