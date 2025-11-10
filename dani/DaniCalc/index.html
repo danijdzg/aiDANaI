@@ -17,18 +17,14 @@
     
     <style>
         :root {
-            /* PALETA DE COLORES REVISADA */
             --bg-color: #000000;
             --primary-text: #ffffff;
             --secondary-text: #bebebe;
             --accent-green-roll: #30e3ca; 
             
-            /* Colores de Botones */
             --btn-dark-grey: #333333; --btn-dark-grey-active: #737373;
             --btn-light-grey: #a5a5a5; --btn-light-grey-active: #d9d9d9; --btn-light-grey-text: #000000;
-            --btn-orange: #ff9500; --btn-orange-active: #fcc280; --btn-orange-text-active: #ff9500;
-
-            /* === NUEVOS COLORES PARA BOTONES === */
+            --btn-orange: #ff9500; --btn-orange-active: #fcc280;
             --btn-blue: #007aff; --btn-blue-active: #5ac8fa;
             --btn-green: #28c745; --btn-green-active: #20a038;
             
@@ -39,24 +35,36 @@
         html { height: 100%; font-family: 'Poppins', -apple-system, sans-serif; }
         body { height: 100vh; width: 100%; overflow: hidden; color: var(--primary-text); background: var(--bg-color); }
         .app-container { width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .paper-roll-container { flex: 1; display: flex; flex-direction: column; padding: env(safe-area-inset-top) 25px 0 25px; overflow: hidden; min-height: 0; }
+        
+        /* === 1. PORTARROLLOS - AHORA CON POSICIÓN RELATIVA SIEMPRE === */
+        .paper-roll-container { 
+            flex: 1; /* Ocupa todo el espacio sobrante */
+            display: flex; 
+            flex-direction: column; 
+            padding: env(safe-area-inset-top) 25px 50px 25px; /* Más espacio abajo para el botón */
+            overflow: hidden; 
+            min-height: 0;
+            position: relative; /* Clave para posicionar el botón toggle */
+        }
+
         #history-list { flex: 1; list-style: none; overflow-y: auto; display: flex; flex-direction: column-reverse; scrollbar-width: none; mask-image: linear-gradient(to top, black 85%, transparent 100%); }
         #history-list::-webkit-scrollbar { display: none; }
-        #history-list li { text-align: right; padding: 12px 5px; cursor: pointer; border-bottom: 1px solid #1a1a1a; transition: background-color 0.2s; display: flex; justify-content: flex-end; align-items: center; }
-        #history-list li:hover { background-color: #111; }
-        .history-expression, .history-result { outline: none; transition: all 0.2s ease; }
+        #history-list li { text-align: right; padding: 12px 5px; cursor: pointer; border-bottom: 1px solid #1a1a1a; display: flex; justify-content: flex-end; align-items: center; }
+        .history-expression, .history-result { outline: none; }
         .history-expression { color: var(--secondary-text); font-size: 1.1rem; }
         .history-result { font-size: 2.1rem; font-weight: 500; }
         .history-expression[contenteditable="true"] { background-color: #222; padding: 5px; border-radius: 5px; color: var(--primary-text); }
         .equals-sign { color: var(--accent-green-roll); font-size: 1.8rem; font-weight: 500; margin: 0 10px; }
+
         .display-wrapper { padding: 15px 0 5px 0; border-bottom: 1px solid #444; }
         .main-display { font-size: 4rem; font-weight: 300; text-align: right; word-wrap: break-word; outline: none; min-height: 55px; }
         .main-display:empty::before { content: "0"; }
 
-        /* === LAYOUT DEL TECLADO REVISADO === */
+        /* === 2. TECLADO - REGLA UNIVERSAL DE 1/3 DE ALTURA === */
         .calculator {
             flex-shrink: 0; 
-            height: 50vh; /* Ocupa el 50% de la altura en móvil */
+            height: 33.33vh; /* ¡CLAVE! Ocupa 1/3 de la altura, SIEMPRE */
+            min-height: 250px; /* Altura mínima para asegurar visibilidad en pantallas muy anchas */
             padding: 0 var(--spacing) calc(var(--spacing) + env(safe-area-inset-bottom)); 
             display: flex;
             flex-direction: column;
@@ -70,32 +78,42 @@
         .keypad .function { background-color: var(--btn-light-grey); color: var(--btn-light-grey-text); } .keypad .function:active { background-color: var(--btn-light-grey-active); }
         .keypad .operator { background-color: var(--btn-orange); } .keypad .operator:active { background-color: var(--btn-orange-active); color: var(--btn-orange); }
         .keypad .zero { grid-column: span 2; border-radius: 50px; aspect-ratio: auto; text-align: left; padding-left: 30px; }
-        
-        /* === APLICANDO LOS NUEVOS COLORES === */
-        .keypad .clear { background-color: var(--btn-blue); }
-        .keypad .clear:active { background-color: var(--btn-blue-active); }
+        .keypad .clear { background-color: var(--btn-blue); } .keypad .clear:active { background-color: var(--btn-blue-active); }
+        .keypad .equals { background-color: var(--btn-green); } .keypad .equals:active { background-color: var(--btn-green-active); }
 
-        .keypad .equals { background-color: var(--btn-green); }
-        .keypad .equals:active { background-color: var(--btn-green-active); }
+        /* === 3. BOTÓN TOGGLE - SIEMPRE VISIBLE Y FUNCIONAL === */
+        #toggle-keypad-btn { 
+            display: block; /* Siempre visible, sin media queries */
+            position: absolute; 
+            bottom: 10px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            background: #1a1a1a; 
+            border: 1px solid #444; 
+            color: #aaa; 
+            padding: 5px 15px; 
+            border-radius: 20px; 
+            cursor: pointer; 
+            font-size: 0.8rem; 
+            opacity: 0.8; 
+            transition: all 0.2s; 
+            z-index: 10;
+        }
+        #toggle-keypad-btn:hover { opacity: 1; color: #fff; }
 
-        #toggle-keypad-btn { display: none; }
-        
+        /* Lógica de ocultación ahora es global, no depende del tamaño de pantalla */
+        .app-container.keypad-hidden .calculator { 
+            transform: translateY(100%); 
+            opacity: 0; 
+            visibility: hidden; 
+            height: 0; min-height: 0;
+            padding: 0; margin: 0;
+        }
+        .app-container.keypad-hidden #toggle-keypad-btn { background: var(--btn-orange); color: #000; opacity: 1; border-color: transparent; }
+
         @media (min-width: 600px) and (min-height: 700px) {
             body { padding: 20px; display: flex; justify-content: center; align-items: center; }
             .app-container { max-width: 420px; height: 95vh; max-height: 900px; border-radius: 40px; box-shadow: 0 0 60px rgba(255, 255, 255, 0.1); }
-            
-            /* === MÁXIMA ALTURA EN PC === */
-            .calculator {
-                height: auto; /* Dejamos que el contenido determine la altura */
-                max-height: 50%; /* Pero NUNCA más de la mitad de su contenedor */
-            }
-
-            .paper-roll-container { position: relative; }
-            #toggle-keypad-btn { display: block; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #1a1a1a; border: 1px solid #444; color: #aaa; padding: 5px 15px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; opacity: 0.8; transition: all 0.2s; }
-            #toggle-keypad-btn:hover { opacity: 1; color: #fff; }
-            .app-container.keypad-hidden .calculator { transform: translateY(100%); opacity: 0; visibility: hidden; height: 0; padding: 0; margin: 0; max-height: 0; }
-            .app-container.keypad-hidden #toggle-keypad-btn { background: var(--btn-orange); color: #000; opacity: 1; border-color: transparent; }
-            .main-display[contenteditable="true"] { background: #111; padding: 10px; border-radius: 10px; }
         }
     </style>
 </head>
@@ -106,12 +124,11 @@
             <div class="display-wrapper">
                 <div class="main-display" id="main-display" contenteditable="false"></div>
             </div>
-            <button id="toggle-keypad-btn">Ocultar Teclado</button>
+            <button id="toggle-keypad-btn">Ocultar/Mostrar Teclado</button>
         </div>
         
         <div class="calculator">
              <div class="keypad">
-                <!-- Se han añadido las clases "clear" y "equals" -->
                 <button class="function clear" id="clear-btn" data-key="Escape" onclick="handleClear()">AC</button><button class="function" data-key="(" onclick="appendSymbol('(')">(</button><button class="function" data-key=")" onclick="appendSymbol(')')">)</button><button class="operator" data-key="/" onclick="appendSymbol('÷')">÷</button><button class="number-key" data-key="7" onclick="appendSymbol('7')">7</button><button class="number-key" data-key="8" onclick="appendSymbol('8')">8</button><button class="number-key" data-key="9" onclick="appendSymbol('9')">9</button><button class="operator" data-key="*" onclick="appendSymbol('×')">×</button><button class="number-key" data-key="4" onclick="appendSymbol('4')">4</button><button class="number-key" data-key="5" onclick="appendSymbol('5')">5</button><button class="number-key" data-key="6" onclick="appendSymbol('6')">6</button><button class="operator" data-key="-" onclick="appendSymbol('-')">−</button><button class="number-key" data-key="1" onclick="appendSymbol('1')">1</button><button class="number-key" data-key="2" onclick="appendSymbol('2')">2</button><button class="number-key" data-key="3" onclick="appendSymbol('3')">3</button><button class="operator" data-key="+" onclick="appendSymbol('+')">+</button><button class="number-key zero" data-key="0" onclick="appendSymbol('0')">0</button>
                 <button class="number-key" data-key="." onclick="appendSymbol('.')">.</button>
                 <button class="equals" data-key="Enter" onclick="calculate()">=</button>
@@ -119,16 +136,15 @@
         </div>
     </div>
 
-    <!-- El JavaScript no necesita cambios lógicos, ya que todo se maneja por CSS -->
+    <!-- El JavaScript sigue siendo el mismo, la lógica de visibilidad la controla el CSS -->
     <script>
-        // DOM Elements
         const mainDisplay = document.getElementById('main-display');
         const historyList = document.getElementById('history-list');
         const appContainer = document.querySelector('.app-container');
         const toggleKeypadBtn = document.getElementById('toggle-keypad-btn');
         const clearBtn = document.getElementById('clear-btn');
         let expression = '';
-        let history = []; 
+        let history = [];
         function formatNumber(numStr) { if (typeof numStr !== 'string') numStr = String(numStr); if (!numStr || numStr === 'Error' || numStr === 'Expresión no válida') return numStr; let [integerPart, decimalPart] = numStr.split('.'); integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); if (decimalPart !== undefined) { return `${integerPart},${decimalPart}`; } return integerPart; }
         function formatExpressionForDisplay(expr) { if (!expr) return '0'; const parts = expr.split(/([+\-×÷()])/); const formattedParts = parts.map(part => { if (!isNaN(parseFloat(part)) && isFinite(part) && part !== '') { return formatNumber(part); } return part; }); return formattedParts.join(''); }
         function deformatNumber(numStr) { return numStr.replace(/\./g, '').replace(/,/g, '.'); }
@@ -143,7 +159,7 @@
         historyList.addEventListener('click', (e) => { if (e.target.classList.contains('history-expression')) enableEditMode(e.target); });
         function enableEditMode(element) { element.contentEditable = true; element.focus(); document.execCommand('selectAll', false, null); const finishEditing = (e) => { if (e.type === 'keydown' && e.key !== 'Enter') return; e.preventDefault(); element.contentEditable = false; recalculateFromHistory(element); element.removeEventListener('blur', finishEditing); element.removeEventListener('keydown', finishEditing); }; element.addEventListener('blur', finishEditing); element.addEventListener('keydown', finishEditing); }
         function recalculateFromHistory(element) { const li = element.closest('li'); const entryId = Number(li.dataset.id); const newExpression = deformatNumber(element.innerText); const { result, error } = evaluateExpression(newExpression); const historyEntry = history.find(h => h.id === entryId); if (error) { li.querySelector('.history-result').innerText = error; if (historyEntry) { historyEntry.result = error; historyEntry.expression = newExpression; } } else { li.querySelector('.history-result').innerText = formatNumber(result.toString()); expression = result.toString(); updateDisplay(); if (historyEntry) { historyEntry.expression = newExpression; historyEntry.result = result; } } }
-        toggleKeypadBtn.addEventListener('click', () => { appContainer.classList.toggle('keypad-hidden'); mainDisplay.contentEditable = appContainer.classList.contains('keypad-hidden'); });
+        toggleKeypadBtn.addEventListener('click', () => { appContainer.classList.toggle('keypad-hidden'); mainDisplay.contentEditable = appContainer.classList.contains('keypad-hidden'); if(mainDisplay.contentEditable) { mainDisplay.focus(); } });
         document.addEventListener('keydown', (e) => { if (document.activeElement.contentEditable === 'true' && e.key !== 'Enter') return; e.preventDefault(); if (e.key === 'Backspace') { backspace(); return; } let key = e.key; if (key === ',') { key = '.'; } const button = document.querySelector(`button[data-key="${key}"]`); if (button) button.click(); });
         updateDisplay();
     </script>
