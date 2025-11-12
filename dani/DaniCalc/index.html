@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
-    <title>aiDANaI-Calculadora</title>
+    <title>aiDANaI Calculadora</title>
     
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#02041b">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F5F7FA">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#02041b">
     <link rel="apple-touch-icon" href="icon-192x192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,256 +17,176 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
     
     <style>
+        /* --- INICIO: PALETA DE COLORES Y VARIABLES GLOBALES --- */
         :root {
-            --bg-color: #02041b;
-            --primary-text: #E6F1FF;
-            --secondary-text: #5b6883;
-            --neon-green: #00FF9D;
-            --neon-purple: #00AFFF;   /* AZUL BRILLANTE */
-            --neon-orange: #FF1744;   /* ROJO BRILLANTE */
-            --neon-cyan: #00CCFF;
-            --border-radius: 24px;
-            --spacing: clamp(12px, 3vw, 18px);
+            --bg-color: #02041b; --primary-text: #E6F1FF; --secondary-text: #5b6883; --keypad-bg: rgba(0, 0, 0, 0.2); --button-bg: rgba(14, 25, 45, 0.4); --button-border: rgba(0, 204, 255, 0.25); --keypad-border: rgba(0, 204, 255, 0.2); --shadow-hover: 0 0 15px rgba(0, 204, 255, 0.5); --backdrop-blur: 80px; --neon-green: #00FF9D; --neon-purple: #00AFFF; --neon-orange: #FF1744; --neon-cyan: #00CCFF; --border-radius: 24px; --spacing: clamp(12px, 3vw, 18px); --keypad-height: 50%;
         }
 
-        /* ============================================================== */
-        /* ===          INICIO: NUEVOS EFECTOS VISUALES               === */
-        /* ============================================================== */
+        body[data-theme="light"] {
+            --bg-color: #F5F7FA; --primary-text: #101828; --secondary-text: #667085; --keypad-bg: rgba(255, 255, 255, 0.3); --button-bg: rgba(255, 255, 255, 0.5); --button-border: rgba(0, 0, 0, 0.1); --keypad-border: rgba(0, 0, 0, 0.1); --shadow-hover: 0 5px 15px rgba(0, 0, 0, 0.1); --backdrop-blur: 60px; --neon-green: #00A896; --neon-purple: #4338CA; --neon-orange: #EF4444; --neon-cyan: #00CCFF;
+        }
+        /* --- FIN: PALETA DE COLORES --- */
         
-        @keyframes resultPulse {
-            0% { text-shadow: 0 0 5px var(--bg-color), 0 0 12px var(--neon-green), 0 0 25px var(--neon-green); transform: scale(1.03); }
-            100% { text-shadow: 0 0 4px var(--bg-color), 0 0 10px var(--neon-green); transform: scale(1); }
-        }
+        /* --- ANIMACIONES --- */
+        @keyframes resultPulse { 0% { transform: scale(1.03); } 100% { transform: scale(1); } }
+        @keyframes cosmicVortex { 0% { transform: rotate(0deg) scale(1.5); } 100% { transform: rotate(360deg) scale(1.5); } }
+        @keyframes sleekGrayPulse { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes animated-border { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes powerOn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         
-        @keyframes cosmicVortex {
-            0% { transform: rotate(0deg) scale(1.5); }
-            100% { transform: rotate(360deg) scale(1.5); }
-        }
-
-        /* Animación para el borde de neón del contenedor */
-        @keyframes animated-border {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        /* Animación de "encendido" para la calculadora */
-        @keyframes powerOn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
-        /* ============================================================== */
-        /* ===           FIN: NUEVOS EFECTOS VISUALES                 === */
-        /* ============================================================== */
-        
+        /* --- ESTILOS BASE --- */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html { height: 100%; font-family: 'Poppins', sans-serif; }
         
         body {
-            height: 100vh; width: 100vw;
-            background-color: var(--bg-color);
-            overflow: hidden;
-            color: var(--primary-text);
+            height: 100vh; width: 100vw; background-color: var(--bg-color); overflow: hidden; color: var(--primary-text); transition: background-color 0.4s ease, color 0.4s ease;
         }
 
+        /* --- FONDOS ANIMADOS --- */
+        .animated-background {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200vw; height: 200vh; opacity: 0; transition: opacity 0.8s ease-in-out; z-index: -1;
+        }
         #background-vortex {
-            position: fixed; top: 50%; left: 50%;
-            width: 150vmax; height: 150vmax;
-            background: radial-gradient(ellipse at center, rgba(13, 33, 86, 0.4) 0%, rgba(2, 4, 27, 0) 60%);
-            animation: cosmicVortex 90s linear infinite;
+            background: radial-gradient(ellipse at center, rgba(13, 33, 86, 0.4) 0%, rgba(2, 4, 27, 0) 60%); animation: cosmicVortex 90s linear infinite;
         }
-        
+        #background-sleek-gray {
+            background: linear-gradient(45deg, #E2E8F0, #FFFFFF, #E2E8F0); background-size: 200% 200%; animation: sleekGrayPulse 40s ease infinite;
+        }
+        body[data-theme="dark"] #background-vortex,
+        body[data-theme="light"] #background-sleek-gray {
+            opacity: 1;
+        }
+
+        /* --- CONTENEDOR PRINCIPAL --- */
         .app-container { 
-            position: relative; z-index: 1;
-            width: 100%; height: 100%; 
-            display: flex; flex-direction: column; 
-            backdrop-filter: blur(80px); -webkit-backdrop-filter: blur(80px);
-            /* MODIFICACIÓN: Animación de "encendido" aplicada */
-            animation: powerOn 0.6s ease-out;
+            position: relative; z-index: 1; width: 100%; height: 100%; display: flex; flex-direction: column; backdrop-filter: blur(var(--backdrop-blur)); -webkit-backdrop-filter: blur(var(--backdrop-blur)); animation: powerOn 0.6s ease-out; transition: backdrop-filter 0.4s ease;
         }
-
-        /* ============================================================== */
-        /* ===          INICIO: NUEVOS EFECTOS VISUALES               === */
-        /* ============================================================== */
-        
-        /* Efecto de líneas de escaneo (Scanlines) */
         .app-container::after {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: repeating-linear-gradient(
-                0deg,
-                rgba(0, 204, 255, 0.05),
-                rgba(0, 204, 255, 0.05) 1px,
-                transparent 1px,
-                transparent 3px
-            );
-            opacity: 0.5;
-            pointer-events: none; /* Para que no interfiera con los clics */
-            z-index: 2;
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: repeating-linear-gradient(0deg, rgba(0, 204, 255, 0.05), rgba(0, 204, 255, 0.05) 1px, transparent 1px, transparent 3px); opacity: 0.5; pointer-events: none; z-index: 2;
         }
-
-        /* ============================================================== */
-        /* ===           FIN: NUEVOS EFECTOS VISUALES                 === */
-        /* ============================================================== */
+        body[data-theme="light"] .app-container::after { display: none; }
         
-        .paper-roll-container {
-            height: 50%;
-            display: flex; flex-direction: column; 
-            padding: env(safe-area-inset-top) var(--spacing) 0 var(--spacing); 
-            overflow: hidden;
+        /* --- INICIO: ENCABEZADO CON ICONOS EN LAS ESQUINAS --- */
+        .app-header {
+            position: absolute; top: 0; left: 0; right: 0;
+            padding: env(safe-area-inset-top) var(--spacing) 10px var(--spacing);
+            z-index: 10;
+            display: grid;
+            grid-template-columns: auto 1fr auto; /* 3 columnas: [icono izq] [título flexible] [icono der] */
+            align-items: center;
         }
+        .app-title {
+            grid-column: 2; /* Coloca el título en la columna central */
+            text-align: center; /* Centra el texto dentro de su columna */
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--secondary-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        /* Posicionamos los botones directamente en la rejilla */
+        #keypad-toggle-btn { grid-column: 1; }
+        #theme-toggle-btn { grid-column: 3; }
+        /* --- FIN: ENCABEZADO --- */
 
+        /* --- ANIMACIÓN DE ICONOS --- */
+        .control-btn {
+            background: none; border: none; cursor: pointer; padding: 8px; color: var(--secondary-text); width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+        }
+        .control-btn svg { transition: transform 0.3s ease, color 0.3s ease; }
+        .control-btn:hover svg { color: var(--primary-text); }
+        .control-btn:active svg { transform: scale(0.85); }
+
+        .icon-wrapper { position: relative; width: 24px; height: 24px; }
+        .icon-wrapper svg {
+            position: absolute; top: 0; left: 0; width: 24px; height: 24px; transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        #icon-sun { opacity: 1; transform: rotate(0deg) scale(1); }
+        #icon-moon { opacity: 0; transform: rotate(90deg) scale(0); }
+        body[data-theme="light"] #icon-sun { opacity: 0; transform: rotate(-90deg) scale(0); }
+        body[data-theme="light"] #icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
+
+        /* --- HISTORIAL Y PANTALLA --- */
+        .paper-roll-container {
+            flex: 1; min-height: 0; display: flex; flex-direction: column; 
+            padding: calc(env(safe-area-inset-top) + 70px) var(--spacing) 0 var(--spacing); 
+            overflow: hidden; transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
         #history-list {
-            flex: 1; list-style: none; overflow-y: auto;
-            display: flex; flex-direction: column-reverse; 
-            scrollbar-width: none;
-            -webkit-mask-image: linear-gradient(to top, black 75%, transparent 100%);
+            flex: 1; list-style: none; overflow-y: auto; display: flex; flex-direction: column-reverse; scrollbar-width: none; -webkit-mask-image: linear-gradient(to top, black 75%, transparent 100%); position: relative;
         }
         #history-list::-webkit-scrollbar { display: none; }
-        
         #history-list li {
-            text-align: right; padding: 8px 12px; margin-bottom: 8px; cursor: pointer;
-            border-radius: 14px; transition: background-color 0.2s, transform 0.2s;
+            text-align: right; padding: 8px 12px; margin-bottom: 8px; cursor: pointer; border-radius: 14px; transition: background-color 0.2s, transform 0.2s;
         }
-        #history-list li:hover { background: rgba(255, 255, 255, 0.05); transform: translateX(-5px); }
-
+        #history-list li:hover { background: rgba(0, 0, 0, 0.05); transform: translateX(-5px); }
+        body[data-theme="dark"] #history-list li:hover { background: rgba(255, 255, 255, 0.05); }
         .history-expression { color: var(--secondary-text); font-size: 1rem; }
         .history-result { font-size: 1.8rem; font-weight: 500; }
-        
+        #history-list:empty::before {
+            content: "El historial de cálculos aparecerá aquí"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--secondary-text); font-size: 0.9rem; text-align: center; width: 80%; line-height: 1.4;
+        }
         .display-wrapper {
-            padding-bottom: var(--spacing); display: flex;
-            flex-direction: column; justify-content: flex-end;
-            min-height: 100px;
+            padding-bottom: var(--spacing); display: flex; flex-direction: column; justify-content: flex-end; min-height: 100px;
         }
-        
         .main-display {
-            font-size: clamp(2.0rem, 11vw, 3.4rem); 
-            font-weight: 300; text-align: right; 
-            word-wrap: break-word; word-break: break-all;
-            color: var(--neon-green);
-            text-shadow: 0 0 4px var(--bg-color), 0 0 10px var(--neon-green);
-            line-height: 1.1;
-            transition: font-size 0.2s ease-out;
+            font-size: 3.4rem; font-weight: 300; text-align: right; white-space: nowrap; overflow: hidden; color: var(--neon-green); line-height: 1.1; transition: none; text-shadow: 0 0 4px var(--bg-color), 0 0 10px var(--neon-green);
         }
-        .main-display:empty::before { content: "0"; color: var(--secondary-text); text-shadow: none; }
+        body[data-theme="light"] .main-display { text-shadow: none; }
+        .main-display:empty::before { content: "0"; color: var(--secondary-text); text-shadow: none; font-size: 3.4rem !important; }
         .main-display.result-pulse { animation: resultPulse 0.6s ease-out; }
 
+        /* --- TECLADO --- */
         .calculator {
-            height: 50%;
-            padding: var(--spacing) var(--spacing) calc(var(--spacing) + env(safe-area-inset-bottom));
-            background: rgba(0, 0, 0, 0.2);
-            border-top: 1px solid rgba(0, 204, 255, 0.2);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            height: var(--keypad-height); padding: var(--spacing) var(--spacing) calc(var(--spacing) + env(safe-area-inset-bottom)); background: var(--keypad-bg); border-top: 1px solid var(--keypad-border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s ease, border-color 0.4s ease, background-color 0.4s ease; overflow: hidden;
         }
-        
-        .keypad { 
-            height: 100%; display: grid; 
-            grid-template-columns: repeat(4, 1fr); 
-            grid-template-rows: repeat(5, 1fr); 
-            gap: var(--spacing);
-        }
-
+        .keypad-hidden .calculator { height: 0; padding-top: 0; padding-bottom: 0; border-top-color: transparent; }
+        .keypad { height: 100%; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(5, 1fr); gap: var(--spacing); }
         .keypad button {
-            border-radius: var(--border-radius); 
-            font-size: 1.9rem; font-weight: 400; 
-            cursor: pointer; background: rgba(14, 25, 45, 0.4);
-            border: 1px solid rgba(0, 204, 255, 0.25); color: var(--primary-text);
-            /* MODIFICACIÓN: Transiciones más completas para los nuevos efectos */
-            transition: transform 0.1s ease-out, background-color 0.2s ease-out, box-shadow 0.2s ease-out;
-            display: flex; align-items: center; justify-content: center;
+            border-radius: var(--border-radius); font-size: 1.9rem; font-weight: 400; cursor: pointer; background: var(--button-bg); border: 1px solid var(--button-border); color: var(--primary-text); transition: transform 0.1s ease-out, background-color 0.2s ease-out, box-shadow 0.2s ease-out; display: flex; align-items: center; justify-content: center;
         }
+        .keypad button:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+        .keypad button:active, .keypad button.key-press { transform: scale(0.92) translateY(0); }
+        .keypad .function { color: var(--neon-purple); }
+        .keypad .operator { color: var(--neon-orange); font-size: 2.3rem; }
+        .keypad .equals { grid-column: span 2; background: rgba(0, 255, 157, 0.2); border: 1px solid var(--neon-green); color: #fff; font-size: 2.8rem; font-weight: 600; }
+        body[data-theme="dark"] .keypad .equals { text-shadow: 0 0 15px #fff; box-shadow: 0 0 15px rgba(0, 255, 157, 0.5), 0 0 25px rgba(0, 255, 157, 0.3) inset; }
+        body[data-theme="dark"] .keypad .equals:hover { box-shadow: 0 0 25px rgba(0, 255, 157, 0.8), 0 0 40px rgba(0, 255, 157, 0.5) inset; }
+        body[data-theme="light"] .keypad .equals { background: var(--neon-green); color: var(--bg-color); }
+        .keypad .equals:active, .keypad .equals.key-press { transform: scale(0.95); background: var(--neon-green) !important; color: var(--bg-color) !important; text-shadow: none !important; box-shadow: 0 0 30px var(--neon-green), 0 0 50px var(--neon-green) !important; }
         
-        /* ============================================================== */
-        /* ===          INICIO: NUEVOS EFECTOS VISUALES               === */
-        /* ============================================================== */
-
-        /* Efecto de resplandor y elevación al pasar el ratón */
-        .keypad button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 0 15px rgba(0, 204, 255, 0.5);
-        }
-
-        /* ============================================================== */
-        /* ===           FIN: NUEVOS EFECTOS VISUALES                 === */
-        /* ============================================================== */
-
-        .keypad button:active,
-        .keypad button.key-press { 
-            transform: scale(0.92) translateY(0); /* Ajuste para que la animación de hover no interfiera con el clic */
-        }
-        .keypad .function { color: var(--neon-purple); border-color: rgba(157, 0, 255, 0.3); }
-        .keypad .function:hover { box-shadow: 0 0 15px rgba(0, 175, 255, 0.6); }
-
-        .keypad .operator { color: var(--neon-orange); font-size: 2.3rem; border-color: rgba(255, 95, 0, 0.3); }
-        .keypad .operator:hover { box-shadow: 0 0 15px rgba(255, 23, 68, 0.6); }
-        
-        .keypad .equals {
-            grid-column: span 2;
-            background: rgba(0, 255, 157, 0.2);
-            border: 1px solid var(--neon-green); color: #fff;
-            font-size: 2.8rem; font-weight: 600; text-shadow: 0 0 15px #fff;
-            box-shadow: 0 0 15px rgba(0, 255, 157, 0.5), 0 0 25px rgba(0, 255, 157, 0.3) inset;
-        }
-
-        .keypad .equals:hover {
-             box-shadow: 0 0 25px rgba(0, 255, 157, 0.8), 0 0 40px rgba(0, 255, 157, 0.5) inset;
-        }
-
-        .keypad .equals:active,
-        .keypad .equals.key-press { 
-            transform: scale(0.95); background: var(--neon-green) !important;
-            color: var(--bg-color) !important; text-shadow: none !important;
-            box-shadow: 0 0 30px var(--neon-green), 0 0 50px var(--neon-green) !important; 
-        }
-        
+        /* --- ESTILOS DESKTOP --- */
         @media (min-width: 450px) {
             body { display: flex; justify-content: center; align-items: center; }
-            .app-container {
-                max-width: 400px; max-height: 850px; 
-                width: 100%; height: 95vh;
-                border-radius: 50px; overflow: hidden;
-                /* MODIFICACIÓN: Se elimina el borde estático para reemplazarlo por el animado */
-                /* border: 1px solid rgba(0, 204, 255, 0.25); */
-                box-shadow: 0 0 80px rgba(0, 50, 100, 0.3);
-                position: relative;
-            }
-
-            /* ============================================================== */
-            /* ===          INICIO: NUEVOS EFECTOS VISUALES               === */
-            /* ============================================================== */
-
-            /* Estilos para el borde de neón animado */
-            .app-container::before {
-                content: '';
-                position: absolute;
-                top: 0; left: 0; right: 0; bottom: 0;
-                border-radius: 50px;
-                padding: 2px;
-                background: linear-gradient(120deg, var(--neon-cyan), var(--neon-purple), var(--neon-cyan));
-                background-size: 300% 300%;
-                -webkit-mask: 
-                    linear-gradient(#fff 0 0) content-box, 
-                    linear-gradient(#fff 0 0);
-                -webkit-mask-composite: destination-out;
-                mask-composite: exclude;
-                animation: animated-border 8s ease-in-out infinite;
-                z-index: 0;
-            }
-            
-            /* ============================================================== */
-            /* ===           FIN: NUEVOS EFECTOS VISUALES                 === */
-            /* ============================================================== */
+            .app-container { max-width: 400px; max-height: 850px; width: 100%; height: 95vh; border-radius: 50px; overflow: hidden; box-shadow: 0 0 80px rgba(0, 50, 100, 0.3); position: relative; }
+            .app-container::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 50px; padding: 2px; background: linear-gradient(120deg, var(--neon-cyan), var(--neon-purple), var(--neon-cyan)); background-size: 300% 300%; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: destination-out; mask-composite: exclude; animation: animated-border 8s ease-in-out infinite; z-index: 0; }
         }
     </style>
 </head>
 <body>
 
-    <div id="background-vortex"></div>
+    <div class="animated-background" id="background-vortex"></div>
+    <div class="animated-background" id="background-sleek-gray"></div>
+    
+    <audio id="click-sound" src="https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-zapsplat/zapsplat_multimedia_button_click_fast_short_002_79285.mp3" preload="auto"></audio>
 
-    <div class="app-container">
+    <div class="app-container" id="app-container">
+        
+        <header class="app-header">
+            <!-- Los elementos se colocan en orden visual: Izquierda, Centro, Derecha -->
+            <button id="keypad-toggle-btn" class="control-btn" aria-label="Ocultar/mostrar teclado">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" ry="2"></rect><line x1="7" y1="9" x2="7.01" y2="9"></line><line x1="11" y1="9" x2="11.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line><line x1="7" y1="13" x2="7.01" y2="13"></line><line x1="11" y1="13" x2="11.01" y2="13"></line><line x1="15" y1="13" x2="15.01" y2="13"></line><line x1="7" y1="17" x2="12" y2="17"></line></svg>
+            </button>
+            <div class="app-title">aiDANaI Calculadora</div>
+            <button id="theme-toggle-btn" class="control-btn" aria-label="Cambiar tema">
+                <div class="icon-wrapper">
+                    <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                    <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                </div>
+            </button>
+        </header>
+
         <div class="paper-roll-container">
+            <!-- El resto del HTML no necesita cambios -->
             <ul id="history-list"></ul>
             <div class="display-wrapper">
                 <div class="main-display" id="main-display"></div>
@@ -275,155 +196,135 @@
         <div class="calculator">
              <div class="keypad">
                 <button class="function" id="clear-btn" data-key="Escape">AC</button>
-                <button class="function" data-key="Backspace">⌫</button>
+                <button class="function" data-key="Backspace" id="backspace-btn">⌫</button>
                 <button class="function" data-key="%">%</button>
                 <button class="operator" data-key="/">÷</button>
-                
-                <button data-key="7">7</button>
-                <button data-key="8">8</button>
-                <button data-key="9">9</button>
+                <button data-key="7">7</button> <button data-key="8">8</button> <button data-key="9">9</button>
                 <button class="operator" data-key="*">×</button>
-                
-                <button data-key="4">4</button>
-                <button data-key="5">5</button>
-                <button data-key="6">6</button>
+                <button data-key="4">4</button> <button data-key="5">5</button> <button data-key="6">6</button>
                 <button class="operator" data-key="-">−</button>
-                
-                <button data-key="1">1</button>
-                <button data-key="2">2</button>
-                <button data-key="3">3</button>
+                <button data-key="1">1</button> <button data-key="2">2</button> <button data-key="3">3</button>
                 <button class="operator" data-key="+">+</button>
-                
-                <button data-key="0">0</button>
-                <button data-key=".">,</button>
+                <button data-key="0">0</button> <button data-key=",">,</button>
                 <button class="equals" data-key="Enter">=</button>
             </div>
         </div>
     </div>
 
     <script>
+        // El JavaScript no necesita cambios para este ajuste de layout.
+        const body = document.body;
+        const appContainer = document.getElementById('app-container');
         const mainDisplay = document.getElementById('main-display');
         const historyList = document.getElementById('history-list');
         const keypad = document.querySelector('.keypad');
-        const clearBtn = document.getElementById('clear-btn');
+        const backspaceBtn = document.getElementById('backspace-btn');
+        const clickSound = document.getElementById('click-sound');
+        const themeToggleBtn = document.getElementById('theme-toggle-btn');
+        const keypadToggleBtn = document.getElementById('keypad-toggle-btn');
         
         let expression = '';
         let history = [];
         let justCalculated = false;
+        let longPressTimer;
+        const LONG_PRESS_DURATION = 600; 
 
+        function playClickSound() {
+            clickSound.currentTime = 0;
+            clickSound.play().catch(e => {});
+        }
         function hapticFeedback() {
-            // Vibración desactivada
-            // if (navigator.vibrate) navigator.vibrate(20);
+            playClickSound();
+            if (navigator.vibrate) navigator.vibrate(20);
         }
         
+        function adjustFontSize() {
+            const maxFontSize = 3.4, minFontSize = 1.2, step = 0.1;
+            mainDisplay.style.fontSize = `${maxFontSize}rem`;
+            let currentSize = maxFontSize;
+            while (mainDisplay.scrollWidth > mainDisplay.clientWidth && currentSize > minFontSize) {
+                currentSize -= step;
+                mainDisplay.style.fontSize = `${currentSize}rem`;
+            }
+        }
         function formatNumberWithSeparators(value) {
             if (!value) return value;
-            if (isNaN(parseFloat(value)) && value.length > 1) {
-                 return value.replace(/\./g, ',');
-            }
-        
+            if (isNaN(parseFloat(value)) && value.length > 1) return value.replace(/\./g, ',');
             let parts = String(value).split('.');
-            let integerPart = parts[0];
-            let decimalPart = parts.length > 1 ? parts[1] : '';
-        
-            integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        
-            return decimalPart ? `${integerPart},${decimalPart}` : integerPart;
+            let integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return parts.length > 1 ? `${integerPart},${parts[1]}` : integerPart;
         }
-
         function updateDisplay() {
-            let displayValue = formatExpressionForDisplay(expression);
-            const parts = displayValue.split(/([+\-×÷])/);
-            const formattedParts = parts.map(part => {
-                if (!isNaN(part) && part.trim() !== '') {
-                    return formatNumberWithSeparators(part);
-                }
-                return part;
-            });
+            let displayValue = String(expression).replace(/\*/g, '×').replace(/\//g, '÷');
+            const parts = displayValue.split(/([+\-×÷%])/);
+            const formattedParts = parts.map(part => (!isNaN(part) && part.trim() !== '') ? formatNumberWithSeparators(part) : part);
             mainDisplay.innerText = formattedParts.join('');
+            adjustFontSize();
         }
-        
-        function formatExpressionForDisplay(expr) {
-            return String(expr).replace(/\*/g, '×').replace(/\//g, '÷');
-        }
-
         function appendSymbol(symbol) {
             hapticFeedback();
-            if (justCalculated && '0123456789'.includes(symbol)) {
-                expression = '';
-            }
+            if (justCalculated && '0123456789.'.includes(symbol)) expression = '';
             justCalculated = false;
-
-            if (["Error", "Error de Sintaxis", "Expresión no válida"].includes(expression)) {
-                expression = '';
-            }
-
+            if (["Error", "Error de Sintaxis", "Expresión no válida"].includes(expression)) expression = '';
             if (symbol === '.') {
                 const segments = expression.split(/[+\-*/]/);
                 if (segments.pop().includes('.')) return;
             }
-            expression += symbol === ',' ? '.' : symbol;
+            expression += symbol;
             updateDisplay();
         }
-
         function backspace() {
-            hapticFeedback();
             if (expression === '' || justCalculated) return;
             expression = String(expression).slice(0, -1);
             justCalculated = false;
             updateDisplay();
         }
-
         function handleClear() {
             hapticFeedback();
-            if (clearBtn.innerText === 'AC') {
+            if (expression === '') {
                 history = [];
                 renderHistory();
+            } else {
+                expression = '';
+                justCalculated = false;
+                updateDisplay();
             }
-            expression = '';
-            justCalculated = false;
-            updateDisplay();
         }
-
         function calculate() { 
             hapticFeedback();
-            const currentExpr = String(expression).trim();
-            if (currentExpr === '' || /[+\-×÷.]$/.test(currentExpr)) return;
-            const exprForEval = currentExpr.replace(/%/g, '/100');
+            if (expression === '' || /[+\-*/.]$/.test(expression)) return;
+            let exprForEval = String(expression).replace(/,/g, '.').replace(/%/g, '/100');
             const { result, error } = evaluateExpression(exprForEval);
-
             if (error) {
                 expression = error; 
             } else {
-                addToHistory(currentExpr, result); 
+                addToHistory(expression, result); 
                 expression = String(result);
                 justCalculated = true;
             }
             updateDisplay();
             mainDisplay.classList.add('result-pulse');
         }
-
         function evaluateExpression(expr) {
             try {
                 const sanitizedExpr = expr.replace(/×/g, '*').replace(/÷/g, '/');
-                if (/[^0-9.\+\-\*\/()\s%]/.test(sanitizedExpr)) return { error: "Expresión no válida" };
+                if (/[^0-9.\+\-\*\/()\s]/.test(sanitizedExpr)) return { error: "Expresión no válida" };
+                if (/\/\s*0(?!\.)/.test(sanitizedExpr)) return { error: "División por cero" };
                 const result = new Function('return ' + sanitizedExpr)();
                 if (isNaN(result) || !isFinite(result)) return { error: "Error" };
-                return { result: parseFloat(result.toPrecision(12)) };
+                return { result: parseFloat(result.toPrecision(14)) };
             } catch { return { error: "Error de Sintaxis" }; }
         }
-
         function addToHistory(expr, res) { 
             history.unshift({ id: Date.now(), expression: expr, result: res }); 
             if (history.length > 50) history.pop(); 
             renderHistory(); 
         }
-
         function renderHistory() { 
             historyList.innerHTML = ''; 
             history.forEach(entry => { 
                 const li = document.createElement('li');
-                const formattedExpr = formatExpressionForDisplay(entry.expression);
+                const formattedExpr = String(entry.expression).replace(/\*/g, '×').replace(/\//g, '÷');
                 const formattedResult = formatNumberWithSeparators(String(entry.result));
                 li.innerHTML = `<div class="history-expression">${formattedExpr}=</div><div class="history-result">${formattedResult}</div>`; 
                 li.addEventListener('click', () => recallFromHistory(entry.id)); 
@@ -431,50 +332,76 @@
             });
             if (history.length > 0) historyList.scrollTop = 0;
         }
-
         function recallFromHistory(id) { 
             const entry = history.find(e => e.id === id); 
             if (entry) { 
-                hapticFeedback();
-                expression = String(entry.result); 
-                justCalculated = true;
-                updateDisplay(); 
+                hapticFeedback(); expression = String(entry.result); 
+                justCalculated = true; updateDisplay(); 
             }
+        }
+        
+        function toggleKeypad() { appContainer.classList.toggle('keypad-hidden'); }
+        function toggleTheme() {
+            const newTheme = body.dataset.theme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('calculator-theme', newTheme);
+        }
+        function applyInitialTheme() {
+            const savedTheme = localStorage.getItem('calculator-theme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+            body.setAttribute('data-theme', initialTheme);
         }
 
         mainDisplay.addEventListener('animationend', () => mainDisplay.classList.remove('result-pulse'));
-        
         keypad.addEventListener('click', (e) => {
             const button = e.target.closest('button');
             if (!button) return;
-            
             const key = button.dataset.key;
-            if (key) {
-                switch(key) {
-                    case 'Enter': calculate(); break;
-                    case 'Escape': handleClear(); break;
-                    case 'Backspace': backspace(); break;
-                    default: appendSymbol(key); break;
-                }
+            if (!key) return;
+            switch(key) {
+                case 'Enter': calculate(); break;
+                case 'Escape': handleClear(); break;
+                case 'Backspace': hapticFeedback(); backspace(); break;
+                default: appendSymbol(key === ',' ? '.' : key); break;
             }
         });
 
+        function startPress(e) {
+            clearTimeout(longPressTimer);
+            longPressTimer = setTimeout(() => {
+                if(navigator.vibrate) navigator.vibrate(50); 
+                expression = ''; updateDisplay();
+            }, LONG_PRESS_DURATION);
+        }
+        function endPress() { clearTimeout(longPressTimer); }
+        
+        backspaceBtn.addEventListener('mousedown', startPress);
+        backspaceBtn.addEventListener('mouseup', endPress);
+        backspaceBtn.addEventListener('mouseleave', endPress);
+        backspaceBtn.addEventListener('touchstart', startPress, { passive: true });
+        backspaceBtn.addEventListener('touchend', endPress);
+
         document.addEventListener('keydown', (e) => {
-            e.preventDefault();
-            const button = document.querySelector(`button[data-key="${e.key}"]`);
-            if (button) {
-                button.click();
-                button.classList.add('key-press');
-                setTimeout(() => button.classList.remove('key-press'), 150);
-            } else if (e.key === 'c' || e.key === 'C') {
-                const clearButton = document.getElementById('clear-btn');
-                clearButton.click();
-                clearButton.classList.add('key-press');
-                setTimeout(() => clearButton.classList.remove('key-press'), 150);
+            if (e.altKey && e.key.toLowerCase() === 'z') { e.preventDefault(); toggleKeypad(); return; }
+            const keyMap = { ',': ',', 'Delete': 'Escape', 'Backspace': 'Backspace', 'Enter': 'Enter', '%': '%', '/': '/', '*': '*', '-': '-', '+': '+', '.': ','};
+            const mappedKey = keyMap[e.key] || (isFinite(e.key) ? e.key : null);
+            if (mappedKey) {
+                 const button = document.querySelector(`button[data-key="${mappedKey}"]`);
+                 if(button) {
+                    e.preventDefault(); button.click();
+                    button.classList.add('key-press');
+                    setTimeout(() => button.classList.remove('key-press'), 150);
+                 }
             }
         });
-        
+
+        themeToggleBtn.addEventListener('click', toggleTheme);
+        keypadToggleBtn.addEventListener('click', toggleKeypad);
+
+        applyInitialTheme();
         updateDisplay();
+        renderHistory();
     </script>
 </body>
 </html>
