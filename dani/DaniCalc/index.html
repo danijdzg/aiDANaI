@@ -12,317 +12,331 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Lexend:wght@300;400;500&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Lexend:wght@300;400;500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     
     <style>
         :root { 
-            /* CAMBIO 1: Altura del teclado reducida a aprox 1/3 de la pantalla */
-            --keypad-height: 36%; 
-            /* Espaciado reducido para que los botones quepan bien en el espacio pequeño */
-            --spacing: 10px; 
-            
             --neon-red: #FF1744;
             --neon-blue: #0088FF;
             --neon-green: #00E676;
         }
-        
+
         /* =========================================
-           TEMA 1: DARK PREMIUM (Conservado)
+           ESTRUCTURA DEL LAYOUT (CRÍTICO)
+           ========================================= */
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; outline: none; }
+        
+        html, body { 
+            height: 100dvh; /* Altura dinámica real */
+            width: 100vw; 
+            font-family: 'Poppins', sans-serif; 
+            overflow: hidden; 
+            transition: background 0.4s ease;
+        }
+
+        /* Contenedor Principal Flex */
+        .app-container { 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            flex-direction: column; 
+            background-color: var(--bg-color);
+        }
+
+        /* 1. ZONA SUPERIOR (HEADER + PAPEL) -> Ocupa 2/3 (flex: 2) */
+        .upper-section {
+            flex: 2; /* El doble de espacio que el teclado */
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* Permite encogerse si es necesario */
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 2. ZONA INFERIOR (TECLADO) -> Ocupa 1/3 (flex: 1) */
+        .calculator {
+            flex: 1; /* Una parte del espacio total */
+            width: 100%;
+            background: var(--keypad-bg);
+            border-radius: 30px 30px 0 0;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
+            z-index: 10;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            transition: transform 0.4s ease, opacity 0.4s;
+            padding: 10px;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* GRID DEL TECLADO: MATEMÁTICAMENTE PERFECTO */
+        .keypad {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            /* 4 columnas iguales */
+            grid-template-columns: repeat(4, 1fr); 
+            /* 5 filas que se reparten el 100% de la altura disponible (1/3 de pantalla) */
+            grid-template-rows: repeat(5, 1fr); 
+            /* Centrar el contenido en cada celda */
+            align-items: center;
+            justify-items: center;
+            gap: 4px; /* Espacio mínimo para maximizar botones */
+        }
+
+        /* ESTILO BOTÓN BASE */
+        .btn {
+            position: relative;
+            border: none;
+            font-family: 'Poppins', sans-serif;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.1s;
+            
+            /* LA CLAVE: Altura relativa a la celda, ancho automático para ser círculo */
+            height: 85%; 
+            aspect-ratio: 1 / 1; /* Obliga a ser cuadrado/circular */
+            border-radius: 50%;
+            
+            /* Fuente dinámica basada en la altura de la pantalla para no cortarse */
+            font-size: clamp(1rem, 3.5vh, 1.8rem);
+            font-weight: 500;
+        }
+
+        /* Botón Enter (Doble ancho) */
+        .btn[data-key="Enter"] {
+            grid-column: span 2;
+            width: 90%; /* Ocupa casi todo el ancho de 2 celdas */
+            aspect-ratio: auto; /* Rompe la regla cuadrada */
+            height: 80%; /* Un poco menos alto para estilizar la píldora */
+            border-radius: 50px;
+        }
+
+        /* Estados Activos */
+        .btn:active, .btn.active-state {
+            transform: scale(0.92);
+            filter: brightness(1.1);
+        }
+
+        /* =========================================
+           TEMA 1: DARK PREMIUM
            ========================================= */
         body[data-theme="dark"] { 
-            --bg-color: #0a0a0f; 
-            background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 50%, #000000 100%);
-            --primary-text: #FFFFFF; 
-            --secondary-text: #8a8a9f; 
-            --header-bg: rgba(10, 10, 15, 0.8);
-            --paper-bg: linear-gradient(145deg, #1c1c28, #14141f);
-            --paper-text: #f5f5f5;
-            --paper-shadow: inset 0 2px 0 rgba(255,255,255,0.05), inset 0 -2px 8px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.3);
-            --keypad-bg: rgba(20, 20, 30, 0.85);
+            --bg-color: #050505;
+            --keypad-bg: rgba(20, 20, 25, 0.9);
+            
+            /* Variables Texto */
+            --primary-text: #ffffff;
+            --secondary-text: #888;
+            
+            /* Fondo Papel */
+            --paper-bg: #0f0f13;
+            --paper-shadow: inset 0 0 20px rgba(0,0,0,0.5);
             
             /* Botones Dark */
-            --btn-face: linear-gradient(145deg, #2a2a35, #1f1f28);
-            --btn-top: linear-gradient(to bottom, rgba(255,255,255,0.12), transparent);
-            --btn-side: #0d0d12;
-            --btn-text-color: #fff;
-            --btn-shadow: 0 1px 0 rgba(255,255,255,0.1), 0 6px 0 var(--btn-side), 0 10px 25px rgba(0,0,0,0.5);
-            --btn-shadow-active: 0 0 0 var(--btn-side), inset 0 3px 8px rgba(0,0,0,0.6);
-            --btn-transform-active: translateY(6px);
+            --btn-face: #1e1e24;
+            --btn-text: #fff;
+            --btn-shadow: 0 4px 0 #000, 0 5px 10px rgba(0,0,0,0.3);
             
-            /* Colores de acento en Dark */
-            --color-red-text: var(--neon-red);
-            --color-blue-text: var(--neon-blue);
-            --color-green-bg: linear-gradient(145deg, var(--neon-green), #00c853);
-            
-            --active-theme-border: #00ff88;
+            /* Colores */
+            --col-red: var(--neon-red);
+            --col-blue: var(--neon-blue);
+            --enter-bg: linear-gradient(90deg, var(--neon-green), #00C853);
+            --enter-text: #000;
+        }
+        
+        body[data-theme="dark"] .btn {
+            background: var(--btn-face);
+            color: var(--btn-text);
+            box-shadow: var(--btn-shadow);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        body[data-theme="dark"] .btn[data-color="red"] { color: var(--col-red); font-weight: 700; }
+        body[data-theme="dark"] .btn[data-color="blue"] { color: var(--col-blue); font-size: 120%; }
+        body[data-theme="dark"] .btn[data-key="Enter"] { 
+            background: var(--enter-bg); 
+            color: var(--enter-text); 
+            box-shadow: 0 0 15px rgba(0, 230, 118, 0.4);
+            border: none;
         }
 
         /* =========================================
-           TEMA 2: LIGHT SPECTACULAR (3D POP / CANDY)
-           CAMBIO 2: Diseño completamente nuevo, colorido y 3D
+           TEMA 2: LIGHT SPECTACULAR (3D POP / CLAY)
            ========================================= */
         body[data-theme="light"] { 
-            --bg-color: #eef2f6; 
-            /* Fondo colorido sutil */
-            background: radial-gradient(circle at 0% 0%, #e1f5fe 0%, #f3e5f5 50%, #fff3e0 100%);
+            --bg-color: #e0e5ec;
+            /* Fondo vibrante */
+            background: radial-gradient(circle at 50% 30%, #f3e7e9 0%, #e3eeff 99%, #e3eeff 100%);
+            --keypad-bg: rgba(255, 255, 255, 0.65);
             
-            --primary-text: #2c3e50; 
-            --secondary-text: #607d8b; 
-            --header-bg: rgba(255,255,255,0.5);
+            --primary-text: #444;
+            --secondary-text: #8898aa;
             
-            /* Papel Glassmorphism Blanco */
-            --paper-bg: rgba(255, 255, 255, 0.8);
-            --paper-text: #2c3e50;
-            --paper-shadow: 
-                0 15px 35px rgba(50, 50, 93, 0.1), 
-                0 5px 15px rgba(0, 0, 0, 0.07),
-                inset 0 0 0 1px rgba(255,255,255,0.8);
-            
-            --keypad-bg: rgba(255, 255, 255, 0.6);
-            
-            /* Estilo base botones numéricos (Blancos 3D "Clay") */
-            --btn-face: #ffffff;
-            --btn-side: #c4cdd5; /* Sombra sólida lateral */
-            --btn-text-color: #37474f;
-            --btn-shadow: 
-                0 6px 0 #c4cdd5, 
-                0 12px 20px rgba(0,0,0,0.15),
-                inset 0 -2px 0 rgba(0,0,0,0.05),
-                inset 0 2px 0 rgba(255,255,255,1);
-            --btn-shadow-active: 
-                0 0 0 #c4cdd5, 
-                inset 0 4px 8px rgba(0,0,0,0.1);
-            --btn-transform-active: translateY(6px);
-
-            /* Modificaciones específicas para colores en Light (variables CSS internas) */
-            --color-red-text: #fff;
-            --color-blue-text: #fff;
-            
-            --active-theme-border: #ff9800;
+            --paper-bg: rgba(255,255,255,0.8);
+            --paper-shadow: 0 10px 30px rgba(166, 171, 189, 0.3);
         }
 
-        /* GLOBAL RESET */
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; outline: none; }
-        html, body { height: 100dvh; width: 100vw; font-family: 'Poppins', sans-serif; background-color: var(--bg-color); color: var(--primary-text); overflow: hidden; transition: background 0.4s ease; }
-
-        .app-container { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; }
-
-        /* HEADER */
-        .app-header { 
-            display: grid; grid-template-columns: 1fr auto auto; 
-            align-items: center; gap: 15px;
-            padding: max(env(safe-area-inset-top), 15px) 25px 15px;
-            background: var(--header-bg); z-index: 20;
-        }
-        .app-title { 
-            font-family: 'Lexend', sans-serif; font-weight: 600; font-size: 1.2rem; 
-            background: linear-gradient(to right, var(--primary-text), var(--secondary-text));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            cursor: pointer; pointer-events: auto;
-        }
-        #header-clock { font-family: 'Fira Code', monospace; font-size: 0.85rem; opacity: 0.7; font-weight: 600; }
-        .control-btn { 
-            width: 42px; height: 42px; border-radius: 14px;
-            background: rgba(128,128,128,0.1); color: var(--primary-text);
-            border: none; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; transition: all 0.2s ease; backdrop-filter: blur(5px);
-        }
-
-        /* PAPEL & DISPLAY */
-        .paper-roll-container { 
-            flex: 1; min-height: 0; margin: 0 20px; 
-            background: var(--paper-bg); border-radius: 4px 4px 25px 25px;
-            box-shadow: var(--paper-shadow); display: flex; flex-direction: column;
-            position: relative; overflow: hidden;
-            transition: margin 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            backdrop-filter: blur(10px);
-        }
-        /* Textura de ruido sutil */
-        .paper-roll-container::before {
-            content: ''; position: absolute; inset: 0; 
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
-            pointer-events: none; z-index: 0; opacity: 0.4;
-        }
-        #history-list { 
-            flex: 1 1 auto; overflow-y: auto; padding: 20px 15px;
-            display: flex; flex-direction: column-reverse; z-index: 1; list-style: none;
-        }
-        #history-list::-webkit-scrollbar { width: 0; }
-        #history-list li { 
-            text-align: right; padding: 10px 12px; margin-bottom: 6px;
-            border-radius: 10px; cursor: pointer; opacity: 0.6; transition: all 0.2s;
-        }
-        #history-list li:active { opacity: 1; background: rgba(128,128,128,0.05); transform: scale(0.98); }
-        .history-ex { font-size: 0.9rem; color: var(--secondary-text); font-family: 'Fira Code', monospace; margin-bottom: 2px; }
-        .history-res { font-size: 1.3rem; font-family: 'Fira Code', monospace; font-weight: 600; color: var(--primary-text); }
-
-        .display-wrapper { 
-            flex-shrink: 0; z-index: 2; text-align: right; padding: 10px 25px 20px;
-            background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(128,128,128,0.03) 100%);
-        }
-        #secondary-display { 
-            min-height: 1.4rem; font-family: 'Fira Code', monospace; color: var(--secondary-text); font-size: 1rem; letter-spacing: -0.5px;
-        }
-        #main-display { 
-            font-family: 'Lexend', sans-serif; font-weight: 500; color: var(--primary-text); 
-            font-size: 3.5rem; line-height: 1.1; white-space: nowrap; overflow: hidden;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.05); cursor: text;
-        }
-        
-        .token { display: inline-block; transition: color 0.2s; border-bottom: 2px solid transparent; }
-        .token-selected { color: var(--neon-blue); border-bottom: 2px solid var(--neon-blue); }
-
-        /* KEYPAD */
-        .calculator { 
-            height: var(--keypad-height); background: var(--keypad-bg);
-            padding: var(--spacing); padding-bottom: calc(var(--spacing) + env(safe-area-inset-bottom));
-            border-radius: 35px 35px 0 0;
-            transition: height 0.5s, padding 0.5s;
-            backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%);
-            box-shadow: 0 -10px 40px rgba(0,0,0,0.1); z-index: 10;
-        }
-        body.keypad-hidden .calculator { height: 0; padding: 0; opacity: 0; pointer-events: none; }
-        body.keypad-hidden .paper-roll-container { margin-bottom: 20px; border-radius: 4px 4px 20px 20px; }
-
-        .keypad { 
-            display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(5, 1fr); 
-            gap: var(--spacing); height: 100%; align-items: center; justify-items: center;
-        }
-
-        /* BOTONES ESTÁNDAR (NÚMEROS) */
-        .btn {
-            position: relative; border: none; 
-            background: var(--btn-face); 
-            color: var(--btn-text-color);
-            font-family: 'Poppins', sans-serif; 
-            font-size: 1.2rem; /* Fuente ligeramente más pequeña por el tamaño reducido */
-            font-weight: 500;
-            border-radius: 50%; /* Círculo perfecto */
-            width: 100%; aspect-ratio: 1 / 1;
-            box-shadow: var(--btn-shadow);
-            transition: transform 0.1s, box-shadow 0.1s, filter 0.2s;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            border: none;
-        }
-        .btn:active, .btn.active-state {
-            transform: var(--btn-transform-active); 
-            box-shadow: var(--btn-shadow-active); 
-            filter: brightness(1.05);
-        }
-
-        /* === ESTILOS ESPECÍFICOS SEGÚN TEMA === */
-
-        /* DARK MODE COLORS */
-        body[data-theme="dark"] .btn[data-color="red"] { color: var(--color-red-text); font-weight: 600; }
-        body[data-theme="dark"] .btn[data-color="blue"] { color: var(--color-blue-text); font-size: 1.4rem; }
-        body[data-theme="dark"] .btn[data-key="."] { color: var(--color-blue-text); font-weight: bold; padding-bottom: 8px; }
-
-        /* LIGHT MODE COLORS (Estilo Caramelo 3D) */
-        /* Botones Rojos (AC, Borrar) -> Gradiente Rosa/Rojo */
-        body[data-theme="light"] .btn[data-color="red"] {
-            background: linear-gradient(145deg, #FF8A80, #FF5252);
-            color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            --btn-side: #c62828; /* Sombra oscura del rojo */
-            box-shadow: 0 6px 0 var(--btn-side), 0 10px 15px rgba(255, 82, 82, 0.4);
-        }
-        body[data-theme="light"] .btn[data-color="red"]:active,
-        body[data-theme="light"] .btn[data-color="red"].active-state {
-            box-shadow: 0 0 0 var(--btn-side), inset 0 3px 5px rgba(0,0,0,0.2);
-        }
-
-        /* Botones Azules (Operadores) -> Gradiente Cian/Azul */
-        body[data-theme="light"] .btn[data-color="blue"] {
-            background: linear-gradient(145deg, #4FC3F7, #039BE5);
-            color: white; font-size: 1.4rem; text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            --btn-side: #0277bd;
-            box-shadow: 0 6px 0 var(--btn-side), 0 10px 15px rgba(3, 155, 229, 0.4);
-        }
-        body[data-theme="light"] .btn[data-color="blue"]:active,
-        body[data-theme="light"] .btn[data-color="blue"].active-state {
-            box-shadow: 0 0 0 var(--btn-side), inset 0 3px 5px rgba(0,0,0,0.2);
-        }
-
-        /* Botón Enter (Verde) -> Común para ambos pero adaptado */
-        .btn[data-color="green"] { 
-            grid-column: span 2; 
-            width: 100%; aspect-ratio: auto; border-radius: 80px;
-            color: #fff; 
-            font-size: 1.8rem; 
+        /* Estilo base botones Light (Efecto Clay 3D) */
+        body[data-theme="light"] .btn {
+            background: #e0e5ec;
+            color: #555;
+            /* Sombra compleja para efecto 3D flotante */
+            box-shadow: 
+                6px 6px 12px #b8b9be, 
+                -6px -6px 12px #ffffff;
             font-weight: 600;
         }
-        /* Enter Dark */
-        body[data-theme="dark"] .btn[data-color="green"] {
-            background: var(--color-green-bg);
-            color: #000;
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
-        }
-        /* Enter Light -> Gradiente Lima Vibrante */
-        body[data-theme="light"] .btn[data-color="green"] {
-            background: linear-gradient(145deg, #69F0AE, #00C853);
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            --btn-side: #008e39;
-            box-shadow: 0 6px 0 var(--btn-side), 0 10px 20px rgba(0, 200, 83, 0.4);
-        }
-        body[data-theme="light"] .btn[data-color="green"]:active,
-        body[data-theme="light"] .btn[data-color="green"].active-state {
-            box-shadow: 0 0 0 var(--btn-side), inset 0 3px 5px rgba(0,0,0,0.2);
+
+        /* Botones Rojos (AC) Light -> Caramelo Rosa */
+        body[data-theme="light"] .btn[data-color="red"] {
+            background: linear-gradient(145deg, #ff7eb3, #ff758c);
+            color: white;
+            box-shadow: 
+                5px 5px 10px rgba(255, 117, 140, 0.4), 
+                -5px -5px 10px rgba(255, 255, 255, 0.5),
+                inset 2px 2px 5px rgba(255,255,255,0.3);
         }
 
+        /* Botones Azules (Operadores) Light -> Caramelo Azul Cian */
+        body[data-theme="light"] .btn[data-color="blue"] {
+            background: linear-gradient(145deg, #4facfe, #00f2fe);
+            color: white;
+            font-size: 120%;
+            box-shadow: 
+                5px 5px 10px rgba(79, 172, 254, 0.4), 
+                -5px -5px 10px rgba(255, 255, 255, 0.5);
+        }
 
-        /* AJUSTES PWA */
+        /* Botón Enter Light -> Caramelo Verde Lima */
+        body[data-theme="light"] .btn[data-key="Enter"] {
+            background: linear-gradient(145deg, #a8ff78, #78ffd6);
+            color: #006442;
+            box-shadow: 
+                5px 5px 15px rgba(120, 255, 214, 0.5), 
+                -5px -5px 15px rgba(255, 255, 255, 0.8);
+        }
+        
+        /* Efecto presionado Light */
+        body[data-theme="light"] .btn:active {
+            box-shadow: 
+                inset 4px 4px 8px rgba(0,0,0,0.1), 
+                inset -4px -4px 8px rgba(255,255,255,0.8);
+        }
+
+        /* --- ELEMENTOS DE LA INTERFAZ --- */
+        
+        /* Header */
+        .app-header {
+            flex: 0 0 auto; /* Altura automática según contenido */
+            display: flex; justify-content: space-between; align-items: center;
+            padding: max(env(safe-area-inset-top), 15px) 20px 10px;
+            z-index: 20;
+        }
+        .app-title { 
+            font-family: 'Lexend', sans-serif; font-weight: 600; font-size: 1.1rem; 
+            background: linear-gradient(90deg, var(--primary-text), var(--secondary-text));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            cursor: pointer;
+        }
+        .control-btn {
+            background: none; border: none; color: var(--primary-text); cursor: pointer; padding: 5px;
+            opacity: 0.7; transition: opacity 0.2s;
+        }
+        .control-btn:hover { opacity: 1; }
+
+        /* Papel / Display */
+        .paper-container {
+            flex: 1; /* Ocupa el resto de la sección superior */
+            margin: 10px 15px 15px;
+            background: var(--paper-bg);
+            border-radius: 20px;
+            box-shadow: var(--paper-shadow);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        #history-list { 
+            flex: 1; overflow-y: auto; padding: 20px;
+            display: flex; flex-direction: column-reverse; 
+            list-style: none;
+        }
+        #history-list::-webkit-scrollbar { width: 4px; }
+        #history-list::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius: 4px; }
+        
+        #history-list li {
+            text-align: right; margin-bottom: 10px; opacity: 0.5; cursor: pointer;
+            transition: 0.2s; padding: 5px; border-radius: 5px;
+        }
+        #history-list li:hover { opacity: 1; background: rgba(128,128,128,0.1); }
+        .history-ex { font-size: 0.8rem; font-family: 'Fira Code', monospace; }
+        .history-res { font-size: 1.1rem; font-weight: 600; font-family: 'Fira Code', monospace; color: var(--primary-text); }
+
+        .display-area {
+            flex-shrink: 0; text-align: right; padding: 10px 20px 20px;
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.02));
+        }
+        #secondary-display { font-family: 'Fira Code', monospace; color: var(--secondary-text); height: 1.5rem; font-size: 0.9rem; }
+        #main-display { 
+            font-family: 'Lexend', sans-serif; color: var(--primary-text); 
+            font-size: clamp(2.5rem, 5vh, 4rem); /* Escala con altura */
+            line-height: 1.1; white-space: nowrap; overflow: hidden;
+        }
+        
+        .token { border-bottom: 2px solid transparent; transition: 0.2s; display: inline-block; }
+        .token.token-selected { color: var(--neon-blue); border-bottom-color: var(--neon-blue); }
+
+        /* Ocultar teclado */
+        body.keypad-hidden .calculator { flex: 0 !important; height: 0 !important; min-height: 0 !important; opacity: 0; padding: 0; overflow: hidden; }
+        
+        /* AJUSTES (Panel) */
         #settings-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50;
-            opacity: 0; pointer-events: none; transition: opacity 0.3s; backdrop-filter: blur(4px);
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50;
+            opacity: 0; pointer-events: none; transition: 0.3s; backdrop-filter: blur(3px);
         }
         #settings-overlay.visible { opacity: 1; pointer-events: auto; }
-        
         #settings-panel {
-            position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
-            background: var(--keypad-bg); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
-            padding: 30px; padding-bottom: max(30px, env(safe-area-inset-bottom));
-            border-radius: 32px 32px 0 0;
-            transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 0 -10px 50px rgba(0,0,0,0.3); color: var(--primary-text);
+            position: fixed; bottom: 0; left: 0; right: 0; background: var(--keypad-bg);
+            padding: 25px; border-radius: 25px 25px 0 0; z-index: 60;
+            transform: translateY(100%); transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+            color: var(--primary-text); backdrop-filter: blur(25px);
+            box-shadow: 0 -5px 30px rgba(0,0,0,0.2);
         }
         #settings-panel.visible { transform: translateY(0); }
         
-        .section-label { font-size: 0.8rem; text-transform: uppercase; opacity: 0.5; letter-spacing: 1.5px; margin: 20px 0 10px; font-weight: 700; }
-        .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px; }
-        .theme-card {
-            background: rgba(128,128,128,0.1); border: 2px solid transparent;
-            padding: 15px; border-radius: 16px; cursor: pointer; text-align: center; transition: all 0.2s;
+        .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .theme-card { 
+            padding: 15px; border-radius: 12px; text-align: center; border: 2px solid transparent; 
+            background: rgba(128,128,128,0.1); cursor: pointer;
         }
-        .theme-card.active { border-color: var(--active-theme-border); background: rgba(128,128,128,0.2); }
-        .theme-preview { width: 100%; height: 40px; border-radius: 10px; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
-        .tp-dark { background: #252629; border-bottom: 4px solid #111; }
-        .tp-light { background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); border-bottom: 4px solid #ccc; }
-
-        .switch-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(128,128,128,0.1); }
-        .switch { position: relative; width: 50px; height: 28px; }
+        .theme-card.active { border-color: var(--neon-green); background: rgba(128,128,128,0.2); }
+        
+        .switch-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(128,128,128,0.1); font-size: 0.9rem; }
+        .switch { width: 40px; height: 24px; position: relative; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; inset: 0; background: rgba(120,120,120,0.3); border-radius: 30px; transition: .3s; }
-        .slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .3s; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; transition: .3s; }
+        .slider:before { content:""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .3s; }
         input:checked + .slider { background: var(--neon-green); }
-        input:checked + .slider:before { transform: translateX(22px); }
+        input:checked + .slider:before { transform: translateX(16px); }
 
-        .close-btn { position: absolute; top: 20px; right: 20px; background: none; border: none; color: inherit; font-size: 1.5rem; padding: 5px; cursor: pointer; }
-        
-        #pwa-install-btn {
-            display: none; width: 100%; padding: 16px; margin-top: 20px;
-            background: var(--neon-green); color: #000; border: none;
-            border-radius: 16px; font-weight: 600; font-size: 1rem;
-            cursor: pointer; box-shadow: 0 5px 15px rgba(0, 230, 118, 0.3);
-            transition: transform 0.2s;
+        .toast {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+            background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 30px;
+            opacity: 0; pointer-events: none; transition: 0.3s; z-index: 100; font-weight: 500;
         }
-        #pwa-install-btn:active { transform: scale(0.97); }
-
-        .toast { position: fixed; top: 15%; left: 50%; transform: translate(-50%, -20px); opacity: 0; background: rgba(0,0,0,0.8); color: white; padding: 10px 24px; border-radius: 50px; pointer-events: none; transition: all 0.3s; backdrop-filter: blur(5px); z-index: 999; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-        .toast.show { transform: translate(-50%, 0); opacity: 1; }
+        .toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         
+        /* PWA Btn */
+        #pwa-btn { display: none; width: 100%; padding: 12px; margin-top: 15px; background: var(--neon-green); border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+
+        /* PC Centering */
         @media(min-width: 600px) {
-            body { display: flex; align-items: center; justify-content: center; background: #111; }
-            .app-container { max-width: 414px; height: 90vh; border-radius: 36px; border: 6px solid #333; background: var(--bg-color); overflow: hidden; box-shadow: 0 0 0 2px #444, 0 30px 80px rgba(0,0,0,0.6); }
-            #settings-panel { max-width: 414px; left: 50%; transform: translate(-50%, 110%); }
+            body { background: #111; display: flex; align-items: center; justify-content: center; }
+            .app-container { 
+                max-width: 400px; height: 90vh; border-radius: 40px; overflow: hidden; 
+                border: 8px solid #222; box-shadow: 0 0 0 2px #444, 0 30px 80px rgba(0,0,0,0.5);
+            }
+            #settings-panel { max-width: 400px; left: 50%; transform: translate(-50%, 110%); }
             #settings-panel.visible { transform: translate(-50%, 0); }
         }
     </style>
@@ -331,44 +345,48 @@
     <audio id="click-sound" src="https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-zapsplat/zapsplat_multimedia_button_click_fast_short_002_79285.mp3" preload="auto"></audio>
 
     <div class="app-container">
-        <header class="app-header">
-            <div class="app-title">aiDANaI Calc</div>
-            <div id="header-clock">00:00:00</div>
-            <button id="settings-btn" class="control-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82-.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06-.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-            </button>
-        </header>
-        
-        <div class="paper-roll-container">
-            <ul id="history-list"></ul>
-            <div class="display-wrapper">
-                <div id="secondary-display"></div>
-                <div id="main-display">0</div>
+        <!-- ZONA SUPERIOR (2/3) -->
+        <div class="upper-section">
+            <header class="app-header">
+                <div class="app-title">aiDANaI Calc</div>
+                <div id="clock" style="font-family:'Fira Code'; opacity:0.6; font-size:0.8rem;">00:00</div>
+                <button id="btn-settings" class="control-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82-.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06-.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+            </header>
+            
+            <div class="paper-container">
+                <ul id="history-list"></ul>
+                <div class="display-area">
+                    <div id="secondary-display"></div>
+                    <div id="main-display">0</div>
+                </div>
             </div>
         </div>
 
+        <!-- ZONA INFERIOR (1/3) -->
         <div class="calculator">
             <div class="keypad">
                 <button class="btn" data-key="AC" data-color="red">AC</button>
                 <button class="btn" data-key="Backspace" data-color="red">⌫</button>
                 <button class="btn" data-key="(" data-color="red">( )</button>
                 <button class="btn" data-key="/" data-color="blue">÷</button>
-                
+
                 <button class="btn" data-key="7">7</button>
                 <button class="btn" data-key="8">8</button>
                 <button class="btn" data-key="9">9</button>
                 <button class="btn" data-key="*" data-color="blue">×</button>
-                
+
                 <button class="btn" data-key="4">4</button>
                 <button class="btn" data-key="5">5</button>
                 <button class="btn" data-key="6">6</button>
                 <button class="btn" data-key="-" data-color="blue">−</button>
-                
+
                 <button class="btn" data-key="1">1</button>
                 <button class="btn" data-key="2">2</button>
                 <button class="btn" data-key="3">3</button>
                 <button class="btn" data-key="+" data-color="blue">+</button>
-                
+
                 <button class="btn" data-key="0">0</button>
                 <button class="btn" data-key="Enter" data-color="green">=</button>
                 <button class="btn" data-key=".">.</button>
@@ -376,356 +394,305 @@
         </div>
     </div>
 
-    <div id="toast" class="toast">Acción realizada</div>
-
+    <div id="toast" class="toast">Notificación</div>
     <div id="settings-overlay"></div>
     <div id="settings-panel">
-        <div style="display:flex; align-items:center; justify-content:space-between;">
-            <h2 style="font-size:1.5rem; font-weight:600;">Ajustes</h2>
-            <button class="close-btn" id="close-settings">&times;</button>
+        <div style="display:flex;justify-content:space-between;align-items:center; margin-bottom:15px;">
+            <h3>Ajustes</h3>
+            <button id="close-settings" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
         </div>
-
-        <div class="section-label">Tema Visual</div>
-        <div class="theme-grid">
-            <div class="theme-card" id="opt-dark">
-                <div class="theme-preview tp-dark"></div>
-                <span>Oscuro</span>
-            </div>
-            <div class="theme-card" id="opt-light">
-                <div class="theme-preview tp-light"></div>
-                <span>Claro 3D</span>
-            </div>
-        </div>
-
-        <div class="section-label">Interfaz</div>
-        <div class="switch-row">
-            <span>Teclado en Pantalla</span>
-            <label class="switch">
-                <input type="checkbox" id="sw-keypad" checked>
-                <span class="slider"></span>
-            </label>
-        </div>
-        <div class="switch-row">
-            <span>Sonido Teclas (ASMR)</span>
-            <label class="switch">
-                <input type="checkbox" id="sw-sound" checked>
-                <span class="slider"></span>
-            </label>
-        </div>
-        <div class="switch-row">
-            <span>Vibración Mecánica</span>
-            <label class="switch">
-                <input type="checkbox" id="sw-haptic" checked>
-                <span class="slider"></span>
-            </label>
-        </div>
-
-        <button id="pwa-install-btn">📥 Instalar Aplicación</button>
         
-        <div style="margin-top:20px; text-align:center; font-size:0.8rem; opacity:0.4; padding-bottom:10px;">aiDANaI Calc</div>
+        <div class="theme-grid">
+            <div class="theme-card" id="theme-dark">Dark Neon</div>
+            <div class="theme-card" id="theme-light">Light Pop 3D</div>
+        </div>
+
+        <div style="margin-top:20px;">
+            <div class="switch-row">
+                <span>Teclado en Pantalla</span>
+                <label class="switch"><input type="checkbox" id="sw-keypad" checked><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+                <span>Sonido (ASMR)</span>
+                <label class="switch"><input type="checkbox" id="sw-sound" checked><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+                <span>Vibración</span>
+                <label class="switch"><input type="checkbox" id="sw-haptic" checked><span class="slider"></span></label>
+            </div>
+        </div>
+        <button id="pwa-btn">Instalar App</button>
     </div>
 
     <script>
-    // PWA INSTALL VARS
-    let deferredPrompt;
-
-    const App = {
-        expr: '', 
-        editIdx: null,
-        state: { sound: true, haptic: true, theme: 'dark', keypad: true },
-        
-        init() {
-            const saved = JSON.parse(localStorage.getItem('aidanai Calc'));
-            if(saved) this.state = { ...this.state, ...saved };
+        const App = {
+            expr: '',
+            editIdx: null,
+            state: { theme: 'dark', sound: true, haptic: true, keypad: true },
             
-            this.setTheme(this.state.theme);
-            this.toggleKeypadUI(this.state.keypad);
-            document.getElementById('sw-keypad').checked = this.state.keypad;
-            document.getElementById('sw-sound').checked = this.state.sound;
-            document.getElementById('sw-haptic').checked = this.state.haptic;
+            init() {
+                // Cargar estado
+                try { 
+                    const s = JSON.parse(localStorage.getItem('aidanaiState'));
+                    if(s) this.state = {...this.state, ...s};
+                } catch(e){}
 
-            this.events();
-            this.loopClock();
-            this.initPWA();
-        },
-
-        events() {
-            const pnl = document.getElementById('settings-panel');
-            const ovr = document.getElementById('settings-overlay');
-            const toggle = (s) => { 
-                s ? pnl.classList.add('visible') : pnl.classList.remove('visible'); 
-                s ? ovr.classList.add('visible') : ovr.classList.remove('visible'); 
-            };
-            
-            document.querySelector('.app-title').addEventListener('click', () => {
-                this.feedback(); 
-                window.location.href = 'crypto.html';
-            });
-            
-            document.getElementById('settings-btn').onclick = (e) => { 
-                e.currentTarget.blur(); 
-                toggle(true); 
-            };
-            document.getElementById('close-settings').onclick = () => toggle(false);
-            ovr.onclick = () => toggle(false);
-
-            ['dark', 'light'].forEach(t => {
-                document.getElementById(`opt-${t}`).onclick = () => this.setTheme(t);
-            });
-
-            document.getElementById('sw-sound').onchange = (e) => { 
-                this.state.sound = e.target.checked; 
-                this.save(); 
-            };
-            document.getElementById('sw-haptic').onchange = (e) => { 
-                this.state.haptic = e.target.checked; 
-                this.save(); 
-            };
-            document.getElementById('sw-keypad').onchange = (e) => {
-                this.state.keypad = e.target.checked;
-                this.toggleKeypadUI(this.state.keypad);
-                this.save();
-            };
-
-            document.querySelectorAll('.btn').forEach(b => {
-                b.addEventListener('pointerdown', (e) => { 
-                    e.preventDefault(); 
-                    this.press(b); 
-                });
-            });
-            
-            document.addEventListener('keydown', (e) => {
-                if(document.getElementById('settings-overlay').classList.contains('visible')) return;
-                const map = {'Enter':'Enter','Escape':'AC','Backspace':'Backspace',',':'.','x':'*'};
-                let k = map[e.key] || e.key; 
-                if(e.code==='NumpadEnter') k='Enter';
+                this.applyTheme(this.state.theme);
+                this.toggleKeypad(this.state.keypad);
                 
-                const btn = document.querySelector(`.btn[data-key="${k}"]`);
-                if(btn) { 
-                    this.press(btn); 
-                } else if("0123456789+-*/.()".includes(k)) { 
-                    this.input(k, "+-*/".includes(k)); 
-                    this.feedback(null, true); 
-                }
-            });
+                // Actualizar UI Switches
+                document.getElementById('sw-sound').checked = this.state.sound;
+                document.getElementById('sw-haptic').checked = this.state.haptic;
+                document.getElementById('sw-keypad').checked = this.state.keypad;
 
-            const display = document.getElementById('main-display');
-            display.addEventListener('click', (e) => {
-                const target = e.target.closest('.token');
-                if(target && !target.innerText.match(/[+\-×÷]/)) {
-                    this.editIdx = parseInt(target.dataset.idx);
-                    this.render();
-                    this.feedback('Modo Edición');
-                }
-            });
-        },
+                this.bindEvents();
+                this.startClock();
+                this.initPWA();
+            },
 
-        initPWA() {
-            window.addEventListener('beforeinstallprompt', (e) => {
-                e.preventDefault();
-                deferredPrompt = e;
-                const btn = document.getElementById('pwa-install-btn');
-                btn.style.display = 'block';
-                
-                btn.addEventListener('click', () => {
-                    btn.style.display = 'none';
-                    deferredPrompt.prompt();
-                    deferredPrompt.userChoice.then((choiceResult) => {
-                        deferredPrompt = null;
+            bindEvents() {
+                // Botones Calculadora
+                document.querySelectorAll('.btn').forEach(b => {
+                    b.addEventListener('pointerdown', (e) => {
+                        e.preventDefault(); // Evitar zoom doble tap
+                        this.handleInput(b.dataset.key, b);
                     });
                 });
-            });
-        },
 
-        getSmartParenthesis() {
-            const openCount = (this.expr.match(/\(/g) || []).length;
-            const closeCount = (this.expr.match(/\)/g) || []).length;
-            const lastChar = this.expr.slice(-1);
-            
-            if (openCount > closeCount) {
-                if (/[0-9)\.]/.test(lastChar)) {
-                    return ')';
-                }
-            }
-            return '(';
-        },
+                // Teclado Físico
+                document.addEventListener('keydown', (e) => {
+                    if(document.getElementById('settings-overlay').classList.contains('visible')) return;
+                    
+                    const map = {'Enter':'Enter','=':'Enter','Escape':'AC','Backspace':'Backspace',',':'.','x':'*'};
+                    let k = map[e.key] || e.key;
+                    
+                    // Buscar botón visual para animarlo
+                    const btn = document.querySelector(`.btn[data-key="${k}"]`);
+                    if(btn) this.handleInput(k, btn);
+                    else if("0123456789+-*/().".includes(k)) this.handleInput(k, null);
+                });
 
-        press(btn) {
-            btn.classList.add('active-state');
-            setTimeout(() => btn.classList.remove('active-state'), 120);
-            
-            this.feedback();
-            let k = btn.dataset.key;
-            
-            if(k === 'AC') this.clear();
-            else if(k === 'Backspace') this.back();
-            else if(k === 'Enter') this.calc();
-            else if(k === '(') {
-                const smartParen = this.getSmartParenthesis();
-                this.input(smartParen, false);
-            }
-            else this.input(k, btn.dataset.color === 'blue');
-        },
+                // Edición Pantalla
+                const disp = document.getElementById('main-display');
+                disp.addEventListener('click', (e) => {
+                    const t = e.target.closest('.token');
+                    if(t && !/[+\-×÷]/.test(t.innerText)) {
+                        this.editIdx = parseInt(t.dataset.idx);
+                        this.render();
+                        this.toast('Editando número...');
+                    }
+                });
 
-        input(val, isOp) {
-            if(this.fresh) {
-                if(isOp) this.fresh = false;
-                else { this.expr = ''; this.fresh = false; }
-            }
+                // Ajustes
+                const pnl = document.getElementById('settings-panel');
+                const ovr = document.getElementById('settings-overlay');
+                const toggle = (show) => {
+                    show ? pnl.classList.add('visible') : pnl.classList.remove('visible');
+                    show ? ovr.classList.add('visible') : ovr.classList.remove('visible');
+                };
 
-            if(isOp) this.editIdx = null;
-
-            if(this.editIdx !== null) {
-                let tokens = this.expr.split(/([\+\-\*\/])/);
-                if(tokens[this.editIdx] !== undefined) {
-                    if(val === '.' && tokens[this.editIdx].includes('.')) return;
-                    tokens[this.editIdx] += val;
-                    this.expr = tokens.join('');
-                    this.render();
-                    return; 
-                } else {
-                    this.editIdx = null; 
-                }
-            }
-            
-            if(isOp && "+-*/".includes(this.expr.slice(-1))) {
-                this.expr = this.expr.slice(0,-1) + val;
-            } else if(val === '.') {
-                const chunk = this.expr.split(/[\+\-\*\/]/).pop();
-                if(!chunk.includes('.')) this.expr += (this.expr===''||isOp) ? '0.' : '.';
-            } else {
-                this.expr += val;
-            }
-            this.render();
-        },
-
-        clear() { 
-            this.expr = ''; 
-            this.fresh = false; 
-            this.editIdx = null; 
-            document.getElementById('secondary-display').innerText = ''; 
-            this.render(); 
-        },
-        
-        back() { 
-            if(this.editIdx !== null) {
-                let tokens = this.expr.split(/([\+\-\*\/])/);
-                if(tokens[this.editIdx]) {
-                    tokens[this.editIdx] = tokens[this.editIdx].slice(0, -1);
-                    if(tokens[this.editIdx] === '') this.editIdx = null;
-                    this.expr = tokens.join('');
-                }
-            } else {
-                this.expr = this.expr.slice(0,-1); 
-            }
-            this.render(); 
-        },
-        
-        calc() {
-            if(!this.expr) return;
-            this.editIdx = null;
-            try {
-                const raw = this.expr.replace(/[^0-9\+\-\*\/\.\(\)]/g,'');
-                let res = new Function('return '+raw)();
-                if(!isFinite(res)) throw 'NaN';
-                res = Math.round(res * 10000000000) / 10000000000;
+                document.getElementById('btn-settings').onclick = () => toggle(true);
+                document.getElementById('close-settings').onclick = () => toggle(false);
+                ovr.onclick = () => toggle(false);
                 
-                this.log(this.expr, res);
-                this.expr = String(res);
-                this.fresh = true;
+                // Crypto link
+                document.querySelector('.app-title').onclick = () => window.location.href='crypto.html';
+
+                // Cambios Config
+                document.getElementById('theme-dark').onclick = () => this.applyTheme('dark');
+                document.getElementById('theme-light').onclick = () => this.applyTheme('light');
+                
+                document.getElementById('sw-sound').onchange = (e) => { this.state.sound = e.target.checked; this.save(); };
+                document.getElementById('sw-haptic').onchange = (e) => { this.state.haptic = e.target.checked; this.save(); };
+                document.getElementById('sw-keypad').onchange = (e) => { this.state.keypad = e.target.checked; this.toggleKeypad(this.state.keypad); this.save(); };
+            },
+
+            handleInput(key, btnEl) {
+                // Feedback
+                if(btnEl) {
+                    btnEl.classList.add('active-state');
+                    setTimeout(()=>btnEl.classList.remove('active-state'), 100);
+                }
+                if(this.state.sound) {
+                    const s = document.getElementById('click-sound').cloneNode();
+                    s.volume = 0.15; s.play().catch(()=>{});
+                }
+                if(this.state.haptic && navigator.vibrate) navigator.vibrate(10);
+
+                // Lógica
+                if(key === 'AC') this.clear();
+                else if(key === 'Backspace') this.backspace();
+                else if(key === 'Enter') this.calculate();
+                else if(key === '(') this.smartParenthesis();
+                else this.append(key);
+            },
+
+            append(val) {
+                // Si venimos de un resultado y pulsamos número, resetear. Si es operador, continuar.
+                const isOp = "+-*/".includes(val);
+                if(this.fresh) {
+                    if(!isOp) this.expr = '';
+                    this.fresh = false;
+                }
+                if(isOp) this.editIdx = null; // Cancelar edición si ponemos operador
+
+                // Lógica de Edición In-Situ
+                if(this.editIdx !== null) {
+                    let tokens = this.expr.split(/([\+\-\*\/])/);
+                    if(tokens[this.editIdx] !== undefined) {
+                        if(val === '.' && tokens[this.editIdx].includes('.')) return;
+                        if(!isOp) {
+                            tokens[this.editIdx] += val;
+                            this.expr = tokens.join('');
+                            this.render();
+                            return;
+                        }
+                    }
+                    this.editIdx = null;
+                }
+
+                // Prevención duplicados operadores
+                const last = this.expr.slice(-1);
+                if(isOp && "+-*/".includes(last)) {
+                    this.expr = this.expr.slice(0,-1) + val;
+                } else {
+                    if(val === '.' && /[0-9.]$/.test(this.expr) === false) this.expr += '0.';
+                    else if(val === '.' && this.getLastNum().includes('.')) return;
+                    else this.expr += val;
+                }
                 this.render();
-                document.getElementById('secondary-display').innerText = 'Resultado';
-            } catch { 
-                this.toast('Error Matemático'); 
-            }
-        },
+            },
 
-        render() {
-            const d = document.getElementById('main-display');
-            const tokens = this.expr.split(/([\+\-\*\/])/);
-            
-            let html = '';
-            tokens.forEach((token, idx) => {
-                if(token === '') return;
+            smartParenthesis() {
+                const open = (this.expr.match(/\(/g)||[]).length;
+                const close = (this.expr.match(/\)/g)||[]).length;
+                const last = this.expr.slice(-1);
                 
-                let visualToken = token;
-                if(!isNaN(parseFloat(token)) && !"+-*/".includes(token)) {
-                    const num = parseFloat(token);
-                    const hasDecimals = num % 1 !== 0;
-                    const formatter = new Intl.NumberFormat('es-ES', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: hasDecimals ? 8 : 0
-                    });
-                    visualToken = formatter.format(num);
+                if(open > close && /[0-9.)]/.test(last)) this.append(')');
+                else this.append('(');
+            },
+
+            backspace() {
+                if(this.editIdx !== null) {
+                    let tokens = this.expr.split(/([\+\-\*\/])/);
+                    if(tokens[this.editIdx]) {
+                        tokens[this.editIdx] = tokens[this.editIdx].slice(0,-1);
+                        this.expr = tokens.join('');
+                    }
                 } else {
-                    visualToken = token === '*' ? ' × ' : token === '/' ? ' ÷ ' : token;
+                    this.expr = this.expr.slice(0, -1);
                 }
+                this.render();
+            },
 
-                const activeClass = (idx === this.editIdx) ? 'token-selected' : '';
-                html += `<span class="token ${activeClass}" data-idx="${idx}">${visualToken}</span>`;
-            });
+            clear() {
+                this.expr = ''; this.editIdx = null; this.fresh = false;
+                document.getElementById('secondary-display').innerText = '';
+                this.render();
+            },
 
-            d.innerHTML = html || '0';
-            const l = d.innerText.length;
-            d.style.fontSize = l > 12 ? '1.8rem' : (l > 9 ? '2.5rem' : '3.2rem');
-            document.querySelector('.btn[data-key="AC"]').innerText = this.expr ? 'C' : 'AC';
-        },
+            calculate() {
+                if(!this.expr) return;
+                try {
+                    // Limpieza segura
+                    const clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
+                    // Evaluación
+                    let res = new Function('return ' + clean)();
+                    
+                    if(!isFinite(res)) throw new Error('NaN');
+                    // Redondeo precisión
+                    res = parseFloat(res.toFixed(10));
 
-        log(ex, r) {
-            const li = document.createElement('li');
-            const nF = new Intl.NumberFormat('es-ES', {maximumFractionDigits: 8});
-            li.innerHTML = `<div class="history-ex">${ex}=</div><div class="history-res">${nF.format(r)}</div>`;
-            li.onclick = () => { 
-                this.expr = String(r); 
-                this.fresh = true; 
-                this.render(); 
-                this.toast('Recuperado'); 
-            };
-            document.getElementById('history-list').prepend(li);
-        },
+                    this.addToHistory(this.expr, res);
+                    this.expr = String(res);
+                    this.fresh = true;
+                    this.editIdx = null;
+                    document.getElementById('secondary-display').innerText = 'Resultado';
+                    this.render();
+                } catch(e) {
+                    this.toast('Error matemático');
+                }
+            },
 
-        setTheme(t) {
-            this.state.theme = t;
-            document.body.dataset.theme = t;
-            ['dark','light'].forEach(x => document.getElementById(`opt-${x}`).classList.remove('active'));
-            document.getElementById(`opt-${t}`).classList.add('active');
-            this.save();
-        },
+            render() {
+                const d = document.getElementById('main-display');
+                if(!this.expr) { d.innerHTML = '0'; return; }
 
-        toggleKeypadUI(show) {
-            if(show) document.body.classList.remove('keypad-hidden');
-            else document.body.classList.add('keypad-hidden');
-        },
+                const tokens = this.expr.split(/([\+\-\*\/])/);
+                let html = '';
+                
+                tokens.forEach((t, i) => {
+                    if(t === '') return;
+                    let view = t;
+                    if(!isNaN(parseFloat(t)) && !"+-*/".includes(t)) {
+                         view = parseFloat(t).toLocaleString('es-ES', {maximumFractionDigits: 8});
+                    } else {
+                        view = t.replace('*','×').replace('/','÷');
+                    }
+                    
+                    const active = (i === this.editIdx) ? 'token-selected' : '';
+                    html += `<span class="token ${active}" data-idx="${i}">${view}</span>`;
+                });
+                d.innerHTML = html;
+            },
 
-        feedback(custom, force) {
-            if(this.state.sound || force) {
-                const s = document.getElementById('click-sound').cloneNode();
-                s.volume = 0.2; 
-                s.play().catch(() => {});
+            addToHistory(ex, r) {
+                const li = document.createElement('li');
+                li.innerHTML = `<div class="history-ex">${ex} =</div><div class="history-res">${r.toLocaleString('es-ES')}</div>`;
+                li.onclick = () => {
+                    this.expr = String(r); this.fresh = true; this.render();
+                };
+                document.getElementById('history-list').prepend(li);
+            },
+
+            getLastNum() {
+                return this.expr.split(/[\+\-\*\/]/).pop() || '';
+            },
+
+            applyTheme(t) {
+                this.state.theme = t;
+                document.body.dataset.theme = t;
+                document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('active'));
+                document.getElementById(`theme-${t}`).classList.add('active');
+                this.save();
+            },
+
+            toggleKeypad(show) {
+                if(show) document.body.classList.remove('keypad-hidden');
+                else document.body.classList.add('keypad-hidden');
+            },
+
+            save() {
+                localStorage.setItem('aidanaiState', JSON.stringify(this.state));
+            },
+
+            toast(msg) {
+                const t = document.getElementById('toast');
+                t.innerText = msg; t.classList.add('show');
+                setTimeout(()=>t.classList.remove('show'), 2000);
+            },
+
+            startClock() {
+                setInterval(() => {
+                    document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                }, 1000);
+            },
+
+            initPWA() {
+                let deferredPrompt;
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault(); deferredPrompt = e;
+                    const btn = document.getElementById('pwa-btn');
+                    btn.style.display = 'block';
+                    btn.onclick = () => {
+                        deferredPrompt.prompt();
+                        btn.style.display = 'none';
+                    };
+                });
             }
-            if(this.state.haptic && navigator.vibrate) navigator.vibrate(15);
-            if(custom) this.toast(custom);
-        },
-
-        toast(m) {
-            const t = document.getElementById('toast');
-            t.innerText = m; 
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 1500);
-        },
+        };
         
-        loopClock() { 
-            setInterval(() => {
-                document.getElementById('header-clock').innerText = new Date().toLocaleTimeString();
-            }, 1000); 
-        },
-        
-        save() { 
-            localStorage.setItem('aidanai Calc', JSON.stringify(this.state)); 
-        }
-    };
-    
-    App.init();
-</script>
+        App.init();
+    </script>
 </body>
 </html>
