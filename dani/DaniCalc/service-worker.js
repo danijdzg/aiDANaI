@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aidanai-fin-v2';
+const CACHE_NAME = 'aiDANaI Calc';
 const ASSETS = ['.', 'index.html', 'manifest.json'];
 
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS))));
