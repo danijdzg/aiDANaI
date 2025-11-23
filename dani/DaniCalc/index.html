@@ -100,10 +100,12 @@
             
             --keypad-bg: #f8f9fa; 
             --card-bg: linear-gradient(145deg, #ffffff, #e6e6e6);
-            --inset-shadow: inset 5px 5px 10px #b8bec9, inset -5px -5px 10px #ffffff;
+            /* MEJORA CONTRASTE Y SOMBRAS (Punto 6) */
+            --inset-shadow: inset 4px 4px 8px #b8bec9, inset -4px -4px 8px #ffffff;
             --border-ui: rgba(255,255,255,0.6);
             --primary-text: #2d3436; 
-            --secondary-text: #636e72;
+            /* Texto secundario más oscuro para legibilidad */
+            --secondary-text: #4a5568;
             --display-lens-bg: #cfd6df;
             --display-lens-border: rgba(255,255,255,0.8);
             
@@ -219,9 +221,10 @@
 
         #history-list li {
             text-align: right;
-            cursor: pointer; opacity: 0.5; 
+            cursor: pointer; opacity: 0.6; /* Un poco más visible por defecto */
             font-family: 'Inter', sans-serif; font-size: 1rem; color: var(--secondary-text);
             animation: slideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            padding: 4px 0; /* UX: Mayor zona táctil */
         }
         #history-list li:hover { opacity: 1; transform: translateX(-5px);
         }
@@ -248,7 +251,8 @@
             font-size: 2.5rem; font-weight: 500; line-height: 1.1;
             text-shadow: 0 2px 15px rgba(0,0,0,0.2);
             word-wrap: break-word; word-break: break-all;
-            transition: font-size 0.1s ease-out; 
+            /* MEJORA: Transición más fluida para la fuente dinámica */
+            transition: font-size 0.2s ease-out; 
             will-change: font-size;
         }
         
@@ -368,7 +372,7 @@
         #chart-modal.visible .modal-content { transform: scale(1);
         }
         .close-chart { background: none; border: none; font-size: 2rem; color: var(--secondary-text); cursor: pointer;
-            float: right; }
+            float: right; padding: 10px; } /* Más área táctil */
 
         .toast {
             position: fixed;
@@ -379,6 +383,7 @@
             padding: 12px 24px; border-radius: 30px;
             opacity: 0; transition: 0.3s; pointer-events: none; z-index: 200;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            white-space: nowrap;
         }
         .toast.show { opacity: 1; transform: translate(-50%, 0) scale(1);
         }
@@ -545,10 +550,6 @@
             chart: null,
             wakeLock: null,
             
-            // Variables para el triple clic
-            acClicks: 0,
-            acTimer: null,
-
             init() {
                 this.loadState();
                 this.applyTheme(this.state.theme);
@@ -586,19 +587,65 @@
                     this.applyTheme(this.state.theme === 'dark' ? 'light' : 'dark');
                     this.haptic(15);
                 });
+
+                // === LÓGICA DE BOTONES (Mejorada con Pulsación Larga en AC) ===
                 document.querySelectorAll('.btn[data-key]').forEach(b => {
-                    const press = (e) => {
-                        if(e.cancelable) e.preventDefault(); 
-                        this.haptic(10);
-                        b.classList.add('btn-active');
-                        this.pulseDisplay(); 
-                        this.handleInput(b.dataset.key);
-                    };
-                    const release = () => b.classList.remove('btn-active');
-                    b.addEventListener('pointerdown', press);
-                    b.addEventListener('pointerup', release);
-                    b.addEventListener('pointerleave', release);
+                    const key = b.dataset.key;
+                    
+                    if (key === 'AC') {
+                        let pressTimer;
+                        let longPressTriggered = false;
+
+                        const startPress = (e) => {
+                            if(e.cancelable) e.preventDefault();
+                            b.classList.add('btn-active');
+                            longPressTriggered = false;
+                            
+                            // 800ms para borrar historial
+                            pressTimer = setTimeout(() => {
+                                longPressTriggered = true;
+                                document.getElementById('history-list').innerHTML = '';
+                                this.showToast('Historial Eliminado 🗑️');
+                                this.haptic([50, 50, 50]); 
+                                this.pulseDisplay();
+                                this.handleInput('AC'); // Resetear pantalla también
+                            }, 800);
+                        };
+
+                        const endPress = () => {
+                            clearTimeout(pressTimer);
+                            b.classList.remove('btn-active');
+                            // Si se soltó antes de 800ms, es un AC normal
+                            if (!longPressTriggered) {
+                                this.haptic(10);
+                                this.handleInput('AC');
+                                this.pulseDisplay();
+                            }
+                        };
+
+                        b.addEventListener('pointerdown', startPress);
+                        b.addEventListener('pointerup', endPress);
+                        b.addEventListener('pointerleave', () => {
+                            clearTimeout(pressTimer);
+                            b.classList.remove('btn-active');
+                        });
+
+                    } else {
+                        // Botones normales
+                        const press = (e) => {
+                            if(e.cancelable) e.preventDefault(); 
+                            this.haptic(10);
+                            b.classList.add('btn-active');
+                            this.pulseDisplay(); 
+                            this.handleInput(key);
+                        };
+                        const release = () => b.classList.remove('btn-active');
+                        b.addEventListener('pointerdown', press);
+                        b.addEventListener('pointerup', release);
+                        b.addEventListener('pointerleave', release);
+                    }
                 });
+
                 document.addEventListener('keydown', (e) => {
                     const k = e.key === 'Enter' ? 'Enter' : e.key;
                     if(!/^[0-9+\-*/.,=()]$|Enter|Backspace|Escape|Delete/.test(k)) return;
@@ -614,8 +661,20 @@
                     }
                 });
 
+                // === LÓGICA DEL MODAL (Mejorada: Cerrar con click fuera) ===
+                const chartModal = document.getElementById('chart-modal');
+                
                 document.querySelectorAll('.card').forEach(c => c.onclick = () => this.openChart(c.dataset.id, c.dataset.name));
-                document.querySelector('.close-chart').onclick = () => document.getElementById('chart-modal').classList.remove('visible');
+                
+                // Cerrar con botón X
+                document.querySelector('.close-chart').onclick = () => chartModal.classList.remove('visible');
+                
+                // MEJORA: Cerrar tocando el fondo
+                chartModal.onclick = (e) => {
+                    if (e.target === chartModal) {
+                        chartModal.classList.remove('visible');
+                    }
+                };
             },
 
             pulseDisplay() {
@@ -627,22 +686,6 @@
             },
 
             handleInput(k) {
-                // Lógica de triple clic en AC
-                if(k === 'AC') {
-                    this.acClicks++;
-                    clearTimeout(this.acTimer);
-                    // Reiniciar contador si no pulsa otra vez en 500ms
-                    this.acTimer = setTimeout(() => { this.acClicks = 0; }, 500);
-
-                    if(this.acClicks >= 3) {
-                        document.getElementById('history-list').innerHTML = '';
-                        this.showToast('Papelera vaciada');
-                        this.acClicks = 0;
-                    }
-                } else {
-                    this.acClicks = 0;
-                }
-
                 if(this.fresh) {
                     if(!"+-*/".includes(k) && k !== 'Enter') { this.expr=''; this.editIdx=null; }
                     this.fresh = false;
@@ -679,7 +722,6 @@
                     this.expr = String(res); this.fresh=true;
                     document.getElementById('secondary-display').innerText = 'TOTAL';
                     document.getElementById('secondary-display').classList.add('visible');
-                    // Extra Flash para resultados
                     this.pulseDisplay();
                 } catch(e) { this.showToast("Cálculo inválido"); }
                 this.render();
@@ -699,9 +741,15 @@
                 const d = document.getElementById('main-display');
                 if(!this.expr) { d.innerHTML = '0'; d.style.fontSize = '2.5rem'; return; }
                 const len = this.expr.length;
+                
+                // === LÓGICA DE FUENTE DINÁMICA MEJORADA (Punto 5) ===
+                // Reduce suavemente el tamaño basado en la longitud
                 let size = 2.5; 
-                if (len > 9) size = 2; if (len > 14) size = 1.5; if (len > 20) size = 1.1;
+                if (len > 7) {
+                    size = Math.max(1.1, 2.5 - ((len - 7) * 0.08));
+                }
                 d.style.fontSize = `${size}rem`;
+
                 const parts = this.expr.split(/([\+\-\*\/])/);
                 let h = '';
                 parts.forEach((p,i) => {
@@ -734,7 +782,6 @@
                 try {
                     const controller = new AbortController();
                     const id = setTimeout(() => controller.abort(), 8000);
-                    // Se añade 'usd' a vs_currencies
                     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=eur,usd&include_24hr_change=true', { signal: controller.signal });
                     clearTimeout(id);
                     if(!res.ok) throw new Error("API Limit");
@@ -745,7 +792,6 @@
 
                     ['bitcoin','ethereum','solana','ripple'].forEach(id => {
                         if(d[id]) {
-                            // Actualizar EUR
                             const elPriceEur = document.getElementById(`${id}-price-eur`);
                             const oldPrice = elPriceEur.innerText;
                             const newPrice = fmtEur.format(d[id].eur);
@@ -757,13 +803,11 @@
                             }
                             elPriceEur.textContent = newPrice;
 
-                            // Actualizar USD
                             const elPriceUsd = document.getElementById(`${id}-price-usd`);
                             if(elPriceUsd) {
                                 elPriceUsd.textContent = fmtUsd.format(d[id].usd);
                             }
 
-                            // Actualizar Cambio
                             const chg = d[id].eur_24h_change;
                             const cEl = document.getElementById(`${id}-change`);
                             cEl.innerText = (chg>0?'+':'') + chg.toFixed(2)+'%';
