@@ -199,9 +199,25 @@
         } white-space: nowrap; text-overflow: ellipsis; }
         #secondary-display.visible { opacity: 1; }
         #main-display { 
-            font-family: 'Lexend', sans-serif; color: var(--primary-text); font-size: 2.5rem; font-weight: 500; line-height: 1.1;
-            text-shadow: 0 2px 15px rgba(0,0,0,0.2); word-wrap: break-word; word-break: break-all; transition: font-size 0.2s ease-out; 
-        }
+    font-family: 'Lexend', sans-serif; 
+    /* ESTO ES LO NUEVO: Alineación tabular para evitar saltos */
+    font-variant-numeric: tabular-nums; 
+    letter-spacing: -1px; /* Hace los números grandes más compactos y elegantes */
+    color: var(--primary-text); 
+    font-size: 2.5rem; 
+    font-weight: 500; 
+    line-height: 1.1;
+    text-shadow: 0 2px 15px rgba(0,0,0,0.2); 
+    word-wrap: break-word; 
+    word-break: break-all; 
+    transition: font-size 0.1s ease-out; /* Transición más rápida (de 0.2s a 0.1s) */
+}
+
+/* AÑADE ESTO PARA LA LISTA CRYPTO */
+.price-eur, .price-usd, .change-percentage {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+}
         
         .calculator-body {
             flex: 1 1 50%; height: 50%; width: 100%; background: var(--keypad-bg); border-radius: 30px 30px 0 0;
@@ -256,9 +272,19 @@
         .change-positive { color: var(--crypto-green); font-weight: bold; text-shadow: 0 0 8px rgba(3, 218, 198, 0.3); }
         .change-negative { color: var(--crypto-red); font-weight: bold; }
         
-        .price-container { text-align: right; display: flex; flex-direction: column; justify-content: center; }
+        .price-container { 
+    text-align: right; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    align-items: flex-end; /* Alineación estricta a la derecha */
+}
         .price-eur { font-size: 1.2rem; font-weight: 700; color: var(--primary-text); }
-        .price-usd { font-size: 0.85rem; font-weight: 500; color: var(--secondary-text); margin-top: 2px; }
+        .price-usd {
+    font-size: 0.75rem;
+    font-family: 'Fira Code', monospace; /* Monospaced para datos técnicos */
+    opacity: 0.6;
+}
 
         /* MODALES */
         #chart-modal, #add-coin-modal {
@@ -469,6 +495,8 @@
 
     <script>
         const App = {
+			acTapCount: 0,
+			acTapTimer: null,
             expr: '',
             state: { 
                 theme: 'dark',
@@ -501,6 +529,40 @@
                 const setH = () => doc.style.setProperty('--doc-height', `${window.innerHeight}px`);
                 setH(); window.addEventListener('resize', setH);
             },
+			clearAllHistory() {
+        // Limpiamos el contador de taps para evitar bucles
+        this.acTapCount = 0; 
+        clearTimeout(this.acTapTimer);
+
+        // Lógica visual y de datos
+        document.getElementById('history-list').innerHTML = '';
+        this.showToast('Historial Eliminado 🗑️');
+        
+        // Haptic Feedback distinto (Patrón: fuerte, pausa, fuerte)
+        this.haptic([50, 30, 50]); 
+        this.pulseDisplay();
+        
+        // Limpiamos también la pantalla actual
+        this.handleInput('AC');
+    },
+
+    // 3. DETECTOR DE TRIPLE TAP (Añádela también)
+    trackACTap() {
+        this.acTapCount++;
+        
+        // Si ya hay un timer corriendo, lo limpiamos para reiniciar la cuenta atrás del último tap
+        clearTimeout(this.acTapTimer);
+        
+        if (this.acTapCount >= 3) {
+            this.clearAllHistory();
+        } else {
+            // Esperamos 500ms antes de resetear la cuenta. 
+            // Si el usuario no pulsa otra vez en este tiempo, vuelve a 0.
+            this.acTapTimer = setTimeout(() => {
+                this.acTapCount = 0;
+            }, 500);
+        }
+    },
 
             async requestWakeLock() { // RESTAURADO: WakeLock
                 try {
@@ -538,27 +600,25 @@
                             if(e.cancelable) e.preventDefault();
                             b.classList.add('btn-active');
                             longPressTriggered = false;
-                            
+                            this.trackACTap();
                             pressTimer = setTimeout(() => {
                                 longPressTriggered = true;
-                                document.getElementById('history-list').innerHTML = '';
-                                this.showToast('Historial Eliminado 🗑️');
-                                this.haptic([50, 50, 50]); 
-                                this.pulseDisplay();
-                                this.handleInput('AC'); 
+                                this.clearAllHistory(); // Usamos la nueva función centralizada
                             }, 800);
                         };
 
                         const endPress = () => {
                             clearTimeout(pressTimer);
                             b.classList.remove('btn-active');
-                            if (!longPressTriggered) {
+                            // Si fue un click normal (ni largo ni el 3º del triple tap), hace un AC simple
+                            if (!longPressTriggered && this.acTapCount < 3) {
                                 this.haptic(10);
-                                this.handleInput('AC');
                                 this.pulseDisplay();
+                                this.handleInput('AC');
                             }
                         };
-
+                        
+                        // Listeners (igual que tenías)
                         b.addEventListener('pointerdown', startPress);
                         b.addEventListener('pointerup', endPress);
                         b.addEventListener('pointerleave', () => {
@@ -583,7 +643,11 @@
 
                 // RESTAURADO: Soporte de teclado físico completo
                 document.addEventListener('keydown', (e) => {
-                    const k = e.key === 'Enter' ? 'Enter' : e.key;
+					const k = e.key === 'Enter' ? 'Enter' : e.key;
+					if (k === 'Escape') {
+                        this.trackACTap();
+                        // Dejamos que continúe para que haga el efecto visual en el botón
+                    }
                     if(!/^[0-9+\-*/.,=()]$|Enter|Backspace|Escape|Delete/.test(k)) return;
                     let vKey = k;
                     if(k==='Enter'||k==='=') vKey='Enter';
@@ -659,25 +723,65 @@
             },
 
             handleInput(k) {
+                // LÓGICA DE CONTINUIDAD (Ans)
                 if(this.fresh) {
-                    if(!"+-*/".includes(k) && k !== 'Enter') { this.expr=''; this.editIdx=null; }
-                    this.fresh = false;
-                    document.getElementById('secondary-display').classList.remove('visible');
+                    // Si el usuario pulsa un operador, seguimos con el resultado anterior
+                    if("+-*/".includes(k)) {
+                        this.fresh = false; 
+                    } 
+                    // Si pulsa un número, punto o paréntesis, empezamos de cero
+                    else if (k !== 'Enter') { 
+                        this.expr = ''; 
+                        this.fresh = false;
+                        document.getElementById('secondary-display').classList.remove('visible');
+                    }
                 }
                 
-                if(k==='AC') { 
+                if(k === 'AC') { 
                     this.expr = '';
-                    this.editIdx = null; 
+                    this.editIdx = null;
+                    // Feedback visual de reseteo
+                    document.getElementById('main-display').innerHTML = '0';
+                    document.getElementById('secondary-display').classList.remove('visible');
+                    return;
                 }
-                else if(k==='Backspace') { this.expr = this.expr.toString().slice(0, -1);
+                
+                if(k === 'Backspace') { 
+                    this.expr = this.expr.toString().slice(0, -1);
                 }
-                else if(k==='Enter') { this.calculate();
+                else if(k === 'Enter') { 
+                    this.calculate();
+                    return; // Importante salir aquí
                 }
-                else if(k==='(') { this.smartParen(); }
+                else if(k === '(') { 
+                    this.smartParen(); 
+                }
                 else {
+                    // PROTECCIÓN DE ENTRADA
                     const last = this.expr.slice(-1);
-                    if("+-*/".includes(last) && "+-*/".includes(k)) { this.expr = this.expr.slice(0, -1) + k; } 
-                    else { this.expr += k; }
+                    
+                    // Evitar múltiples operadores seguidos (ej: ++ o --)
+                    if("+-*/".includes(last) && "+-*/".includes(k)) {
+                        this.expr = this.expr.slice(0, -1) + k;
+                    }
+                    // Manejo inteligente del punto decimal
+                    else if (k === '.') {
+                        // Si está vacío o termina en operador, poner "0."
+                        if(this.expr === '' || "+-*/(".includes(last)) {
+                            this.expr += '0.';
+                        }
+                        // Evitar doble punto en el mismo número
+                        else {
+                            const numbers = this.expr.split(/[\+\-\*\/]/);
+                            const currentNum = numbers[numbers.length - 1];
+                            if (!currentNum.includes('.')) {
+                                this.expr += '.';
+                            }
+                        }
+                    }
+                    else { 
+                        this.expr += k; 
+                    }
                 }
                 this.renderCalc();
             },
@@ -718,29 +822,57 @@
             renderCalc() {
                 const d = document.getElementById('main-display');
                 if(!this.expr) { d.innerHTML = '0'; d.style.fontSize = '2.5rem'; return; }
-                const len = this.expr.length;
                 
+                // 1. Ajuste de tamaño de fuente
+                const len = this.expr.length;
                 let size = 2.5; 
-                if (len > 7) {
-                    size = Math.max(1.1, 2.5 - ((len - 7) * 0.08));
-                }
+                if (len > 9) size = 2.0;
+                if (len > 13) size = 1.5;
+                if (len > 18) size = 1.1;
                 d.style.fontSize = `${size}rem`;
 
-                const parts = this.expr.split(/([\+\-\*\/])/);
+                // 2. Tokenización y Formateo
+                // Usamos una Regex que captura números, operadores y paréntesis
+                const parts = this.expr.split(/([\+\-\*\/\(\)])/);
                 let h = '';
+                
                 parts.forEach((p,i) => {
-                    if(p==='') return;
+                    if(p === '') return;
+                    
                     let cls = 'token';
                     let txt = p;
-                    if("+-*/".includes(p)) { cls += ' token-op'; txt = p.replace('*','×').replace('/','÷'); } 
-                    else { if(!isNaN(parseFloat(p))) { let [int, dec] = p.split('.'); int = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-                    txt = dec !== undefined ? `${int},${dec}` : int; } }
-                    if(i === this.editIdx) cls += ' token-selected';
+
+                    if("+-*/()".includes(p)) { 
+                        cls += ' token-op';
+                        // Estética: Operadores más bonitos
+                        txt = p.replace('*','×').replace('/','÷').replace('-','−'); 
+                    } 
+                    else {
+                        // Es un número (o parte de él)
+                        if(!isNaN(parseFloat(p))) {
+                            const [int, dec] = p.split('.');
+                            
+                            // Formato ES: Puntos para miles
+                            let formattedInt = int;
+                            if (int !== '' && int !== '-') {
+                                formattedInt = parseFloat(int).toLocaleString('es-ES');
+                            }
+                            
+                            // Reconstrucción visual: Coma para decimales
+                            if (dec !== undefined) {
+                                txt = `${formattedInt},<span style="opacity:0.7; font-size:0.9em">${dec}</span>`;
+                            } else {
+                                txt = formattedInt;
+                            }
+                            
+                            // Caso especial: Usuario escribe "-0." -> "-0,"
+                            if (p === '-0.') txt = '-0,';
+                        }
+                    }
                     h += `<span class="${cls}">${txt}</span>`;
                 });
                 d.innerHTML = h;
             },
-
             addToHistory(ex, r) {
                 const li = document.createElement('li');
                 const formattedRes = r.toLocaleString('es-ES', { maximumFractionDigits: 10 });
@@ -836,7 +968,12 @@
                     const d = await res.json();
                     this.prices = d;
 
-                    const fmtEur = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'});
+                    const fmtEur = new Intl.NumberFormat('es-ES', { 
+    style: 'decimal', 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 6 
+});
+elEur.textContent = fmtEur.format(d[id].eur) + ' €'; // Añadir símbolo manual para control total
                     const fmtUsd = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
 
                     this.state.coins.forEach(id => {
