@@ -239,7 +239,12 @@
             opacity: 0; transform: scale(0.5); pointer-events: none; transition: opacity 0.3s, transform 0.3s;
         }
         .btn:active::after { opacity: 1; transform: scale(1); transition: 0s; }
-        .btn:active, .btn.btn-active { box-shadow: var(--btn-shadow-active); transform: translateY(3px); }
+        .btn:active, .btn.btn-active { 
+    box-shadow: var(--btn-shadow-active); 
+    /* Cambio: En lugar de mover hacia abajo, reducimos escala ligeramente */
+    transform: scale(0.96); 
+    transition: transform 0.1s cubic-bezier(0.4, 0.0, 0.2, 1); /* Curva de aceleración iOS */
+}
         .btn-wide { grid-column: span 2; border-radius: 20px; }
         .btn[data-color="red"] { background: var(--bg-red); color: #fff; }
         .btn[data-color="blue"] { background: var(--bg-blue); color: #fff; }
@@ -324,7 +329,16 @@
 
         /* Add Coin Modal (NUEVO) */
         .input-group { display: flex; gap: 10px; margin-top: 15px; }
-        #coin-input { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--border-ui); background: var(--keypad-bg); color: var(--primary-text); font-family: 'Poppins', sans-serif; }
+        #coin-input { 
+    flex: 1; 
+    padding: 12px; 
+    border-radius: 12px; 
+    border: 1px solid var(--border-ui); 
+    background: var(--keypad-bg); 
+    color: var(--primary-text); 
+    font-family: 'Poppins', sans-serif;
+    font-size: 16px; /* CRÍTICO PARA IOS */
+} sans-serif; }
         .btn-confirm { background: var(--neon-green); color: #000; border: none; padding: 0 20px; border-radius: 12px; font-weight: 600; cursor: pointer; }
 
         /* Spinner Original */
@@ -494,642 +508,628 @@
     <div id="toast" class="toast">Notificación</div>
 
     <script>
-        const App = {
-			acTapCount: 0,
-			acTapTimer: null,
-            expr: '',
-            state: { 
-                theme: 'dark',
-                coins: ['bitcoin', 'ethereum', 'solana', 'ripple'] // Default list
-            },
-            editIdx: null,
-            chart: null,
-            wakeLock: null,
+    const App = {
+        acTapCount: 0,
+        acTapTimer: null,
+        expr: '',
+        fresh: true, // Variable que faltaba en tu código original para controlar el input
+        state: { 
+            theme: 'dark',
+            coins: ['bitcoin', 'ethereum', 'solana', 'ripple'],
+            // MEJORA EXPERTO: Guardamos caché de precios y última actualización
+            cachedPrices: {},
+            lastUpdateTimestamp: null
+        },
+        editIdx: null,
+        chart: null,
+        wakeLock: null,
+        
+        // Crypto State
+        currentCoin: null,
+        currentPrice: 0,
+        chartDays: 7,
+        
+        init() {
+            this.loadState();
+            this.applyTheme(this.state.theme);
             
-            // Crypto State
-            currentCoin: null,
-            currentPrice: 0,
-            chartDays: 7,
-            prices: {}, 
+            // 1. Renderizar inmediato con lo que tengamos en memoria (aunque sea viejo)
+            this.renderCryptoList(); 
+            this.updateStatusDisplay(false); // Mostrar hora de caché inicial
             
-            init() {
-                this.loadState();
-                this.applyTheme(this.state.theme);
-                this.renderCryptoList(); // Renderiza las monedas guardadas
-                this.bindEvents();
-                this.startClocks();
-                this.fetchPrices();
-                setInterval(() => this.fetchPrices(), 60000);
-                this.requestWakeLock(); // RESTAURADO: WakeLock
-                this.fixHeight();
-            },
+            this.bindEvents();
+            this.startClocks();
+            
+            // 2. Intentar actualizar datos frescos
+            this.fetchPrices();
+            
+            // Intervalo aumentado a 90s para evitar bloqueo de CoinGecko (Error 429)
+            setInterval(() => this.fetchPrices(), 90000); 
+            
+            this.requestWakeLock();
+            this.fixHeight();
+        },
 
-            fixHeight() {
-                const doc = document.documentElement;
-                const setH = () => doc.style.setProperty('--doc-height', `${window.innerHeight}px`);
-                setH(); window.addEventListener('resize', setH);
-            },
-			clearAllHistory() {
-        // Limpiamos el contador de taps para evitar bucles
-        this.acTapCount = 0; 
-        clearTimeout(this.acTapTimer);
+        fixHeight() {
+            const doc = document.documentElement;
+            const setH = () => doc.style.setProperty('--doc-height', `${window.innerHeight}px`);
+            setH(); window.addEventListener('resize', setH);
+        },
 
-        // Lógica visual y de datos
-        document.getElementById('history-list').innerHTML = '';
-        this.showToast('Historial Eliminado 🗑️');
-        
-        // Haptic Feedback distinto (Patrón: fuerte, pausa, fuerte)
-        this.haptic([50, 30, 50]); 
-        this.pulseDisplay();
-        
-        // Limpiamos también la pantalla actual
-        this.handleInput('AC');
-    },
+        clearAllHistory() {
+            this.acTapCount = 0; 
+            clearTimeout(this.acTapTimer);
+            document.getElementById('history-list').innerHTML = '';
+            this.showToast('Historial Eliminado 🗑️');
+            this.haptic([50, 30, 50]); 
+            this.pulseDisplay();
+            this.handleInput('AC');
+        },
 
-    // 3. DETECTOR DE TRIPLE TAP (Añádela también)
-    trackACTap() {
-        this.acTapCount++;
-        
-        // Si ya hay un timer corriendo, lo limpiamos para reiniciar la cuenta atrás del último tap
-        clearTimeout(this.acTapTimer);
-        
-        if (this.acTapCount >= 3) {
-            this.clearAllHistory();
-        } else {
-            // Esperamos 500ms antes de resetear la cuenta. 
-            // Si el usuario no pulsa otra vez en este tiempo, vuelve a 0.
-            this.acTapTimer = setTimeout(() => {
-                this.acTapCount = 0;
-            }, 500);
-        }
-    },
+        trackACTap() {
+            this.acTapCount++;
+            clearTimeout(this.acTapTimer);
+            if (this.acTapCount >= 3) {
+                this.clearAllHistory();
+            } else {
+                this.acTapTimer = setTimeout(() => { this.acTapCount = 0; }, 500);
+            }
+        },
 
-            async requestWakeLock() { // RESTAURADO: WakeLock
-                try {
-                    if ('wakeLock' in navigator) {
-                        this.wakeLock = await navigator.wakeLock.request('screen');
-                        document.addEventListener('visibilitychange', async () => {
-                            if (this.wakeLock !== null && document.visibilityState === 'visible') {
-                                this.wakeLock = await navigator.wakeLock.request('screen');
-                            }
-                        });
-                    }
-                } catch (e) {}
-            },
+        async requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    this.wakeLock = await navigator.wakeLock.request('screen');
+                    document.addEventListener('visibilitychange', async () => {
+                        if (this.wakeLock !== null && document.visibilityState === 'visible') {
+                            this.wakeLock = await navigator.wakeLock.request('screen');
+                        }
+                    });
+                }
+            } catch (e) {}
+        },
 
-            bindEvents() {
-                // Navegación
-                document.getElementById('btn-go-crypto').onclick = () => this.switchView('crypto');
-                document.getElementById('btn-go-calc').onclick = () => this.switchView('calc');
-                
-                // Temas (Con Haptic RESTAURADO)
-                document.querySelectorAll('.btn-theme').forEach(b => b.onclick = () => {
-                    this.applyTheme(this.state.theme === 'dark' ? 'light' : 'dark');
-                    this.haptic(15);
-                });
+        bindEvents() {
+            document.getElementById('btn-go-crypto').onclick = () => this.switchView('crypto');
+            document.getElementById('btn-go-calc').onclick = () => this.switchView('calc');
+            
+            document.querySelectorAll('.btn-theme').forEach(b => b.onclick = () => {
+                this.applyTheme(this.state.theme === 'dark' ? 'light' : 'dark');
+                this.haptic(15);
+            });
 
-                // Lógica de Botones Calculadora (COMPLETA ORIGINAL + TECLADO)
-                document.querySelectorAll('.btn[data-key]').forEach(b => {
-                    const key = b.dataset.key;
-                    
-                    if (key === 'AC') {
-                        let pressTimer;
-                        let longPressTriggered = false;
-
-                        const startPress = (e) => { // RESTAURADO: Long Press logic
-                            if(e.cancelable) e.preventDefault();
-                            b.classList.add('btn-active');
-                            longPressTriggered = false;
-                            this.trackACTap();
-                            pressTimer = setTimeout(() => {
-                                longPressTriggered = true;
-                                this.clearAllHistory(); // Usamos la nueva función centralizada
-                            }, 800);
-                        };
-
-                        const endPress = () => {
-                            clearTimeout(pressTimer);
-                            b.classList.remove('btn-active');
-                            // Si fue un click normal (ni largo ni el 3º del triple tap), hace un AC simple
-                            if (!longPressTriggered && this.acTapCount < 3) {
-                                this.haptic(10);
-                                this.pulseDisplay();
-                                this.handleInput('AC');
-                            }
-                        };
-                        
-                        // Listeners (igual que tenías)
-                        b.addEventListener('pointerdown', startPress);
-                        b.addEventListener('pointerup', endPress);
-                        b.addEventListener('pointerleave', () => {
-                            clearTimeout(pressTimer);
-                            b.classList.remove('btn-active');
-                        });
-
-                    } else {
-                        const press = (e) => {
-                            if(e.cancelable) e.preventDefault(); 
-                            this.haptic(10);
-                            b.classList.add('btn-active');
-                            this.pulseDisplay(); 
-                            this.handleInput(key);
-                        };
-                        const release = () => b.classList.remove('btn-active');
-                        b.addEventListener('pointerdown', press);
-                        b.addEventListener('pointerup', release);
-                        b.addEventListener('pointerleave', release);
-                    }
-                });
-
-                // RESTAURADO: Soporte de teclado físico completo
-                document.addEventListener('keydown', (e) => {
-					const k = e.key === 'Enter' ? 'Enter' : e.key;
-					if (k === 'Escape') {
+            document.querySelectorAll('.btn[data-key]').forEach(b => {
+                const key = b.dataset.key;
+                if (key === 'AC') {
+                    let pressTimer;
+                    let longPressTriggered = false;
+                    const startPress = (e) => {
+                        if(e.cancelable) e.preventDefault();
+                        b.classList.add('btn-active');
+                        longPressTriggered = false;
                         this.trackACTap();
-                        // Dejamos que continúe para que haga el efecto visual en el botón
-                    }
-                    if(!/^[0-9+\-*/.,=()]$|Enter|Backspace|Escape|Delete/.test(k)) return;
-                    let vKey = k;
-                    if(k==='Enter'||k==='=') vKey='Enter';
-                    if(k==='Escape'||k==='Delete') vKey='AC';
-                    const btn = document.querySelector(`.btn[data-key="${vKey}"]`) || document.querySelector(`.btn[data-key="${k}"]`);
-                    if(btn) {
-                        btn.classList.add('btn-active');
-                        this.pulseDisplay();
-                        setTimeout(() => btn.classList.remove('btn-active'), 100);
-                        this.handleInput(vKey === 'AC' ? 'AC' : (vKey === 'Enter' ? 'Enter' : k));
-                    }
-                });
-
-                // EVENTOS NUEVOS: Modales y Cripto
-                const chartModal = document.getElementById('chart-modal');
-                const addModal = document.getElementById('add-coin-modal');
-
-                document.getElementById('btn-add-coin').onclick = () => {
-                    addModal.classList.add('visible');
-                    document.getElementById('coin-input').focus();
-                };
-                document.getElementById('close-add').onclick = () => addModal.classList.remove('visible');
-                document.getElementById('confirm-add').onclick = () => this.addCoin();
-                
-                // Add coin con Enter
-                document.getElementById('coin-input').addEventListener('keypress', (e) => {
-                    if(e.key === 'Enter') this.addCoin();
-                });
-
-                document.getElementById('close-chart').onclick = () => chartModal.classList.remove('visible');
-                
-                // Cerrar clickando fuera
-                chartModal.onclick = (e) => { if (e.target === chartModal) chartModal.classList.remove('visible'); };
-                addModal.onclick = (e) => { if (e.target === addModal) addModal.classList.remove('visible'); };
-
-                // Chart Timeframes
-                document.querySelectorAll('.tf-btn').forEach(btn => {
-                    btn.onclick = () => {
-                        document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-                        btn.classList.add('active');
-                        this.chartDays = btn.dataset.days;
-                        this.haptic(10);
-                        if(this.currentCoin) this.loadChartData(this.currentCoin);
+                        pressTimer = setTimeout(() => {
+                            longPressTriggered = true;
+                            this.clearAllHistory();
+                        }, 800);
                     };
-                });
+                    const endPress = () => {
+                        clearTimeout(pressTimer);
+                        b.classList.remove('btn-active');
+                        if (!longPressTriggered && this.acTapCount < 3) {
+                            this.haptic(10);
+                            this.pulseDisplay();
+                            this.handleInput('AC');
+                        }
+                    };
+                    b.addEventListener('pointerdown', startPress);
+                    b.addEventListener('pointerup', endPress);
+                    b.addEventListener('pointerleave', () => {
+                        clearTimeout(pressTimer);
+                        b.classList.remove('btn-active');
+                    });
+                } else {
+                    const press = (e) => {
+                        if(e.cancelable) e.preventDefault(); 
+                        this.haptic(10);
+                        b.classList.add('btn-active');
+                        this.pulseDisplay(); 
+                        this.handleInput(key);
+                    };
+                    const release = () => b.classList.remove('btn-active');
+                    b.addEventListener('pointerdown', press);
+                    b.addEventListener('pointerup', release);
+                    b.addEventListener('pointerleave', release);
+                }
+            });
 
-                // Feature: Usar Precio en Calculadora
-                document.getElementById('btn-use-price').onclick = () => {
-                    this.sendToCalc();
+            document.addEventListener('keydown', (e) => {
+                const k = e.key === 'Enter' ? 'Enter' : e.key;
+                if (k === 'Escape') this.trackACTap();
+                if(!/^[0-9+\-*/.,=()]$|Enter|Backspace|Escape|Delete/.test(k)) return;
+                let vKey = k;
+                if(k==='Enter'||k==='=') vKey='Enter';
+                if(k==='Escape'||k==='Delete') vKey='AC';
+                const btn = document.querySelector(`.btn[data-key="${vKey}"]`) || document.querySelector(`.btn[data-key="${k}"]`);
+                if(btn) {
+                    btn.classList.add('btn-active');
+                    this.pulseDisplay();
+                    setTimeout(() => btn.classList.remove('btn-active'), 100);
+                    this.handleInput(vKey === 'AC' ? 'AC' : (vKey === 'Enter' ? 'Enter' : k));
+                }
+            });
+
+            const chartModal = document.getElementById('chart-modal');
+            const addModal = document.getElementById('add-coin-modal');
+
+            document.getElementById('btn-add-coin').onclick = () => {
+                addModal.classList.add('visible');
+                // Pequeño timeout para asegurar que el modal es visible antes de enfocar (mejor en iOS)
+                setTimeout(() => document.getElementById('coin-input').focus(), 100);
+            };
+            document.getElementById('close-add').onclick = () => addModal.classList.remove('visible');
+            document.getElementById('confirm-add').onclick = () => this.addCoin();
+            
+            document.getElementById('coin-input').addEventListener('keypress', (e) => {
+                if(e.key === 'Enter') this.addCoin();
+            });
+
+            document.getElementById('close-chart').onclick = () => chartModal.classList.remove('visible');
+            chartModal.onclick = (e) => { if (e.target === chartModal) chartModal.classList.remove('visible'); };
+            addModal.onclick = (e) => { if (e.target === addModal) addModal.classList.remove('visible'); };
+
+            document.querySelectorAll('.tf-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    this.chartDays = btn.dataset.days;
+                    this.haptic(10);
+                    if(this.currentCoin) this.loadChartData(this.currentCoin);
+                };
+            });
+
+            document.getElementById('btn-use-price').onclick = () => {
+                this.sendToCalc();
+                chartModal.classList.remove('visible');
+                this.haptic(20);
+            };
+
+            document.getElementById('btn-delete-current').onclick = () => {
+                if(confirm(`¿Eliminar ${this.currentCoin}?`)) {
+                    this.state.coins = this.state.coins.filter(c => c !== this.currentCoin);
+                    // Limpiamos también de la caché
+                    if(this.state.cachedPrices[this.currentCoin]) delete this.state.cachedPrices[this.currentCoin];
+                    this.saveState();
+                    this.renderCryptoList();
+                    this.fetchPrices();
                     chartModal.classList.remove('visible');
                     this.haptic(20);
-                };
-
-                // Borrar moneda
-                document.getElementById('btn-delete-current').onclick = () => {
-                    if(confirm(`¿Eliminar ${this.currentCoin}?`)) {
-                        this.state.coins = this.state.coins.filter(c => c !== this.currentCoin);
-                        this.saveState();
-                        this.renderCryptoList();
-                        this.fetchPrices();
-                        chartModal.classList.remove('visible');
-                        this.haptic(20);
-                    }
-                };
-            },
-
-            pulseDisplay() {
-                const lens = document.getElementById('display-container');
-                lens.classList.remove('pulse-active');
-                void lens.offsetWidth; 
-                lens.classList.add('pulse-active');
-                setTimeout(()=>lens.classList.remove('pulse-active'), 300);
-            },
-
-            handleInput(k) {
-                // LÓGICA DE CONTINUIDAD (Ans)
-                if(this.fresh) {
-                    // Si el usuario pulsa un operador, seguimos con el resultado anterior
-                    if("+-*/".includes(k)) {
-                        this.fresh = false; 
-                    } 
-                    // Si pulsa un número, punto o paréntesis, empezamos de cero
-                    else if (k !== 'Enter') { 
-                        this.expr = ''; 
-                        this.fresh = false;
-                        document.getElementById('secondary-display').classList.remove('visible');
-                    }
                 }
-                
-                if(k === 'AC') { 
-                    this.expr = '';
-                    this.editIdx = null;
-                    // Feedback visual de reseteo
-                    document.getElementById('main-display').innerHTML = '0';
+            };
+        },
+
+        pulseDisplay() {
+            const lens = document.getElementById('display-container');
+            lens.classList.remove('pulse-active');
+            void lens.offsetWidth; 
+            lens.classList.add('pulse-active');
+            setTimeout(()=>lens.classList.remove('pulse-active'), 300);
+        },
+
+        handleInput(k) {
+            if(this.fresh) {
+                if("+-*/".includes(k)) {
+                    this.fresh = false; 
+                } 
+                else if (k !== 'Enter') { 
+                    this.expr = ''; 
+                    this.fresh = false;
                     document.getElementById('secondary-display').classList.remove('visible');
-                    return;
                 }
-                
-                if(k === 'Backspace') { 
-                    this.expr = this.expr.toString().slice(0, -1);
-                }
-                else if(k === 'Enter') { 
-                    this.calculate();
-                    return; // Importante salir aquí
-                }
-                else if(k === '(') { 
-                    this.smartParen(); 
-                }
-                else {
-                    // PROTECCIÓN DE ENTRADA
-                    const last = this.expr.slice(-1);
-                    
-                    // Evitar múltiples operadores seguidos (ej: ++ o --)
-                    if("+-*/".includes(last) && "+-*/".includes(k)) {
-                        this.expr = this.expr.slice(0, -1) + k;
-                    }
-                    // Manejo inteligente del punto decimal
-                    else if (k === '.') {
-                        // Si está vacío o termina en operador, poner "0."
-                        if(this.expr === '' || "+-*/(".includes(last)) {
-                            this.expr += '0.';
-                        }
-                        // Evitar doble punto en el mismo número
-                        else {
-                            const numbers = this.expr.split(/[\+\-\*\/]/);
-                            const currentNum = numbers[numbers.length - 1];
-                            if (!currentNum.includes('.')) {
-                                this.expr += '.';
-                            }
-                        }
-                    }
-                    else { 
-                        this.expr += k; 
-                    }
-                }
-                this.renderCalc();
-            },
-
-            calculate() {
-                if(!this.expr) return;
-                try {
-                    // RESTAURADO: Mostrar operación original en pantalla secundaria
-                    const originalExpr = this.expr.replace(/\*/g,'×').replace(/\//g,'÷');
-                    
-                    let clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
-                    clean = clean.replace(/\)\(/g, ')*('); 
-                    let res = new Function('return ' + clean)();
-                    if(!isFinite(res)) throw new Error("Error");
-                    res = parseFloat(res.toPrecision(12)); 
-                    
-                    this.addToHistory(this.expr, res);
-                    this.expr = String(res); this.fresh=true;
-                    
-                    const secDisp = document.getElementById('secondary-display');
-                    secDisp.innerText = originalExpr + ' =';
-                    secDisp.classList.add('visible');
-                    this.pulseDisplay();
-                } catch(e) { this.showToast("Cálculo inválido"); }
-                this.renderCalc();
-            },
-
-            smartParen() {
-                const o = (this.expr.match(/\(/g)||[]).length;
-                const c = (this.expr.match(/\)/g)||[]).length;
-                const last = this.expr.slice(-1);
-                if(o > c && (/[0-9.]$/.test(last) || last===')')) this.expr += ')';
-                else if(/[0-9.]$/.test(last) || last===')') this.expr += '*(';
-                else this.expr += '(';
-                this.renderCalc();
-            },
-
-            renderCalc() {
-                const d = document.getElementById('main-display');
-                if(!this.expr) { d.innerHTML = '0'; d.style.fontSize = '2.5rem'; return; }
-                
-                // 1. Ajuste de tamaño de fuente
-                const len = this.expr.length;
-                let size = 2.5; 
-                if (len > 9) size = 2.0;
-                if (len > 13) size = 1.5;
-                if (len > 18) size = 1.1;
-                d.style.fontSize = `${size}rem`;
-
-                // 2. Tokenización y Formateo
-                // Usamos una Regex que captura números, operadores y paréntesis
-                const parts = this.expr.split(/([\+\-\*\/\(\)])/);
-                let h = '';
-                
-                parts.forEach((p,i) => {
-                    if(p === '') return;
-                    
-                    let cls = 'token';
-                    let txt = p;
-
-                    if("+-*/()".includes(p)) { 
-                        cls += ' token-op';
-                        // Estética: Operadores más bonitos
-                        txt = p.replace('*','×').replace('/','÷').replace('-','−'); 
-                    } 
-                    else {
-                        // Es un número (o parte de él)
-                        if(!isNaN(parseFloat(p))) {
-                            const [int, dec] = p.split('.');
-                            
-                            // Formato ES: Puntos para miles
-                            let formattedInt = int;
-                            if (int !== '' && int !== '-') {
-                                formattedInt = parseFloat(int).toLocaleString('es-ES');
-                            }
-                            
-                            // Reconstrucción visual: Coma para decimales
-                            if (dec !== undefined) {
-                                txt = `${formattedInt},<span style="opacity:0.7; font-size:0.9em">${dec}</span>`;
-                            } else {
-                                txt = formattedInt;
-                            }
-                            
-                            // Caso especial: Usuario escribe "-0." -> "-0,"
-                            if (p === '-0.') txt = '-0,';
-                        }
-                    }
-                    h += `<span class="${cls}">${txt}</span>`;
-                });
-                d.innerHTML = h;
-            },
-            addToHistory(ex, r) {
-                const li = document.createElement('li');
-                const formattedRes = r.toLocaleString('es-ES', { maximumFractionDigits: 10 });
-                const prettyExpr = ex.replace(/\*/g,'×').replace(/\//g,'÷').replace(/(\d+)(\.\d+)?/g, (m, i, d) => i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (d?d.replace('.',','):''));
-                li.innerHTML = `${prettyExpr} = <b>${formattedRes}</b>`;
-                li.setAttribute('role', 'button');
-                li.setAttribute('tabindex', '0');
-                li.onclick = () => { this.expr = String(r); this.fresh = true; this.renderCalc(); this.haptic(10); };
-                const list = document.getElementById('history-list');
-                list.prepend(li);
-                if(list.children.length > 20) list.lastChild.remove(); 
-            },
-
-            /* --- LOGICA CRYPTO (MEJORADA + ROBUSTEZ ORIGINAL) --- */
-
-            renderCryptoList() {
-                const container = document.getElementById('crypto-list-container');
-                container.innerHTML = '';
-                
-                if(this.state.coins.length === 0) {
-                    container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--secondary-text)">Sin monedas. Pulsa + para añadir.</div>';
-                    return;
-                }
-
-                this.state.coins.forEach(id => {
-                    const div = document.createElement('div');
-                    div.className = 'card';
-                    div.onclick = () => this.openChartModal(id);
-                    div.innerHTML = `
-                        <div class="coin-details">
-                            <img src="" class="coin-logo" id="img-${id}" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/4/46/Bitcoin.svg'">
-                            <div class="coin-info">
-                                <h2>${id}</h2>
-                                <p class="change-percentage" id="change-${id}">--</p>
-                            </div>
-                        </div>
-                        <div class="price-container">
-                            <p class="price-eur" id="price-eur-${id}">--</p>
-                            <p class="price-usd" id="price-usd-${id}">--</p>
-                        </div>
-                    `;
-                    container.appendChild(div);
-                });
-            },
-
-            async addCoin() {
-                const input = document.getElementById('coin-input');
-                const id = input.value.toLowerCase().trim();
-                if(!id) return;
-                
-                if(this.state.coins.includes(id)) {
-                    this.showToast('La moneda ya está en la lista');
-                    return;
-                }
-
-                document.getElementById('add-coin-modal').classList.remove('visible');
-                this.showToast(`Buscando ${id}...`);
-
-                try {
-                    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=eur`);
-                    const data = await res.json();
-                    if(data[id]) {
-                        this.state.coins.push(id);
-                        this.saveState();
-                        this.renderCryptoList();
-                        this.fetchPrices();
-                        input.value = '';
-                        this.showToast(`${id} añadido`);
-                        this.haptic(20);
-                    } else {
-                        this.showToast('Moneda no encontrada');
-                        this.haptic(50);
-                    }
-                } catch(e) {
-                    this.showToast('Error de conexión');
-                }
-            },
-
-            async fetchPrices() {
-                if(this.state.coins.length === 0) return;
-                const ids = this.state.coins.join(',');
-                const dot = document.querySelector('.status-dot');
-                const label = document.getElementById('time-text');
-                
-                try {
-                    const controller = new AbortController(); // RESTAURADO: Robustez Original
-                    const idTimeout = setTimeout(() => controller.abort(), 8000);
-                    
-                    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur,usd&include_24hr_change=true`, { signal: controller.signal });
-                    clearTimeout(idTimeout);
-                    
-                    if(!res.ok) throw new Error("API Limit");
-                    const d = await res.json();
-                    this.prices = d;
-
-                    const fmtEur = new Intl.NumberFormat('es-ES', { 
-    style: 'decimal', 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 6 
-});
-elEur.textContent = fmtEur.format(d[id].eur) + ' €'; // Añadir símbolo manual para control total
-                    const fmtUsd = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
-
-                    this.state.coins.forEach(id => {
-                        if(d[id]) {
-                            // Update Images intelligently
-                            const img = document.getElementById(`img-${id}`);
-                            if(img) {
-                                if(id==='bitcoin') img.src="https://assets.coingecko.com/coins/images/1/large/bitcoin.png";
-                                else if(id==='ethereum') img.src="https://assets.coingecko.com/coins/images/279/large/ethereum.png";
-                                else if(id==='solana') img.src="https://assets.coingecko.com/coins/images/4128/large/solana.png";
-                                else if(id==='ripple') img.src="https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png";
-                                else if(!img.src || img.src.includes('wikimedia')) img.src = `https://assets.coingecko.com/coins/images/1/large/${id}.png`; // Intento genérico
-                            }
-
-                            const elEur = document.getElementById(`price-eur-${id}`);
-                            const oldPrice = elEur.innerText;
-                            const newPrice = fmtEur.format(d[id].eur);
-
-                            // RESTAURADO: Animación de color al cambiar precio
-                            if(oldPrice !== '--' && oldPrice !== newPrice) {
-                                elEur.style.color = d[id].eur_24h_change > 0 ? 'var(--crypto-green)' : 'var(--crypto-red)';
-                                setTimeout(()=>elEur.style.color = 'var(--primary-text)', 1000);
-                            }
-                            elEur.textContent = newPrice;
-
-                            const elUsd = document.getElementById(`price-usd-${id}`);
-                            if(elUsd) elUsd.textContent = fmtUsd.format(d[id].usd);
-
-                            const chg = d[id].eur_24h_change || 0;
-                            const elChg = document.getElementById(`change-${id}`);
-                            if(elChg) {
-                                elChg.innerText = (chg>0?'+':'') + chg.toFixed(2) + '%';
-                                elChg.className = `change-percentage ${chg>=0?'change-positive':'change-negative'}`;
-                            }
-                        }
-                    });
-                    
-                    label.innerText = new Date().toLocaleTimeString().slice(0,5);
-                    dot.className = 'status-dot online';
-                } catch(e) {
-                    dot.className = 'status-dot error';
-                    label.innerText = e.name === 'AbortError' ? 'Red lenta' : 'Sin conexión';
-                }
-            },
-
-            openChartModal(id) {
-                this.currentCoin = id;
-                this.currentPrice = this.prices[id] ? this.prices[id].eur : 0;
-                document.getElementById('chart-title').innerText = id;
-                document.getElementById('chart-modal').classList.add('visible');
-                this.loadChartData(id);
-            },
-
-            async loadChartData(id) {
-                const spinner = document.getElementById('loading-chart');
-                spinner.classList.add('active'); // UX: Spinner Original
-                
-                if(!this.chart) {
-                    this.chart = new ApexCharts(document.getElementById('chart-container'), {
-                        series:[], chart: {type:'area', height:250, toolbar:{show:false}, background:'transparent'},
-                        theme: {mode: this.state.theme}, 
-                        stroke:{curve:'smooth',width:2},
-                        fill: {type:'gradient', gradient: {shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3}}, 
-                        dataLabels:{enabled:false},
-                        xaxis: {type:'datetime', tooltip:{enabled:false}, axisBorder:{show:false}, labels:{show:false}},
-                        yaxis: {labels: {style:{colors:'var(--secondary-text)'}, formatter: v=>v.toLocaleString('es-ES') + '€'}},
-                        grid: {show:false},
-                        tooltip: { theme: this.state.theme, x: {format: 'dd MMM HH:mm'} }
-                    });
-                    this.chart.render();
-                }
-
-                try {
-                    const res = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=eur&days=${this.chartDays}`);
-                    const data = await res.json();
-                    
-                    const isPositive = (data.prices[data.prices.length-1][1] >= data.prices[0][1]);
-                    const color = isPositive ? '#00E676' : '#FF1744';
-
-                    this.chart.updateOptions({
-                        theme:{mode:this.state.theme},
-                        tooltip: { theme: this.state.theme },
-                        colors: [color]
-                    });
-                    this.chart.updateSeries([{name:'Precio', data: data.prices}]);
-                    
-                    this.currentPrice = data.prices[data.prices.length-1][1];
-
-                } catch(e) { this.showToast('Error cargando gráfico'); }
-                finally { spinner.classList.remove('active'); }
-            },
-
-            sendToCalc() {
-                if(!this.currentPrice) return;
-                
-                // Nueva lógica inteligente de inserción
-                const p = String(this.currentPrice);
-                const lastChar = this.expr.slice(-1);
-                
-                if("+-*/(".includes(lastChar)) {
-                    this.expr += p;
-                } else {
-                    // Si hay un número o está vacío, reemplaza para empezar operación nueva con el precio
-                     this.expr = p;
-                }
-
-                this.fresh = false; 
-                this.switchView('calc');
-                this.renderCalc();
-                this.pulseDisplay();
-                this.showToast(`Precio copiado`);
-            },
-
-            switchView(v) {
-                document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-                if(v==='crypto') { 
-                    document.getElementById('view-crypto').classList.add('active'); 
-                    this.fetchPrices(); 
-                } else { 
-                    document.getElementById('view-calculator').classList.add('active'); 
-                }
-            },
-            
-            applyTheme(t) {
-                this.state.theme = t;
-                document.body.dataset.theme = t;
-                if(this.chart) this.chart.updateOptions({ theme: {mode: t}, tooltip: { theme: t } });
-                this.saveState();
-            },
-            
-            haptic(p) { if(navigator.vibrate) navigator.vibrate(p); }, // RESTAURADO
-            
-            showToast(msg) { 
-                const t = document.getElementById('toast');
-                t.innerText = msg; t.classList.add('show'); 
-                setTimeout(()=>t.classList.remove('show'), 2000); 
-            },
-            
-            saveState() { localStorage.setItem('aidanaiAppV2', JSON.stringify(this.state)); },
-            loadState() { 
-                try {
-                    const s = JSON.parse(localStorage.getItem('aidanaiAppV2'));
-                    if(s) this.state = {...this.state, ...s};
-                } catch(e){} 
-            },
-            
-            startClocks() {
-                setInterval(() => {
-                    const now = new Date();
-                    const t = now.toLocaleTimeString();
-                    document.querySelectorAll('#clock, #clock-crypto').forEach(e => e.innerText = t);
-                }, 1000);
             }
-        };
+            
+            if(k === 'AC') { 
+                this.expr = '';
+                this.editIdx = null;
+                document.getElementById('main-display').innerHTML = '0';
+                document.getElementById('secondary-display').classList.remove('visible');
+                return;
+            }
+            
+            if(k === 'Backspace') { 
+                this.expr = this.expr.toString().slice(0, -1);
+            }
+            else if(k === 'Enter') { 
+                this.calculate();
+                return;
+            }
+            else if(k === '(') { 
+                this.smartParen(); 
+            }
+            else {
+                const last = this.expr.slice(-1);
+                if("+-*/".includes(last) && "+-*/".includes(k)) {
+                    this.expr = this.expr.slice(0, -1) + k;
+                }
+                else if (k === '.') {
+                    if(this.expr === '' || "+-*/(".includes(last)) {
+                        this.expr += '0.';
+                    }
+                    else {
+                        const numbers = this.expr.split(/[\+\-\*\/]/);
+                        const currentNum = numbers[numbers.length - 1];
+                        if (!currentNum.includes('.')) {
+                            this.expr += '.';
+                        }
+                    }
+                }
+                else { 
+                    this.expr += k; 
+                }
+            }
+            this.renderCalc();
+        },
 
-        window.onload = () => App.init();
-    </script>
+        calculate() {
+            if(!this.expr) return;
+            try {
+                const originalExpr = this.expr.replace(/\*/g,'×').replace(/\//g,'÷');
+                let clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
+                clean = clean.replace(/\)\(/g, ')*('); 
+                
+                let res = new Function('return ' + clean)();
+                if(!isFinite(res)) throw new Error("Error");
+
+                res = Math.round(res * 10000000000) / 10000000000;
+
+                this.addToHistory(this.expr, res);
+                this.expr = String(res); 
+                this.fresh=true;
+                const secDisp = document.getElementById('secondary-display');
+                secDisp.innerText = originalExpr + ' =';
+                secDisp.classList.add('visible');
+                this.pulseDisplay();
+            } catch(e) { this.showToast("Cálculo inválido"); }
+            this.renderCalc();
+        },
+
+        smartParen() {
+            const o = (this.expr.match(/\(/g)||[]).length;
+            const c = (this.expr.match(/\)/g)||[]).length;
+            const last = this.expr.slice(-1);
+            if(o > c && (/[0-9.]$/.test(last) || last===')')) this.expr += ')';
+            else if(/[0-9.]$/.test(last) || last===')') this.expr += '*(';
+            else this.expr += '(';
+            this.renderCalc();
+        },
+
+        renderCalc() {
+            const d = document.getElementById('main-display');
+            if(!this.expr) { d.innerHTML = '0'; d.style.fontSize = '2.5rem'; return; }
+            
+            const len = this.expr.length;
+            let size = 2.5; 
+            if (len > 9) size = 2.0;
+            if (len > 13) size = 1.5;
+            if (len > 18) size = 1.1;
+            d.style.fontSize = `${size}rem`;
+
+            const parts = this.expr.split(/([\+\-\*\/\(\)])/);
+            let h = '';
+            
+            parts.forEach((p,i) => {
+                if(p === '') return;
+                
+                let cls = 'token';
+                let txt = p;
+
+                if("+-*/()".includes(p)) { 
+                    cls += ' token-op';
+                    txt = p.replace('*','×').replace('/','÷').replace('-','−'); 
+                } 
+                else {
+                    if(!isNaN(parseFloat(p))) {
+                        const [int, dec] = p.split('.');
+                        let formattedInt = int;
+                        if (int !== '' && int !== '-') {
+                            formattedInt = parseFloat(int).toLocaleString('es-ES');
+                        }
+                        if (dec !== undefined) {
+                            txt = `${formattedInt}<span style="opacity:0.6; font-size:0.65em; vertical-align: top; margin-top: 0.2em; display: inline-block;">,${dec}</span>`;
+                        } else {
+                            txt = formattedInt;
+                        }
+                        if (p === '-0.') txt = '-0,';
+                    }
+                }
+                h += `<span class="${cls}">${txt}</span>`;
+            });
+            d.innerHTML = h;
+        },
+
+        addToHistory(ex, r) {
+            const li = document.createElement('li');
+            const formattedRes = r.toLocaleString('es-ES', { maximumFractionDigits: 10 });
+            const prettyExpr = ex.replace(/\*/g,'×').replace(/\//g,'÷').replace(/(\d+)(\.\d+)?/g, (m, i, d) => i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (d?d.replace('.',','):''));
+            li.innerHTML = `${prettyExpr} = <b>${formattedRes}</b>`;
+            li.setAttribute('role', 'button');
+            li.setAttribute('tabindex', '0');
+            li.onclick = () => { this.expr = String(r); this.fresh = true; this.renderCalc(); this.haptic(10); };
+            const list = document.getElementById('history-list');
+            list.prepend(li);
+            if(list.children.length > 20) list.lastChild.remove(); 
+        },
+
+        // --- LÓGICA CRYPTO OPTIMIZADA POR EXPERTO --- //
+
+        renderCryptoList() {
+            const container = document.getElementById('crypto-list-container');
+            container.innerHTML = '';
+            
+            if(this.state.coins.length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--secondary-text)">Sin monedas. Pulsa + para añadir.</div>';
+                return;
+            }
+
+            const fmtEur = new Intl.NumberFormat('es-ES', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 6 });
+            const fmtUsd = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
+
+            // Usamos los precios guardados en caché si existen
+            const data = this.state.cachedPrices || {};
+
+            this.state.coins.forEach(id => {
+                const coinData = data[id];
+                const priceEur = coinData ? fmtEur.format(coinData.eur) + ' €' : '--';
+                const priceUsd = coinData ? fmtUsd.format(coinData.usd) : '--';
+                const change = coinData ? coinData.eur_24h_change : 0;
+                
+                // Imagen
+                let imgSrc = `https://assets.coingecko.com/coins/images/1/large/${id}.png`;
+                if(id==='bitcoin') imgSrc="https://assets.coingecko.com/coins/images/1/large/bitcoin.png";
+                if(id==='ethereum') imgSrc="https://assets.coingecko.com/coins/images/279/large/ethereum.png";
+                if(id==='solana') imgSrc="https://assets.coingecko.com/coins/images/4128/large/solana.png";
+                if(id==='ripple') imgSrc="https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png";
+
+                const changeClass = change >= 0 ? 'change-positive' : 'change-negative';
+                const changeText = coinData ? (change > 0 ? '+' : '') + change.toFixed(2) + '%' : '--';
+
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.onclick = () => this.openChartModal(id);
+                div.innerHTML = `
+                    <div class="coin-details">
+                        <img src="${imgSrc}" class="coin-logo" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/4/46/Bitcoin.svg'">
+                        <div class="coin-info">
+                            <h2>${id}</h2>
+                            <p class="change-percentage ${changeClass}">${changeText}</p>
+                        </div>
+                    </div>
+                    <div class="price-container">
+                        <p class="price-eur">${priceEur}</p>
+                        <p class="price-usd">${priceUsd}</p>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        },
+
+        updateStatusDisplay(isOnline, isError = false) {
+            const dot = document.querySelector('.status-dot');
+            const label = document.getElementById('time-text'); // Corregido selector
+            const timestamp = document.getElementById('timestamp');
+
+            if (isOnline) {
+                dot.className = 'status-dot online';
+                label.innerText = 'Actualizado: ' + new Date().toLocaleTimeString().slice(0,5);
+                timestamp.style.opacity = '1';
+            } else {
+                // Modo Error / Offline: Mostrar cuándo fue la última vez que tuvimos datos
+                dot.className = isError ? 'status-dot error' : 'status-dot';
+                if (this.state.lastUpdateTimestamp) {
+                    const date = new Date(this.state.lastUpdateTimestamp);
+                    const now = new Date();
+                    const isToday = date.getDate() === now.getDate();
+                    const dateStr = isToday ? date.toLocaleTimeString().slice(0,5) : date.toLocaleDateString();
+                    label.innerText = `Datos: ${dateStr} (Sin conexión)`;
+                } else {
+                    label.innerText = 'Sin datos';
+                }
+                timestamp.style.opacity = '0.7';
+            }
+        },
+
+        async addCoin() {
+            const input = document.getElementById('coin-input');
+            const id = input.value.toLowerCase().trim();
+            if(!id) return;
+            
+            if(this.state.coins.includes(id)) {
+                this.showToast('La moneda ya está en la lista');
+                return;
+            }
+
+            document.getElementById('add-coin-modal').classList.remove('visible');
+            this.showToast(`Buscando ${id}...`);
+
+            try {
+                const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=eur,usd&include_24hr_change=true`);
+                const data = await res.json();
+                if(data[id]) {
+                    this.state.coins.push(id);
+                    // Guardar inmediatamente el dato obtenido en caché para no tener que refrescar todo
+                    this.state.cachedPrices[id] = data[id];
+                    this.saveState();
+                    this.renderCryptoList();
+                    input.value = '';
+                    this.showToast(`${id} añadido`);
+                    this.haptic(20);
+                } else {
+                    this.showToast('Moneda no encontrada o API ocupada');
+                    this.haptic(50);
+                }
+            } catch(e) {
+                this.showToast('Error de conexión');
+            }
+        },
+
+        async fetchPrices() {
+            if(this.state.coins.length === 0) return;
+            
+            // Indicador visual sutil de "cargando" (opacidad)
+            const list = document.getElementById('crypto-list-container');
+            list.style.transition = 'opacity 0.3s';
+            list.style.opacity = '0.6'; 
+
+            const ids = this.state.coins.join(',');
+            
+            try {
+                const controller = new AbortController();
+                const idTimeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+                
+                const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur,usd&include_24hr_change=true`, { signal: controller.signal });
+                clearTimeout(idTimeout);
+                
+                if(!res.ok) throw new Error("API Limit");
+                
+                const d = await res.json();
+                
+                // ACTUALIZACIÓN DE ESTADO EXITOSA
+                this.state.cachedPrices = { ...this.state.cachedPrices, ...d }; // Merge data
+                this.state.lastUpdateTimestamp = Date.now();
+                this.saveState();
+                
+                this.renderCryptoList();
+                this.updateStatusDisplay(true);
+
+            } catch(e) {
+                console.warn("Fetch failed, using cache", e);
+                // SI FALLA, NO BORRAMOS NADA. Solo actualizamos el estado visual.
+                this.updateStatusDisplay(false, true); 
+            } finally {
+                list.style.opacity = '1';
+            }
+        },
+
+        openChartModal(id) {
+            this.currentCoin = id;
+            // Intentar obtener precio de caché primero
+            const cached = this.state.cachedPrices[id];
+            this.currentPrice = cached ? cached.eur : 0;
+            
+            document.getElementById('chart-title').innerText = id;
+            document.getElementById('chart-modal').classList.add('visible');
+            this.loadChartData(id);
+        },
+
+        async loadChartData(id) {
+            const spinner = document.getElementById('loading-chart');
+            spinner.classList.add('active');
+            
+            if(!this.chart) {
+                this.chart = new ApexCharts(document.getElementById('chart-container'), {
+                    series:[], chart: {type:'area', height:250, toolbar:{show:false}, background:'transparent'},
+                    theme: {mode: this.state.theme}, 
+                    stroke:{curve:'smooth',width:2},
+                    fill: {type:'gradient', gradient: {shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3}}, 
+                    dataLabels:{enabled:false},
+                    xaxis: {type:'datetime', tooltip:{enabled:false}, axisBorder:{show:false}, labels:{show:false}},
+                    yaxis: {labels: {style:{colors:'var(--secondary-text)'}, formatter: v=>v.toLocaleString('es-ES') + '€'}},
+                    grid: {show:false},
+                    tooltip: { theme: this.state.theme, x: {format: 'dd MMM HH:mm'} }
+                });
+                this.chart.render();
+            }
+
+            try {
+                // Chart data no se cachea igual porque depende del timeframe, se deja igual
+                const res = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=eur&days=${this.chartDays}`);
+                const data = await res.json();
+                
+                if(!data.prices) throw new Error("No data");
+
+                const isPositive = (data.prices[data.prices.length-1][1] >= data.prices[0][1]);
+                const color = isPositive ? '#00E676' : '#FF1744';
+
+                this.chart.updateOptions({
+                    theme:{mode:this.state.theme},
+                    tooltip: { theme: this.state.theme },
+                    colors: [color]
+                });
+                this.chart.updateSeries([{name:'Precio', data: data.prices}]);
+                
+                // Actualizamos precio actual con el último del chart si es más reciente
+                const lastPrice = data.prices[data.prices.length-1][1];
+                this.currentPrice = lastPrice;
+
+            } catch(e) { this.showToast('Error cargando gráfico'); }
+            finally { spinner.classList.remove('active'); }
+        },
+
+        sendToCalc() {
+            if(!this.currentPrice) return;
+            const p = String(this.currentPrice);
+            const lastChar = this.expr.slice(-1);
+            if("+-*/(".includes(lastChar)) {
+                this.expr += p;
+            } else {
+                 this.expr = p;
+            }
+            this.fresh = false; 
+            this.switchView('calc');
+            this.renderCalc();
+            this.pulseDisplay();
+            this.showToast(`Precio copiado`);
+        },
+
+        switchView(v) {
+            document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+            if(v==='crypto') { 
+                document.getElementById('view-crypto').classList.add('active'); 
+                // Renderizar primero caché para que se sienta instantáneo
+                this.renderCryptoList();
+                // Luego intentar fetch silencioso
+                this.fetchPrices(); 
+            } else { 
+                document.getElementById('view-calculator').classList.add('active'); 
+            }
+        },
+        
+        applyTheme(t) {
+            this.state.theme = t;
+            document.body.dataset.theme = t;
+            if(this.chart) this.chart.updateOptions({ theme: {mode: t}, tooltip: { theme: t } });
+            this.saveState();
+        },
+        
+        haptic(p) { if(navigator.vibrate) navigator.vibrate(p); },
+        
+        showToast(msg) { 
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.classList.add('show'); 
+            setTimeout(()=>t.classList.remove('show'), 2000); 
+        },
+        
+        saveState() { localStorage.setItem('aidanaiAppV2', JSON.stringify(this.state)); },
+        
+        loadState() { 
+            try {
+                const s = JSON.parse(localStorage.getItem('aidanaiAppV2'));
+                if(s) this.state = {...this.state, ...s};
+                // Asegurar estructura
+                if(!this.state.cachedPrices) this.state.cachedPrices = {};
+            } catch(e){} 
+        },
+        
+        startClocks() {
+            setInterval(() => {
+                const now = new Date();
+                const t = now.toLocaleTimeString();
+                document.querySelectorAll('#clock, #clock-crypto').forEach(e => e.innerText = t);
+            }, 1000);
+        }
+    };
+
+    window.onload = () => App.init();
+</script>
 </body>
 </html>
