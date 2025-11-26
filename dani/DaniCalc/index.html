@@ -675,9 +675,18 @@
             calculate() {
                 if(!this.expr) return;
                 try {
-                    // CORRECCIÓN: Ahora reemplazamos también los puntos por comas en la vista previa
-                    const originalExpr = this.expr.replace(/\*/g,'×').replace(/\//g,'÷').replace(/\./g, ',');
+                    // 1. PREPARAMOS LA VISTA PREVIA (FORMATO BONITO)
+                    // Primero cambiamos los símbolos de operación
+                    let formattedExpr = this.expr.replace(/\*/g, '×').replace(/\//g, '÷');
                     
+                    // APLICAMOS EL FORMATO DE MILES A LOS NÚMEROS (Igual que en el historial)
+                    formattedExpr = formattedExpr.replace(/\d+(\.\d+)?/g, (match) => {
+                        const [int, dec] = match.split('.');
+                        const intFormatted = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+                        return dec ? `${intFormatted},${dec}` : intFormatted;
+                    });
+
+                    // 2. PREPARAMOS EL CÁLCULO MATEMÁTICO (LIMPIEZA TÉCNICA)
                     let clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
                     clean = clean.replace(/([+\-*/])\1+/g, '$1'); 
                     clean = clean.replace(/\)\(/g, ')*('); 
@@ -687,20 +696,25 @@
                     const closeParen = (clean.match(/\)/g)||[]).length;
                     if(openParen !== closeParen) throw new Error("PAREN");
 
+                    // 3. EJECUTAMOS EL CÁLCULO
                     let res = new Function('return ' + clean)();
 
                     if(!isFinite(res)) throw new Error("INVALID");
-                    res = parseFloat(parseFloat(res).toPrecision(15)); 
+                    
+                    // CORRECCIÓN DECIMALES: Ajustamos a precisión 12 para evitar errores tipo 0.300000004
+                    res = parseFloat(parseFloat(res).toPrecision(12)); 
                     
                     this.addToHistoryState(this.expr, res);
 
                     this.expr = String(res); 
                     this.fresh = true;
                     
+                    // 4. MOSTRAMOS EL RESULTADO Y LA VISTA PREVIA FORMATEADA
                     const secDisp = document.getElementById('secondary-display');
-                    secDisp.innerText = originalExpr + ' ='; // Ahora mostrará comas
+                    secDisp.innerText = formattedExpr + ' ='; // Aquí usamos la versión con puntos de miles
                     secDisp.classList.add('visible');
                     this.pulseDisplay();
+
                 } catch(e) { 
                     let msg = "❌ Error";
                     if(e.message === "DIV_ZERO") msg = "⚠️ División por 0";
@@ -776,9 +790,25 @@
 
             renderHistoryItem(item, isNew) {
                 const li = document.createElement('li');
+                
+                // 1. Formateamos el RESULTADO final (esto ya lo tenías, pero nos aseguramos)
                 const formattedRes = item.res.toLocaleString('es-ES', { maximumFractionDigits: 10 });
-                const prettyExpr = item.expr.replace(/\*/g,'×').replace(/\//g,'÷').replace(/\./g, ',');
+                
+                // 2. Formateamos la EXPRESIÓN (los números de la operación)
+                // Primero cambiamos los símbolos de multiplicar/dividir
+                let prettyExpr = item.expr.replace(/\*/g, '×').replace(/\//g, '÷');
+                
+                // AHORA LA MAGIA: Buscamos cada número en la cadena y lo formateamos
+                prettyExpr = prettyExpr.replace(/\d+(\.\d+)?/g, (match) => {
+                    const [int, dec] = match.split('.');
+                    // Añadimos puntos de miles a la parte entera
+                    const intFormatted = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+                    // Si tiene decimales, los unimos con coma, si no, devolvemos solo el entero
+                    return dec ? `${intFormatted},${dec}` : intFormatted;
+                });
+
                 li.innerHTML = `${prettyExpr} = <b>${formattedRes}</b>`;
+                
                 li.onclick = () => { 
                     this.expr = String(item.res); 
                     this.fresh = true; 
@@ -788,7 +818,7 @@
                 };
                 
                 const list = document.getElementById('history-list');
-                if(isNew) list.prepend(li); else list.prepend(li);
+                if(isNew) list.prepend(li); else list.prepend(li); // Nota: en tu código original tenías 'prepend' en ambos casos, lo mantengo igual.
             },
 
             async fetchPrices(force = false) {
