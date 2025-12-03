@@ -418,1249 +418,925 @@
 
     <div id="toast" class="toast"></div>
 
-    <script>
-        const App = {
-            expr: '',
-            fresh: true,
-            chart: null,
-            currentCoinId: null,
-            escCounter: 0,
-            escTimer: null,
-            audioCtx: null,
-            touchStartY: 0,
-            pullToRefreshActive: false,
-            particleCount: 0,
-            maxParticles: 100,
-            transitionStyles: ['flip', 'fold', 'vortex', 'glitch', 'morph'],
-            currentTransition: 0,
-            audioVisualizer: null,
-            analyser: null,
-            audioSource: null,
-            animationId: null,
-            lastMouseX: 0,
-            lastMouseY: 0,
-            backgroundMode: 'calc',
-            touchTrailInterval: null,
-            chartCache: {}, 
+    <<script>
+    const App = {
+        expr: '',
+        fresh: true,
+        chart: null,
+        currentCoinId: null,
+        escCounter: 0,
+        escTimer: null,
+        audioCtx: null,
+        touchStartY: 0,
+        pullToRefreshActive: false,
+        particleCount: 0,
+        maxParticles: 60, // Reducido para rendimiento
+        transitionStyles: ['flip', 'fold', 'vortex', 'glitch', 'morph'],
+        currentTransition: 0,
+        animationId: null,
+        lastMouseX: 0,
+        lastMouseY: 0,
+        backgroundMode: 'calc',
+        
+        state: { 
+            theme: 'dark', 
+            muted: false, 
+            history: [], 
+            cryptoCache: null, 
+            lastFetchTime: 0,
+            chartCache: {},
+            backgroundIntensity: 0.4
+        },
+        
+        init() {
+            this.loadState();
+            this.updateMuteIcon();
+            this.initBackgroundLayers();
+            this.updateBackgroundMode('calc');
+            this.startTimeBasedBackground();
             
-            state: { 
-                theme: 'dark', 
-                muted: false, 
-                history: [], 
-                cryptoCache: null,
-                lastFetchTime: 0,
-                chartCache: {},
-                backgroundIntensity: 0.4,
-                visualizerEnabled: true
-            },
+            this.bindEvents();
+            this.startClocks();
+            this.renderHistoryFromState(); 
             
-            init() {
-                this.loadState();
-                this.updateMuteIcon();
-                this.initBackgroundLayers();
-                this.updateBackgroundMode('calc');
-                this.startTimeBasedBackground();
-                
-                this.bindEvents();
-                this.startClocks();
-                this.renderHistoryFromState(); 
-                
-                if(this.state.cryptoCache) this.renderCryptoData(this.state.cryptoCache, new Date(this.state.lastFetchTime));
-                
-                setInterval(() => this.fetchPrices(), 60000);
-                this.fixHeight();
-                this.initAudioContext();
-                this.setupPullToRefresh();
-                this.setupRippleEffects();
-                this.setupTouchTrail();
-                this.setupMouseTracking();
-                
-                document.body.addEventListener('touchstart', () => {
-                    if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
-                }, { once: true });
-            },
+            // Cargar caché inicial si es válido
+            if(this.state.cryptoCache) {
+                this.renderCryptoData(this.state.cryptoCache, new Date(this.state.lastFetchTime));
+            }
+            
+            setInterval(() => this.fetchPrices(), 60000);
+            this.fixHeight();
+            this.initAudioContext();
+            this.setupPullToRefresh();
+            this.setupTouchTrail();
+            this.setupMouseTracking();
+            
+            // Desbloquear AudioContext en interacción
+            const unlockAudio = () => {
+                if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
+                document.removeEventListener('touchstart', unlockAudio);
+                document.removeEventListener('click', unlockAudio);
+            };
+            document.addEventListener('touchstart', unlockAudio);
+            document.addEventListener('click', unlockAudio);
+        },
 
-            fixHeight() {
-                const doc = document.documentElement;
-                const setH = () => doc.style.setProperty('--doc-height', `${window.innerHeight}px`);
-                setH();
-                window.addEventListener('resize', setH);
-            },
+        fixHeight() {
+            const doc = document.documentElement;
+            const setH = () => doc.style.setProperty('--doc-height', `${window.innerHeight}px`);
+            setH();
+            window.addEventListener('resize', setH);
+        },
 
-            initBackgroundLayers() {
-                this.updateBackgroundIntensity(this.state.backgroundIntensity);
-                this.animateTimeGradient();
-                this.createBackgroundParticles();
-            },
+        // --- BACKGROUND & VISUALS ---
+        initBackgroundLayers() {
+            this.updateBackgroundIntensity(this.state.backgroundIntensity);
+            this.animateTimeGradient();
+            this.createBackgroundParticles();
+        },
+        
+        updateBackgroundMode(mode) {
+            this.backgroundMode = mode;
+            const layers = {
+                'particles': document.getElementById('dynamic-bg-layer'),
+                'grid': document.getElementById('grid-pattern-layer'),
+                'circuit': document.getElementById('circuit-pattern-layer'),
+                'crypto': document.getElementById('crypto-waves-layer'),
+                'time': document.getElementById('time-gradient-layer')
+            };
             
-            updateBackgroundMode(mode) {
-                this.backgroundMode = mode;
-                const layers = {
-                    'particles': document.getElementById('dynamic-bg-layer'),
-                    'grid': document.getElementById('grid-pattern-layer'),
-                    'circuit': document.getElementById('circuit-pattern-layer'),
-                    'crypto': document.getElementById('crypto-waves-layer'),
-                    'time': document.getElementById('time-gradient-layer')
-                };
+            // Transición suave de opacidades según el modo
+            if (mode === 'calc') {
+                layers.particles.style.opacity = '0.3';
+                layers.grid.style.opacity = '0.2';
+                layers.circuit.style.opacity = '0.4';
+                layers.crypto.style.opacity = '0';
+                layers.time.style.opacity = '0.3';
+            } else { 
+                layers.particles.style.opacity = '0.4';
+                layers.grid.style.opacity = '0.1';
+                layers.circuit.style.opacity = '0.2';
+                layers.crypto.style.opacity = '0.5';
+                layers.time.style.opacity = '0.2';
+            }
+        },
+        
+        startTimeBasedBackground() {
+            const updateTimeBackground = () => {
+                const now = new Date();
+                const hours = now.getHours();
+                let color1, color2, angle;
                 
-                if (mode === 'calc') {
-                    layers.particles.style.opacity = '0.3';
-                    layers.grid.style.opacity = '0.2';
-                    layers.circuit.style.opacity = '0.4';
-                    layers.crypto.style.opacity = '0';
-                    layers.time.style.opacity = '0.3';
-                } else { 
-                    layers.particles.style.opacity = '0.4';
-                    layers.grid.style.opacity = '0.1';
-                    layers.circuit.style.opacity = '0.2';
-                    layers.crypto.style.opacity = '0.5';
-                    layers.time.style.opacity = '0.2';
+                if (hours >= 6 && hours < 12) {
+                    color1 = '#0a1929'; color2 = '#001524'; angle = '135deg';
+                } else if (hours >= 12 && hours < 18) {
+                    color1 = '#1a0505'; color2 = '#000000'; angle = '45deg';
+                } else if (hours >= 18 && hours < 22) {
+                    color1 = '#2c0618'; color2 = '#000814'; angle = '225deg';
+                } else {
+                    color1 = '#000814'; color2 = '#000000'; angle = '315deg';
                 }
-            },
-            
-            startTimeBasedBackground() {
-                const updateTimeBackground = () => {
-                    const now = new Date();
-                    const hours = now.getHours();
-                    let color1, color2, angle;
-                    
-                    if (hours >= 6 && hours < 12) {
-                        color1 = '#0a1929'; color2 = '#001524'; angle = '135deg';
-                    } else if (hours >= 12 && hours < 18) {
-                        color1 = '#1a0505'; color2 = '#000000'; angle = '45deg';
-                    } else if (hours >= 18 && hours < 22) {
-                        color1 = '#2c0618'; color2 = '#000814'; angle = '225deg';
-                    } else {
-                        color1 = '#000814'; color2 = '#000000'; angle = '315deg';
-                    }
-                    
-                    const timeLayer = document.getElementById('time-gradient-layer');
-                    timeLayer.style.setProperty('--time-color-1', color1);
-                    timeLayer.style.setProperty('--time-color-2', color2);
-                    timeLayer.style.setProperty('--gradient-angle', angle);
-                };
                 
-                updateTimeBackground();
-                setInterval(updateTimeBackground, 60000);
-            },
+                const timeLayer = document.getElementById('time-gradient-layer');
+                timeLayer.style.setProperty('--time-color-1', color1);
+                timeLayer.style.setProperty('--time-color-2', color2);
+                timeLayer.style.setProperty('--gradient-angle', angle);
+            };
             
-            animateTimeGradient() {
-                let angle = 135;
-                const animate = () => {
-                    angle = (angle + 0.1) % 360;
-                    document.getElementById('time-gradient-layer').style.setProperty('--gradient-angle', `${angle}deg`);
-                    requestAnimationFrame(animate);
-                };
-                animate();
-            },
-            
-            createBackgroundParticles() {
-                const particlesLayer = document.getElementById('particles-layer');
-                for (let i = 0; i < 30; i++) {
-                    const particle = document.createElement('div');
-                    const size = Math.random() * 4 + 1;
-                    const x = Math.random() * 100;
-                    const y = Math.random() * 100;
-                    const duration = Math.random() * 20 + 10;
-                    
-                    particle.style.cssText = `position: absolute; width: ${size}px; height: ${size}px; background: ${this.getRandomNeonColor()}; border-radius: 50%; left: ${x}%; top: ${y}%; opacity: ${Math.random() * 0.3 + 0.1}; filter: blur(1px); animation: floatUp ${duration}s linear infinite;`;
-                    particlesLayer.appendChild(particle);
-                }
-            },
-            
-            updateBackgroundIntensity(intensity) {
-                this.state.backgroundIntensity = intensity;
-                document.querySelectorAll('.dynamic-bg').forEach(layer => layer.style.opacity = intensity);
-                this.saveState();
-            },
-            
-            setupMouseTracking() {
-                document.addEventListener('mousemove', (e) => {
-                    this.lastMouseX = e.clientX;
-                    this.lastMouseY = e.clientY;
-                    const particlesLayer = document.getElementById('dynamic-bg-layer');
-                    particlesLayer.style.setProperty('--mouse-x', `${e.clientX}px`);
-                    particlesLayer.style.setProperty('--mouse-y', `${e.clientY}px`);
-                });
-                document.addEventListener('click', (e) => this.createBackgroundRipple(e.clientX, e.clientY));
-            },
-            
-            createBackgroundRipple(x, y) {
-                const ripple = document.createElement('div');
-                ripple.style.cssText = `position: fixed; left: ${x}px; top: ${y}px; width: 0; height: 0; border-radius: 50%; background: radial-gradient(circle, ${this.getRandomNeonColor()} 0%, transparent 70%); transform: translate(-50%, -50%); pointer-events: none; z-index: 998; animation: pressureWave 1s ease-out forwards;`;
-                document.body.appendChild(ripple);
-                setTimeout(() => ripple.remove(), 1000);
-            },
-            
-            setupTouchTrail() {
-                let lastTouchTime = 0;
-                const touchCooldown = 50; 
-                document.addEventListener('touchmove', (e) => {
-                    const now = Date.now();
-                    if (now - lastTouchTime < touchCooldown) return;
-                    lastTouchTime = now;
-                    const touch = e.touches[0];
-                    this.createTouchTrail(touch.clientX, touch.clientY);
-                }, { passive: true });
-                
-                document.addEventListener('mousemove', (e) => {
-                    const now = Date.now();
-                    if (now - lastTouchTime < touchCooldown || !e.buttons) return;
-                    lastTouchTime = now;
-                    this.createTouchTrail(e.clientX, e.clientY);
-                });
-            },
-            
-            createTouchTrail(x, y) {
-                const trail = document.createElement('div');
-                trail.classList.add('touch-trail');
-                const size = Math.random() * 15 + 5;
-                const color = this.getRandomNeonColor();
-                trail.style.cssText = `width: ${size}px; height: ${size}px; background: ${color}; left: ${x}px; top: ${y}px; opacity: 0.7;`;
-                document.getElementById('particles-layer').appendChild(trail);
-                const tx = (Math.random() - 0.5) * 30;
-                const ty = (Math.random() - 0.5) * 30;
-                trail.animate([{ transform: 'translate(0, 0) scale(1)', opacity: 0.7 }, { transform: `translate(${tx}px, ${ty}px) scale(0.5)`, opacity: 0 }], { duration: 600, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }).onfinish = () => trail.remove();
-            },
-            
-            createPressureWave(x, y, element = null) {
-                const wave = document.createElement('div');
-                wave.classList.add('pressure-wave-effect');
-                const rect = element ? element.getBoundingClientRect() : { left: x, top: y, width: 0, height: 0 };
-                const centerX = element ? rect.left + rect.width / 2 : x;
-                const centerY = element ? rect.top + rect.height / 2 : y;
-                wave.style.cssText = `left: ${centerX}px; top: ${centerY}px; width: 0; height: 0;`;
-                document.getElementById('particles-layer').appendChild(wave);
-                const finalSize = element ? Math.max(rect.width, rect.height) * 2 : 100;
-                wave.animate([{ width: '0', height: '0', opacity: 0.7, transform: 'translate(-50%, -50%) scale(0.5)' }, { width: `${finalSize}px`, height: `${finalSize}px`, opacity: 0, transform: 'translate(-50%, -50%) scale(1.5)' }], { duration: 600, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }).onfinish = () => wave.remove();
-            },
-            
-            createGlowBorder(element, duration = 1000) {
-                element.classList.add('active', 'glow-border');
-                setTimeout(() => { element.classList.remove('active'); setTimeout(() => element.classList.remove('glow-border'), 300); }, duration);
-            },
-            
-            applyElasticEffect(element) { element.classList.add('elastic-active'); setTimeout(() => element.classList.remove('elastic-active'), 600); },
-            applyBounceEffect(element) { element.classList.add('bounce-active'); setTimeout(() => element.classList.remove('bounce-active'), 400); },
-            applyCircuitEffect(element) { element.classList.add('circuit-active'); setTimeout(() => element.classList.remove('circuit-active'), 800); },
-            createRippleGlow(element) { element.classList.add('ripple-glow'); setTimeout(() => element.classList.remove('ripple-glow'), 1000); },
-            showToast(msg) {
-                const toast = document.getElementById('toast');
-                toast.innerText = msg;
-                toast.className = 'toast show';
-                setTimeout(() => { toast.className = 'toast'; }, 3000);
-            },
-
-            // --- INICIO DEL CÓDIGO A PEGAR ---
-            haptic(pattern) {
-                if (navigator.vibrate) {
-                    try { navigator.vibrate(pattern); } catch(e) {}
-                }
-            },
-			
-                    
-             
-            getChartCacheKey(coinId, days) { return `${coinId}_${days}`; },
-            
-            getCachedChartData(coinId, days) {
-                const cacheKey = this.getChartCacheKey(coinId, days);
-                const cached = this.state.chartCache[cacheKey];
-                if (!cached) return null;
-                const now = Date.now();
-                if (now - cached.timestamp > 10 * 60 * 1000) {
-                    delete this.state.chartCache[cacheKey];
-                    this.saveState();
-                    return null;
-                }
-                return cached.data;
-            },
-            
-            setChartCache(coinId, days, data) {
-                const cacheKey = this.getChartCacheKey(coinId, days);
-                this.state.chartCache[cacheKey] = { data: data, timestamp: Date.now() };
-                const keys = Object.keys(this.state.chartCache);
-                if (keys.length > 20) {
-                    let oldestKey = keys[0];
-                    let oldestTime = this.state.chartCache[oldestKey].timestamp;
-                    keys.forEach(key => { if (this.state.chartCache[key].timestamp < oldestTime) { oldestKey = key; oldestTime = this.state.chartCache[key].timestamp; } });
-                    delete this.state.chartCache[oldestKey];
-                }
-                this.saveState();
-            },
-            
-            bindEvents() {
-                document.getElementById('btn-go-crypto').onclick = () => { this.updateBackgroundMode('crypto'); this.switchViewWithTransition('crypto'); };
-                document.getElementById('btn-go-calc').onclick = () => { this.updateBackgroundMode('calc'); this.switchViewWithTransition('calc'); };
-                document.getElementById('btn-mute').onclick = () => this.toggleMute();
-                document.querySelectorAll('.btn[data-key]').forEach(b => {
-                    const key = b.dataset.key;
-                    if (key === 'AC') {
-                        let pressTimer;
-                        let longPressTriggered = false;
-                        const startPress = (e) => {
-                            if(e.cancelable) e.preventDefault();
-                            this.createRipple(e, b);
-                            this.createPressureWave(e.clientX, e.clientY, b);
-                            b.classList.add('btn-active');
-                            longPressTriggered = false;
-                            pressTimer = setTimeout(() => { longPressTriggered = true; this.clearAllHistory(); }, 800);
-                        };
-                        const endPress = () => {
-                            clearTimeout(pressTimer);
-                            b.classList.remove('btn-active');
-                            if (!longPressTriggered) { this.haptic(10); this.handleInput('AC'); this.pulseDisplay(); }
-                        };
-                        b.addEventListener('pointerdown', startPress);
-                        b.addEventListener('pointerup', endPress);
-                        b.addEventListener('pointerleave', () => { clearTimeout(pressTimer); b.classList.remove('btn-active'); });
-                    } else {
-                        const press = (e) => {
-                            if(e.cancelable) e.preventDefault(); 
-                            this.createRipple(e, b);
-                            this.createPressureWave(e.clientX, e.clientY, b);
-                            this.applyBounceEffect(b);
-                            this.haptic(10); 
-                            b.classList.add('btn-active'); 
-                            this.pulseDisplay(); 
-                            this.handleInput(key);
-                            if (['+', '-', '*', '/', '%', 'Enter'].includes(key)) this.createButtonParticles(e, key);
-                        };
-                        const release = () => b.classList.remove('btn-active');
-                        b.addEventListener('pointerdown', press);
-                        b.addEventListener('pointerup', release);
-                        b.addEventListener('pointerleave', release);
-                    }
-                });
-
-                document.addEventListener('keydown', (e) => {
-                    const k = e.key === 'Enter' ? 'Enter' : e.key;
-                    if (k === 'Escape') {
-                        this.escCounter++;
-                        clearTimeout(this.escTimer);
-                        this.escTimer = setTimeout(() => { this.escCounter = 0; }, 800);
-                        const btn = document.querySelector('.btn[data-key="AC"]');
-                        if(btn) { btn.classList.add('btn-active'); this.createRipple({clientX: btn.getBoundingClientRect().x + 20, clientY: btn.getBoundingClientRect().y + 20}, btn); setTimeout(()=>btn.classList.remove('btn-active'), 100); }
-                        if (this.escCounter >= 3) { this.clearAllHistory(); this.escCounter = 0; } 
-                        else { this.handleInput('AC'); }
-                        return;
-                    }
-                    if(!/^[0-9+\-*/.,=()%]$|Enter|Backspace|Delete/.test(k)) return;
-                    let vKey = k;
-                    if(k==='Enter'||k==='=') vKey='Enter';
-                    if(k==='Delete') vKey='AC';
-                    if(k==='.') vKey=',';
-                    const btn = document.querySelector(`.btn[data-key="${vKey}"]`) || document.querySelector(`.btn[data-key="${k}"]`);
-                    if(btn) {
-                        btn.classList.add('btn-active');
-                        this.createRipple({clientX: btn.getBoundingClientRect().x + 30, clientY: btn.getBoundingClientRect().y + 30}, btn);
-                        this.createPressureWave(btn.getBoundingClientRect().x + 30, btn.getBoundingClientRect().y + 30, btn);
-                        this.pulseDisplay();
-                        setTimeout(() => btn.classList.remove('btn-active'), 100);
-                        this.handleInput(vKey === 'AC' ? 'AC' : (vKey === 'Enter' ? 'Enter' : (vKey === ',' ? ',' : k)));
-                    }
-                });
-
-                const chartModal = document.getElementById('chart-modal');
-                document.querySelectorAll('.card').forEach(c => {
-                    c.onclick = (e) => {
-                        this.createRipple(e, c);
-                        this.createGlowBorder(c, 2000);
-                        this.createPressureWave(e.clientX, e.clientY, c);
-                        this.openChart(c.dataset.id, c.dataset.name);
-                    }
-                });
-                document.querySelector('.close-chart').onclick = () => {
-                    chartModal.classList.remove('visible');
-                    if(this.chart) { this.chart.destroy(); this.chart = null; }
-                };
-                chartModal.onclick = (e) => { if (e.target === chartModal) document.querySelector('.close-chart').click(); };
-
-                document.querySelectorAll('.time-btn').forEach(btn => {
-                    btn.onclick = (e) => {
-                        document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-                        e.target.classList.add('active');
-                        this.applyBounceEffect(e.target);
-                        this.updateChartData(e.target.dataset.days);
-                    }
-                });
-            },
-
-            createParticle(x, y, config = {}) {
-                if (this.particleCount >= this.maxParticles) return;
+            updateTimeBackground();
+            setInterval(updateTimeBackground, 60000);
+        },
+        
+        animateTimeGradient() {
+            let angle = 135;
+            const animate = () => {
+                angle = (angle + 0.1) % 360;
+                const el = document.getElementById('time-gradient-layer');
+                if(el) el.style.setProperty('--gradient-angle', `${angle}deg`);
+                this.animationId = requestAnimationFrame(animate);
+            };
+            animate();
+        },
+        
+        createBackgroundParticles() {
+            const particlesLayer = document.getElementById('particles-layer');
+            // Reducido a 15 para mejorar rendimiento en idle
+            for (let i = 0; i < 15; i++) {
                 const particle = document.createElement('div');
-                const size = config.size || Math.random() * 8 + 4;
-                const color = config.color || this.getRandomNeonColor();
-                const shape = config.shape || this.getRandomShape();
-                const lifetime = config.lifetime || Math.random() * 1.5 + 0.5;
-                particle.classList.add('particle', `particle-${shape}`);
-                particle.style.width = `${size}px`;
-                particle.style.height = `${size}px`;
-                particle.style.background = color;
-                particle.style.left = `${x}px`;
-                particle.style.top = `${y}px`;
-                particle.style.opacity = '0.8';
-                particle.style.position = 'absolute';
-                if (config.glow) particle.style.boxShadow = `0 0 ${size * 2}px ${color}`;
-                document.getElementById('particles-layer').appendChild(particle);
-                this.particleCount++;
-                const animation = config.animation || 'floatUp';
-                const animationName = this.getAnimationName(animation);
-                const tx = config.tx || 0;
-                const ty = config.ty || 0;
-                const rot = config.rotation || 0;
-                particle.style.setProperty('--tx', `${tx}px`);
-                particle.style.setProperty('--ty', `${ty}px`);
-                particle.style.setProperty('--rot', `${rot}deg`);
-                particle.style.setProperty('--start-x', `${Math.random() * 100 - 50}px`);
-                particle.style.setProperty('--end-x', `${Math.random() * 100 - 50}px`);
-                particle.style.animation = `${animationName} ${lifetime}s ease-out forwards`;
-                particle.addEventListener('animationend', () => { particle.remove(); this.particleCount--; });
-                return particle;
-            },
-            
-            getRandomNeonColor() { return ['var(--neon-red)', 'var(--neon-cyan)', 'var(--neon-lime)', 'var(--neon-yellow)', 'var(--matrix-green)', 'var(--crypto-up)', '#ff00ff', '#00ffff'][Math.floor(Math.random() * 8)]; },
-            getRandomShape() { return ['circle', 'star', 'square', 'triangle', 'hexagon'][Math.floor(Math.random() * 5)]; },
-            
-            getAnimationName(type) {
-                const animations = { 'floatUp': 'particleFloatUp', 'floatDown': 'particleFloatDown', 'explosion': 'particleExplosion', 'fragmentation': 'particleFragmentation', 'starFall': 'particleStarFall', 'matrixRain': 'particleMatrixRain', 'confetti': 'particleConfetti' };
-                return animations[type] || 'particleFloatUp';
-            },
-            
-            createOperationParticles(operationType, x, y) {
-                const displayRect = document.getElementById('display-container').getBoundingClientRect();
-                const centerX = displayRect.left + displayRect.width / 2;
-                const centerY = displayRect.top + displayRect.height / 2;
-                switch(operationType) {
-                    case '+': case '-':
-                        const direction = operationType === '+' ? 'floatUp' : 'floatDown';
-                        for (let i = 0; i < 15; i++) { setTimeout(() => { const px = centerX + Math.random() * 100 - 50; const py = centerY + Math.random() * 50 - 25; this.createParticle(px, py, { animation: direction, color: operationType === '+' ? 'var(--crypto-up)' : 'var(--crypto-down)', size: Math.random() * 6 + 3, glow: true }); }, i * 30); }
-                        break;
-                    case '*':
-                        for (let i = 0; i < 25; i++) { setTimeout(() => { const angle = Math.random() * Math.PI * 2; const distance = Math.random() * 60; const px = centerX + Math.cos(angle) * distance; const py = centerY + Math.sin(angle) * distance; this.createParticle(centerX, centerY, { animation: 'explosion', color: 'var(--neon-yellow)', size: Math.random() * 8 + 4, glow: true, tx: px - centerX, ty: py - centerY, rotation: Math.random() * 360 }); }, i * 20); }
-                        break;
-                    case '/':
-                        for (let i = 0; i < 20; i++) { setTimeout(() => { const angle = Math.random() * Math.PI * 2; const distance = 40 + Math.random() * 40; const px = centerX + Math.cos(angle) * distance; const py = centerY + Math.sin(angle) * distance; this.createParticle(centerX, centerY, { animation: 'fragmentation', color: 'var(--neon-cyan)', size: Math.random() * 6 + 2, tx: px - centerX, ty: py - centerY, rotation: Math.random() * 720 }); }, i * 25); }
-                        break;
-                    case '%':
-                        for (let i = 0; i < 12; i++) { setTimeout(() => { const px = centerX + Math.random() * 120 - 60; this.createParticle(px, centerY - 50, { animation: 'starFall', shape: 'star', color: 'var(--matrix-green)', size: Math.random() * 10 + 5, glow: true }); }, i * 40); }
-                        break;
-                    case 'Enter':
-                        for (let i = 0; i < 30; i++) { setTimeout(() => { const px = centerX + Math.random() * 150 - 75; this.createParticle(px, centerY - 30, { animation: 'confetti', shape: Math.random() > 0.5 ? 'star' : 'circle', color: this.getRandomNeonColor(), size: Math.random() * 8 + 4, tx: Math.random() * 100 - 50, glow: true }); }, i * 20); }
-                        break;
+                const size = Math.random() * 4 + 1;
+                const duration = Math.random() * 20 + 10;
+                particle.style.cssText = `position: absolute; width: ${size}px; height: ${size}px; background: ${this.getRandomNeonColor()}; border-radius: 50%; left: ${Math.random() * 100}%; top: ${Math.random() * 100}%; opacity: ${Math.random() * 0.3 + 0.1}; filter: blur(1px); animation: particleFloatUp ${duration}s linear infinite; will-change: transform;`;
+                particlesLayer.appendChild(particle);
+            }
+        },
+        
+        updateBackgroundIntensity(intensity) {
+            this.state.backgroundIntensity = intensity;
+            document.querySelectorAll('.dynamic-bg').forEach(layer => layer.style.opacity = intensity);
+            this.saveState();
+        },
+        
+        setupMouseTracking() {
+            document.addEventListener('mousemove', (e) => {
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
+                const layer = document.getElementById('dynamic-bg-layer');
+                if(layer) {
+                    layer.style.setProperty('--mouse-x', `${e.clientX}px`);
+                    layer.style.setProperty('--mouse-y', `${e.clientY}px`);
                 }
-            },
-            
-            createButtonParticles(event, key) {
-                const rect = event.target.getBoundingClientRect();
-                const x = rect.left + rect.width / 2;
-                const y = rect.top + rect.height / 2;
-                for (let i = 0; i < 8; i++) {
-                    setTimeout(() => {
-                        const angle = Math.random() * Math.PI * 2;
-                        const distance = Math.random() * 40;
-                        const px = x + Math.cos(angle) * distance;
-                        const py = y + Math.sin(angle) * distance;
-                        this.createParticle(x, y, { animation: 'floatUp', color: this.getColorByKey(key), size: Math.random() * 5 + 2, glow: true, tx: px - x, ty: py - y });
-                    }, i * 30);
-                }
-            },
-            
-            getColorByKey(key) {
-                const colorMap = { '+': 'var(--crypto-up)', '-': 'var(--crypto-down)', '*': 'var(--neon-yellow)', '/': 'var(--neon-cyan)', '%': 'var(--matrix-green)', 'Enter': 'var(--neon-lime)' };
-                return colorMap[key] || this.getRandomNeonColor();
-            },
-            
-            createRipple(event, element) {
-                const ripple = document.createElement('span');
-                const rect = element.getBoundingClientRect();
-                const size = Math.max(rect.width, rect.height);
-                const x = (event.clientX ? event.clientX : rect.left + rect.width/2) - rect.left - size / 2;
-                const y = (event.clientY ? event.clientY : rect.top + rect.height/2) - rect.top - size / 2;
-                ripple.style.width = ripple.style.height = size + 'px';
-                ripple.style.left = x + 'px';
-                ripple.style.top = y + 'px';
-                ripple.classList.add('ripple');
-                element.appendChild(ripple);
-                setTimeout(() => ripple.remove(), 600);
-            },
-            
-            setupRippleEffects() {},
+            });
+            document.addEventListener('click', (e) => this.createBackgroundRipple(e.clientX, e.clientY));
+        },
+        
+        createBackgroundRipple(x, y) {
+            const ripple = document.createElement('div');
+            ripple.style.cssText = `position: fixed; left: ${x}px; top: ${y}px; width: 0; height: 0; border-radius: 50%; background: radial-gradient(circle, ${this.getRandomNeonColor()} 0%, transparent 70%); transform: translate(-50%, -50%); pointer-events: none; z-index: 998; animation: pressureWave 1s ease-out forwards;`;
+            document.body.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 1000);
+        },
+        
+        setupTouchTrail() {
+            let lastTouchTime = 0;
+            const touchCooldown = 40; 
+            const handleTrail = (x, y) => {
+                const now = Date.now();
+                if (now - lastTouchTime < touchCooldown) return;
+                lastTouchTime = now;
+                this.createTouchTrail(x, y);
+            };
 
-            createSuccessEffect() {
-                const display = document.getElementById('main-display');
-                const rect = display.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                for(let i = 0; i < 50; i++) {
-                    setTimeout(() => {
-                        const angle = Math.random() * Math.PI * 2;
-                        const distance = Math.random() * 80;
-                        const px = centerX + Math.cos(angle) * distance;
-                        const py = centerY + Math.sin(angle) * distance;
-                        this.createParticle(centerX, centerY, { animation: 'explosion', shape: Math.random() > 0.7 ? 'star' : 'circle', color: this.getRandomNeonColor(), size: Math.random() * 10 + 5, glow: true, tx: px - centerX, ty: py - centerY, rotation: Math.random() * 720, lifetime: Math.random() * 1.5 + 0.8 });
-                    }, i * 15);
-                }
-                for(let i = 0; i < 20; i++) {
-                    setTimeout(() => {
-                        const startX = rect.left + Math.random() * rect.width;
-                        this.createParticle(startX, rect.top - 20, { animation: 'matrixRain', shape: 'square', color: 'var(--matrix-green)', size: Math.random() * 6 + 3, lifetime: Math.random() * 1 + 0.5 });
-                    }, i * 50);
-                }
-            },
-
-            switchViewWithTransition(targetView) {
-                const currentView = targetView === 'crypto' ? 'view-calculator' : 'view-crypto';
-                const nextView = targetView === 'crypto' ? 'view-crypto' : 'view-calculator';
-                const transitionStyle = this.transitionStyles[this.currentTransition];
-                this.currentTransition = (this.currentTransition + 1) % this.transitionStyles.length;
-                if(!this.state.muted) this.playTransitionSound();
-                this.createTransitionParticles(currentView, nextView);
-                const currentElement = document.getElementById(currentView);
-                const nextElement = document.getElementById(nextView);
-                currentElement.classList.add(`transition-${transitionStyle}`);
-                nextElement.classList.add(`transition-${transitionStyle}`);
-                setTimeout(() => {
-                    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-                    document.getElementById(nextView).classList.add('active');
-                    setTimeout(() => {
-                        currentElement.classList.remove(`transition-${transitionStyle}`);
-                        nextElement.classList.remove(`transition-${transitionStyle}`);
-                    }, 100);
-                    if(targetView === 'crypto') { 
-                        this.fetchPrices(); 
-                        this.showToast('📊 Modo Crypto Activado');
-                    } else { 
-                        this.showToast('🧮 Modo Calculadora Activado');
-                    }
-                }, transitionStyle === 'vortex' ? 500 : 600);
-            },
+            document.addEventListener('touchmove', (e) => handleTrail(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+            document.addEventListener('mousemove', (e) => { if(e.buttons) handleTrail(e.clientX, e.clientY); });
+        },
+        
+        createTouchTrail(x, y) {
+            if(this.particleCount > this.maxParticles) return;
+            const trail = document.createElement('div');
+            trail.classList.add('touch-trail');
+            const size = Math.random() * 15 + 5;
+            trail.style.cssText = `width: ${size}px; height: ${size}px; background: ${this.getRandomNeonColor()}; left: ${x}px; top: ${y}px; opacity: 0.7;`;
+            document.getElementById('particles-layer').appendChild(trail);
             
-            createTransitionParticles(fromViewId, toViewId) {
-                const fromView = document.getElementById(fromViewId);
-                const toView = document.getElementById(toViewId);
-                if(!fromView || !toView) return;
-                const fromRect = fromView.getBoundingClientRect();
-                const toRect = toView.getBoundingClientRect();
-                for(let i = 0; i < 30; i++) {
-                    setTimeout(() => {
-                        const fromX = fromRect.left + Math.random() * fromRect.width;
-                        const fromY = fromRect.top + Math.random() * fromRect.height;
-                        const toX = toRect.left + Math.random() * toRect.width;
-                        const toY = toRect.top + Math.random() * toRect.height;
-                        const particle = this.createParticle(fromX, fromY, { color: this.getRandomNeonColor(), size: Math.random() * 6 + 3, glow: true });
-                        if(particle) {
-                            particle.animate([{ transform: `translate(0, 0)`, opacity: 1 }, { transform: `translate(${toX - fromX}px, ${toY - fromY}px)`, opacity: 0 }], { duration: 800, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }).onfinish = () => particle.remove();
-                        }
-                    }, i * 20);
-                }
-                for(let i = 0; i < 20; i++) {
-                    setTimeout(() => {
-                        const x = fromRect.left + fromRect.width / 2 + (Math.random() - 0.5) * 100;
-                        const y = fromRect.top + fromRect.height / 2 + (Math.random() - 0.5) * 100;
-                        this.createParticle(x, y, { animation: 'explosion', color: 'var(--neon-red)', size: Math.random() * 8 + 4, glow: true, lifetime: 0.8 });
-                    }, i * 30);
-                }
-            },
-            
-            playTransitionSound() {
-                if(!this.audioCtx) return;
-                try {
-                    if(this.audioCtx.state === 'suspended') this.audioCtx.resume();
-                    const now = this.audioCtx.currentTime;
-                    const oscillator1 = this.audioCtx.createOscillator();
-                    const oscillator2 = this.audioCtx.createOscillator();
-                    const gainNode = this.audioCtx.createGain();
-                    oscillator1.connect(gainNode);
-                    oscillator2.connect(gainNode);
-                    gainNode.connect(this.audioCtx.destination);
-                    oscillator1.type = 'sine';
-                    oscillator2.type = 'triangle';
-                    oscillator1.frequency.setValueAtTime(523.25, now);
-                    oscillator1.frequency.exponentialRampToValueAtTime(1046.50, now + 0.3);
-                    oscillator2.frequency.setValueAtTime(659.25, now);
-                    oscillator2.frequency.exponentialRampToValueAtTime(1318.51, now + 0.3);
-                    gainNode.gain.setValueAtTime(0, now);
-                    gainNode.gain.linearRampToValueAtTime(0.1, now + 0.05);
-                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-                    oscillator1.start(now);
-                    oscillator2.start(now);
-                    oscillator1.stop(now + 0.5);
-                    oscillator2.stop(now + 0.5);
-                } catch(e) {}
-            },
+            trail.animate([
+                { transform: 'translate(0, 0) scale(1)', opacity: 0.7 }, 
+                { transform: `translate(${(Math.random() - 0.5) * 30}px, ${(Math.random() - 0.5) * 30}px) scale(0.5)`, opacity: 0 }
+            ], { duration: 600, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }).onfinish = () => trail.remove();
+        },
+        
+        createPressureWave(x, y, element = null) {
+            const wave = document.createElement('div');
+            wave.classList.add('pressure-wave-effect');
+            const rect = element ? element.getBoundingClientRect() : { left: x, top: y, width: 0, height: 0 };
+            const centerX = element ? rect.left + rect.width / 2 : x;
+            const centerY = element ? rect.top + rect.height / 2 : y;
+            wave.style.cssText = `left: ${centerX}px; top: ${centerY}px; width: 0; height: 0;`;
+            document.getElementById('particles-layer').appendChild(wave);
+            const finalSize = element ? Math.max(rect.width, rect.height) * 2 : 100;
+            wave.animate([
+                { width: '0', height: '0', opacity: 0.7, transform: 'translate(-50%, -50%) scale(0.5)' }, 
+                { width: `${finalSize}px`, height: `${finalSize}px`, opacity: 0, transform: 'translate(-50%, -50%) scale(1.5)' }
+            ], { duration: 600, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }).onfinish = () => wave.remove();
+        },
+        
+        createGlowBorder(element, duration = 1000) {
+            element.classList.add('active', 'glow-border');
+            setTimeout(() => { element.classList.remove('active'); setTimeout(() => element.classList.remove('glow-border'), 300); }, duration);
+        },
+        
+        applyBounceEffect(element) { element.classList.add('bounce-active'); setTimeout(() => element.classList.remove('bounce-active'), 400); },
+        showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.className = 'toast show';
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+        },
 
-            toggleMute() {
-                this.state.muted = !this.state.muted;
-                this.updateMuteIcon();
+        // --- CACHE HELPERS ---
+        getChartCacheKey(coinId, days) { return `${coinId}_${days}`; },
+        
+        getCachedChartData(coinId, days) {
+            const cacheKey = this.getChartCacheKey(coinId, days);
+            const cached = this.state.chartCache[cacheKey];
+            if (!cached) return null;
+            if (Date.now() - cached.timestamp > 10 * 60 * 1000) {
+                delete this.state.chartCache[cacheKey];
                 this.saveState();
-                if(!this.state.muted) {
-                    this.playTone('Enter');
-                    } else {
-                    if (this.animationId) { cancelAnimationFrame(this.animationId); this.animationId = null; }
-                }
-                this.showToast(this.state.muted ? 'Silencio Activado 🔇' : 'Sonido Activado 🔊');
-            },
-
-            updateMuteIcon() {
-                const onIcon = document.getElementById('icon-sound-on');
-                const offIcon = document.getElementById('icon-sound-off');
-                if(this.state.muted) {
-                    onIcon.classList.replace('shown', 'hidden');
-                    offIcon.classList.replace('hidden', 'shown');
+                return null;
+            }
+            return cached.data;
+        },
+        
+        setChartCache(coinId, days, data) {
+            const cacheKey = this.getChartCacheKey(coinId, days);
+            this.state.chartCache[cacheKey] = { data: data, timestamp: Date.now() };
+            // Limitar caché para no llenar localStorage
+            const keys = Object.keys(this.state.chartCache);
+            if (keys.length > 15) {
+                const oldestKey = keys.reduce((a, b) => this.state.chartCache[a].timestamp < this.state.chartCache[b].timestamp ? a : b);
+                delete this.state.chartCache[oldestKey];
+            }
+            this.saveState();
+        },
+        
+        // --- EVENT BINDING ---
+        bindEvents() {
+            document.getElementById('btn-go-crypto').onclick = () => { this.updateBackgroundMode('crypto'); this.switchViewWithTransition('crypto'); };
+            document.getElementById('btn-go-calc').onclick = () => { this.updateBackgroundMode('calc'); this.switchViewWithTransition('calc'); };
+            document.getElementById('btn-mute').onclick = () => this.toggleMute();
+            
+            // Touch/Click Handling for Keypad
+            document.querySelectorAll('.btn[data-key]').forEach(b => {
+                const key = b.dataset.key;
+                if (key === 'AC') {
+                    let pressTimer;
+                    let longPressTriggered = false;
+                    const startPress = (e) => {
+                        if(e.cancelable) e.preventDefault();
+                        this.createRipple(e, b);
+                        this.createPressureWave(e.clientX, e.clientY, b);
+                        b.classList.add('btn-active');
+                        longPressTriggered = false;
+                        pressTimer = setTimeout(() => { longPressTriggered = true; this.clearAllHistory(); }, 800);
+                    };
+                    const endPress = () => {
+                        clearTimeout(pressTimer);
+                        b.classList.remove('btn-active');
+                        if (!longPressTriggered) { this.haptic(10); this.handleInput('AC'); this.pulseDisplay(); }
+                    };
+                    b.addEventListener('pointerdown', startPress);
+                    b.addEventListener('pointerup', endPress);
+                    b.addEventListener('pointerleave', () => { clearTimeout(pressTimer); b.classList.remove('btn-active'); });
                 } else {
-                    offIcon.classList.replace('shown', 'hidden');
-                    onIcon.classList.replace('hidden', 'shown');
+                    const press = (e) => {
+                        if(e.cancelable) e.preventDefault(); 
+                        this.createRipple(e, b);
+                        this.createPressureWave(e.clientX, e.clientY, b);
+                        this.applyBounceEffect(b);
+                        this.haptic(10); 
+                        b.classList.add('btn-active'); 
+                        this.pulseDisplay(); 
+                        this.handleInput(key);
+                        if (['+', '-', '*', '/', '%', 'Enter'].includes(key)) this.createButtonParticles(e, key);
+                    };
+                    const release = () => b.classList.remove('btn-active');
+                    b.addEventListener('pointerdown', press);
+                    b.addEventListener('pointerup', release);
+                    b.addEventListener('pointerleave', release);
                 }
-            },
+            });
 
-            clearAllHistory() {
-                this.state.history = []; 
-                this.saveState(); 
-                document.getElementById('history-list').innerHTML = '';
-                this.showToast('🗑️ Historial Eliminado');
-                this.haptic([50, 50, 50]); 
-                this.pulseDisplay();
-                const displayRect = document.getElementById('display-container').getBoundingClientRect();
-                for(let i = 0; i < 40; i++) {
-                    setTimeout(() => {
-                        const x = displayRect.left + Math.random() * displayRect.width;
-                        const y = displayRect.top + Math.random() * displayRect.height;
-                        this.createParticle(x, y, { animation: 'explosion', color: 'var(--neon-red)', size: Math.random() * 7 + 3, glow: true, lifetime: 1.2 });
-                    }, i * 20);
+            // Keyboard support
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.escCounter++;
+                    clearTimeout(this.escTimer);
+                    this.escTimer = setTimeout(() => { this.escCounter = 0; }, 800);
+                    if (this.escCounter >= 2) { this.clearAllHistory(); this.escCounter = 0; } 
+                    else { this.handleInput('AC'); }
+                    return;
                 }
-                this.handleInput('AC'); 
-            },
-
-            pulseDisplay() {
-                const lens = document.getElementById('display-container');
-                lens.classList.remove('pulse-active');
-                void lens.offsetWidth; 
-                lens.classList.add('pulse-active');
-                setTimeout(()=>lens.classList.remove('pulse-active'), 300);
-            },
-
-            handleInput(k) {
-                if(this.fresh) {
-                    if(!"+-*/%".includes(k) && k !== 'Enter') { this.expr=''; }
-                    this.fresh = false;
-                    document.getElementById('secondary-display').classList.remove('visible');
-                }
-                if (['+', '-', '*', '/', '%', 'Enter'].includes(k)) {
-                    const displayRect = document.getElementById('display-container').getBoundingClientRect();
-                    const centerX = displayRect.left + displayRect.width / 2;
-                    const centerY = displayRect.top + displayRect.height / 2;
-                    this.createOperationParticles(k, centerX, centerY);
-                }
-                if(k==='AC') { this.expr = ''; }
-                else if(k==='Backspace') { this.expr = this.expr.toString().slice(0, -1); }
-                else if(k==='Enter') { this.calculate(); }
-                else if(k==='(') { this.smartParen(); }
-                else if(k==='%') { this.handlePercent(); } 
-                else {
-                    const last = this.expr.slice(-1);
-                    if (k === ',') k = '.';
-                    if (k === '.') {
-                        const currentNum = this.expr.split(/[\+\-\*\/]/).pop();
-                        if (currentNum.includes('.')) return; 
-                        if (this.expr === '' || "+-*/(".includes(last)) {
-                            this.expr += '0.';
-                            this.render(); this.playTone(k); return;
-                        }
-                    }
-                    if ("+-*/".includes(k) && "+-*/".includes(last)) { 
-                        this.expr = this.expr.slice(0, -1) + k;
-                    } else { 
-                        this.expr += k; 
-                    }
-                }
-                this.render();
-                this.playTone(k);
-            },
-
-            handlePercent() {
-                if (!this.expr) return;
-                const operators = ['+', '-', '*', '/'];
-                let lastOpIndex = -1;
-                let lastOp = '';
-                for (let i = this.expr.length - 1; i >= 0; i--) {
-                    if (operators.includes(this.expr[i])) { lastOpIndex = i; lastOp = this.expr[i]; break; }
-                }
-                const match = this.expr.match(/(\d+(\.\d+)?)$/);
-                if (!match) return;
-                const currentVal = parseFloat(match[0]);
-                let replacement = '';
-                if (lastOpIndex !== -1 && (lastOp === '+' || lastOp === '-')) {
-                    const baseExpr = this.expr.substring(0, lastOpIndex);
-                    try {
-                        const cleanBase = baseExpr.replace(/[^0-9+\-*/.]/g, ''); 
-                        const baseVal = new Function('return ' + cleanBase)();
-                        const percentVal = baseVal * (currentVal / 100);
-                        replacement = percentVal.toString();
-                    } catch (e) { replacement = (currentVal / 100).toString(); }
-                } else { replacement = (currentVal / 100).toString(); }
-                this.expr = this.expr.substring(0, this.expr.length - match[0].length) + replacement;
-                this.fresh = false;
-                this.render();
-            },
-
-            calculate() {
-                if(!this.expr) return;
-                try {
-                    let formattedExpr = this.expr.replace(/\*/g, '×').replace(/\//g, '÷');
-                    formattedExpr = formattedExpr.replace(/\d+(\.\d+)?/g, (match) => {
-                        const [int, dec] = match.split('.');
-                        return dec ? `${parseInt(int).toLocaleString('es-ES')},${dec}` : parseInt(int).toLocaleString('es-ES');
-                    });
-                    let clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
-                    clean = clean.replace(/([+\-*/])\1+/g, '$1'); 
-                    clean = clean.replace(/\)\(/g, ')*('); 
-                    if(clean.includes('/0') && !clean.match(/\/0\./)) throw new Error("DIV_ZERO");
-                    const openParen = (clean.match(/\(/g)||[]).length;
-                    const closeParen = (clean.match(/\)/g)||[]).length;
-                    if(openParen !== closeParen) throw new Error("PAREN");
-                    let res = new Function('return ' + clean)();
-                    if(!isFinite(res)) throw new Error("INVALID");
-                    res = parseFloat(parseFloat(res).toPrecision(12)); 
-                    this.addToHistoryState(this.expr, res);
-                    this.expr = String(res); 
-                    this.fresh = true;
-                    const secDisp = document.getElementById('secondary-display');
-                    secDisp.innerText = formattedExpr + ' =';
-                    secDisp.classList.add('visible');
+                const k = e.key === 'Enter' ? 'Enter' : (e.key === 'Backspace' ? 'Backspace' : e.key);
+                if(!/^[0-9+\-*/.,=()%]$|Enter|Backspace|Delete/.test(k)) return;
+                
+                let vKey = k === 'Delete' ? 'AC' : (k === '.' ? ',' : k);
+                if(vKey === '=') vKey = 'Enter';
+                
+                const btn = document.querySelector(`.btn[data-key="${vKey}"]`) || document.querySelector(`.btn[data-key="${k}"]`);
+                if(btn) {
+                    btn.classList.add('btn-active');
                     this.pulseDisplay();
-                    const d = document.getElementById('main-display');
-                    d.classList.remove('pop-active');
-                    void d.offsetWidth;
-                    d.classList.add('pop-active');
-                    this.createSuccessEffect();
-                } catch(e) { 
-                    const dContainer = document.getElementById('display-container');
-                    dContainer.classList.add('shake-active');
-                    setTimeout(() => dContainer.classList.remove('shake-active'), 300);
-                    const displayRect = document.getElementById('display-container').getBoundingClientRect();
-                    const centerX = displayRect.left + displayRect.width / 2;
-                    const centerY = displayRect.top + displayRect.height / 2;
-                    for(let i = 0; i < 15; i++) {
-                        setTimeout(() => {
-                            this.createParticle(centerX, centerY, { animation: 'explosion', color: 'var(--neon-red)', size: Math.random() * 8 + 4, glow: true, lifetime: 0.8 });
-                        }, i * 30);
-                    }
-                    let msg = "❌ Error";
-                    if(e.message === "DIV_ZERO") msg = "⚠️ División por 0";
-                    else if(e.message === "PAREN") msg = "⚠️ Paréntesis ()";
-                    this.showToast(msg);
-                    this.haptic([50, 50, 100]);
-                    const d = document.getElementById('main-display');
-                    const originalColor = d.style.color;
-                    d.style.color = 'var(--neon-red)';
-                    setTimeout(() => d.style.color = originalColor, 800);
+                    setTimeout(() => btn.classList.remove('btn-active'), 100);
+                    this.handleInput(vKey);
                 }
-                this.render();
-            },
+            });
 
-            smartParen() {
-                const o = (this.expr.match(/\(/g)||[]).length;
-                const c = (this.expr.match(/\)/g)||[]).length;
-                const last = this.expr.slice(-1);
-                if(o > c && (/[0-9.]$/.test(last) || last===')')) this.expr += ')';
-                else if(/[0-9.]$/.test(last) || last===')') this.expr += '*(';
-                else this.expr += '(';
-                this.render();
-            },
-
-            render() {
-                const d = document.getElementById('main-display');
-                if(!this.expr) { d.innerHTML = '0'; d.style.fontSize = '3.2rem'; return; }
-                const parts = this.expr.split(/([\+\-\*\/])/);
-                let h = '';
-                document.querySelectorAll('.btn').forEach(b => b.classList.remove('op-active'));
-                const lastChar = this.expr.slice(-1);
-                if ("+-*/".includes(lastChar)) {
-                    const opMap = {'+':'+', '-':'-', '*':'*', '/':'/'};
-                    const btn = document.querySelector(`.btn[data-key="${opMap[lastChar]}"]`);
-                    if(btn) btn.classList.add('op-active');
+            // Chart Interactions
+            const chartModal = document.getElementById('chart-modal');
+            document.querySelectorAll('.card').forEach(c => {
+                c.onclick = (e) => {
+                    this.createRipple(e, c);
+                    this.createPressureWave(e.clientX, e.clientY, c);
+                    this.openChart(c.dataset.id, c.dataset.name);
                 }
-                parts.forEach((p) => {
-                    if(p==='') return;
-                    if("+-*/".includes(p)) { 
-                        const op = p.replace('*','×').replace('/','÷'); 
-                        h += `<span class="token token-op" style="margin:0 2px">${op}</span>`;
-                    } else {
-                        if(!isNaN(parseFloat(p))) { 
-                            let [int, dec] = p.split('.'); 
-                            const intFormatted = int ? parseInt(int).toLocaleString('es-ES') : '';
-                            const finalInt = (int === '0' || int === '') && p.startsWith('0') ? '0' : intFormatted;
-                            if(dec !== undefined) {
-                                h += `<span>${finalInt}<span class="small-decimal" style="opacity:0.7">,${dec}</span></span>`;
-                            } else {
-                                h += `<span>${finalInt}</span>`;
-                            }
-                        } else {
-                            h += p;
-                        }
-                    }
-                });
-                d.innerHTML = h;
-                const plainTextLen = d.innerText.replace(/,/g, '').length; 
-                let size = 3.2;
-                if (plainTextLen > 7) {
-                    size = Math.max(1.25, 3.2 - ((plainTextLen - 7) * 0.20)); 
-                }
-                d.style.fontSize = `${size}rem`;
-                requestAnimationFrame(() => d.scrollLeft = d.scrollWidth);
-            },
-
-            addToHistoryState(ex, r) {
-                const item = { expr: ex, res: r, date: Date.now() };
-                this.state.history.unshift(item); 
-                if (this.state.history.length > 20) this.state.history.pop(); 
-                this.saveState();
-                this.renderHistoryItem(item, true); 
-                if(this.state.history.length % 3 === 0) {
-                    const historyList = document.getElementById('history-list');
-                    const firstItem = historyList.querySelector('li:first-child');
-                    if(firstItem) {
-                        const rect = firstItem.getBoundingClientRect();
-                        this.createParticle(rect.right - 10, rect.top + 10, { animation: 'floatUp', color: 'var(--history-res-color)', size: 4, glow: true, lifetime: 1 });
-                    }
-                }
-            },
-
-            renderHistoryFromState() {
-                const list = document.getElementById('history-list');
-                list.innerHTML = '';
-                [...this.state.history].reverse().forEach(item => this.renderHistoryItem(item, false));
-            },
-
-            renderHistoryItem(item, isNew) {
-                const li = document.createElement('li');
-                const formattedRes = item.res.toLocaleString('es-ES', { maximumFractionDigits: 10 });
-                let prettyExpr = item.expr.replace(/\*/g, '×').replace(/\//g, '÷');
-                prettyExpr = prettyExpr.replace(/\d+(\.\d+)?/g, (match) => {
-                    const [int, dec] = match.split('.');
-                    const intFormatted = parseInt(int).toLocaleString('es-ES');
-                    return dec ? `${intFormatted},${dec}` : intFormatted;
-                });
-                li.innerHTML = `${prettyExpr} = <b>${formattedRes}</b>`;
-                li.onclick = () => { 
-                    this.expr = String(item.res); 
-                    this.fresh = true; 
-                    this.render(); 
-                    this.haptic(10);
-                    const rect = li.getBoundingClientRect();
-                    for(let i = 0; i < 5; i++) {
-                        setTimeout(() => {
-                            this.createParticle(rect.right - 5, rect.top + 15, { animation: 'floatUp', color: 'var(--history-res-color)', size: Math.random() * 5 + 2, glow: true });
-                        }, i * 50);
-                    }
-                    this.showToast('✓ Recuperado');
-                };
-                const list = document.getElementById('history-list');
-                if(isNew) list.prepend(li); else list.prepend(li); 
-            },
-
-            async fetchPrices(force = false) {
-                const dot = document.querySelector('.status-dot');
-                const label = document.getElementById('time-text');
-                const now = Date.now();
-                const cacheValid = this.state.cryptoCache && (now - this.state.lastFetchTime < 60000);
-                if (cacheValid && !force) {
-                    this.renderCryptoData(this.state.cryptoCache, new Date(this.state.lastFetchTime));
-                    return;
-                }
-                document.querySelectorAll('.card').forEach(c => c.classList.add('loading'));
-                try {
-                    dot.className = 'status-dot'; 
-                    label.innerText = "Actualizando...";
-                    const controller = new AbortController();
-                    setTimeout(() => controller.abort(), 8000);
-                    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=eur,usd&include_24hr_change=true', { signal: controller.signal });
-                    if(res.status === 429) throw new Error("Límite API");
-                    if(!res.ok) throw new Error("Error API");
-                    const d = await res.json();
-                    this.state.cryptoCache = d;
-                    this.state.lastFetchTime = Date.now();
-                    this.saveState();
-                    this.renderCryptoData(d, new Date());
-                    const timestamp = document.querySelector('#timestamp');
-                    if(timestamp) {
-                        const rect = timestamp.getBoundingClientRect();
-                        for(let i = 0; i < 8; i++) {
-                            setTimeout(() => {
-                                this.createParticle(rect.left + rect.width/2, rect.top + 10, { animation: 'floatUp', color: 'var(--crypto-up)', size: Math.random() * 4 + 2, glow: true });
-                            }, i * 60);
-                        }
-                    }
-                } catch(e) { 
-                    if (this.state.cryptoCache) {
-                        this.renderCryptoData(this.state.cryptoCache, new Date(this.state.lastFetchTime));
-                        dot.className = 'status-dot';
-                        dot.style.backgroundColor = 'var(--neon-yellow)'; 
-                        dot.style.boxShadow = '0 0 10px var(--neon-yellow)';
-                        label.innerText = "Modo Offline";
-                        this.showToast("⚠️ Datos guardados");
-                    } else {
-                        dot.className = 'status-dot error';
-                        label.innerText = "Sin conexión";
-                    }
-                } finally {
-                    document.querySelectorAll('.card').forEach(c => c.classList.remove('loading'));
-                }
-            },
-
-            renderCryptoData(d, dateObj) {
-                const dot = document.querySelector('.status-dot');
-                const label = document.getElementById('time-text');
-                const fmtEur = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'});
-                const fmtUsd = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
-                ['bitcoin','ethereum','solana','ripple'].forEach(id => {
-                    if(d[id]) {
-                        document.getElementById(`${id}-price-eur`).textContent = fmtEur.format(d[id].eur);
-                        document.getElementById(`${id}-price-usd`).textContent = fmtUsd.format(d[id].usd);
-                        const chg = d[id].eur_24h_change;
-                        const cEl = document.getElementById(`${id}-change`);
-                        cEl.innerText = (chg>0?'+':'') + chg.toFixed(2)+'%';
-                        cEl.className = `change-percentage tabular-nums ${chg>=0?'change-positive':'change-negative'}`;
-                        if(Math.abs(chg) > 2) {
-                            const card = document.querySelector(`.card[data-id="${id}"]`);
-                            if(card) {
-                                const rect = card.getBoundingClientRect();
-                                const color = chg >= 0 ? 'var(--crypto-up)' : 'var(--crypto-down)';
-                                for(let i = 0; i < 3; i++) {
-                                    setTimeout(() => {
-                                        this.createParticle(rect.right - 20, rect.top + rect.height/2, { animation: chg >= 0 ? 'floatUp' : 'floatDown', color: color, size: Math.random() * 4 + 2, glow: true });
-                                    }, i * 100);
-                                }
-                            }
-                        }
-                    }
-                });
-                const timeStr = dateObj.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
-                if(label.innerText !== "Modo Offline") {
-                    dot.className = 'status-dot online';
-                    dot.style.backgroundColor = ''; 
-                    dot.style.boxShadow = '';
-                    label.innerText = `Actualizado: ${timeStr}`;
-                }
-            },
-
-            async openChart(id, name) {
-                this.currentCoinId = id;
-                document.getElementById('chart-title').innerText = name;
-                document.getElementById('chart-modal').classList.add('visible');
-                document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-                document.querySelector('.time-btn[data-days="30"]').classList.add('active');
+            });
+            document.querySelector('.close-chart').onclick = () => {
+                chartModal.classList.remove('visible');
                 if(this.chart) { this.chart.destroy(); this.chart = null; }
-                await this.initChart();
-                this.updateChartData(30);
-                const modal = document.getElementById('chart-modal');
-                const rect = modal.getBoundingClientRect();
-                for(let i = 0; i < 15; i++) {
-                    setTimeout(() => {
-                        this.createParticle(rect.left + rect.width/2, rect.top + 50, { animation: 'explosion', color: 'var(--neon-cyan)', size: Math.random() * 6 + 3, glow: true });
-                    }, i * 40);
+            };
+            chartModal.onclick = (e) => { if (e.target === chartModal) document.querySelector('.close-chart').click(); };
+
+            document.querySelectorAll('.time-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    this.applyBounceEffect(e.target);
+                    this.updateChartData(e.target.dataset.days);
                 }
-            },
+            });
+        },
 
-            async initChart() {
-                const options = {
-                    series: [],
-                    chart: { type: 'area', height: 250, toolbar:{show:false}, background:'transparent', animations: { enabled: true, speed: 800 } },
-                    theme: { mode: 'dark' },
-                    stroke: { curve: 'smooth', width: 2 },
-                    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.1 } },
-                    dataLabels: { enabled: false },
-                    xaxis: { type: 'datetime', tooltip:{enabled:false}, axisBorder:{show:false}, labels: { show: false } },
-                    yaxis: { show: true, labels: { style:{ colors:'var(--secondary-text)' }, formatter: v=>v.toLocaleString('es-ES',{maximumFractionDigits:0}) + '€' } },
-                    grid: { borderColor: 'rgba(255,255,255,0.05)', strokeDashArray: 5, padding: { left: 10, right: 0 } },
-                    tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm' } }
-                };
-                this.chart = new ApexCharts(document.querySelector("#chart-container"), options);
-                await this.chart.render();
-            },
-
-            async updateChartData(days) {
-                const spinner = document.getElementById('loading-chart');
-                spinner.classList.add('active');
-                
-                const now = Date.now();
-                const cacheKey = this.getChartCacheKey(this.currentCoinId, days);
-                const cachedData = this.getCachedChartData(this.currentCoinId, days);
-                
-                if (cachedData) {
-                    const isPositive = cachedData[cachedData.length-1][1] >= cachedData[0][1];
-                    const color = isPositive ? '#00ff9d' : '#ff0033';
-                    if(this.chart) {
-                        this.chart.updateOptions({ colors: [color], tooltip: { theme: 'dark' } });
-                        this.chart.updateSeries([{ name: 'Precio', data: cachedData }]);
-                    }
-                    spinner.classList.remove('active');
-                    this.triggerChartParticles(color); 
-                    return;
-                }
-
-                try {
-                    const url = `https://api.coingecko.com/api/v3/coins/${this.currentCoinId}/market_chart?vs_currency=eur&days=${days}`;
-                    const res = await fetch(url);
-                    if(res.status === 429) throw new Error("⚠️ Límite de API. Espera.");
-                    if(!res.ok) throw new Error("Error API");
-                    const data = await res.json();
-                    if(!data.prices || data.prices.length === 0) throw new Error("Sin datos");
-
-                    const isPositive = data.prices[data.prices.length-1][1] >= data.prices[0][1];
-                    const color = isPositive ? '#00ff9d' : '#ff0033';
-
-                    this.setChartCache(this.currentCoinId, days, data.prices);
-
-                    if(this.chart) {
-                        this.chart.updateOptions({ colors: [color], tooltip: { theme: 'dark' } });
-                        this.chart.updateSeries([{ name: 'Precio', data: data.prices }]);
-                    }
-                    
-                    this.triggerChartParticles(color);
-
-                } catch(e) { this.showToast(e.message); } 
-                finally { spinner.classList.remove('active'); }
-            },
+        // --- PARTICLE SYSTEM ---
+        createParticle(x, y, config = {}) {
+            if (this.particleCount >= this.maxParticles) return; // Límite estricto
             
-            triggerChartParticles(color) {
-                const chartContainer = document.getElementById('chart-container');
-                if(chartContainer) {
-                    const rect = chartContainer.getBoundingClientRect();
-                    for(let i = 0; i < 10; i++) {
-                        setTimeout(() => {
-                            this.createParticle(rect.left + rect.width/2, rect.top + rect.height/2, { animation: 'explosion', color: color, size: Math.random() * 5 + 3, glow: true });
-                        }, i * 50);
-                    }
-                }
-            },
-
-            switchViewWithTransition(targetView) {
-                const currentView = targetView === 'crypto' ? 'view-calculator' : 'view-crypto';
-                const nextView = targetView === 'crypto' ? 'view-crypto' : 'view-calculator';
-                const transitionStyle = this.transitionStyles[this.currentTransition];
-                this.currentTransition = (this.currentTransition + 1) % this.transitionStyles.length;
-                if(!this.state.muted) this.playTransitionSound();
-                this.createTransitionParticles(currentView, nextView);
-                const currentElement = document.getElementById(currentView);
-                const nextElement = document.getElementById(nextView);
-                currentElement.classList.add(`transition-${transitionStyle}`);
-                nextElement.classList.add(`transition-${transitionStyle}`);
+            const particle = document.createElement('div');
+            const size = config.size || Math.random() * 8 + 4;
+            const color = config.color || this.getRandomNeonColor();
+            const shape = config.shape || this.getRandomShape();
+            const lifetime = config.lifetime || Math.random() * 1.5 + 0.5;
+            
+            particle.className = `particle particle-${shape}`;
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+            particle.style.background = color;
+            particle.style.left = `${x}px`;
+            particle.style.top = `${y}px`;
+            if (config.glow) particle.style.boxShadow = `0 0 ${size * 2}px ${color}`;
+            
+            // Variables CSS para la animación
+            particle.style.setProperty('--tx', `${config.tx || 0}px`);
+            particle.style.setProperty('--ty', `${config.ty || 0}px`);
+            particle.style.setProperty('--rot', `${config.rotation || 0}deg`);
+            particle.style.setProperty('--start-x', `${Math.random() * 100 - 50}px`);
+            particle.style.setProperty('--end-x', `${Math.random() * 100 - 50}px`);
+            
+            const animName = this.getAnimationName(config.animation || 'floatUp');
+            particle.style.animation = `${animName} ${lifetime}s ease-out forwards`;
+            
+            document.getElementById('particles-layer').appendChild(particle);
+            this.particleCount++;
+            
+            particle.addEventListener('animationend', () => { particle.remove(); this.particleCount--; });
+        },
+        
+        getRandomNeonColor() { return ['var(--neon-red)', 'var(--neon-cyan)', 'var(--neon-lime)', 'var(--neon-yellow)', 'var(--matrix-green)', 'var(--crypto-up)', '#ff00ff', '#00ffff'][Math.floor(Math.random() * 8)]; },
+        getRandomShape() { return ['circle', 'star', 'square', 'triangle'][Math.floor(Math.random() * 4)]; },
+        
+        getAnimationName(type) {
+            const animations = { 'floatUp': 'particleFloatUp', 'floatDown': 'particleFloatDown', 'explosion': 'particleExplosion', 'fragmentation': 'particleFragmentation', 'starFall': 'particleStarFall', 'matrixRain': 'particleMatrixRain', 'confetti': 'particleConfetti' };
+            return animations[type] || 'particleFloatUp';
+        },
+        
+        createOperationParticles(operationType, x, y) {
+            // Optimizado: menos partículas
+            switch(operationType) {
+                case '+': case '-':
+                    const direction = operationType === '+' ? 'floatUp' : 'floatDown';
+                    for (let i = 0; i < 8; i++) { setTimeout(() => { this.createParticle(x + Math.random()*60-30, y, { animation: direction, color: operationType === '+' ? 'var(--crypto-up)' : 'var(--crypto-down)', size: Math.random()*5+2, glow: true }); }, i * 40); }
+                    break;
+                case '*':
+                    for (let i = 0; i < 12; i++) { setTimeout(() => { const a = Math.random()*6.28; const d = Math.random()*40; this.createParticle(x, y, { animation: 'explosion', color: 'var(--neon-yellow)', size: Math.random()*6+3, glow: true, tx: Math.cos(a)*d, ty: Math.sin(a)*d }); }, i * 30); }
+                    break;
+                case '/':
+                    for (let i = 0; i < 10; i++) { setTimeout(() => { const a = Math.random()*6.28; const d = 40; this.createParticle(x, y, { animation: 'fragmentation', color: 'var(--neon-cyan)', size: 4, tx: Math.cos(a)*d, ty: Math.sin(a)*d, rotation: 360 }); }, i * 30); }
+                    break;
+                case 'Enter':
+                    for (let i = 0; i < 15; i++) { setTimeout(() => { this.createParticle(x + Math.random()*100-50, y-20, { animation: 'confetti', shape: 'star', color: this.getRandomNeonColor(), size: 5, tx: Math.random()*60-30, glow: true }); }, i * 20); }
+                    break;
+            }
+        },
+        
+        createButtonParticles(event, key) {
+            const rect = event.target.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            const color = this.getColorByKey(key);
+            for (let i = 0; i < 5; i++) { // Reducido a 5
                 setTimeout(() => {
-                    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-                    document.getElementById(nextView).classList.add('active');
-                    setTimeout(() => {
-                        currentElement.classList.remove(`transition-${transitionStyle}`);
-                        nextElement.classList.remove(`transition-${transitionStyle}`);
-                    }, 100);
-                    if(targetView === 'crypto') { 
-                        this.fetchPrices(); 
-                        this.showToast('📊 Modo Crypto Activado');
-                    } else { 
-                        this.showToast('🧮 Modo Calculadora Activado');
-                    }
-                }, transitionStyle === 'vortex' ? 500 : 600);
-            },
-            
-            createTransitionParticles(fromViewId, toViewId) {
-                const fromView = document.getElementById(fromViewId);
-                const toView = document.getElementById(toViewId);
-                if(!fromView || !toView) return;
-                const fromRect = fromView.getBoundingClientRect();
-                const toRect = toView.getBoundingClientRect();
-                for(let i = 0; i < 30; i++) {
-                    setTimeout(() => {
-                        const fromX = fromRect.left + Math.random() * fromRect.width;
-                        const fromY = fromRect.top + Math.random() * fromRect.height;
-                        const toX = toRect.left + Math.random() * toRect.width;
-                        const toY = toRect.top + Math.random() * toRect.height;
-                        const particle = this.createParticle(fromX, fromY, { color: this.getRandomNeonColor(), size: Math.random() * 6 + 3, glow: true });
-                        if(particle) {
-                            particle.animate([{ transform: `translate(0, 0)`, opacity: 1 }, { transform: `translate(${toX - fromX}px, ${toY - fromY}px)`, opacity: 0 }], { duration: 800, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }).onfinish = () => particle.remove();
-                        }
-                    }, i * 20);
-                }
-                for(let i = 0; i < 20; i++) {
-                    setTimeout(() => {
-                        const x = fromRect.left + fromRect.width / 2 + (Math.random() - 0.5) * 100;
-                        const y = fromRect.top + fromRect.height / 2 + (Math.random() - 0.5) * 100;
-                        this.createParticle(x, y, { animation: 'explosion', color: 'var(--neon-red)', size: Math.random() * 8 + 4, glow: true, lifetime: 0.8 });
-                    }, i * 30);
-                }
-            },
-            
-            playTransitionSound() {
-                if(!this.audioCtx) return;
-                try {
-                    if(this.audioCtx.state === 'suspended') this.audioCtx.resume();
-                    const now = this.audioCtx.currentTime;
-                    const oscillator1 = this.audioCtx.createOscillator();
-                    const oscillator2 = this.audioCtx.createOscillator();
-                    const gainNode = this.audioCtx.createGain();
-                    oscillator1.connect(gainNode);
-                    oscillator2.connect(gainNode);
-                    gainNode.connect(this.audioCtx.destination);
-                    oscillator1.type = 'sine';
-                    oscillator2.type = 'triangle';
-                    oscillator1.frequency.setValueAtTime(523.25, now);
-                    oscillator1.frequency.exponentialRampToValueAtTime(1046.50, now + 0.3);
-                    oscillator2.frequency.setValueAtTime(659.25, now);
-                    oscillator2.frequency.exponentialRampToValueAtTime(1318.51, now + 0.3);
-                    gainNode.gain.setValueAtTime(0, now);
-                    gainNode.gain.linearRampToValueAtTime(0.1, now + 0.05);
-                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-                    oscillator1.start(now);
-                    oscillator2.start(now);
-                    oscillator1.stop(now + 0.5);
-                    oscillator2.stop(now + 0.5);
-                } catch(e) {}
-            },
-
-            toggleMute() {
-                this.state.muted = !this.state.muted;
-                this.updateMuteIcon();
-                this.saveState();
-                if(!this.state.muted) {
-                    this.playTone('Enter');
-                    this.initAudioVisualizer();
-                } else {
-                    if (this.animationId) { cancelAnimationFrame(this.animationId); this.animationId = null; }
-                }
-                this.showToast(this.state.muted ? 'Silencio Activado 🔇' : 'Sonido Activado 🔊');
-            },
-
-            updateMuteIcon() {
-                const onIcon = document.getElementById('icon-sound-on');
-                const offIcon = document.getElementById('icon-sound-off');
-                if(this.state.muted) {
-                    onIcon.classList.replace('shown', 'hidden');
-                    offIcon.classList.replace('hidden', 'shown');
-                } else {
-                    offIcon.classList.replace('shown', 'hidden');
-                    onIcon.classList.replace('hidden', 'shown');
-                }
-            },
-
-            saveState() { localStorage.setItem('aidanaiUltimate', JSON.stringify(this.state)); },
-            
-            loadState() { 
-                try {
-                    const s = JSON.parse(localStorage.getItem('aidanaiUltimate')); 
-                    if(s) {
-                        this.state = {...this.state, ...s};
-                        if (this.state.chartCache === undefined) this.state.chartCache = {};
-                        if (this.state.backgroundIntensity === undefined) this.state.backgroundIntensity = 0.4;
-                        if (this.state.visualizerEnabled === undefined) this.state.visualizerEnabled = true;
-                    }
-                } catch(e) {} 
-            },
-            
-            startClocks() {
-                const update = () => {
-                    const now = new Date();
-                    const timeStr = now.toLocaleTimeString('es-ES', {hour:'numeric', minute:'2-digit', second:'2-digit'});
-                    document.querySelectorAll('#clock, #clock-crypto').forEach(e => e.innerText = timeStr);
-                };
-                update(); setInterval(update, 1000);
-            },
-            
-            initAudioContext() {
-                try { this.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { this.audioCtx = null; }
-            },
-            
-            playTone(key) {
-                if(this.state.muted || !this.audioCtx) return;
-                try {
-                    if(this.audioCtx.state === 'suspended') this.audioCtx.resume();
-                    const osc = this.audioCtx.createOscillator();
-                    const gain = this.audioCtx.createGain();
-                    osc.connect(gain);
-                    gain.connect(this.audioCtx.destination);
-                    osc.type = 'sine';
-                    const frequencies = { 'Enter': 880, 'AC': 440, 'Backspace': 392, '%': 523.25, '+': 659.25, '-': 587.33, '*': 698.46, '/': 783.99, 'default': 1046.50 };
-                    osc.frequency.value = frequencies[key] || frequencies.default;
-                    const now = this.audioCtx.currentTime;
-                    gain.gain.setValueAtTime(0, now);
-                    gain.gain.linearRampToValueAtTime(0.15, now + 0.002);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-                    osc.start(now);
-                    osc.stop(now + 0.07);
-                } catch(e) {}
-            },
-            
-            setupPullToRefresh() {
-                const cryptoContent = document.querySelector('.crypto-content');
-                if(!cryptoContent) return;
-                
-                cryptoContent.addEventListener('touchstart', (e) => {
-                    if(cryptoContent.scrollTop === 0) this.touchStartY = e.touches[0].clientY;
-                }, { passive: true });
-                
-                cryptoContent.addEventListener('touchmove', (e) => {
-                    if(this.touchStartY && !this.pullToRefreshActive) {
-                        const pullDistance = e.touches[0].clientY - this.touchStartY;
-                        if(pullDistance > 100 && cryptoContent.scrollTop === 0) {
-                            this.pullToRefreshActive = true;
-                            this.showToast('🔄 Actualizando...');
-                            this.fetchPrices(true);
-                            this.haptic(20);
-                            const timestamp = document.querySelector('#timestamp');
-                            if(timestamp) {
-                                const rect = timestamp.getBoundingClientRect();
-                                for(let i = 0; i < 12; i++) {
-                                    setTimeout(() => {
-                                        this.createParticle(rect.left + rect.width/2, rect.top + 5, { animation: 'floatUp', color: 'var(--neon-cyan)', size: Math.random() * 5 + 3, glow: true });
-                                    }, i * 50);
-                                }
-                            }
-                            setTimeout(() => { this.touchStartY = 0; this.pullToRefreshActive = false; }, 1000);
-                        }
-                    }
-                }, { passive: true });
-                cryptoContent.addEventListener('touchend', () => { this.touchStartY = 0; }, { passive: true });
-            },
-            
-            // Cache helpers
-            getChartCacheKey(coinId, days) { return `${coinId}_${days}`; },
-            
-            getCachedChartData(coinId, days) {
-                const cacheKey = this.getChartCacheKey(coinId, days);
-                const cached = this.state.chartCache[cacheKey];
-                if (!cached) return null;
-                const now = Date.now();
-                if (now - cached.timestamp > 10 * 60 * 1000) { // 10 min cache
-                    delete this.state.chartCache[cacheKey];
-                    this.saveState();
-                    return null;
-                }
-                return cached.data;
-            },
-            
-            setChartCache(coinId, days, data) {
-                const cacheKey = this.getChartCacheKey(coinId, days);
-                this.state.chartCache[cacheKey] = { data: data, timestamp: Date.now() };
-                const keys = Object.keys(this.state.chartCache);
-                if (keys.length > 20) {
-                    let oldestKey = keys[0];
-                    let oldestTime = this.state.chartCache[oldestKey].timestamp;
-                    keys.forEach(key => { if (this.state.chartCache[key].timestamp < oldestTime) { oldestKey = key; oldestTime = this.state.chartCache[key].timestamp; } });
-                    delete this.state.chartCache[oldestKey];
-                }
-                this.saveState();
+                    const a = Math.random() * 6.28;
+                    const d = Math.random() * 30;
+                    this.createParticle(x, y, { animation: 'floatUp', color: color, size: Math.random() * 4 + 2, glow: true, tx: Math.cos(a)*d, ty: Math.sin(a)*d });
+                }, i * 40);
             }
-        };
+        },
         
-        setInterval(() => {
-            const particles = document.querySelectorAll('.particle');
-            if(particles.length > 100) {
-                for(let i = 0; i < particles.length - 80; i++) {
-                    particles[i].remove();
-                    App.particleCount--;
+        getColorByKey(key) {
+            const colorMap = { '+': 'var(--crypto-up)', '-': 'var(--crypto-down)', '*': 'var(--neon-yellow)', '/': 'var(--neon-cyan)', '%': 'var(--matrix-green)', 'Enter': 'var(--neon-lime)' };
+            return colorMap[key] || this.getRandomNeonColor();
+        },
+        
+        createRipple(event, element) {
+            const ripple = document.createElement('span');
+            const rect = element.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const x = (event.clientX ? event.clientX : rect.left + rect.width/2) - rect.left - size / 2;
+            const y = (event.clientY ? event.clientY : rect.top + rect.height/2) - rect.top - size / 2;
+            ripple.style.cssText = `width: ${size}px; height: ${size}px; left: ${x}px; top: ${y}px;`;
+            ripple.classList.add('ripple');
+            element.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 600);
+        },
+        
+        createSuccessEffect() {
+            const display = document.getElementById('main-display');
+            const rect = display.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            for(let i = 0; i < 20; i++) {
+                setTimeout(() => {
+                    const a = Math.random() * 6.28;
+                    const d = Math.random() * 60;
+                    this.createParticle(centerX, centerY, { animation: 'explosion', shape: 'star', color: this.getRandomNeonColor(), size: Math.random() * 8 + 4, glow: true, tx: Math.cos(a)*d, ty: Math.sin(a)*d });
+                }, i * 20);
+            }
+        },
+
+        // --- NAVIGATION ---
+        switchViewWithTransition(targetView) {
+            const currentView = targetView === 'crypto' ? 'view-calculator' : 'view-crypto';
+            const nextView = targetView === 'crypto' ? 'view-crypto' : 'view-calculator';
+            const transitionStyle = this.transitionStyles[this.currentTransition];
+            this.currentTransition = (this.currentTransition + 1) % this.transitionStyles.length;
+            
+            if(!this.state.muted) this.playTransitionSound();
+            
+            const currentElement = document.getElementById(currentView);
+            const nextElement = document.getElementById(nextView);
+            
+            currentElement.classList.add(`transition-${transitionStyle}`);
+            nextElement.classList.add(`transition-${transitionStyle}`);
+            
+            setTimeout(() => {
+                document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+                document.getElementById(nextView).classList.add('active');
+                setTimeout(() => {
+                    currentElement.classList.remove(`transition-${transitionStyle}`);
+                    nextElement.classList.remove(`transition-${transitionStyle}`);
+                }, 100);
+                
+                if(targetView === 'crypto') { 
+                    this.fetchPrices(); 
+                    this.showToast('📊 Modo Crypto');
+                } else { 
+                    this.showToast('🧮 Modo Calculadora');
+                }
+            }, transitionStyle === 'vortex' ? 500 : 600);
+        },
+        
+        playTransitionSound() {
+            if(!this.audioCtx) return;
+            try {
+                if(this.audioCtx.state === 'suspended') this.audioCtx.resume();
+                const now = this.audioCtx.currentTime;
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(this.audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.05, now + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } catch(e) {}
+        },
+
+        toggleMute() {
+            this.state.muted = !this.state.muted;
+            this.updateMuteIcon();
+            this.saveState();
+            if(!this.state.muted) this.playTone('Enter');
+            this.showToast(this.state.muted ? 'Silencio 🔇' : 'Sonido 🔊');
+        },
+
+        updateMuteIcon() {
+            const onIcon = document.getElementById('icon-sound-on');
+            const offIcon = document.getElementById('icon-sound-off');
+            if(this.state.muted) {
+                onIcon.classList.replace('shown', 'hidden');
+                offIcon.classList.replace('hidden', 'shown');
+            } else {
+                offIcon.classList.replace('shown', 'hidden');
+                onIcon.classList.replace('hidden', 'shown');
+            }
+        },
+
+        clearAllHistory() {
+            this.state.history = []; 
+            this.saveState(); 
+            document.getElementById('history-list').innerHTML = '';
+            this.showToast('🗑️ Historial Borrado');
+            this.haptic([50, 50]); 
+            this.handleInput('AC'); 
+        },
+
+        pulseDisplay() {
+            const lens = document.getElementById('display-container');
+            lens.classList.remove('pulse-active');
+            void lens.offsetWidth; 
+            lens.classList.add('pulse-active');
+        },
+
+        // --- CALCULATOR LOGIC ---
+        handleInput(k) {
+            if(this.fresh) {
+                if(!"+-*/%".includes(k) && k !== 'Enter') { this.expr=''; }
+                this.fresh = false;
+                document.getElementById('secondary-display').classList.remove('visible');
+            }
+            if (['+', '-', '*', '/', '%', 'Enter'].includes(k)) {
+                const rect = document.getElementById('display-container').getBoundingClientRect();
+                this.createOperationParticles(k, rect.left + rect.width/2, rect.top + rect.height/2);
+            }
+            
+            if(k==='AC') { this.expr = ''; }
+            else if(k==='Backspace') { this.expr = this.expr.toString().slice(0, -1); }
+            else if(k==='Enter') { this.calculate(); }
+            else if(k==='(') { this.smartParen(); }
+            else if(k==='%') { this.handlePercent(); } 
+            else {
+                const last = this.expr.slice(-1);
+                if (k === ',') k = '.';
+                // PREVENIR MÚLTIPLES PUNTOS
+                if (k === '.') {
+                    const parts = this.expr.split(/[\+\-\*\/]/);
+                    const current = parts[parts.length-1];
+                    if(current.includes('.')) return;
+                    if(this.expr === '' || "+-*/(".includes(last)) { this.expr += '0.'; this.render(); this.playTone(k); return; }
+                }
+                if ("+-*/".includes(k) && "+-*/".includes(last)) { 
+                    this.expr = this.expr.slice(0, -1) + k;
+                } else { 
+                    this.expr += k; 
                 }
             }
-        }, 5000);
+            this.render();
+            this.playTone(k);
+        },
+
+        handlePercent() {
+            if (!this.expr) return;
+            const match = this.expr.match(/(\d+(\.\d+)?)$/);
+            if (!match) return;
+            const currentVal = parseFloat(match[0]);
+            this.expr = this.expr.substring(0, this.expr.length - match[0].length) + (currentVal / 100).toString();
+            this.fresh = false;
+            this.render();
+        },
+
+        calculate() {
+            if(!this.expr) return;
+            try {
+                let formattedExpr = this.expr.replace(/\*/g, '×').replace(/\//g, '÷');
+                let clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
+                // Sanitización básica
+                if(clean.includes('/0') && !clean.match(/\/0\./)) throw new Error("DIV_ZERO");
+                
+                // Paréntesis balanceados?
+                const open = (clean.match(/\(/g)||[]).length;
+                const close = (clean.match(/\)/g)||[]).length;
+                if(open !== close) throw new Error("PAREN");
+                
+                let res = new Function('return ' + clean)();
+                if(!isFinite(res) || isNaN(res)) throw new Error("INVALID");
+                
+                // Formateo de precisión
+                res = parseFloat(parseFloat(res).toPrecision(12)); 
+                
+                this.addToHistoryState(this.expr, res);
+                this.expr = String(res); 
+                this.fresh = true;
+                
+                const secDisp = document.getElementById('secondary-display');
+                secDisp.innerText = formattedExpr + ' =';
+                secDisp.classList.add('visible');
+                
+                const d = document.getElementById('main-display');
+                d.classList.remove('pop-active');
+                void d.offsetWidth;
+                d.classList.add('pop-active');
+                this.createSuccessEffect();
+            } catch(e) { 
+                this.handleError(e);
+            }
+            this.render();
+        },
         
-        App.init();
-    </script>
+        handleError(e) {
+            const dContainer = document.getElementById('display-container');
+            dContainer.classList.add('shake-active');
+            setTimeout(() => dContainer.classList.remove('shake-active'), 300);
+            
+            let msg = "❌ Error";
+            if(e.message === "DIV_ZERO") msg = "⚠️ División por 0";
+            if(e.message === "PAREN") msg = "⚠️ Paréntesis ()";
+            
+            this.showToast(msg);
+            this.haptic([50, 100]);
+            const d = document.getElementById('main-display');
+            d.style.color = 'var(--neon-red)';
+            setTimeout(() => d.style.color = '', 800);
+        },
+
+        smartParen() {
+            const o = (this.expr.match(/\(/g)||[]).length;
+            const c = (this.expr.match(/\)/g)||[]).length;
+            const last = this.expr.slice(-1);
+            if(o > c && (/[0-9.]$/.test(last) || last===')')) this.expr += ')';
+            else if(/[0-9.]$/.test(last) || last===')') this.expr += '*(';
+            else this.expr += '(';
+            this.render();
+        },
+
+        render() {
+            const d = document.getElementById('main-display');
+            if(!this.expr) { d.innerHTML = '0'; d.style.fontSize = '3.2rem'; return; }
+            
+            // Highlight de operador activo
+            document.querySelectorAll('.btn').forEach(b => b.classList.remove('op-active'));
+            const lastChar = this.expr.slice(-1);
+            if ("+-*/".includes(lastChar)) {
+                const opMap = {'+':'+', '-':'-', '*':'*', '/':'/'};
+                const btn = document.querySelector(`.btn[data-key="${opMap[lastChar]}"]`);
+                if(btn) btn.classList.add('op-active');
+            }
+            
+            // Renderizado HTML coloreado
+            const parts = this.expr.split(/([\+\-\*\/])/);
+            let h = '';
+            parts.forEach((p) => {
+                if(p==='') return;
+                if("+-*/".includes(p)) { 
+                    const op = p.replace('*','×').replace('/','÷'); 
+                    h += `<span class="token token-op" style="margin:0 2px">${op}</span>`;
+                } else {
+                    if(!isNaN(parseFloat(p))) { 
+                        let [int, dec] = p.split('.'); 
+                        const intF = int ? parseInt(int).toLocaleString('es-ES') : '';
+                        const fInt = (int === '0' || int === '') && p.startsWith('0') ? '0' : intF;
+                        h += dec !== undefined ? `<span>${fInt}<span class="small-decimal">,${dec}</span></span>` : `<span>${fInt}</span>`;
+                    } else { h += p; }
+                }
+            });
+            d.innerHTML = h;
+            
+            // Escalado dinámico de fuente
+            const len = d.innerText.length;
+            const size = len > 7 ? Math.max(1.4, 3.2 - ((len - 7) * 0.22)) : 3.2;
+            d.style.fontSize = `${size}rem`;
+            d.scrollLeft = d.scrollWidth;
+        },
+
+        addToHistoryState(ex, r) {
+            const item = { expr: ex, res: r, date: Date.now() };
+            this.state.history.unshift(item); 
+            if (this.state.history.length > 20) this.state.history.pop(); 
+            this.saveState();
+            this.renderHistoryItem(item, true); 
+        },
+
+        renderHistoryFromState() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+            [...this.state.history].reverse().forEach(item => this.renderHistoryItem(item, false));
+        },
+
+        renderHistoryItem(item, isNew) {
+            const li = document.createElement('li');
+            const resF = item.res.toLocaleString('es-ES', { maximumFractionDigits: 10 });
+            let pretty = item.expr.replace(/\*/g, '×').replace(/\//g, '÷');
+            li.innerHTML = `${pretty} = <b>${resF}</b>`;
+            li.onclick = () => { 
+                this.expr = String(item.res); 
+                this.fresh = true; 
+                this.render(); 
+                this.haptic(10);
+            };
+            const list = document.getElementById('history-list');
+            list.prepend(li); 
+        },
+
+        // --- CRYPTO FETCHING ---
+        async fetchPrices(force = false) {
+            const dot = document.querySelector('.status-dot');
+            const label = document.getElementById('time-text');
+            
+            // Check cache en memoria
+            const now = Date.now();
+            if (!force && this.state.cryptoCache && (now - this.state.lastFetchTime < 60000)) {
+                this.renderCryptoData(this.state.cryptoCache, new Date(this.state.lastFetchTime));
+                return;
+            }
+
+            document.querySelectorAll('.card').forEach(c => c.classList.add('loading'));
+            dot.className = 'status-dot'; 
+            label.innerText = "Actualizando...";
+
+            try {
+                const controller = new AbortController();
+                setTimeout(() => controller.abort(), 8000);
+                const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=eur,usd&include_24hr_change=true', { signal: controller.signal });
+                
+                if(res.status === 429) throw new Error("Límite API");
+                if(!res.ok) throw new Error("Error API");
+                
+                const d = await res.json();
+                this.state.cryptoCache = d;
+                this.state.lastFetchTime = Date.now();
+                this.saveState();
+                this.renderCryptoData(d, new Date());
+                
+            } catch(e) { 
+                if (this.state.cryptoCache) {
+                    this.renderCryptoData(this.state.cryptoCache, new Date(this.state.lastFetchTime));
+                    dot.style.backgroundColor = 'var(--neon-yellow)'; 
+                    label.innerText = "Modo Offline";
+                } else {
+                    dot.className = 'status-dot error';
+                    label.innerText = "Sin conexión";
+                }
+            } finally {
+                document.querySelectorAll('.card').forEach(c => c.classList.remove('loading'));
+            }
+        },
+
+        renderCryptoData(d, dateObj) {
+            const fmtEur = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'});
+            const fmtUsd = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
+            ['bitcoin','ethereum','solana','ripple'].forEach(id => {
+                if(d[id]) {
+                    document.getElementById(`${id}-price-eur`).textContent = fmtEur.format(d[id].eur);
+                    document.getElementById(`${id}-price-usd`).textContent = fmtUsd.format(d[id].usd);
+                    const chg = d[id].eur_24h_change;
+                    const cEl = document.getElementById(`${id}-change`);
+                    cEl.innerText = (chg>0?'+':'') + chg.toFixed(2)+'%';
+                    cEl.className = `change-percentage tabular-nums ${chg>=0?'change-positive':'change-negative'}`;
+                }
+            });
+            const dot = document.querySelector('.status-dot');
+            const label = document.getElementById('time-text');
+            if(label.innerText !== "Modo Offline") {
+                dot.className = 'status-dot online';
+                dot.style.backgroundColor = '';
+                label.innerText = `Actualizado: ${dateObj.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}`;
+            }
+        },
+
+        async openChart(id, name) {
+            this.currentCoinId = id;
+            document.getElementById('chart-title').innerText = name;
+            document.getElementById('chart-modal').classList.add('visible');
+            if(this.chart) { this.chart.destroy(); this.chart = null; }
+            await this.initChart();
+            this.updateChartData(30);
+        },
+
+        async initChart() {
+            const options = {
+                series: [],
+                chart: { type: 'area', height: 250, toolbar:{show:false}, background:'transparent', animations: { enabled: true, speed: 500 } }, // Animación más rápida
+                theme: { mode: 'dark' },
+                stroke: { curve: 'smooth', width: 2 },
+                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.1 } },
+                dataLabels: { enabled: false },
+                xaxis: { type: 'datetime', tooltip:{enabled:false}, axisBorder:{show:false}, labels: { show: false } },
+                yaxis: { show: true, labels: { style:{ colors:'var(--secondary-text)' }, formatter: v=>v.toLocaleString('es-ES',{maximumFractionDigits:0}) + '€' } },
+                grid: { borderColor: 'rgba(255,255,255,0.05)', strokeDashArray: 5, padding: { left: 10, right: 0 } },
+                tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm' } }
+            };
+            this.chart = new ApexCharts(document.querySelector("#chart-container"), options);
+            await this.chart.render();
+        },
+
+        async updateChartData(days) {
+            const spinner = document.getElementById('loading-chart');
+            spinner.classList.add('active');
+            
+            const cachedData = this.getCachedChartData(this.currentCoinId, days);
+            
+            if (cachedData) {
+                this.renderChartData(cachedData);
+                spinner.classList.remove('active');
+                return;
+            }
+
+            try {
+                const url = `https://api.coingecko.com/api/v3/coins/${this.currentCoinId}/market_chart?vs_currency=eur&days=${days}`;
+                const res = await fetch(url);
+                if(res.status === 429) throw new Error("⏳ Límite API. Espera.");
+                if(!res.ok) throw new Error("Error API");
+                const data = await res.json();
+                if(!data.prices || data.prices.length === 0) throw new Error("Sin datos");
+
+                this.setChartCache(this.currentCoinId, days, data.prices);
+                this.renderChartData(data.prices);
+
+            } catch(e) { this.showToast(e.message); } 
+            finally { spinner.classList.remove('active'); }
+        },
+        
+        renderChartData(prices) {
+            const isPositive = prices[prices.length-1][1] >= prices[0][1];
+            const color = isPositive ? '#00ff9d' : '#ff0033';
+            if(this.chart) {
+                this.chart.updateOptions({ colors: [color] });
+                this.chart.updateSeries([{ name: 'Precio', data: prices }]);
+            }
+        },
+
+        // --- UTILS ---
+        setupPullToRefresh() {
+            const content = document.querySelector('.crypto-content');
+            if(!content) return;
+            content.addEventListener('touchstart', (e) => { if(content.scrollTop === 0) this.touchStartY = e.touches[0].clientY; }, { passive: true });
+            content.addEventListener('touchmove', (e) => {
+                if(this.touchStartY && !this.pullToRefreshActive && content.scrollTop === 0) {
+                    if((e.touches[0].clientY - this.touchStartY) > 100) {
+                        this.pullToRefreshActive = true;
+                        this.showToast('🔄 Recargando...');
+                        this.fetchPrices(true);
+                        this.haptic(20);
+                        setTimeout(() => { this.touchStartY = 0; this.pullToRefreshActive = false; }, 1000);
+                    }
+                }
+            }, { passive: true });
+        },
+        
+        haptic(pattern) { if (navigator.vibrate) try { navigator.vibrate(pattern); } catch(e) {} },
+        saveState() { localStorage.setItem('aidanaiUltimate', JSON.stringify(this.state)); },
+        loadState() { try { const s = JSON.parse(localStorage.getItem('aidanaiUltimate')); if(s) this.state = {...this.state, ...s}; } catch(e) {} },
+        
+        startClocks() {
+            const update = () => {
+                const s = new Date().toLocaleTimeString('es-ES', {hour:'numeric', minute:'2-digit', second:'2-digit'});
+                document.querySelectorAll('#clock, #clock-crypto').forEach(e => e.innerText = s);
+            };
+            update(); setInterval(update, 1000);
+        },
+        
+        initAudioContext() { try { this.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { this.audioCtx = null; } },
+        
+        playTone(key) {
+            if(this.state.muted || !this.audioCtx) return;
+            try {
+                if(this.audioCtx.state === 'suspended') this.audioCtx.resume();
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(this.audioCtx.destination);
+                osc.type = 'sine';
+                const freqs = { 'Enter': 880, 'AC': 440, 'Backspace': 392, '%': 523, '+': 659, '-': 587, '*': 698, '/': 784 };
+                osc.frequency.value = freqs[key] || 1046;
+                const now = this.audioCtx.currentTime;
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.1, now + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } catch(e) {}
+        }
+    };
+    
+    // Limpieza de partículas huérfanas
+    setInterval(() => {
+        const p = document.querySelectorAll('.particle');
+        if(p.length > 50) { for(let i=0; i<p.length-50; i++) p[i].remove(); App.particleCount = 50; }
+    }, 5000);
+    
+    window.addEventListener('load', () => App.init());
+</script>
 </body>
 </html>
