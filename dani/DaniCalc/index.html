@@ -264,12 +264,7 @@
     .loading-spinner.active { display: block; }
     .toast { position: fixed; top: 90px; left: 50%; transform: translate(-50%, -20px) scale(0.9); background: rgba(10, 10, 10, 0.95); border: 1px solid var(--accent-red-text); box-shadow: 0 0 20px rgba(255, 0, 51, 0.3); color: white; padding: 12px 30px; border-radius: 40px; font-size: 1rem; opacity: 0; transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 200; font-weight: 600; letter-spacing: 0.5px; backdrop-filter: blur(10px); }
     .toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
-
-    /* Audio Visualizer */
-    .audio-visualizer { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--neon-red); z-index: 1001; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; opacity: 0.7; }
-    .audio-visualizer:hover { opacity: 1; transform: scale(1.1); box-shadow: 0 0 20px var(--neon-red); }
-    .visualizer-bar { width: 3px; background: var(--neon-cyan); border-radius: 2px; margin: 0 1px; transition: height 0.1s; }
-
+    
     @media (max-width: 380px) {
         .app-header { gap: 4px; padding: 5px; }
         .app-header .icon-btn { width: 38px; height: 38px; padding: 8px; }
@@ -277,8 +272,7 @@
         #clock, #clock-crypto { font-size: 0.7rem; min-width: 65px; }
         .keypad { gap: 10px; }
         .btn { font-size: 1.2rem; border-radius: 16px; }
-        .audio-visualizer { bottom: 10px; right: 10px; width: 40px; height: 40px; }
-    }
+       }
     
     @media(min-width: 600px) {
         body { display: flex; align-items: center; justify-content: center; background: #050505; }
@@ -297,11 +291,7 @@
     <div id="time-gradient-layer" class="dynamic-bg time-gradient"></div>
 
     <div id="particles-layer" class="particles-layer"></div>
-    
-    <div id="audio-visualizer" class="audio-visualizer" title="Sincronización Audiovisual">
-        <div id="visualizer-bars"></div>
-    </div>
-
+        
     <div class="view-container">
         <div id="view-calculator" class="view active">
             <header class="app-header">
@@ -480,7 +470,6 @@
                 setInterval(() => this.fetchPrices(), 60000);
                 this.fixHeight();
                 this.initAudioContext();
-                this.initAudioVisualizer();
                 this.setupPullToRefresh();
                 this.setupRippleEffects();
                 this.setupTouchTrail();
@@ -669,101 +658,8 @@
                 }
             },
 			
-            initAudioVisualizer() {
-                if (!this.audioCtx || this.state.muted) return;
-                try {
-                    this.analyser = this.audioCtx.createAnalyser();
-                    this.analyser.fftSize = 256;
-                    const oscillator = this.audioCtx.createOscillator();
-                    const gainNode = this.audioCtx.createGain();
-                    oscillator.connect(gainNode);
-                    gainNode.connect(this.analyser);
-                    this.analyser.connect(this.audioCtx.destination);
-                    oscillator.type = 'sine';
-                    oscillator.frequency.value = 440;
-                    gainNode.gain.value = 0.01; 
-                    oscillator.start();
-                    this.audioSource = oscillator;
-                    this.createVisualizerBars();
-                    this.startVisualizer();
-                } catch (e) { console.log('Error inicializando visualizador:', e); }
-            },
-            
-            createVisualizerBars() {
-                const container = document.getElementById('visualizer-bars');
-                container.innerHTML = '';
-                for (let i = 0; i < 12; i++) {
-                    const bar = document.createElement('div');
-                    bar.classList.add('visualizer-bar');
-                    bar.id = `visualizer-bar-${i}`;
-                    container.appendChild(bar);
-                }
-            },
-            
-            startVisualizer() {
-                if (!this.analyser || !this.state.visualizerEnabled) return;
-                const updateVisualizer = () => {
-                    if (!this.analyser || this.state.muted) { this.animationId = requestAnimationFrame(updateVisualizer); return; }
-                    const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-                    this.analyser.getByteFrequencyData(dataArray);
-                    const bars = document.querySelectorAll('.visualizer-bar');
-                    bars.forEach((bar, i) => {
-                        const index = Math.floor((i / bars.length) * dataArray.length);
-                        const value = dataArray[index] / 255;
-                        const height = Math.max(3, value * 30);
-                        let color = height < 10 ? 'var(--neon-cyan)' : (height < 20 ? 'var(--neon-lime)' : 'var(--neon-red)');
-                        bar.style.height = `${height}px`;
-                        bar.style.background = color;
-                        bar.style.boxShadow = `0 0 ${height}px ${color}`;
-                    });
-                    this.syncVisualEffects(dataArray);
-                    this.animationId = requestAnimationFrame(updateVisualizer);
-                };
-                updateVisualizer();
-            },
-            
-            syncVisualEffects(audioData) {
-                if (!this.state.visualizerEnabled) return;
-                const avgVolume = audioData.reduce((a, b) => a + b) / audioData.length / 255;
-                if (avgVolume > 0.1) {
-                    this.updateBackgroundIntensity(0.4 + (avgVolume * 0.3));
-                    if (audioData[100] > 200) this.createAudioParticles(avgVolume);
-                }
-                const bass = audioData[0] / 255;
-                if (bass > 0.5) this.pulseElements(bass);
-            },
-            
-            createAudioParticles(intensity) {
-                const count = Math.floor(intensity * 10);
-                for (let i = 0; i < count; i++) {
-                    setTimeout(() => {
-                        const x = Math.random() * window.innerWidth;
-                        const y = Math.random() * window.innerHeight;
-                        this.createParticle(x, y, { animation: 'floatUp', color: this.getRandomNeonColor(), size: Math.random() * 4 + 2, glow: true, lifetime: Math.random() * 1 + 0.5 });
-                    }, i * 50);
-                }
-            },
-            
-            pulseElements(intensity) {
-                const elements = [document.querySelector('.app-title'), document.querySelector('#clock'), document.querySelectorAll('.btn[data-color="green"]')[0]].filter(el => el);
-                elements.forEach(el => { el.classList.add('glow-pulse'); setTimeout(() => el.classList.remove('glow-pulse'), 500); });
-            },
-            
-            toggleVisualizer() {
-                this.state.visualizerEnabled = !this.state.visualizerEnabled;
-                const visualizer = document.getElementById('audio-visualizer');
-                if (this.state.visualizerEnabled) {
-                    visualizer.style.opacity = '0.7';
-                    this.startVisualizer();
-                    this.showToast('🎵 Sincronización Activada');
-                } else {
-                    visualizer.style.opacity = '0.3';
-                    if (this.animationId) { cancelAnimationFrame(this.animationId); this.animationId = null; }
-                    this.showToast('🎵 Sincronización Desactivada');
-                }
-                this.saveState();
-            },
-            
+                    
+             
             getChartCacheKey(coinId, days) { return `${coinId}_${days}`; },
             
             getCachedChartData(coinId, days) {
@@ -796,8 +692,6 @@
                 document.getElementById('btn-go-crypto').onclick = () => { this.updateBackgroundMode('crypto'); this.switchViewWithTransition('crypto'); };
                 document.getElementById('btn-go-calc').onclick = () => { this.updateBackgroundMode('calc'); this.switchViewWithTransition('calc'); };
                 document.getElementById('btn-mute').onclick = () => this.toggleMute();
-                document.getElementById('audio-visualizer').onclick = () => this.toggleVisualizer();
-
                 document.querySelectorAll('.btn[data-key]').forEach(b => {
                     const key = b.dataset.key;
                     if (key === 'AC') {
@@ -1101,8 +995,7 @@
                 this.saveState();
                 if(!this.state.muted) {
                     this.playTone('Enter');
-                    this.initAudioVisualizer();
-                } else {
+                    } else {
                     if (this.animationId) { cancelAnimationFrame(this.animationId); this.animationId = null; }
                 }
                 this.showToast(this.state.muted ? 'Silencio Activado 🔇' : 'Sonido Activado 🔊');
