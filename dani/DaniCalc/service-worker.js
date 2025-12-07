@@ -1,9 +1,10 @@
-const CACHE_NAME = 'aiDANaI-Fusion-v2';
+const CACHE_NAME = 'aiDANaI-Fusion-Final';
 const CORE_ASSETS = [
     '.',
     'index.html',
     'manifest.json',
-    'https://cdn.jsdelivr.net/npm/apexcharts' // Librería de gráficos
+    'https://cdn.jsdelivr.net/npm/apexcharts', // Librería de gráficos
+    'https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Lexend:wght@300;400;500;700&family=Poppins:wght@400;500;700&family=Inter:wght@400;600&display=swap' // Fuentes
 ];
 
 self.addEventListener('install', e => {
@@ -27,13 +28,12 @@ self.addEventListener('fetch', e => {
                     caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
                     return res;
                 })
-                .catch(() => caches.match(e.request)) // Fallback a caché si no hay internet
+                .catch(() => caches.match(e.request)) // Si falla internet, usa caché
         );
         return;
     }
 
-    // 2. Fuentes de Google y Estilos Externos: Stale-While-Revalidate
-    // (Usa caché pero actualiza en segundo plano)
+    // 2. Fuentes y Estilos Externos: Stale-While-Revalidate
     if (url.hostname.includes('googleapis.com') || url.hostname.includes('gstatic.com')) {
         e.respondWith(
             caches.match(e.request).then(cachedResponse => {
@@ -47,7 +47,7 @@ self.addEventListener('fetch', e => {
         return;
     }
 
-    // 3. Archivos propios de la App: Cache First (Velocidad máxima)
+    // 3. Archivos App: Cache First (Velocidad máxima)
     e.respondWith(
         caches.match(e.request).then(res => res || fetch(e.request))
     );
