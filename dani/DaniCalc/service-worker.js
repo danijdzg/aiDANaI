@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aiDANaI-Fusion-Final';
+const CACHE_NAME = 'aiDANaI';
 const CORE_ASSETS = [
     '.',
     'index.html',
