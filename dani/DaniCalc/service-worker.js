@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aiDANaI';
+const CACHE_NAME = 'aiDANaI Calc';
 const CORE_ASSETS = [
     '.',
     'index.html',
