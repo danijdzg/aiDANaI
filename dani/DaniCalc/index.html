@@ -14,12 +14,12 @@
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     
    <style>
-    /* === CSS OPTIMIZADO: APARIENCIA ONEPLUS NORD 4 FIJA === */
+    /* === CSS: ONEPLUS NORD 4 - CHASIS FÍSICO === */
     :root { 
         --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); --header-height: 60px; 
         --neon-red: #ff0033; --neon-cyan: #00f2ff; --neon-lime: #ccff00; --neon-yellow: #ffff00;
         --crypto-up: #00ff9d; --crypto-down: #ff0033;
-        --bg-body: #000000; --chassis-bg: #050505; --chassis-border: 1px solid #222;
+        --bg-body: #050505; --chassis-bg: #050505; --chassis-border: 1px solid #222;
         --screen-bg: #000000; --screen-inset: inset 0 0 30px rgba(0,0,0,1);
         --screen-border: 1px solid rgba(255, 0, 51, 0.2); --screen-glow: 0 0 20px rgba(255, 0, 51, 0.05);
         --primary-text: #ffffff; --secondary-text: #888;
@@ -37,8 +37,60 @@
         --card-hover: rgba(30, 30, 30, 0.95); --edit-highlight: rgba(255, 0, 51, 0.15);
     }
     
-    /* Configuración base */
-    body { overscroll-behavior: none; touch-action: none; background: var(--bg-body); height: 100dvh; width: 100vw; font-family: 'Poppins', sans-serif; overflow: hidden; margin: 0; padding: 0; } 
+    body { 
+        overscroll-behavior: none; touch-action: none; 
+        background: #111; 
+        background-image: radial-gradient(#222 1px, transparent 0); 
+        background-size: 30px 30px;
+        height: 100vh; width: 100vw; 
+        font-family: 'Poppins', sans-serif; 
+        overflow: hidden; margin: 0; padding: 0; 
+        display: flex; align-items: center; justify-content: center;
+    } 
+    
+    /* === EL CONTENEDOR ES EL TELÉFONO === */
+    .view-container { 
+        position: relative; /* Para que el JS pueda moverlo con top/left */
+        overflow: hidden; 
+        display: flex; 
+        flex-direction: column; 
+        background: #000;
+        
+        /* DIMENSIONES EXACTAS ONEPLUS NORD 4 */
+        width: 412px; 
+        height: 915px;
+        min-width: 412px; max-width: 412px;
+        min-height: 915px; max-height: 915px;
+        
+        /* ESTÉTICA DE CHASIS */
+        border-radius: 40px; 
+        border: 8px solid #1a1a1a; 
+        box-shadow: 
+            0 0 0 2px #333, /* Borde exterior fino */
+            0 50px 100px rgba(0,0,0,0.8), /* Sombra profunda de elevación */
+            inset 0 0 40px rgba(0,0,0,0.8); /* Sombra interior pantalla */
+            
+        z-index: 10;
+        cursor: grab; /* Indica que se puede mover */
+    }
+    
+    .view-container:active {
+        cursor: grabbing;
+    }
+
+    /* En móvil real, ocupamos todo */
+    @media (max-width: 450px) {
+        .view-container {
+            width: 100%; height: 100%;
+            min-width: 0; max-width: none;
+            min-height: 0; max-height: none;
+            border: none; border-radius: 0;
+            box-shadow: none;
+            cursor: default;
+        }
+        body { background: #000; }
+    }
+
     #history-list, .crypto-content { overscroll-behavior: contain; touch-action: pan-y; }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; outline: none; }
     button, .card, li { touch-action: manipulation; cursor: pointer; }
@@ -57,15 +109,12 @@
     @keyframes glowPulseBorder { 0% { border-color: rgba(255,255,255,0.1); } 50% { border-color: var(--neon-cyan); box-shadow: 0 0 15px rgba(0, 242, 255, 0.15); } 100% { border-color: rgba(255,255,255,0.1); } }
     .glow-border { animation: glowPulseBorder 3s infinite; }
     
-    /* Layout de la App */
-    .view-container { width: 100%; height: 100%; position: relative; overflow: hidden; display: flex; flex-direction: column; background: #000; }
     .view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; opacity: 0; pointer-events: none; transform: scale(0.98); transition: opacity 0.2s ease, transform 0.2s ease; will-change: transform, opacity; }
     .view.active { opacity: 1; pointer-events: auto; transform: scale(1); z-index: 10; }
     .optimized-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; background-color: #000000; background-image: radial-gradient(circle at 50% 0%, #1a0505 0%, #000000 70%), linear-gradient(rgba(255, 0, 51, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 0, 51, 0.05) 1px, transparent 1px); background-size: 100% 100%, 30px 30px, 30px 30px; }
     .particles-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; overflow: hidden; }
     .particle { position: absolute; pointer-events: none; z-index: 1000; border-radius: 50%; }
     
-    /* Componentes UI */
     .app-header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: max(var(--safe-top), 10px) 15px 5px; z-index: 20; gap: 10px; height: calc(var(--header-height) + var(--safe-top)); width: 100%; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
     .embedded-ui { background: var(--card-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 16px; display: flex; align-items: center; justify-content: center; border: var(--card-border); transition: all 0.2s; flex-shrink: 0; position: relative; }
     .icon-btn { width: 44px; height: 44px; cursor: pointer; color: var(--secondary-text); padding: 10px; position: relative; overflow: hidden; }
@@ -126,37 +175,6 @@
     .time-btn.active { background: #333; color: white; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
     .toast { position: fixed; top: 90px; left: 50%; transform: translate(-50%, -20px); background: #222; border: 1px solid #ff0033; color: white; padding: 12px 30px; border-radius: 40px; opacity: 0; transition: 0.3s; pointer-events: none; z-index: 200; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
-    
-    /* === TRANSFORMACIÓN A MÓVIL ONEPLUS NORD 4 === */
-    @media(min-width: 450px) {
-        body { 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            background: #050505; 
-            background-image: radial-gradient(#151515 1px, transparent 0); 
-            background-size: 20px 20px; 
-            min-height: 100vh;
-        }
-        .view-container { 
-            /* DIMENSIONES EXACTAS ONEPLUS NORD 4 (Viewport lógico) */
-            width: 412px; 
-            height: 915px;
-            
-            /* BLOQUEO TOTAL DE REDIMENSIONADO */
-            min-width: 412px; max-width: 412px;
-            min-height: 915px; max-height: 915px;
-            
-            border-radius: 40px; 
-            border: 10px solid #222; 
-            box-shadow: 0 0 0 2px #333, 0 40px 100px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,0,0,0.6); 
-            background: #000; 
-        }
-        .optimized-bg { border-radius: 30px; position: absolute; top:0; left:0; width:100%; height:100%; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
-    }
 </style>
 </head>
 <body data-theme="dark">
@@ -164,7 +182,7 @@
     <div class="optimized-bg"></div>
     <div id="particles-layer" class="particles-layer"></div>
         
-    <div class="view-container">
+    <div class="view-container" id="draggable-phone">
         <div id="view-calculator" class="view active">
             <header class="app-header">
                 <button class="embedded-ui icon-btn icon-swap" id="btn-mute" aria-label="Silenciar">
@@ -235,20 +253,57 @@
         storageKey: 'aidanaiUltimateFusion',
         
         init() {
+            this.makeDraggable(); // INICIA EL DRAG & DROP
             this.loadState(); this.updateMuteIcon(); this.fixHeight(); this.bindEvents();
             this.startClocks(); this.renderHistory(); this.initAudio(); this.unlockAudio();
             
-            // INICIO: Mostrar datos si existen y su hora EXACTA
             if(this.state.cryptoCache) {
                 this.renderCryptoData(this.state.cryptoCache);
                 const t = this.state.lastFetchTime > 0 ? new Date(this.state.lastFetchTime).toLocaleTimeString() : '---';
-                // Mostramos estado Memoria inicialmente
                 document.getElementById('timestamp').innerHTML = `<span class="status-dot online" style="opacity:0.5;background:var(--neon-yellow);box-shadow:0 0 8px var(--neon-yellow)"></span> Memoria (Datos: ${t})`;
             }
             
-            // Refrescar siempre al abrir si ha pasado > 60s
             if(!this.state.cryptoCache || Date.now() - this.state.lastFetchTime > 60000) this.fetchPrices();
         },
+
+        // === NUEVA FUNCIÓN PARA MOVER EL TELÉFONO ===
+        makeDraggable() {
+            if (window.innerWidth <= 450) return; // No activar en móviles reales
+            const el = document.getElementById('draggable-phone');
+            let isDragging = false;
+            let startX, startY, initialLeft, initialTop;
+
+            el.addEventListener('mousedown', (e) => {
+                // Evitar drag si pulsan botones o links, pero permitir si es el fondo/header
+                if (e.target.closest('button') || e.target.closest('a') || e.target.closest('.card') || e.target.closest('.keypad')) return;
+                
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                const rect = el.getBoundingClientRect();
+                initialLeft = rect.left;
+                initialTop = rect.top;
+                el.style.position = 'absolute'; // Asegurar que es absoluto al empezar
+                el.style.left = initialLeft + 'px';
+                el.style.top = initialTop + 'px';
+                el.style.transform = 'none'; // Quitar transformaciones de centrado CSS
+                el.style.margin = '0';
+                document.body.style.justifyContent = 'flex-start'; // Romper el centrado flex
+                document.body.style.alignItems = 'flex-start';
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                el.style.left = `${initialLeft + dx}px`;
+                el.style.top = `${initialTop + dy}px`;
+            });
+
+            window.addEventListener('mouseup', () => { isDragging = false; });
+        },
+
         fixHeight() { const s = () => document.documentElement.style.setProperty('--doc-height', `${window.innerHeight}px`); s(); window.addEventListener('resize', s); },
         initAudio() { try { this.audioCtx = new (window.AudioContext||window.webkitAudioContext)(); this.audioEnabled = true; } catch(e){ this.audioEnabled = false; } },
         unlockAudio() {
@@ -276,7 +331,6 @@
             document.getElementById('btn-go-crypto').onclick = () => { 
                 document.getElementById('view-calculator').classList.remove('active'); 
                 document.getElementById('view-crypto').classList.add('active'); 
-                // Al entrar, si los datos son viejos, refrescar
                 if(Date.now()-this.state.lastFetchTime>60000) this.fetchPrices(); 
             };
             document.getElementById('btn-go-calc').onclick = () => { document.getElementById('view-crypto').classList.remove('active'); document.getElementById('view-calculator').classList.add('active'); };
@@ -395,7 +449,6 @@
         
         async fetchPrices(){
             const tsElement = document.getElementById('timestamp');
-            // Estado visual de "Cargando..." pero manteniendo hora antigua
             const oldTime = this.state.lastFetchTime > 0 ? new Date(this.state.lastFetchTime).toLocaleTimeString() : '---';
             document.getElementById('time-text').innerText = 'Actualizando...';
             document.querySelectorAll('.card').forEach(c => c.classList.add('stale')); 
@@ -408,28 +461,21 @@
                 
                 if(!r.ok) throw new Error();
                 
-                // ÉXITO: Actualizamos todo
                 const d = await r.json();
                 this.state.cryptoCache = d;
                 this.state.lastFetchTime = Date.now(); 
                 this.saveState();
                 
-                this.renderCryptoData(d); // Renderiza y quita stale
-                
-                // Mensaje ACTUALIZADO con hora nueva
+                this.renderCryptoData(d);
                 const newTime = new Date(this.state.lastFetchTime).toLocaleTimeString();
                 tsElement.innerHTML = `<span class="status-dot online"></span> Actualizado: ${newTime}`;
                 
             } catch(e) {
-                // FALLO: Recuperamos hora antigua para mostrarla
                 let msg = 'Offline (Sin datos)';
                 if (this.state.lastFetchTime > 0) {
                     const timeStr = new Date(this.state.lastFetchTime).toLocaleTimeString();
                     msg = `Offline (Datos: ${timeStr})`;
                 }
-                
-                // Mantenemos opacidad (stale) para indicar visualmente que son viejos
-                // Y mostramos el mensaje de error con la hora vieja
                 tsElement.innerHTML = `<span class="status-dot error"></span> ${msg}`;
                 this.showToast('Error de conexión');
             }
