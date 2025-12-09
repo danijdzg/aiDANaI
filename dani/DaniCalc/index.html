@@ -152,10 +152,38 @@
 
     .upper-section { flex: 1 1 40%; display: flex; flex-direction: column; padding: 15px 20px; min-height: 0; justify-content: flex-end; position: relative; }
     
-    .display-lens { width: 100%; flex: 1; background: var(--screen-bg); box-shadow: var(--screen-inset), var(--screen-glow); border: var(--screen-border); border-radius: 24px; display: flex; flex-direction: column; padding: 20px; position: relative; overflow: hidden; backdrop-filter: blur(5px); }
-    
+    .display-lens { 
+    width: 100%; flex: 1; 
+    /* Fondo ligeramente más claro para contraste con el chasis negro */
+    background: #080808; 
+    /* Sombra interna reducida (antes era 30px, oscurecía mucho) */
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.8), var(--screen-glow); 
+    border: var(--screen-border); 
+    border-radius: 24px; 
+    display: flex; flex-direction: column; padding: 20px; 
+    position: relative; overflow: hidden; 
+    backdrop-filter: blur(5px); 
+}    
     #history-list { flex: 1; overflow-y: auto; padding: 5px; display: flex; flex-direction: column-reverse; list-style: none; gap: 8px; mask-image: linear-gradient(to top, black 85%, transparent 100%); scrollbar-width: none; }
-    #history-list li { text-align: right; cursor: pointer; opacity: 0.8; font-family: 'Inter', sans-serif; font-size: 1.1rem; color: var(--history-op-color); text-shadow: var(--history-glow); padding: 6px 10px; border-radius: 8px; transition: all 0.2s; }
+    #history-list li { 
+    display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+    text-align: right; cursor: default; /* Cursor default porque los hijos tienen pointer */
+    opacity: 0.9; 
+    font-family: 'Inter', sans-serif; font-size: 1.1rem; 
+    color: var(--history-op-color); 
+    padding: 8px 10px; /* Un poco más de espacio táctil */
+    border-radius: 8px; transition: all 0.2s; 
+}
+	/* Área de la operación (Izquierda) */
+.hist-expr { cursor: pointer; border-bottom: 1px dashed rgba(0, 242, 255, 0.3); }
+.hist-expr:hover { color: #fff; border-bottom-color: #fff; }
+
+/* Área del resultado (Derecha) */
+.hist-res { cursor: pointer; color: var(--history-res-color); font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.hist-res:hover { background: rgba(57, 255, 20, 0.1); box-shadow: 0 0 10px rgba(57, 255, 20, 0.2); }
+
+/* 4. Nuevo estado para el punto de estatus (Caché/Warning) */
+.status-dot.warning { background-color: var(--neon-lime); box-shadow: 0 0 8px var(--neon-lime); }
     #history-list li:hover { opacity: 1; background: var(--edit-highlight); }
     #history-list b { color: var(--history-res-color); font-weight: 700; margin-left: 8px; }
     
@@ -163,7 +191,18 @@
     #secondary-display { font-family: 'Fira Code', monospace; color: var(--accent-blue-text); text-shadow: var(--text-glow-blue); min-height: 1.5rem; font-size: 1.1rem; opacity: 0; transition: opacity 0.2s; white-space: nowrap; margin-bottom: 5px; }
     #secondary-display.visible { opacity: 1; }
     
-    #main-display { font-family: 'Lexend', sans-serif; color: var(--primary-text); font-size: 3.5rem; font-weight: 500; line-height: 1.1; width: 100%; text-align: right; white-space: nowrap; overflow-x: auto; scrollbar-width: none; text-shadow: 0 0 25px rgba(255,255,255,0.15); padding-bottom: 2px; transition: color 0.1s; }
+    #main-display { 
+    font-family: 'Lexend', sans-serif; 
+    color: var(--primary-text); 
+    font-size: 3.5rem; 
+    font-weight: 600; /* Aumentado de 500 a 600 */
+    line-height: 1.1; 
+    width: 100%; text-align: right; 
+    white-space: nowrap; overflow-x: auto; scrollbar-width: none; 
+    /* Brillo blanco más intenso para resaltar sobre fondo negro */
+    text-shadow: 0 0 15px rgba(255,255,255,0.4); 
+    padding-bottom: 2px; transition: color 0.1s; 
+}
 
     .calculator-body { flex: 1 1 60%; width: 100%; background: var(--chassis-bg); border-top: var(--chassis-border); border-radius: 35px 35px 0 0; z-index: 10; padding: 25px; padding-bottom: max(25px, var(--safe-bottom)); box-shadow: 0 -20px 60px rgba(0,0,0,0.4); display: flex; flex-direction: column; justify-content: center; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
     .keypad { flex: 1; width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(5, 1fr); gap: 15px; align-items: center; justify-items: center; }
@@ -679,14 +718,48 @@
             this.saveState();
             this.renderHistory(); 
         },
-        renderHistory() {
-            const list = document.getElementById('history-list');
-            list.innerHTML = this.state.history.map(item => {
-                const resF = item.res.toLocaleString('es-ES', { maximumFractionDigits: 10 });
-                const exprF = item.expr.replace(/\./g, ',').replace(/\*/g,'×').replace(/\//g,'÷');
-                return `<li onclick="App.loadFromHistory('${item.res}')">${exprF} = <b>${resF}</b></li>`;
-            }).join('');
-        },
+       /* === REEMPLAZAR EN App === */
+
+// 1. Renderizado inteligente separando Operación y Resultado
+renderHistory() {
+    const list = document.getElementById('history-list');
+    list.innerHTML = this.state.history.map((item, index) => {
+        const resF = item.res.toLocaleString('es-ES', { maximumFractionDigits: 10 });
+        // Escapamos las comillas para evitar errores en el HTML
+        const safeExpr = item.expr.replace(/"/g, '&quot;');
+        const prettyExpr = item.expr.replace(/\./g, ',').replace(/\*/g,'×').replace(/\//g,'÷');
+        
+        // Usamos data-index para manejar el click limpiamente
+        return `
+            <li>
+                <span class="hist-expr" onclick="App.handleHistoryClick(${index}, 'expr')" title="Recuperar operación">${prettyExpr}</span> 
+                <span>=</span> 
+                <span class="hist-res" onclick="App.handleHistoryClick(${index}, 'res')" title="Usar resultado">${resF}</span>
+            </li>`;
+    }).join('');
+},
+
+// 2. Nueva función manejadora del historial
+handleHistoryClick(index, type) {
+    const item = this.state.history[index];
+    if (!item) return;
+
+    if (type === 'expr') {
+        // Cargar operación para editar
+        this.expr = String(item.expr);
+        this.showToast("Operación recuperada");
+    } else {
+        // Cargar resultado para seguir calculando
+        this.expr = String(item.res);
+        this.showToast("Resultado recuperado");
+    }
+    
+    this.fresh = true; // El próximo número reemplazará si no es operador, o concatenará si es operador
+    this.render(true);
+    
+    // Feedback sonoro sutil (si el audio está activo)
+    if(this.audioEnabled && !this.state.muted) this.playTone(600, 0.05);
+},
         loadFromHistory(val) { this.expr = String(val); this.fresh = true; this.render(true); },
         
         // CLEAR COMPLETO (INDEX.HTML)
@@ -702,23 +775,69 @@
             this.render(); 
         },
 
-        async fetchPrices() {
-            try {
-                const timeText = document.getElementById('time-text');
-                timeText.innerText = 'Actualizando...';
-                
-                const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=eur,usd&include_24hr_change=true');
-                if(!res.ok) throw new Error();
-                const d = await res.json();
-                this.state.cryptoCache = d;
-                this.state.lastFetchTime = Date.now();
-                this.saveState();
-                this.renderCryptoData(d);
-                document.getElementById('timestamp').innerHTML = '<span class="status-dot online"></span> Actualizado: ' + new Date().toLocaleTimeString();
-            } catch(e) { 
-                document.getElementById('timestamp').innerHTML = '<span class="status-dot error"></span> Error Conexión'; 
-            }
-        },
+        /* === REEMPLAZAR EN App === */
+
+async fetchPrices() {
+    const timeText = document.getElementById('time-text');
+    const statusDot = document.querySelector('.status-dot');
+    
+    // Evitar llamadas innecesarias (Throttle de 60 segundos)
+    const now = Date.now();
+    const CACHE_DURATION = 60000; // 1 minuto
+    
+    // Si tenemos datos recientes, usarlos directamente sin llamar a la API
+    if (this.state.cryptoCache && (now - this.state.lastFetchTime < CACHE_DURATION)) {
+        this.renderCryptoData(this.state.cryptoCache);
+        this.updateStatusUI('cached');
+        return;
+    }
+
+    try {
+        timeText.innerText = 'Actualizando...';
+        statusDot.className = 'status-dot'; // Reset class
+        
+        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=eur,usd&include_24hr_change=true');
+        
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        
+        const d = await res.json();
+        
+        // Guardar éxito
+        this.state.cryptoCache = d;
+        this.state.lastFetchTime = Date.now();
+        this.saveState();
+        
+        this.renderCryptoData(d);
+        this.updateStatusUI('online');
+        
+    } catch(e) {
+        console.warn("API Error:", e);
+        
+        // ESTRATEGIA DE FALLBACK:
+        if (this.state.cryptoCache) {
+            // Si falla pero tenemos caché, mostramos caché con advertencia visual
+            this.renderCryptoData(this.state.cryptoCache);
+            this.updateStatusUI('offline-cached');
+            this.showToast("Sin conexión: Usando datos guardados");
+        } else {
+            // Solo si no hay caché mostramos error fatal
+            document.getElementById('timestamp').innerHTML = '<span class="status-dot error"></span> Error Conexión';
+        }
+    }
+},
+
+// Función auxiliar para actualizar la UI de estado
+updateStatusUI(status) {
+    const ts = document.getElementById('timestamp');
+    const time = new Date(this.state.lastFetchTime || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    if (status === 'online') {
+        ts.innerHTML = `<span class="status-dot online"></span> Act. ${time}`;
+    } else if (status === 'cached' || status === 'offline-cached') {
+        // Amarillo/Lima para indicar que son datos guardados
+        ts.innerHTML = `<span class="status-dot warning"></span> Memoria (${time})`;
+    }
+},
         renderCryptoData(d) {
             const fmt = (v, c) => new Intl.NumberFormat('es-ES', {style:'currency', currency:c}).format(v);
             ['bitcoin','ethereum','solana','ripple'].forEach(id => {
