@@ -652,59 +652,73 @@ const PAGE_IDS = {
 };
 
 // ==========================================
-// === CORE OPTIMIZATION: AppStore v2.0 (PROTEGIDO) ===
+// === CORE OPTIMIZATION: AppStore v1.0 ===
 // ==========================================
 const AppStore = {
     movements: [],
     isFullyLoaded: false,
-    _loadingPromise: null, // Semáforo de seguridad
+    lastFetch: 0,
+    CACHE_DURATION: 5 * 60 * 1000, // 5 minutos de validez si se solicita recarga suave
 
-    async getAll(forceReload = false) {
+    // Carga TODO el historial una sola vez y lo guarda en memoria RAM
+    async getAll() {
         if (!currentUser) return [];
 
-        // 1. SI YA ESTÁ CARGANDO, ESPERAR (Evita descargas dobles)
-        if (this._loadingPromise) return this._loadingPromise;
-
-        // 2. SI YA HAY DATOS, USAR MEMORIA (Velocidad instantánea)
-        if (!forceReload && this.isFullyLoaded && this.movements.length > 0) {
+        // Si ya tenemos datos y no forzamos recarga, devolvemos memoria (Instantáneo)
+        if (this.isFullyLoaded) {
             return this.movements;
         }
 
-        console.log("🚀 AppStore: Descargando de Firebase...");
-        
-        this._loadingPromise = (async () => {
-            try {
-                const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-                    .orderBy('fecha', 'desc')
-                    .get();
-                
-                this.movements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                this.isFullyLoaded = true;
-                return this.movements;
-            } catch (error) {
-                console.error("Error AppStore:", error);
-                return [];
-            } finally {
-                this._loadingPromise = null; // Liberar semáforo
-            }
-        })();
-
-        return this._loadingPromise;
+        console.log("🚀 AppStore: Descargando historial completo de Firestore...");
+        try {
+            const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
+                .orderBy('fecha', 'desc') // Ordenamos por fecha descendente
+                .get();
+            
+            this.movements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            this.isFullyLoaded = true;
+            this.lastFetch = Date.now();
+            
+            console.log(`✅ AppStore: ${this.movements.length} movimientos cargados en memoria.`);
+            return this.movements;
+        } catch (error) {
+            console.error("❌ AppStore Error:", error);
+            return [];
+        }
     },
-    
-    // Métodos auxiliares (Déjalos igual o cópialos de aquí)
-    add(item) { this.movements.unshift(item); this.sort(); },
-    update(updatedItem) {
-        const index = this.movements.findIndex(m => m.id === updatedItem.id);
-        if (index !== -1) this.movements[index] = updatedItem;
+
+    // Métodos para mantener la memoria sincronizada sin llamar a la DB
+    add(item) {
+        // Añadimos al principio (es el más reciente)
+        this.movements.unshift(item);
+        // Re-ordenamos por seguridad si la fecha no es hoy
         this.sort();
     },
+
+    update(updatedItem) {
+        const index = this.movements.findIndex(m => m.id === updatedItem.id);
+        if (index !== -1) {
+            this.movements[index] = updatedItem;
+            this.sort();
+        }
+    },
+
     delete(id) {
         const index = this.movements.findIndex(m => m.id === id);
-        if (index !== -1) this.movements.splice(index, 1);
+        if (index !== -1) {
+            this.movements.splice(index, 1);
+        }
     },
-    sort() { this.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
-    clear() { this.movements = []; this.isFullyLoaded = false; this._loadingPromise = null; }
+
+    sort() {
+        this.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    },
+
+    // Reset total (al cerrar sesión)
+    clear() {
+        this.movements = [];
+        this.isFullyLoaded = false;
+    }
 };
 // ▼▼▼ REEMPLAZAR TU FUNCIÓN updateAnalisisWidgets CON ESTA VERSIÓN SIMPLIFICADA ▼▼▼
 const updateAnalisisWidgets = async () => {
@@ -2390,99 +2404,37 @@ const cleanupObservers = () => {
         movementsObserver = null;
     }
 };
-// =========================================================
-// === NAVEGACIÓN "FUERZA BRUTA" (CORRECCIÓN DEFINITIVA) ===
-// =========================================================
 const navigateTo = async (pageId, isInitial = false) => {
-    // 1. LISTA DE PÁGINAS (Tus IDs reales según tu HTML)
-    const allPages = [
-        'panel-page', 
-        'diario-page', 
-        'patrimonio-page', 
-        'planificar-page', 
-        'ajustes-page'
-    ];
-
-    console.log(`🧭 Navegando a: ${pageId}`);
-
-    // 2. APAGÓN GENERAL: Ocultar TODO manualmente
-    allPages.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.style.display = 'none'; // ¡Ocultar a la fuerza!
-            el.classList.remove('view--active');
-            // Quitamos clases de animación viejas que puedan estorbar
-            el.classList.remove('view-transition-in-forward', 'view-transition-out-forward', 'view-transition-in-backward', 'view-transition-out-backward');
-        }
-    });
-
-    // 3. ENCENDER SOLO LA DESTINO
-    const newView = document.getElementById(pageId);
-    if (!newView) {
-        console.error(`❌ ERROR CRÍTICO: No existe la página con ID "${pageId}"`);
-        return;
-    }
-
-    // Mostramos la página nueva
-    newView.style.display = 'block'; 
-    setTimeout(() => newView.classList.add('view--active'), 10);
-
-    // 4. GESTIÓN DE INTERFAZ (Tu lógica original restaurada)
     cleanupObservers();
-    const mainScroller = document.querySelector('.app-layout__main');
-    
-    // Cerrar menús
-    const menu = document.getElementById('main-menu-popover');
+    const oldView = document.querySelector('.view--active');
+    const newView = select(pageId);
+    const mainScroller = selectOne('.app-layout__main');
+
+    const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // Scroll arriba
-    if (mainScroller) mainScroller.scrollTop = 0;
-
-    // Actualizar barra inferior (Botones activos)
-    document.querySelectorAll('.bottom-nav__item').forEach(btn => {
-        const isActive = btn.dataset.page === pageId;
-        btn.classList.toggle('bottom-nav__item--active', isActive);
-        // Colorear icono
-        const icon = btn.querySelector('.material-icons');
-        if (icon) icon.style.color = isActive ? 'var(--c-primary)' : '';
-    });
-
-    // 5. RENDERIZADO DE CONTENIDO (Carga de datos)
-    // Cargas perezosas
-    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
-
-    // Ejecutar renderizadores
-    switch (pageId) {
-        case PAGE_IDS.PANEL:
-            updatePageTitle(''); // Sin título en el panel
-            await renderPanelPage();
-            scheduleDashboardUpdate();
-            break;
-        case PAGE_IDS.DIARIO:
-            updatePageTitle(''); 
-            await renderDiarioPage();
-            break;
-        case PAGE_IDS.PATRIMONIO:
-            updatePageTitle('Patrimonio');
-            await renderPatrimonioPage();
-            break;
-        case PAGE_IDS.PLANIFICAR:
-            updatePageTitle('Planificar');
-            await renderPlanificacionPage();
-            break;
-        case PAGE_IDS.AJUSTES:
-            updatePageTitle('Ajustes');
-            renderAjustesPage();
-            break;
+    // 1. Guardar scroll
+    if (oldView && mainScroller) {
+        pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
-};
 
-// Pequeña ayuda para el título
-const updatePageTitle = (text) => {
-    const el = document.getElementById('page-title-display');
-    if(el) el.textContent = text;
-};
+    if (!newView || (oldView && oldView.id === pageId)) return;
+    
+    destroyAllCharts();
+    if (!isInitial) hapticFeedback('light');
+
+    if (!isInitial && window.history.state?.page !== pageId) {
+        history.pushState({ page: pageId }, '', `#${pageId}`);
+    }
+
+    // Nav Inferior
+    const navItems = Array.from(selectAll('.bottom-nav__item'));
+    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
+    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+    const isForward = newIndex > oldIndex;
+
+    // Barra Superior
+    const actionsEl = select('top-bar-actions');
     const leftEl = select('top-bar-left-button');
     
     // Acciones por defecto (Menú de 3 puntos)
@@ -11638,6 +11590,59 @@ const updateExtractoList = () => {
     listContainer.innerHTML = html;
 };
 
+/* ================================================================= */
+/* === GESTOR DE ACCIONES DE CABECERA (Iconos Directos) === */
+/* ================================================================= */
+
+document.addEventListener('click', (e) => {
+    // Buscamos si se ha pulsado un botón con data-action
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+
+    // --- ACCIÓN: BUSCAR ---
+    if (action === 'global-search') {
+        // Si tienes una función de búsqueda, llámala aquí.
+        // Si no, mostramos un aviso temporal
+        if (typeof showSearchModal === 'function') {
+            showSearchModal();
+        } 
+    }
+
+    // --- ACCIÓN: AJUSTES ---
+    if (action === 'navigate') {
+        const pageId = btn.dataset.page;
+        if (typeof navigateTo === 'function') {
+            navigateTo(pageId);
+        }
+    }
+
+    // --- ACCIÓN: CALCULADORA ---
+    if (action === 'open-calculator') {
+        const modal = document.getElementById('calculator-iframe-modal');
+        if (modal) {
+            modal.style.display = 'flex'; // Asegurar visibilidad
+            modal.classList.add('active');
+            // Recargar iframe si es necesario
+            const iframe = document.getElementById('calculator-frame');
+            if(iframe && !iframe.src) iframe.src = 'calculadora.html';
+        }
+    }
+
+    // --- ACCIÓN: CERRAR SESIÓN ---
+    if (action === 'logout') {
+        if (confirm("¿Seguro que quieres cerrar sesión?")) {
+            if (typeof firebase !== 'undefined') {
+                firebase.auth().signOut().then(() => {
+                    window.location.reload();
+                });
+            } else {
+                window.location.reload();
+            }
+        }
+    }
+});
 
 /* ================================================================= */
 /* === GESTOR MAESTRO V5 (Calculadora Independiente) === */
@@ -11706,9 +11711,9 @@ window.addEventListener('click', (e) => {
 
     // --- C. OTRAS ACCIONES (Header) ---
     if (action === 'navigate') {
-    const pageId = btn.getAttribute('data-page') || btn.dataset.page;
-    navigateTo(pageId);
-}
+        const page = btn.dataset.page;
+        if (typeof navigateTo === 'function') navigateTo(page);
+    }
     
     if (action === 'logout') {
         if (confirm("¿Cerrar sesión?")) {
@@ -11717,3 +11722,51 @@ window.addEventListener('click', (e) => {
         }
     }
 });
+/* ============================================== */
+/* === MOTOR DE VIAJE ESPACIAL (main.js) === */
+/* ============================================== */
+
+const createSpaceTravel = () => {
+    // 1. Crear contenedor si no existe
+    let container = document.getElementById('cosmos-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'cosmos-container';
+        document.body.prepend(container);
+    } else {
+        container.innerHTML = '';
+    }
+
+    // 2. Generar Estrellas (Aumentamos cantidad para sensación de velocidad)
+    const starCount = 200; 
+    
+    for (let i = 0; i < starCount; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        
+        // MATEMÁTICAS DE TÚNEL:
+        // Calculamos un ángulo aleatorio y una distancia final
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 800 + Math.random() * 1500; // Dispersión amplia
+        
+        const destX = Math.cos(angle) * distance;
+        const destY = Math.sin(angle) * distance;
+
+        // Variables CSS
+        star.style.setProperty('--dest-x', `${destX}px`);
+        star.style.setProperty('--dest-y', `${destY}px`);
+
+        // Velocidad: Cuanto más bajo el número, más rápido parece la nave
+        const duration = 5 + Math.random() * 10;
+        star.style.setProperty('--duration', `${duration}s`);
+
+        // Retraso para flujo continuo
+        const delay = Math.random() * 5;
+        star.style.setProperty('--delay', `-${delay}s`);
+
+        container.appendChild(star);
+    }
+};
+
+// Iniciar motores al cargar
+document.addEventListener('DOMContentLoaded', createSpaceTravel);
