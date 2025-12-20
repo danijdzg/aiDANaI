@@ -11719,3 +11719,27 @@ window.addEventListener('click', (e) => {
         }
     }
 });
+// --- ONEPLUS NORD 4: OPTIMIZACIONES FINALES ---
+
+// 1. Forzar visibilidad si la carga se atasca
+setTimeout(() => {
+    const appRoot = document.getElementById('app-root');
+    if (appRoot && !appRoot.classList.contains('app-layout--visible')) {
+        console.warn("Forzando visibilidad de emergencia...");
+        appRoot.style.opacity = '1';
+        appRoot.style.display = 'flex';
+    }
+}, 2000); // Si en 2 segundos no ha cargado, muéstralo de todas formas
+
+// 2. Ajuste de Haptics (Vibración) para OxygenOS
+const nativeHaptic = () => {
+    if (navigator.vibrate) navigator.vibrate(5); // 5ms es un "tick" muy agradable en OnePlus
+};
+
+// Asignar vibración a todos los botones
+document.addEventListener('DOMContentLoaded', () => {
+    const buttons = document.querySelectorAll('button, .bottom-nav__item, .fab-trigger');
+    buttons.forEach(btn => {
+        btn.addEventListener('click', nativeHaptic);
+    });
+});
