@@ -6312,82 +6312,102 @@ h2, h3, .section-title {
 .top-bar__right {
     display: none !important;
 }
-/* =============================================================== */
-/* === OPTIMIZACIÓN ONEPLUS NORD 4: PANEL SIN SCROLL Y CON BORDES === */
-/* =============================================================== */
+/* ========================================================================== */
+/* === SOLUCIÓN FINAL: PANEL ONEPLUS NORD 4 (BORDES + SIN SCROLL) === */
+/* ========================================================================== */
 
-/* 1. Ajuste del Contenedor Principal del Panel */
-#dashboard-page {
-    /* Forzamos que ocupe la altura exacta disponible entre cabecera y menú */
-    height: 100% !important; 
-    max-height: 100% !important;
-    overflow: hidden !important; /* PROHIBIDO EL SCROLL */
-    
+/* 1. EL CONTENEDOR PRINCIPAL (PANEL) */
+/* Lo convertimos en una columna flexible que ocupa exactamente la pantalla */
+#panel-page {
     display: flex !important;
     flex-direction: column !important;
-    padding-bottom: 0 !important; /* Quitamos relleno inferior */
-    gap: 8px !important; /* Reducimos el espacio entre elementos */
-}
-
-/* 2. Pegar el contenido al Encabezado */
-/* Esto reduce el espacio aireado que suele haber arriba */
-.app-layout__content {
-    /* Ajusta este valor si el encabezado tapa algo, 
-       pero en Nord 4 aprox 60-64px es el límite del header */
-    padding-top: 30px !important; 
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-}
-
-/* 3. Estilo de las Tarjetas (Bordes y Compactación) */
-.card, 
-.kpi-card, 
-.chart-card,
-.summary-card {
-    /* Petición: Bordes a todas las tarjetas */
-    border: 3px solid var(--c-outline, #cccccc) !important;
-    box-shadow: none !important; /* Quitamos sombra para ganar limpieza */
-    border-radius: 12px !important; /* Radio un poco más suave */
     
-    /* Compactación interna */
-    padding: 12px !important; 
-    margin-bottom: 0 !important; /* El margen lo controla el gap del padre */
+    /* Altura: 100% de la ventana menos lo que miden las barras (aprox 115px) */
+    height: calc(100dvh - 115px) !important; 
+    max-height: calc(100dvh - 115px) !important;
+    
+    /* PROHIBIDO EL SCROLL: Si algo sobra, se encoge, no se desliza */
+    overflow: hidden !important; 
+    
+    /* Márgenes y Rellenos */
+    padding: 5px 8px !important; /* Un poco de aire lateral */
+    margin: 0 !important;
+    gap: 8px !important; /* Espacio exacto entre tarjetas */
+    
+    /* Aseguramos que empiece pegado arriba */
+    justify-content: flex-start !important;
 }
 
-/* 4. Distribución Inteligente del Espacio */
-
-/* Fila de KPIs (Ingresos/Gastos/Neto) */
-/* Hacemos que ocupe solo lo necesario */
-.kpi-grid, .stats-row {
-    flex-shrink: 0 !important; /* No permitimos que se encoja demasiado */
-    margin-bottom: 0 !important;
-    gap: 8px !important;
+/* 2. BORDES PARA TODO (LO QUE PEDISTE) */
+/* Apuntamos a CUALQUIER tarjeta dentro del panel específicamente */
+#panel-page .card,
+#panel-page .kpi-item, 
+#panel-page .chart-container,
+#panel-page .summary-card,
+#panel-page .kpi-grid {
+    /* Borde visible y sólido */
+    border: 1px solid rgba(255, 255, 255, 0.25) !important; 
+    border-radius: 12px !important;
+    
+    /* Fondo oscuro sólido para que el borde resalte */
+    background-color: #121212 !important; 
+    
+    /* Sin sombras, solo borde (estilo técnico) */
+    box-shadow: none !important;
+    
+    /* Eliminamos márgenes externos porque el padre (#panel-page) controla el gap */
+    margin: 0 !important;
 }
 
-/* El Gráfico Principal: Este es el que debe estirarse o encogerse */
-/* Asumo que tienes un contenedor para el gráfico principal */
-.chart-card-container, 
-#main-chart-container,
-.chart-container {
-    flex-grow: 1 !important; /* Ocupa todo el espacio sobrante */
-    min-height: 0 !important; /* CRUCIAL: Permite que el gráfico se haga pequeño si hace falta */
+/* 3. ELIMINAR EL HUECO SUPERIOR DEL ENCABEZADO */
+/* Forzamos que el contenido principal suba */
+.app-layout__main {
+    /* Ajuste milimétrico para Nord 4. Si la cámara tapa, sube/baja este valor */
+    padding-top: 55px !important; 
+    padding-bottom: 0 !important;
+}
+
+/* El primer elemento del panel no debe tener margen arriba */
+#panel-page > *:first-child {
+    margin-top: 0 !important;
+}
+
+/* 4. LA MAGIA DEL "SIN SCROLL" (El Gráfico Flexible) */
+/* Hacemos que la tarjeta del gráfico ocupe TODO el espacio sobrante */
+#panel-page .chart-container,
+#panel-page .card:has(canvas), 
+#panel-page .card:has(.chart-canvas) {
+    flex-grow: 1 !important; /* Crece para llenar la pantalla */
+    flex-shrink: 1 !important; /* Se encoge si falta espacio */
+    min-height: 0 !important; /* CRÍTICO: Permite encogerse sin romper el layout */
+    
     display: flex !important;
     flex-direction: column !important;
     justify-content: center !important;
+    padding: 10px !important;
 }
 
-/* Asegurar que el canvas (la gráfica) no fuerce el tamaño */
-canvas {
+/* Ajuste del lienzo del gráfico para que no fuerce el tamaño */
+#panel-page canvas {
+    max-width: 100% !important;
     max-height: 100% !important;
-    width: 100% !important;
+    width: auto !important;
+    height: auto !important;
 }
 
-/* Ajustes para textos dentro de las tarjetas para ganar espacio */
-.kpi-card h3, .card-title {
-    font-size: 0.85rem !important;
-    margin-bottom: 4px !important;
+/* 5. AJUSTE DE LOS KPI (Los cuadritos de arriba) */
+#panel-page .kpi-grid {
+    flex-shrink: 0 !important; /* No permitimos que se aplasten */
+    height: auto !important;
+    padding: 4px !important;
+    /* Quitamos el borde al contenedor grid, se lo damos a los items */
+    border: none !important; 
+    background: transparent !important;
+    gap: 8px !important;
 }
 
-.kpi-value {
-    font-size: 1.2rem !important; /* Un poco más pequeño para asegurar que cabe */
+#panel-page .kpi-item {
+    /* Borde para cada cuadrito individual */
+    border: 1px solid rgba(255, 255, 255, 0.25) !important; 
+    padding: 10px 4px !important;
 }
