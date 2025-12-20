@@ -1611,26 +1611,23 @@ const calculatePreviousDueDate = (currentDueDate, frequency, weekDays = []) => {
     
     console.log('Alturas de elementos definidas (Robusto):', vList.heights);
 };
-        const hapticFeedback = (type = 'light') => {
-    // Solo vibra si el navegador lo soporta Y el usuario ya ha interactuado.
-    if (!userHasInteracted || !('vibrate' in navigator)) {
-        return;
-    }
+    //
+const hapticFeedback = (type = 'light') => {
+    if (!userHasInteracted || !('vibrate' in navigator)) return;
     
     try {
         let pattern;
         switch (type) {
-            case 'light':   pattern = 10; break;
-            case 'medium':  pattern = 25; break;
-            case 'success': pattern = [15, 60, 15]; break;
-            case 'warning': pattern = [30, 40, 30]; break;
-            case 'error':   pattern = [50, 50, 50]; break;
-            default:        pattern = 10;
+            // Patrones optimizados para motores hápticos lineales (OnePlus/Pixel)
+            case 'light':   pattern = 5; break;  // Muy corto y seco (clicks)
+            case 'medium':  pattern = 15; break; // Botones importantes
+            case 'success': pattern = [5, 30, 5]; break; // Doble toque rápido
+            case 'warning': pattern = [20, 50, 20]; break;
+            case 'error':   pattern = [50, 30, 50, 30, 50]; break;
+            default:        pattern = 5;
         }
         navigator.vibrate(pattern);
-    } catch (e) {
-        // La vibración puede fallar silenciosamente. No es un error crítico.
-    }
+    } catch (e) { }
 };
 
         const parseDateStringAsUTC = (dateString) => {
