@@ -3742,40 +3742,51 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (VERSIÓN CON BARRA MEJORADA)
+    // 4. MOVIMIENTOS REALES (DISEÑO VISUAL MEJORADO: BURBUJAS)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
+        // Animación si es nuevo
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
-        // Formatear fecha corta
+        // Formato fecha
         const dateObj = new Date(m.fecha);
         const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 
-        let line1, line2, amountClass, amountSign, indicatorClass;
+        // VARIABLES PARA EL NUEVO DISEÑO
+        let line1, line2, amountClass, amountSign;
+        let iconName, bubbleClass; // <--- Nuevas variables para el icono
 
         if (m.tipo === 'traspaso') {
-            // --- TIPO: TRASPASO (AZUL/MORADO) ---
-            indicatorClass = 't-indicator--transfer'; // Nueva clase para el indicador
-            
+            // --- TRASPASO (Azul/Morado) ---
+            bubbleClass = 't-bubble--transfer';
+            iconName = 'swap_horiz'; // Icono de intercambio
+
             const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
             const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
             
-            const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined 
-                ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` : '';
-            const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined 
-                ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
+            // Saldos snapshot si existen
+            const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` : '';
+            const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
 
             line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
             line2 = `<span class="t-transfer-part">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
             
-            amountClass = 'text-info';
+            amountClass = 'text-info'; 
             amountSign = '';
-            
+
         } else {
-            // --- TIPO: GASTO O INGRESO ---
+            // --- GASTO O INGRESO ---
             const isGasto = m.cantidad < 0;
-            indicatorClass = isGasto ? 't-indicator--expense' : 't-indicator--income'; // Nueva clase indicador
+            
+            // Selección de Icono y Color
+            if (isGasto) {
+                bubbleClass = 't-bubble--expense';
+                iconName = 'arrow_downward'; // Flecha abajo para gasto
+            } else {
+                bubbleClass = 't-bubble--income';
+                iconName = 'arrow_upward'; // Flecha arriba para ingreso
+            }
 
             const concepto = conceptos.find(c => c.id === m.conceptoId);
             const conceptoNombre = concepto ? concepto.nombre : 'Varios';
@@ -3792,10 +3803,13 @@ const renderVirtualListItem = (item) => {
             amountSign = isGasto ? '' : '+';
         }
 
-        // HTML FINAL CON BARRA INDEPENDIENTE
+        // HTML FINAL: Sustituimos la barra por la burbuja de icono
         return `
         <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
-            <div class="t-indicator ${indicatorClass}"></div>
+            
+            <div class="t-icon-bubble ${bubbleClass}">
+                <span class="material-icons">${iconName}</span>
+            </div>
             
             <div class="t-content">
                 <div class="t-row-primary">
