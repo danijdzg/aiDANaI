@@ -3742,7 +3742,7 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (VERSIÓN OPTIMIZADA SIN ICONOS)
+    // 4. MOVIMIENTOS REALES (VERSIÓN CON BARRA MEJORADA)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
@@ -3752,11 +3752,11 @@ const renderVirtualListItem = (item) => {
         const dateObj = new Date(m.fecha);
         const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 
-        let line1, line2, amountClass, amountSign, typeClass;
+        let line1, line2, amountClass, amountSign, indicatorClass;
 
         if (m.tipo === 'traspaso') {
-            // --- TIPO: TRASPASO (MORADO) ---
-            typeClass = 't-type-transfer'; // Clase para la barra morada
+            // --- TIPO: TRASPASO (AZUL/MORADO) ---
+            indicatorClass = 't-indicator--transfer'; // Nueva clase para el indicador
             
             const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
             const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
@@ -3766,17 +3766,16 @@ const renderVirtualListItem = (item) => {
             const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined 
                 ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
 
-            // Diseño simplificado solo texto
             line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
             line2 = `<span class="t-transfer-part">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
             
-            amountClass = 'text-info'; // Azul para el importe
+            amountClass = 'text-info';
             amountSign = '';
             
         } else {
-            // --- TIPO: GASTO (ROJO) O INGRESO (VERDE) ---
+            // --- TIPO: GASTO O INGRESO ---
             const isGasto = m.cantidad < 0;
-            typeClass = isGasto ? 't-type-expense' : 't-type-income'; // Clase para barra roja/verde
+            indicatorClass = isGasto ? 't-indicator--expense' : 't-indicator--income'; // Nueva clase indicador
 
             const concepto = conceptos.find(c => c.id === m.conceptoId);
             const conceptoNombre = concepto ? concepto.nombre : 'Varios';
@@ -3793,9 +3792,11 @@ const renderVirtualListItem = (item) => {
             amountSign = isGasto ? '' : '+';
         }
 
-        // HTML FINAL LIMPIO: Sin div de icono, solo barra lateral por CSS
+        // HTML FINAL CON BARRA INDEPENDIENTE
         return `
-        <div class="t-card ${highlightClass} ${typeClass}" data-id="${m.id}" data-action="edit-movement-from-list">
+        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
+            <div class="t-indicator ${indicatorClass}"></div>
+            
             <div class="t-content">
                 <div class="t-row-primary">
                     <div class="t-line-1">${line1}</div>
