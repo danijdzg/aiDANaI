@@ -11784,3 +11784,85 @@ window.addEventListener('click', (e) => {
         }
     }
 });
+
+/* ================================================================= */
+/* === NUEVA LÓGICA DE ICONOS CONTEXTUALES (AÑADIR AL FINAL DE MAIN.JS) === */
+/* ================================================================= */
+
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // 1. FUNCIÓN PARA CONTROLAR LA VISIBILIDAD
+    // ----------------------------------------
+    function actualizarIconosEncabezado(paginaActiva) {
+        const herramientasDiario = document.getElementById('header-diario-tools');
+        if (!herramientasDiario) return; // Si no existe, no hacemos nada
+
+        // Solo mostramos estos iconos si estamos en la página 'diario'
+        if (paginaActiva === 'diario') {
+            herramientasDiario.style.display = 'flex';
+        } else {
+            herramientasDiario.style.display = 'none';
+        }
+    }
+
+    // 2. DETECTAR CLICS EN EL MENÚ DE ABAJO (NAVEGACIÓN)
+    // --------------------------------------------------
+    const botonesMenuAbajo = document.querySelectorAll('.bottom-nav__item');
+    
+    botonesMenuAbajo.forEach(boton => {
+        boton.addEventListener('click', () => {
+            // Obtenemos a qué página va el botón (ej: 'diario', 'dashboard')
+            const pagina = boton.dataset.page;
+            actualizarIconosEncabezado(pagina);
+        });
+    });
+
+    // 3. DETECTAR CLICS EN LOS BOTONES DEL ENCABEZADO (ACCIONES)
+    // ----------------------------------------------------------
+    document.body.addEventListener('click', (e) => {
+        // Buscamos si lo que se pulsó es un botón con acción
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+
+        const action = btn.dataset.action;
+
+        // --- ACCIÓN A: ABRIR FILTROS ---
+        if (action === 'open-filters') {
+            const modal = document.getElementById('diario-filters-modal');
+            if (modal) {
+                modal.style.display = 'flex'; // Primero lo hacemos visible
+                // Un milisegundo después activamos la animación
+                setTimeout(() => { modal.classList.add('active'); }, 10);
+            } else {
+                console.error("Error: No se encuentra el modal de filtros");
+            }
+        }
+
+        // --- ACCIÓN B: CAMBIAR VISTA (GRID/LISTA) ---
+        if (action === 'toggle-view') {
+            const paginaDiario = document.getElementById('diario-page'); 
+            const icono = btn.querySelector('.material-icons');
+            
+            if (paginaDiario) {
+                // Alternamos la clase que cambia el diseño
+                paginaDiario.classList.toggle('view-mode-compact');
+                
+                // Cambiamos el dibujo del icono
+                const estaCompacto = paginaDiario.classList.contains('view-mode-compact');
+                if (icono) {
+                    icono.textContent = estaCompacto ? 'view_list' : 'grid_view';
+                }
+            }
+        }
+    });
+
+    // 4. COMPROBACIÓN INICIAL (AL ARRANCAR LA APP)
+    // --------------------------------------------
+    // Miramos qué botón de abajo está activo al cargar
+    const botonActivoInicial = document.querySelector('.bottom-nav__item--active');
+    if (botonActivoInicial) {
+        actualizarIconosEncabezado(botonActivoInicial.dataset.page);
+    } else {
+        actualizarIconosEncabezado('dashboard'); // Por defecto panel
+    }
+});
