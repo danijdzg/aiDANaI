@@ -11784,3 +11784,56 @@ window.addEventListener('click', (e) => {
         }
     }
 });
+
+/* ================================================================ */
+/* === LÓGICA DE ICONOS DE DIARIO (PEGAR AL FINAL DE MAIN.JS) === */
+/* ================================================================ */
+
+// 1. Función para cambiar la vista (Lista <-> Compacta)
+window.toggleDiarioView = function(btnElement) {
+    const diarioContainer = document.getElementById('diario-page') || document.body;
+    const icono = btnElement.querySelector('.material-icons');
+    
+    // Alternar clase
+    diarioContainer.classList.toggle('view-mode-compact');
+    
+    // Cambiar icono
+    if (diarioContainer.classList.contains('view-mode-compact')) {
+        icono.textContent = 'view_list'; // Icono de lista
+        console.log("Vista cambiada a: Compacta");
+    } else {
+        icono.textContent = 'grid_view'; // Icono de cuadrícula/normal
+        console.log("Vista cambiada a: Normal");
+    }
+};
+
+// 2. Control de Visibilidad al Navegar
+document.addEventListener('DOMContentLoaded', () => {
+    
+    function actualizarIconos(paginaDestino) {
+        const herramientas = document.getElementById('header-diario-tools');
+        if (!herramientas) return;
+
+        // ¿Estamos en la pestaña diario?
+        if (paginaDestino === 'diario' || paginaDestino === 'diario-page') {
+            herramientas.style.display = 'flex'; // MOSTRAR
+        } else {
+            herramientas.style.display = 'none'; // OCULTAR
+        }
+    }
+
+    // Escuchar clics en el menú inferior
+    const botonesNav = document.querySelectorAll('.bottom-nav__item');
+    botonesNav.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const pagina = btn.dataset.page; // 'dashboard', 'diario', etc.
+            actualizarIconos(pagina);
+        });
+    });
+
+    // Comprobación inicial al arrancar
+    const activoInicial = document.querySelector('.bottom-nav__item--active');
+    if (activoInicial) {
+        actualizarIconos(activoInicial.dataset.page);
+    }
+});
