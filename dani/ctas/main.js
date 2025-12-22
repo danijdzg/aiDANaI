@@ -8927,12 +8927,7 @@ if (action === 'show-main-menu') {
 	// --- LÓGICA DE MODO PRIVACIDAD ---
     // Al hacer clic en el valor del Patrimonio Neto (KPI principal), alternamos el modo.
     document.body.addEventListener('click', (e) => {
-		// 1. Abrir OneDrive
-    if (action === 'open-onedrive') {
-        window.open('https://onedrive.live.com/personal/7e83c02dcfc2b265/_layouts/15/doc2.aspx?sourcedoc=%7B76934C85-AB73-427F-BF3E-27519B683C73%7D&file=CUENTAS-DANINORMA.xlsx&action=default&mobileredirect=true', '_blank');
-        return;
-    }
-
+	
     // 2. Abrir Filtros (Lógica robusta)
     if (action === 'open-filters') {
         const modal = document.getElementById('diario-filters-modal');
@@ -11836,3 +11831,58 @@ document.addEventListener('DOMContentLoaded', () => {
         actualizarIconos(activoInicial.dataset.page);
     }
 });
+
+/* ================================================================= */
+/* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO === */
+/* ================================================================= */
+
+// Variable Global para controlar la vista (Por defecto: Lista)
+// Opciones: 'list' (Lista simple) | 'date' (Agrupado por Fechas)
+window.currentDiarioView = 'list'; 
+
+// --- 1. FUNCIÓN PARA EL BOTÓN DE FILTRO ---
+window.openDiarioFilters = function() {
+    const modal = document.getElementById('diario-filters-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Pequeño retardo para permitir la animación CSS
+        setTimeout(() => {
+            modal.classList.add('active');
+        }, 10);
+        console.log("Abriendo filtros de diario...");
+    } else {
+        console.error("ERROR: No se encuentra el modal con id='diario-filters-modal' en index.html");
+        alert("Error: Falta el formulario de filtros en el HTML");
+    }
+};
+
+// --- 2. FUNCIÓN PARA EL BOTÓN DE VISTA ---
+window.toggleDiarioView = function(btnElement) {
+    const icono = btnElement.querySelector('.material-icons');
+    
+    // A) CAMBIAR EL ESTADO
+    if (window.currentDiarioView === 'list') {
+        // Cambiamos a VISTA POR FECHA
+        window.currentDiarioView = 'date';
+        if (icono) icono.textContent = 'list'; // Ponemos icono de lista para volver
+        console.log("Cambiando a Vista: AGRUPADA POR FECHA");
+    } else {
+        // Volvemos a VISTA DE LISTA
+        window.currentDiarioView = 'list';
+        if (icono) icono.textContent = 'calendar_month'; // Ponemos icono de calendario
+        console.log("Cambiando a Vista: LISTA SIMPLE");
+    }
+
+    // B) EJECUTAR EL CAMBIO (RE-RENDERIZAR)
+    // Aquí llamamos a tu función principal que pinta la lista.
+    // Buscamos las funciones más probables en tu código.
+    if (typeof renderDiario === 'function') {
+        renderDiario(); 
+    } else if (typeof renderMovements === 'function') {
+        renderMovements();
+    } else if (typeof updateDiarioList === 'function') {
+        updateDiarioList();
+    } else {
+        console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
+    }
+};
