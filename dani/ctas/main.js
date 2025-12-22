@@ -8928,6 +8928,56 @@ if (action === 'show-main-menu') {
 	// --- LÓGICA DE MODO PRIVACIDAD ---
     // Al hacer clic en el valor del Patrimonio Neto (KPI principal), alternamos el modo.
     document.body.addEventListener('click', (e) => {
+		// 1. Abrir OneDrive
+    if (action === 'open-onedrive') {
+        window.open('https://onedrive.live.com/personal/7e83c02dcfc2b265/_layouts/15/doc2.aspx?sourcedoc=%7B76934C85-AB73-427F-BF3E-27519B683C73%7D&file=CUENTAS-DANINORMA.xlsx&action=default&mobileredirect=true', '_blank');
+        return;
+    }
+
+    // 2. Abrir Filtros (Lógica robusta)
+    if (action === 'open-filters') {
+        const modal = document.getElementById('diario-filters-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+            // Pequeño delay para permitir que el display:flex se renderice antes de la opacidad
+            requestAnimationFrame(() => {
+                modal.classList.add('active');
+            });
+        } else {
+            console.error('Modal de filtros no encontrado en el DOM');
+        }
+        return;
+    }
+
+    // 3. Abrir Búsqueda Global
+    if (action === 'open-search') {
+        const modal = document.getElementById('global-search-modal');
+        const input = document.getElementById('global-search-input');
+        if (modal) {
+            modal.style.display = 'flex';
+            requestAnimationFrame(() => {
+                modal.classList.add('active');
+                if (input) input.focus(); // Foco automático inteligente
+            });
+        }
+        return;
+    }
+
+    // 4. Alternar Vista (Grid/Lista)
+    if (action === 'toggle-view') {
+        const diarioPage = document.getElementById('diario-page');
+        const iconSpan = btn.querySelector('.material-icons');
+        
+        if (diarioPage) {
+            diarioPage.classList.toggle('view-mode-grid');
+            // Cambiar icono visualmente
+            if (iconSpan) {
+                const isGrid = diarioPage.classList.contains('view-mode-grid');
+                iconSpan.textContent = isGrid ? 'view_list' : 'grid_view';
+            }
+        }
+        return;
+    }
         // Buscamos si el clic fue en el valor del patrimonio o en su etiqueta
         const kpiPatrimonio = e.target.closest('#kpi-patrimonio-neto-value') || 
                               e.target.closest('#patrimonio-total-balance');
