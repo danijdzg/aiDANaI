@@ -11456,8 +11456,6 @@ const initSpeedDial = () => {
 
     if (!container || !trigger) return;
 
-    // --- Funciones de Control ---
-    
     const openMenu = () => {
         container.classList.add('active');
         hapticFeedback('medium');
@@ -11467,54 +11465,18 @@ const initSpeedDial = () => {
         container.classList.remove('active');
     };
 
-    const toggleMenu = (e) => {
-        // Detenemos la propagación para que no llegue al "document" y se cierre inmediatamente
+    trigger.onclick = (e) => {
         e.stopPropagation();
-        
-        if (container.classList.contains('active')) {
-            closeMenu();
-        } else {
-            openMenu();
-        }
+        container.classList.contains('active') ? closeMenu() : openMenu();
     };
 
-    // --- EVENTO 1: BOTÓN PRINCIPAL (+) ---
-    // Usamos 'click' estándar. Es compatible con Móvil y PC.
-    trigger.onclick = toggleMenu;
+    if (backdrop) backdrop.onclick = closeMenu;
 
-    // --- EVENTO 2: FONDO OSCURO (Cerrar al tocar fuera) ---
-    // Esta es la clave para lo que pediste: si tocas lo oscuro, se cierra.
-    if (backdrop) {
-        backdrop.onclick = (e) => {
-            e.stopPropagation();
-            closeMenu();
-        };
-    }
-
-    // --- EVENTO 3: LAS OPCIONES (Pago, Traspaso, Ingreso) ---
     options.forEach(btn => {
         btn.onclick = (e) => {
-            e.stopPropagation(); // Evitar cerrar antes de tiempo
-            
-            const type = btn.dataset.type; // 'gasto', 'ingreso', 'traspaso'
-            
-            // 1. Feedback y Cierre visual inmediato
-            hapticFeedback('light');
+            const type = btn.dataset.type;
             closeMenu();
-
-            // 2. Ejecutar la acción tras una micro-pausa (para que se vea la animación)
-            setTimeout(() => {
-                try {
-                    if (typeof startMovementForm === 'function') {
-                        startMovementForm(null, false, type);
-                    } else {
-                        console.error("Error: startMovementForm no encontrada");
-                        showToast("Error interno", "danger");
-                    }
-                } catch (err) {
-                    console.error(err);
-                }
-            }, 75);
+            setTimeout(() => startMovementForm(null, false, type), 200);
         };
     });
 };
