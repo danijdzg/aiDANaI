@@ -100,7 +100,7 @@
     }
     .super-flash-active { animation: superFlash 0.3s ease-out; }
 
-    @keyframes popScale { 0% { transform: scale(1); } 50% { transform: scale(1.1); color: var(--neon-lime); text-shadow: 0 0 20px var(--neon-lime); } 100% { transform: scale(1); } }
+    @keyframes popScale { 0% { transform: scale(1); } 50% { transform: scale(1.05); color: var(--neon-lime); text-shadow: 0 0 20px var(--neon-lime); } 100% { transform: scale(1); } }
     .pop-active { animation: popScale 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
     @keyframes particleExplosion { 
@@ -457,11 +457,9 @@
             this.initAudio();
             this.unlockAudio();
             
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(() => console.log('SW Registrado'))
-                    .catch(err => console.log('Error SW:', err));
-            }
+            if ('serviceWorker' in navigator && !window.location.href.startsWith('blob:')) {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+}
 
             if(this.state.cryptoCache) {
                 const now = Date.now();
@@ -610,8 +608,8 @@
 						let clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
 						// Usamos new Function en vez de eval
 						let res = new Function('return ' + clean)() / 100;
-						// Aplicamos la misma corrección de decimales
-						this.expr = String(parseFloat(res.toFixed(10))); 
+						// Aplicamos toPrecision(12) inmediatamente tras la división para evitar residuos decimales
+						this.expr = String(parseFloat(res.toPrecision(12))); 
 					this.render(); 
 				} catch(e) {}
 			} 
@@ -656,8 +654,8 @@
                 // 3. Validación
                 if(!isFinite(res) || isNaN(res)) throw new Error("Err");
                 
-                // 4. CORRECCIÓN DECIMAL: Máximo 10 decimales, elimina ceros finales
-                res = parseFloat(res.toFixed(10));
+                // toPrecision(12) es el estándar que elimina errores como 0.1 + 0.2 = 0.30000000000000004
+				res = parseFloat(res.toPrecision(12));
                 
                 this.addToHistory(this.expr, res);
                 const prettyExpr = this.expr.replace(/\./g, ',').replace(/\*/g, '×').replace(/\//g, '÷');
