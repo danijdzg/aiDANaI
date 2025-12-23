@@ -2455,11 +2455,10 @@ const navigateTo = async (pageId, isInitial = false) => {
 const pageRenderers = {
     [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    // ▼▼▼ CAMBIO AQUÍ ▼▼▼
     [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
-    // ▲▲▲ FIN CAMBIO ▲▲▲
     [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
     [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+    [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: () => {}, actions: standardActions }, // <-- AÑADE ESTA LÍNEA
 };
 
     if (pageRenderers[pageId]) {
@@ -9225,6 +9224,33 @@ const handleStart = (e) => {
         
         // Mapa de acciones
         const actions = {
+		'show-patrimonio-list': () => {
+            hapticFeedback('light');
+            showCuentasModal(); 
+        },
+        'show-inversiones': () => {
+            hapticFeedback('light');
+            showManageInvestmentAccountsModal();
+        },
+        'show-extracto': () => {
+            hapticFeedback('light');
+            // Esta función ya existe en tu código y abre el extracto tipo cartilla
+            renderInformeDetallado('extracto_cuenta');
+        },
+        'show-presupuestos': () => {
+            hapticFeedback('light');
+            handleUpdateBudgets();
+        },
+        'show-recurrentes': () => {
+            hapticFeedback('light');
+            showRecurrentesModal();
+        },
+        'show-calendario': () => {
+            hapticFeedback('light');
+            // Cambiamos al modo calendario y navegamos al Diario automáticamente
+            diarioViewMode = 'calendar';
+            navigateTo(PAGE_IDS.DIARIO);
+        },	
 		'toggle-portfolio-currency': async () => {
     // Verificación de seguridad: Solo funciona si estamos en la página de Patrimonio
     const activePage = document.querySelector('.view--active');
