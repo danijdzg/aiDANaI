@@ -9234,23 +9234,8 @@ const handleStart = (e) => {
         },
         'show-extracto': () => {
             hapticFeedback('light');
-            // Creamos el contenedor que tu función original 'renderInformeDetallado' necesita encontrar
-            const html = `<div id="informe-content-extracto_cuenta" style="padding: 10px;">
-                            <div class="skeleton" style="height: 100px; border-radius: 12px;"></div>
-                          </div>`;
-            
-            // Abrimos el modal y metemos ese contenedor dentro
-            showGenericModal('Extracto de Cuenta', html);
-            
-            // Llamamos a tu función de siempre. Ella sola se encargará de 
-            // pintar el selector de cuentas y el botón "TODO" dentro del modal.
-            setTimeout(() => {
-                if (typeof renderInformeDetallado === 'function') {
-                    renderInformeDetallado('extracto_cuenta');
-                }
-            }, 100);
-        },
-        'show-presupuestos': () => {
+            renderInformesPage ();
+		'show-presupuestos': () => {
             hapticFeedback('light');
             handleUpdateBudgets();
         },
