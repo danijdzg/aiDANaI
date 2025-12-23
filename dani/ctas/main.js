@@ -646,8 +646,7 @@ const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", auth
 const PAGE_IDS = {
     PANEL: 'panel-page',
     DIARIO: 'diario-page',
-    PATRIMONIO: 'patrimonio-page',
-    PLANIFICAR: 'planificar-page',
+    ANALISIS: 'analisis-page',
     AJUSTES: 'ajustes-page',
 };
 
