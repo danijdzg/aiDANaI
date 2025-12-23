@@ -11886,19 +11886,3 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
-// Este código asegura que la navegación funcione con la nueva pestaña
-document.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action="navigate"]');
-    if (btn) {
-        const pageId = btn.dataset.page;
-        // Ocultar todas las páginas
-        document.querySelectorAll('.page-content').forEach(p => p.style.display = 'none');
-        // Mostrar la elegida
-        const targetPage = document.getElementById(pageId);
-        if (targetPage) targetPage.style.display = 'block';
-        
-        // Actualizar estado activo en el menú
-        document.querySelectorAll('.bottom-nav__item').forEach(i => i.classList.remove('bottom-nav__item--active'));
-        btn.classList.add('bottom-nav__item--active');
-    }
-});
