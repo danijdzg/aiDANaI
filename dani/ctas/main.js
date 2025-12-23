@@ -9234,7 +9234,7 @@ const handleStart = (e) => {
         },
         'show-extracto': () => {
             hapticFeedback('light');
-            renderInformesPage ();
+            showGlobalSearchModal ();
 		},
 		'show-presupuestos': () => {
             hapticFeedback('light');
