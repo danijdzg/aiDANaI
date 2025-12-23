@@ -9232,18 +9232,25 @@ const handleStart = (e) => {
             hapticFeedback('light');
             showManageInvestmentAccountsModal();
         },
-        'show-extracto-global': () => {
-            hapticFeedback('light');
-            // En lugar de renderizar en un hueco inexistente, abrimos el 
-            // Libro Mayor Global en un modal para que sea útil desde cualquier sitio.
-            const html = `
-                <div id="informe-resultado-container" style="min-height: 300px;">
-                    <div style="text-align:center; padding: 40px;"><span class="spinner"></span></div>
-                </div>`;
-            showGenericModal('Extracto Global', html);
-            // Llamamos a tu función existente que calcula todo el historial
-            setTimeout(() => handleGenerateGlobalExtract(), 100);
-        },
+        'show-extracto': () => {
+    hapticFeedback('light');
+    
+    // 1. Preparamos el contenedor para tu función original
+    const html = `<div id="informe-content-extracto_cuenta" class="extracto-container">
+                    <div class="loading-state"><span class="spinner"></span></div>
+                  </div>`;
+    
+    // 2. Abrimos el modal con el ID que tu función renderInformeDetallado busca
+    showGenericModal('Extracto de Cuenta', html);
+    
+    // 3. Ejecutamos tu función original de siempre
+    // El pequeño delay asegura que el modal esté abierto antes de pintar los datos
+    setTimeout(() => {
+        if (typeof renderInformeDetallado === 'function') {
+            renderInformeDetallado('extracto_cuenta');
+        }
+    }, 150);
+},
         'show-presupuestos': () => {
             hapticFeedback('light');
             handleUpdateBudgets();
