@@ -9232,10 +9232,17 @@ const handleStart = (e) => {
             hapticFeedback('light');
             showManageInvestmentAccountsModal();
         },
-        'show-extracto': () => {
+        'show-extracto-global': () => {
             hapticFeedback('light');
-            // Esta función ya existe en tu código y abre el extracto tipo cartilla
-            renderInformeDetallado('extracto_cuenta');
+            // En lugar de renderizar en un hueco inexistente, abrimos el 
+            // Libro Mayor Global en un modal para que sea útil desde cualquier sitio.
+            const html = `
+                <div id="informe-resultado-container" style="min-height: 300px;">
+                    <div style="text-align:center; padding: 40px;"><span class="spinner"></span></div>
+                </div>`;
+            showGenericModal('Extracto Global', html);
+            // Llamamos a tu función existente que calcula todo el historial
+            setTimeout(() => handleGenerateGlobalExtract(), 100);
         },
         'show-presupuestos': () => {
             hapticFeedback('light');
@@ -9245,12 +9252,11 @@ const handleStart = (e) => {
             hapticFeedback('light');
             showRecurrentesModal();
         },
-        'show-calendario': () => {
-            hapticFeedback('light');
-            // Cambiamos al modo calendario y navegamos al Diario automáticamente
-            diarioViewMode = 'calendar';
-            navigateTo(PAGE_IDS.DIARIO);
-        },	
+        'show-informe-personalizado': () => {
+            hapticFeedback('medium');
+            // Abrimos directamente tu potente constructor de informes
+            showInformeBuilderModal(); 
+        },
 		'toggle-portfolio-currency': async () => {
     // Verificación de seguridad: Solo funciona si estamos en la página de Patrimonio
     const activePage = document.querySelector('.view--active');
