@@ -11886,3 +11886,12 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
+
+// Asegurar que al navegar se limpien las clases activas correctamente
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.bottom-nav__item');
+    if (btn) {
+        document.querySelectorAll('.bottom-nav__item').forEach(el => el.classList.remove('bottom-nav__item--active'));
+        btn.classList.add('bottom-nav__item--active');
+    }
+});
