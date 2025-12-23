@@ -11456,32 +11456,34 @@ const initSpeedDial = () => {
 
     if (!container || !trigger) return;
 
-    // --- Funciones de Control Actualizadas ---
+    // --- Funciones de Control ---
+    
     const openMenu = () => {
-        // Añadimos la clase que activa el oscurecimiento y despliega botones
-        container.classList.add('fab-container--open'); 
-        container.classList.add('active'); // Mantenemos active por si el CSS lo usa
+        container.classList.add('active');
         hapticFeedback('medium');
     };
 
     const closeMenu = () => {
-        container.classList.remove('fab-container--open');
         container.classList.remove('active');
     };
 
     const toggleMenu = (e) => {
+        // Detenemos la propagación para que no llegue al "document" y se cierre inmediatamente
         e.stopPropagation();
-        if (container.classList.contains('fab-container--open')) {
+        
+        if (container.classList.contains('active')) {
             closeMenu();
         } else {
             openMenu();
         }
     };
 
-    // Evento al pulsar el botón principal (+)
+    // --- EVENTO 1: BOTÓN PRINCIPAL (+) ---
+    // Usamos 'click' estándar. Es compatible con Móvil y PC.
     trigger.onclick = toggleMenu;
 
-    // Evento al pulsar el fondo oscuro (para cerrar)
+    // --- EVENTO 2: FONDO OSCURO (Cerrar al tocar fuera) ---
+    // Esta es la clave para lo que pediste: si tocas lo oscuro, se cierra.
     if (backdrop) {
         backdrop.onclick = (e) => {
             e.stopPropagation();
@@ -11489,19 +11491,30 @@ const initSpeedDial = () => {
         };
     }
 
-    // Evento para los botones de Gasto, Traspaso e Ingreso
+    // --- EVENTO 3: LAS OPCIONES (Pago, Traspaso, Ingreso) ---
     options.forEach(btn => {
         btn.onclick = (e) => {
-            e.stopPropagation();
-            const type = btn.dataset.type;
-            hapticFeedback('light');
-            closeMenu(); // Cerramos y oscurecemos antes de abrir el form
+            e.stopPropagation(); // Evitar cerrar antes de tiempo
             
+            const type = btn.dataset.type; // 'gasto', 'ingreso', 'traspaso'
+            
+            // 1. Feedback y Cierre visual inmediato
+            hapticFeedback('light');
+            closeMenu();
+
+            // 2. Ejecutar la acción tras una micro-pausa (para que se vea la animación)
             setTimeout(() => {
-                if (typeof startMovementForm === 'function') {
-                    startMovementForm(null, false, type);
+                try {
+                    if (typeof startMovementForm === 'function') {
+                        startMovementForm(null, false, type);
+                    } else {
+                        console.error("Error: startMovementForm no encontrada");
+                        showToast("Error interno", "danger");
+                    }
+                } catch (err) {
+                    console.error(err);
                 }
-            }, 150);
+            }, 75);
         };
     });
 };
