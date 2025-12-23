@@ -646,7 +646,8 @@ const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", auth
 const PAGE_IDS = {
     PANEL: 'panel-page',
     DIARIO: 'diario-page',
-    ANALISIS: 'analisis-page',
+    PATRIMONIO: 'patrimonio-page',
+    PLANIFICAR: 'planificar-page',
     AJUSTES: 'ajustes-page',
 };
 
@@ -2455,10 +2456,11 @@ const navigateTo = async (pageId, isInitial = false) => {
 const pageRenderers = {
     [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+    // ▼▼▼ CAMBIO AQUÍ ▼▼▼
     [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
+    // ▲▲▲ FIN CAMBIO ▲▲▲
     [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
     [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-    [PAGE_IDS.ANALISIS]: { title: 'Análisis', render: () => {}, actions: standardActions }, // <-- AÑADE ESTA LÍNEA
 };
 
     if (pageRenderers[pageId]) {
@@ -9224,31 +9226,6 @@ const handleStart = (e) => {
         
         // Mapa de acciones
         const actions = {
-		'show-patrimonio-list': () => {
-            hapticFeedback('light');
-            showCuentasModal(); 
-        },
-        'show-inversiones': () => {
-            hapticFeedback('light');
-            showManageInvestmentAccountsModal();
-        },
-        'show-extracto': () => {
-            hapticFeedback('light');
-            showGlobalSearchModal ();
-		},
-		'show-presupuestos': () => {
-            hapticFeedback('light');
-            handleUpdateBudgets();
-        },
-        'show-recurrentes': () => {
-            hapticFeedback('light');
-            showRecurrentesModal();
-        },
-        'show-informe-personalizado': () => {
-            hapticFeedback('medium');
-            // Abrimos directamente tu potente constructor de informes
-            showInformeBuilderModal(); 
-        },
 		'toggle-portfolio-currency': async () => {
     // Verificación de seguridad: Solo funciona si estamos en la página de Patrimonio
     const activePage = document.querySelector('.view--active');
