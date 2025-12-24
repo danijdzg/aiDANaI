@@ -2407,16 +2407,24 @@ const navigateTo = async (pageId, isInitial = false) => {
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
 
+    // Cerrar menú si estuviera abierto
     const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // 1. Guardar scroll
+    // 1. Guardar posición de scroll de la página actual antes de irnos
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
 
     if (!newView || (oldView && oldView.id === pageId)) return;
     
+    // 2. LIMPIEZA TOTAL: Ocultamos TODAS las vistas inmediatamente 
+    // Esto evita que una empuje a la otra hacia abajo.
+    selectAll('.view').forEach(v => {
+        v.classList.remove('view--active');
+        v.style.display = 'none'; // Forzamos desaparición física del espacio
+    });
+
     destroyAllCharts();
     if (!isInitial) hapticFeedback('light');
 
@@ -2424,92 +2432,67 @@ const navigateTo = async (pageId, isInitial = false) => {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // Nav Inferior
-    const navItems = Array.from(selectAll('.bottom-nav__item'));
-    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
-    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-    const isForward = newIndex > oldIndex;
-
-    // Barra Superior
+    // Preparación de la Barra Superior
     const actionsEl = select('top-bar-actions');
-    const leftEl = select('top-bar-left-button');
-    
-    // Acciones por defecto (Menú de 3 puntos)
     const standardActions = `
         <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
             <span class="material-icons">calculate</span>
         </button>
         <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
-    <span class="material-icons">more_vert</span>
-</button>
+            <span class="material-icons">more_vert</span>
+        </button>
     `;
     
+    // Carga de datos bajo demanda
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
     if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
-	const patrimonioActions = `
-    <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
-        <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
-    </button>
-    ${standardActions}
-`;
 
-const pageRenderers = {
-    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    // ▼▼▼ CAMBIO AQUÍ ▼▼▼
-    [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
-    // ▲▲▲ FIN CAMBIO ▲▲▲
-    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-};
+    const patrimonioActions = `<button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda"><span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span></button>${standardActions}`;
+
+    // Configuración de renderizadores (Asegúrate de incluir ANALISIS si has unificado)
+    const pageRenderers = {
+        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+        // Si añadiste la pestaña unificada:
+        'analisis-page': { title: 'Análisis', render: () => {}, actions: standardActions }
+    };
 
     if (pageRenderers[pageId]) {
-        // 1. Actualizar el Título (Limpiamos si es Panel o Diario)
+        // Actualizar título
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
-            const rawTitle = pageRenderers[pageId].title;
-            // Si es Panel o Diario, dejamos el texto vacío. Si no, ponemos el título (ej: Ajustes)
-            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
+            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : pageRenderers[pageId].title;
         }
 
-        // 2. Botones extra del Diario (Filtro y Vista)
-        // Los inyectamos en la barra de acciones de la derecha si estamos en Diario
+        // Botones específicos del Diario
         if (actionsEl) {
             let actionsHTML = pageRenderers[pageId].actions;
-            
             if (pageId === PAGE_IDS.DIARIO) {
-                // Añadimos los botones del diario al principio de las acciones
                 const diarioButtons = `
                     <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista"><span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span></button>
                     <button data-action="show-diario-filters" class="icon-btn" title="Filtrar"><span class="material-icons">filter_list</span></button>
                 `;
                 actionsHTML = diarioButtons + actionsHTML;
             }
-            
             actionsEl.innerHTML = actionsHTML;
         }
         
-        // 3. Renderizar la página
         await pageRenderers[pageId].render();
     }
     
-    // Animaciones y Clases
+    // 3. MOSTRAR LA NUEVA VISTA
+    // Ahora que todas están en display:none, esta será la única que ocupe lugar.
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
-    newView.classList.add('view--active'); 
-    if (oldView && !isInitial) {
-        const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
-        const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
-        newView.classList.add(inClass);
-        oldView.classList.add(outClass);
-        oldView.addEventListener('animationend', () => {
-            oldView.classList.remove('view--active', outClass);
-            newView.classList.remove(inClass);
-        }, { once: true });
-    } else if (oldView) {
-        oldView.classList.remove('view--active');
-    }
+    
+    newView.style.display = 'flex'; // Activamos el espacio
+    requestAnimationFrame(() => {
+        newView.classList.add('view--active'); // Activamos la opacidad/animación
+    });
 
-    // Restaurar Scroll
+    // 4. RESTAURAR SCROLL
     if (mainScroller) {
         const targetScroll = pageScrollPositions[pageId] || 0;
         mainScroller.scrollTop = targetScroll;
