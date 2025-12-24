@@ -2452,7 +2452,15 @@ const navigateTo = async (pageId, isInitial = false) => {
     // Configuración de renderizadores (Asegúrate de incluir ANALISIS si has unificado)
     const pageRenderers = {
         [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: `
+        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+            <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+        </button>
+        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
+            <span class="material-icons">filter_list</span>
+        </button>
+        ` 
+},
         [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
         [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
         [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
