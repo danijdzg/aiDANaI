@@ -2454,26 +2454,32 @@ const navigateTo = async (pageId, isInitial = false) => {
 `;
 
 const pageRenderers = {
-    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+    [PAGE_IDS.PANEL]: { 
+        title: 'Panel', 
+        render: renderPanelPage, 
+        actions: `
+            <button data-action="global-search" class="icon-btn" title="Buscar"><span class="material-icons">search</span></button>
+            <button data-action="open-external-calculator" class="icon-btn"><span class="material-icons">calculate</span></button>
+            <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu"><span class="material-icons">more_vert</span></button>
+        ` 
+    },
     [PAGE_IDS.DIARIO]: { 
-    title: 'Diario', 
-    render: renderDiarioPage, 
-    actions: `
-    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-        <span class="material-icons">${window.currentDiarioView === 'list' ? 'calendar_month' : 'list'}</span>
-    </button>
-    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
-        <span class="material-icons">filter_list</span>
-    </button>
-    <button data-action="open-external-calculator" class="icon-btn"><span class="material-icons">calculate</span></button>
-    <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu"><span class="material-icons">more_vert</span></button>
-`
-},
-    // ▼▼▼ CAMBIO AQUÍ ▼▼▼
-    [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
-    // ▲▲▲ FIN CAMBIO ▲▲▲
+        title: 'Diario', 
+        render: renderDiarioPage, 
+        actions: `
+            <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+                <span class="material-icons">${window.currentDiarioView === 'list' ? 'calendar_month' : 'list'}</span>
+            </button>
+            <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
+                <span class="material-icons">filter_list</span>
+            </button>
+            <button data-action="global-search" class="icon-btn" title="Buscar"><span class="material-icons">search</span></button>
+            <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu"><span class="material-icons">more_vert</span></button>
+        ` 
+    },
+    [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: standardActions },
     [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions }
 };
 
     if (pageRenderers[pageId]) {
@@ -8893,7 +8899,7 @@ const renderInversionesPage = async (containerId) => {
 
 
 const attachEventListeners = () => {
-    // 1. Habilitador de vibración (Haptics) - NO TOCAR
+    // 1. Gestión de vibración (Haptics)
     const enableHaptics = () => {
         userHasInteracted = true;
         document.body.removeEventListener('touchstart', enableHaptics);
@@ -8902,12 +8908,11 @@ const attachEventListeners = () => {
     document.body.addEventListener('touchstart', enableHaptics, { once: true, passive: true });
     document.body.addEventListener('click', enableHaptics, { once: true });
 
-    // --- GESTOR MAESTRO DE CLICS (Único y Protegido) ---
-    // He unido aquí TODA tu lógica extensa para que no haya conflictos.
+    // --- GESTOR ÚNICO DE CLICS (Master) ---
     document.body.addEventListener('click', async (e) => {
         const target = e.target;
 
-        // A. MODO PRIVACIDAD (KPIs del Panel)
+        // A. MODO PRIVACIDAD (KPIs)
         const kpiPatrimonio = target.closest('#kpi-patrimonio-neto-value') || target.closest('#patrimonio-total-balance');
         if (kpiPatrimonio) {
             document.body.classList.toggle('privacy-mode');
@@ -8916,101 +8921,82 @@ const attachEventListeners = () => {
             return;
         }
 
-        // B. CIERRE DE MENÚS (Popover)
+        // B. CERRAR MENÚS
         if (!target.closest('.custom-select-wrapper')) closeAllCustomSelects(null);
         const menu = document.getElementById('main-menu-popover');
-        if (menu && menu.classList.contains('popover-menu--visible')) {
+        if (menu?.classList.contains('popover-menu--visible')) {
             if (!target.closest('#main-menu-popover') && !target.closest('[data-action="show-main-menu"]')) {
                 menu.classList.remove('popover-menu--visible');
             }
         }
 
-        // C. PROCESAR BOTONES CON ACCIÓN [data-action]
+        // C. PROCESAR ACCIONES
         const actionTarget = target.closest('[data-action]');
         if (!actionTarget) return;
 
-        // --- SOLUCIÓN AL ERROR DE CONSOLA ---
-        // Extraemos TODAS las variables que tus funciones necesitan
         const { action, id, page, type, modalId, kpi } = actionTarget.dataset;
-        const btn = actionTarget;
 
-        // D. MAPA DE ACCIONES (Toda tu funcionalidad original preservada)
         const actions = {
             'navigate': () => { if (page) navigateTo(page); },
-            'show-main-menu': (ev) => {
-                ev.stopPropagation();
-                if (!menu) return;
-                hapticFeedback('light');
-                const rect = btn.getBoundingClientRect();
-                menu.style.top = `${rect.bottom + 5}px`;
-                menu.style.right = `${Math.max(5, window.innerWidth - rect.right)}px`;
-                menu.classList.toggle('popover-menu--visible');
+            
+            // BUSCADOR (Corregido)
+            'global-search': () => {
+                if (typeof showGlobalSearchModal === 'function') {
+                    showGlobalSearchModal();
+                } else {
+                    showModal('global-search-modal');
+                }
             },
-            // Botones del Diario (Corregidos)
+
+            // DIARIO (Filtros y Vista)
             'toggle-diario-view': () => {
                 hapticFeedback('light');
-                if (typeof window.toggleDiarioView === 'function') window.toggleDiarioView(btn);
+                if (window.toggleDiarioView) window.toggleDiarioView(actionTarget);
             },
             'show-diario-filters': () => {
                 hapticFeedback('light');
-                showDiarioFiltersModal();
+                if (typeof showDiarioFiltersModal === 'function') showDiarioFiltersModal();
             },
-            'clear-diario-filters': () => clearDiarioFilters(),
-            
-            // Formularios y Movimientos
-            'show-main-add-sheet': () => showModal('main-add-sheet'),
-            'open-movement-form': () => {
-                hideModal('main-add-sheet');
-                setTimeout(() => startMovementForm(null, false, type), 250);
+
+            'show-main-menu': (ev) => {
+                ev.stopPropagation();
+                hapticFeedback('light');
+                const rect = actionTarget.getBoundingClientRect();
+                if(menu) {
+                    menu.style.top = `${rect.bottom + 5}px`;
+                    menu.style.right = `${Math.max(5, window.innerWidth - rect.right)}px`;
+                    menu.classList.toggle('popover-menu--visible');
+                }
             },
-            'edit-movement-from-list': () => startMovementForm(id, false),
-            
-            // Calculadora e Informes
+
             'open-external-calculator': () => {
                 const frame = document.getElementById('calculator-frame');
                 if (frame && !frame.src) frame.src = 'calculadora.html';
                 showModal('calculator-iframe-modal');
             },
-            'show-extracto': () => {
-                const html = `<div id="informe-content-extracto_cuenta"><div class="loading-state"><span class="spinner"></span></div></div>`;
-                showGenericModal('Extracto de Cuenta', html);
-                setTimeout(() => { if (typeof renderInformeDetallado === 'function') renderInformeDetallado('extracto_cuenta'); }, 150);
+
+            'show-main-add-sheet': () => showModal('main-add-sheet'),
+            
+            'open-movement-form': () => {
+                hideModal('main-add-sheet');
+                setTimeout(() => startMovementForm(null, false, type), 250);
             },
 
-            // Gestión de Cartera y Balances (Tus funciones avanzadas)
-            'recalculate-balances': () => auditAndFixAllBalances(btn),
-            'toggle-portfolio-currency': () => handleTogglePortfolioCurrency(),
-            'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-kpi-help': (ev) => {
                 ev.stopPropagation();
                 const info = KPI_EXPLANATIONS[kpi];
                 if (info) showGenericModal(info.title, `<p>${info.text}</p>`);
             },
-            
-            // Cierre
-            'close-modal': () => hideModal(modalId || btn.closest('.modal-overlay')?.id),
+
+            'close-modal': () => hideModal(modalId || actionTarget.closest('.modal-overlay')?.id),
+
             'logout': () => { if (confirm("¿Cerrar sesión?")) { firebase.auth().signOut(); location.reload(); } }
         };
 
         if (actions[action]) actions[action](e);
     });
 
-    // 2. Mantener la lógica de pulsación larga en el Diario
-    const diarioPage = document.getElementById('diario-page');
-    if (diarioPage) {
-        let longPressTimer;
-        diarioPage.addEventListener('touchstart', (ev) => {
-            const card = ev.target.closest('.t-card') || ev.target.closest('.transaction-card');
-            if (!card) return;
-            longPressTimer = setTimeout(() => {
-                hapticFeedback('medium');
-                startMovementForm(card.dataset.id, false);
-            }, 600);
-        }, { passive: true });
-        diarioPage.addEventListener('touchend', () => clearTimeout(longPressTimer));
-    }
-
-    // 3. Inicializar Observadores (Scroll infinito, etc.)
+    // 3. Otros observadores de tu código (Scroll, FAB, etc.)
     initMovementsObserver();
     setupFabInteractions();
 };
