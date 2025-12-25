@@ -2260,22 +2260,38 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
         useGrouping: true // ¡Esta es la opción clave!
     }).format(num);
 };
-		const showPinScreen = (user) => {
-			SpaceBackgroundEffect.start();
-            currentUser = user;
-            const pinScreen = select('pin-login-screen');
-            const loginScreen = select('login-screen');
-            const appRoot = select('app-root');
+	const showPinScreen = (user) => {
+    // 1. Encender estrellas (IMPORTANTE)
+    if (typeof SpaceBackgroundEffect !== 'undefined') {
+        SpaceBackgroundEffect.start();
+    }
 
-            if (appRoot) appRoot.classList.remove('app-layout--visible');
-            if (loginScreen) loginScreen.classList.remove('login-view--visible');
-            if (pinScreen) pinScreen.classList.add('login-view--visible');
-            
-            const pinInputs = selectAll('#pin-inputs-container .pin-input');
-            pinInputs.forEach(input => input.value = '');
-            (select('pin-error')).textContent = '';
-            if (pinInputs.length > 0) pinInputs[0].focus();
-        };
+    currentUser = user;
+    const pinScreen = select('pin-login-screen');
+    const loginScreen = select('login-screen');
+    const appRoot = select('app-root'); // O 'app-container', verifica tu ID
+
+    // 2. Ocultar todo lo demás
+    if (appRoot) appRoot.classList.remove('app-layout--visible'); 
+    if (loginScreen) loginScreen.classList.remove('login-view--visible');
+
+    // 3. Mostrar PIN y quitarle el fondo
+    if (pinScreen) {
+        pinScreen.classList.add('login-view--visible');
+        
+        // --- ESTA LÍNEA ES LA MAGIA QUE FALTA ---
+        pinScreen.style.background = 'transparent'; 
+        pinScreen.style.backgroundColor = 'transparent';
+        // ----------------------------------------
+    }
+    
+    // Lógica de inputs (sin cambios)
+    const pinInputs = selectAll('#pin-inputs-container .pin-input');
+    pinInputs.forEach(input => input.value = '');
+    const errorMsg = select('pin-error');
+    if (errorMsg) errorMsg.textContent = '';
+    if (pinInputs.length > 0) pinInputs[0].focus();
+};
 
         const handlePinSubmit = async () => {
             const pinInputs = selectAll('#pin-inputs-container .pin-input');
@@ -2388,10 +2404,11 @@ window.addEventListener('offline', () => {
     updateSyncStatusIcon();
 });
     const startMainApp = async () => {
-	SpaceBackgroundEffect.stop();	
-    const loginScreen = select('login-screen');
+	const loginScreen = select('login-screen');
     const pinLoginScreen = select('pin-login-screen');
+	SpaceBackgroundEffect.stop();	
     const appRoot = select('app-root');
+	if (appRoot) appRoot.style.display = 'block';
 	if (localStorage.getItem('privacyMode') === 'true') {
     document.body.classList.add('privacy-mode');
 	}
