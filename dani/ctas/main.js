@@ -649,6 +649,152 @@ const PAGE_IDS = {
     PLANIFICAR: 'planificar-page',
     AJUSTES: 'ajustes-page',
 };
+/* =============================================================== */
+/* === MOTOR DE FONDO ESPACIAL ESPECTACULAR === */
+/* =============================================================== */
+const SpaceBackgroundEffect = (() => {
+    let canvas, ctx, w, h, animationFrameId;
+    let stars = [];
+    let shootingStars = [];
+    let isActive = false;
+
+    // Configuración para que sea "Espectacular"
+    const CONFIG = {
+        starCount: 450, // ¡Muchas estrellas!
+        baseSpeed: 0.3, // Velocidad del desplazamiento vertical
+        shootingStarFrequency: 0.04, // Probabilidad alta de estrellas fugaces por frame
+    };
+
+    // Clase para una estrella normal
+    class Star {
+        constructor() {
+            this.reset();
+            // Posición inicial aleatoria en toda la pantalla
+            this.y = Math.random() * h; 
+        }
+        reset() {
+            this.x = Math.random() * w;
+            this.y = -10; // Empieza justo arriba de la pantalla
+            this.z = Math.random() * 1.5 + 0.5; // Profundidad (afecta velocidad y tamaño)
+            this.size = Math.random() * 1.2 * this.z;
+            this.brightness = Math.random() * 0.8 + 0.2;
+            // Velocidad parpadeo
+            this.twinkleSpeed = Math.random() * 0.05; 
+            this.twinkleDir = Math.random() > 0.5 ? 1 : -1;
+        }
+        update() {
+            this.y += CONFIG.baseSpeed * this.z;
+            // Efecto parpadeo
+            this.brightness += this.twinkleSpeed * this.twinkleDir;
+            if (this.brightness > 1 || this.brightness < 0.2) this.twinkleDir *= -1;
+            
+            // Si sale por abajo, reiniciar arriba
+            if (this.y > h) this.reset();
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.brightness})`;
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Clase para estrella fugaz espectacular
+    class ShootingStar {
+        constructor() {
+            this.reset();
+        }
+        reset() {
+            this.x = Math.random() * w * 1.5 - w * 0.25; // Empezar fuera de pantalla horizontalmente
+            this.y = Math.random() * h * 0.5; // Empezar en la mitad superior
+            this.len = Math.random() * 200 + 100; // Longitud de la cola
+            this.speed = Math.random() * 15 + 10; // ¡Muy rápidas!
+            this.size = Math.random() * 2 + 0.5;
+            // Ángulo aleatorio entre 30 y 60 grados hacia abajo/derecha
+            this.angle = (Math.random() * 30 + 30) * (Math.PI / 180); 
+            this.opacity = 1;
+            this.active = true;
+        }
+        update() {
+            this.x += this.speed * Math.cos(this.angle);
+            this.y += this.speed * Math.sin(this.angle);
+            this.opacity -= 0.015; // Desvanecer cola
+            if (this.x > w + this.len || this.y > h + this.len || this.opacity <= 0) {
+                this.active = false;
+            }
+        }
+        draw() {
+            if (!this.active) return;
+            const tailX = this.x - this.len * Math.cos(this.angle);
+            const tailY = this.y - this.len * Math.sin(this.angle);
+            
+            const gradient = ctx.createLinearGradient(this.x, this.y, tailX, tailY);
+            gradient.addColorStop(0, `rgba(255,255,255,${this.opacity})`); // Cabeza brillante
+            gradient.addColorStop(0.2, `rgba(100,200,255,${this.opacity * 0.6})`); // Cuerpo azulado
+            gradient.addColorStop(1, `rgba(0,0,0,0)`); // Cola transparente
+
+            ctx.beginPath();
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = this.size;
+            ctx.lineCap = 'round';
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(tailX, tailY);
+            ctx.stroke();
+        }
+    }
+
+    const init = () => {
+        canvas = document.getElementById('space-canvas');
+        if (!canvas) return;
+        ctx = canvas.getContext('2d');
+        resize();
+        window.addEventListener('resize', resize);
+        // Crear estrellas iniciales
+        for (let i = 0; i < CONFIG.starCount; i++) stars.push(new Star());
+    };
+
+    const resize = () => {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+    };
+
+    const animate = () => {
+        if (!isActive) return;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; // Rastro suave para movimiento
+        ctx.fillRect(0, 0, w, h); // Limpiar pantalla (fondo negro)
+
+        // Dibujar estrellas normales
+        stars.forEach(star => { star.update(); star.draw(); });
+
+        // Gestionar estrellas fugaces
+        if (Math.random() < CONFIG.shootingStarFrequency) {
+            shootingStars.push(new ShootingStar());
+        }
+        shootingStars.forEach(ss => { ss.update(); ss.draw(); });
+        // Eliminar estrellas fugaces inactivas para ahorrar memoria
+        shootingStars = shootingStars.filter(ss => ss.active);
+
+        animationFrameId = requestAnimationFrame(animate);
+    };
+
+    return {
+        start: () => {
+            if (!canvas) init();
+            if (isActive) return;
+            isActive = true;
+            canvas.classList.add('active');
+            animate();
+            console.log('🌌 Motor espacial espectacular INICIADO');
+        },
+        stop: () => {
+            if (!isActive) return;
+            isActive = false;
+            if (canvas) canvas.classList.remove('active');
+            cancelAnimationFrame(animationFrameId);
+            console.log('🛑 Motor espacial DETENIDO (Ahorro de energía)');
+        }
+    };
+})();
 
 // ==========================================
 // === CORE OPTIMIZATION: AppStore v1.0 ===
@@ -2115,6 +2261,7 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
     }).format(num);
 };
 		const showPinScreen = (user) => {
+			SpaceBackgroundEffect.start();
             currentUser = user;
             const pinScreen = select('pin-login-screen');
             const loginScreen = select('login-screen');
@@ -2213,6 +2360,7 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
             });
         };
     const initApp = async () => {
+	SpaceBackgroundEffect.start();	
     const procederConCargaDeApp = () => {
         document.documentElement.lang = 'es';
         setupTheme();
@@ -2240,6 +2388,7 @@ window.addEventListener('offline', () => {
     updateSyncStatusIcon();
 });
     const startMainApp = async () => {
+	SpaceBackgroundEffect.stop();	
     const loginScreen = select('login-screen');
     const pinLoginScreen = select('pin-login-screen');
     const appRoot = select('app-root');
