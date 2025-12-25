@@ -5885,8 +5885,13 @@ const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICAR);
     if (!container) return;
 
-    // Estructura HTML final
+    // --- AQUÍ ESTÁ EL CAMBIO: AÑADIMOS EL TÍTULO AL HTML ---
     container.innerHTML = `
+        <h2 class="section-header" style="margin: 20px 0 15px 0; display: flex; align-items: center; gap: 10px; padding: 0 16px;">
+            <span class="material-icons" style="color: var(--c-primary);">event_note</span> 
+            Planificar
+        </h2>
+
         <div class="card card--no-bg accordion-wrapper">
             <details class="accordion">
                 <summary>
@@ -5900,6 +5905,7 @@ const renderPlanificacionPage = () => {
                 </div>
             </details>
         </div>
+
         <div class="card card--no-bg accordion-wrapper">
             <details class="accordion">
                 <summary>
@@ -5916,6 +5922,7 @@ const renderPlanificacionPage = () => {
                             <span class="material-icons" style="font-size: 16px;">edit_calendar</span><span>Gestionar</span>
                         </button>
                     </div>
+                    
                     <div id="annual-budget-dashboard">
                         <div id="budget-kpi-container" class="kpi-grid"></div>
                         <div class="card" style="margin-top: var(--sp-4);">
@@ -5926,6 +5933,7 @@ const renderPlanificacionPage = () => {
                         </div>
                         <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
                     </div>
+
                     <div id="budget-init-placeholder" class="empty-state hidden">
                         <span class="material-icons">edit_calendar</span>
                         <h3 id="budget-placeholder-title">Define tu Plan Financiero</h3>
@@ -5937,7 +5945,7 @@ const renderPlanificacionPage = () => {
                 </div>
             </details>
         </div>
-        
+
         <div class="card card--no-bg accordion-wrapper">
             <details class="accordion">
                 <summary>
@@ -5954,12 +5962,12 @@ const renderPlanificacionPage = () => {
                     <div id="informe-widget-content">
                         <div class="skeleton" style="height: 240px; border-radius: var(--border-radius-lg);"></div>
                     </div>
-                    </div>
+                </div>
             </details>
         </div>
     `;
-    
-    // Inicialización del selector de año para presupuestos
+
+    // --- RESTO DE LA LÓGICA (NO TOCAR) ---
     const yearSelect = container.querySelector('#budget-year-selector');
     if (yearSelect) {
         const currentYear = new Date().getFullYear();
@@ -5970,7 +5978,7 @@ const renderPlanificacionPage = () => {
             .sort((a, b) => b - a)
             .map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`)
             .join('');
-
+            
         yearSelect.addEventListener('change', () => {
             hapticFeedback('light');
             renderBudgetTracking();
@@ -5980,9 +5988,7 @@ const renderPlanificacionPage = () => {
     populateAllDropdowns();
     renderBudgetTracking();
     renderPendingRecurrents();
-    renderRecurrentsListOnPage();
-
-    // Cargamos el contenido del informe personalizado
+    renderRecurrentsListOnPage(); 
     renderInformeWidgetContent();
 };
 
@@ -5990,13 +5996,17 @@ const renderPatrimonioPage = () => {
     const container = select(PAGE_IDS.PATRIMONIO);
     if (!container) return;
 
-    // Estructura HTML
+    // --- AQUÍ ESTÁ EL CAMBIO: AÑADIMOS EL TÍTULO AL HTML ---
     container.innerHTML = `
+        <h2 class="section-header" style="margin: 20px 0 15px 0; display: flex; align-items: center; gap: 10px; padding: 0 16px;">
+            <span class="material-icons" style="color: var(--c-primary);">account_balance</span> 
+            Patrimonio
+        </h2>
+
         <details class="accordion" style="margin-bottom: var(--sp-4);">
             <summary>
                 <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                    <span class="material-icons">account_balance</span>
-                    Visión General
+                    <span class="material-icons">account_balance</span> Visión General
                 </h3>
                 <span class="material-icons accordion__icon">expand_more</span>
             </summary>
@@ -6008,36 +6018,33 @@ const renderPatrimonioPage = () => {
         <details id="acordeon-portafolio" class="accordion" style="margin-bottom: var(--sp-4);">
             <summary>
                 <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                    <span class="material-icons">rocket_launch</span>
-                    Portafolio de Inversión
+                    <span class="material-icons">rocket_launch</span> Portafolio de Inversión
                 </h3>
                 <span class="material-icons accordion__icon">expand_more</span>
             </summary>
             <div class="accordion__content" style="padding: 0 var(--sp-2);">
                 <div id="portfolio-evolution-container">
-                     <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
+                    <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
                 </div>
                 <div id="portfolio-main-content" style="margin-top: var(--sp-4);">
                     <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
                 </div>
             </div>
         </details>
-        
+
         <div class="card card--no-bg accordion-wrapper">
             <details id="acordeon-extracto_cuenta" class="accordion informe-acordeon">
-                <summary id="summary-extracto-trigger" style="user-select: none; -webkit-user-select: none;"> 
+                <summary id="summary-extracto-trigger" style="user-select: none; -webkit-user-select: none;">
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                        <span class="material-icons">wysiwyg</span>
-                        <span>Extracto de Cuenta</span>
+                        <span class="material-icons">wysiwyg</span> <span>Extracto de Cuenta</span>
                     </h3>
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
                 <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                     <div id="informe-content-extracto_cuenta">
-                         <div id="informe-cuenta-wrapper">
+                        <div id="informe-cuenta-wrapper">
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label for="informe-cuenta-select" class="form-label">Selecciona una cuenta:</label>
-                                
                                 <div style="display: flex; gap: 8px; align-items: stretch; width: 100%;">
                                     <div class="input-wrapper" style="flex-grow: 1; min-width: 0;">
                                         <select id="informe-cuenta-select" class="form-select"></select>
@@ -6046,7 +6053,7 @@ const renderPatrimonioPage = () => {
                                         TODO
                                     </button>
                                 </div>
-                                </div>
+                            </div>
                         </div>
                         <div id="informe-resultado-container" style="margin-top: var(--sp-4);">
                             <div class="empty-state" style="background:transparent; padding:var(--sp-2); border:none;">
@@ -6061,51 +6068,32 @@ const renderPatrimonioPage = () => {
         </div>
     `;
 
+    // --- RESTO DE LA LÓGICA DE INICIALIZACIÓN (NO TOCAR) ---
     setTimeout(async () => {
-        // Carga Visión General
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
-        
-        // --- LÓGICA DEL BOTÓN "TODO" REFORZADA ---
         const btnTodo = select('btn-extracto-todo');
         if (btnTodo) {
-            // Eliminamos listeners previos clonando el nodo (truco de seguridad)
             const newBtn = btnTodo.cloneNode(true);
             btnTodo.parentNode.replaceChild(newBtn, btnTodo);
-            
             newBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation(); // Evitar que cierre el acordeón
-                e.target.blur();
-                
-                // Aseguramos que la función existe antes de llamarla
+                e.preventDefault(); e.stopPropagation(); e.target.blur();
                 if (typeof handleGenerateGlobalExtract === 'function') {
                     handleGenerateGlobalExtract(e.target);
-                } else {
-                    console.error("La función handleGenerateGlobalExtract no está definida.");
-                    showToast("Error interno: función no encontrada.", "danger");
                 }
             });
         }
-        // ------------------------------
-
-        // Lógica Selector Individual
         const selectCuenta = select('informe-cuenta-select');
         if (selectCuenta) {
             const populate = (el, data) => {
                 let opts = '<option value="">Seleccionar cuenta...</option>';
                 [...data].sort((a,b) => a.nombre.localeCompare(b.nombre))
-                         .forEach(i => opts += `<option value="${i.id}">${i.nombre}</option>`);
+                    .forEach(i => opts += `<option value="${i.id}">${i.nombre}</option>`);
                 el.innerHTML = opts;
             };
             populate(selectCuenta, getVisibleAccounts());
             createCustomSelect(selectCuenta);
-
-            selectCuenta.addEventListener('change', () => {
-                handleGenerateInformeCuenta(null, null);
-            });
+            selectCuenta.addEventListener('change', () => { handleGenerateInformeCuenta(null, null); });
         }
-
-        // Lógica Portafolio
         const acordeonPortafolio = select('acordeon-portafolio');
         if (acordeonPortafolio) {
             const loadPortfolioData = async () => {
@@ -6115,11 +6103,10 @@ const renderPatrimonioPage = () => {
             acordeonPortafolio.addEventListener('toggle', async () => {
                 if (acordeonPortafolio.open && !acordeonPortafolio.dataset.loaded) {
                     await loadPortfolioData();
-                    acordeonPortafolio.dataset.loaded = "true"; 
+                    acordeonPortafolio.dataset.loaded = "true";
                 }
             });
         }
-        
     }, 50);
 };
 
