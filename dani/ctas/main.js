@@ -5881,183 +5881,192 @@ const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICAR);
     if (!container) return;
 
-    // Preparamos los controles de filtro si la función existe, si no, dejamos vacío para evitar errores
+    // Preparamos controles de filtro
     const filterControlsHTML = typeof generateReportFilterControls === 'function' 
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
 
-    // --- HTML FUSIONADO: PATRIMONIO + FLUJO DE CAJA + PLANIFICAR ---
+    // --- NUEVO HTML CON DISEÑO PREMIUM ---
     container.innerHTML = `
-        <h2 class="section-header" style="margin: 20px 0 15px 0; display: flex; align-items: center; gap: 10px; padding: 0 16px;">
-            <span class="material-icons" style="color: var(--c-primary);">analytics</span> 
-            Análisis Global
-        </h2>
+        <header style="padding: 24px 16px 8px 16px;">
+            <h1 style="font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; margin: 0;">
+                Análisis <span style="color: var(--c-primary);">Global</span>
+            </h1>
+            <p style="color: var(--c-on-surface-secondary); margin-top: 4px; font-size: 0.95rem;">
+                Tu salud financiera en tiempo real
+            </p>
+        </header>
 
-        <div style="margin-bottom: 30px; border-bottom: 1px dashed var(--c-outline); padding-bottom: 20px;">
-            <h3 style="margin: 0 16px 10px 16px; font-size: 0.9rem; color: var(--c-on-surface-secondary); text-transform: uppercase; letter-spacing: 1px;">Patrimonio</h3>
-            
-            <details class="accordion" style="margin-bottom: var(--sp-4);">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                        <span class="material-icons">account_balance</span> Visión General
-                    </h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" id="patrimonio-overview-container" style="padding: 0 var(--sp-2);">
-                    <div class="skeleton" style="height: 400px; border-radius: var(--border-radius-lg);"></div>
+        <div class="analysis-section-label">MI PATRIMONIO</div>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Balance Neto</h3>
+                    <p class="widget-subtitle">Tus activos menos tus deudas</p>
                 </div>
-            </details>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" id="patrimonio-overview-container">
+                <div class="skeleton" style="height: 400px; border-radius: 12px; margin-top: 16px;"></div>
+            </div>
+        </details>
 
-            <details id="acordeon-portafolio" class="accordion" style="margin-bottom: var(--sp-4);">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                        <span class="material-icons">rocket_launch</span> Portafolio de Inversión
-                    </h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: 0 var(--sp-2);">
-                    <div id="portfolio-evolution-container">
-                        <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
+        <details id="acordeon-portafolio" class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Inversiones</h3>
+                    <p class="widget-subtitle">Evolución de tu portafolio</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content">
+                <div id="portfolio-evolution-container" style="margin-top: 16px;">
+                    <div class="chart-container skeleton" style="height: 220px; border-radius: 12px;"></div>
+                </div>
+                <div id="portfolio-main-content" style="margin-top: 20px;">
+                    <div class="skeleton" style="height: 300px; border-radius: 12px;"></div>
+                </div>
+            </div>
+        </details>
+
+        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon">
+            <summary id="summary-extracto-trigger" class="widget-header">
+                <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Extracto de Cuenta</h3>
+                    <p class="widget-subtitle">Movimientos detallados por cuenta</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content">
+                <div id="informe-content-extracto_cuenta" style="padding-top: 16px;">
+                    <div id="informe-cuenta-wrapper">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="informe-cuenta-select" class="form-label">Cuenta a consultar:</label>
+                            <div style="display: flex; gap: 8px; width: 100%;">
+                                <div class="input-wrapper" style="flex-grow: 1;">
+                                    <select id="informe-cuenta-select" class="form-select"></select>
+                                </div>
+                                <button id="btn-extracto-todo" class="btn btn--secondary" style="font-weight: 700;">TODO</button>
+                            </div>
+                        </div>
                     </div>
-                    <div id="portfolio-main-content" style="margin-top: var(--sp-4);">
-                        <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
+                    <div id="informe-resultado-container" style="margin-top: 16px;">
+                        <div class="empty-state" style="background:transparent; padding:10px; border:none;">
+                            <p style="font-size:0.85rem;">Selecciona una cuenta.</p>
+                        </div>
                     </div>
                 </div>
-            </details>
+            </div>
+        </details>
 
-            <div class="card card--no-bg accordion-wrapper">
-                <details id="acordeon-extracto_cuenta" class="accordion informe-acordeon">
-                    <summary id="summary-extracto-trigger" style="user-select: none; -webkit-user-select: none;">
-                        <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                            <span class="material-icons">wysiwyg</span> <span>Extracto de Cuenta</span>
-                        </h3>
-                        <span class="material-icons accordion__icon">expand_more</span>
-                    </summary>
-                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                        <div id="informe-content-extracto_cuenta">
-                            <div id="informe-cuenta-wrapper">
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="informe-cuenta-select" class="form-label">Selecciona una cuenta:</label>
-                                    <div style="display: flex; gap: 8px; align-items: stretch; width: 100%;">
-                                        <div class="input-wrapper" style="flex-grow: 1; min-width: 0;">
-                                            <select id="informe-cuenta-select" class="form-select"></select>
-                                        </div>
-                                        <button id="btn-extracto-todo" class="btn btn--secondary" style="flex-shrink: 0; min-width: auto; padding: 0 16px; font-weight: 700; white-space: nowrap;" title="Ver todo ordenado por fecha">
-                                            TODO
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div id="informe-resultado-container" style="margin-top: var(--sp-4);">
-                                <div class="empty-state" style="background:transparent; padding:var(--sp-2); border:none;">
-                                    <p style="font-size:0.85rem;">
-                                        Selecciona una cuenta o pulsa <strong>TODO</strong>.
-                                    </p>
-                                </div>
-                            </div>
+        <details id="acordeon-flujo_caja" class="dashboard-widget informe-acordeon">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Flujo de Caja</h3>
+                    <p class="widget-subtitle">Entradas vs. Salidas mensuales</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                ${filterControlsHTML}
+                <div id="informe-content-flujo_caja" style="min-height: 250px; margin-top: 10px;">
+                     <div class="skeleton" style="height: 250px; border-radius: 12px;"></div>
+                </div>
+            </div>
+        </details>
+
+
+        <div class="analysis-section-label">FUTURO Y METAS</div>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--reloj"><span class="material-icons">update</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Recurrentes</h3>
+                    <p class="widget-subtitle">Suscripciones y pagos fijos</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                <div id="pending-recurrents-container"></div>
+                <p class="form-label" style="margin-bottom: 12px;">Toca para editar:</p>
+                <div id="recurrentes-list-container"></div>
+            </div>
+        </details>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--presu"><span class="material-icons">savings</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Presupuestos</h3>
+                    <p class="widget-subtitle">Control de gasto anual</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="form-group" style="flex-grow: 1; margin: 0;">
+                        <label for="budget-year-selector" class="form-label">Año Fiscal</label>
+                        <select id="budget-year-selector" class="form-select"></select>
+                    </div>
+                    <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: 12px;">
+                        <span class="material-icons" style="font-size: 16px;">edit</span> Gestionar
+                    </button>
+                </div>
+                
+                <div id="annual-budget-dashboard">
+                    <div id="budget-kpi-container" class="kpi-grid"></div>
+                    <div class="card" style="margin-top: 16px; box-shadow: none; border: 1px solid var(--c-outline);">
+                        <h3 class="card__title" style="font-size: 0.9rem;">Tendencia</h3>
+                        <div class="card__content">
+                            <div class="chart-container" style="height: 200px;"><canvas id="budget-trend-chart"></canvas></div>
                         </div>
                     </div>
-                </details>
-            </div>
+                    <div id="budget-details-list" style="margin-top: 16px;"></div>
+                </div>
 
-            <div class="card card--no-bg accordion-wrapper">
-                <details id="acordeon-flujo_caja" class="accordion informe-acordeon">
-                    <summary>
-                        <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                            <span class="material-icons">bar_chart</span> Flujo de Caja (Ingresos vs Gastos)
-                        </h3>
-                        <span class="material-icons accordion__icon">expand_more</span>
-                    </summary>
-                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                        ${filterControlsHTML}
-                        <div id="informe-content-flujo_caja" style="min-height: 250px;">
-                             <div class="skeleton" style="height: 250px; border-radius: var(--border-radius-lg);"></div>
-                        </div>
-                    </div>
-                </details>
+                <div id="budget-init-placeholder" class="empty-state hidden">
+                    <span class="material-icons" style="font-size: 48px; color: var(--c-outline);">savings</span>
+                    <h3 style="margin-top: 10px;">Sin Presupuesto</h3>
+                    <button data-action="update-budgets" class="btn btn--primary" style="margin-top: 16px;">
+                        Crear Plan
+                    </button>
+                </div>
             </div>
-            </div>
+        </details>
 
-        <div>
-            <h3 style="margin: 0 16px 10px 16px; font-size: 0.9rem; color: var(--c-on-surface-secondary); text-transform: uppercase; letter-spacing: 1px;">Planificación</h3>
-
-            <div class="card card--no-bg accordion-wrapper">
-                <details class="accordion">
-                    <summary>
-                        <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
-                        <span class="material-icons accordion__icon">expand_more</span>
-                    </summary>
-                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                        <div id="pending-recurrents-container"></div>
-                        <p class="form-label" style="margin-bottom: var(--sp-3);">Pulsa en una operación para editarla.</p>
-                        <div id="recurrentes-list-container"></div>
-                    </div>
-                </details>
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--informe"><span class="material-icons">auto_graph</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Informe Custom</h3>
+                    <p class="widget-subtitle">Tus métricas favoritas</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h4 id="informe-widget-title" style="margin: 0; font-size: 0.9rem; font-weight: 700;">Mi Informe</h4>
+                    <button class="btn btn--secondary" data-action="show-informe-builder" style="padding: 4px 10px; font-size: 0.75rem;">
+                        <span class="material-icons" style="font-size: 14px;">settings</span>
+                    </button>
+                </div>
+                <div id="informe-widget-content">
+                    <div class="skeleton" style="height: 200px; border-radius: 12px;"></div>
+                </div>
             </div>
-
-            <div class="card card--no-bg accordion-wrapper">
-                <details class="accordion">
-                    <summary>
-                        <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">request_quote</span>Presupuestos Anuales</h3>
-                        <span class="material-icons accordion__icon">expand_more</span>
-                    </summary>
-                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
-                            <div class="form-group" style="flex-grow: 1; margin: 0;">
-                                <label for="budget-year-selector" class="form-label">Año</label>
-                                <select id="budget-year-selector" class="form-select"></select>
-                            </div>
-                            <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: var(--sp-3);">
-                                <span class="material-icons" style="font-size: 16px;">edit_calendar</span><span>Gestionar</span>
-                            </button>
-                        </div>
-                        
-                        <div id="annual-budget-dashboard">
-                            <div id="budget-kpi-container" class="kpi-grid"></div>
-                            <div class="card" style="margin-top: var(--sp-4);">
-                                <h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia</h3>
-                                <div class="card__content">
-                                    <div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div>
-                                </div>
-                            </div>
-                            <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
-                        </div>
-                        <div id="budget-init-placeholder" class="empty-state hidden">
-                            <span class="material-icons">edit_calendar</span>
-                            <h3>Define tu Plan</h3>
-                            <button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);">
-                                <span>Crear Presupuestos</span>
-                            </button>
-                        </div>
-                    </div>
-                </details>
-            </div>
-
-            <div class="card card--no-bg accordion-wrapper">
-                <details class="accordion">
-                    <summary>
-                        <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">auto_graph</span>Informe Personalizado</h3>
-                        <span class="material-icons accordion__icon">expand_more</span>
-                    </summary>
-                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-3);">
-                            <h4 id="informe-widget-title" style="margin: 0; font-size: var(--fs-base); font-weight: 700; color: var(--c-on-surface);">Mi Informe</h4>
-                            <button class="btn btn--secondary" data-action="show-informe-builder" style="padding: 4px 10px; font-size: 0.75rem;">
-                                <span class="material-icons" style="font-size: 14px;">settings</span> Configurar
-                            </button>
-                        </div>
-                        <div id="informe-widget-content">
-                            <div class="skeleton" style="height: 240px; border-radius: var(--border-radius-lg);"></div>
-                        </div>
-                    </div>
-                </details>
-            </div>
-        </div>
+        </details>
+        
+        <div style="height: 80px;"></div>
     `;
 
-    // --- LÓGICA DE INICIALIZACIÓN (COMBINADA) ---
-    
-    // 1. Lógica de PLANIFICAR
+    // --- LÓGICA JAVASCRIPT (IGUAL QUE ANTES) ---
+    // 1. Planificación
     const yearSelect = container.querySelector('#budget-year-selector');
     if (yearSelect) {
         const currentYear = new Date().getFullYear();
@@ -6072,12 +6081,10 @@ const renderPlanificacionPage = () => {
     renderRecurrentsListOnPage(); 
     renderInformeWidgetContent();
 
-    // 2. Lógica de PATRIMONIO e INFORMES
+    // 2. Patrimonio
     setTimeout(async () => {
-        // Widget de Patrimonio
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
         
-        // Extracto de Cuenta
         const btnTodo = select('btn-extracto-todo');
         if (btnTodo) {
             const newBtn = btnTodo.cloneNode(true);
@@ -6099,7 +6106,6 @@ const renderPlanificacionPage = () => {
             selectCuenta.addEventListener('change', () => { handleGenerateInformeCuenta(null, null); });
         }
         
-        // Portafolio
         const acordeonPortafolio = select('acordeon-portafolio');
         if (acordeonPortafolio) {
             const loadPortfolioData = async () => {
@@ -6114,7 +6120,6 @@ const renderPlanificacionPage = () => {
             });
         }
 
-        // ▼▼▼ NUEVA LÓGICA PARA FLUJO DE CAJA ▼▼▼
         const acordeonFlujo = select('acordeon-flujo_caja');
         if (acordeonFlujo) {
             acordeonFlujo.addEventListener('toggle', () => {
@@ -6124,17 +6129,13 @@ const renderPlanificacionPage = () => {
                         renderInformeFlujoCaja(flujoContainer);
                         acordeonFlujo.dataset.loaded = "true";
                     } else {
-                        console.warn('Función renderInformeFlujoCaja no encontrada');
-                        if(flujoContainer) flujoContainer.innerHTML = '<p class="form-error">No se pudo cargar el gráfico.</p>';
+                         if(flujoContainer) flujoContainer.innerHTML = '<p class="form-error">Error al cargar gráfico.</p>';
                     }
                 }
             });
         }
-        // ▲▲▲ FIN DE LA NUEVA LÓGICA ▲▲▲
-
     }, 50);
 };
-
 
   // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF      ===
