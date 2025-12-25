@@ -646,7 +646,6 @@ const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", auth
 const PAGE_IDS = {
     PANEL: 'panel-page',
     DIARIO: 'diario-page',
-    PATRIMONIO: 'patrimonio-page',
     PLANIFICAR: 'planificar-page',
     AJUSTES: 'ajustes-page',
 };
@@ -2456,9 +2455,6 @@ const navigateTo = async (pageId, isInitial = false) => {
 const pageRenderers = {
     [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    // ▼▼▼ CAMBIO AQUÍ ▼▼▼
-    [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
-    // ▲▲▲ FIN CAMBIO ▲▲▲
     [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
     [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
 };
@@ -8854,15 +8850,13 @@ const handleInputFocus = (e) => {
     hapticFeedback('light');
     showCalculator(e.target);
 };
-// --- PARCHES DE COMPATIBILIDAD ---
-// Añade esto al final de main.js o en el bloque de funciones globales
 const renderInversionesView = async () => {
-    await navigateTo(PAGE_IDS.PATRIMONIO);
+    // Redirigimos a la nueva pestaña unificada
+    await navigateTo(PAGE_IDS.PLANIFICAR); 
 };
-
-const renderInversionesPage = async (containerId) => {
-    // Si se llama con un ID específico, ignoramos y renderizamos la página completa de patrimonio
-    await renderPatrimonioPage();
+const renderInversionesPage = async (containerId) => { 
+    // Usamos la nueva función de renderizado
+    await renderPlanificacionPage(); 
 };
 
 
