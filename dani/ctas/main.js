@@ -4278,63 +4278,100 @@ const renderAjustesPage = () => {
     const container = select(PAGE_IDS.AJUSTES);
     if (!container) return;
 
+    // Estructura HTML de la nueva página de Ajustes, agrupada por temas.
     container.innerHTML = `
-        <header style="padding: 24px 16px 8px 16px;">
-            <h1 style="font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; margin: 0;">
-                Configuración
-            </h1>
-            <p style="color: var(--c-on-surface-secondary); margin-top: 4px; font-size: 0.95rem;">
-                Personaliza tu experiencia
-            </p>
-        </header>
+        <div style="padding-bottom: var(--sp-4);">
 
-        <div class="analysis-section-label">GESTIÓN DE DATOS</div>
-
-        <details class="dashboard-widget">
-            <summary class="widget-header">
-                <div class="icon-box" style="background: rgba(255, 82, 82, 0.1); color: #ff5252;">
-                    <span class="material-icons">backup</span>
+            <!-- Grupo 1: Gestión de Datos -->
+            <h3 class="settings-group__title">Gestión de Datos</h3>
+            <div class="card">
+                <div class="card__content" style="padding: 0;">
+                    <button class="settings-item" data-action="manage-cuentas">
+                        <span class="material-icons">account_balance_wallet</span>
+                        <span class="settings-item__label">Gestionar Cuentas</span>
+                        <span class="material-icons">chevron_right</span>
+                    </button>
+                    <button class="settings-item" data-action="manage-conceptos">
+                        <span class="material-icons">label</span>
+                        <span class="settings-item__label">Gestionar Conceptos</span>
+                        <span class="material-icons">chevron_right</span>
+                    </button>
                 </div>
-                <div class="widget-info">
-                    <h3 class="widget-title">Copia de Seguridad</h3>
-                    <p class="widget-subtitle">Importar y exportar datos</p>
-                </div>
-                <span class="material-icons widget-arrow">expand_more</span>
-            </summary>
-            <div class="widget-content" style="padding-top: 16px; padding-bottom: 24px;">
-                <button data-action="export-json" class="btn btn--secondary btn--full" style="margin-bottom: 12px; justify-content: center;">
-                    <span class="material-icons">download</span> Exportar Copia (JSON)
-                </button>
-                <button data-action="import-json-wizard" class="btn btn--secondary btn--full" style="justify-content: center;">
-                    <span class="material-icons">upload</span> Importar Copia (JSON)
-                </button>
-                <p class="form-label" style="text-align: center; margin-top: 16px; font-size: 0.8rem;">
-                    Guarda tus datos regularmente para no perderlos.
-                </p>
             </div>
-        </details>
 
-        <div class="analysis-section-label">CUENTA Y SEGURIDAD</div>
+            <!-- Grupo 2: Copias de Seguridad y Migración -->
+        <h3 class="settings-group__title">Copias de Seguridad y Migración</h3>
+        <div class="card">
+            <div class="card__content" style="padding: 0;">
+                <button class="settings-item" data-action="export-data">
+                    <span class="material-icons text-positive">cloud_upload</span>
+                    <span class="settings-item__label">Exportar Copia (JSON)</span>
+                    <span class="material-icons">chevron_right</span>
+                </button>
+                 <button class="settings-item" data-action="export-csv">
+                    <span class="material-icons text-positive">description</span>
+                    <span class="settings-item__label">Exportar a CSV (Excel)</span>
+                    <span class="material-icons">chevron_right</span>
+                </button>
+                <button class="settings-item" data-action="import-data">
+                    <span class="material-icons text-warning">cloud_download</span>
+                    <span class="settings-item__label">Importar Copia (JSON)</span>
+                    <span class="material-icons">chevron_right</span>
+                </button>
+                <button class="settings-item" data-action="import-csv">
+                     <span class="material-icons text-warning">grid_on</span>
+                    <span class="settings-item__label">Importar desde CSV</span>
+                    <span class="material-icons">chevron_right</span>
+                </button>
 
-        <div class="dashboard-widget" style="padding: 0;">
-            <div class="widget-header" onclick="auth.signOut()" style="border-bottom: none;">
-                <div class="icon-box" style="background: rgba(255, 82, 82, 0.1); color: #ff5252;">
-                    <span class="material-icons">logout</span>
-                </div>
-                <div class="widget-info">
-                    <h3 class="widget-title" style="color: var(--c-danger);">Cerrar Sesión</h3>
-                    <p class="widget-subtitle">Salir de la aplicación de forma segura</p>
-                </div>
-                <span class="material-icons" style="color: var(--c-danger);">chevron_right</span>
+                <!-- ===== INICIO DE LA MODIFICACIÓN ===== -->
+                <!-- Este es el nuevo botón que hemos añadido -->
+                <button class="settings-item text-danger" data-action="recalculate-balances">
+                    <span class="material-icons">rule_folder</span>
+                    <span class="settings-item__label">Auditar y Corregir Saldos</span>
+                    <span class="material-icons">chevron_right</span>
+                </button>
+                <!-- ===== FIN DE LA MODIFICACIÓN ===== -->
+                
             </div>
         </div>
-        
-        <div style="text-align: center; margin-top: 40px; margin-bottom: 100px; opacity: 0.5;">
-            <img src="icons/icon-192x192.png" alt="Logo" style="width: 48px; height: 48px; border-radius: 12px; margin-bottom: 8px; filter: grayscale(100%);">
-            <p style="font-size: 0.8rem; margin: 0;">aiDANaI v2.5.0</p>
-            <p style="font-size: 0.7rem; margin: 4px 0 0 0;">Diseñado para tus finanzas</p>
+            
+            <!-- Grupo 3: Seguridad y Cuenta -->
+            <h3 class="settings-group__title">Seguridad y Cuenta</h3>
+			
+            <div class="card">
+                <div class="card__content" style="padding: 0;">
+                    <div class="settings-item" style="cursor: default;">
+                        <span class="material-icons">alternate_email</span>
+                        <span id="config-user-email" class="settings-item__label">Cargando...</span>
+                    </div>
+                    <button class="settings-item" data-action="set-pin">
+                        <span class="material-icons">pin</span>
+                        <span class="settings-item__label">Configurar PIN de acceso</span>
+                        <span class="material-icons">chevron_right</span>
+                    </button>
+					<h3 class="settings-group__title">Personalización</h3>
+<div class="card">
+    <div class="card__content" style="padding: 0;">
+        <button class="settings-item" data-action="rename-ledgers">
+            <span class="material-icons text-info">edit_square</span>
+            <span class="settings-item__label">Renombrar Cajas (A/B/C)</span>
+            <span class="material-icons">chevron_right</span>
+        </button>
+    </div>
+</div>
+                    <button class="settings-item text-danger" data-action="logout">
+                        <span class="material-icons">logout</span>
+                        <span class="settings-item__label">Cerrar Sesión</span>
+                    </button>
+                </div>
+            </div>
+
         </div>
     `;
+    
+    // Esta función, que ya tienes, se encarga de mostrar tu email en la lista.
+    loadConfig();
 };
 
 const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBudgetedExpense) => {
