@@ -1897,13 +1897,32 @@ const formatCurrencyHTML = (numInCents) => {
 };
 const updateLedgerButtonUI = () => {
     const btn = select('ledger-toggle-btn');
+    const oneDriveBtn = select('main-menu-btn'); // Seleccionamos el icono de cartera
+    
+    // Definimos los colores exactos para cada caja
+    const colors = {
+        'A': '#007bff', // Azul (Caja A)
+        'B': '#dc3545', // Rojo (Caja B)
+        'C': '#28a745'  // Verde (Caja C)
+    };
+    
+    // Obtenemos el color actual (o Azul por defecto)
+    const activeColor = colors[currentLedger] || colors['A'];
+
     if (btn) {
-        // Obtenemos el nombre usando tu función helper existente
         const name = getLedgerName(currentLedger);
-        
-        // Actualizamos el texto y el título
         btn.textContent = name;
         btn.title = `Estás en: ${name}`;
+        
+        // Forzamos el color del botón Caja también para asegurar sincronía
+        btn.style.borderColor = activeColor;
+        btn.style.color = activeColor;
+    }
+
+    // --- AQUÍ ESTÁ EL CAMBIO ---
+    // Pintamos el icono de OneDrive del mismo color
+    if (oneDriveBtn) {
+        oneDriveBtn.style.color = activeColor;
     }
 };
 /* --- HELPER: Convierte HEX a RGBA para los gradientes --- */
