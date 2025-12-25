@@ -1896,33 +1896,41 @@ const formatCurrencyHTML = (numInCents) => {
     return db.config?.ledgerNames?.[letter] || `Caja ${letter}`;
 };
 const updateLedgerButtonUI = () => {
-    const btn = select('ledger-toggle-btn');
-    const oneDriveBtn = select('main-menu-btn'); // Seleccionamos el icono de cartera
+    // 1. Seleccionamos los elementos
+    const btn = document.getElementById('ledger-toggle-btn');
+    const oneDriveBtn = document.getElementById('main-menu-btn');
     
-    // Definimos los colores exactos para cada caja
+    // 2. Definimos los colores (A=Azul, B=Rojo, C=Verde)
     const colors = {
-        'A': '#007bff', // Azul (Caja A)
-        'B': '#dc3545', // Rojo (Caja B)
-        'C': '#28a745'  // Verde (Caja C)
+        'A': '#007bff', 
+        'B': '#dc3545', 
+        'C': '#28a745'
     };
     
-    // Obtenemos el color actual (o Azul por defecto)
+    // 3. Obtenemos el color actual
     const activeColor = colors[currentLedger] || colors['A'];
 
+    // 4. Aplicamos el cambio al botón de CAJA (Caja A, B, C)
     if (btn) {
         const name = getLedgerName(currentLedger);
         btn.textContent = name;
         btn.title = `Estás en: ${name}`;
         
-        // Forzamos el color del botón Caja también para asegurar sincronía
-        btn.style.borderColor = activeColor;
-        btn.style.color = activeColor;
+        // Forzamos el color con prioridad máxima
+        btn.style.setProperty('color', activeColor, 'important');
+        btn.style.setProperty('border-color', activeColor, 'important');
     }
 
-    // --- AQUÍ ESTÁ EL CAMBIO ---
-    // Pintamos el icono de OneDrive del mismo color
+    // 5. Aplicamos el cambio al botón de ONEDRIVE (Cartera)
     if (oneDriveBtn) {
-        oneDriveBtn.style.color = activeColor;
+        // Cambiamos el color del botón
+        oneDriveBtn.style.setProperty('color', activeColor, 'important');
+        
+        // TRUCO EXTRA: Buscamos el icono de dentro y también lo pintamos
+        const iconInside = oneDriveBtn.querySelector('.material-icons');
+        if (iconInside) {
+            iconInside.style.setProperty('color', activeColor, 'important');
+        }
     }
 };
 /* --- HELPER: Convierte HEX a RGBA para los gradientes --- */
