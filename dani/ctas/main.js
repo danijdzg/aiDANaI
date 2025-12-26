@@ -11616,7 +11616,7 @@ const renderPagePatrimonioExtracto = () => {
     updateExtractoList();
 };
 
-// Función auxiliar para filtrar y pintar la lista
+// Función auxiliar para filtrar y pintar la lista (CORREGIDA Y CERRADA)
 const updateExtractoList = () => {
     const listContainer = document.getElementById('extracto-list-content');
     if (!listContainer) return;
@@ -11629,7 +11629,6 @@ const updateExtractoList = () => {
     if (extractoState.startDate) {
         movs = movs.filter(m => m.fecha.split('T')[0] >= extractoState.startDate);
     }
-    
     // Filtro por Fecha (Hasta)
     if (extractoState.endDate) {
         movs = movs.filter(m => m.fecha.split('T')[0] <= extractoState.endDate);
@@ -11658,14 +11657,13 @@ const updateExtractoList = () => {
             const dateObj = new Date(m.fecha);
             const dateStr = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
             html += `
-                <div style="padding: 10px 20px; background: var(--c-background); color: var(--c-primary); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; position:sticky; top: 73px; z-index:5; border-bottom:1px solid var(--c-outline);">
-                    ${dateStr}
-                </div>`;
+            <div style="padding: 10px 20px; background: var(--c-background); color: var(--c-primary); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; position:sticky; top: 73px; z-index:5; border-bottom:1px solid var(--c-outline);">
+                ${dateStr}
+            </div>`;
             lastDate = dateKey;
         }
 
-        // Renderizado de la Tarjeta (Reutilizando tu estilo existente)
-        // Nota: Usamos una versión simplificada de renderVirtualListItem para este contexto
+        // Renderizado de la Tarjeta
         const cantidadClass = m.cantidad < 0 ? 'text-negative' : 'text-positive';
         const symbol = m.cantidad < 0 ? '' : '+';
         
@@ -11674,20 +11672,19 @@ const updateExtractoList = () => {
         const concepto = db.conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
 
         html += `
-            <div class="transaction-card" style="margin: 0; border-radius: 0; border-bottom: 1px solid var(--c-outline);">
-                <div class="transaction-card__content">
-                    <div class="transaction-card__details">
-                        <div class="transaction-card__row-1">${m.descripcion || concepto}</div>
-                        <div class="transaction-card__row-2" style="opacity:0.7;">${cuenta} • ${concepto}</div>
-                    </div>
-                    <div class="transaction-card__figures">
-                        <strong class="${cantidadClass}" style="font-size: 1rem;">
-                            ${symbol}${formatCurrencyHTML(m.cantidad)}
-                        </strong>
+        <div class="transaction-card" style="margin: 0; border-radius: 0; border-bottom: 1px solid var(--c-outline);">
+            <div class="transaction-card__content">
+                <div class="transaction-card__details">
+                    <div class="transaction-card__row-1">${m.descripcion || concepto}</div>
+                    <div class="transaction-card__row-2" style="font-size: 0.75rem; color: var(--c-on-surface-secondary);">
+                        ${cuenta} • ${concepto}
                     </div>
                 </div>
+                <div class="transaction-card__figures">
+                    <div class="transaction-card__amount ${cantidadClass}">${symbol}${formatCurrency(m.cantidad)}</div>
+                </div>
             </div>
-        `;
+        </div>`;
     });
 
     listContainer.innerHTML = html;
