@@ -9450,11 +9450,18 @@ const handleStart = (e) => {
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
-            'open-movement-form': (e) => {
-                const type = e.target.closest('[data-type]').dataset.type;
-                hideModal('main-add-sheet');
-                setTimeout(() => startMovementForm(null, false, type), 250);
-            },
+            'open-movement-form': () => {
+    // Cerramos cualquier menú previo
+    const menu = document.getElementById('main-menu-popover');
+    if (menu) menu.classList.remove('popover-menu--visible');
+    
+    // Obtenemos el ID del movimiento pulsado
+    // (actionTarget es el elemento que pulsaste, definido al inicio del listener)
+    const id = actionTarget.dataset.id; 
+    
+    // Abrimos el formulario en modo edición
+    startMovementForm(id, false); 
+},
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,
