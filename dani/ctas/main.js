@@ -5980,52 +5980,91 @@ const renderSavingsRateGauge = (canvasId, percentage) => {
 };
 
 		
-        const _renderRecientesFromCache = async () => {
-            const recientesContainer = select('inicio-view-recientes');
-            if (!recientesContainer) return;
-            
-            const movsToDisplay = recentMovementsCache;
-            
-            if (movsToDisplay.length === 0) {
-                recientesContainer.innerHTML = `<div class="empty-state" style="border: none; background: transparent;"><p>No hay movimientos recientes en esta contabilidad.</p></div>`;
-                return;
+        // =================================================================
+// === FUNCIÓN CORREGIDA PARA LA PANTALLA DE INICIO ===
+// =================================================================
+const _renderRecientesFromCache = async () => {
+    // 1. Buscamos el contenedor por su nombre REAL en tu HTML
+    const recientesContainer = document.getElementById('inicio-view-recientes');
+    if (!recientesContainer) return;
+
+    // 2. Obtenemos los datos guardados en memoria
+    const movsToDisplay = recentMovementsCache || [];
+
+    if (movsToDisplay.length === 0) {
+        recientesContainer.innerHTML = `<div class="empty-state" style="padding: 20px; text-align: center; opacity: 0.6; font-size: 0.9rem;">No hay movimientos recientes.</div>`;
+        return;
+    }
+
+    // 3. Ordenamos: Lo más nuevo arriba
+    movsToDisplay.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    // 4. Cogemos solo los 5 últimos para no llenar la pantalla
+    const top5 = movsToDisplay.slice(0, 5);
+
+    let html = '';
+    
+    // 5. Creamos la lista visual
+    top5.forEach(m => {
+        const isGasto = m.cantidad < 0;
+        const amountClass = isGasto ? 'text-negative' : 'text-positive';
+        const amountSign = m.cantidad > 0 ? '+' : '';
+        
+        // Formatear fecha
+        const dateObj = new Date(m.fecha);
+        const dateStr = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+        
+        // Configurar Iconos y Colores
+        let title = m.descripcion;
+        let subtitle = 'Movimiento';
+        let icon = isGasto ? 'arrow_downward' : 'arrow_upward';
+        let iconColor = isGasto ? '#FF3B30' : '#34C759'; // Rojo o Verde Apple
+        let iconBg = isGasto ? 'rgba(255, 59, 48, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+
+        // Buscar el nombre del concepto si existe
+        if (typeof db !== 'undefined' && db.conceptos) {
+            const concepto = db.conceptos.find(c => c.id === m.conceptoId);
+            if (concepto) {
+                if (!title) title = concepto.nombre;
+                subtitle = concepto.nombre;
             }
+        }
+        if (!title) title = 'Sin descripción';
 
-            await processMovementsForRunningBalance(movsToDisplay, true); 
+        // Caso especial: Traspasos
+        if (m.tipo === 'traspaso') {
+            title = 'Traspaso';
+            icon = 'swap_horiz';
+            iconColor = '#007AFF'; // Azul
+            iconBg = 'rgba(0, 122, 255, 0.1)';
+            amountClass = 'text-info'; // Color neutro/informativo
+        }
 
-            const grouped = {};
-            const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-            movsToDisplay.forEach(mov => {
-                const dateKey = mov.fecha.slice(0, 10);
-                if (!grouped[dateKey]) {
-                    grouped[dateKey] = { movements: [], total: 0 };
-                }
-                grouped[dateKey].movements.push(mov);
-                if (mov.tipo === 'traspaso') {
-                    const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
-                    const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-                    if (origenVisible && !destinoVisible) { grouped[dateKey].total -= mov.cantidad; }
-                    else if (!origenVisible && destinoVisible) { grouped[dateKey].total += mov.cantidad; }
-                } else {
-                    grouped[dateKey].total += mov.cantidad;
-                }
-            });
+        // --- LA SOLUCIÓN ESTÁ AQUÍ: data-action="open-movement-form" ---
+        html += `
+        <div class="list-item" 
+             data-action="open-movement-form" 
+             data-id="${m.id}"
+             style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.08); cursor: pointer;">
+            
+            <div style="width: 40px; height: 40px; border-radius: 12px; background-color: ${iconBg}; display: flex; align-items: center; justify-content: center; margin-right: 12px; flex-shrink: 0;">
+                <span class="material-icons" style="color: ${iconColor}; font-size: 20px;">${icon}</span>
+            </div>
+            
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-on-surface);">${title}</div>
+                <div style="font-size: 0.8rem; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-on-surface-secondary);">${dateStr} • ${subtitle}</div>
+            </div>
+            
+            <div class="${amountClass}" style="font-weight: 700; font-size: 0.95rem; margin-left: 8px; white-space: nowrap;">
+                ${amountSign}${parseFloat(m.cantidad / 100).toLocaleString('es-ES', {minimumFractionDigits: 2})} €
+            </div>
+        </div>
+        `;
+    });
 
-            let html = '';
-            const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-            for (const dateKey of sortedDates) {
-                const group = grouped[dateKey];
-                html += renderVirtualListItem({ type: 'date-header', date: dateKey, total: group.total });
-                
-                group.movements.sort((a, b) => b.id.localeCompare(a.id));
-
-                for (const mov of group.movements) {
-                    html += renderVirtualListItem({ type: 'transaction', movement: mov });
-                }
-            }
-            html += `<div style="text-align: center; margin-top: var(--sp-4);"><button class="btn btn--secondary" data-action="navigate" data-page="${PAGE_IDS.DIARIO}">Ver todos los movimientos</button></div>`;
-            recientesContainer.innerHTML = html;
-        };
+    recientesContainer.innerHTML = html;
+};
 	const renderPendingRecurrents = () => {
     const container = select('pending-recurrents-container');
     if (!container || !db.recurrentes) return;
