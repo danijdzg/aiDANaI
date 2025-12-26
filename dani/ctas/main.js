@@ -12010,3 +12010,26 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
+// ===============================================================
+// === SOLUCIÓN DEFINITIVA PARA CLICS BLOQUEADOS ===
+// ===============================================================
+// Sobrescribimos el gestor de clics para ignorar cualquier bloqueo anterior
+document.addEventListener('click', async (e) => {
+    // 1. Buscamos el botón pulsado (incluso si pulsas en el icono de dentro)
+    const target = e.target.closest('[data-action]');
+    
+    // Si no es un botón de acción, ignoramos
+    if (!target) return;
+
+    // 2. Obtenemos el nombre de la acción
+    const action = target.dataset.action;
+
+    // 3. ¡EJECUTAMOS SIN MIEDO! (Sin comprobar isNavigating)
+    if (action && typeof actions !== 'undefined' && actions[action]) {
+        // Pequeña vibración para confirmar que el clic funciona
+        if (navigator.vibrate) navigator.vibrate(5);
+        
+        console.log('Forzando ejecución de acción:', action);
+        await actions[action](e);
+    }
+}, true); // El 'true' aquí es clave: captura el clic antes que nadie
