@@ -3947,7 +3947,7 @@ const renderVirtualListItem = (item) => {
 
         // HTML FINAL: Sustituimos la barra por la burbuja de icono
         return `
-        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
+        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="open-movement-form">
             
             <div class="t-icon-bubble ${bubbleClass}">
                 <span class="material-icons">${iconName}</span>
@@ -4322,7 +4322,71 @@ const loadMoreMovements = async (isInitial = false) => {
     movementsObserver.observe(trigger);
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
+/* =============================================================== */
+/* === NUEVA FUNCIÓN: Generar HTML de un movimiento === */
+/* =============================================================== */
+const getMovimientoListItemHTML = (mov, showDate = false) => {
+    // 1. Cálculos visuales
+    const isIngreso = mov.tipo === 'ingreso';
+    const amountClass = isIngreso ? 'amount--positive' : 'amount--negative';
+    const amountPrefix = isIngreso ? '+' : '';
+    const formattedDate = new Date(mov.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+    // 2. Iconos y Textos inteligentes
+    let icon = 'sell';
+    let title = 'General';
+    let subtitle = '';
+
+    if (mov.tipo === 'traspaso') {
+        icon = 'swap_horiz';
+        title = 'Traspaso';
+        // Buscamos nombres de cuentas
+        const cOrigen = (AppStore.cuentas || []).find(c => c.id === mov.cuentaOrigenId)?.nombre || '??';
+        const cDestino = (AppStore.cuentas || []).find(c => c.id === mov.cuentaDestinoId)?.nombre || '??';
+        subtitle = `${cOrigen} ➝ ${cDestino}`;
+    } else {
+        // Gasto o Ingreso normal
+        const concepto = (AppStore.conceptos || []).find(c => c.id === mov.conceptoId);
+        if (concepto) {
+            icon = concepto.icono || 'sell';
+            title = concepto.nombre;
+        }
+        const cuenta = (AppStore.cuentas || []).find(c => c.id === mov.cuentaId)?.nombre || '';
+        subtitle = cuenta ? `${title} • ${cuenta}` : title;
+        // Si el movimiento tiene descripción manual, la usamos de título
+        if (mov.descripcion) title = mov.descripcion;
+    }
+
+    // 3. HTML FINAL (Con los activadores de clic para editar)
+    // Fíjate en data-action="open-movement-form" -> Esto activa el editor
+    return `
+    <div class="list-item movement-item" 
+         data-action="open-movement-form" 
+         data-id="${mov.id}" 
+         data-type="${mov.tipo}"
+         style="cursor: pointer; position: relative; overflow: hidden;">
+         
+        <div class="list-item__icon ${isIngreso ? 'bg-success-transparent' : 'bg-danger-transparent'}"
+             style="${mov.tipo === 'traspaso' ? 'background-color: var(--c-surface-variant);' : ''}">
+            <span class="material-icons ${isIngreso ? 'text-success' : 'text-danger'}"
+                  style="${mov.tipo === 'traspaso' ? 'color: var(--c-on-surface);' : ''}">${icon}</span>
+        </div>
+        
+        <div class="list-item__content">
+            <div class="list-item__title">${title}</div>
+            <div class="list-item__subtitle">
+                ${showDate ? `<span style="opacity:0.8; margin-right:4px;">${formattedDate}</span>` : ''}
+                <span>${subtitle}</span>
+                ${mov.esRecurrente ? '<span class="material-icons" style="font-size: 13px; vertical-align: -2px; margin-left: 4px;">repeat</span>' : ''}
+            </div>
+        </div>
+        
+        <div class="list-item__amount ${amountClass}" style="${mov.tipo === 'traspaso' ? 'color: var(--c-on-surface);' : ''}">
+            ${amountPrefix}${parseFloat(mov.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+        </div>
+    </div>
+    `;
+};
 
 const renderDiarioPage = async () => {
     if (isDiarioPageRendering) {
@@ -9386,11 +9450,18 @@ const handleStart = (e) => {
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
-            'open-movement-form': (e) => {
-                const type = e.target.closest('[data-type]').dataset.type;
-                hideModal('main-add-sheet');
-                setTimeout(() => startMovementForm(null, false, type), 250);
-            },
+            'open-movement-form': () => {
+    // Cerramos cualquier menú previo
+    const menu = document.getElementById('main-menu-popover');
+    if (menu) menu.classList.remove('popover-menu--visible');
+    
+    // Obtenemos el ID del movimiento pulsado
+    // (actionTarget es el elemento que pulsaste, definido al inicio del listener)
+    const id = actionTarget.dataset.id; 
+    
+    // Abrimos el formulario en modo edición
+    startMovementForm(id, false); 
+},
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,
