@@ -11690,19 +11690,14 @@ const updateExtractoList = () => {
     listContainer.innerHTML = html;
 };
 
-
 /* ================================================================ */
 /* === LÓGICA DE ICONOS DE DIARIO (PEGAR AL FINAL DE MAIN.JS) === */
 /* ================================================================ */
-
 // 1. Función para cambiar la vista (Lista <-> Compacta)
 window.toggleDiarioView = function(btnElement) {
     const diarioContainer = document.getElementById('diario-page') || document.body;
     const icono = btnElement.querySelector('.material-icons');
-    
-    // Alternar clase
-    diarioContainer.classList.toggle('view-mode-compact');
-    
+    // Alternar clase diarioContainer.classList.toggle('view-mode-compact');
     // Cambiar icono
     if (diarioContainer.classList.contains('view-mode-compact')) {
         icono.textContent = 'view_list'; // Icono de lista
@@ -11712,21 +11707,20 @@ window.toggleDiarioView = function(btnElement) {
         console.log("Vista cambiada a: Normal");
     }
 };
-
 // 2. Control de Visibilidad al Navegar
 document.addEventListener('DOMContentLoaded', () => {
-    
     function actualizarIconos(paginaDestino) {
         const herramientas = document.getElementById('header-diario-tools');
         if (!herramientas) return;
-
         // ¿Estamos en la pestaña diario?
-        if (paginaDestino === 'diario' || paginaDestino === 'diario-page') {
-            herramientas.style.display = 'flex'; // MOSTRAR
+        if (paginaDestino === 'diario-page') {
+            herramientas.style.display = 'flex';
         } else {
-            herramientas.style.display = 'none'; // OCULTAR
+            herramientas.style.display = 'none';
         }
     }
+}); // <--- ESTO ES LO QUE TE FALTABA (El cierre del paréntesis y la llave)
+
 
     // Escuchar clics en el menú inferior
     const botonesNav = document.querySelectorAll('.bottom-nav__item');
