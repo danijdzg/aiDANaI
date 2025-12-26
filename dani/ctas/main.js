@@ -9325,13 +9325,8 @@ const handleStart = (e) => {
 
         // Gestión de acciones [data-action]
         const actionTarget = e.target.closest('[data-action]');
-       
-    // MEJORA: Prevención de doble clic si el botón ya está cargando o deshabilitado
-    if (actionTarget.classList.contains('btn--loading') || actionTarget.disabled) {
-        e.stopImmediatePropagation();
-        return;
-    }
-
+    if (!actionTarget) return;
+    
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
         const btn = actionTarget.closest('button');
         
