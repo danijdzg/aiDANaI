@@ -10283,86 +10283,160 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     }
 };
 const handleSaveMovement = async (form, btn) => {
-    // 1. Evitar dobles clics
-    if (btn && btn.dataset.isBusy === 'true') return;
-    if (btn) btn.dataset.isBusy = 'true';
+    // 1. Validaciones y UI
+    clearAllErrors(form.id);
+    if (!validateMovementForm()) {
+        hapticFeedback('error');
+        showToast('Revisa los campos marcados.', 'warning');
+        return false;
+    }
+
+    const saveBtn = select('save-movimiento-btn');
+    const saveNewBtn = select('save-and-new-movimiento-btn');
+    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
+
+    // Estado de carga
+    if (saveBtn) setButtonLoading(saveBtn, true);
+    if (saveNewBtn && isSaveAndNew) setButtonLoading(saveNewBtn, true);
+
+    const releaseButtons = () => {
+        if (saveBtn) setButtonLoading(saveBtn, false);
+        if (saveNewBtn) setButtonLoading(saveNewBtn, false);
+    };
 
     try {
-        // 2. Recoger datos del formulario
-        const id = document.getElementById('movimiento-id').value; // <--- AQUÍ ESTÁ LA CLAVE
-        const cantidadInput = document.getElementById('movimiento-cantidad').value;
-        const fecha = document.getElementById('movimiento-fecha').value;
-        const conceptoId = document.getElementById('movimiento-concepto').dataset.value;
-        const cuentaId = document.getElementById('movimiento-cuenta').dataset.value;
-        const tipo = document.getElementById('movimiento-tipo-selector').dataset.value || 'gasto';
-        const notas = document.getElementById('movimiento-notas').value;
-        const esRecurrente = document.getElementById('check-recurrente').checked;
+        // 2. Obtener datos del formulario
+        const getVal = (id) => select(id)?.value || '';
+        
+        // RECUPERAMOS EL ID PARA SABER SI ES EDICIÓN
+        const id = getVal('movimiento-id') || generateId(); 
+        const isEditing = getVal('movimiento-mode').startsWith('edit');
 
-        // Validaciones básicas
-        if (!cantidadInput || cantidadInput === '0' || cantidadInput === '0,00') {
-            throw new Error("Introduce una cantidad válida");
-        }
-        if (!conceptoId) throw new Error("Selecciona un concepto");
-        if (!cuentaId) throw new Error("Selecciona una cuenta");
+        const cantidadVal = parseCurrencyString(getVal('movimiento-cantidad'));
+        const cantidad = Math.round(cantidadVal * 100); // A céntimos
+        
+        // Detectar signo correcto según tipo (Gasto = negativo, Ingreso = positivo)
+        // Nota: Si es traspaso, la cantidad siempre es positiva (valor absoluto del movimiento)
+        const activeTypeBtn = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
+        const tipo = activeTypeBtn ? activeTypeBtn.dataset.type : 'gasto';
+        
+        let finalAmount = Math.abs(cantidad);
+        if (tipo === 'gasto') finalAmount = -finalAmount;
+        
+        const fecha = getVal('movimiento-fecha');
+        const descripcion = getVal('movimiento-descripcion').trim();
+        const esRecurrente = select('movimiento-recurrente')?.checked || false;
 
-        const cantidad = parseCurrency(cantidadInput);
-
-        // 3. Crear el objeto del movimiento
-        const movData = {
-            id: id || generateId(), // Si ya tiene ID (edición), lo mantenemos. Si no, creamos uno nuevo.
+        // Construir objeto de datos
+        const dataToSave = {
+            id: id,
             fecha: fecha,
-            cantidad: cantidad,
-            conceptoId: conceptoId,
-            cuentaId: cuentaId,
+            cantidad: finalAmount, // En céntimos
+            descripcion: descripcion,
             tipo: tipo,
-            notas: notas,
             esRecurrente: esRecurrente,
             updatedAt: new Date().toISOString()
         };
 
-        // 4. GUARDAR EN LA BASE DE DATOS (LA CORRECCIÓN)
-        if (id) {
-            // === MODO EDICIÓN: BUSCAR Y REEMPLAZAR ===
-            const index = db.movimientos.findIndex(m => m.id === id);
-            if (index !== -1) {
-                // Mantenemos la fecha de creación original si queremos
-                movData.createdAt = db.movimientos[index].createdAt || new Date().toISOString();
-                
-                // Sustituimos el viejo por el nuevo
-                db.movimientos[index] = movData;
-                console.log("✏️ Movimiento editado correctamente:", id);
-                showToast("Movimiento actualizado");
-            } else {
-                // Por seguridad, si tiene ID pero no lo encontramos, lo añadimos
-                db.movimientos.push(movData);
-            }
+        if (tipo === 'traspaso') {
+            dataToSave.cuentaOrigenId = getVal('movimiento-cuenta-origen');
+            dataToSave.cuentaDestinoId = getVal('movimiento-cuenta-destino');
+            dataToSave.conceptoId = ''; // Traspasos no suelen llevar concepto
         } else {
-            // === MODO CREACIÓN: AÑADIR NUEVO ===
-            movData.createdAt = new Date().toISOString();
-            db.movimientos.push(movData);
-            console.log("✨ Nuevo movimiento creado");
-            showToast("Movimiento guardado");
+            dataToSave.cuentaId = getVal('movimiento-cuenta');
+            dataToSave.conceptoId = getVal('movimiento-concepto');
         }
 
-        // 5. Guardar en memoria local / nube
-        await saveDb();
-
-        // 6. Limpieza y cierre
-        hideModal('movimiento-modal');
-        updateDashboardValues(); // Refrescar los números del panel
+        // 3. Lógica de Base de Datos (Firebase Batch)
+        const batch = fbDb.batch();
+        const userRef = fbDb.collection('users').doc(currentUser.uid);
         
-        // Si estamos en el diario, recargarlo para ver el cambio
-        if (typeof renderDiario === 'function' && document.getElementById(PAGE_IDS.DIARIO).style.display !== 'none') {
-            renderDiario();
+        // Referencia al documento del movimiento
+        const movRef = userRef.collection('movimientos').doc(id);
+        batch.set(movRef, dataToSave, { merge: true });
+
+        // 4. ACTUALIZACIÓN DE SALDOS (CRÍTICO)
+        // Si estamos editando, primero revertimos el impacto del movimiento anterior
+        if (isEditing) {
+            // Buscamos el movimiento original en memoria (AppStore es más fiable aquí)
+            const original = (await AppStore.getAll()).find(m => m.id === id);
+            
+            if (original) {
+                if (original.tipo === 'traspaso') {
+                    // Revertir traspaso: Devolver dinero a origen, quitar de destino
+                    batch.update(userRef.collection('cuentas').doc(original.cuentaOrigenId), { 
+                        saldo: firebase.firestore.FieldValue.increment(original.cantidad) 
+                    });
+                    batch.update(userRef.collection('cuentas').doc(original.cuentaDestinoId), { 
+                        saldo: firebase.firestore.FieldValue.increment(-original.cantidad) 
+                    });
+                } else {
+                    // Revertir normal: Restar la cantidad (si era gasto negativo, esto suma; si era ingreso, resta)
+                    batch.update(userRef.collection('cuentas').doc(original.cuentaId), { 
+                        saldo: firebase.firestore.FieldValue.increment(-original.cantidad) 
+                    });
+                }
+            }
+        }
+
+        // Aplicar el nuevo impacto
+        if (tipo === 'traspaso') {
+            // Nuevo traspaso: Restar de origen, sumar a destino
+            batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaOrigenId), { 
+                saldo: firebase.firestore.FieldValue.increment(-dataToSave.cantidad) 
+            });
+            batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaDestinoId), { 
+                saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) 
+            });
+        } else {
+            // Nuevo normal: Sumar la cantidad (negativa o positiva)
+            batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaId), { 
+                saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) 
+            });
+        }
+
+        // 5. Ejecutar escritura en DB
+        await batch.commit();
+
+        // 6. Actualizar Memoria (AppStore) para reflejar cambios instantáneamente
+        if (isEditing) {
+            AppStore.update(dataToSave);
+        } else {
+            AppStore.add(dataToSave);
+        }
+
+        // 7. Feedback y Cierre
+        hapticFeedback('success');
+        showToast(isEditing ? 'Movimiento actualizado.' : 'Movimiento guardado.', 'success');
+
+        if (!isSaveAndNew) {
+            hideModal('movimiento-modal');
+        } else {
+            // Resetear solo campos necesarios para "Guardar y nuevo"
+            select('movimiento-cantidad').value = '';
+            select('movimiento-descripcion').value = '';
+            // updateInputMirror si usas la calculadora visual
+            const mirror = select('movimiento-cantidad').parentNode.querySelector('.input-visual-mirror');
+            if(mirror) mirror.innerHTML = `<span class="currency-major">0</span><small class="currency-minor">,00</small>`;
+            
+            select('movimiento-cantidad').focus();
+        }
+
+        // 8. Refrescar UI (Panel y Diario)
+        scheduleDashboardUpdate(); // Actualiza gráficas del panel
+        
+        // Si estamos en el diario, forzar repintado
+        const diarioPage = select(PAGE_IDS.DIARIO);
+        if (diarioPage && diarioPage.classList.contains('view--active')) {
+            // Forzamos recarga de la lista
+            if (typeof renderDiarioPage === 'function') renderDiarioPage();
         }
 
     } catch (error) {
-        console.error(error);
-        showToast(error.message, 'error');
+        console.error("Error crítico al guardar:", error);
+        showToast("Error al guardar en la base de datos.", "danger");
     } finally {
-        if (btn) {
-            setTimeout(() => delete btn.dataset.isBusy, 300);
-        }
+        releaseButtons();
     }
 };
 
