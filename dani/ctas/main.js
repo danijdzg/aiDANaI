@@ -3947,30 +3947,25 @@ const renderVirtualListItem = (item) => {
 
         // HTML FINAL: Sustituimos la barra por la burbuja de icono
         return `
-    <div class="t-card ${highlightClass}" 
-         data-id="${m.id}" 
-         data-action="open-movement-form"  
-         data-type="${m.tipo}"
-         style="cursor: pointer;">
-         
-         <div class="t-icon-bubble ${bubbleClass}">
-            <span class="material-icons" style="font-size: 20px; color: ${iconColor};">${iconName}</span>
-         </div>
-         
-         <div class="t-content">
-            <div class="t-row-primary">
-                <span class="t-title">${m.descripcion || categoryName}</span>
-                <span class="t-amount ${amountClass}">${amountPrefix}${formatCurrency(m.cantidad)}</span>
+        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="open-movement-form">
+            
+            <div class="t-icon-bubble ${bubbleClass}">
+                <span class="material-icons">${iconName}</span>
             </div>
-            <div class="t-row-secondary">
-                <span class="t-subtitle">
-                    ${formatDate(m.fecha)} • ${subTitle}
-                    ${m.esRecurrente ? ' • <span class="material-icons" style="font-size:10px; vertical-align:middle">repeat</span>' : ''}
-                </span>
+            
+            <div class="t-content">
+                <div class="t-row-primary">
+                    <div class="t-line-1">${line1}</div>
+                    <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+                </div>
+                <div class="t-row-secondary">
+                    <div class="t-line-2">${line2}</div>
+                    ${m.tipo !== 'traspaso' ? `<div class="t-running-balance">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
+                </div>
             </div>
-         </div>
-    </div>
-    `;
+        </div>`;
+    }
+    return '';
 };
         
         const renderVisibleItems = () => {
@@ -7788,70 +7783,137 @@ const renderQuickAccessChips = () => {
 };
 
 
-const startMovementForm = (id = null, isTemplate = false, defaultType = 'gasto') => {
-    console.log("📝 Abriendo formulario. ID:", id);
+const startMovementForm = async (id = null, isRecurrent = false, initialType = 'gasto') => {
+    hapticFeedback('medium');
+    const form = select('form-movimiento');
+    if (!form) return;
+    
+    let data = null;
+    let mode = 'new';
 
-    // 1. Resetear formulario visualmente
-    const form = document.getElementById('form-movimiento');
-    if (form) {
-        form.reset();
-        // Limpiar clases de error
-        form.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
+    form.reset();
+    clearAllErrors(form.id);
+    
+    // Rellenamos los desplegables
+    populateAllDropdowns();
+
+    // Resetear selector de días semanal
+    selectAll('.day-selector-btn').forEach(btn => btn.classList.remove('active'));
+    const weeklySelector = select('weekly-day-selector');
+    if (weeklySelector) weeklySelector.classList.add('hidden');
+    
+    if (id) {
+        try {
+            const collectionName = isRecurrent ? 'recurrentes' : 'movimientos';
+            const doc = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(id).get();
+
+            if (doc.exists) {
+                data = { id: doc.id, ...doc.data() };
+                mode = isRecurrent ? 'edit-recurrent' : 'edit-single';
+                initialType = data.tipo === 'traspaso' ? 'traspaso' : (data.cantidad < 0 ? 'gasto' : 'ingreso');
+            } else {
+                showToast("Error: No se encontró el elemento.", "danger");
+                id = null;
+            }
+        } catch (error) {
+            console.error("Error al cargar datos:", error);
+            return;
+        }
     }
 
-    // Fecha por defecto (Hoy) si está vacío
-    const dateInput = document.getElementById('movimiento-fecha');
-    if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().split('T')[0];
+    setMovimientoFormType(initialType);
+    select('movimiento-mode').value = mode;
+    select('movimiento-id').value = id || '';
 
-    // Variables de control
-    let mov = null;
-    let typeToApply = defaultType;
-
-    // 2. MODO EDICIÓN: Si llega un ID, buscamos los datos
-    if (id) {
-        // Buscamos en la memoria (AppStore)
-        mov = (AppStore.movimientos || []).find(m => m.id === id);
+    if (data) {
+        // --- Lógica de Edición (Cargar datos) ---
+        select('movimiento-cantidad').value = `${(Math.abs(data.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false })}`;
         
-        if (mov) {
-            typeToApply = mov.tipo;
-            
-            // Rellenar ID oculto y modo (CRUCIAL para guardar cambios)
-            document.getElementById('movimiento-id').value = mov.id;
-            document.getElementById('movimiento-mode').value = 'edit';
-            
-            // Rellenar campos texto/fecha
-            if (dateInput) dateInput.value = mov.fecha;
-            if (document.getElementById('movimiento-descripcion')) document.getElementById('movimiento-descripcion').value = mov.descripcion || '';
-            if (document.getElementById('movimiento-notas')) document.getElementById('movimiento-notas').value = mov.notas || '';
-            if (document.getElementById('check-recurrente')) document.getElementById('check-recurrente').checked = mov.esRecurrente || false;
-
-            // Rellenar Cantidad (Formateada a 2 decimales y positiva)
-            const amountAbs = Math.abs(mov.cantidad) / 100;
-            const amountString = amountAbs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            if (document.getElementById('movimiento-cantidad')) {
-                document.getElementById('movimiento-cantidad').value = amountString;
-            }
-
-            // Rellenar Selectores según tipo
-            if (mov.tipo === 'traspaso') {
-                if (document.getElementById('movimiento-cuenta-origen')) document.getElementById('movimiento-cuenta-origen').value = mov.cuentaOrigenId;
-                if (document.getElementById('movimiento-cuenta-destino')) document.getElementById('movimiento-cuenta-destino').value = mov.cuentaDestinoId;
-            } else {
-                if (document.getElementById('movimiento-concepto')) document.getElementById('movimiento-concepto').value = mov.conceptoId;
-                if (document.getElementById('movimiento-cuenta')) document.getElementById('movimiento-cuenta').value = mov.cuentaId;
+        const fechaInput = select('movimiento-fecha');
+        const dateStringForInput = isRecurrent ? data.nextDate : data.fecha;
+        if (dateStringForInput) {
+            const fechaISO = dateStringForInput.includes('T') ? dateStringForInput.split('T')[0] : dateStringForInput;
+            if (fechaISO) {
+                fechaInput.value = fechaISO;
+                updateDateDisplay(fechaInput); 
             }
         }
+
+        select('movimiento-descripcion').value = data.descripcion || '';
+
+        const setSelectValue = (selectId, value) => {
+            const el = select(selectId);
+            if (el) {
+                el.value = value || '';
+                el.dispatchEvent(new Event('change')); 
+            }
+        };
+
+        if (data.tipo === 'traspaso') {
+            setSelectValue('movimiento-cuenta-origen', data.cuentaOrigenId);
+            setSelectValue('movimiento-cuenta-destino', data.cuentaDestinoId);
+        } else {
+            setSelectValue('movimiento-cuenta', data.cuentaId);
+            setSelectValue('movimiento-concepto', data.conceptoId);
+        }
+
+        // Recurrentes
+        const recurrenteCheckbox = select('movimiento-recurrente');
+        const recurrentOptions = select('recurrent-options');
+        
+        if (mode === 'edit-recurrent') {
+            if (recurrenteCheckbox) recurrenteCheckbox.checked = true;
+            setSelectValue('recurrent-frequency', data.frequency);
+            if(select('recurrent-next-date')) select('recurrent-next-date').value = data.nextDate;
+            if(select('recurrent-end-date')) select('recurrent-end-date').value = data.endDate || '';
+            if(recurrentOptions) recurrentOptions.classList.remove('hidden');
+            if (data.frequency === 'weekly' && data.weekDays) {
+                if(select('weekly-day-selector')) select('weekly-day-selector').classList.remove('hidden');
+                data.weekDays.forEach(day => {
+                    const btn = document.querySelector(`.day-selector-btn[data-day="${day}"]`);
+                    if(btn) btn.classList.add('active');
+                });
+            }
+        } else {
+            if (recurrenteCheckbox) recurrenteCheckbox.checked = false;
+            if (recurrentOptions) recurrentOptions.classList.add('hidden');
+        }
+
     } else {
-        // MODO CREAR NUEVO
-        document.getElementById('movimiento-id').value = '';
-        document.getElementById('movimiento-mode').value = 'create';
+        // --- Lógica de Nuevo Movimiento ---
+        const fechaInput = select('movimiento-fecha');
+        const now = new Date();
+        const localIsoDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+        fechaInput.value = localIsoDate;
+        updateDateDisplay(fechaInput);
+    }
+    
+    // Gestión de botones
+    const deleteBtn = select('delete-movimiento-btn');
+    const duplicateBtn = select('duplicate-movimiento-btn'); 
+    if (deleteBtn) {
+        deleteBtn.classList.toggle('hidden', !id || !data);
+        deleteBtn.dataset.isRecurrent = String(isRecurrent);
+    }
+    if (duplicateBtn) {
+        duplicateBtn.classList.toggle('hidden', !(mode === 'edit-single' && data));
     }
 
-    // 3. Ajustar la interfaz (Mostrar/Ocultar campos según Gasto/Ingreso/Traspaso)
-    setMovimientoFormType(typeToApply);
-    
-    // 4. Mostrar el Modal
     showModal('movimiento-modal');
+    
+    if (typeof initAmountInput === 'function') initAmountInput(); 
+    if (typeof setupFormNavigation === 'function') setupFormNavigation();
+
+    // ▼▼▼ AQUÍ ESTÁ LA MEJORA 1: AUTO-APERTURA INTELIGENTE ▼▼▼
+    if (mode === 'new') {
+        setTimeout(() => {
+            const amountInput = select('movimiento-cantidad');
+            if (amountInput) {
+                // En lugar de solo focus(), llamamos directamente a la calculadora
+                showCalculator(amountInput);
+            }
+        }, 300); // Un poco más de tiempo para asegurar que el modal terminó de subir
+    }
 };
         
         
@@ -9388,18 +9450,11 @@ const handleStart = (e) => {
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
-            'open-movement-form': () => {
-    // Cerramos cualquier menú previo
-    const menu = document.getElementById('main-menu-popover');
-    if (menu) menu.classList.remove('popover-menu--visible');
-    
-    // Obtenemos el ID del movimiento pulsado
-    // (actionTarget es el elemento que pulsaste, definido al inicio del listener)
-    const id = actionTarget.dataset.id; 
-    
-    // Abrimos el formulario en modo edición
-    startMovementForm(id, false); 
-},
+            'open-movement-form': (e) => {
+                const type = e.target.closest('[data-type]').dataset.type;
+                hideModal('main-add-sheet');
+                setTimeout(() => startMovementForm(null, false, type), 250);
+            },
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,
