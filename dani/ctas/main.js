@@ -9605,7 +9605,57 @@ const handleStart = (e) => {
             'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
             'recalculate-balances': () => { showConfirmationModal('Se recalcularán todos los saldos. ¿Continuar?', () => auditAndFixAllBalances(btn), 'Confirmar Auditoría'); },
             'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
-            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo."); if (pin === null) return; if (pin === "") { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); showToast('PIN de acceso rápido eliminado.', 'info'); return; } if (!/^\d{4}$/.test(pin)) { showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger'); return; } const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos."); if (pin !== pinConfirm) { showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger'); return; } const pinHash = await hashPin(pin); localStorage.setItem('pinUserHash', pinHash); localStorage.setItem('pinUserEmail', currentUser.email); hapticFeedback('success'); showToast('¡PIN de acceso rápido configurado con éxito!', 'info'); },
+            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(),
+			'set-pin': async () => {
+    // 1. Creamos el HTML del Modal
+    const html = `
+        <div style="text-align: center;">
+            <p class="form-label" style="margin-bottom: 20px;">
+                Protege tu acceso. Introduce un código de 4 números.
+            </p>
+            <div class="form-group">
+                <input type="tel" id="new-pin-input" class="form-input" 
+                       pattern="[0-9]*" inputmode="numeric" maxlength="4" 
+                       placeholder="• • • •" 
+                       style="text-align: center; font-size: 2rem; letter-spacing: 10px; width: 80%; margin: 0 auto;">
+            </div>
+            <button id="save-pin-btn" class="btn btn--primary btn--full" style="margin-top: 20px;">
+                Guardar PIN
+            </button>
+        </div>
+    `;
+    
+    // 2. Mostramos el Modal
+    showGenericModal('Configurar Seguridad', html);
+
+    // 3. Damos vida al botón Guardar
+    setTimeout(() => {
+        const input = document.getElementById('new-pin-input');
+        const btn = document.getElementById('save-pin-btn');
+        if(input) input.focus();
+
+        btn.addEventListener('click', async () => {
+            const pin = input.value;
+            if (pin.length === 4 && !isNaN(pin)) {
+                try {
+                    // Usamos tu función existente hashPin
+                    const hash = await hashPin(pin);
+                    localStorage.setItem('pinUserHash', hash);
+                    // IMPORTANTE: Guardamos que el usuario tiene PIN
+                    if(currentUser) localStorage.setItem('pinUserEmail', currentUser.email);
+                    
+                    hideModal('generic-modal');
+                    showToast('¡PIN de seguridad activado!');
+                } catch (e) {
+                    console.error(e);
+                    showToast('Error al guardar', 'error');
+                }
+            } else {
+                showToast('El PIN deben ser 4 números', 'warning');
+            }
+        });
+    }, 100);
+},
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
             'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
