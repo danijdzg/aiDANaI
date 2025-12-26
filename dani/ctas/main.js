@@ -865,53 +865,6 @@ const AppStore = {
         this.isFullyLoaded = false;
     }
 };
-// ▼▼▼ REEMPLAZAR TU FUNCIÓN updateAnalisisWidgets CON ESTA VERSIÓN SIMPLIFICADA ▼▼▼
-const updateAnalisisWidgets = async () => {
-    try {
-        // Renderiza y calcula Colchón de Emergencia e Independencia Financiera
-        const saldos = await getSaldos();
-        const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
-        const efData = calculateEmergencyFund(saldos, db.cuentas, recentMovementsCache);
-        const fiData = calculateFinancialIndependence(patrimonioNeto, efData.gastoMensualPromedio);
-
-        // Colchón de Emergencia
-        const efContainer = document.querySelector('[data-widget-type="emergency-fund"]');
-        if (efContainer) {
-            const efWidget = efContainer.querySelector('#emergency-fund-widget');
-            efWidget.querySelector('.card__content').classList.remove('skeleton'); 
-            const monthsValueEl = efWidget.querySelector('#kpi-ef-months-value'); 
-            const progressEl = efWidget.querySelector('#kpi-ef-progress'); 
-            const textEl = efWidget.querySelector('#kpi-ef-text');
-            if (monthsValueEl && progressEl && textEl) { 
-                monthsValueEl.textContent = isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : '∞'; 
-                progressEl.value = Math.min(efData.mesesCobertura, 6); 
-                let textClass = 'text-danger'; 
-                if (efData.mesesCobertura >= 6) textClass = 'text-positive'; 
-                else if (efData.mesesCobertura >= 3) textClass = 'text-warning'; 
-                monthsValueEl.className = `kpi-item__value ${textClass}`; 
-                textEl.innerHTML = `Tu dinero líquido cubre <strong>${isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : 'todos tus'}</strong> meses de gastos.`; 
-            }
-        }
-        
-        // Independencia Financiera
-        const fiContainer = document.querySelector('[data-widget-type="fi-progress"]');
-        if(fiContainer) {
-            const fiWidget = fiContainer.querySelector('#fi-progress-widget');
-            fiWidget.querySelector('.card__content').classList.remove('skeleton'); 
-            const percentageValueEl = fiWidget.querySelector('#kpi-fi-percentage-value'); 
-            const progressEl = fiWidget.querySelector('#kpi-fi-progress'); 
-            const textEl = fiWidget.querySelector('#kpi-fi-text'); 
-            if (percentageValueEl && progressEl && textEl) { 
-                percentageValueEl.textContent = `${fiData.progresoFI.toFixed(1)}%`; 
-                progressEl.value = fiData.progresoFI; 
-                textEl.innerHTML = `Objetivo: <strong>${formatCurrency(fiData.objetivoFI)}</strong> (basado en un gasto anual de ${formatCurrency(fiData.gastoAnualEstimado)})`; 
-            }
-        }
-
-    } catch (error) {
-        console.error("Error al actualizar los widgets de análisis:", error);
-    }
-};
 
 const getRecurrentsForDate = (dateString) => {
     const targetDate = parseDateStringAsUTC(dateString);
@@ -9056,7 +9009,11 @@ const renderInversionesPage = async (containerId) => {
 
 // ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
 const attachEventListeners = () => {
-	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
+	// Evitamos duplicar el cerebro si ya está activo
+    if (window.eventsAttached) return;
+    window.eventsAttached = true;
+
+    console.log("🛡️ Sistema de Eventos Centralizado: ACTIVO");
     document.addEventListener('click', async (e) => {
         
         // 1. CERRAR MENÚ AL TOCAR FUERA
