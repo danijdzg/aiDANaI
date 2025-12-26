@@ -1547,7 +1547,7 @@ async function loadCoreData(uid) {
             }
 
             const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
+            if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) {
                 renderBudgetTracking();
             }
         }, err => {
@@ -5249,11 +5249,9 @@ const TransactionCardComponent = (m, dbData) => {
     }
 
     return `
-    <div class="list-item-animate"> 
-        <div class="transaction-card ${highlightClass}" data-id="${m.id}" style="padding-left: var(--sp-2); padding-right: var(--sp-2);">
-            
+    <div class="list-item-animate">
+        <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="open-movement-form" style="padding-left: var(--sp-2); padding-right: var(--sp-2); cursor: pointer;">
             ${avatarHTML}
-
             <div class="transaction-card__content">
                 <div class="transaction-card__details">
                     <div class="transaction-card__row-1" style="font-size: 0.95rem; font-weight: 700; color: var(--c-on-surface); margin-bottom: 2px;">
@@ -7590,9 +7588,7 @@ const showDrillDownModal = (title, movements) => {
           TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
       )
       .join('')
-      // Cambiamos la acción para que la edición funcione desde dentro del modal
-      .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
-
+      
     // Llamamos a la función para mostrar el modal
     showGenericModal(title, modalContentHTML);
     
