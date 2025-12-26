@@ -2376,16 +2376,16 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
             });
         };
     const initApp = async () => {
-	SpaceBackgroundEffect.start();	
-    const procederConCargaDeApp = () => {
-        document.documentElement.lang = 'es';
-        setupTheme();
-        // Ya no necesitamos cargar tema, el CSS lo fuerza
-        attachEventListeners();
-        checkAuthState(); 
-    };
+    console.log('Iniciando aplicación...');
+    
+    // Iniciar el fondo de estrellas (si lo tienes activo)
+    if (typeof SpaceBackgroundEffect !== 'undefined') SpaceBackgroundEffect.start();
 
-    procederConCargaDeApp();
+    // 1. Instalar el cerebro de eventos (AHORA ES SEGURO LLAMARLO AQUÍ)
+    attachEventListeners(); 
+
+    // 2. Comprobar usuario
+    checkAuthState();
 };
 
 		window.addEventListener('online', () => {
@@ -9053,817 +9053,175 @@ const renderInversionesPage = async (containerId) => {
     await renderPlanificacionPage(); 
 };
 
-
-// ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
+// =================================================================
+// === GESTOR DE EVENTOS "FOREVER" (NO SE DESCONECTA JAMÁS) ===
+// =================================================================
 const attachEventListeners = () => {
-	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
+    // 1. SEGURIDAD ANTI-DUPLICADOS
+    // Si ya tenemos el cerebro instalado, no ponemos otro.
+    if (window.isEventsAttached) {
+        console.log("🛡️ Eventos ya activos. Saltando reinicialización.");
+        return; 
+    }
+    
+    console.log("🔌 Conectando Sistema Central de Eventos (Modo Seguro)...");
+
+    // 2. EL GRAN OYENTE (Delegación de Eventos en la Raíz)
     document.addEventListener('click', async (e) => {
-        
-        // 1. CERRAR MENÚ AL TOCAR FUERA
-        // Si el menú está abierto y tocamos fuera de él, lo cerramos
+        const target = e.target;
+
+        // --- A. GESTIÓN DE MENÚS FLOTANTES (Cerrar al tocar fuera) ---
         const menu = document.getElementById('main-menu-popover');
         if (menu && menu.classList.contains('popover-menu--visible')) {
-            if (!e.target.closest('#main-menu-popover') && !e.target.closest('[data-action="show-main-menu"]')) {
+            if (!target.closest('#main-menu-popover') && !target.closest('[data-action="show-main-menu"]')) {
                 menu.classList.remove('popover-menu--visible');
             }
         }
-
-        // 2. DETECTAR BOTONES CON ACCIÓN
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return; // Si no es un botón con acción, no hacemos nada
-
-        const action = btn.dataset.action;
-
-// ESTE ES EL BLOQUE QUE HACE LA MAGIA
-if (action === 'show-main-menu') {
-    e.stopPropagation(); // Evita que se cierre al instante
-    
-    const menu = document.getElementById('main-menu-popover');
-    if (menu) {
-        menu.classList.toggle('popover-menu--visible');
-        hapticFeedback('light');
-    } else {
-        console.error("Error: No encuentro el menú con id 'main-menu-popover'");
-    }
-    return;
-}
-        if (action === 'logout') {
-            if (confirm("¿Cerrar sesión?")) {
-                firebase.auth().signOut();
-                location.reload();
-            }
-        }
         
-        if (action === 'navigate') {
-            const page = btn.dataset.page;
-            if (page) navigateTo(page);
-        }
-    });
-	
-	// --- INICIO: LÓGICA DE PULSACIÓN PROLONGADA PARA DIARIO ---
-    const diarioPage = document.getElementById('diario-page');
-    if (diarioPage) {
-        let longPressTimer = null;
-        let startX = 0;
-        let startY = 0;
-        const LONG_PRESS_DURATION = 600; // Tiempo en ms para activar (0.6 segundos)
-
-        // Dentro de attachEventListeners...
-
-const handleStart = (e) => {
-            const card = e.target.closest('.transaction-card');
-            if (!card) return;
-
-            // ▼▼▼ FEEDBACK VISUAL: AÑADIR CLASE ▼▼▼
-            card.classList.add('is-pressing'); 
-
-            const point = e.touches ? e.touches[0] : e;
-            startX = point.clientX;
-            startY = point.clientY;
-
-            longPressTimer = setTimeout(() => {
-                // ▼▼▼ FEEDBACK VISUAL: QUITAR CLASE ▼▼▼
-                card.classList.remove('is-pressing');
-                
-                hapticFeedback('medium');
-                const id = card.dataset.id;
-                startMovementForm(id, false); 
-            }, LONG_PRESS_DURATION);
-        };
-
-        const handleMove = (e) => {
-    // CORRECCIÓN: Detectar si es táctil o ratón para obtener las coordenadas
-    const point = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
-    
-    const moveX = point.clientX;
-    const moveY = point.clientY;
-
-    // Si se mueve más de 10px, cancelamos la pulsación larga
-    if (Math.abs(startX - moveX) > 10 || Math.abs(startY - moveY) > 10) {
-        if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-        }
-        // También quitamos la clase visual si nos movemos
-        const card = e.target.closest('.transaction-card');
-        if(card) card.classList.remove('is-pressing');
-    }
-};
-
-        const handleEnd = (e) => {
-            // ▼▼▼ CANCELAR SI SE SUELTA ANTES DE TIEMPO ▼▼▼
-            const card = e.target.closest('.transaction-card');
-            if(card) card.classList.remove('is-pressing');
-
-            if (longPressTimer) {
-                clearTimeout(longPressTimer);
-                longPressTimer = null;
-            }
-        };
-
-        // Añadimos los escuchadores (soporte para Táctil y Ratón)
-        diarioPage.addEventListener('touchstart', handleStart, { passive: true });
-        diarioPage.addEventListener('touchmove', handleMove, { passive: true });
-        diarioPage.addEventListener('touchend', handleEnd);
-        diarioPage.addEventListener('contextmenu', (e) => {
-            // Evita que salga el menú del navegador si pulsas mucho rato
-            if (e.target.closest('.transaction-card')) {
-                e.preventDefault();
-            }
-        });
-
-        // Soporte para PC (Ratón)
-        diarioPage.addEventListener('mousedown', handleStart);
-        diarioPage.addEventListener('mousemove', handleMove);
-        diarioPage.addEventListener('mouseup', handleEnd);
-        diarioPage.addEventListener('mouseleave', handleEnd);
-    }
-	const diarioContainer = select('diario-page'); 
-    if (diarioContainer) { 
-        const mainScroller = selectOne('.app-layout__main'); 
+        // --- B. DETECTAR CLIC EN BOTÓN DE ACCIÓN ---
+        // Buscamos si lo que has tocado (o su padre) tiene data-action
+        const actionBtn = target.closest('[data-action]');
         
-        diarioContainer.addEventListener('touchstart', (e) => { 
-            if (mainScroller.scrollTop > 0) return; 
-            ptrState.startY = e.touches[0].clientY; 
-            ptrState.isPulling = true; 
-                        
-        }, { passive: true }); 
+        // Si no es un botón de acción, no hacemos nada (dejamos que el navegador siga)
+        if (!actionBtn) return;
 
-        diarioContainer.addEventListener('touchmove', (e) => { 
-            if (!ptrState.isPulling) { 
-               
-                return; 
-            } 
-            // ... (El resto del código del Pull-to-refresh se mantiene igual) ...
-             const currentY = e.touches[0].clientY; 
-             ptrState.distance = (currentY - ptrState.startY) * 0.5; // Factor de resistencia simple
-             // ... etc ...
-        }, { passive: false }); 
-
-        diarioContainer.addEventListener('touchend', async (e) => { 
-           
-        }); 
-      
-    }
-    // 1. Habilitador de vibración (Haptics)
-    const enableHaptics = () => {
-        userHasInteracted = true;
-        document.body.removeEventListener('touchstart', enableHaptics, { once: true });
-        document.body.removeEventListener('click', enableHaptics, { once: true });
-    };
-    document.body.addEventListener('touchstart', enableHaptics, { once: true, passive: true });
-    document.body.addEventListener('click', enableHaptics, { once: true });
-
-    // 2. Gesto Pull-to-Refresh (Diario)
-    const ptrElement = select('diario-page');
-    const mainScrollerPtr = selectOne('.app-layout__main');
-    const ptrIndicator = document.createElement('div');
-    ptrIndicator.id = 'pull-to-refresh-indicator';
-    ptrIndicator.innerHTML = '<div class="spinner"></div>';
-    if (ptrElement) ptrElement.prepend(ptrIndicator);
-
-    let ptrState = { startY: 0, isPulling: false, distance: 0, threshold: 80 };
-
-    if (ptrElement && mainScrollerPtr) {
-        ptrElement.addEventListener('touchstart', (e) => {
-            if (mainScrollerPtr.scrollTop <= 0) { 
-                ptrState.startY = e.touches[0].clientY;
-                ptrState.isPulling = true;
-            }
-        }, { passive: true });
-
-        ptrElement.addEventListener('touchmove', (e) => {
-            if (!ptrState.isPulling) return;
-			// Si el usuario ha hecho scroll hacia abajo aunque sea 1px, cancelamos el pull
-    if (mainScrollerPtr.scrollTop > 0) {
-        ptrState.isPulling = false;
-        ptrState.distance = 0;
-        ptrIndicator.classList.remove('visible');
-        return;
-    }
-            const currentY = e.touches[0].clientY;
-            ptrState.distance = (currentY - ptrState.startY) * 0.5; // Factor de resistencia simple
-            // Solo activamos el efecto visual si arrastra hacia abajo y estamos en el tope
-    if (ptrState.distance > 0 && mainScrollerPtr.scrollTop <= 0) {
-        // Solo prevenimos el defecto si realmente estamos "tirando" para refrescar
-        if (e.cancelable) e.preventDefault(); 
-        
-        ptrIndicator.classList.add('visible');
-                const rotation = Math.min(ptrState.distance * 2.5, 360);
-                ptrIndicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`;
-                ptrIndicator.style.opacity = Math.min(ptrState.distance / ptrState.threshold, 1);
-            }
-        }, { passive: false });
-
-        ptrElement.addEventListener('touchend', async () => {
-            if (ptrState.isPulling && ptrState.distance > ptrState.threshold) {
-                hapticFeedback('medium');
-                ptrIndicator.querySelector('.spinner').style.animation = 'spin 1.2s linear infinite';
-                await renderDiarioPage();
-                setTimeout(() => {
-                    ptrIndicator.classList.remove('visible');
-                    ptrIndicator.querySelector('.spinner').style.animation = '';
-                }, 500);
-            } else {
-                ptrIndicator.classList.remove('visible');
-            }
-            ptrState.isPulling = false;
-            ptrState.distance = 0;
-        });
-    }
-
-    // 3. Listener Global para mostrar Modales (Limpio de código legacy)
-    document.addEventListener("show-modal", (e) => {
-        showModal(e.detail.modalId); // Solo muestra el modal, la inicialización va aparte
-    });
-
-    // 4. Navegación del historial (Botón atrás del navegador)
-    window.addEventListener('popstate', (event) => {
-    // Buscamos si hay algún modal abierto visualmente
-    const activeModal = document.querySelector('.modal-overlay--active');
-    
-    // Si hay un modal abierto Y el nuevo estado ya no tiene 'modalId' 
-    // (significa que el usuario ha vuelto atrás al estado base)
-    if (activeModal && (!event.state || !event.state.modalId)) {
-        
-        // Cerramos el modal VISUALMENTE "a mano".
-        // NOTA: No llamamos a hideModal(id) aquí porque esa función
-        // intentaría manipular el historial de nuevo, creando un bucle.
-        
-        // 1. Quitar clases de visibilidad
-        activeModal.classList.remove('modal-overlay--active');
-        select('app-root').classList.remove('app-layout--transformed-by-modal');
-
-        // 2. Limpiar estilos inline del arrastre (si los hubiera)
-        const modalElement = activeModal.querySelector('.modal');
-        if (modalElement) {
-            modalElement.style.transform = '';
-            // Limpieza de listeners de arrastre (igual que en hideModal)
-            modalElement.removeEventListener('mousedown', handleModalDragStart);
-            modalElement.removeEventListener('touchstart', handleModalDragStart);
-        }
-        
-        // 3. Si tienes lógica específica al cerrar (como desenfocar inputs), ponla aquí
-        if (document.activeElement) document.activeElement.blur();
-        
-        return; // Importante: paramos aquí para que no ejecute navegación de páginas
-    }
-    
-    // Si NO era un modal, dejamos que tu lógica de navegación entre páginas (Panel -> Diario) funcione.
-    const pageToNavigate = event.state ? event.state.page : PAGE_IDS.PANEL;
-    if (pageToNavigate) navigateTo(pageToNavigate, false);
-});
-
-    // 5. GESTIÓN DE CLICS (Delegación de eventos)
-    document.body.addEventListener('click', async (e) => {
-        const target = e.target;
-
-        // Cerrar dropdowns personalizados al hacer clic fuera
-        if (!target.closest('.custom-select-wrapper')) {
-            closeAllCustomSelects(null);
+        // --- C. PREVENIR DOBLES PULSACIONES (Debounce Suave) ---
+        // Si el botón ya se está ejecutando, lo ignoramos para evitar errores
+        if (actionBtn.dataset.isProcessing === 'true') {
+            console.log("⏳ Calma, estoy procesando el clic anterior...");
+            e.preventDefault();
+            e.stopPropagation();
+            return;
         }
 
-        // Gestión de acciones [data-action]
-        const actionTarget = e.target.closest('[data-action]');
-    if (!actionTarget) return;
-    
-    // MEJORA: Prevención de doble clic si el botón ya está cargando o deshabilitado
-    if (actionTarget.classList.contains('btn--loading') || actionTarget.disabled) {
-        e.stopImmediatePropagation();
-        return;
-    }
-
-        const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
-        const btn = actionTarget.closest('button');
+        // --- D. PREPARAR LA ACCIÓN ---
+        const { action, id, page, type, modalId } = actionBtn.dataset;
         
-        // Mapa de acciones
-        const actions = {
-		'toggle-portfolio-currency': async () => {
-    // Verificación de seguridad: Solo funciona si estamos en la página de Patrimonio
-    const activePage = document.querySelector('.view--active');
-    if (!activePage || activePage.id !== PAGE_IDS.PATRIMONIO) return;
-
-    hapticFeedback('medium');
-    const btnIcon = select('currency-toggle-icon');
-    
-    if (portfolioViewMode === 'EUR') {
-        showToast('Calculando equivalencia en Bitcoin...', 'info');
-        const price = await fetchBtcPrice();
-        if (price > 0) {
-            portfolioViewMode = 'BTC';
-            if(btnIcon) {
-                btnIcon.textContent = 'euro'; // Muestra el símbolo de Euro para indicar "volver a Euro"
-                btnIcon.classList.add('btc-mode-active');
-            }
-            // Recargamos solo el contenido principal, no el gráfico (el gráfico se queda en EUR por coherencia)
-            renderPortfolioMainContent('portfolio-main-content');
-        }
-    } else {
-        portfolioViewMode = 'EUR';
-        if(btnIcon) {
-            btnIcon.textContent = 'currency_bitcoin'; // Muestra el símbolo de Bitcoin para indicar "ir a Bitcoin"
-            btnIcon.classList.remove('btc-mode-active');
-        }
-        renderPortfolioMainContent('portfolio-main-content');
-    }
-},
-			'rename-ledgers': showRenameLedgersModal,
-            'swipe-show-irr-history': () => handleShowIrrHistory(type),
-            'show-main-menu': (e) => {
-    const menu = document.getElementById('main-menu-popover');
-    if (!menu) return;
-
-    // Intentamos obtener el botón de 3 formas:
-    // 1. Por el evento directo (e.currentTarget)
-    // 2. Por el objetivo del evento (e.target)
-    // 3. FALLBACK: Por su ID directo (si todo lo anterior falla)
-    let button = (e && e.currentTarget) || 
-                 (e && e.target && e.target.closest('[data-action="show-main-menu"]')) ||
-                 document.getElementById('header-menu-btn');
-
-    hapticFeedback('light');
-
-    // CÁLCULO DE POSICIÓN
-    if (!menu.classList.contains('popover-menu--visible') && button) {
-        const rect = button.getBoundingClientRect();
-        
-        // Posición: Debajo del botón y alineado a la derecha
-        menu.style.top = `${rect.bottom + 5}px`;
-        
-        const rightSpace = window.innerWidth - rect.right;
-        menu.style.right = `${Math.max(5, rightSpace)}px`;
-        menu.style.left = 'auto'; // Limpiamos left por seguridad
-    }
-
-    // MOSTRAR EL MENÚ
-    menu.classList.toggle('popover-menu--visible');
-
-    // Lógica para cerrar al hacer clic fuera
-    if (menu.classList.contains('popover-menu--visible')) {
-        setTimeout(() => {
-            const closeOnClickOutside = (event) => {
-                const target = event.target;
-                // Si el clic NO es en el menú Y NO es en el botón que lo abre
-                if (!menu.contains(target) && !target.closest('[data-action="show-main-menu"]')) {
-                    menu.classList.remove('popover-menu--visible');
-                    document.removeEventListener('click', closeOnClickOutside);
-                }
-            };
-            document.addEventListener('click', closeOnClickOutside);
-        }, 0);
-    }
-},
-			'open-external-calculator': () => {
-                // Cierra el menú si estaba abierto
-                const menu = document.getElementById('main-menu-popover');
-                if (menu) menu.classList.remove('popover-menu--visible');
-                
-                hapticFeedback('light');
-                
-                // Lógica de incrustación
-                const frame = document.getElementById('calculator-frame');
-                if (frame) {
-                    // Solo cargamos la fuente si está vacía para no perder el estado si se cierra y abre
-                    if (!frame.getAttribute('src')) {
-                        frame.src = 'calculadora.html';
-                    }
-                }
-                
-                // Abrimos el modal incrustado
-                showModal('calculator-iframe-modal');
-            },
-            'show-main-add-sheet': () => showModal('main-add-sheet'),
-            'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
-            'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
-            'open-movement-form': (e) => {
-                const type = e.target.closest('[data-type]').dataset.type;
-                hideModal('main-add-sheet');
-                setTimeout(() => startMovementForm(null, false, type), 250);
-            },
-            'export-filtered-csv': () => handleExportFilteredCsv(btn),
-            'show-diario-filters': showDiarioFiltersModal,
-            'clear-diario-filters': clearDiarioFilters,
-            'toggle-amount-type': () => { /* Ya no se usa botón toggle, pero se mantiene por compatibilidad */ },
-            'show-kpi-drilldown': () => handleKpiDrilldown(actionTarget),
-			'show-kpi-help': (e) => {
-    e.stopPropagation(); // Evitar que el clic active cosas debajo (ej. drilldown)
-    const kpiKey = actionTarget.dataset.kpi;
-    const info = KPI_EXPLANATIONS[kpiKey];
-    
-    if (info) {
-        hapticFeedback('light');
-        // Usamos el modal genérico para mostrar la ayuda
-        showGenericModal(
-            info.title, 
-            `<p class="form-label" style="font-size:1rem; line-height:1.6; color:var(--c-on-surface); text-align: left;">
-                ${info.text}
-            </p>`
-        );
-    } else {
-        console.warn(`No hay explicación definida para: ${kpiKey}`);
-    }
-},
-            'edit-movement-from-modal': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; hideModal('generic-modal'); startMovementForm(movementId, false); },
-            'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
-            'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
-            'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
-            'show-concept-drilldown': () => {
-                const conceptId = actionTarget.dataset.conceptId;
-                const conceptName = actionTarget.dataset.conceptName;
-                getFilteredMovements(false).then(({ current }) => {
-                    const movementsOfConcept = current.filter(m => m.conceptoId === conceptId);
-                    showDrillDownModal(`Movimientos de: ${conceptName}`, movementsOfConcept);
-                });
-            },
-            'toggle-diario-view': () => { diarioViewMode = diarioViewMode === 'list' ? 'calendar' : 'list'; const btnIcon = selectOne('[data-action="toggle-diario-view"] .material-icons'); if(btnIcon) btnIcon.textContent = diarioViewMode === 'list' ? 'calendar_month' : 'list'; renderDiarioPage(); },
-            'calendar-nav': () => {
-                const direction = actionTarget.dataset.direction;
-                if (!(diarioCalendarDate instanceof Date) || isNaN(diarioCalendarDate)) diarioCalendarDate = new Date();
-                const currentMonth = diarioCalendarDate.getUTCMonth();
-                diarioCalendarDate.setUTCMonth(currentMonth + (direction === 'next' ? 1 : -1));
-                renderDiarioCalendar();
-            },
-            'show-day-details': () => {
-                const date = actionTarget.dataset.date;
-                const movementsOfDay = db.movimientos.filter(m => m.fecha.startsWith(date));
-                if (movementsOfDay.length > 0) {
-                    const formattedDate = new Date(date + 'T12:00:00Z').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
-                    showDrillDownModal(`Movimientos del ${formattedDate}`, movementsOfDay);
-                }
-            },
-            'toggle-investment-type-filter': () => handleToggleInvestmentTypeFilter(type),
-            'toggle-account-type-filter': () => { hapticFeedback('light'); if (deselectedAccountTypesFilter.has(type)) { deselectedAccountTypesFilter.delete(type); } else { deselectedAccountTypesFilter.add(type); } renderPatrimonioOverviewWidget('patrimonio-overview-container'); },
-            'switch-estrategia-tab': () => { const tabName = actionTarget.dataset.tab; showEstrategiaTab(tabName); },
-            'show-help-topic': () => { /* Lógica de ayuda mantenida */
-                const topic = actionTarget.dataset.topic;
-                if(topic) {
-                    let title, content;
-                    // ... (contenido de los temas de ayuda sin cambios) ...
-                    if (topic === 'tasa-ahorro') { title = '¿Cómo se calcula la Tasa de Ahorro?'; content = `<p>Mide qué porcentaje de tus ingresos consigues guardar...</p>`; }
-                    // ... (resto de casos) ...
-                    else if (topic === 'independencia-financiera') { title = 'Independencia Financiera (I.F.)'; content = `<p>Mide tu progreso...</p>`; }
-                    
-                    const titleEl = select('help-modal-title'); const bodyEl = select('help-modal-body');
-                    if(titleEl) titleEl.textContent = title; if(bodyEl) bodyEl.innerHTML = `<div style="padding: 0 var(--sp-2);">${content}</div>`;
-                    showModal('help-modal');
-                }
-            },
-            'use-password-instead': () => showPasswordFallback(),
-            'navigate': () => { hapticFeedback('light'); navigateTo(page); },
-            'help': showHelpModal,
-            'exit': handleExitApp,
-            'forgot-password': (e) => { e.preventDefault(); const email = prompt("Email para recuperar contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => showToast('Correo enviado.', 'info')).catch(() => showToast('Error al enviar correo.', 'danger')); } },
-            'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
-            'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { title.textContent = 'Bienvenido de nuevo'; mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
-            'import-csv': showCsvImportWizard,
-            'toggle-ledger': async () => {
-    hapticFeedback('medium');
-    
-    // 1. Rotación: A -> B -> C -> A
-    if (currentLedger === 'A') currentLedger = 'B';
-    else if (currentLedger === 'B') currentLedger = 'C';
-    else currentLedger = 'A';
-    
-    // 2. Limpieza de Cachés
-    runningBalancesCache = null;
-    allDiarioMovementsCache = []; 
-    
-    // 3. Actualizar UI Visual
-    document.body.dataset.ledgerMode = currentLedger;
-    
-    // ▼▼▼ AQUÍ ESTABA EL ERROR (CORREGIDO) ▼▼▼
-    // Simplemente llamamos a la función auxiliar que ya creamos.
-    // Ella se encarga de buscar el botón y cambiar el texto.
-    updateLedgerButtonUI(); 
-    // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
-    
-      // 4. Actualizar datos y vistas
-    populateAllDropdowns();
-
-    const activePageEl = document.querySelector('.view--active');
-    if (activePageEl) {
-        if (activePageEl.id === PAGE_IDS.PANEL) scheduleDashboardUpdate();
-        else if (activePageEl.id === PAGE_IDS.DIARIO) {
-            db.movimientos = [];
-            lastVisibleMovementDoc = null;
-            allMovementsLoaded = false;
-            select('virtual-list-content').innerHTML = '';
-            await loadMoreMovements(true);
-        }
-        else if (activePageEl.id === PAGE_IDS.PATRIMONIO) renderPatrimonioPage();
-        else if (activePageEl.id === PAGE_IDS.PLANIFICAR) renderPlanificacionPage();
-    }
-},
-            'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
-            'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
-            'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Eliminar operación recurrente?' : '¿Eliminar movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
-			'duplicate-movement-from-modal': () => {
-    const id = select('movimiento-id').value;
-    // Buscamos el movimiento original en la base de datos local
-    const movement = db.movimientos.find(m => m.id === id);
-    
-    if (movement) {
-        // Usamos la función que ya tienes creada
-        handleDuplicateMovement(movement);
-    } else {
-        // Por si acaso es un recurrente o hay un error
-        showToast("No se pudo cargar el movimiento original para duplicar.", "warning");
-    }
-},
-            'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
-            'swipe-duplicate-movement': () => { const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id); if (movement) handleDuplicateMovement(movement); },
-            'search-result-movimiento': (e) => { hideModal('global-search-modal'); startMovementForm(e.target.closest('[data-id]').dataset.id, false); },
-            'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso.","warning"); return; } showConfirmationModal('¿Eliminar concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); renderConceptosModalList(); }); },
-            'delete-cuenta': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('cuentaId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Cuenta con movimientos.","warning"); return; } showConfirmationModal('¿Eliminar cuenta?', async () => { await deleteDoc('cuentas', id); hapticFeedback('success'); showToast("Cuenta eliminada."); renderCuentasModalList(); }); },
-            'close-modal': () => { 
-                const closestOverlay = target.closest('.modal-overlay'); 
-                const effectiveModalId = modalId || (closestOverlay ? closestOverlay.id : null); 
-                
-                // ▼▼▼ SEGURIDAD ▼▼▼
-                if (effectiveModalId === 'movimiento-modal') {
-                    const cantidad = document.getElementById('movimiento-cantidad').value;
-                    // Si hay cantidad (>0) o descripción y no estamos guardando
-                    const desc = document.getElementById('movimiento-descripcion').value;
-                    if ((cantidad && cantidad !== '0,00') || desc.length > 2) {
-                        if (!confirm("¿Descartar los cambios?")) return;
-                    }
-                }
-                // ▲▲▲ FIN SEGURIDAD ▲▲▲
-
-                if (effectiveModalId) hideModal(effectiveModalId); 
-            },
-            'manage-conceptos': showConceptosModal, 'manage-cuentas': showCuentasModal,
-            'save-config': () => handleSaveConfig(btn),
-            'export-data': () => handleExportData(btn), 'export-csv': () => handleExportCsv(btn), 'import-data': () => showImportJSONWizard(),
-            'clear-data': () => { showConfirmationModal('¿Borrar TODOS tus datos?', async () => { /* Lógica */ }, 'Confirmar'); },
-            'update-budgets': handleUpdateBudgets, 'logout': () => fbAuth.signOut(), 'delete-account': () => { showConfirmationModal('¿Eliminar cuenta permanentemente?', async () => { /* Lógica */ }); },
-            'manage-investment-accounts': showManageInvestmentAccountsModal, 'update-asset-value': () => showValoracionModal(id),
-            'global-search': () => { showGlobalSearchModal(); hapticFeedback('medium'); },
-            'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
-            'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
-            'duplicate-movement': () => { /* Lógica duplicar */ },
-            'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
-            'recalculate-balances': () => { showConfirmationModal('Se recalcularán todos los saldos. ¿Continuar?', () => auditAndFixAllBalances(btn), 'Confirmar Auditoría'); },
-            'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
-            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(),
-			'set-pin': async () => {
-    // 1. Creamos el HTML del Modal
-    const html = `
-        <div style="text-align: center;">
-            <p class="form-label" style="margin-bottom: 20px;">
-                Protege tu acceso. Introduce un código de 4 números.
-            </p>
-            <div class="form-group">
-                <input type="tel" id="new-pin-input" class="form-input" 
-                       pattern="[0-9]*" inputmode="numeric" maxlength="4" 
-                       placeholder="• • • •" 
-                       style="text-align: center; font-size: 2rem; letter-spacing: 10px; width: 80%; margin: 0 auto;">
-            </div>
-            <button id="save-pin-btn" class="btn btn--primary btn--full" style="margin-top: 20px;">
-                Guardar PIN
-            </button>
-        </div>
-    `;
-    
-    // 2. Mostramos el Modal
-    showGenericModal('Configurar Seguridad', html);
-
-    // 3. Damos vida al botón Guardar
-    setTimeout(() => {
-        const input = document.getElementById('new-pin-input');
-        const btn = document.getElementById('save-pin-btn');
-        if(input) input.focus();
-
-        btn.addEventListener('click', async () => {
-            const pin = input.value;
-            if (pin.length === 4 && !isNaN(pin)) {
-                try {
-                    // Usamos tu función existente hashPin
-                    const hash = await hashPin(pin);
-                    localStorage.setItem('pinUserHash', hash);
-                    // IMPORTANTE: Guardamos que el usuario tiene PIN
-                    if(currentUser) localStorage.setItem('pinUserEmail', currentUser.email);
-                    
-                    hideModal('generic-modal');
-                    showToast('¡PIN de seguridad activado!');
-                } catch (e) {
-                    console.error(e);
-                    showToast('Error al guardar', 'error');
-                }
-            } else {
-                showToast('El PIN deben ser 4 números', 'warning');
-            }
-        });
-    }, 100);
-},
-            'edit-recurrente-from-pending': () => startMovementForm(id, true),
-            'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
-            'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
-        };
-        
-        if (actions[action]) actions[action](e);
-    });
-
-    // 6. Gestión de elementos <details> para informes
-    document.body.addEventListener('toggle', (e) => {
-        const detailsElement = e.target;
-        if (detailsElement.tagName !== 'DETAILS' || !detailsElement.classList.contains('informe-acordeon')) return;
-        if (detailsElement.open) {
-            const informeId = detailsElement.id.replace('acordeon-', '');
-            renderInformeDetallado(informeId);
-        }
-    }, true);
-    
-    // 7. Gestión de formularios (Submit)
-    document.body.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const target = e.target;
-        const submitter = e.submitter;
-        const handlers = {
-			'rename-ledgers-form': () => handleSaveLedgerNames(submitter),
-            'login-form': () => { const action = submitter ? submitter.dataset.action : 'login'; if (action === 'login') handleLogin(submitter); else handleRegister(submitter); },
-            'pin-form': handlePinSubmit,
-            'form-movimiento': () => handleSaveMovement(target, submitter),
-            'add-concepto-form': () => handleAddConcept(submitter),
-            'add-cuenta-form': () => handleAddAccount(submitter),
-            'informe-cuenta-form': () => handleGenerateInformeCuenta(target, submitter),
-            'manage-investment-accounts-form': () => handleSaveInvestmentAccounts(target, submitter),
-            'form-valoracion': () => handleSaveValoracion(target, submitter),
-            'diario-filters-form': applyDiarioFilters
-        };
-        if (handlers[target.id]) handlers[target.id]();
-    });
-    
-    // 8. Eventos de inputs generales
-    document.body.addEventListener('input', (e) => { 
-        const id = e.target.id; 
-        if (id) { 
-            clearError(id); 
-            if (id === 'movimiento-cantidad') validateField('movimiento-cantidad', true); 
-            if (id === 'movimiento-concepto' || id === 'movimiento-cuenta') validateField(id, true); 
-            // ... validaciones restantes
-            if (id === 'concepto-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderConceptosModalList(), 200); } 
-            if (id === 'cuenta-search-input') { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => renderCuentasModalList(), 200); } 
-        } 
-    });
-    
-    document.body.addEventListener('blur', (e) => { 
-        const id = e.target.id; 
-        if (id && (id === 'movimiento-concepto' || id === 'movimiento-cuenta')) validateField(id); 
-    }, true);
-    
-    document.body.addEventListener('focusin', (e) => { 
-        if (e.target.matches('.pin-input')) handlePinInputInteraction(); 
-        
-    });
-    
-    // 9. Cambios en filtros y selects
-    document.addEventListener('change', e => {
-        const target = e.target;
-        if (target.id === 'filter-periodo' || target.id === 'filter-fecha-inicio' || target.id === 'filter-fecha-fin') {
-            const panelPage = select('panel-page');
-            if (!panelPage || !panelPage.classList.contains('view--active')) return;
-            if (target.id === 'filter-periodo') {
-                const customDateFilters = select('custom-date-filters');
-                if (customDateFilters) customDateFilters.classList.toggle('hidden', target.value !== 'custom');
-                if (target.value !== 'custom') { hapticFeedback('light'); scheduleDashboardUpdate(); }
-            }
-            if (target.id === 'filter-fecha-inicio' || target.id === 'filter-fecha-fin') {
-                const s = select('filter-fecha-inicio'), en = select('filter-fecha-fin');
-                if (s && en && s.value && en.value) { hapticFeedback('light'); scheduleDashboardUpdate(); }
-            }
-        }
-        // Lógica opciones recurrentes
-        if (target.id === 'movimiento-recurrente') {
-            select('recurrent-options').classList.toggle('hidden', !target.checked);
-            if(target.checked && !select('recurrent-next-date').value) select('recurrent-next-date').value = select('movimiento-fecha').value;
-        }
-        if (target.id === 'recurrent-frequency') {
-            const endGroup = select('recurrent-end-date').closest('.form-group');
-            if (endGroup) endGroup.classList.toggle('hidden', target.value === 'once');
-        }
-    });
-    
-    // 10. Listeners específicos (Importación, Calculadora, Búsqueda)
-    const importFileInput = select('import-file-input'); if (importFileInput) importFileInput.addEventListener('change', (e) => { if(e.target.files) handleJSONFileSelect(e.target.files[0]); });
-    document.addEventListener('DOMContentLoaded', () => {
-    
-    // Referencias
-    const fabContainer = document.getElementById('fab-container');
-    const fabTrigger = document.getElementById('fab-trigger');
-    const fabBackdrop = document.getElementById('fab-backdrop');
-    const fabOptions = document.querySelectorAll('.fab-option');
-
-    // 1. Función para alternar el menú
-    function toggleFab() {
-        fabContainer.classList.toggle('active');
-        // Feedback háptico suave si es móvil
+        // Efecto vibración (Feedback táctil)
         if (navigator.vibrate) navigator.vibrate(10);
-    }
-
-    // 2. Función para cerrar el menú
-    function closeFab() {
-        fabContainer.classList.remove('active');
-    }
-
-    // 3. Event Listeners
-    
-    // Click en el botón principal (+)
-    fabTrigger.addEventListener('click', (e) => {
-        e.stopPropagation(); // Evitar que se propague
-        toggleFab();
-    });
-
-    // Click en el fondo oscuro (cerrar sin elegir)
-    fabBackdrop.addEventListener('click', closeFab);
-
-    // Click en cada opción (Ingreso, Gasto, Traspaso)
-    fabOptions.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            // Obtener el tipo de movimiento (ingreso, gasto, traspaso)
-            const type = btn.dataset.type;
-            
-            // Cerrar el abanico
-            closeFab();
-
-            // --- AQUÍ LLAMAS A TU LÓGICA EXISTENTE ---
-            // Basado en tu código, simularía abrir el modal configurando el tipo
-            console.log("Abriendo modal para:", type);
-            
-            // Ejemplo de integración (Reemplaza 'openModalLogic' con tu función real):
-            // setMovimientoType(type); // Si tienes una función que setea el tipo
-            // openMovimientoModal();   // Función que abre el modal
-            
-            // Si usas lógica directa de renderizado:
-            if (typeof renderMovimientoModal === 'function') {
-                renderMovimientoModal(type); 
-            } else {
-                // Fallback: Busca los botones ocultos del modal original y haz click en ellos
-                // Esto es un "truco" si no quieres reescribir tu lógica de modales
-                const hiddenTypeBtn = document.querySelector(`[data-type="${type}"]`);
-                if(hiddenTypeBtn) hiddenTypeBtn.click();
-            }
-        });
-    });
-});
-	
-    // CALCULADORA: Clics en botones
-    const calculatorGrid = select('calculator-grid'); 
-    if (calculatorGrid) calculatorGrid.addEventListener('click', (e) => { 
-        const btn = e.target.closest('button'); 
-        if(btn && btn.dataset.key) handleCalculatorInput(btn.dataset.key); 
-    });
-    
-    const searchInput = select('global-search-input'); if (searchInput) searchInput.addEventListener('input', () => { clearTimeout(globalSearchDebounceTimer); globalSearchDebounceTimer = setTimeout(() => performGlobalSearch(searchInput.value), 250); });
-    document.body.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); e.stopPropagation(); showGlobalSearchModal(); } });
-    
-    // Dropzone JSON y Scroll
-    const dropZone = select('json-drop-zone'); if (dropZone) { /* Lógica Dropzone (sin cambios) */ }
         
-    // Scroll infinito
-    const mainScroller = selectOne('.app-layout__main'); 
-    if (mainScroller) { 
-        let scrollRAF = null; 
-        mainScroller.addEventListener('scroll', () => { 
-            if (scrollRAF) window.cancelAnimationFrame(scrollRAF); 
-            scrollRAF = window.requestAnimationFrame(() => { 
-                if (diarioViewMode === 'list' && select('diario-page')?.classList.contains('view--active')) renderVisibleItems(); 
-            }); 
-        }, { passive: true }); 
-    }
+        console.log(`⚡ CLICK DETECTADO: ${action}`);
 
-    // Selectores de frecuencia recurrentes
-    const frequencySelect = select('recurrent-frequency');
-    if (frequencySelect) {
-        frequencySelect.addEventListener('change', (e) => {
-            const isWeekly = e.target.value === 'weekly';
-            const weeklySelector = select('weekly-day-selector');
-            const endGroup = select('recurrent-end-date')?.closest('.form-group');
-            if (weeklySelector) weeklySelector.classList.toggle('hidden', !isWeekly);
-            if (endGroup) endGroup.classList.toggle('hidden', e.target.value === 'once');
-        });
-    }
+        // Marcamos el botón como "Ocupado" temporalmente
+        actionBtn.dataset.isProcessing = 'true';
 
-    // Selector de Fecha Nativo
-    const fechaDisplayButton = select('movimiento-fecha-display'); 
-    const fechaRealInput = select('movimiento-fecha'); 
-    if (fechaDisplayButton && fechaRealInput) { 
-        fechaDisplayButton.addEventListener('click', () => {
-            try { fechaRealInput.showPicker(); } catch (error) { fechaRealInput.click(); }
-        });
-        fechaRealInput.addEventListener('input', () => {
-            updateDateDisplay(fechaRealInput);
-            const isRecurrent = select('movimiento-recurrente')?.checked;
-            if (isRecurrent) {
-                const nextDateEl = select('recurrent-next-date');
-                if (nextDateEl) nextDateEl.value = fechaRealInput.value;
+        try {
+            // === MAPA DE ACCIONES ===
+            switch (action) {
+                // NAVEGACIÓN
+                case 'navigate':
+                    await navigateTo(page);
+                    break;
+                
+                case 'show-main-menu':
+                    const m = document.getElementById('main-menu-popover');
+                    if (m) {
+                        m.classList.toggle('popover-menu--visible');
+                        // Posicionamiento
+                        const rect = actionBtn.getBoundingClientRect();
+                        m.style.top = `${rect.bottom + 5}px`; 
+                        m.style.right = '16px'; 
+                        m.style.left = 'auto';
+                    }
+                    break;
+
+                case 'logout':
+                    if (typeof fbAuth !== 'undefined') fbAuth.signOut();
+                    break;
+                
+                case 'close-modal':
+                    const overlay = target.closest('.modal-overlay') || document.getElementById(modalId);
+                    if (overlay) hideModal(overlay.id);
+                    break;
+
+                // FORMULARIOS
+                case 'open-movement-form':
+                    hideModal('main-add-sheet'); 
+                    setTimeout(() => startMovementForm(id || null, false, type || 'gasto'), 50);
+                    break;
+                
+                case 'save-and-new-movement':
+                    await handleSaveMovement(document.getElementById('form-movimiento'), actionBtn);
+                    break;
+
+                case 'toggle-diario-view':
+                    if (window.toggleDiarioView) window.toggleDiarioView(actionBtn);
+                    break;
+
+                case 'show-diario-filters':
+                    if (typeof showDiarioFiltersModal === 'function') showDiarioFiltersModal();
+                    break;
+                    
+                case 'clear-diario-filters':
+                    if (typeof clearDiarioFilters === 'function') clearDiarioFilters();
+                    break;
+
+                // AJUSTES
+                case 'manage-cuentas': showCuentasModal(); break;
+                case 'manage-conceptos': showConceptosModal(); break;
+                case 'update-budgets': handleUpdateBudgets(); break;
+                case 'save-config': handleSaveConfig(actionBtn); break;
+                case 'export-csv': handleExportCsv(actionBtn); break;
+                
+                // SEGURIDAD
+                case 'set-pin':
+                    const pin = prompt("Escribe tu nuevo PIN de 4 dígitos:");
+                    if (pin) {
+                        if (pin.length === 4 && !isNaN(pin)) {
+                            const hash = await hashPin(pin);
+                            localStorage.setItem('pinUserHash', hash);
+                            if(currentUser) localStorage.setItem('pinUserEmail', currentUser.email);
+                            showToast('PIN Guardado correctamente');
+                        } else {
+                            showToast('El PIN debe tener 4 números', 'error');
+                        }
+                    }
+                    break;
+
+                // DEFAULT: Si la acción está en la lista antigua 'actions'
+                default:
+                    if (typeof actions !== 'undefined' && actions[action]) {
+                        await actions[action](e);
+                    } else {
+                        console.warn(`⚠️ Acción desconocida: ${action}`);
+                    }
+                    break;
             }
-        }); 
-    }
-    
-    initSpeedDial();
+        } catch (error) {
+            console.error(`❌ Error ejecutando ${action}:`, error);
+        } finally {
+            // --- E. LIBERACIÓN (CRUCIAL) ---
+            // Pase lo que pase (éxito o error), liberamos el botón inmediatamente
+            // para que se pueda volver a pulsar.
+            setTimeout(() => {
+                delete actionBtn.dataset.isProcessing;
+            }, 300); // Pequeño retraso para evitar doble clic accidental
+        }
+    });
+
+    // 3. LISTENERS PARA FORMULARIOS (SUBMIT)
+    document.addEventListener('submit', (e) => {
+        if (!e.target.matches('form')) return;
+        e.preventDefault();
+        
+        console.log(`📝 Submit formulario: ${e.target.id}`);
+        const btn = e.submitter;
+
+        // Redirección simple de formularios
+        if (e.target.id === 'form-movimiento') handleSaveMovement(e.target, btn);
+        else if (e.target.id === 'login-form') {
+            if (btn && btn.dataset.action === 'register') handleRegister(btn);
+            else handleLogin(btn);
+        }
+        else if (e.target.id === 'pin-form') handlePinSubmit();
+        else if (e.target.id === 'informe-cuenta-form') handleGenerateInformeCuenta(e.target, btn);
+        else if (e.target.id === 'diario-filters-form') applyDiarioFilters();
+    });
+
+    // MARCA DE AGUA: Indicamos que los eventos ya están listos
+    window.isEventsAttached = true;
 };
-// ▲▲▲ FIN FUNCIÓN attachEventListeners ▲▲▲
+
 
 // Lógica separada para el selector de días semanales (para que no se duplique)
 const daySelector = select('weekly-day-selector-buttons');
@@ -12010,26 +11368,3 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
-// ===============================================================
-// === SOLUCIÓN DEFINITIVA PARA CLICS BLOQUEADOS ===
-// ===============================================================
-// Sobrescribimos el gestor de clics para ignorar cualquier bloqueo anterior
-document.addEventListener('click', async (e) => {
-    // 1. Buscamos el botón pulsado (incluso si pulsas en el icono de dentro)
-    const target = e.target.closest('[data-action]');
-    
-    // Si no es un botón de acción, ignoramos
-    if (!target) return;
-
-    // 2. Obtenemos el nombre de la acción
-    const action = target.dataset.action;
-
-    // 3. ¡EJECUTAMOS SIN MIEDO! (Sin comprobar isNavigating)
-    if (action && typeof actions !== 'undefined' && actions[action]) {
-        // Pequeña vibración para confirmar que el clic funciona
-        if (navigator.vibrate) navigator.vibrate(5);
-        
-        console.log('Forzando ejecución de acción:', action);
-        await actions[action](e);
-    }
-}, true); // El 'true' aquí es clave: captura el clic antes que nadie
