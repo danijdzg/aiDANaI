@@ -5980,52 +5980,86 @@ const renderSavingsRateGauge = (canvasId, percentage) => {
 };
 
 		
-        const _renderRecientesFromCache = async () => {
-            const recientesContainer = select('inicio-view-recientes');
-            if (!recientesContainer) return;
-            
-            const movsToDisplay = recentMovementsCache;
-            
-            if (movsToDisplay.length === 0) {
-                recientesContainer.innerHTML = `<div class="empty-state" style="border: none; background: transparent;"><p>No hay movimientos recientes en esta contabilidad.</p></div>`;
-                return;
+// =================================================================
+// === INICIO DEL BLOQUE A PEGAR (COPIA DESDE AQUÍ) ===
+// =================================================================
+const _renderRecientesFromCache = async () => {
+    // 1. Buscamos el contenedor
+    const recientesContainer = document.getElementById('inicio-view-recientes');
+    if (!recientesContainer) return;
+
+    // 2. Datos
+    const movsToDisplay = recentMovementsCache || [];
+
+    if (movsToDisplay.length === 0) {
+        recientesContainer.innerHTML = `<div class="empty-state" style="padding: 20px; text-align: center; opacity: 0.6; font-size: 0.9rem;">No hay movimientos recientes.</div>`;
+        return;
+    }
+
+    // 3. Ordenar y Cortar
+    movsToDisplay.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    const top5 = movsToDisplay.slice(0, 5);
+
+    let html = '';
+    
+    // 4. Generar HTML
+    top5.forEach(m => {
+        const isGasto = m.cantidad < 0;
+        const amountClass = isGasto ? 'text-negative' : 'text-positive';
+        const amountSign = m.cantidad > 0 ? '+' : '';
+        const dateStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+        
+        let title = m.descripcion;
+        let subtitle = 'Movimiento';
+        let icon = isGasto ? 'arrow_downward' : 'arrow_upward';
+        let iconColor = isGasto ? '#FF3B30' : '#34C759';
+        let iconBg = isGasto ? 'rgba(255, 59, 48, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+
+        if (typeof db !== 'undefined' && db.conceptos) {
+            const concepto = db.conceptos.find(c => c.id === m.conceptoId);
+            if (concepto) {
+                if (!title) title = concepto.nombre;
+                subtitle = concepto.nombre;
             }
+        }
+        if (!title) title = 'Sin descripción';
 
-            await processMovementsForRunningBalance(movsToDisplay, true); 
+        if (m.tipo === 'traspaso') {
+            title = 'Traspaso';
+            icon = 'swap_horiz';
+            iconColor = '#007AFF';
+            iconBg = 'rgba(0, 122, 255, 0.1)';
+            amountClass = 'text-info';
+        }
 
-            const grouped = {};
-            const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-            movsToDisplay.forEach(mov => {
-                const dateKey = mov.fecha.slice(0, 10);
-                if (!grouped[dateKey]) {
-                    grouped[dateKey] = { movements: [], total: 0 };
-                }
-                grouped[dateKey].movements.push(mov);
-                if (mov.tipo === 'traspaso') {
-                    const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
-                    const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-                    if (origenVisible && !destinoVisible) { grouped[dateKey].total -= mov.cantidad; }
-                    else if (!origenVisible && destinoVisible) { grouped[dateKey].total += mov.cantidad; }
-                } else {
-                    grouped[dateKey].total += mov.cantidad;
-                }
-            });
+        // AQUI ESTA LA COMILLA DE APERTURA (NO LA BORRES) --> `
+        html += `
+        <div class="list-item" 
+             data-action="open-movement-form" 
+             data-id="${m.id}"
+             style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.08); cursor: pointer;">
+            
+            <div style="width: 40px; height: 40px; border-radius: 12px; background-color: ${iconBg}; display: flex; align-items: center; justify-content: center; margin-right: 12px; flex-shrink: 0;">
+                <span class="material-icons" style="color: ${iconColor}; font-size: 20px;">${icon}</span>
+            </div>
+            
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-on-surface);">${title}</div>
+                <div style="font-size: 0.8rem; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-on-surface-secondary);">${dateStr} • ${subtitle}</div>
+            </div>
+            
+            <div class="${amountClass}" style="font-weight: 700; font-size: 0.95rem; margin-left: 8px; white-space: nowrap;">
+                ${amountSign}${parseFloat(m.cantidad / 100).toLocaleString('es-ES', {minimumFractionDigits: 2})} €
+            </div>
+        </div>
+        `; // <--- AQUI ESTA LA COMILLA DE CIERRE (IMPORTANTE)
+    });
 
-            let html = '';
-            const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-            for (const dateKey of sortedDates) {
-                const group = grouped[dateKey];
-                html += renderVirtualListItem({ type: 'date-header', date: dateKey, total: group.total });
-                
-                group.movements.sort((a, b) => b.id.localeCompare(a.id));
-
-                for (const mov of group.movements) {
-                    html += renderVirtualListItem({ type: 'transaction', movement: mov });
-                }
-            }
-            html += `<div style="text-align: center; margin-top: var(--sp-4);"><button class="btn btn--secondary" data-action="navigate" data-page="${PAGE_IDS.DIARIO}">Ver todos los movimientos</button></div>`;
-            recientesContainer.innerHTML = html;
-        };
+    recientesContainer.innerHTML = html;
+}; 
+// =================================================================
+// === FIN DEL BLOQUE (ASEGÚRATE DE COPIAR HASTA AQUÍ) ===
+// =================================================================
 	const renderPendingRecurrents = () => {
     const container = select('pending-recurrents-container');
     if (!container || !db.recurrentes) return;
@@ -11582,7 +11616,7 @@ const renderPagePatrimonioExtracto = () => {
     updateExtractoList();
 };
 
-// Función auxiliar para filtrar y pintar la lista
+// Función auxiliar para filtrar y pintar la lista (CORREGIDA Y CERRADA)
 const updateExtractoList = () => {
     const listContainer = document.getElementById('extracto-list-content');
     if (!listContainer) return;
@@ -11595,7 +11629,6 @@ const updateExtractoList = () => {
     if (extractoState.startDate) {
         movs = movs.filter(m => m.fecha.split('T')[0] >= extractoState.startDate);
     }
-    
     // Filtro por Fecha (Hasta)
     if (extractoState.endDate) {
         movs = movs.filter(m => m.fecha.split('T')[0] <= extractoState.endDate);
@@ -11624,14 +11657,13 @@ const updateExtractoList = () => {
             const dateObj = new Date(m.fecha);
             const dateStr = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
             html += `
-                <div style="padding: 10px 20px; background: var(--c-background); color: var(--c-primary); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; position:sticky; top: 73px; z-index:5; border-bottom:1px solid var(--c-outline);">
-                    ${dateStr}
-                </div>`;
+            <div style="padding: 10px 20px; background: var(--c-background); color: var(--c-primary); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; position:sticky; top: 73px; z-index:5; border-bottom:1px solid var(--c-outline);">
+                ${dateStr}
+            </div>`;
             lastDate = dateKey;
         }
 
-        // Renderizado de la Tarjeta (Reutilizando tu estilo existente)
-        // Nota: Usamos una versión simplificada de renderVirtualListItem para este contexto
+        // Renderizado de la Tarjeta
         const cantidadClass = m.cantidad < 0 ? 'text-negative' : 'text-positive';
         const symbol = m.cantidad < 0 ? '' : '+';
         
@@ -11640,38 +11672,32 @@ const updateExtractoList = () => {
         const concepto = db.conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
 
         html += `
-            <div class="transaction-card" style="margin: 0; border-radius: 0; border-bottom: 1px solid var(--c-outline);">
-                <div class="transaction-card__content">
-                    <div class="transaction-card__details">
-                        <div class="transaction-card__row-1">${m.descripcion || concepto}</div>
-                        <div class="transaction-card__row-2" style="opacity:0.7;">${cuenta} • ${concepto}</div>
-                    </div>
-                    <div class="transaction-card__figures">
-                        <strong class="${cantidadClass}" style="font-size: 1rem;">
-                            ${symbol}${formatCurrencyHTML(m.cantidad)}
-                        </strong>
+        <div class="transaction-card" style="margin: 0; border-radius: 0; border-bottom: 1px solid var(--c-outline);">
+            <div class="transaction-card__content">
+                <div class="transaction-card__details">
+                    <div class="transaction-card__row-1">${m.descripcion || concepto}</div>
+                    <div class="transaction-card__row-2" style="font-size: 0.75rem; color: var(--c-on-surface-secondary);">
+                        ${cuenta} • ${concepto}
                     </div>
                 </div>
+                <div class="transaction-card__figures">
+                    <div class="transaction-card__amount ${cantidadClass}">${symbol}${formatCurrency(m.cantidad)}</div>
+                </div>
             </div>
-        `;
+        </div>`;
     });
 
     listContainer.innerHTML = html;
 };
 
-
 /* ================================================================ */
 /* === LÓGICA DE ICONOS DE DIARIO (PEGAR AL FINAL DE MAIN.JS) === */
 /* ================================================================ */
-
 // 1. Función para cambiar la vista (Lista <-> Compacta)
 window.toggleDiarioView = function(btnElement) {
     const diarioContainer = document.getElementById('diario-page') || document.body;
     const icono = btnElement.querySelector('.material-icons');
-    
-    // Alternar clase
-    diarioContainer.classList.toggle('view-mode-compact');
-    
+    // Alternar clase diarioContainer.classList.toggle('view-mode-compact');
     // Cambiar icono
     if (diarioContainer.classList.contains('view-mode-compact')) {
         icono.textContent = 'view_list'; // Icono de lista
@@ -11681,37 +11707,20 @@ window.toggleDiarioView = function(btnElement) {
         console.log("Vista cambiada a: Normal");
     }
 };
-
 // 2. Control de Visibilidad al Navegar
 document.addEventListener('DOMContentLoaded', () => {
-    
     function actualizarIconos(paginaDestino) {
         const herramientas = document.getElementById('header-diario-tools');
         if (!herramientas) return;
-
         // ¿Estamos en la pestaña diario?
-        if (paginaDestino === 'diario' || paginaDestino === 'diario-page') {
-            herramientas.style.display = 'flex'; // MOSTRAR
+        if (paginaDestino === 'diario-page') {
+            herramientas.style.display = 'flex';
         } else {
-            herramientas.style.display = 'none'; // OCULTAR
+            herramientas.style.display = 'none';
         }
     }
+}); // <--- ESTO ES LO QUE TE FALTABA (El cierre del paréntesis y la llave)
 
-    // Escuchar clics en el menú inferior
-    const botonesNav = document.querySelectorAll('.bottom-nav__item');
-    botonesNav.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const pagina = btn.dataset.page; // 'dashboard', 'diario', etc.
-            actualizarIconos(pagina);
-        });
-    });
-
-    // Comprobación inicial al arrancar
-    const activoInicial = document.querySelector('.bottom-nav__item--active');
-    if (activoInicial) {
-        actualizarIconos(activoInicial.dataset.page);
-    }
-});
 
 /* ================================================================= */
 /* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO === */
