@@ -865,53 +865,6 @@ const AppStore = {
         this.isFullyLoaded = false;
     }
 };
-// ▼▼▼ REEMPLAZAR TU FUNCIÓN updateAnalisisWidgets CON ESTA VERSIÓN SIMPLIFICADA ▼▼▼
-const updateAnalisisWidgets = async () => {
-    try {
-        // Renderiza y calcula Colchón de Emergencia e Independencia Financiera
-        const saldos = await getSaldos();
-        const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
-        const efData = calculateEmergencyFund(saldos, db.cuentas, recentMovementsCache);
-        const fiData = calculateFinancialIndependence(patrimonioNeto, efData.gastoMensualPromedio);
-
-        // Colchón de Emergencia
-        const efContainer = document.querySelector('[data-widget-type="emergency-fund"]');
-        if (efContainer) {
-            const efWidget = efContainer.querySelector('#emergency-fund-widget');
-            efWidget.querySelector('.card__content').classList.remove('skeleton'); 
-            const monthsValueEl = efWidget.querySelector('#kpi-ef-months-value'); 
-            const progressEl = efWidget.querySelector('#kpi-ef-progress'); 
-            const textEl = efWidget.querySelector('#kpi-ef-text');
-            if (monthsValueEl && progressEl && textEl) { 
-                monthsValueEl.textContent = isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : '∞'; 
-                progressEl.value = Math.min(efData.mesesCobertura, 6); 
-                let textClass = 'text-danger'; 
-                if (efData.mesesCobertura >= 6) textClass = 'text-positive'; 
-                else if (efData.mesesCobertura >= 3) textClass = 'text-warning'; 
-                monthsValueEl.className = `kpi-item__value ${textClass}`; 
-                textEl.innerHTML = `Tu dinero líquido cubre <strong>${isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : 'todos tus'}</strong> meses de gastos.`; 
-            }
-        }
-        
-        // Independencia Financiera
-        const fiContainer = document.querySelector('[data-widget-type="fi-progress"]');
-        if(fiContainer) {
-            const fiWidget = fiContainer.querySelector('#fi-progress-widget');
-            fiWidget.querySelector('.card__content').classList.remove('skeleton'); 
-            const percentageValueEl = fiWidget.querySelector('#kpi-fi-percentage-value'); 
-            const progressEl = fiWidget.querySelector('#kpi-fi-progress'); 
-            const textEl = fiWidget.querySelector('#kpi-fi-text'); 
-            if (percentageValueEl && progressEl && textEl) { 
-                percentageValueEl.textContent = `${fiData.progresoFI.toFixed(1)}%`; 
-                progressEl.value = fiData.progresoFI; 
-                textEl.innerHTML = `Objetivo: <strong>${formatCurrency(fiData.objetivoFI)}</strong> (basado en un gasto anual de ${formatCurrency(fiData.gastoAnualEstimado)})`; 
-            }
-        }
-
-    } catch (error) {
-        console.error("Error al actualizar los widgets de análisis:", error);
-    }
-};
 
 const getRecurrentsForDate = (dateString) => {
     const targetDate = parseDateStringAsUTC(dateString);
@@ -2626,25 +2579,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     const actionsEl = select('top-bar-actions');
     const leftEl = select('top-bar-left-button');
     
-    // Acciones por defecto (Menú de 3 puntos)
-    const standardActions = `
-        <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
-            <span class="material-icons">calculate</span>
-        </button>
-        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
-    <span class="material-icons">more_vert</span>
-</button>
-    `;
-    
-    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
-	const patrimonioActions = `
-    <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
-        <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
-    </button>
-    ${standardActions}
-`;
-
+   
 const pageRenderers = {
     [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
@@ -9054,7 +8989,6 @@ const renderInversionesPage = async (containerId) => {
 };
 
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
 const attachEventListeners = () => {
 	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
     document.addEventListener('click', async (e) => {
@@ -9528,16 +9462,11 @@ const handleStart = (e) => {
     runningBalancesCache = null;
     allDiarioMovementsCache = []; 
     
-    // 3. Actualizar UI Visual
+  
     document.body.dataset.ledgerMode = currentLedger;
     
-    // ▼▼▼ AQUÍ ESTABA EL ERROR (CORREGIDO) ▼▼▼
-    // Simplemente llamamos a la función auxiliar que ya creamos.
-    // Ella se encarga de buscar el botón y cambiar el texto.
     updateLedgerButtonUI(); 
-    // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
     
-      // 4. Actualizar datos y vistas
     populateAllDropdowns();
 
     const activePageEl = document.querySelector('.view--active');
@@ -9605,7 +9534,57 @@ const handleStart = (e) => {
             'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
             'recalculate-balances': () => { showConfirmationModal('Se recalcularán todos los saldos. ¿Continuar?', () => auditAndFixAllBalances(btn), 'Confirmar Auditoría'); },
             'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
-            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo."); if (pin === null) return; if (pin === "") { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); showToast('PIN de acceso rápido eliminado.', 'info'); return; } if (!/^\d{4}$/.test(pin)) { showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger'); return; } const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos."); if (pin !== pinConfirm) { showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger'); return; } const pinHash = await hashPin(pin); localStorage.setItem('pinUserHash', pinHash); localStorage.setItem('pinUserEmail', currentUser.email); hapticFeedback('success'); showToast('¡PIN de acceso rápido configurado con éxito!', 'info'); },
+            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(),
+			'set-pin': async () => {
+    // 1. Creamos el HTML del Modal
+    const html = `
+        <div style="text-align: center;">
+            <p class="form-label" style="margin-bottom: 20px;">
+                Protege tu acceso. Introduce un código de 4 números.
+            </p>
+            <div class="form-group">
+                <input type="tel" id="new-pin-input" class="form-input" 
+                       pattern="[0-9]*" inputmode="numeric" maxlength="4" 
+                       placeholder="• • • •" 
+                       style="text-align: center; font-size: 2rem; letter-spacing: 10px; width: 80%; margin: 0 auto;">
+            </div>
+            <button id="save-pin-btn" class="btn btn--primary btn--full" style="margin-top: 20px;">
+                Guardar PIN
+            </button>
+        </div>
+    `;
+    
+    // 2. Mostramos el Modal
+    showGenericModal('Configurar Seguridad', html);
+
+    // 3. Damos vida al botón Guardar
+    setTimeout(() => {
+        const input = document.getElementById('new-pin-input');
+        const btn = document.getElementById('save-pin-btn');
+        if(input) input.focus();
+
+        btn.addEventListener('click', async () => {
+            const pin = input.value;
+            if (pin.length === 4 && !isNaN(pin)) {
+                try {
+                    // Usamos tu función existente hashPin
+                    const hash = await hashPin(pin);
+                    localStorage.setItem('pinUserHash', hash);
+                    // IMPORTANTE: Guardamos que el usuario tiene PIN
+                    if(currentUser) localStorage.setItem('pinUserEmail', currentUser.email);
+                    
+                    hideModal('generic-modal');
+                    showToast('¡PIN de seguridad activado!');
+                } catch (e) {
+                    console.error(e);
+                    showToast('Error al guardar', 'error');
+                }
+            } else {
+                showToast('El PIN deben ser 4 números', 'warning');
+            }
+        });
+    }, 100);
+},
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
             'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
@@ -11748,18 +11727,7 @@ document.addEventListener('click', (e) => {
         }
     }
 
-    // --- ACCIÓN: CALCULADORA ---
-    if (action === 'open-calculator') {
-        const modal = document.getElementById('calculator-iframe-modal');
-        if (modal) {
-            modal.style.display = 'flex'; // Asegurar visibilidad
-            modal.classList.add('active');
-            // Recargar iframe si es necesario
-            const iframe = document.getElementById('calculator-frame');
-            if(iframe && !iframe.src) iframe.src = 'calculadora.html';
-        }
-    }
-
+  
     // --- ACCIÓN: CERRAR SESIÓN ---
     if (action === 'logout') {
         if (confirm("¿Seguro que quieres cerrar sesión?")) {
@@ -11770,85 +11738,6 @@ document.addEventListener('click', (e) => {
             } else {
                 window.location.reload();
             }
-        }
-    }
-});
-
-/* ================================================================= */
-/* === GESTOR MAESTRO V5 (Calculadora Independiente) === */
-/* ================================================================= */
-
-window.addEventListener('click', (e) => {
-    // 1. REGLA DE ORO: Si pulsamos DENTRO del iframe o su contenedor (y no es el botón cerrar)
-    // NO HACEMOS NADA. Dejamos que la calculadora gestione sus propios clics.
-    if (e.target.closest('#calculator-iframe-modal') && !e.target.closest('[data-action="close-modal"]')) {
-        return; 
-    }
-
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-
-    const action = btn.dataset.action;
-
-    // --- A. ABRIR CALCULADORA ---
-    if (action === 'open-calculator') {
-        e.preventDefault();
-        e.stopPropagation(); // Detenemos la propagación para aislar el evento
-        
-        const modal = document.getElementById('calculator-iframe-modal');
-        const iframe = document.getElementById('calculator-frame');
-
-        if (modal && iframe) {
-            console.log("🧮 Iniciando App Calculadora...");
-            
-            // Cargar archivo si está vacío
-            if (!iframe.getAttribute('src') || iframe.getAttribute('src') === '') {
-                iframe.src = 'calculadora.html';
-            }
-
-            // ABRIR VISUALMENTE
-            modal.style.display = 'flex';
-            // Pequeño timeout para asegurar que el display:flex se aplica antes de la opacidad
-            setTimeout(() => {
-                modal.classList.add('active');
-                modal.style.opacity = '1';
-                modal.style.pointerEvents = 'auto'; // Forzamos interactividad JS
-                
-                // TRUCO FINAL: Darle el foco al iframe para que funcione el teclado
-                iframe.focus();
-                if (iframe.contentWindow) iframe.contentWindow.focus();
-            }, 10);
-
-        } else {
-            alert("Error: No se encuentra el modal de la calculadora.");
-        }
-        return;
-    }
-
-    // --- B. CERRAR CALCULADORA ---
-    if (action === 'close-modal') {
-        const modalId = btn.dataset.modalId;
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('active');
-            modal.style.opacity = '0';
-            setTimeout(() => {
-                modal.style.display = 'none';
-            }, 300); // Esperar a la animación de cierre
-        }
-        return;
-    }
-
-    // --- C. OTRAS ACCIONES (Header) ---
-    if (action === 'navigate') {
-        const page = btn.dataset.page;
-        if (typeof navigateTo === 'function') navigateTo(page);
-    }
-    
-    if (action === 'logout') {
-        if (confirm("¿Cerrar sesión?")) {
-            if (typeof firebase !== 'undefined') firebase.auth().signOut().then(() => window.location.reload());
-            else window.location.reload();
         }
     }
 });
