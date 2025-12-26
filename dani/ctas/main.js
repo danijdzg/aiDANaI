@@ -5980,15 +5980,15 @@ const renderSavingsRateGauge = (canvasId, percentage) => {
 };
 
 		
-        // =================================================================
-// === FUNCIÓN CORREGIDA PARA LA PANTALLA DE INICIO ===
+// =================================================================
+// === INICIO DEL BLOQUE A PEGAR (COPIA DESDE AQUÍ) ===
 // =================================================================
 const _renderRecientesFromCache = async () => {
-    // 1. Buscamos el contenedor por su nombre REAL en tu HTML
+    // 1. Buscamos el contenedor
     const recientesContainer = document.getElementById('inicio-view-recientes');
     if (!recientesContainer) return;
 
-    // 2. Obtenemos los datos guardados en memoria
+    // 2. Datos
     const movsToDisplay = recentMovementsCache || [];
 
     if (movsToDisplay.length === 0) {
@@ -5996,32 +5996,25 @@ const _renderRecientesFromCache = async () => {
         return;
     }
 
-    // 3. Ordenamos: Lo más nuevo arriba
+    // 3. Ordenar y Cortar
     movsToDisplay.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
-    // 4. Cogemos solo los 5 últimos para no llenar la pantalla
     const top5 = movsToDisplay.slice(0, 5);
 
     let html = '';
     
-    // 5. Creamos la lista visual
+    // 4. Generar HTML
     top5.forEach(m => {
         const isGasto = m.cantidad < 0;
         const amountClass = isGasto ? 'text-negative' : 'text-positive';
         const amountSign = m.cantidad > 0 ? '+' : '';
+        const dateStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
         
-        // Formatear fecha
-        const dateObj = new Date(m.fecha);
-        const dateStr = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-        
-        // Configurar Iconos y Colores
         let title = m.descripcion;
         let subtitle = 'Movimiento';
         let icon = isGasto ? 'arrow_downward' : 'arrow_upward';
-        let iconColor = isGasto ? '#FF3B30' : '#34C759'; // Rojo o Verde Apple
+        let iconColor = isGasto ? '#FF3B30' : '#34C759';
         let iconBg = isGasto ? 'rgba(255, 59, 48, 0.1)' : 'rgba(52, 199, 89, 0.1)';
 
-        // Buscar el nombre del concepto si existe
         if (typeof db !== 'undefined' && db.conceptos) {
             const concepto = db.conceptos.find(c => c.id === m.conceptoId);
             if (concepto) {
@@ -6031,16 +6024,15 @@ const _renderRecientesFromCache = async () => {
         }
         if (!title) title = 'Sin descripción';
 
-        // Caso especial: Traspasos
         if (m.tipo === 'traspaso') {
             title = 'Traspaso';
             icon = 'swap_horiz';
-            iconColor = '#007AFF'; // Azul
+            iconColor = '#007AFF';
             iconBg = 'rgba(0, 122, 255, 0.1)';
-            amountClass = 'text-info'; // Color neutro/informativo
+            amountClass = 'text-info';
         }
 
-        // --- LA SOLUCIÓN ESTÁ AQUÍ: data-action="open-movement-form" ---
+        // AQUI ESTA LA COMILLA DE APERTURA (NO LA BORRES) --> `
         html += `
         <div class="list-item" 
              data-action="open-movement-form" 
@@ -6060,11 +6052,14 @@ const _renderRecientesFromCache = async () => {
                 ${amountSign}${parseFloat(m.cantidad / 100).toLocaleString('es-ES', {minimumFractionDigits: 2})} €
             </div>
         </div>
-        `;
+        `; // <--- AQUI ESTA LA COMILLA DE CIERRE (IMPORTANTE)
     });
 
     recientesContainer.innerHTML = html;
-};
+}; 
+// =================================================================
+// === FIN DEL BLOQUE (ASEGÚRATE DE COPIAR HASTA AQUÍ) ===
+// =================================================================
 	const renderPendingRecurrents = () => {
     const container = select('pending-recurrents-container');
     if (!container || !db.recurrentes) return;
@@ -11805,4 +11800,4 @@ window.toggleDiarioView = function(btnElement) {
     } else {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
-}};
+};
