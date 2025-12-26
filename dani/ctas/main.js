@@ -11805,4 +11805,4 @@ window.toggleDiarioView = function(btnElement) {
     } else {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
-};
+}};
