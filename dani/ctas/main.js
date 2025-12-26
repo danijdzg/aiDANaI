@@ -11690,14 +11690,19 @@ const updateExtractoList = () => {
     listContainer.innerHTML = html;
 };
 
+
 /* ================================================================ */
 /* === LÓGICA DE ICONOS DE DIARIO (PEGAR AL FINAL DE MAIN.JS) === */
 /* ================================================================ */
+
 // 1. Función para cambiar la vista (Lista <-> Compacta)
 window.toggleDiarioView = function(btnElement) {
     const diarioContainer = document.getElementById('diario-page') || document.body;
     const icono = btnElement.querySelector('.material-icons');
-    // Alternar clase diarioContainer.classList.toggle('view-mode-compact');
+    
+    // Alternar clase
+    diarioContainer.classList.toggle('view-mode-compact');
+    
     // Cambiar icono
     if (diarioContainer.classList.contains('view-mode-compact')) {
         icono.textContent = 'view_list'; // Icono de lista
@@ -11707,16 +11712,89 @@ window.toggleDiarioView = function(btnElement) {
         console.log("Vista cambiada a: Normal");
     }
 };
+
 // 2. Control de Visibilidad al Navegar
 document.addEventListener('DOMContentLoaded', () => {
+    
     function actualizarIconos(paginaDestino) {
         const herramientas = document.getElementById('header-diario-tools');
         if (!herramientas) return;
+
         // ¿Estamos en la pestaña diario?
-        if (paginaDestino === 'diario-page') {
-            herramientas.style.display = 'flex';
+        if (paginaDestino === 'diario' || paginaDestino === 'diario-page') {
+            herramientas.style.display = 'flex'; // MOSTRAR
         } else {
-            herramientas.style.display = 'none';
+            herramientas.style.display = 'none'; // OCULTAR
         }
     }
-}); // <--- ESTO ES LO QUE TE FALTABA (El cierre del paréntesis y la llave)
+
+    // Escuchar clics en el menú inferior
+    const botonesNav = document.querySelectorAll('.bottom-nav__item');
+    botonesNav.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const pagina = btn.dataset.page; // 'dashboard', 'diario', etc.
+            actualizarIconos(pagina);
+        });
+    });
+
+    // Comprobación inicial al arrancar
+    const activoInicial = document.querySelector('.bottom-nav__item--active');
+    if (activoInicial) {
+        actualizarIconos(activoInicial.dataset.page);
+    }
+});
+
+/* ================================================================= */
+/* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO === */
+/* ================================================================= */
+
+// Variable Global para controlar la vista (Por defecto: Lista)
+// Opciones: 'list' (Lista simple) | 'date' (Agrupado por Fechas)
+window.currentDiarioView = 'list'; 
+
+// --- 1. FUNCIÓN PARA EL BOTÓN DE FILTRO ---
+window.openDiarioFilters = function() {
+    const modal = document.getElementById('diario-filters-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Pequeño retardo para permitir la animación CSS
+        setTimeout(() => {
+            modal.classList.add('active');
+        }, 10);
+        console.log("Abriendo filtros de diario...");
+    } else {
+        console.error("ERROR: No se encuentra el modal con id='diario-filters-modal' en index.html");
+        alert("Error: Falta el formulario de filtros en el HTML");
+    }
+};
+
+// --- 2. FUNCIÓN PARA EL BOTÓN DE VISTA ---
+window.toggleDiarioView = function(btnElement) {
+    const icono = btnElement.querySelector('.material-icons');
+    
+    // A) CAMBIAR EL ESTADO
+    if (window.currentDiarioView === 'list') {
+        // Cambiamos a VISTA POR FECHA
+        window.currentDiarioView = 'date';
+        if (icono) icono.textContent = 'list'; // Ponemos icono de lista para volver
+        console.log("Cambiando a Vista: AGRUPADA POR FECHA");
+    } else {
+        // Volvemos a VISTA DE LISTA
+        window.currentDiarioView = 'list';
+        if (icono) icono.textContent = 'calendar_month'; // Ponemos icono de calendario
+        console.log("Cambiando a Vista: LISTA SIMPLE");
+    }
+
+    // B) EJECUTAR EL CAMBIO (RE-RENDERIZAR)
+    // Aquí llamamos a tu función principal que pinta la lista.
+    // Buscamos las funciones más probables en tu código.
+    if (typeof renderDiario === 'function') {
+        renderDiario(); 
+    } else if (typeof renderMovements === 'function') {
+        renderMovements();
+    } else if (typeof updateDiarioList === 'function') {
+        updateDiarioList();
+    } else {
+        console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
+    }
+};
