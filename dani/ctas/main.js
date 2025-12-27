@@ -1,9 +1,4 @@
-// Función de limpieza de seguridad
-const sanitize = (str) => {
-    const temp = document.createElement('div');
-    temp.textContent = str;
-    return temp.innerHTML;
-};
+
 import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm';
 const KPI_EXPLANATIONS = {
     'ingresos': { 
@@ -107,48 +102,6 @@ const setupEnhancedFormNavigation = () => {
         setTimeout(() => select('movimiento-cantidad')?.focus(), 100);
     });
 };
-// --- AUTO-GUARDADO: Sistema de Borradores ---
-const saveFormDraft = () => {
-    const draft = {
-        cantidad: select('movimiento-cantidad').value,
-        descripcion: select('movimiento-descripcion').value,
-        cuenta: select('movimiento-cuenta').value,
-        concepto: select('movimiento-concepto').value,
-        fecha: select('movimiento-fecha').value,
-        timestamp: Date.now()
-    };
-    localStorage.setItem('movimiento_draft', JSON.stringify(draft));
-};
-
-const loadFormDraft = () => {
-    const draftJson = localStorage.getItem('movimiento_draft');
-    if (!draftJson) return;
-    
-    const draft = JSON.parse(draftJson);
-    // Solo recuperamos si el borrador es reciente (menos de 24h)
-    if (Date.now() - draft.timestamp > 24 * 60 * 60 * 1000) {
-        localStorage.removeItem('movimiento_draft');
-        return;
-    }
-
-    if (draft.cantidad) {
-        select('movimiento-cantidad').value = draft.cantidad;
-        // Actualizamos el espejo visual de la calculadora si existe
-        const mirror = select('movimiento-cantidad').parentNode.querySelector('.input-visual-mirror');
-        if(mirror && typeof updateInputMirror === 'function') updateInputMirror(select('movimiento-cantidad'));
-    }
-    if (draft.descripcion) select('movimiento-descripcion').value = draft.descripcion;
-    if (draft.cuenta) select('movimiento-cuenta').value = draft.cuenta;
-    if (draft.concepto) select('movimiento-concepto').value = draft.concepto;
-    if (draft.fecha) select('movimiento-fecha').value = draft.fecha;
-    
-    // Feedback visual sutil
-    showToast('Borrador recuperado', 'info');
-};
-
-const clearFormDraft = () => {
-    localStorage.removeItem('movimiento_draft');
-};
 const setupRealTimeValidation = () => {
     const cantidadInput = select('movimiento-cantidad');
     const cuentaSelect = select('movimiento-cuenta');
@@ -187,12 +140,6 @@ const setupRealTimeValidation = () => {
             showFieldError('', 'cuenta');
         }
     });
-	// Guardar borrador cada vez que el usuario escriba algo
-const inputsToWatch = ['movimiento-cantidad', 'movimiento-descripcion', 'movimiento-cuenta', 'movimiento-concepto'];
-inputsToWatch.forEach(id => {
-    const el = select(id);
-    if (el) el.addEventListener('input', saveFormDraft);
-});
 };
 const showRenameLedgersModal = () => {
     const names = db.config.ledgerNames || { A: "Personal", B: "Ahorro", C: "Extra" };
@@ -373,228 +320,149 @@ const setupQuickAddMode = () => {
 };
 const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
     const fecha = new Date(mov.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-    let cargo = '', abono = '', conceptoTexto = '';
+    let cargo = '';
+    let abono = '';
+    let conceptoTexto = '';
+    
+    // Si estamos en modo GLOBAL (cuentaId es null), mostramos el nombre de la cuenta
     const isGlobal = cuentaId === null;
     const cuentaPropia = isGlobal ? allCuentas.find(c => c.id === mov.cuentaId) : null;
-    const prefixCuenta = cuentaPropia ? `[${escapeHTML(cuentaPropia.nombre)}] ` : '';
+    const prefixCuenta = cuentaPropia ? `[${cuentaPropia.nombre}] ` : '';
 
+    // Lógica de importes y descripciones
     if (mov.tipo === 'traspaso') {
+        // En modo global, el traspaso interno se anula visualmente o se muestra neutro
+        // pero vamos a mantener la lógica relativa para mostrar flujo.
+        const esOrigen = mov.cuentaOrigenId === cuentaId || (isGlobal && mov.cantidad < 0); // Simplificación
+        
         const origen = allCuentas.find(c => c.id === mov.cuentaOrigenId);
         const destino = allCuentas.find(c => c.id === mov.cuentaDestinoId);
-        conceptoTexto = `TRASPASO: ${origen ? escapeHTML(origen.nombre) : '?'} -> ${destino ? escapeHTML(destino.nombre) : '?'}`;
+        
+        const nombreOrigen = origen ? escapeHTML(origen.nombre) : '?';
+        const nombreDestino = destino ? escapeHTML(destino.nombre) : '?';
+        
+        conceptoTexto = `TRASPASO: ${nombreOrigen} -> ${nombreDestino}`;
+        
+        // En extracto global, un traspaso interno no afecta al saldo neto global,
+        // pero lo mostramos en la columna que corresponda al signo para referencia.
         if (mov.cantidad < 0) cargo = formatCurrency(Math.abs(mov.cantidad));
         else abono = formatCurrency(mov.cantidad);
-        if (mov.descripcion && mov.descripcion !== 'Traspaso') conceptoTexto += ` (${escapeHTML(mov.descripcion)})`;
+
+        if (mov.descripcion && mov.descripcion !== 'Traspaso') {
+            conceptoTexto += ` (${escapeHTML(mov.descripcion)})`;
+        }
     } else {
+        // Movimiento normal
         const concepto = db.conceptos.find(c => c.id === mov.conceptoId);
-        conceptoTexto = `${prefixCuenta}${concepto ? escapeHTML(concepto.nombre.toUpperCase()) : 'VARIO'}`;
+        const nombreConcepto = concepto ? concepto.nombre.toUpperCase() : 'VARIO';
+        
+        // En modo global añadimos el nombre de la cuenta al principio
+        conceptoTexto = `${prefixCuenta}${nombreConcepto}`;
         if (mov.descripcion) conceptoTexto += ` - ${escapeHTML(mov.descripcion)}`;
-        if (mov.cantidad < 0) cargo = formatCurrency(Math.abs(mov.cantidad));
-        else abono = formatCurrency(mov.cantidad);
+
+        if (mov.cantidad < 0) {
+            cargo = formatCurrency(Math.abs(mov.cantidad));
+        } else {
+            abono = formatCurrency(mov.cantidad);
+        }
     }
 
-    // AQUI ESTÁ EL CAMBIO SEMÁNTICO: Usamos TR y TD
     return `
-        <tr class="cartilla-row">
-            <td class="cartilla-cell cartilla-date">${fecha}</td>
-            <td class="cartilla-cell cartilla-concept">${conceptoTexto}</td>
-            <td class="cartilla-cell cartilla-amount text-debit">${cargo}</td>
-            <td class="cartilla-cell cartilla-amount text-credit">${abono}</td>
-            <td class="cartilla-cell cartilla-balance">${formatCurrency(mov.runningBalance)}</td>
-        </tr>
+        <div class="cartilla-row">
+            <div class="cartilla-cell cartilla-date">${fecha}</div>
+            <div class="cartilla-cell cartilla-concept">${conceptoTexto}</div>
+            <div class="cartilla-cell cartilla-amount text-debit">${cargo}</div>
+            <div class="cartilla-cell cartilla-amount text-credit">${abono}</div>
+            <div class="cartilla-cell cartilla-balance">${formatCurrency(mov.runningBalance)}</div>
+        </div>
     `;
 };
-// ===============================================================
-// === GENERACIÓN DE INFORME (EXTRACTO DE CUENTA) - VERSIÓN FINAL ===
-// ===============================================================
+
 const handleGenerateInformeCuenta = async (form, btn = null) => {
-    // 1. Recogemos datos del formulario
-    const cuentaId = form.querySelector('#informe-cuenta').value || null; // null significa "Todas"
-    const startDateVal = form.querySelector('#informe-fecha-inicio').value;
-    const endDateVal = form.querySelector('#informe-fecha-fin').value;
-
-    // Validamos fechas
-    if (!startDateVal || !endDateVal) {
-        showToast('Por favor, selecciona un rango de fechas.', 'error');
-        return;
-    }
-
-    const startDate = new Date(startDateVal);
-    const endDate = new Date(endDateVal);
+    // 1. Solo activamos la animación del botón si se proporciona (ahora es opcional)
+    if (btn) setButtonLoading(btn, true, 'Imprimiendo...');
     
-    // Ajustamos horas para cubrir todo el día
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
+    const cuentaId = select('informe-cuenta-select').value;
+    const resultadoContainer = select('informe-resultado-container');
 
-    if (startDate > endDate) {
-        showToast('La fecha de inicio no puede ser posterior al fin.', 'error');
+    // 2. Si no hay cuenta seleccionada, limpiamos y salimos
+    if (!cuentaId) {
+        resultadoContainer.innerHTML = '';
+        if (btn) setButtonLoading(btn, false);
         return;
     }
 
-    // 2. Filtramos los movimientos (SOLO los de la cuenta seleccionada y fechas)
-    let movimientosFiltrados = db.movimientos.filter(m => {
-        const mDate = new Date(m.fecha);
-        const enFecha = mDate >= startDate && mDate <= endDate;
+    // 3. Mostramos un indicador de carga en el contenedor de resultados
+    resultadoContainer.innerHTML = `
+        <div style="text-align:center; padding: var(--sp-5);">
+            <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
+            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Cargando movimientos...</p>
+        </div>`;
+
+    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+
+    try {
+        // --- Obtención y cálculo de datos (IGUAL QUE ANTES) ---
+        const todosLosMovimientos = await AppStore.getAll();
         
-        // Si no hay cuenta seleccionada (Global), mostramos todo
-        if (!cuentaId) return enFecha;
+        let movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
+            (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId)
+        );
 
-        // Si hay cuenta, miramos si es la cuenta normal, o si es origen/destino en un traspaso
-        const esCuenta = (m.cuentaId === cuentaId) || 
-                         (m.tipo === 'traspaso' && (m.cuentaOrigenId === cuentaId || m.cuentaDestinoId === cuentaId));
-        return enFecha && esCuenta;
-    });
+        if (movimientosDeLaCuenta.length === 0) {
+             resultadoContainer.innerHTML = `<div class="empty-state" style="background:transparent; border:none; padding:var(--sp-4);"><p>Sin movimientos registrados.</p></div>`;
+             if (btn) setButtonLoading(btn, false);
+             return;
+        }
 
-    // 3. Ordenamos por fecha (antiguos primero para calcular el saldo bien)
-    movimientosFiltrados.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+        movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-    // 4. Calculamos el SALDO INICIAL (El dinero que había antes de la fecha de inicio)
-    //    Sumamos todos los movimientos de la historia ANTERIORES a startDate
-    let saldoAcumulado = 0;
-    
-    if (cuentaId) {
-        // Saldo inicial específico de la cuenta
-        const movimientosPrevios = db.movimientos.filter(m => {
-            const mDate = new Date(m.fecha);
-            // Solo movimientos ANTERIORES al rango
-            if (mDate >= startDate) return false; 
-            
-            return (m.cuentaId === cuentaId) || 
-                   (m.tipo === 'traspaso' && (m.cuentaOrigenId === cuentaId || m.cuentaDestinoId === cuentaId));
-        });
-
-        movimientosPrevios.forEach(m => {
-            if (m.tipo === 'gasto') {
-                if (m.cuentaId === cuentaId) saldoAcumulado -= m.cantidad;
-            } else if (m.tipo === 'ingreso') {
-                if (m.cuentaId === cuentaId) saldoAcumulado += m.cantidad;
-            } else if (m.tipo === 'traspaso') {
-                if (m.cuentaOrigenId === cuentaId) saldoAcumulado -= m.cantidad;
-                if (m.cuentaDestinoId === cuentaId) saldoAcumulado += m.cantidad;
-            }
-        });
-    } else {
-        // Saldo inicial GLOBAL (suma de todas las cuentas activas)
-        // Esto es complejo, para simplificar en vista global solemos empezar en 0 o calcular todo el patrimonio previo
-        // Para este extracto, calcularemos el flujo del periodo si es global, o el saldo real si es cuenta única.
-        // Si quieres saldo global real, habría que sumar TOOOODOS los ingresos/gastos históricos.
-        // Asumiremos 0 para flujo global o calcularemos previo si es crítico. 
-        // Para "Caja A" vs "B", el usuario suele querer ver el saldo de UNA cuenta.
-    }
-
-    // 5. Generamos el HTML con TABLA (Accesibilidad Semántica)
-    const nombreCuenta = cuentaId ? db.cuentas.find(c => c.id === cuentaId)?.nombre : 'Vista Global';
-    const title = `Extracto: ${escapeHTML(nombreCuenta || 'Global')}`;
-
-    let html = `
-        <div class="informe-resumen" style="margin-bottom: 20px; padding: 15px; background: var(--c-surface-variant); border-radius: 12px;">
-            <p><strong>Saldo Inicial (${startDate.toLocaleDateString()}):</strong> ${formatCurrency(saldoAcumulado)}</p>
-            <p style="font-size: 0.9em; opacity: 0.8;">Movimientos encontrados: ${movimientosFiltrados.length}</p>
-        </div>
-
-        <div class="cartilla-container" style="overflow-x: auto;">
-            <table class="cartilla-table" style="width: 100%; border-collapse: collapse; min-width: 600px;">
-                <thead>
-                    <tr style="border-bottom: 2px solid var(--c-outline); text-align: left; color: var(--c-on-surface-secondary); font-size: 0.85rem;">
-                        <th scope="col" style="padding: 12px 8px;">FECHA</th>
-                        <th scope="col" style="padding: 12px 8px;">CONCEPTO</th>
-                        <th scope="col" style="padding: 12px 8px; text-align: right;">CARGO</th>
-                        <th scope="col" style="padding: 12px 8px; text-align: right;">ABONO</th>
-                        <th scope="col" style="padding: 12px 8px; text-align: right;">SALDO</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    if (movimientosFiltrados.length === 0) {
-        html += `
-            <tr>
-                <td colspan="5" style="padding: 20px; text-align: center; color: var(--c-on-surface-secondary);">
-                    No hay movimientos en este periodo.
-                </td>
-            </tr>
-        `;
-    } else {
-        movimientosFiltrados.forEach(m => {
-            // Actualizar Saldo Acumulado línea a línea
-            let cargo = 0;
-            let abono = 0;
-            let esGastoParaEstaCuenta = false;
-
-            if (m.tipo === 'gasto') {
-                cargo = m.cantidad;
-                saldoAcumulado -= m.cantidad;
-                esGastoParaEstaCuenta = true;
-            } else if (m.tipo === 'ingreso') {
-                abono = m.cantidad;
-                saldoAcumulado += m.cantidad;
-            } else if (m.tipo === 'traspaso') {
-                if (cuentaId) {
-                    if (m.cuentaOrigenId === cuentaId) {
-                        cargo = m.cantidad;
-                        saldoAcumulado -= m.cantidad;
-                        esGastoParaEstaCuenta = true;
-                    } else if (m.cuentaDestinoId === cuentaId) {
-                        abono = m.cantidad;
-                        saldoAcumulado += m.cantidad;
-                    }
-                } else {
-                    // En vista global, un traspaso no cambia el patrimonio neto, pero lo mostramos
-                    // para información. Normalmente no es ni cargo ni abono global (se anulan).
-                    // Lo dejamos en gris o vacío en columnas numéricas.
-                }
-            }
-
-            // Formatear fecha
-            const fechaStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-
-            // Formatear Concepto y Descripción
-            let conceptoTxt = '';
-            if (m.tipo === 'traspaso') {
-                const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || '?';
-                const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '?';
-                conceptoTxt = `Traspaso: ${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
+        let saldoAcumulado = 0;
+        for (const mov of movimientosDeLaCuenta) {
+            let impacto = 0;
+            if (mov.tipo === 'traspaso') {
+                if (mov.cuentaOrigenId === cuentaId) impacto = -mov.cantidad;
+                if (mov.cuentaDestinoId === cuentaId) impacto = mov.cantidad;
             } else {
-                const conceptoObj = db.conceptos.find(c => c.id === m.conceptoId);
-                conceptoTxt = conceptoObj ? escapeHTML(conceptoObj.nombre) : 'Sin concepto';
+                impacto = mov.cantidad;
             }
-            if (m.descripcion) {
-                conceptoTxt += ` <br><span style="font-size:0.85em; color:var(--c-on-surface-secondary);">${escapeHTML(m.descripcion)}</span>`;
-            }
+            saldoAcumulado += impacto;
+            mov.runningBalance = saldoAcumulado;
+        }
 
-            // Renderizar FILA (TR)
-            html += `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 10px 8px;">${fechaStr}</td>
-                    <td style="padding: 10px 8px;">${conceptoTxt}</td>
-                    <td style="padding: 10px 8px; text-align: right; color: var(--c-danger);">
-                        ${cargo > 0 ? formatCurrency(cargo) : ''}
-                    </td>
-                    <td style="padding: 10px 8px; text-align: right; color: var(--c-success);">
-                        ${abono > 0 ? formatCurrency(abono) : ''}
-                    </td>
-                    <td style="padding: 10px 8px; text-align: right; font-weight: bold;">
-                        ${formatCurrency(saldoAcumulado)}
-                    </td>
-                </tr>
-            `;
-        });
+        movimientosDeLaCuenta.reverse(); 
+
+        // --- Renderizado HTML ---
+        let html = `
+            <div class="cartilla-container">
+                <div class="cartilla-header-info">
+                    <h4>EXTRACTO DE CUENTA</h4>
+                    <p><strong>Titular:</strong> ${escapeHTML(cuenta.nombre)}</p>
+                    <p class="cartilla-print-date">Fecha: ${new Date().toLocaleDateString()}</p>
+                </div>
+                <div class="cartilla-table">
+                    <div class="cartilla-row cartilla-head">
+                        <div class="cartilla-cell">FECHA</div>
+                        <div class="cartilla-cell">CONCEPTO</div>
+                        <div class="cartilla-cell text-right">CARGOS</div>
+                        <div class="cartilla-cell text-right">ABONOS</div>
+                        <div class="cartilla-cell text-right">SALDO</div>
+                    </div>`;
+                
+        for (const mov of movimientosDeLaCuenta) {
+            html += renderInformeCuentaRow(mov, cuentaId, db.cuentas);
+        }
+        
+        html += `</div><div class="cartilla-footer">** FIN DEL EXTRACTO **</div></div>`;
+        resultadoContainer.innerHTML = html;
+
+    } catch (error) {
+        console.error(error);
+        showToast("Error generando el extracto.", "danger");
+        resultadoContainer.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar datos.</p></div>`;
+    } finally {
+        if (btn) setButtonLoading(btn, false);
     }
-
-    html += `
-                </tbody>
-            </table>
-            <div style="margin-top: 20px; text-align: right;">
-                <p style="font-size: 1.2rem; font-weight: bold;">Saldo Final: ${formatCurrency(saldoAcumulado)}</p>
-            </div>
-        </div>
-    `;
-
-    // 6. Mostramos el resultado en el Modal Genérico
-    showGenericModal(title, html);
-    
-    // Cerramos el modal de filtros si estaba abierto (opcional, según tu UX)
-    // closeModal('informe-cuenta-modal'); 
 };
 const handleGenerateGlobalExtract = async (btn = null) => {
     const resultadoContainer = select('informe-resultado-container');
@@ -995,6 +863,53 @@ const AppStore = {
     clear() {
         this.movements = [];
         this.isFullyLoaded = false;
+    }
+};
+// ▼▼▼ REEMPLAZAR TU FUNCIÓN updateAnalisisWidgets CON ESTA VERSIÓN SIMPLIFICADA ▼▼▼
+const updateAnalisisWidgets = async () => {
+    try {
+        // Renderiza y calcula Colchón de Emergencia e Independencia Financiera
+        const saldos = await getSaldos();
+        const patrimonioNeto = Object.values(saldos).reduce((sum, s) => sum + s, 0);
+        const efData = calculateEmergencyFund(saldos, db.cuentas, recentMovementsCache);
+        const fiData = calculateFinancialIndependence(patrimonioNeto, efData.gastoMensualPromedio);
+
+        // Colchón de Emergencia
+        const efContainer = document.querySelector('[data-widget-type="emergency-fund"]');
+        if (efContainer) {
+            const efWidget = efContainer.querySelector('#emergency-fund-widget');
+            efWidget.querySelector('.card__content').classList.remove('skeleton'); 
+            const monthsValueEl = efWidget.querySelector('#kpi-ef-months-value'); 
+            const progressEl = efWidget.querySelector('#kpi-ef-progress'); 
+            const textEl = efWidget.querySelector('#kpi-ef-text');
+            if (monthsValueEl && progressEl && textEl) { 
+                monthsValueEl.textContent = isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : '∞'; 
+                progressEl.value = Math.min(efData.mesesCobertura, 6); 
+                let textClass = 'text-danger'; 
+                if (efData.mesesCobertura >= 6) textClass = 'text-positive'; 
+                else if (efData.mesesCobertura >= 3) textClass = 'text-warning'; 
+                monthsValueEl.className = `kpi-item__value ${textClass}`; 
+                textEl.innerHTML = `Tu dinero líquido cubre <strong>${isFinite(efData.mesesCobertura) ? efData.mesesCobertura.toFixed(1) : 'todos tus'}</strong> meses de gastos.`; 
+            }
+        }
+        
+        // Independencia Financiera
+        const fiContainer = document.querySelector('[data-widget-type="fi-progress"]');
+        if(fiContainer) {
+            const fiWidget = fiContainer.querySelector('#fi-progress-widget');
+            fiWidget.querySelector('.card__content').classList.remove('skeleton'); 
+            const percentageValueEl = fiWidget.querySelector('#kpi-fi-percentage-value'); 
+            const progressEl = fiWidget.querySelector('#kpi-fi-progress'); 
+            const textEl = fiWidget.querySelector('#kpi-fi-text'); 
+            if (percentageValueEl && progressEl && textEl) { 
+                percentageValueEl.textContent = `${fiData.progresoFI.toFixed(1)}%`; 
+                progressEl.value = fiData.progresoFI; 
+                textEl.innerHTML = `Objetivo: <strong>${formatCurrency(fiData.objetivoFI)}</strong> (basado en un gasto anual de ${formatCurrency(fiData.gastoAnualEstimado)})`; 
+            }
+        }
+
+    } catch (error) {
+        console.error("Error al actualizar los widgets de análisis:", error);
     }
 };
 
@@ -1679,7 +1594,7 @@ async function loadCoreData(uid) {
             }
 
             const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) {
+            if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
                 renderBudgetTracking();
             }
         }, err => {
@@ -2313,35 +2228,28 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
 };
         const escapeHTML = str => (str || '').replace(/[&<>"']/g, match => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[match]);
         
-   const parseCurrencyString = (str) => {
-    if (typeof str !== 'string' || !str) return 0;
+        const parseCurrencyString = (str) => {
+    if (typeof str !== 'string' || !str.trim()) return 0; // Retorna 0 en lugar de NaN para evitar errores matemáticos posteriores
+    let cleanStr = str.replace(/[€$£\s]/g, '');
+
+    // Si solo hay un separador, asumimos que es decimal si hay 1 o 2 dígitos después.
+    // Si hay 3, es ambiguo, pero en España suele ser millares (1.000).
+    // Tu lógica actual es buena, pero añadamos seguridad:
     
-    // 1. Limpieza agresiva: quitamos letras, símbolos de moneda y espacios
-    let clean = str.replace(/[^0-9,.-]/g, '');
-
-    // 2. Detección de formato (Europeo vs Americano)
-    // Si tiene coma y punto (ej: 1.200,50), asumimos formato europeo estándar
-    if (clean.includes(',') && clean.includes('.')) {
-        clean = clean.replace(/\./g, ''); // Quitar puntos de miles
-        clean = clean.replace(',', '.');  // Cambiar coma decimal a punto
+    // Normalizar a formato inglés interno (1234.56)
+    if (cleanStr.includes(',') && cleanStr.includes('.')) {
+        // Caso complejo: 1.234,56 -> eliminar puntos, cambiar coma
+        cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
+    } else if (cleanStr.includes(',')) {
+        // Caso simple coma: 12,50 -> 12.50
+        cleanStr = cleanStr.replace(',', '.');
     } 
-    // Si solo tiene coma (ej: 12,50), es decimal europeo
-    else if (clean.includes(',')) {
-        clean = clean.replace(',', '.');
-    }
-    // Si solo tiene punto, hay ambigüedad. 
-    // En tu app (ES), "1.200" son mil doscientos, no uno coma dos.
-    else if (clean.includes('.')) {
-        const parts = clean.split('.');
-        // Si la parte tras el punto tiene 3 cifras (1.234), es millar -> Quitar punto
-        if (parts[parts.length - 1].length === 3) {
-            clean = clean.replace(/\./g, '');
-        } 
-        // Si tiene 2 (1.50), asumimos que el usuario escribió formato inglés -> Mantener
-    }
-
-    const val = parseFloat(clean);
-    return isNaN(val) ? 0 : val;
+    // Caso simple punto: 12.50 se queda igual. 
+    // PERO si es 1.200 (mil doscientos), JS lo toma como 1.2.
+    // Dada tu audiencia (España), asumimos que el input manual de la calculadora usa ',' para decimales.
+    
+    const result = parseFloat(cleanStr);
+    return isNaN(result) ? 0 : result;
 };
 		const formatAsCurrencyInput = (num) => {
     if (isNaN(num)) return '';
@@ -4086,7 +3994,7 @@ const renderVirtualListItem = (item) => {
 
         // HTML FINAL: Sustituimos la barra por la burbuja de icono
         return `
-        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="open-movement-form">
+        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
             
             <div class="t-icon-bubble ${bubbleClass}">
                 <span class="material-icons">${iconName}</span>
@@ -4461,71 +4369,7 @@ const loadMoreMovements = async (isInitial = false) => {
     movementsObserver.observe(trigger);
 };
 
-/* =============================================================== */
-/* === NUEVA FUNCIÓN: Generar HTML de un movimiento === */
-/* =============================================================== */
-const getMovimientoListItemHTML = (mov, showDate = false) => {
-    // 1. Cálculos visuales
-    const isIngreso = mov.tipo === 'ingreso';
-    const amountClass = isIngreso ? 'amount--positive' : 'amount--negative';
-    const amountPrefix = isIngreso ? '+' : '';
-    const formattedDate = new Date(mov.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-
-    // 2. Iconos y Textos inteligentes
-    let icon = 'sell';
-    let title = 'General';
-    let subtitle = '';
-
-    if (mov.tipo === 'traspaso') {
-        icon = 'swap_horiz';
-        title = 'Traspaso';
-        // Buscamos nombres de cuentas
-        const cOrigen = (AppStore.cuentas || []).find(c => c.id === mov.cuentaOrigenId)?.nombre || '??';
-        const cDestino = (AppStore.cuentas || []).find(c => c.id === mov.cuentaDestinoId)?.nombre || '??';
-        subtitle = `${cOrigen} ➝ ${cDestino}`;
-    } else {
-        // Gasto o Ingreso normal
-        const concepto = (AppStore.conceptos || []).find(c => c.id === mov.conceptoId);
-        if (concepto) {
-            icon = concepto.icono || 'sell';
-            title = concepto.nombre;
-        }
-        const cuenta = (AppStore.cuentas || []).find(c => c.id === mov.cuentaId)?.nombre || '';
-        subtitle = cuenta ? `${title} • ${cuenta}` : title;
-        // Si el movimiento tiene descripción manual, la usamos de título
-        if (mov.descripcion) title = mov.descripcion;
-    }
-
-    // 3. HTML FINAL (Con los activadores de clic para editar)
-    // Fíjate en data-action="open-movement-form" -> Esto activa el editor
-    return `
-    <div class="list-item movement-item" 
-         data-action="open-movement-form" 
-         data-id="${mov.id}" 
-         data-type="${mov.tipo}"
-         style="cursor: pointer; position: relative; overflow: hidden;">
-         
-        <div class="list-item__icon ${isIngreso ? 'bg-success-transparent' : 'bg-danger-transparent'}"
-             style="${mov.tipo === 'traspaso' ? 'background-color: var(--c-surface-variant);' : ''}">
-            <span class="material-icons ${isIngreso ? 'text-success' : 'text-danger'}"
-                  style="${mov.tipo === 'traspaso' ? 'color: var(--c-on-surface);' : ''}">${icon}</span>
-        </div>
-        
-        <div class="list-item__content">
-            <div class="list-item__title">${title}</div>
-            <div class="list-item__subtitle">
-                ${showDate ? `<span style="opacity:0.8; margin-right:4px;">${formattedDate}</span>` : ''}
-                <span>${subtitle}</span>
-                ${mov.esRecurrente ? '<span class="material-icons" style="font-size: 13px; vertical-align: -2px; margin-left: 4px;">repeat</span>' : ''}
-            </div>
-        </div>
-        
-        <div class="list-item__amount ${amountClass}" style="${mov.tipo === 'traspaso' ? 'color: var(--c-on-surface);' : ''}">
-            ${amountPrefix}${parseFloat(mov.cantidad / 100).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
-        </div>
-    </div>
-    `;
-};
+// ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
 
 const renderDiarioPage = async () => {
     if (isDiarioPageRendering) {
@@ -5388,9 +5232,11 @@ const TransactionCardComponent = (m, dbData) => {
     }
 
     return `
-    <div class="list-item-animate">
-        <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="open-movement-form" style="padding-left: var(--sp-2); padding-right: var(--sp-2); cursor: pointer;">
+    <div class="list-item-animate"> 
+        <div class="transaction-card ${highlightClass}" data-id="${m.id}" style="padding-left: var(--sp-2); padding-right: var(--sp-2);">
+            
             ${avatarHTML}
+
             <div class="transaction-card__content">
                 <div class="transaction-card__details">
                     <div class="transaction-card__row-1" style="font-size: 0.95rem; font-weight: 700; color: var(--c-on-surface); margin-bottom: 2px;">
@@ -7727,7 +7573,9 @@ const showDrillDownModal = (title, movements) => {
           TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
       )
       .join('')
-      
+      // Cambiamos la acción para que la edición funcione desde dentro del modal
+      .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
+
     // Llamamos a la función para mostrar el modal
     showGenericModal(title, modalContentHTML);
     
@@ -8049,8 +7897,6 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
             }
         }, 300); // Un poco más de tiempo para asegurar que el modal terminó de subir
     }
-	// Si es un movimiento nuevo, intentamos cargar borrador
-	if (mode === 'new') loadFormDraft();
 };
         
         
@@ -9210,11 +9056,7 @@ const renderInversionesPage = async (containerId) => {
 
 // ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
 const attachEventListeners = () => {
-	// Evitamos duplicar el cerebro si ya está activo
-    if (window.eventsAttached) return;
-    window.eventsAttached = true;
-
-    console.log("🛡️ Sistema de Eventos Centralizado: ACTIVO");
+	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
     document.addEventListener('click', async (e) => {
         
         // 1. CERRAR MENÚ AL TOCAR FUERA
@@ -9587,18 +9429,11 @@ const handleStart = (e) => {
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
-            'open-movement-form': () => {
-    // Cerramos cualquier menú previo
-    const menu = document.getElementById('main-menu-popover');
-    if (menu) menu.classList.remove('popover-menu--visible');
-    
-    // Obtenemos el ID del movimiento pulsado
-    // (actionTarget es el elemento que pulsaste, definido al inicio del listener)
-    const id = actionTarget.dataset.id; 
-    
-    // Abrimos el formulario en modo edición
-    startMovementForm(id, false); 
-},
+            'open-movement-form': (e) => {
+                const type = e.target.closest('[data-type]').dataset.type;
+                hideModal('main-add-sheet');
+                setTimeout(() => startMovementForm(null, false, type), 250);
+            },
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,
@@ -10489,9 +10324,10 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
             if (cuenta) cuenta.saldo += newData.cantidad; // Solo opera si la cuenta existe
         }
     }
+    // --- ⭐ FIN DE LA CORRECCIÓN ⭐ ---
 };
 const handleSaveMovement = async (form, btn) => {
-    // 1. Validaciones y UI
+    // 1. Validaciones iniciales
     clearAllErrors(form.id);
     if (!validateMovementForm()) {
         hapticFeedback('error');
@@ -10503,7 +10339,6 @@ const handleSaveMovement = async (form, btn) => {
     const saveNewBtn = select('save-and-new-movimiento-btn');
     const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
 
-    // Estado de carga
     if (saveBtn) setButtonLoading(saveBtn, true);
     if (saveNewBtn && isSaveAndNew) setButtonLoading(saveNewBtn, true);
 
@@ -10514,135 +10349,206 @@ const handleSaveMovement = async (form, btn) => {
 
     try {
         // 2. Obtener datos del formulario
-        const getVal = (id) => select(id)?.value || '';
-        
-        // RECUPERAMOS EL ID PARA SABER SI ES EDICIÓN
-        const id = getVal('movimiento-id') || generateId(); 
-        const isEditing = getVal('movimiento-mode').startsWith('edit');
-
-        const cantidadVal = parseCurrencyString(getVal('movimiento-cantidad'));
-        const cantidad = Math.round(cantidadVal * 100); // A céntimos
-        
-        // Detectar signo correcto según tipo (Gasto = negativo, Ingreso = positivo)
-        // Nota: Si es traspaso, la cantidad siempre es positiva (valor absoluto del movimiento)
-        const activeTypeBtn = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
-        const tipo = activeTypeBtn ? activeTypeBtn.dataset.type : 'gasto';
-        
-        let finalAmount = Math.abs(cantidad);
-        if (tipo === 'gasto') finalAmount = -finalAmount;
-        
-        const fecha = getVal('movimiento-fecha');
-        const descripcion = getVal('movimiento-descripcion').trim();
-        const esRecurrente = select('movimiento-recurrente')?.checked || false;
-
-        // Construir objeto de datos
-        const dataToSave = {
-            id: id,
-            fecha: fecha,
-            cantidad: finalAmount, // En céntimos
-            descripcion: descripcion,
-            tipo: tipo,
-            esRecurrente: esRecurrente,
-            updatedAt: new Date().toISOString()
+        const getVal = (id) => {
+            const el = select(id);
+            return el ? el.value : '';
         };
 
-        if (tipo === 'traspaso') {
-            dataToSave.cuentaOrigenId = getVal('movimiento-cuenta-origen');
-            dataToSave.cuentaDestinoId = getVal('movimiento-cuenta-destino');
-            dataToSave.conceptoId = ''; // Traspasos no suelen llevar concepto
+        const mode = getVal('movimiento-mode');
+        const id = getVal('movimiento-id') || generateId();
+        
+        const typePill = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
+        const tipoMovimiento = typePill ? typePill.dataset.type : 'gasto';
+        
+        const cantidadPositiva = parseCurrencyString(getVal('movimiento-cantidad'));
+        const cantidadEnCentimos = Math.round(cantidadPositiva * 100);
+        
+        const recurrenteCheck = select('movimiento-recurrente');
+        const isRecurrent = recurrenteCheck ? recurrenteCheck.checked : false;
+
+        // Objeto Base
+        const baseData = {
+            descripcion: getVal('movimiento-descripcion').trim(),
+            cantidad: tipoMovimiento === 'gasto' ? -Math.abs(cantidadEnCentimos) : Math.abs(cantidadEnCentimos),
+            tipo: tipoMovimiento,
+            conceptoId: getVal('movimiento-concepto'),
+        };
+
+        // Lógica de Traspasos vs Normal
+        if (tipoMovimiento === 'traspaso') {
+            baseData.tipo = 'traspaso';
+            baseData.cantidad = Math.abs(cantidadEnCentimos);
+            baseData.cuentaOrigenId = getVal('movimiento-cuenta-origen');
+            baseData.cuentaDestinoId = getVal('movimiento-cuenta-destino');
+            baseData.cuentaId = null;
         } else {
-            dataToSave.cuentaId = getVal('movimiento-cuenta');
-            dataToSave.conceptoId = getVal('movimiento-concepto');
+            baseData.tipo = 'movimiento';
+            baseData.cuentaId = getVal('movimiento-cuenta');
+            baseData.cuentaOrigenId = null;
+            baseData.cuentaDestinoId = null;
         }
 
-        // 3. Lógica de Base de Datos (Firebase Batch)
-        const batch = fbDb.batch();
-        const userRef = fbDb.collection('users').doc(currentUser.uid);
-        
-        // Referencia al documento del movimiento
-        const movRef = userRef.collection('movimientos').doc(id);
-        batch.set(movRef, dataToSave, { merge: true });
-
-        // 4. ACTUALIZACIÓN DE SALDOS (CRÍTICO)
-        // Si estamos editando, primero revertimos el impacto del movimiento anterior
-        if (isEditing) {
-            // Buscamos el movimiento original en memoria (AppStore es más fiable aquí)
-            const original = (await AppStore.getAll()).find(m => m.id === id);
+        // --- 3. GUARDADO DE RECURRENTE (Lógica separada) ---
+        if (isRecurrent) {
+            const frequency = getVal('recurrent-frequency') || 'monthly';
+            let rawNextDate = getVal('recurrent-next-date');
+            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha');
             
-            if (original) {
-                if (original.tipo === 'traspaso') {
-                    // Revertir traspaso: Devolver dinero a origen, quitar de destino
-                    batch.update(userRef.collection('cuentas').doc(original.cuentaOrigenId), { 
-                        saldo: firebase.firestore.FieldValue.increment(original.cantidad) 
-                    });
-                    batch.update(userRef.collection('cuentas').doc(original.cuentaDestinoId), { 
-                        saldo: firebase.firestore.FieldValue.increment(-original.cantidad) 
-                    });
+            let weekDays = [];
+            if (frequency === 'weekly') {
+                weekDays = Array.from(document.querySelectorAll('.day-selector-btn.active')).map(b => b.dataset.day);
+                if (weekDays.length === 0) throw new Error("Selecciona al menos un día.");
+            }
+
+            const recurrentData = {
+                id: id,
+                ...baseData,
+                frequency: frequency,
+                nextDate: rawNextDate, 
+                endDate: getVal('recurrent-end-date') || null,
+                weekDays: weekDays,
+                active: true
+            };
+
+            await saveDoc('recurrentes', id, recurrentData);
+
+            // Actualizar memoria local
+            const idx = db.recurrentes.findIndex(r => r.id === id);
+            if (idx > -1) db.recurrentes[idx] = recurrentData;
+            else db.recurrentes.push(recurrentData);
+            db.recurrentes.sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+
+            hapticFeedback('success');
+            showToast('Recurrente guardado.');
+            
+            const activePage = document.querySelector('.view--active');
+            if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) renderPlanificacionPage();
+
+        } 
+        // --- 4. GUARDADO DE MOVIMIENTO NORMAL ---
+        else {
+            let oldData = null;
+            if (mode.startsWith('edit')) {
+                const original = db.movimientos.find(m => m.id === id);
+                if (original) oldData = { ...original };
+            }
+
+            // CORRECCIÓN DE FECHA: Forzamos mediodía UTC
+            const rawDate = getVal('movimiento-fecha');
+            const safeDateISO = rawDate ? new Date(rawDate + 'T12:00:00Z').toISOString() : new Date().toISOString();
+
+            const dataToSave = {
+                id: id,
+                fecha: safeDateISO,
+                ...baseData
+            };
+
+            // 4.1. Actualizar Memoria Local (Optimista)
+            if (oldData) {
+                const index = db.movimientos.findIndex(m => m.id === id);
+                if (index > -1) db.movimientos[index] = dataToSave;
+            } else {
+                db.movimientos.unshift(dataToSave);
+            }
+
+            // 4.2. Actualizar Saldos (Optimista)
+            applyOptimisticBalanceUpdate(dataToSave, oldData);
+
+            // 4.3. Feedback Visual en Botón (Mejora UX)
+            if (btn) {
+                btn.classList.remove('btn--loading');
+                btn.classList.add('btn--success-state');
+                btn.innerHTML = `
+                    <div class="btn-content-visible" style="display:flex; align-items:center; gap:8px; justify-content:center;">
+                        <span class="material-icons" style="font-size: 20px;">check_circle</span>
+                        <span>¡Guardado!</span>
+                    </div>`;
+                hapticFeedback('success');
+                // Pequeña espera para ver el éxito
+                await new Promise(r => setTimeout(r, 650));
+            }
+
+            // 4.4. Batch Write a Firebase (Persistencia)
+            const batch = fbDb.batch();
+            const userRef = fbDb.collection('users').doc(currentUser.uid);
+
+            // Revertir saldo viejo
+            if (oldData) {
+                if (oldData.tipo === 'traspaso') {
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldData.cantidad) });
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
                 } else {
-                    // Revertir normal: Restar la cantidad (si era gasto negativo, esto suma; si era ingreso, resta)
-                    batch.update(userRef.collection('cuentas').doc(original.cuentaId), { 
-                        saldo: firebase.firestore.FieldValue.increment(-original.cantidad) 
-                    });
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
                 }
             }
-        }
 
-        // Aplicar el nuevo impacto
-        if (tipo === 'traspaso') {
-            // Nuevo traspaso: Restar de origen, sumar a destino
-            batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaOrigenId), { 
-                saldo: firebase.firestore.FieldValue.increment(-dataToSave.cantidad) 
-            });
-            batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaDestinoId), { 
-                saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) 
-            });
-        } else {
-            // Nuevo normal: Sumar la cantidad (negativa o positiva)
-            batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaId), { 
-                saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) 
-            });
-        }
+            // Guardar nuevo
+            batch.set(userRef.collection('movimientos').doc(id), dataToSave);
 
-        // 5. Ejecutar escritura en DB
-        await batch.commit();
-
-        // 6. Actualizar Memoria (AppStore) para reflejar cambios instantáneamente
-        if (isEditing) {
-            AppStore.update(dataToSave);
-        } else {
-            AppStore.add(dataToSave);
-        }
-
-        // 7. Feedback y Cierre
-        hapticFeedback('success');
-        showToast(isEditing ? 'Movimiento actualizado.' : 'Movimiento guardado.', 'success');
-		clearFormDraft();
-        if (!isSaveAndNew) {
-            hideModal('movimiento-modal');
-        } else {
-            // Resetear solo campos necesarios para "Guardar y nuevo"
-            select('movimiento-cantidad').value = '';
-            select('movimiento-descripcion').value = '';
-            // updateInputMirror si usas la calculadora visual
-            const mirror = select('movimiento-cantidad').parentNode.querySelector('.input-visual-mirror');
-            if(mirror) mirror.innerHTML = `<span class="currency-major">0</span><small class="currency-minor">,00</small>`;
+            // Aplicar saldo nuevo
+            if (dataToSave.tipo === 'traspaso') {
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataToSave.cantidad) });
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
+            } else {
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
+            }
             
-            select('movimiento-cantidad').focus();
+            // Actualizar AppStore
+			if (oldData) {
+				AppStore.update(dataToSave);
+			} else {
+				AppStore.add(dataToSave);
+			}
+            
+            await batch.commit();
+            
+            // 4.5. Efecto Confeti (Solo ingresos)
+			if (dataToSave.cantidad > 0 && dataToSave.tipo !== 'traspaso') {
+				confetti({
+    				particleCount: 100,
+    				spread: 70,
+    				origin: { y: 0.7 },
+    				colors: ['#39FF14', '#00B34D', '#FFD60A'],
+    			    disableForReducedMotion: true
+			    });
+		    }
+
+            // 4.6. NAVEGACIÓN Y RESALTADO (Nuevo Flujo)
+            if (!isSaveAndNew) {
+                hideModal('movimiento-modal');
+                // Llamamos a la función mágica para ir al diario y resaltar
+                navigateToAndHighlight(id); 
+                
+                // Restaurar botón después
+                setTimeout(() => {
+                    if(btn) {
+                        btn.classList.remove('btn--success-state');
+                        btn.innerHTML = 'Guardar';
+                        btn.removeAttribute('disabled');
+                    }
+                }, 500);
+            } else {
+                startMovementForm();
+                // Restaurar botón inmediatamente
+                if(btn) {
+                    btn.classList.remove('btn--success-state');
+                    btn.innerHTML = '+ Otro';
+                    btn.removeAttribute('disabled');
+                }
+            }
+            
+            // Refrescar UI global
+            setTimeout(() => updateLocalDataAndRefreshUI(), 50);
         }
 
-        // 8. Refrescar UI (Panel y Diario)
-        scheduleDashboardUpdate(); // Actualiza gráficas del panel
-        
-        // Si estamos en el diario, forzar repintado
-        const diarioPage = select(PAGE_IDS.DIARIO);
-        if (diarioPage && diarioPage.classList.contains('view--active')) {
-            // Forzamos recarga de la lista
-            if (typeof renderDiarioPage === 'function') renderDiarioPage();
+    } catch (error) { // <--- AQUÍ ESTABA EL PROBLEMA (Faltaba la llave de cierre arriba)
+        console.error("Error al guardar:", error);
+        showToast(error.message || "Error al guardar.", "danger");
+        // Restaurar botón en caso de error
+        if(btn) {
+             btn.classList.remove('btn--success-state');
+             btn.innerHTML = 'Guardar';
         }
-
-    } catch (error) {
-        console.error("Error crítico al guardar:", error);
-        showToast("Error al guardar en la base de datos.", "danger");
     } finally {
         releaseButtons();
     }
