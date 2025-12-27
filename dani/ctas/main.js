@@ -4958,7 +4958,7 @@ const renderPanelPage = async () => {
     container.innerHTML = `
         <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
             
-            <div class="hero-card fade-in-up" data-action="ver-balance-neto" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1); cursor: pointer;">
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div style="font-size: 0.8rem; font-weight: 700; color: var(--c-on-surface); text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">
@@ -5232,25 +5232,30 @@ const TransactionCardComponent = (m, dbData) => {
     }
 
     return `
-    <div class="list-item-animate">
-        <div class="transaction-card ${highlightClass}" 
-             data-action="open-movement-form" 
-             data-id="${m.id}" 
-             style="padding-left: var(--sp-2); padding-right: var(--sp-2); cursor: pointer;">
+    <div class="list-item-animate"> 
+        <div class="transaction-card ${highlightClass}" data-id="${m.id}" style="padding-left: var(--sp-2); padding-right: var(--sp-2);">
             
             ${avatarHTML}
-            
+
             <div class="transaction-card__content">
-                <div class="transaction-card__title">${conceptoName}</div>
-                <div class="transaction-card__subtitle">${m.descripcion || dateStr}</div>
-            </div>
-            
-            <div class="transaction-card__amount ${amountClass}">
-                ${formatCurrency(m.cantidad)}
+                <div class="transaction-card__details">
+                    <div class="transaction-card__row-1" style="font-size: 0.95rem; font-weight: 700; color: var(--c-on-surface); margin-bottom: 2px;">
+                        ${title}
+                    </div>
+                    <div class="transaction-card__row-2" style="opacity: 0.8; font-size: 0.75rem; color: var(--c-on-surface-secondary);">
+                        ${subtitle}
+                    </div>
+                </div>
+                <div class="transaction-card__figures">
+                    <div class="transaction-card__amount ${amountClass}" style="font-size: 1rem;">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+                    ${ m.tipo !== 'traspaso' 
+                       ? `<div class="transaction-card__balance" style="font-size: 0.7rem; opacity: 0.6; margin-top:2px;">${formatCurrencyHTML(m.runningBalance)}</div>` 
+                       : '' 
+                    }
+                </div>
             </div>
         </div>
-    </div>
-`;
+    </div>`;
 };
 
 // Variable para recordar la selección del usuario (por defecto 3 Meses)
@@ -6087,7 +6092,7 @@ const renderPlanificacionPage = () => {
 
         <div class="analysis-section-label">MI PATRIMONIO</div>
 
-        <details id="seccion-balance-neto" class="dashboard-widget">
+        <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
@@ -7909,111 +7914,108 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
             }, 100);
         };
         
-// ===============================================================
-// === NUEVO BUSCADOR GLOBAL POTENTE (Sustituye al anterior) ===
-// ===============================================================
+        // REEMPLAZA TU FUNCIÓN performGlobalSearch POR ESTA VERSIÓN MEJORADA
 const performGlobalSearch = async (query) => {
-    const resultsContainer = document.getElementById('global-search-results');
+    const resultsContainer = select('global-search-results');
     if (!resultsContainer) return;
 
-    // 1. Limpieza inicial: Si no hay texto, mostrar mensaje de ayuda
     if (!query || query.trim().length < 2) {
-        resultsContainer.innerHTML = `
-            <div class="empty-state" style="padding: 2rem; opacity: 0.6; text-align: center;">
-                <span class="material-icons" style="font-size: 48px;">manage_search</span>
-                <p>Escribe para buscar cuentas, conceptos o importes...</p>
-            </div>`;
+        resultsContainer.innerHTML = `<div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">manage_search</span><h3>Encuéntralo todo</h3><p>Busca movimientos, cuentas o conceptos. <br>Atajo: <strong>Cmd/Ctrl + K</strong></p></div>`;
         return;
     }
 
-    // 2. Indicador de carga
-    resultsContainer.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <span class="spinner" style="color: var(--c-primary);"></span>
-            <p style="font-size: 0.8rem; margin-top: 10px;">Buscando en todo el historial...</p>
-        </div>`;
-
-    // 3. Obtener TODOS los datos (Usamos AppStore para velocidad si está disponible)
-    let allMovs = [];
-    if (typeof AppStore !== 'undefined') {
-        if (!AppStore.isFullyLoaded) await AppStore.getAll(); // Carga forzada si falta
-        allMovs = AppStore.movements;
-    } else {
-        allMovs = db.movimientos; // Fallback por seguridad
-    }
-
-    // 4. EL FILTRO INTELIGENTE (Ignora mayúsculas y acentos)
-    const term = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    resultsContainer.innerHTML = `<div style="text-align: center; padding: var(--sp-5);"><span class="spinner"></span><p style="margin-top: var(--sp-2);">Buscando en toda tu base de datos...</p></div>`;
     
-    const hits = allMovs.filter(m => {
-        // Preparamos los datos del movimiento para buscar en ellos
-        const concepto = db.conceptos.find(c => c.id === m.conceptoId);
-        const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
-        
-        // Limpiamos textos (quitamos acentos y pasamos a minúsculas)
-        const tConcepto = (concepto?.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const tDesc = (m.descripcion || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const tCuenta = (cuenta?.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        
-        // Truco para buscar importes (ej: buscas "50" y encuentra "50.00")
-        const cantidadReal = (Math.abs(m.cantidad) / 100).toString(); 
-        
-        // ¿Coincide con algo?
-        return tConcepto.includes(term) || 
-               tDesc.includes(term) || 
-               tCuenta.includes(term) ||
-               cantidadReal.includes(term);
-    });
+    const queryLower = query.toLowerCase();
+    let resultsHtml = '';
+    const MAX_RESULTS_PER_GROUP = 10;
 
-    // 5. Ordenar: Lo más reciente primero
-    hits.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    const allMovements = await AppStore.getAll();
 
-    // 6. Pintar los resultados en pantalla
-    if (hits.length === 0) {
-        resultsContainer.innerHTML = `
-            <div class="empty-state" style="padding: 20px; text-align:center;">
-                <p>No encontré nada con "${query}"</p>
-            </div>`;
-    } else {
-        resultsContainer.innerHTML = hits.map(m => {
+    // --- SECCIÓN DE MOVIMIENTOS MEJORADA ---
+    const movs = allMovements
+        .map(m => {
             const concepto = db.conceptos.find(c => c.id === m.conceptoId);
-            const date = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-            
-            // Colores según si es gasto (-) o ingreso (+)
-            const amountClass = m.cantidad < 0 ? 'text-negative' : 'text-positive'; // Usa tus clases CSS
-            const amountSign = m.cantidad > 0 ? '+' : '';
-            
-            // Al hacer clic, abrimos el formulario de editar (startMovementForm)
-            return `
-            <div class="search-result-item" onclick="hideModal('global-search-modal'); startMovementForm('${m.id}', false)" style="padding: 12px; border-bottom: 1px solid var(--c-outline); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 600; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                        ${concepto?.nombre || 'Movimiento'}
-                    </div>
-                    <div style="font-size: 0.75rem; color: var(--c-on-surface-secondary); margin-top: 4px;">
-                        ${date} • <span style="font-style: italic;">${m.descripcion || 'Sin detalles'}</span>
-                    </div>
-                </div>
-                <div class="${amountClass}" style="font-weight: 700; font-size: 0.95rem; margin-left: 10px; white-space: nowrap;">
-                    ${amountSign}${formatCurrency(m.cantidad)}
-                </div>
-            </div>`;
-        }).join('');
-        
-        // Espacio final para que el último elemento no quede pegado al borde si haces scroll
-        resultsContainer.insertAdjacentHTML('beforeend', `<div style="height: 40px; text-align:center; font-size:0.7rem; opacity:0.5; margin-top:10px;">${hits.length} resultados encontrados</div>`);
-    }
-};
+            const conceptoNombre = (concepto && concepto.nombre) || '';
+            let cuentaInfo = '';
+            if (m.tipo === 'traspaso') {
+                const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId);
+                const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId);
+                cuentaInfo = `${(origen && origen.nombre) || ''} → ${(destino && destino.nombre) || ''}`;
+            } else {
+                const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
+                cuentaInfo = (cuenta && cuenta.nombre) || '';
+            }
+            const fecha = new Date(m.fecha).toLocaleDateString('es-ES');
+            const importe = (m.cantidad / 100).toLocaleString('es-ES');
+            const searchableText = `${m.descripcion} ${conceptoNombre} ${cuentaInfo} ${fecha} ${importe}`.toLowerCase();
+            return { movement: m, text: searchableText, cuentaInfo: cuentaInfo };
+        })
+        .filter(item => item.text.includes(queryLower))
+        .sort((a, b) => new Date(b.movement.fecha) - new Date(a.movement.fecha))
+        .slice(0, MAX_RESULTS_PER_GROUP)
+        .map(item => item); // Devolvemos el objeto completo con cuentaInfo
 
-// 7. AUTO-ACTIVACIÓN (Esto asegura que funcione aunque el HTML no tenga 'oninput')
-document.addEventListener('DOMContentLoaded', () => {
-    // Buscamos el input del buscador
-    const input = document.getElementById('global-search-input');
-    // Si existe, le decimos: "Cuando escriban, ejecuta la función performGlobalSearch"
-    if (input) {
-        input.addEventListener('input', (e) => performGlobalSearch(e.target.value));
+    if (movs.length > 0) {
+        resultsHtml += `<div class="search-result-group">
+                            <div class="search-result-group__title">Movimientos Encontrados</div>`;
+        movs.forEach(item => {
+            const m = item.movement;
+            const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
+            resultsHtml += `
+                <button class="search-result-item" data-action="search-result-movimiento" data-id="${m.id}">
+                    <span class="material-icons search-result-item__icon">receipt_long</span>
+                    <div class="search-result-item__details">
+                        <p>${escapeHTML(m.descripcion)}</p>
+                        <small>${new Date(m.fecha).toLocaleDateString('es-ES')} • ${escapeHTML(item.cuentaInfo)}</small>
+                    </div>
+                    <strong class="search-result-item__amount ${amountClass}">${formatCurrency(m.cantidad)}</strong>
+                </button>`;
+        });
+        resultsHtml += `</div>`;
     }
-});
+
+    // --- SECCIÓN DE CUENTAS MEJORADA ---
+    const cuentas = (db.cuentas || []).filter(c => c.nombre.toLowerCase().includes(queryLower) || c.tipo.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
+    if (cuentas.length > 0) {
+        resultsHtml += `<div class="search-result-group">
+                            <div class="search-result-group__title">Cuentas</div>`;
+        cuentas.forEach(c => {
+            resultsHtml += `
+                <button class="search-result-item" data-action="search-result-cuenta" data-id="${c.id}">
+                    <span class="material-icons search-result-item__icon">account_balance_wallet</span>
+                    <div class="search-result-item__details">
+                        <p>${escapeHTML(c.nombre)}</p>
+                        <small>${escapeHTML(c.tipo)}</small>
+                    </div>
+                </button>`;
+        });
+        resultsHtml += `</div>`;
+    }
+
+    // --- SECCIÓN DE CONCEPTOS MEJORADA ---
+    const conceptos = (db.conceptos || []).filter(c => c.nombre.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
+    if (conceptos.length > 0) {
+        resultsHtml += `<div class="search-result-group">
+                            <div class="search-result-group__title">Conceptos</div>`;
+        conceptos.forEach(c => {
+            resultsHtml += `
+                <button class="search-result-item" data-action="search-result-concepto" data-id="${c.id}">
+                    <span class="material-icons search-result-item__icon">label</span>
+                    <div class="search-result-item__details">
+                        <p>${escapeHTML(c.nombre)}</p>
+                    </div>
+                </button>`;
+        });
+        resultsHtml += `</div>`;
+    }
+
+    if (!resultsHtml) {
+        resultsHtml = `<div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">search_off</span><h3>Sin resultados</h3><p>No se encontró nada para "${escapeHTML(query)}".</p></div>`;
+    }
+    
+    resultsContainer.innerHTML = resultsHtml;
+};
 
 		// REEMPLAZA tu función showValoracionModal con esta versión
 const showValoracionModal = (cuentaId) => {
@@ -9315,25 +9317,7 @@ const handleStart = (e) => {
     // 5. GESTIÓN DE CLICS (Delegación de eventos)
     document.body.addEventListener('click', async (e) => {
         const target = e.target;
-		const actionBtn = e.target.closest('[data-action]'); // Asegúrate que esta línea existe al principio
 
-if (actionBtn) {
-    // --- AÑADE O REVISA ESTE BLOQUE ---
-    if (action === 'open-movement-form') {
-        const id = actionBtn.dataset.id; // Cogemos el ID que pusimos en la tarjeta
-        const type = actionBtn.dataset.type; // Por si es un botón de "Añadir Gasto" nuevo
-        
-        // Si tiene ID, es editar. Si no, es nuevo.
-        if (id) {
-            startMovementForm(id); // <--- ESTO ABRE EL FORMULARIO PARA EDITAR
-        } else {
-            startMovementForm(null, type); // Nuevo movimiento
-        }
-        
-        // Si veníamos del buscador o de una hoja de acciones, cerramos esos modales
-        hideModal('global-search-modal'); 
-        hideModal('main-add-sheet');
-    }
         // Cerrar dropdowns personalizados al hacer clic fuera
         if (!target.closest('.custom-select-wrapper')) {
             closeAllCustomSelects(null);
@@ -9672,7 +9656,7 @@ if (actionBtn) {
         };
         
         if (actions[action]) actions[action](e);
-    };
+    });
 
     // 6. Gestión de elementos <details> para informes
     document.body.addEventListener('toggle', (e) => {
@@ -9872,7 +9856,7 @@ if (actionBtn) {
     }
     
     initSpeedDial();
-});
+};
 // ▲▲▲ FIN FUNCIÓN attachEventListeners ▲▲▲
 
 // Lógica separada para el selector de días semanales (para que no se duplique)
@@ -11882,83 +11866,9 @@ window.toggleDiarioView = function(btnElement) {
         renderDiario(); 
     } else if (typeof renderMovements === 'function') {
         renderMovements();
-    } else if (typeof updateDiario === 'function') {
-        updateDiario();
+    } else if (typeof updateDiarioList === 'function') {
+        updateDiarioList();
+    } else {
+        console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
-
-// ===============================================================
-// === ZONA DE INTERACTIVIDAD (CÓDIGO FINAL) ===
-// ===============================================================
-
-// Esperamos a que la página cargue para activar los clics
-document.addEventListener('DOMContentLoaded', () => {
-    
-    document.body.addEventListener('click', (event) => {
-        // 1. GESTIÓN DE EDICIÓN DE MOVIMIENTOS
-        // Buscamos si se pulsó algo que parezca un movimiento
-        const targetMovimiento = event.target.closest('.transaction-card, [data-action="open-movement-form"], [data-action="edit-movement-from-list"]');
-        
-        if (targetMovimiento) {
-            // Sacamos el ID
-            const id = targetMovimiento.getAttribute('data-id') || targetMovimiento.dataset.id;
-            const type = targetMovimiento.dataset.type;
-
-            // Si tiene ID, editamos. Si tiene Type, creamos.
-            if (id) {
-                // Paramos cualquier otro evento
-                event.stopPropagation();
-                
-                // Cerramos buscador si está abierto
-                const buscador = document.getElementById('global-search-modal');
-                if (buscador) buscador.classList.remove('active');
-
-                // Abrimos formulario
-                if (typeof startMovementForm === 'function') startMovementForm(id);
-                return; // Importante: Terminamos aquí
-            } 
-            else if (type) {
-                if (typeof startMovementForm === 'function') startMovementForm(null, type);
-                return;
-            }
-        }
-
-        // 2. GESTIÓN DE SALTO A PATRIMONIO
-        // Buscamos si se pulsó la tarjeta de Patrimonio
-        const targetPatrimonio = event.target.closest('[data-action="ver-balance-neto"]');
-        
-        if (targetPatrimonio) {
-            // Navegamos a la página de Planificar
-            if (typeof navigateTo === 'function') navigateTo('planificar-page');
-            else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
-            
-            // Esperamos y bajamos al gráfico
-            setTimeout(() => {
-                let destino = document.getElementById('seccion-balance-neto');
-                
-                // Si no encontramos el destino por ID, buscamos por texto (Plan B)
-                if (!destino) {
-                    const todosLosTitulos = document.querySelectorAll('h3, .card__title');
-                    for (let i = 0; i < todosLosTitulos.length; i++) {
-                        const texto = todosLosTitulos[i].innerText || "";
-                        if (texto.includes('Patrimonio') || texto.includes('Balance')) {
-                            destino = todosLosTitulos[i].closest('.card, .dashboard-widget');
-                            break;
-                        }
-                    }
-                }
-
-                if (destino) {
-                    // Si es un desplegable cerrado, abrirlo
-                    if (destino.tagName === 'DETAILS') destino.open = true;
-                    
-                    destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
-                    // Efecto visual
-                    destino.style.opacity = '0.5';
-                    setTimeout(() => destino.style.opacity = '1', 300);
-                }
-            }, 300);
-        }
-    });
-});
