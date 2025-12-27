@@ -11882,89 +11882,83 @@ window.toggleDiarioView = function(btnElement) {
         renderDiario(); 
     } else if (typeof renderMovements === 'function') {
         renderMovements();
-    } else if (typeof updateDiarioList === 'function') {
-        updateDiarioList();
-    } else {
-        console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
+    } else if (typeof updateDiario === 'function') {
+        updateDiario();
     }
 };
 
 // ===============================================================
-// === GESTOR DE CLICS UNIFICADO (VERSIÓN FINAL SANEADA) ===
+// === ZONA DE INTERACTIVIDAD (CÓDIGO FINAL) ===
 // ===============================================================
 
-// Este bloque escucha TODOS los clics de la aplicación
-document.body.addEventListener('click', (e) => {
+// Esperamos a que la página cargue para activar los clics
+document.addEventListener('DOMContentLoaded', () => {
     
-    // --- PARTE 1: INTENTAR EDITAR UN MOVIMIENTO ---
-    // Buscamos si el clic fue en algo relacionado con movimientos
-    const movTarget = e.target.closest('[data-action="edit-movement-from-list"], [data-action="open-movement-form"], .transaction-card');
-    
-    if (movTarget) {
-        // Sacamos los datos del elemento pulsado
-        const id = movTarget.dataset.id || movTarget.getAttribute('data-id');
-        const type = movTarget.dataset.type; 
+    document.body.addEventListener('click', (event) => {
+        // 1. GESTIÓN DE EDICIÓN DE MOVIMIENTOS
+        // Buscamos si se pulsó algo que parezca un movimiento
+        const targetMovimiento = event.target.closest('.transaction-card, [data-action="open-movement-form"], [data-action="edit-movement-from-list"]');
+        
+        if (targetMovimiento) {
+            // Sacamos el ID
+            const id = targetMovimiento.getAttribute('data-id') || targetMovimiento.dataset.id;
+            const type = targetMovimiento.dataset.type;
 
-        // Caso A: Es un movimiento existente (tiene ID) -> EDITAR
-        if (id) {
-            e.stopPropagation(); // Frenamos el clic para que no active nada más
-            
-            // Si está abierto el buscador, lo cerramos visualmente
-            const searchModal = document.getElementById('global-search-modal');
-            if (searchModal) searchModal.classList.remove('active');
-            
-            // Abrimos el formulario
-            if (typeof startMovementForm === 'function') {
-                startMovementForm(id);
-            }
-        } 
-        // Caso B: Es un botón de "Nuevo Ingreso/Gasto" (tiene Type) -> CREAR
-        else if (type) {
-            if (typeof startMovementForm === 'function') {
-                startMovementForm(null, type);
+            // Si tiene ID, editamos. Si tiene Type, creamos.
+            if (id) {
+                // Paramos cualquier otro evento
+                event.stopPropagation();
+                
+                // Cerramos buscador si está abierto
+                const buscador = document.getElementById('global-search-modal');
+                if (buscador) buscador.classList.remove('active');
+
+                // Abrimos formulario
+                if (typeof startMovementForm === 'function') startMovementForm(id);
+                return; // Importante: Terminamos aquí
+            } 
+            else if (type) {
+                if (typeof startMovementForm === 'function') startMovementForm(null, type);
+                return;
             }
         }
-        return; // ¡Importante! Si era un movimiento, paramos aquí.
-    }
 
-    // --- PARTE 2: INTENTAR IR AL PATRIMONIO ---
-    // Buscamos si el clic fue en la tarjeta de Patrimonio del panel
-    const btnPatrimonio = e.target.closest('[data-action="ver-balance-neto"]');
-    
-    if (btnPatrimonio) {
-        // 1. Mandamos la orden de cambiar de pantalla
-        if (typeof navigateTo === 'function') navigateTo('planificar-page');
-        else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
+        // 2. GESTIÓN DE SALTO A PATRIMONIO
+        // Buscamos si se pulsó la tarjeta de Patrimonio
+        const targetPatrimonio = event.target.closest('[data-action="ver-balance-neto"]');
         
-        // 2. Esperamos un momento a que la pantalla cargue y buscamos el gráfico
-        setTimeout(() => {
-            // Intentamos encontrar el destino por ID
-            let destino = document.getElementById('seccion-balance-neto');
+        if (targetPatrimonio) {
+            // Navegamos a la página de Planificar
+            if (typeof navigateTo === 'function') navigateTo('planificar-page');
+            else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
             
-            // Si no tiene ID, lo buscamos por el texto del título (Plan de respaldo)
-            if (!destino) {
-                const titulos = document.querySelectorAll('.card__title, h3, .widget-title');
-                for (const t of titulos) {
-                    if (t.textContent && (t.textContent.includes('Patrimonio') || t.textContent.includes('Balance'))) {
-                        destino = t.closest('.card, .dashboard-widget, details');
-                        break;
+            // Esperamos y bajamos al gráfico
+            setTimeout(() => {
+                let destino = document.getElementById('seccion-balance-neto');
+                
+                // Si no encontramos el destino por ID, buscamos por texto (Plan B)
+                if (!destino) {
+                    const todosLosTitulos = document.querySelectorAll('h3, .card__title');
+                    for (let i = 0; i < todosLosTitulos.length; i++) {
+                        const texto = todosLosTitulos[i].innerText || "";
+                        if (texto.includes('Patrimonio') || texto.includes('Balance')) {
+                            destino = todosLosTitulos[i].closest('.card, .dashboard-widget');
+                            break;
+                        }
                     }
                 }
-            }
 
-            // Si lo encontramos, bajamos hasta él
-            if (destino) {
-                // Si es un desplegable cerrado, lo abrimos a la fuerza
-                if (destino.tagName === 'DETAILS' && !destino.open) destino.open = true;
-                
-                destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                
-                // Efecto visual "flash"
-                destino.style.transition = 'transform 0.2s';
-                destino.style.transform = 'scale(1.02)';
-                setTimeout(() => destino.style.transform = 'scale(1)', 300);
-            }
-        }, 300); // Esperamos 300 milisegundos
-    }
-}); 
-// FIN DEL ARCHIVO
+                if (destino) {
+                    // Si es un desplegable cerrado, abrirlo
+                    if (destino.tagName === 'DETAILS') destino.open = true;
+                    
+                    destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Efecto visual
+                    destino.style.opacity = '0.5';
+                    setTimeout(() => destino.style.opacity = '1', 300);
+                }
+            }, 300);
+        }
+    });
+});
