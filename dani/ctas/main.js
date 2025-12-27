@@ -9872,7 +9872,7 @@ if (actionBtn) {
     }
     
     initSpeedDial();
-};
+});
 // ▲▲▲ FIN FUNCIÓN attachEventListeners ▲▲▲
 
 // Lógica separada para el selector de días semanales (para que no se duplique)
