@@ -11888,40 +11888,72 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
-// --- PUENTE DE NAVEGACIÓN: PATRIMONIO -> ANÁLISIS ---
-// Pégalo al final del archivo, FUERA de cualquier otra función
+
+// ===============================================================
+// === GESTOR DE CLICS UNIFICADO (PÉGALO AL FINAL DEL ARCHIVO) ===
+// ===============================================================
 document.body.addEventListener('click', (e) => {
-    // Usamos 'target' en lugar de variables comunes para evitar conflictos
+    // ---------------------------------------------------------
+    // ACCIÓN 1: EDITAR MOVIMIENTOS (Detecta cualquier clic en tarjeta o botón)
+    // ---------------------------------------------------------
+    const movTarget = e.target.closest('[data-action="edit-movement-from-list"], [data-action="open-movement-form"], .transaction-card');
+    
+    if (movTarget) {
+        const id = movTarget.dataset.id || movTarget.getAttribute('data-id');
+        const type = movTarget.dataset.type; // Para botones de "Nuevo Ingreso", etc.
+        
+        // Si hay ID, es editar. Si hay Type, es nuevo.
+        if (id) {
+            e.stopPropagation(); // Evita que se activen otras cosas
+            // Cerramos buscadores o menús si están abiertos
+            const searchModal = document.getElementById('global-search-modal');
+            if(searchModal) searchModal.classList.remove('active');
+            
+            if (typeof startMovementForm === 'function') startMovementForm(id);
+        } 
+        else if (type && typeof startMovementForm === 'function') {
+            startMovementForm(null, type);
+        }
+        return; // Terminamos aquí si era un movimiento
+    }
+
+    // ---------------------------------------------------------
+    // ACCIÓN 2: SALTO DE PATRIMONIO -> ANÁLISIS
+    // ---------------------------------------------------------
     const btnPatrimonio = e.target.closest('[data-action="ver-balance-neto"]');
     
     if (btnPatrimonio) {
-        // 1. Ir a la página de Análisis
-        if (typeof navigateTo === 'function') navigateTo('planificar-page');
-        else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
-
+        // 1. Navegar a la pantalla de Análisis
+        if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
+        else if (typeof navigateTo === 'function') navigateTo('planificar-page');
+        
         // 2. Buscar el gráfico y bajar hasta él
         setTimeout(() => {
-            // Buscamos por texto si no tiene ID, es más seguro
-            const titulos = document.querySelectorAll('.widget-title, .card__title, h3');
-            let destino = null;
+            // Intentamos encontrar el destino por ID o por Texto (Plan B)
+            let destino = document.getElementById('seccion-balance-neto');
             
-            for (const t of titulos) {
-                if (t.textContent.includes('Patrimonio') || t.textContent.includes('Balance')) {
-                    destino = t.closest('.dashboard-widget, .card');
-                    break;
+            if (!destino) {
+                // Búsqueda inteligente por texto si falló el ID
+                const titulos = document.querySelectorAll('.card__title, h3, .widget-title');
+                for (const t of titulos) {
+                    if (t.textContent.includes('Patrimonio') || t.textContent.includes('Balance')) {
+                        destino = t.closest('.card, .dashboard-widget');
+                        break;
+                    }
                 }
             }
 
             if (destino) {
-                // Si es un acordeón cerrado (details), lo abrimos
+                // Si es un desplegable cerrado, lo abrimos
                 if (destino.tagName === 'DETAILS' && !destino.open) destino.open = true;
                 
                 destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Efecto visual
+                
+                // Efecto visual "flash" para que veas dónde estás
                 destino.style.transition = 'transform 0.2s';
                 destino.style.transform = 'scale(1.02)';
                 setTimeout(() => destino.style.transform = 'scale(1)', 300);
             }
-        }, 300); // Damos un poco más de tiempo (300ms)
+        }, 300); // 300ms de cortesía para que cargue la pantalla
     }
 });
