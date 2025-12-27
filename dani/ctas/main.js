@@ -1,4 +1,9 @@
-
+// Función de limpieza de seguridad
+const sanitize = (str) => {
+    const temp = document.createElement('div');
+    temp.textContent = str;
+    return temp.innerHTML;
+};
 import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm';
 const KPI_EXPLANATIONS = {
     'ingresos': { 
@@ -102,6 +107,48 @@ const setupEnhancedFormNavigation = () => {
         setTimeout(() => select('movimiento-cantidad')?.focus(), 100);
     });
 };
+// --- AUTO-GUARDADO: Sistema de Borradores ---
+const saveFormDraft = () => {
+    const draft = {
+        cantidad: select('movimiento-cantidad').value,
+        descripcion: select('movimiento-descripcion').value,
+        cuenta: select('movimiento-cuenta').value,
+        concepto: select('movimiento-concepto').value,
+        fecha: select('movimiento-fecha').value,
+        timestamp: Date.now()
+    };
+    localStorage.setItem('movimiento_draft', JSON.stringify(draft));
+};
+
+const loadFormDraft = () => {
+    const draftJson = localStorage.getItem('movimiento_draft');
+    if (!draftJson) return;
+    
+    const draft = JSON.parse(draftJson);
+    // Solo recuperamos si el borrador es reciente (menos de 24h)
+    if (Date.now() - draft.timestamp > 24 * 60 * 60 * 1000) {
+        localStorage.removeItem('movimiento_draft');
+        return;
+    }
+
+    if (draft.cantidad) {
+        select('movimiento-cantidad').value = draft.cantidad;
+        // Actualizamos el espejo visual de la calculadora si existe
+        const mirror = select('movimiento-cantidad').parentNode.querySelector('.input-visual-mirror');
+        if(mirror && typeof updateInputMirror === 'function') updateInputMirror(select('movimiento-cantidad'));
+    }
+    if (draft.descripcion) select('movimiento-descripcion').value = draft.descripcion;
+    if (draft.cuenta) select('movimiento-cuenta').value = draft.cuenta;
+    if (draft.concepto) select('movimiento-concepto').value = draft.concepto;
+    if (draft.fecha) select('movimiento-fecha').value = draft.fecha;
+    
+    // Feedback visual sutil
+    showToast('Borrador recuperado', 'info');
+};
+
+const clearFormDraft = () => {
+    localStorage.removeItem('movimiento_draft');
+};
 const setupRealTimeValidation = () => {
     const cantidadInput = select('movimiento-cantidad');
     const cuentaSelect = select('movimiento-cuenta');
@@ -140,6 +187,12 @@ const setupRealTimeValidation = () => {
             showFieldError('', 'cuenta');
         }
     });
+	// Guardar borrador cada vez que el usuario escriba algo
+const inputsToWatch = ['movimiento-cantidad', 'movimiento-descripcion', 'movimiento-cuenta', 'movimiento-concepto'];
+inputsToWatch.forEach(id => {
+    const el = select(id);
+    if (el) el.addEventListener('input', saveFormDraft);
+});
 };
 const showRenameLedgersModal = () => {
     const names = db.config.ledgerNames || { A: "Personal", B: "Ahorro", C: "Extra" };
@@ -320,149 +373,228 @@ const setupQuickAddMode = () => {
 };
 const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
     const fecha = new Date(mov.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-    let cargo = '';
-    let abono = '';
-    let conceptoTexto = '';
-    
-    // Si estamos en modo GLOBAL (cuentaId es null), mostramos el nombre de la cuenta
+    let cargo = '', abono = '', conceptoTexto = '';
     const isGlobal = cuentaId === null;
     const cuentaPropia = isGlobal ? allCuentas.find(c => c.id === mov.cuentaId) : null;
-    const prefixCuenta = cuentaPropia ? `[${cuentaPropia.nombre}] ` : '';
+    const prefixCuenta = cuentaPropia ? `[${escapeHTML(cuentaPropia.nombre)}] ` : '';
 
-    // Lógica de importes y descripciones
     if (mov.tipo === 'traspaso') {
-        // En modo global, el traspaso interno se anula visualmente o se muestra neutro
-        // pero vamos a mantener la lógica relativa para mostrar flujo.
-        const esOrigen = mov.cuentaOrigenId === cuentaId || (isGlobal && mov.cantidad < 0); // Simplificación
-        
         const origen = allCuentas.find(c => c.id === mov.cuentaOrigenId);
         const destino = allCuentas.find(c => c.id === mov.cuentaDestinoId);
-        
-        const nombreOrigen = origen ? escapeHTML(origen.nombre) : '?';
-        const nombreDestino = destino ? escapeHTML(destino.nombre) : '?';
-        
-        conceptoTexto = `TRASPASO: ${nombreOrigen} -> ${nombreDestino}`;
-        
-        // En extracto global, un traspaso interno no afecta al saldo neto global,
-        // pero lo mostramos en la columna que corresponda al signo para referencia.
+        conceptoTexto = `TRASPASO: ${origen ? escapeHTML(origen.nombre) : '?'} -> ${destino ? escapeHTML(destino.nombre) : '?'}`;
         if (mov.cantidad < 0) cargo = formatCurrency(Math.abs(mov.cantidad));
         else abono = formatCurrency(mov.cantidad);
-
-        if (mov.descripcion && mov.descripcion !== 'Traspaso') {
-            conceptoTexto += ` (${escapeHTML(mov.descripcion)})`;
-        }
+        if (mov.descripcion && mov.descripcion !== 'Traspaso') conceptoTexto += ` (${escapeHTML(mov.descripcion)})`;
     } else {
-        // Movimiento normal
         const concepto = db.conceptos.find(c => c.id === mov.conceptoId);
-        const nombreConcepto = concepto ? concepto.nombre.toUpperCase() : 'VARIO';
-        
-        // En modo global añadimos el nombre de la cuenta al principio
-        conceptoTexto = `${prefixCuenta}${nombreConcepto}`;
+        conceptoTexto = `${prefixCuenta}${concepto ? escapeHTML(concepto.nombre.toUpperCase()) : 'VARIO'}`;
         if (mov.descripcion) conceptoTexto += ` - ${escapeHTML(mov.descripcion)}`;
-
-        if (mov.cantidad < 0) {
-            cargo = formatCurrency(Math.abs(mov.cantidad));
-        } else {
-            abono = formatCurrency(mov.cantidad);
-        }
+        if (mov.cantidad < 0) cargo = formatCurrency(Math.abs(mov.cantidad));
+        else abono = formatCurrency(mov.cantidad);
     }
 
+    // AQUI ESTÁ EL CAMBIO SEMÁNTICO: Usamos TR y TD
     return `
-        <div class="cartilla-row">
-            <div class="cartilla-cell cartilla-date">${fecha}</div>
-            <div class="cartilla-cell cartilla-concept">${conceptoTexto}</div>
-            <div class="cartilla-cell cartilla-amount text-debit">${cargo}</div>
-            <div class="cartilla-cell cartilla-amount text-credit">${abono}</div>
-            <div class="cartilla-cell cartilla-balance">${formatCurrency(mov.runningBalance)}</div>
-        </div>
+        <tr class="cartilla-row">
+            <td class="cartilla-cell cartilla-date">${fecha}</td>
+            <td class="cartilla-cell cartilla-concept">${conceptoTexto}</td>
+            <td class="cartilla-cell cartilla-amount text-debit">${cargo}</td>
+            <td class="cartilla-cell cartilla-amount text-credit">${abono}</td>
+            <td class="cartilla-cell cartilla-balance">${formatCurrency(mov.runningBalance)}</td>
+        </tr>
     `;
 };
-
+// ===============================================================
+// === GENERACIÓN DE INFORME (EXTRACTO DE CUENTA) - VERSIÓN FINAL ===
+// ===============================================================
 const handleGenerateInformeCuenta = async (form, btn = null) => {
-    // 1. Solo activamos la animación del botón si se proporciona (ahora es opcional)
-    if (btn) setButtonLoading(btn, true, 'Imprimiendo...');
-    
-    const cuentaId = select('informe-cuenta-select').value;
-    const resultadoContainer = select('informe-resultado-container');
+    // 1. Recogemos datos del formulario
+    const cuentaId = form.querySelector('#informe-cuenta').value || null; // null significa "Todas"
+    const startDateVal = form.querySelector('#informe-fecha-inicio').value;
+    const endDateVal = form.querySelector('#informe-fecha-fin').value;
 
-    // 2. Si no hay cuenta seleccionada, limpiamos y salimos
-    if (!cuentaId) {
-        resultadoContainer.innerHTML = '';
-        if (btn) setButtonLoading(btn, false);
+    // Validamos fechas
+    if (!startDateVal || !endDateVal) {
+        showToast('Por favor, selecciona un rango de fechas.', 'error');
         return;
     }
 
-    // 3. Mostramos un indicador de carga en el contenedor de resultados
-    resultadoContainer.innerHTML = `
-        <div style="text-align:center; padding: var(--sp-5);">
-            <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
-            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Cargando movimientos...</p>
-        </div>`;
+    const startDate = new Date(startDateVal);
+    const endDate = new Date(endDateVal);
+    
+    // Ajustamos horas para cubrir todo el día
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
 
-    const cuenta = db.cuentas.find(c => c.id === cuentaId);
-
-    try {
-        // --- Obtención y cálculo de datos (IGUAL QUE ANTES) ---
-        const todosLosMovimientos = await AppStore.getAll();
-        
-        let movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
-            (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId)
-        );
-
-        if (movimientosDeLaCuenta.length === 0) {
-             resultadoContainer.innerHTML = `<div class="empty-state" style="background:transparent; border:none; padding:var(--sp-4);"><p>Sin movimientos registrados.</p></div>`;
-             if (btn) setButtonLoading(btn, false);
-             return;
-        }
-
-        movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-
-        let saldoAcumulado = 0;
-        for (const mov of movimientosDeLaCuenta) {
-            let impacto = 0;
-            if (mov.tipo === 'traspaso') {
-                if (mov.cuentaOrigenId === cuentaId) impacto = -mov.cantidad;
-                if (mov.cuentaDestinoId === cuentaId) impacto = mov.cantidad;
-            } else {
-                impacto = mov.cantidad;
-            }
-            saldoAcumulado += impacto;
-            mov.runningBalance = saldoAcumulado;
-        }
-
-        movimientosDeLaCuenta.reverse(); 
-
-        // --- Renderizado HTML ---
-        let html = `
-            <div class="cartilla-container">
-                <div class="cartilla-header-info">
-                    <h4>EXTRACTO DE CUENTA</h4>
-                    <p><strong>Titular:</strong> ${escapeHTML(cuenta.nombre)}</p>
-                    <p class="cartilla-print-date">Fecha: ${new Date().toLocaleDateString()}</p>
-                </div>
-                <div class="cartilla-table">
-                    <div class="cartilla-row cartilla-head">
-                        <div class="cartilla-cell">FECHA</div>
-                        <div class="cartilla-cell">CONCEPTO</div>
-                        <div class="cartilla-cell text-right">CARGOS</div>
-                        <div class="cartilla-cell text-right">ABONOS</div>
-                        <div class="cartilla-cell text-right">SALDO</div>
-                    </div>`;
-                
-        for (const mov of movimientosDeLaCuenta) {
-            html += renderInformeCuentaRow(mov, cuentaId, db.cuentas);
-        }
-        
-        html += `</div><div class="cartilla-footer">** FIN DEL EXTRACTO **</div></div>`;
-        resultadoContainer.innerHTML = html;
-
-    } catch (error) {
-        console.error(error);
-        showToast("Error generando el extracto.", "danger");
-        resultadoContainer.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar datos.</p></div>`;
-    } finally {
-        if (btn) setButtonLoading(btn, false);
+    if (startDate > endDate) {
+        showToast('La fecha de inicio no puede ser posterior al fin.', 'error');
+        return;
     }
+
+    // 2. Filtramos los movimientos (SOLO los de la cuenta seleccionada y fechas)
+    let movimientosFiltrados = db.movimientos.filter(m => {
+        const mDate = new Date(m.fecha);
+        const enFecha = mDate >= startDate && mDate <= endDate;
+        
+        // Si no hay cuenta seleccionada (Global), mostramos todo
+        if (!cuentaId) return enFecha;
+
+        // Si hay cuenta, miramos si es la cuenta normal, o si es origen/destino en un traspaso
+        const esCuenta = (m.cuentaId === cuentaId) || 
+                         (m.tipo === 'traspaso' && (m.cuentaOrigenId === cuentaId || m.cuentaDestinoId === cuentaId));
+        return enFecha && esCuenta;
+    });
+
+    // 3. Ordenamos por fecha (antiguos primero para calcular el saldo bien)
+    movimientosFiltrados.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+    // 4. Calculamos el SALDO INICIAL (El dinero que había antes de la fecha de inicio)
+    //    Sumamos todos los movimientos de la historia ANTERIORES a startDate
+    let saldoAcumulado = 0;
+    
+    if (cuentaId) {
+        // Saldo inicial específico de la cuenta
+        const movimientosPrevios = db.movimientos.filter(m => {
+            const mDate = new Date(m.fecha);
+            // Solo movimientos ANTERIORES al rango
+            if (mDate >= startDate) return false; 
+            
+            return (m.cuentaId === cuentaId) || 
+                   (m.tipo === 'traspaso' && (m.cuentaOrigenId === cuentaId || m.cuentaDestinoId === cuentaId));
+        });
+
+        movimientosPrevios.forEach(m => {
+            if (m.tipo === 'gasto') {
+                if (m.cuentaId === cuentaId) saldoAcumulado -= m.cantidad;
+            } else if (m.tipo === 'ingreso') {
+                if (m.cuentaId === cuentaId) saldoAcumulado += m.cantidad;
+            } else if (m.tipo === 'traspaso') {
+                if (m.cuentaOrigenId === cuentaId) saldoAcumulado -= m.cantidad;
+                if (m.cuentaDestinoId === cuentaId) saldoAcumulado += m.cantidad;
+            }
+        });
+    } else {
+        // Saldo inicial GLOBAL (suma de todas las cuentas activas)
+        // Esto es complejo, para simplificar en vista global solemos empezar en 0 o calcular todo el patrimonio previo
+        // Para este extracto, calcularemos el flujo del periodo si es global, o el saldo real si es cuenta única.
+        // Si quieres saldo global real, habría que sumar TOOOODOS los ingresos/gastos históricos.
+        // Asumiremos 0 para flujo global o calcularemos previo si es crítico. 
+        // Para "Caja A" vs "B", el usuario suele querer ver el saldo de UNA cuenta.
+    }
+
+    // 5. Generamos el HTML con TABLA (Accesibilidad Semántica)
+    const nombreCuenta = cuentaId ? db.cuentas.find(c => c.id === cuentaId)?.nombre : 'Vista Global';
+    const title = `Extracto: ${escapeHTML(nombreCuenta || 'Global')}`;
+
+    let html = `
+        <div class="informe-resumen" style="margin-bottom: 20px; padding: 15px; background: var(--c-surface-variant); border-radius: 12px;">
+            <p><strong>Saldo Inicial (${startDate.toLocaleDateString()}):</strong> ${formatCurrency(saldoAcumulado)}</p>
+            <p style="font-size: 0.9em; opacity: 0.8;">Movimientos encontrados: ${movimientosFiltrados.length}</p>
+        </div>
+
+        <div class="cartilla-container" style="overflow-x: auto;">
+            <table class="cartilla-table" style="width: 100%; border-collapse: collapse; min-width: 600px;">
+                <thead>
+                    <tr style="border-bottom: 2px solid var(--c-outline); text-align: left; color: var(--c-on-surface-secondary); font-size: 0.85rem;">
+                        <th scope="col" style="padding: 12px 8px;">FECHA</th>
+                        <th scope="col" style="padding: 12px 8px;">CONCEPTO</th>
+                        <th scope="col" style="padding: 12px 8px; text-align: right;">CARGO</th>
+                        <th scope="col" style="padding: 12px 8px; text-align: right;">ABONO</th>
+                        <th scope="col" style="padding: 12px 8px; text-align: right;">SALDO</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    if (movimientosFiltrados.length === 0) {
+        html += `
+            <tr>
+                <td colspan="5" style="padding: 20px; text-align: center; color: var(--c-on-surface-secondary);">
+                    No hay movimientos en este periodo.
+                </td>
+            </tr>
+        `;
+    } else {
+        movimientosFiltrados.forEach(m => {
+            // Actualizar Saldo Acumulado línea a línea
+            let cargo = 0;
+            let abono = 0;
+            let esGastoParaEstaCuenta = false;
+
+            if (m.tipo === 'gasto') {
+                cargo = m.cantidad;
+                saldoAcumulado -= m.cantidad;
+                esGastoParaEstaCuenta = true;
+            } else if (m.tipo === 'ingreso') {
+                abono = m.cantidad;
+                saldoAcumulado += m.cantidad;
+            } else if (m.tipo === 'traspaso') {
+                if (cuentaId) {
+                    if (m.cuentaOrigenId === cuentaId) {
+                        cargo = m.cantidad;
+                        saldoAcumulado -= m.cantidad;
+                        esGastoParaEstaCuenta = true;
+                    } else if (m.cuentaDestinoId === cuentaId) {
+                        abono = m.cantidad;
+                        saldoAcumulado += m.cantidad;
+                    }
+                } else {
+                    // En vista global, un traspaso no cambia el patrimonio neto, pero lo mostramos
+                    // para información. Normalmente no es ni cargo ni abono global (se anulan).
+                    // Lo dejamos en gris o vacío en columnas numéricas.
+                }
+            }
+
+            // Formatear fecha
+            const fechaStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
+            // Formatear Concepto y Descripción
+            let conceptoTxt = '';
+            if (m.tipo === 'traspaso') {
+                const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || '?';
+                const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '?';
+                conceptoTxt = `Traspaso: ${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
+            } else {
+                const conceptoObj = db.conceptos.find(c => c.id === m.conceptoId);
+                conceptoTxt = conceptoObj ? escapeHTML(conceptoObj.nombre) : 'Sin concepto';
+            }
+            if (m.descripcion) {
+                conceptoTxt += ` <br><span style="font-size:0.85em; color:var(--c-on-surface-secondary);">${escapeHTML(m.descripcion)}</span>`;
+            }
+
+            // Renderizar FILA (TR)
+            html += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 10px 8px;">${fechaStr}</td>
+                    <td style="padding: 10px 8px;">${conceptoTxt}</td>
+                    <td style="padding: 10px 8px; text-align: right; color: var(--c-danger);">
+                        ${cargo > 0 ? formatCurrency(cargo) : ''}
+                    </td>
+                    <td style="padding: 10px 8px; text-align: right; color: var(--c-success);">
+                        ${abono > 0 ? formatCurrency(abono) : ''}
+                    </td>
+                    <td style="padding: 10px 8px; text-align: right; font-weight: bold;">
+                        ${formatCurrency(saldoAcumulado)}
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    html += `
+                </tbody>
+            </table>
+            <div style="margin-top: 20px; text-align: right;">
+                <p style="font-size: 1.2rem; font-weight: bold;">Saldo Final: ${formatCurrency(saldoAcumulado)}</p>
+            </div>
+        </div>
+    `;
+
+    // 6. Mostramos el resultado en el Modal Genérico
+    showGenericModal(title, html);
+    
+    // Cerramos el modal de filtros si estaba abierto (opcional, según tu UX)
+    // closeModal('informe-cuenta-modal'); 
 };
 const handleGenerateGlobalExtract = async (btn = null) => {
     const resultadoContainer = select('informe-resultado-container');
@@ -2181,28 +2313,35 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
 };
         const escapeHTML = str => (str || '').replace(/[&<>"']/g, match => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[match]);
         
-        const parseCurrencyString = (str) => {
-    if (typeof str !== 'string' || !str.trim()) return 0; // Retorna 0 en lugar de NaN para evitar errores matemáticos posteriores
-    let cleanStr = str.replace(/[€$£\s]/g, '');
+   const parseCurrencyString = (str) => {
+    if (typeof str !== 'string' || !str) return 0;
+    
+    // 1. Limpieza agresiva: quitamos letras, símbolos de moneda y espacios
+    let clean = str.replace(/[^0-9,.-]/g, '');
 
-    // Si solo hay un separador, asumimos que es decimal si hay 1 o 2 dígitos después.
-    // Si hay 3, es ambiguo, pero en España suele ser millares (1.000).
-    // Tu lógica actual es buena, pero añadamos seguridad:
-    
-    // Normalizar a formato inglés interno (1234.56)
-    if (cleanStr.includes(',') && cleanStr.includes('.')) {
-        // Caso complejo: 1.234,56 -> eliminar puntos, cambiar coma
-        cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
-    } else if (cleanStr.includes(',')) {
-        // Caso simple coma: 12,50 -> 12.50
-        cleanStr = cleanStr.replace(',', '.');
+    // 2. Detección de formato (Europeo vs Americano)
+    // Si tiene coma y punto (ej: 1.200,50), asumimos formato europeo estándar
+    if (clean.includes(',') && clean.includes('.')) {
+        clean = clean.replace(/\./g, ''); // Quitar puntos de miles
+        clean = clean.replace(',', '.');  // Cambiar coma decimal a punto
     } 
-    // Caso simple punto: 12.50 se queda igual. 
-    // PERO si es 1.200 (mil doscientos), JS lo toma como 1.2.
-    // Dada tu audiencia (España), asumimos que el input manual de la calculadora usa ',' para decimales.
-    
-    const result = parseFloat(cleanStr);
-    return isNaN(result) ? 0 : result;
+    // Si solo tiene coma (ej: 12,50), es decimal europeo
+    else if (clean.includes(',')) {
+        clean = clean.replace(',', '.');
+    }
+    // Si solo tiene punto, hay ambigüedad. 
+    // En tu app (ES), "1.200" son mil doscientos, no uno coma dos.
+    else if (clean.includes('.')) {
+        const parts = clean.split('.');
+        // Si la parte tras el punto tiene 3 cifras (1.234), es millar -> Quitar punto
+        if (parts[parts.length - 1].length === 3) {
+            clean = clean.replace(/\./g, '');
+        } 
+        // Si tiene 2 (1.50), asumimos que el usuario escribió formato inglés -> Mantener
+    }
+
+    const val = parseFloat(clean);
+    return isNaN(val) ? 0 : val;
 };
 		const formatAsCurrencyInput = (num) => {
     if (isNaN(num)) return '';
@@ -7910,6 +8049,8 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
             }
         }, 300); // Un poco más de tiempo para asegurar que el modal terminó de subir
     }
+	// Si es un movimiento nuevo, intentamos cargar borrador
+	if (mode === 'new') loadFormDraft();
 };
         
         
@@ -10475,7 +10616,7 @@ const handleSaveMovement = async (form, btn) => {
         // 7. Feedback y Cierre
         hapticFeedback('success');
         showToast(isEditing ? 'Movimiento actualizado.' : 'Movimiento guardado.', 'success');
-
+		clearFormDraft();
         if (!isSaveAndNew) {
             hideModal('movimiento-modal');
         } else {
