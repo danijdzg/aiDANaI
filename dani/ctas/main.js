@@ -9313,27 +9313,7 @@ const handleStart = (e) => {
 
     // 5. GESTIÓN DE CLICS (Delegación de eventos)
     document.body.addEventListener('click', async (e) => {
-		const actionBtn = e.target.closest('[data-action]'); // Asegúrate que esta línea existe al principio
 
-if (actionBtn) {
-    const action = actionBtn.dataset.action;
-
-    // --- AÑADE O REVISA ESTE BLOQUE ---
-    if (action === 'open-movement-form') {
-        const id = actionBtn.dataset.id; // Cogemos el ID que pusimos en la tarjeta
-        const type = actionBtn.dataset.type; // Por si es un botón de "Añadir Gasto" nuevo
-        
-        // Si tiene ID, es editar. Si no, es nuevo.
-        if (id) {
-            startMovementForm(id); // <--- ESTO ABRE EL FORMULARIO PARA EDITAR
-        } else {
-            startMovementForm(null, type); // Nuevo movimiento
-        }
-        
-        // Si veníamos del buscador o de una hoja de acciones, cerramos esos modales
-        hideModal('global-search-modal'); 
-        hideModal('main-add-sheet');
-    }
         const target = e.target;
 
         // Cerrar dropdowns personalizados al hacer clic fuera
