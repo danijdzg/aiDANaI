@@ -9672,7 +9672,7 @@ if (actionBtn) {
         };
         
         if (actions[action]) actions[action](e);
-    });
+    };
 
     // 6. Gestión de elementos <details> para informes
     document.body.addEventListener('toggle', (e) => {
