@@ -11890,70 +11890,81 @@ window.toggleDiarioView = function(btnElement) {
 };
 
 // ===============================================================
-// === GESTOR DE CLICS UNIFICADO (PÉGALO AL FINAL DEL ARCHIVO) ===
+// === GESTOR DE CLICS UNIFICADO (VERSIÓN FINAL SANEADA) ===
 // ===============================================================
+
+// Este bloque escucha TODOS los clics de la aplicación
 document.body.addEventListener('click', (e) => {
-    // ---------------------------------------------------------
-    // ACCIÓN 1: EDITAR MOVIMIENTOS (Detecta cualquier clic en tarjeta o botón)
-    // ---------------------------------------------------------
+    
+    // --- PARTE 1: INTENTAR EDITAR UN MOVIMIENTO ---
+    // Buscamos si el clic fue en algo relacionado con movimientos
     const movTarget = e.target.closest('[data-action="edit-movement-from-list"], [data-action="open-movement-form"], .transaction-card');
     
     if (movTarget) {
+        // Sacamos los datos del elemento pulsado
         const id = movTarget.dataset.id || movTarget.getAttribute('data-id');
-        const type = movTarget.dataset.type; // Para botones de "Nuevo Ingreso", etc.
-        
-        // Si hay ID, es editar. Si hay Type, es nuevo.
+        const type = movTarget.dataset.type; 
+
+        // Caso A: Es un movimiento existente (tiene ID) -> EDITAR
         if (id) {
-            e.stopPropagation(); // Evita que se activen otras cosas
-            // Cerramos buscadores o menús si están abiertos
-            const searchModal = document.getElementById('global-search-modal');
-            if(searchModal) searchModal.classList.remove('active');
+            e.stopPropagation(); // Frenamos el clic para que no active nada más
             
-            if (typeof startMovementForm === 'function') startMovementForm(id);
+            // Si está abierto el buscador, lo cerramos visualmente
+            const searchModal = document.getElementById('global-search-modal');
+            if (searchModal) searchModal.classList.remove('active');
+            
+            // Abrimos el formulario
+            if (typeof startMovementForm === 'function') {
+                startMovementForm(id);
+            }
         } 
-        else if (type && typeof startMovementForm === 'function') {
-            startMovementForm(null, type);
+        // Caso B: Es un botón de "Nuevo Ingreso/Gasto" (tiene Type) -> CREAR
+        else if (type) {
+            if (typeof startMovementForm === 'function') {
+                startMovementForm(null, type);
+            }
         }
-        return; // Terminamos aquí si era un movimiento
+        return; // ¡Importante! Si era un movimiento, paramos aquí.
     }
 
-    // ---------------------------------------------------------
-    // ACCIÓN 2: SALTO DE PATRIMONIO -> ANÁLISIS
-    // ---------------------------------------------------------
+    // --- PARTE 2: INTENTAR IR AL PATRIMONIO ---
+    // Buscamos si el clic fue en la tarjeta de Patrimonio del panel
     const btnPatrimonio = e.target.closest('[data-action="ver-balance-neto"]');
     
     if (btnPatrimonio) {
-        // 1. Navegar a la pantalla de Análisis
-        if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
-        else if (typeof navigateTo === 'function') navigateTo('planificar-page');
+        // 1. Mandamos la orden de cambiar de pantalla
+        if (typeof navigateTo === 'function') navigateTo('planificar-page');
+        else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
         
-        // 2. Buscar el gráfico y bajar hasta él
+        // 2. Esperamos un momento a que la pantalla cargue y buscamos el gráfico
         setTimeout(() => {
-            // Intentamos encontrar el destino por ID o por Texto (Plan B)
+            // Intentamos encontrar el destino por ID
             let destino = document.getElementById('seccion-balance-neto');
             
+            // Si no tiene ID, lo buscamos por el texto del título (Plan de respaldo)
             if (!destino) {
-                // Búsqueda inteligente por texto si falló el ID
                 const titulos = document.querySelectorAll('.card__title, h3, .widget-title');
                 for (const t of titulos) {
-                    if (t.textContent.includes('Patrimonio') || t.textContent.includes('Balance')) {
-                        destino = t.closest('.card, .dashboard-widget');
+                    if (t.textContent && (t.textContent.includes('Patrimonio') || t.textContent.includes('Balance'))) {
+                        destino = t.closest('.card, .dashboard-widget, details');
                         break;
                     }
                 }
             }
 
+            // Si lo encontramos, bajamos hasta él
             if (destino) {
-                // Si es un desplegable cerrado, lo abrimos
+                // Si es un desplegable cerrado, lo abrimos a la fuerza
                 if (destino.tagName === 'DETAILS' && !destino.open) destino.open = true;
                 
                 destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 
-                // Efecto visual "flash" para que veas dónde estás
+                // Efecto visual "flash"
                 destino.style.transition = 'transform 0.2s';
                 destino.style.transform = 'scale(1.02)';
                 setTimeout(() => destino.style.transform = 'scale(1)', 300);
             }
-        }, 300); // 300ms de cortesía para que cargue la pantalla
+        }, 300); // Esperamos 300 milisegundos
     }
-});
+}); 
+// FIN DEL ARCHIVO
