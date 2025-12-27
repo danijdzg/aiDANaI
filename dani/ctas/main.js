@@ -7914,108 +7914,111 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
             }, 100);
         };
         
-        // REEMPLAZA TU FUNCIÓN performGlobalSearch POR ESTA VERSIÓN MEJORADA
+// ===============================================================
+// === NUEVO BUSCADOR GLOBAL POTENTE (Sustituye al anterior) ===
+// ===============================================================
 const performGlobalSearch = async (query) => {
-    const resultsContainer = select('global-search-results');
+    const resultsContainer = document.getElementById('global-search-results');
     if (!resultsContainer) return;
 
+    // 1. Limpieza inicial: Si no hay texto, mostrar mensaje de ayuda
     if (!query || query.trim().length < 2) {
-        resultsContainer.innerHTML = `<div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">manage_search</span><h3>Encuéntralo todo</h3><p>Busca movimientos, cuentas o conceptos. <br>Atajo: <strong>Cmd/Ctrl + K</strong></p></div>`;
+        resultsContainer.innerHTML = `
+            <div class="empty-state" style="padding: 2rem; opacity: 0.6; text-align: center;">
+                <span class="material-icons" style="font-size: 48px;">manage_search</span>
+                <p>Escribe para buscar cuentas, conceptos o importes...</p>
+            </div>`;
         return;
     }
 
-    resultsContainer.innerHTML = `<div style="text-align: center; padding: var(--sp-5);"><span class="spinner"></span><p style="margin-top: var(--sp-2);">Buscando en toda tu base de datos...</p></div>`;
+    // 2. Indicador de carga
+    resultsContainer.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <span class="spinner" style="color: var(--c-primary);"></span>
+            <p style="font-size: 0.8rem; margin-top: 10px;">Buscando en todo el historial...</p>
+        </div>`;
+
+    // 3. Obtener TODOS los datos (Usamos AppStore para velocidad si está disponible)
+    let allMovs = [];
+    if (typeof AppStore !== 'undefined') {
+        if (!AppStore.isFullyLoaded) await AppStore.getAll(); // Carga forzada si falta
+        allMovs = AppStore.movements;
+    } else {
+        allMovs = db.movimientos; // Fallback por seguridad
+    }
+
+    // 4. EL FILTRO INTELIGENTE (Ignora mayúsculas y acentos)
+    const term = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     
-    const queryLower = query.toLowerCase();
-    let resultsHtml = '';
-    const MAX_RESULTS_PER_GROUP = 10;
+    const hits = allMovs.filter(m => {
+        // Preparamos los datos del movimiento para buscar en ellos
+        const concepto = db.conceptos.find(c => c.id === m.conceptoId);
+        const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
+        
+        // Limpiamos textos (quitamos acentos y pasamos a minúsculas)
+        const tConcepto = (concepto?.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const tDesc = (m.descripcion || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const tCuenta = (cuenta?.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        // Truco para buscar importes (ej: buscas "50" y encuentra "50.00")
+        const cantidadReal = (Math.abs(m.cantidad) / 100).toString(); 
+        
+        // ¿Coincide con algo?
+        return tConcepto.includes(term) || 
+               tDesc.includes(term) || 
+               tCuenta.includes(term) ||
+               cantidadReal.includes(term);
+    });
 
-    const allMovements = await AppStore.getAll();
+    // 5. Ordenar: Lo más reciente primero
+    hits.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-    // --- SECCIÓN DE MOVIMIENTOS MEJORADA ---
-    const movs = allMovements
-        .map(m => {
+    // 6. Pintar los resultados en pantalla
+    if (hits.length === 0) {
+        resultsContainer.innerHTML = `
+            <div class="empty-state" style="padding: 20px; text-align:center;">
+                <p>No encontré nada con "${query}"</p>
+            </div>`;
+    } else {
+        resultsContainer.innerHTML = hits.map(m => {
             const concepto = db.conceptos.find(c => c.id === m.conceptoId);
-            const conceptoNombre = (concepto && concepto.nombre) || '';
-            let cuentaInfo = '';
-            if (m.tipo === 'traspaso') {
-                const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId);
-                const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId);
-                cuentaInfo = `${(origen && origen.nombre) || ''} → ${(destino && destino.nombre) || ''}`;
-            } else {
-                const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
-                cuentaInfo = (cuenta && cuenta.nombre) || '';
-            }
-            const fecha = new Date(m.fecha).toLocaleDateString('es-ES');
-            const importe = (m.cantidad / 100).toLocaleString('es-ES');
-            const searchableText = `${m.descripcion} ${conceptoNombre} ${cuentaInfo} ${fecha} ${importe}`.toLowerCase();
-            return { movement: m, text: searchableText, cuentaInfo: cuentaInfo };
-        })
-        .filter(item => item.text.includes(queryLower))
-        .sort((a, b) => new Date(b.movement.fecha) - new Date(a.movement.fecha))
-        .slice(0, MAX_RESULTS_PER_GROUP)
-        .map(item => item); // Devolvemos el objeto completo con cuentaInfo
-
-    if (movs.length > 0) {
-        resultsHtml += `<div class="search-result-group">
-                            <div class="search-result-group__title">Movimientos Encontrados</div>`;
-        movs.forEach(item => {
-            const m = item.movement;
-            const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
-            resultsHtml += `
-                <button class="search-result-item" data-action="search-result-movimiento" data-id="${m.id}">
-                    <span class="material-icons search-result-item__icon">receipt_long</span>
-                    <div class="search-result-item__details">
-                        <p>${escapeHTML(m.descripcion)}</p>
-                        <small>${new Date(m.fecha).toLocaleDateString('es-ES')} • ${escapeHTML(item.cuentaInfo)}</small>
+            const date = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+            
+            // Colores según si es gasto (-) o ingreso (+)
+            const amountClass = m.cantidad < 0 ? 'text-negative' : 'text-positive'; // Usa tus clases CSS
+            const amountSign = m.cantidad > 0 ? '+' : '';
+            
+            // Al hacer clic, abrimos el formulario de editar (startMovementForm)
+            return `
+            <div class="search-result-item" onclick="hideModal('global-search-modal'); startMovementForm('${m.id}', false)" style="padding: 12px; border-bottom: 1px solid var(--c-outline); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${concepto?.nombre || 'Movimiento'}
                     </div>
-                    <strong class="search-result-item__amount ${amountClass}">${formatCurrency(m.cantidad)}</strong>
-                </button>`;
-        });
-        resultsHtml += `</div>`;
-    }
-
-    // --- SECCIÓN DE CUENTAS MEJORADA ---
-    const cuentas = (db.cuentas || []).filter(c => c.nombre.toLowerCase().includes(queryLower) || c.tipo.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
-    if (cuentas.length > 0) {
-        resultsHtml += `<div class="search-result-group">
-                            <div class="search-result-group__title">Cuentas</div>`;
-        cuentas.forEach(c => {
-            resultsHtml += `
-                <button class="search-result-item" data-action="search-result-cuenta" data-id="${c.id}">
-                    <span class="material-icons search-result-item__icon">account_balance_wallet</span>
-                    <div class="search-result-item__details">
-                        <p>${escapeHTML(c.nombre)}</p>
-                        <small>${escapeHTML(c.tipo)}</small>
+                    <div style="font-size: 0.75rem; color: var(--c-on-surface-secondary); margin-top: 4px;">
+                        ${date} • <span style="font-style: italic;">${m.descripcion || 'Sin detalles'}</span>
                     </div>
-                </button>`;
-        });
-        resultsHtml += `</div>`;
+                </div>
+                <div class="${amountClass}" style="font-weight: 700; font-size: 0.95rem; margin-left: 10px; white-space: nowrap;">
+                    ${amountSign}${formatCurrency(m.cantidad)}
+                </div>
+            </div>`;
+        }).join('');
+        
+        // Espacio final para que el último elemento no quede pegado al borde si haces scroll
+        resultsContainer.insertAdjacentHTML('beforeend', `<div style="height: 40px; text-align:center; font-size:0.7rem; opacity:0.5; margin-top:10px;">${hits.length} resultados encontrados</div>`);
     }
-
-    // --- SECCIÓN DE CONCEPTOS MEJORADA ---
-    const conceptos = (db.conceptos || []).filter(c => c.nombre.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
-    if (conceptos.length > 0) {
-        resultsHtml += `<div class="search-result-group">
-                            <div class="search-result-group__title">Conceptos</div>`;
-        conceptos.forEach(c => {
-            resultsHtml += `
-                <button class="search-result-item" data-action="search-result-concepto" data-id="${c.id}">
-                    <span class="material-icons search-result-item__icon">label</span>
-                    <div class="search-result-item__details">
-                        <p>${escapeHTML(c.nombre)}</p>
-                    </div>
-                </button>`;
-        });
-        resultsHtml += `</div>`;
-    }
-
-    if (!resultsHtml) {
-        resultsHtml = `<div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">search_off</span><h3>Sin resultados</h3><p>No se encontró nada para "${escapeHTML(query)}".</p></div>`;
-    }
-    
-    resultsContainer.innerHTML = resultsHtml;
 };
+
+// 7. AUTO-ACTIVACIÓN (Esto asegura que funcione aunque el HTML no tenga 'oninput')
+document.addEventListener('DOMContentLoaded', () => {
+    // Buscamos el input del buscador
+    const input = document.getElementById('global-search-input');
+    // Si existe, le decimos: "Cuando escriban, ejecuta la función performGlobalSearch"
+    if (input) {
+        input.addEventListener('input', (e) => performGlobalSearch(e.target.value));
+    }
+});
 
 		// REEMPLAZA tu función showValoracionModal con esta versión
 const showValoracionModal = (cuentaId) => {
