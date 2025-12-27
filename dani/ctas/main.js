@@ -4958,7 +4958,7 @@ const renderPanelPage = async () => {
     container.innerHTML = `
         <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
             
-            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1);">
+            <div class="hero-card fade-in-up" data-action="ver-balance-neto" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1); cursor: pointer;">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div style="font-size: 0.8rem; font-weight: 700; color: var(--c-on-surface); text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">
@@ -5232,30 +5232,25 @@ const TransactionCardComponent = (m, dbData) => {
     }
 
     return `
-    <div class="list-item-animate"> 
-        <div class="transaction-card ${highlightClass}" data-id="${m.id}" style="padding-left: var(--sp-2); padding-right: var(--sp-2);">
+    <div class="list-item-animate">
+        <div class="transaction-card ${highlightClass}" 
+             data-action="open-movement-form" 
+             data-id="${m.id}" 
+             style="padding-left: var(--sp-2); padding-right: var(--sp-2); cursor: pointer;">
             
             ${avatarHTML}
-
+            
             <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__row-1" style="font-size: 0.95rem; font-weight: 700; color: var(--c-on-surface); margin-bottom: 2px;">
-                        ${title}
-                    </div>
-                    <div class="transaction-card__row-2" style="opacity: 0.8; font-size: 0.75rem; color: var(--c-on-surface-secondary);">
-                        ${subtitle}
-                    </div>
-                </div>
-                <div class="transaction-card__figures">
-                    <div class="transaction-card__amount ${amountClass}" style="font-size: 1rem;">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
-                    ${ m.tipo !== 'traspaso' 
-                       ? `<div class="transaction-card__balance" style="font-size: 0.7rem; opacity: 0.6; margin-top:2px;">${formatCurrencyHTML(m.runningBalance)}</div>` 
-                       : '' 
-                    }
-                </div>
+                <div class="transaction-card__title">${conceptoName}</div>
+                <div class="transaction-card__subtitle">${m.descripcion || dateStr}</div>
+            </div>
+            
+            <div class="transaction-card__amount ${amountClass}">
+                ${formatCurrency(m.cantidad)}
             </div>
         </div>
-    </div>`;
+    </div>
+`;
 };
 
 // Variable para recordar la selección del usuario (por defecto 3 Meses)
@@ -6092,7 +6087,7 @@ const renderPlanificacionPage = () => {
 
         <div class="analysis-section-label">MI PATRIMONIO</div>
 
-        <details class="dashboard-widget">
+        <details id="seccion-balance-neto" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
@@ -9320,7 +9315,27 @@ const handleStart = (e) => {
     // 5. GESTIÓN DE CLICS (Delegación de eventos)
     document.body.addEventListener('click', async (e) => {
         const target = e.target;
+		const actionBtn = e.target.closest('[data-action]'); // Asegúrate que esta línea existe al principio
 
+if (actionBtn) {
+    const action = actionBtn.dataset.action;
+
+    // --- AÑADE O REVISA ESTE BLOQUE ---
+    if (action === 'open-movement-form') {
+        const id = actionBtn.dataset.id; // Cogemos el ID que pusimos en la tarjeta
+        const type = actionBtn.dataset.type; // Por si es un botón de "Añadir Gasto" nuevo
+        
+        // Si tiene ID, es editar. Si no, es nuevo.
+        if (id) {
+            startMovementForm(id); // <--- ESTO ABRE EL FORMULARIO PARA EDITAR
+        } else {
+            startMovementForm(null, type); // Nuevo movimiento
+        }
+        
+        // Si veníamos del buscador o de una hoja de acciones, cerramos esos modales
+        hideModal('global-search-modal'); 
+        hideModal('main-add-sheet');
+    }
         // Cerrar dropdowns personalizados al hacer clic fuera
         if (!target.closest('.custom-select-wrapper')) {
             closeAllCustomSelects(null);
@@ -11875,3 +11890,53 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
+// --- PUENTE DE NAVEGACIÓN PATRIMONIO ---
+document.body.addEventListener('click', (e) => {
+    // 1. Detectar clic en la tarjeta de Patrimonio
+    const btnPatrimonio = e.target.closest('[data-action="ver-balance-neto"]');
+    if (btnPatrimonio) {
+        // Navegar a Planificar
+        navigateTo('planificar-page'); 
+        
+        // Esperar y deslizar hasta el gráfico
+        setTimeout(() => {
+            const destino = document.getElementById('seccion-balance-neto');
+            if (destino) {
+                // Si es un acordeón cerrado, lo abrimos
+                if (destino.tagName === 'DETAILS' && !destino.open) destino.open = true;
+                
+                destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Efecto visual de "parpadeo"
+                destino.style.transition = 'opacity 0.3s';
+                destino.style.opacity = '0.5';
+                setTimeout(() => destino.style.opacity = '1', 300);
+            }
+        }, 150);
+    }
+});
+// --- CAZADOR UNIVERSAL DE CLICS EN MOVIMIENTOS ---
+document.body.addEventListener('click', (e) => {
+    // Buscamos si lo que has tocado es una tarjeta de movimiento o un botón de editar
+    const target = e.target.closest('[data-action="edit-movement-from-list"], [data-action="open-movement-form"], .transaction-card, .t-card');
+    
+    if (target) {
+        // Si el elemento tiene un ID de movimiento, abrimos el editor
+        const id = target.dataset.id || target.getAttribute('data-id');
+        
+        if (id) {
+            e.stopPropagation(); // Evita conflictos
+            // Intentamos cerrar cualquier modal abierto por si acaso
+            const openModal = document.querySelector('.modal-overlay:not(.hidden)');
+            if (openModal && openModal.id !== 'movimiento-modal') {
+                openModal.classList.add('hidden'); // Ocultar otros modales
+                openModal.classList.remove('active'); // Por si usas esta clase
+            }
+            
+            // ABRIR EL FORMULARIO
+            console.log("Editando movimiento:", id); // Para depurar
+            if (typeof startMovementForm === 'function') {
+                startMovementForm(id);
+            }
+        }
+    }
+});
