@@ -9318,8 +9318,6 @@ const handleStart = (e) => {
 		const actionBtn = e.target.closest('[data-action]'); // Asegúrate que esta línea existe al principio
 
 if (actionBtn) {
-    const action = actionBtn.dataset.action;
-
     // --- AÑADE O REVISA ESTE BLOQUE ---
     if (action === 'open-movement-form') {
         const id = actionBtn.dataset.id; // Cogemos el ID que pusimos en la tarjeta
@@ -11890,53 +11888,40 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
-// --- PUENTE DE NAVEGACIÓN PATRIMONIO ---
+// --- PUENTE DE NAVEGACIÓN: PATRIMONIO -> ANÁLISIS ---
+// Pégalo al final del archivo, FUERA de cualquier otra función
 document.body.addEventListener('click', (e) => {
-    // 1. Detectar clic en la tarjeta de Patrimonio
+    // Usamos 'target' en lugar de variables comunes para evitar conflictos
     const btnPatrimonio = e.target.closest('[data-action="ver-balance-neto"]');
+    
     if (btnPatrimonio) {
-        // Navegar a Planificar
-        navigateTo('planificar-page'); 
-        
-        // Esperar y deslizar hasta el gráfico
+        // 1. Ir a la página de Análisis
+        if (typeof navigateTo === 'function') navigateTo('planificar-page');
+        else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
+
+        // 2. Buscar el gráfico y bajar hasta él
         setTimeout(() => {
-            const destino = document.getElementById('seccion-balance-neto');
+            // Buscamos por texto si no tiene ID, es más seguro
+            const titulos = document.querySelectorAll('.widget-title, .card__title, h3');
+            let destino = null;
+            
+            for (const t of titulos) {
+                if (t.textContent.includes('Patrimonio') || t.textContent.includes('Balance')) {
+                    destino = t.closest('.dashboard-widget, .card');
+                    break;
+                }
+            }
+
             if (destino) {
-                // Si es un acordeón cerrado, lo abrimos
+                // Si es un acordeón cerrado (details), lo abrimos
                 if (destino.tagName === 'DETAILS' && !destino.open) destino.open = true;
                 
                 destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Efecto visual de "parpadeo"
-                destino.style.transition = 'opacity 0.3s';
-                destino.style.opacity = '0.5';
-                setTimeout(() => destino.style.opacity = '1', 300);
+                // Efecto visual
+                destino.style.transition = 'transform 0.2s';
+                destino.style.transform = 'scale(1.02)';
+                setTimeout(() => destino.style.transform = 'scale(1)', 300);
             }
-        }, 150);
-    }
-});
-// --- CAZADOR UNIVERSAL DE CLICS EN MOVIMIENTOS ---
-document.body.addEventListener('click', (e) => {
-    // Buscamos si lo que has tocado es una tarjeta de movimiento o un botón de editar
-    const target = e.target.closest('[data-action="edit-movement-from-list"], [data-action="open-movement-form"], .transaction-card, .t-card');
-    
-    if (target) {
-        // Si el elemento tiene un ID de movimiento, abrimos el editor
-        const id = target.dataset.id || target.getAttribute('data-id');
-        
-        if (id) {
-            e.stopPropagation(); // Evita conflictos
-            // Intentamos cerrar cualquier modal abierto por si acaso
-            const openModal = document.querySelector('.modal-overlay:not(.hidden)');
-            if (openModal && openModal.id !== 'movimiento-modal') {
-                openModal.classList.add('hidden'); // Ocultar otros modales
-                openModal.classList.remove('active'); // Por si usas esta clase
-            }
-            
-            // ABRIR EL FORMULARIO
-            console.log("Editando movimiento:", id); // Para depurar
-            if (typeof startMovementForm === 'function') {
-                startMovementForm(id);
-            }
-        }
+        }, 300); // Damos un poco más de tiempo (300ms)
     }
 });
