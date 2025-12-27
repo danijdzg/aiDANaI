@@ -3416,97 +3416,201 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
     });
 };        
 
-// ===============================================================
-// === FUNCIÓN DE ANÁLISIS/PLANIFICACIÓN (CON DESTINOS) ===
-// ===============================================================
-const renderBudgetTracking = () => {
-    const container = document.getElementById('planificar-content');
-    if (!container) return;
-
-    // LIMPIEZA INICIAL
-    container.innerHTML = '';
-
-    // 1. CÁLCULOS BÁSICOS
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    const totalGasto = db.movimientos
-        .filter(m => {
-            const d = new Date(m.fecha);
-            return m.tipo === 'gasto' && d >= startOfMonth && d <= endOfMonth;
-        })
-        .reduce((sum, m) => sum + m.cantidad, 0);
-
-    // Presupuesto de ejemplo (puedes ajustar esto luego)
-    const presupuestoMensual = 2000; 
-    const porcentaje = Math.min((totalGasto / presupuestoMensual) * 100, 100);
+const renderBudgetTracking = async () => {
+    const dashboardContainer = select('annual-budget-dashboard');
+    const placeholder = select('budget-init-placeholder');
+    const yearSelector = select('budget-year-selector');
+    if (!dashboardContainer || !placeholder || !yearSelector) return;
     
-    // Color de la barra de presupuesto
-    let colorBarra = 'var(--c-primary)';
-    if(porcentaje > 80) colorBarra = 'var(--c-warning)';
-    if(porcentaje >= 100) colorBarra = 'var(--c-danger)';
+    const year = parseInt(yearSelector.value, 10);
+    
+    const allYearBudgets = (db.presupuestos || [])
+        .filter(b => b.ano === year && db.conceptos.find(c => c.id === b.conceptoId));
 
-    // 2. GENERAR EL HTML
-    const html = `
-        <div class="card fade-in-up" style="margin-bottom: var(--sp-4); padding: 20px;">
-            <h3 class="card__title" style="margin-bottom: 15px;">Presupuesto Mensual</h3>
-            <div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size: 0.9rem;">
-                    <span style="color: var(--c-on-surface-secondary);">Gastado: <strong style="color: var(--c-on-surface);">${formatCurrency(totalGasto)}</strong></span>
-                    <span style="color: var(--c-on-surface-secondary);">Límite: ${formatCurrency(presupuestoMensual)}</span>
-                </div>
-                <div style="width: 100%; height: 12px; background: var(--c-surface-variant); border-radius: 6px; overflow: hidden;">
-                    <div style="width: ${porcentaje}%; height: 100%; background: ${colorBarra}; transition: width 1s ease;"></div>
-                </div>
-                <p style="text-align: right; font-size: 0.8rem; margin-top: 8px; color: ${colorBarra}; font-weight: 600;">
-                    ${porcentaje.toFixed(1)}% utilizado
-                </p>
-            </div>
-        </div>
-
-        <div class="card fade-in-up" style="margin-bottom: var(--sp-4);">
-            <h3 class="card__title">Gastos por Categoría</h3>
-            <div class="chart-container" style="position: relative; height: 250px; margin-top: 10px;">
-                <canvas id="gastosPorCategoriaChart"></canvas>
-            </div>
-        </div>
-
-        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-primary), 0.3);">
-            <h3 class="card__title" style="display: flex; align-items: center; gap: 10px;">
-                <span class="material-icons" style="color: var(--c-primary);">savings</span>
-                Evolución de Patrimonio
-            </h3>
-            <p style="font-size: 0.85rem; color: var(--c-on-surface-secondary); margin-bottom: 15px;">
-                Tu flujo de caja neto (Ingresos - Gastos) mes a mes.
-            </p>
-            <div class="chart-container" style="position: relative; height: 250px;">
-                <canvas id="balanceNetoChart"></canvas>
-            </div>
-        </div>
-
-        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-info), 0.3);">
-            <h3 class="card__title" style="display: flex; align-items: center; gap: 10px;">
-                <span class="material-icons" style="color: var(--c-info);">trending_up</span>
-                Cartera de Inversiones
-            </h3>
-            <p style="font-size: 0.85rem; color: var(--c-on-surface-secondary); margin-bottom: 15px;">
-                Distribución y rendimiento de tu capital invertido.
-            </p>
-            <div class="chart-container" style="position: relative; height: 250px;">
-                <canvas id="inversionesChart"></canvas>
-            </div>
-        </div>
-    `;
-
-    container.innerHTML = html;
-
-    // 3. INICIALIZAR LOS GRÁFICOS
-    // Llamamos a la función que pinta las bolitas y barras dentro de los canvas
-    if (typeof renderCharts === 'function') {
-        // Un pequeño retraso para asegurar que el HTML existe
-        setTimeout(() => renderCharts(startOfMonth, endOfMonth), 50);
+    if (allYearBudgets.length === 0) {
+        dashboardContainer.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        const titleEl = select('budget-placeholder-title');
+        const textEl = select('budget-placeholder-text');
+        if (titleEl) titleEl.textContent = `Configurar Presupuestos ${year}`;
+        if (textEl) textEl.textContent = `Aún no has definido metas de ingreso o límites de gasto para el año ${year}.`;
+        return;
     }
+    
+    dashboardContainer.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+
+    const { percentage: yearProgress, daysPassed, daysRemaining, totalDaysInYear } = getYearProgress();
+    
+    // --- INICIO DE LA SOLUCIÓN DEFINITIVA ---
+    // 1. En lugar de hacer una consulta compleja a Firebase, traemos TODOS los movimientos
+    //    usando una función que ya sabemos que es fiable y no depende de índices.
+    const allMovements = await AppStore.getAll();
+
+    // 2. Ahora, filtramos esos movimientos en JavaScript. Es más rápido y 100% seguro.
+    //    Nos aseguramos de que el movimiento sea del tipo correcto Y del año seleccionado.
+    const movements = allMovements.filter(mov => {
+        const movYear = new Date(mov.fecha).getFullYear();
+        return mov.tipo === 'movimiento' && movYear === year;
+    });
+    // --- FIN DE LA SOLUCIÓN DEFINITIVA ---
+
+    const monthlyIncomeData = {};
+    const monthlyExpenseData = {};
+    movements.forEach(mov => {
+        const month = new Date(mov.fecha).getMonth();
+        if (mov.cantidad > 0) {
+            monthlyIncomeData[month] = (monthlyIncomeData[month] || 0) + mov.cantidad;
+        } else {
+            monthlyExpenseData[month] = (monthlyExpenseData[month] || 0) + Math.abs(mov.cantidad);
+        }
+    });
+
+    const expenseBudgets = allYearBudgets.filter(b => b.cantidad < 0);
+    let totalBudgetedExpense = 0;
+    const expenseDetails = expenseBudgets.map(budget => {
+        const actualSpent = Math.abs(movements.filter(m => m.conceptoId === budget.conceptoId && m.cantidad < 0).reduce((sum, m) => sum + m.cantidad, 0));
+        const budgetLimit = Math.abs(budget.cantidad);
+        totalBudgetedExpense += budgetLimit;
+
+        const rawPacePercentage = (budgetLimit > 0 && yearProgress > 0) ? ((actualSpent / budgetLimit) / (yearProgress / 100)) * 100 : (actualSpent > 0 ? 200 : 100);
+        const pacePercentage = Math.min(rawPacePercentage, 200);
+
+        let status;
+        if (rawPacePercentage > 120) {
+            status = { text: 'Excedido', icon: 'cancel', color: 'text-danger' };
+        } else if (rawPacePercentage >= 80) {
+            status = { text: 'Vas bien', icon: 'check_circle', color: 'text-info' };
+        } else {
+            status = { text: 'Ahorrando', icon: 'verified', color: 'text-positive' };
+        }
+
+        const projectedAnnualSpent = (daysPassed > 0) ? (actualSpent / daysPassed) * totalDaysInYear : 0;
+        return { ...budget, actual: actualSpent, limit: budgetLimit, projected: projectedAnnualSpent, pacePercentage, status };
+    });
+    const totalProjectedExpense = expenseDetails.reduce((sum, b) => sum + b.projected, 0);
+
+    const incomeBudgets = allYearBudgets.filter(b => b.cantidad >= 0);
+    let totalBudgetedIncome = 0;
+    const incomeDetails = incomeBudgets.map(budget => {
+        const actualIncome = movements.filter(m => m.conceptoId === budget.conceptoId && m.cantidad > 0).reduce((sum, m) => sum + m.cantidad, 0);
+        const budgetGoal = budget.cantidad;
+        totalBudgetedIncome += budgetGoal;
+
+        const rawPacePercentage = (budgetGoal > 0 && yearProgress > 0) ? ((actualIncome / budgetGoal) / (yearProgress / 100)) * 100 : (actualIncome > 0 ? 200 : 0);
+        const pacePercentage = Math.min(rawPacePercentage, 200);
+
+        let status;
+        if (rawPacePercentage > 120) {
+            status = { text: 'Superado', icon: 'rocket_launch', color: 'text-positive' };
+        } else if (rawPacePercentage >= 80) {
+            status = { text: 'Vas bien', icon: 'check_circle', color: 'text-info' };
+        } else {
+            status = { text: 'Por debajo del objetivo', icon: 'trending_down', color: 'text-warning' };
+        }
+
+        const projectedAnnualIncome = (daysPassed > 0) ? (actualIncome / daysPassed) * totalDaysInYear : 0;
+        return { ...budget, actual: actualIncome, limit: budgetGoal, projected: projectedAnnualIncome, pacePercentage, status };
+    });
+    const totalProjectedIncome = incomeDetails.reduce((sum, b) => sum + b.projected, 0);
+
+    const projectedNet = totalProjectedIncome - totalProjectedExpense;
+    const kpiContainer = select('budget-kpi-container');
+    if (kpiContainer) kpiContainer.innerHTML = `
+        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Ingresos</h4><strong class="kpi-item__value text-positive">${formatCurrency(totalProjectedIncome)}</strong></div>
+        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Gastos</h4><strong class="kpi-item__value text-negative">${formatCurrency(totalProjectedExpense)}</strong></div>
+        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Neta Anual</h4><strong class="kpi-item__value ${projectedNet >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(projectedNet)}</strong></div>
+    `;
+    renderBudgetTrendChart(monthlyIncomeData, monthlyExpenseData, totalBudgetedExpense / 12);
+
+    const listContainer = select('budget-details-list');
+    let listHtml = '';
+
+    if (incomeDetails.length > 0) {
+        listHtml += `<h4 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2);">Metas de Ingresos</h4>`;
+        listHtml += incomeDetails.sort((a, b) => (a.projected / (a.limit || 1)) - (b.projected / (b.limit || 1))).map(b => {
+            const concepto = db.conceptos.find(c => c.id === b.conceptoId);
+            const conceptoNombre = (concepto && concepto.nombre) || 'Concepto no encontrado';
+            
+            // --- HTML MEJORADO CON CLASES RESPONSIVAS ---
+            return `
+            <div class="card" style="margin-bottom: var(--sp-3);">
+                <div class="card__content" style="padding: var(--sp-3);">
+                    <div class="budget-card-grid">
+                        <div class="budget-chart-wrapper">
+                            <canvas id="gauge-chart-${b.id}"></canvas>
+                            <div style="position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: var(--fs-lg); line-height:1;">
+                                ${b.pacePercentage.toFixed(0)}<span style="font-size: 0.6em;">%</span>
+                            </div>
+                        </div>
+                        <div class="budget-info-wrapper">
+                            <div class="budget-header-row">
+                                <h4 class="budget-title">${escapeHTML(conceptoNombre)}</h4>
+                                <span class="${b.status.color} budget-status-badge">
+                                    <span class="material-icons" style="font-size: 14px;">${b.status.icon}</span>
+                                    <span>${b.status.text}</span>
+                                </span>
+                            </div>
+                            <div class="budget-text-line">
+                                <strong>Ingresado:</strong> ${formatCurrency(b.actual)} / ${formatCurrency(b.limit)}
+                            </div>
+                            <div class="budget-text-line" style="font-weight: 600;">
+                                <strong>Proyección:</strong> 
+                                <span class="${b.projected >= b.limit ? 'text-positive' : 'text-danger'}">${formatCurrency(b.projected)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    
+    if (expenseDetails.length > 0) {
+        listHtml += `<h4 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2);">Límites de Gasto</h4>`;
+        listHtml += expenseDetails.sort((a, b) => (b.projected / (b.limit || 1)) - (a.projected / (a.limit || 1))).map(b => {
+            const concepto = db.conceptos.find(c => c.id === b.conceptoId);
+            const conceptoNombre = (concepto && concepto.nombre) || 'Concepto no encontrado';
+            
+            // --- HTML MEJORADO CON CLASES RESPONSIVAS ---
+            return `
+            <div class="card" style="margin-bottom: var(--sp-3);">
+                <div class="card__content" style="padding: var(--sp-3);">
+                    <div class="budget-card-grid">
+                        <div class="budget-chart-wrapper">
+                            <canvas id="gauge-chart-${b.id}"></canvas>
+                            <div style="position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: var(--fs-lg); line-height:1;">
+                                ${b.pacePercentage.toFixed(0)}<span style="font-size: 0.6em;">%</span>
+                            </div>
+                        </div>
+                        <div class="budget-info-wrapper">
+                            <div class="budget-header-row">
+                                <h4 class="budget-title">${escapeHTML(conceptoNombre)}</h4>
+                                <span class="${b.status.color} budget-status-badge">
+                                    <span class="material-icons" style="font-size: 14px;">${b.status.icon}</span> 
+                                    <span>${b.status.text}</span>
+                                </span>
+                            </div>
+                            <div class="budget-text-line">
+                                <strong>Gastado:</strong> ${formatCurrency(b.actual)} / ${formatCurrency(b.limit)}
+                            </div>
+                            <div class="budget-text-line" style="font-weight: 600;">
+                                <strong>Proyección:</strong> 
+                                <span class="${b.projected > b.limit ? 'text-danger' : 'text-positive'}">${formatCurrency(b.projected)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    
+    if (listContainer) listContainer.innerHTML = listHtml;
+
+    setTimeout(() => {
+        [...incomeDetails, ...expenseDetails].forEach(b => {
+            renderGaugeChart(`gauge-chart-${b.id}`, b.pacePercentage, 100);
+        });
+    }, 50);
 };
 const handleToggleInvestmentTypeFilter = (type) => {
     hapticFeedback('light');
@@ -4847,112 +4951,163 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
-// ===============================================================
-// === FUNCIÓN DE PANEL PRINCIPAL (CON BOTONES DE NAVEGACIÓN) ===
-// ===============================================================
 const renderPanelPage = async () => {
-    const container = document.getElementById('panel-content');
+    const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // 1. CÁLCULOS DE DINERO (Lógica interna)
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    // Patrimonio Total (Suma de todas las cuentas)
-    const totalBalance = db.cuentas.reduce((sum, c) => sum + c.saldo, 0);
-
-    // Ingresos y Gastos del Mes
-    let ingresosMes = 0;
-    let gastosMes = 0;
-
-    // Capital Invertido (Cuentas tipo 'inversion' o 'ahorro')
-    // Ajusta esto si tus cuentas de inversión tienen otro nombre
-    const totalInvertido = db.cuentas
-        .filter(c => c.type === 'inversion' || c.tipo === 'inversion' || c.nombre.toLowerCase().includes('inver'))
-        .reduce((sum, c) => sum + c.saldo, 0);
-
-    db.movimientos.forEach(m => {
-        const d = new Date(m.fecha);
-        if (d >= startOfMonth && d <= endOfMonth) {
-            if (m.tipo === 'ingreso') ingresosMes += m.cantidad;
-            if (m.tipo === 'gasto') gastosMes += m.cantidad;
-        }
-    });
-
-    // 2. DIBUJAR EL HTML (Aquí están los botones nuevos)
     container.innerHTML = `
-        <div class="panel-header fade-in">
-            <div class="greeting">
-                <span class="greeting__text">Hola, ${currentUser?.displayName || 'Usuario'}</span>
-                <span class="greeting__date">${now.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-            </div>
-            <div class="user-avatar" onclick="handleLogout()">
-                ${(currentUser?.displayName || 'U').charAt(0).toUpperCase()}
-            </div>
-        </div>
+        <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
+            
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--c-on-surface); text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">
+                        Flujo de Caja
+                    </div>
+                    
+                    <div class="report-filters" style="margin: 0;">
+                        <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 4px 24px 4px 10px; height: auto; width: auto; background-color: rgba(255,255,255,0.05); border: 1px solid var(--c-outline); border-radius: 8px; color: var(--c-on-surface); cursor: pointer;">
+                            <option value="mes-actual">Este Mes</option>
+                            <option value="año-actual">Este Año</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </div>
+                </div>
 
-        <div class="hero-card fade-in-up" data-action="ver-balance-neto" style="padding: 20px; margin-bottom: var(--sp-4); cursor: pointer; position: relative; overflow: hidden;">
-            <div style="position: relative; z-index: 2;">
-                <div class="hero-card__label" style="opacity: 0.8; font-size: 0.9rem; margin-bottom: 5px;">Patrimonio Total</div>
-                <div class="hero-card__amount" style="font-size: 2.2rem; font-weight: 700;">${formatCurrency(totalBalance)}</div>
-                <div style="font-size: 0.8rem; margin-top: 10px; display: flex; align-items: center; opacity: 0.9;">
-                    <span class="material-icons" style="font-size: 1rem; margin-right: 5px;">show_chart</span>
-                    Toca para ver evolución
+                <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Desde</label>
+                        <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                    </div>
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Hasta</label>
+                        <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: rgba(0, 179, 77, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(0, 179, 77, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-success); text-transform: uppercase; margin-bottom: 2px;">
+                            INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos">?</button>
+                        </div>
+                        <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-success);">+0,00 €</div>
+                    </div>
+
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="background: rgba(255, 59, 48, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 59, 48, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-danger); text-transform: uppercase; margin-bottom: 2px;">
+                            GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos">?</button>
+                        </div>
+                        <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-danger);">-0,00 €</div>
+                    </div>
+                </div>
+
+                <div style="height: 1px; background-color: var(--c-outline); margin: 15px 0; opacity: 0.5;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="saldoNeto">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            NETO <button class="help-btn" data-action="show-kpi-help" data-kpi="neto">?</button>
+                        </div>
+                        <div id="kpi-saldo-neto-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0,00 €</div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            AHORRO <button class="help-btn" data-action="show-kpi-help" data-kpi="tasa_ahorro">?</button>
+                        </div>
+                        <div id="kpi-tasa-ahorro-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0.00%</div>
+                    </div>
                 </div>
             </div>
-            <div style="position: absolute; right: -20px; bottom: -20px; opacity: 0.1;">
-                <span class="material-icons" style="font-size: 120px;">account_balance</span>
-            </div>
-        </div>
 
-        <div class="summary-row fade-in-up" style="display: flex; gap: 15px; margin-bottom: var(--sp-4);">
-            <div class="card" style="flex: 1; padding: 15px;">
-                <div style="color: var(--c-success); font-size: 0.8rem; margin-bottom: 5px; font-weight: 600;">INGRESOS</div>
-                <div style="font-size: 1.1rem; font-weight: 700;">${formatCurrency(ingresosMes)}</div>
-            </div>
-            <div class="card" style="flex: 1; padding: 15px;">
-                <div style="color: var(--c-danger); font-size: 0.8rem; margin-bottom: 5px; font-weight: 600;">GASTOS</div>
-                <div style="font-size: 1.1rem; font-weight: 700;">${formatCurrency(gastosMes)}</div>
-            </div>
-        </div>
-
-        <h3 class="section-title fade-in-up">Resumen de Activos</h3>
-        <div class="card fade-in-up" data-action="ver-inversiones" style="margin-bottom: var(--sp-3); padding: 15px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <div style="background: rgba(var(--rgb-info), 0.15); color: var(--c-info); padding: 10px; border-radius: 12px; display: flex;">
-                    <span class="material-icons">trending_up</span>
+            <div class="hero-card fade-in-up" style="padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+                
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+                        PATRIMONIO (CAPITAL TOTAL) <button class="help-btn" data-action="show-kpi-help" data-kpi="patrimonio">?</button>
+                    </div>
+                    <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
                 </div>
-                <div>
-                    <div style="font-size: 0.9rem; color: var(--c-on-surface-secondary);">Capital Invertido</div>
-                    <div style="font-size: 1.1rem; font-weight: 700; color: var(--c-on-surface);">${formatCurrency(totalInvertido)}</div>
+
+                <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
+                    
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">account_balance_wallet</span> Liquidez
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez">?</button>
+                        </div>
+                        <div id="kpi-liquidez-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
+                    <div style="height: 30px; background-color: var(--c-outline);"></div>
+
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+                        </div>
+                        <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
                 </div>
             </div>
-            <span class="material-icons" style="color: var(--c-on-surface-secondary);">chevron_right</span>
-        </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px; margin-bottom: 15px;">
-            <h3 class="section-title" style="margin: 0;">Últimos Movimientos</h3>
-            <span style="font-size: 0.85rem; color: var(--c-primary); cursor: pointer;" onclick="handleNavigation('diario-page')">Ver todos</span>
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
+                    <div style="text-align: left;">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">Capital Invertido</div>
+                        <div id="new-card-capital" style="font-weight:700;">0,00 €</div>
+                    </div>
+                    <div style="text-align: center; font-weight:800; color:var(--c-on-surface-secondary);">
+                        +/-
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">
+                            P&L <button class="help-btn" data-action="show-kpi-help" data-kpi="pnl" style="width:14px; height:14px; font-size:9px;">?</button>
+                        </div>
+                        <div id="new-card-pnl" style="font-weight:700;">0,00 €</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; text-align: center;">
+                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--c-on-surface-tertiary); margin-bottom: 5px;">
+                        = Valor Real de Mercado <button class="help-btn" data-action="show-kpi-help" data-kpi="posicion_real">?</button>
+                    </div>
+                    <div id="new-card-market-value" class="skeleton" style="font-size: 1.8rem; font-weight: 800; line-height: 1;">0,00 €</div>
+                </div>
+            </div>
+
+            <div class="hero-card fade-in-up" style="padding: 15px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-outline);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="text-align: center;">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #FFD60A; font-size: 18px;">shield</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">COBERTURA</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="cobertura" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-runway-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #FFD60A;">0.0 Meses</div>
+                    </div>
+                    <div style="text-align: center; border-left: 1px solid var(--c-outline);">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #39FF14; font-size: 18px;">flag</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">LIBERTAD</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="libertad" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-fi-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #39FF14;">0.00%</div>
+                    </div>
+                </div>
+            </div>
         </div>
         
-        <div id="panel-recent-movements"></div>
+        <div id="concepto-totals-list" style="display:none;"></div>
+        <canvas id="conceptos-chart" style="display:none;"></canvas>
+        <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
     `;
-
-    // 3. CARGAR LA LISTA DE MOVIMIENTOS RECIENTES
-    const recentMoves = db.movimientos.slice(0, 5); // Los 5 últimos
-    const recentContainer = document.getElementById('panel-recent-movements');
     
-    if (recentMoves.length === 0) {
-        recentContainer.innerHTML = `
-            <div style="text-align: center; padding: 30px; opacity: 0.6;">
-                <span class="material-icons" style="font-size: 40px; margin-bottom: 10px;">receipt_long</span>
-                <p>No hay movimientos recientes</p>
-            </div>`;
-    } else {
-        // Usamos el componente de tarjeta que ya tienes
-        recentContainer.innerHTML = recentMoves.map(m => TransactionCardComponent(m)).join('');
-    }
+    populateAllDropdowns();
+    await Promise.all([loadPresupuestos(), loadInversiones()]);
+    scheduleDashboardUpdate(); 
 };
  const showEstrategiaTab = (tabName) => {
     // 1. Gestionar el estado activo de los botones de las pestañas
@@ -11715,75 +11870,3 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
-// ===============================================================
-// === GESTOR DE CLICS FINAL (Patrimonio + Inversiones + Edición) ===
-// ===============================================================
-document.addEventListener('DOMContentLoaded', () => {
-    
-    document.body.addEventListener('click', (event) => {
-        // --- A) GESTIÓN DE EDICIÓN DE MOVIMIENTOS ---
-        const targetMovimiento = event.target.closest('.transaction-card, [data-action="open-movement-form"], [data-action="edit-movement-from-list"]');
-        
-        if (targetMovimiento) {
-            const id = targetMovimiento.getAttribute('data-id') || targetMovimiento.dataset.id;
-            const type = targetMovimiento.dataset.type;
-
-            if (id) {
-                event.stopPropagation();
-                // Cerrar buscadores si están abiertos
-                const buscador = document.getElementById('global-search-modal');
-                if (buscador) buscador.classList.remove('active');
-
-                if (typeof startMovementForm === 'function') startMovementForm(id);
-                return;
-            } else if (type) {
-                if (typeof startMovementForm === 'function') startMovementForm(null, type);
-                return;
-            }
-        }
-
-        // --- B) NAVEGACIÓN INTELIGENTE (Patrimonio e Inversiones) ---
-        const btnPatrimonio = event.target.closest('[data-action="ver-balance-neto"]');
-        const btnInversion = event.target.closest('[data-action="ver-inversiones"]');
-        
-        if (btnPatrimonio || btnInversion) {
-            // 1. Ir a la página de Análisis
-            if (typeof navigateTo === 'function') navigateTo('planificar-page');
-            else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
-            
-            // 2. Decidir a qué gráfico bajar
-            let targetID = btnPatrimonio ? 'seccion-balance-neto' : 'seccion-inversiones';
-            let palabrasClave = btnPatrimonio ? ['Patrimonio', 'Balance'] : ['Inversiones', 'Rentabilidad'];
-
-            // 3. Esperar y buscar el destino
-            setTimeout(() => {
-                let destino = document.getElementById(targetID);
-                
-                // Si no lo encuentra por ID, busca por texto (Plan B de seguridad)
-                if (!destino) {
-                    const titulos = document.querySelectorAll('h3, .card__title, .widget-title');
-                    for (const t of titulos) {
-                        const texto = t.textContent || "";
-                        if (palabrasClave.some(p => texto.includes(p))) {
-                            destino = t.closest('.card, .dashboard-widget');
-                            break;
-                        }
-                    }
-                }
-
-                if (destino) {
-                    // Abrir acordeón si está cerrado
-                    if (destino.tagName === 'DETAILS') destino.open = true;
-                    
-                    // Bajar hasta el gráfico
-                    destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
-                    // Efecto visual de parpadeo
-                    destino.style.transition = 'transform 0.2s';
-                    destino.style.transform = 'scale(1.02)';
-                    setTimeout(() => destino.style.transform = 'scale(1)', 300);
-                }
-            }, 350); // Tiempo suficiente para que cargue la pantalla
-        }
-    });
-});
