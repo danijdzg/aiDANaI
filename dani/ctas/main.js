@@ -3416,129 +3416,7 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
     });
 };        
 
-// ===============================================================
-// === PANTALLA ANÁLISIS: VERSIÓN FINAL CON FECHA MANUAL ===
-// ===============================================================
-const renderBudgetTracking = () => {
-    const container = document.getElementById('planificar-content');
-    if (!container) return;
 
-    container.innerHTML = '';
-
-    // 1. Cálculos del Presupuesto (Barra superior)
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    const totalGasto = db.movimientos
-        .filter(m => {
-            const d = new Date(m.fecha);
-            return m.tipo === 'gasto' && d >= startOfMonth && d <= endOfMonth;
-        })
-        .reduce((sum, m) => sum + m.cantidad, 0);
-
-    const presupuestoMensual = 2000; 
-    const porcentaje = Math.min((totalGasto / presupuestoMensual) * 100, 100);
-    const colorBarra = porcentaje > 80 ? (porcentaje >= 100 ? 'var(--c-danger)' : 'var(--c-warning)') : 'var(--c-primary)';
-
-    // 2. Lista de Inversiones
-    const cuentasInversion = db.cuentas.filter(c => 
-        c.type === 'inversion' || c.tipo === 'inversion' || 
-        (c.nombre && c.nombre.toLowerCase().match(/inver|fondo|acciones|btc|crypto/))
-    );
-
-    let inversionesListHTML = '';
-    
-    if (cuentasInversion.length > 0) {
-        inversionesListHTML = `<div style="margin-top: 15px; border-top: 1px solid var(--c-outline); padding-top: 5px;">`;
-        
-        cuentasInversion.forEach(cuenta => {
-            // A) PRIORIDAD ABSOLUTA: La fecha manual que tú escribiste
-            let fechaTexto = cuenta.fechaValoracion; 
-
-            // B) Si no hay fecha manual, buscamos la del último movimiento (Plan B)
-            if (!fechaTexto) {
-                const movs = db.movimientos.filter(m => m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id);
-                if (movs.length > 0) {
-                    movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-                    const d = new Date(movs[0].fecha);
-                    fechaTexto = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear().toString().slice(-2)}`;
-                } else {
-                    fechaTexto = "Sin fecha";
-                }
-            }
-
-            // C) Renderizado de la fila
-            inversionesListHTML += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <div onclick="openInvestmentHistory('${cuenta.id}')" style="flex: 1; cursor: pointer;">
-                        <div style="font-weight: 500; color: var(--c-on-surface); font-size: 0.95rem;">${cuenta.nombre}</div>
-                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary);">Ver historial</div>
-                    </div>
-
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <div style="text-align: right;">
-                            <span style="display: block; color: #FFEB3B; font-family: monospace; font-size: 0.8rem; font-weight: bold; background: rgba(255, 235, 59, 0.15); padding: 1px 6px; border-radius: 4px; margin-bottom: 2px;">
-                                ${fechaTexto}
-                            </span>
-                            <span style="font-weight: 700; color: #fff; font-size: 1rem;">
-                                ${formatCurrency(cuenta.saldo)}
-                            </span>
-                        </div>
-                        
-                        <button onclick="actualizarValorInversion('${cuenta.id}', event)" 
-                                style="background: rgba(255,255,255,0.1); border: none; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--c-primary);">
-                            <span class="material-icons" style="font-size: 18px;">edit</span>
-                        </button>
-                    </div>
-                </div>`;
-        });
-        inversionesListHTML += `</div>`;
-    } else {
-        inversionesListHTML = `<p style="opacity:0.5; text-align:center; padding:15px;">No hay cuentas de inversión.</p>`;
-    }
-
-    // 3. Montaje Final
-    container.innerHTML = `
-        <div class="card fade-in-up" style="margin-bottom: var(--sp-4); padding: 20px;">
-            <h3 class="card__title" style="margin-bottom: 10px;">Presupuesto Mensual</h3>
-            <div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size: 0.9rem;">
-                    <span>Gastado: <strong>${formatCurrency(totalGasto)}</strong></span>
-                    <span>Límite: ${formatCurrency(presupuestoMensual)}</span>
-                </div>
-                <div style="width: 100%; height: 10px; background: var(--c-surface-variant); border-radius: 5px; overflow: hidden;">
-                    <div style="width: ${porcentaje}%; height: 100%; background: ${colorBarra};"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card fade-in-up" style="margin-bottom: var(--sp-4);">
-            <h3 class="card__title">Gastos por Categoría</h3>
-            <div class="chart-container" style="position: relative; height: 250px; margin-top: 10px;">
-                <canvas id="gastosPorCategoriaChart"></canvas>
-            </div>
-        </div>
-
-        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-primary), 0.3);">
-            <h3 class="card__title"><span class="material-icons" style="color: var(--c-primary); margin-right:8px;">savings</span>Evolución Patrimonio</h3>
-            <div class="chart-container" style="position: relative; height: 250px;"><canvas id="balanceNetoChart"></canvas></div>
-        </div>
-
-        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-info), 0.3);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3 class="card__title" style="margin:0;"><span class="material-icons" style="color: var(--c-info); margin-right:8px;">trending_up</span>Cartera Inversiones</h3>
-            </div>
-            <p style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-bottom: 10px;">Usa el lápiz para actualizar fecha y valor.</p>
-            
-            ${inversionesListHTML}
-            
-            <div class="chart-container" style="position: relative; height: 250px; margin-top: 20px;"><canvas id="inversionesChart"></canvas></div>
-        </div>
-    `;
-
-    if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 50);
-};
 const handleToggleInvestmentTypeFilter = (type) => {
     hapticFeedback('light');
     if (deselectedInvestmentTypesFilter.has(type)) {
@@ -11873,53 +11751,201 @@ window.openInvestmentHistory = (cuentaId) => {
     // 3. Mostramos el Modal usando tu sistema existente
     showGenericModal(`Historial: ${cuenta.nombre}`, listHtml);
 };
-// ===============================================================
-// === NUEVO SISTEMA: ACTUALIZAR VALOR + FECHA MANUAL ===
-// ===============================================================
+// ===========================================================================
+// === 1. FUNCIÓN PARA GUARDAR VALOR Y FECHA MANUAL (Lápiz) ===
+// ===========================================================================
 window.actualizarValorInversion = async (cuentaId, event) => {
-    if (event) event.stopPropagation();
+    // Evitamos clics fantasma
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
 
     const cuenta = db.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) return;
 
-    // 1. Pedir el NUEVO VALOR
+    // A) PEDIR EL NUEVO VALOR
     const valorActual = cuenta.saldo;
-    const nuevoValorStr = prompt(`Introduce el VALOR REAL actual para "${cuenta.nombre}":`, valorActual);
-    if (nuevoValorStr === null) return; 
+    const nuevoValorStr = prompt(`PASO 1/2: Valor REAL de "${cuenta.nombre}":`, valorActual);
+    
+    if (nuevoValorStr === null) return; // Cancelado por el usuario
 
-    // Limpiamos el valor (cambiamos coma por punto)
+    // Convertir coma a punto por si acaso
     const nuevoValor = parseFloat(nuevoValorStr.replace(',', '.'));
     if (isNaN(nuevoValor)) {
-        alert("Por favor, introduce un número válido.");
+        alert("Número no válido.");
         return;
     }
 
-    // 2. Pedir la FECHA DE ACTUALIZACIÓN
+    // B) PEDIR LA FECHA (Pre-rellenada con la fecha actual o la última guardada)
     const hoy = new Date();
-    const fechaDefecto = `${hoy.getDate().toString().padStart(2,'0')}/${(hoy.getMonth()+1).toString().padStart(2,'0')}/${hoy.getFullYear()}`;
-    
-    const nuevaFecha = prompt(`¿A qué FECHA corresponde este valor?\n(Formato: DD/MM/AAAA)`, fechaDefecto);
-    if (nuevaFecha === null) return;
+    const diaHoy = hoy.getDate().toString().padStart(2, '0');
+    const mesHoy = (hoy.getMonth() + 1).toString().padStart(2, '0');
+    const anioHoy = hoy.getFullYear();
+    const fechaSugerida = cuenta.fechaValoracion || `${diaHoy}/${mesHoy}/${anioHoy}`;
 
+    const nuevaFecha = prompt(`PASO 2/2: Fecha de este valor (DD/MM/AAAA):`, fechaSugerida);
+    
+    if (nuevaFecha === null) return; // Cancelado
+
+    // C) GUARDAR EN LA NUBE Y EN LOCAL
     try {
-        // 3. Guardar en la base de datos (Saldo + Fecha Manual)
-        // Guardamos la fecha tal cual la escribes para que no se cambie sola
-        await fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId).update({
+        const updateData = {
             saldo: nuevoValor,
-            fechaValoracion: nuevaFecha 
-        });
+            fechaValoracion: nuevaFecha // Guardamos la fecha EXACTA que has escrito
+        };
+
+        // 1. Guardar en Firestore
+        await fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId).update(updateData);
         
-        // 4. Actualizar en pantalla al instante
+        // 2. Actualizar memoria local al instante
         cuenta.saldo = nuevoValor;
         cuenta.fechaValoracion = nuevaFecha;
         
-        showToast("Inversión actualizada correctamente.");
+        showToast("Valor y fecha guardados.");
         
-        // Recargar la zona de inversiones si existe
-        if (typeof renderBudgetTracking === 'function') renderBudgetTracking();
+        // 3. RE-PINTAR LA PANTALLA INMEDIATAMENTE
+        if (typeof renderBudgetTracking === 'function') {
+            renderBudgetTracking();
+        }
 
     } catch (error) {
-        console.error(error);
-        showToast("Error al guardar.", "danger");
+        console.error("Error al actualizar:", error);
+        alert("Error de conexión. No se pudo guardar.");
+    }
+};
+
+// ===========================================================================
+// === 2. FUNCIÓN DE ANÁLISIS (PINTAR GRÁFICOS Y LISTA) ===
+// ===========================================================================
+const renderBudgetTracking = () => {
+    const container = document.getElementById('planificar-content');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    // --- CÁLCULOS PRESUPUESTO (NO TOCAR) ---
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const totalGasto = db.movimientos
+        .filter(m => {
+            const d = new Date(m.fecha);
+            return m.tipo === 'gasto' && d >= startOfMonth && d <= endOfMonth;
+        })
+        .reduce((sum, m) => sum + m.cantidad, 0);
+
+    const presupuestoMensual = 2000; 
+    const porcentaje = Math.min((totalGasto / presupuestoMensual) * 100, 100);
+    const colorBarra = porcentaje > 80 ? (porcentaje >= 100 ? 'var(--c-danger)' : 'var(--c-warning)') : 'var(--c-primary)';
+
+    // --- FILTRAR SOLO CUENTAS DE INVERSIÓN ---
+    const cuentasInversion = db.cuentas.filter(c => 
+        c.type === 'inversion' || c.tipo === 'inversion' || 
+        (c.nombre && c.nombre.toLowerCase().match(/inver|fondo|acciones|btc|crypto|ahorro/))
+    );
+
+    let inversionesListHTML = '';
+    
+    if (cuentasInversion.length > 0) {
+        inversionesListHTML = `<div style="margin-top: 15px; border-top: 1px solid var(--c-outline); padding-top: 5px;">`;
+        
+        cuentasInversion.forEach(cuenta => {
+            
+            // --- LÓGICA DE FECHA (AQUÍ ESTÁ LA CLAVE) ---
+            // 1. Buscamos la fecha manual guardada (Paso 1)
+            let fechaMostrar = cuenta.fechaValoracion;
+
+            // 2. Si NO hay fecha manual, mostramos "Sin fecha" o buscamos en movimientos antiguos
+            if (!fechaMostrar) {
+                 const movs = db.movimientos.filter(m => m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id);
+                 if (movs.length > 0) {
+                    movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+                    const d = new Date(movs[0].fecha);
+                    fechaMostrar = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear().toString().slice(-2)}*`; // Asterisco indica automática
+                 } else {
+                    fechaMostrar = "--/--";
+                 }
+            }
+
+            // --- HTML DE LA FILA ---
+            inversionesListHTML += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    
+                    <div onclick="openInvestmentHistory('${cuenta.id}')" style="flex: 1; cursor: pointer;">
+                        <div style="font-weight: 500; color: var(--c-on-surface); font-size: 0.95rem;">${cuenta.nombre}</div>
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary);">Ver movimientos</div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        
+                        <div style="text-align: right;">
+                            <div style="background: rgba(255, 235, 59, 0.1); border-radius: 4px; padding: 2px 6px; display: inline-block; margin-bottom: 2px;">
+                                <span style="color: #FFEB3B; font-family: monospace; font-size: 0.85rem; font-weight: 700; display: block; line-height: 1;">
+                                    ${fechaMostrar}
+                                </span>
+                            </div>
+                            <div style="font-weight: 700; color: #fff; font-size: 1rem; margin-top: 2px;">
+                                ${formatCurrency(cuenta.saldo)}
+                            </div>
+                        </div>
+                        
+                        <button onclick="actualizarValorInversion('${cuenta.id}', event)" 
+                                style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--c-primary); transition: all 0.2s;">
+                            <span class="material-icons" style="font-size: 20px;">edit</span>
+                        </button>
+                    </div>
+                </div>`;
+        });
+        inversionesListHTML += `</div>`;
+    } else {
+        inversionesListHTML = `<div style="text-align: center; padding: 20px; color: var(--c-on-surface-secondary); font-size: 0.9rem;">No hay cuentas de inversión.<br>Crea una cuenta tipo 'Inversión' para verla aquí.</div>`;
+    }
+
+    // --- MONTAJE FINAL DEL HTML ---
+    container.innerHTML = `
+        <div class="card fade-in-up" style="margin-bottom: var(--sp-4); padding: 20px;">
+            <h3 class="card__title" style="margin-bottom: 10px;">Presupuesto Mensual</h3>
+            <div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size: 0.9rem;">
+                    <span>Gastado: <strong>${formatCurrency(totalGasto)}</strong></span>
+                    <span>Límite: ${formatCurrency(presupuestoMensual)}</span>
+                </div>
+                <div style="width: 100%; height: 10px; background: var(--c-surface-variant); border-radius: 5px; overflow: hidden;">
+                    <div style="width: ${porcentaje}%; height: 100%; background: ${colorBarra};"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card fade-in-up" style="margin-bottom: var(--sp-4);">
+            <h3 class="card__title">Gastos por Categoría</h3>
+            <div class="chart-container" style="position: relative; height: 250px; margin-top: 10px;">
+                <canvas id="gastosPorCategoriaChart"></canvas>
+            </div>
+        </div>
+
+        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-primary), 0.3);">
+            <h3 class="card__title"><span class="material-icons" style="color: var(--c-primary); margin-right:8px;">savings</span>Patrimonio Neto</h3>
+            <div class="chart-container" style="position: relative; height: 250px;"><canvas id="balanceNetoChart"></canvas></div>
+        </div>
+
+        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-info), 0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 class="card__title" style="margin:0;"><span class="material-icons" style="color: var(--c-info); margin-right:8px;">trending_up</span>Mis Inversiones</h3>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-bottom: 15px; margin-top: 5px;">
+                Control de valor real y fecha de actualización.
+            </p>
+            
+            ${inversionesListHTML}
+            
+            <div class="chart-container" style="position: relative; height: 250px; margin-top: 20px;"><canvas id="inversionesChart"></canvas></div>
+        </div>
+    `;
+
+    // Inicializar gráficos si la librería está cargada
+    if (typeof renderCharts === 'function') {
+        setTimeout(() => renderCharts(startOfMonth, endOfMonth), 50);
     }
 };
