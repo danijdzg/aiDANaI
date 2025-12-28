@@ -5097,112 +5097,62 @@ const renderPanelPage = async () => {
             break;
     }
 };
-// =====================================================================
-// === INICIO: PASO 1 - REEMPLAZA ESTA FUNCIÓN POR COMPLETO          ===
-// =====================================================================
-/**
- * Genera el HTML para una tarjeta de movimiento o traspaso con sus acciones de swipe.
- * @param {object} m - El objeto del movimiento.
- * @param {object} dbData - Objeto con acceso a `db.cuentas` y `db.conceptos`.
- * @returns {string} El string HTML del componente completo.
- */
-const TransactionCardComponent = (m, dbData) => {
-    const { cuentas, conceptos } = dbData;
-    const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
+// ===============================================================
+// === COMPONENTE TARJETA DE MOVIMIENTO (CORREGIDO) ===
+// ===============================================================
+const TransactionCardComponent = (m) => {
+    // 1. DEFINIR VARIABLES (Aquí estaba el fallo antes)
+    const concepto = db.conceptos.find(c => c.id === m.conceptoId);
     
-    // Formato de fecha corto (ej: 12 oct)
-    const formattedDate = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    // Calculamos el nombre. Si no tiene concepto, ponemos 'Movimiento'
+    let conceptoName = concepto ? concepto.nombre : 'Movimiento';
+    
+    // Si es un traspaso, ignoramos el concepto y ponemos "Traspaso"
+    if (m.tipo === 'traspaso') conceptoName = 'Traspaso';
 
-    let avatarHTML = '';
-    let title = '';
-    let subtitle = '';
-    let amountClass = '';
-    let amountSign = '';
-
-    // --- Helper para extraer emoji ---
-    const extractEmoji = (str) => {
-        if (!str) return null;
-        const match = str.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
-        return match ? match[0] : null;
-    };
-
-    // Helper para formatear saldo de forma compacta
-    const formatCompact = (cents) => {
-        const val = cents / 100;
-        return val.toLocaleString('es-ES', { 
-            minimumFractionDigits: 0, 
-            maximumFractionDigits: 2 
-        }) + '€';
-    };
-
-    if (m.tipo === 'traspaso') {
-        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || '?';
-        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '?';
-        
-        // Obtener saldos tras el traspaso
-        const saldoOrigen = m.runningBalanceOrigen !== undefined ? formatCompact(m.runningBalanceOrigen) : '...';
-        const saldoDestino = m.runningBalanceDestino !== undefined ? formatCompact(m.runningBalanceDestino) : '...';
-
-        // Icono de Traspaso
-        avatarHTML = `<div class="transaction-avatar avatar--transfer"><span class="material-icons">swap_horiz</span></div>`;
-        
-        // Título: Descripción o "Traspaso"
-        title = m.descripcion && m.descripcion !== 'Traspaso' ? escapeHTML(m.descripcion) : 'Traspaso entre cuentas';
-        
-        // Subtítulo: Origen (Saldo) -> Destino (Saldo)
-        subtitle = `<span style="font-size: 0.7rem;">${escapeHTML(origen)} (<strong>${saldoOrigen}</strong>) ➔ ${escapeHTML(destino)} (<strong>${saldoDestino}</strong>)</span>`;
-        
-        amountClass = 'text-info';
-    } else {
-        const concepto = conceptos.find(c => c.id === m.conceptoId);
-        const cuentaObj = cuentas.find(c => c.id === m.cuentaId); // Buscamos la cuenta
-        
-        const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Sin concepto';
-        const nombreCuenta = cuentaObj ? escapeHTML(cuentaObj.nombre) : 'Cuenta?'; // Nombre de la cuenta
-        
-        // 1. Avatar: Emoji o Inicial del concepto
-        const emoji = extractEmoji(conceptoNombre);
-        const content = emoji || conceptoNombre.charAt(0).toUpperCase();
-        const typeClass = m.cantidad >= 0 ? 'avatar--income' : 'avatar--expense';
-        
-        avatarHTML = `<div class="transaction-avatar ${typeClass}">${content}</div>`;
-        
-        // 2. Título (Negrita): Priorizamos la DESCRIPCIÓN
-        const conceptoLimpio = emoji ? conceptoNombre.replace(emoji, '').trim() : conceptoNombre;
-        
-        if (m.descripcion && m.descripcion.trim().length > 0) {
-            title = escapeHTML(m.descripcion);
-        } else {
-            title = conceptoLimpio;
-        }
-        
-        // 3. Subtítulo: Fecha • Concepto • Cuenta
-        // Aquí añadimos la variable nombreCuenta
-        subtitle = `${formattedDate} • ${conceptoLimpio} • ${nombreCuenta}`;
-        
-        amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
-        amountSign = m.cantidad > 0 ? '+' : '';
+    // 2. Formatos de fecha y dinero
+    const dateStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    
+    // Colores según tipo
+    let amountClass = 'var(--c-on-surface)';
+    let signo = '';
+    
+    if (m.tipo === 'ingreso') {
+        amountClass = 'var(--c-success)';
+        signo = '+';
+    } else if (m.tipo === 'gasto') {
+        amountClass = 'var(--c-on-surface)'; // O var(--c-danger) si prefieres rojo
+        signo = '-';
     }
 
+    // Icono y color del avatar
+    const iconName = m.tipo === 'traspaso' ? 'swap_horiz' : (concepto?.icono || 'paid');
+    const iconColor = m.tipo === 'traspaso' ? '#999' : (concepto?.color || '#666');
+    const avatarHTML = `
+        <div style="width: 40px; height: 40px; border-radius: 50%; background: ${iconColor}20; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+            <span class="material-icons" style="font-size: 20px;">${iconName}</span>
+        </div>`;
+
+    // 3. RETORNAR EL HTML (Con sistema de clic para editar)
     return `
-    <div class="list-item-animate">
-        <div class="transaction-card ${highlightClass}" 
-             data-action="open-movement-form" 
-             data-id="${m.id}" 
-             style="padding-left: var(--sp-2); padding-right: var(--sp-2); cursor: pointer;">
-            
-            ${avatarHTML}
-            
-            <div class="transaction-card__content">
-                <div class="transaction-card__title">${conceptoName}</div>
-                <div class="transaction-card__subtitle">${m.descripcion || dateStr}</div>
+    <div class="transaction-card list-item-animate" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px 15px; display: flex; align-items: center; border-bottom: 1px solid var(--c-outline); cursor: pointer; transition: background 0.2s;">
+        
+        ${avatarHTML}
+        
+        <div style="flex: 1; min-width: 0; padding-right: 10px;">
+            <div style="font-weight: 600; font-size: 0.95rem; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${conceptoName}
             </div>
-            
-            <div class="transaction-card__amount ${amountClass}">
-                ${formatCurrency(m.cantidad)}
+            <div style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-top: 2px;">
+                ${dateStr} • ${m.descripcion || 'Sin nota'}
             </div>
         </div>
-    </div>`;
+        
+        <div style="font-weight: 700; font-size: 0.95rem; color: ${amountClass}; white-space: nowrap;">
+            ${signo}${formatCurrency(m.cantidad)}
+        </div>
+    </div>
+    `;
 };
 
 // Variable para recordar la selección del usuario (por defecto 3 Meses)
