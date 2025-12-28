@@ -3417,18 +3417,16 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
 };        
 
 // ===============================================================
-// === FUNCIÓN DE ANÁLISIS (CON VALOR REAL Y FECHA EXACTA) ===
+// === FUNCIÓN DE ANÁLISIS (VERSIÓN SEGURA Y ROBUSTA) ===
 // ===============================================================
-const renderBudgetTracking = async () => {
+const renderBudgetTracking = () => {
     const container = document.getElementById('planificar-content');
     if (!container) return;
 
-    // Aseguramos que tenemos los datos de inversiones cargados para saber el valor real
-    if (!dataLoaded.inversiones) await loadInversiones();
-
+    // Limpiamos el contenedor
     container.innerHTML = '';
 
-    // 1. CÁLCULOS GENERALES DEL PRESUPUESTO
+    // 1. CÁLCULOS GENERALES (Gastos del mes)
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -3447,7 +3445,7 @@ const renderBudgetTracking = async () => {
     if(porcentaje > 80) colorBarra = 'var(--c-warning)';
     if(porcentaje >= 100) colorBarra = 'var(--c-danger)';
 
-    // --- 2. GENERADOR DE LISTA DE INVERSIONES (LÓGICA MEJORADA) ---
+    // 2. BUSCAR CUENTAS DE INVERSIÓN
     const cuentasInversion = db.cuentas.filter(c => 
         c.type === 'inversion' || c.tipo === 'inversion' || 
         (c.nombre && c.nombre.toLowerCase().includes('inver')) ||
@@ -3457,83 +3455,62 @@ const renderBudgetTracking = async () => {
         (c.nombre && c.nombre.toLowerCase().includes('crypto'))
     );
 
+    // 3. GENERAR LA LISTA HTML
     let inversionesListHTML = '';
     
     if (cuentasInversion.length > 0) {
         inversionesListHTML = `<div style="margin-top: 15px; border-top: 1px solid var(--c-outline); padding-top: 5px;">`;
         
         cuentasInversion.forEach(cuenta => {
-            // A) BUSCAR EL "VALOR REAL" (Mercado) Y SU FECHA
-            // 1. Buscamos en el historial de valoraciones (Actualizaciones manuales de precio)
-            const valoraciones = (db.inversiones_historial || [])
-                .filter(v => v.cuentaId === cuenta.id)
-                .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
-            // 2. Buscamos en los movimientos (Aportaciones/Retiradas)
-            const movimientos = db.movimientos.filter(m => 
+            // A) DETECTIVE DE FECHAS: Buscar el último movimiento de esta cuenta
+            // Buscamos cualquier movimiento donde aparezca esta cuenta
+            const movs = db.movimientos.filter(m => 
                 m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id
             );
-            movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+            
+            // Ordenamos del más reciente al más antiguo
+            movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-            let valorMostrar = cuenta.saldo; // Por defecto el saldo contable
-            let fechaObj = null;
-
-            // PRIORIDAD: Si hay una valoración manual reciente, esa manda (Valor de Mercado)
-            if (valoraciones.length > 0) {
-                valorMostrar = valoraciones[0].valor;
-                fechaObj = new Date(valoraciones[0].fecha);
-                
-                // Si el último movimiento es POSTERIOR a la valoración, la valoración podría estar obsoleta,
-                // pero generalmente en inversiones queremos ver el último precio marcado.
-                // Si prefieres ver la fecha del movimiento si es más reciente, descomenta esto:
-                /* if (movimientos.length > 0) {
-                    const fechaMov = new Date(movimientos[0].fecha);
-                    if (fechaMov > fechaObj) fechaObj = fechaMov;
-                }
-                */
-            } else if (movimientos.length > 0) {
-                // Si no hay valoraciones, usamos la fecha del último movimiento
-                fechaObj = new Date(movimientos[0].fecha);
-            }
-
-            // Formatear fecha (DD/MM)
             let fechaDisplay = '--/--';
-            if (fechaObj) {
-                const dia = fechaObj.getDate().toString().padStart(2, '0');
-                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+            
+            // Si encontramos movimientos, cogemos la fecha del primero
+            if (movs.length > 0) {
+                const lastDate = new Date(movs[0].fecha);
+                const dia = lastDate.getDate().toString().padStart(2, '0');
+                const mes = (lastDate.getMonth() + 1).toString().padStart(2, '0');
                 fechaDisplay = `${dia}/${mes}`;
             }
 
-            // B) CREAR FILA
+            // B) DIBUJAR LA FILA
             inversionesListHTML += `
                 <div onclick="openInvestmentHistory('${cuenta.id}')" 
                      style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: background 0.2s;">
                     
-                    <div style="font-weight: 500; color: var(--c-on-surface); font-size: 0.95rem;">
+                    <div style="font-weight: 500; color: var(--c-on-surface); font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;">
                         ${cuenta.nombre}
                     </div>
 
                     <div style="display: flex; align-items: center;">
-                        <span style="font-family: monospace; color: #FFEB3B; font-weight: bold; font-size: 0.85rem; margin-right: 12px; letter-spacing: -0.5px;">
+                        <span style="color: #FFEB3B; font-family: monospace; font-weight: 700; font-size: 0.85rem; margin-right: 10px; background: rgba(255, 235, 59, 0.1); padding: 2px 6px; border-radius: 4px;">
                             ${fechaDisplay}
                         </span>
                         
                         <span style="font-weight: 700; color: #fff; font-size: 1rem;">
-                            ${formatCurrency(valorMostrar)}
+                            ${formatCurrency(cuenta.saldo)}
                         </span>
                         
-                        <span class="material-icons" style="font-size: 16px; color: var(--c-on-surface-secondary); margin-left: 8px;">chevron_right</span>
+                        <span class="material-icons" style="font-size: 16px; color: var(--c-on-surface-secondary); margin-left: 5px;">chevron_right</span>
                     </div>
                 </div>
             `;
         });
         inversionesListHTML += `</div>`;
     } else {
-        inversionesListHTML = `<p style="opacity:0.5; text-align:center; padding:15px; font-size:0.85rem;">No tienes cuentas de inversión.</p>`;
+        inversionesListHTML = `<p style="opacity:0.5; text-align:center; padding:15px; font-size:0.85rem;">No tienes cuentas de inversión activas.</p>`;
     }
 
-    // 3. HTML FINAL DEL PANEL
-    const html = `
+    // 4. MONTAR EL HTML FINAL
+    container.innerHTML = `
         <div class="card fade-in-up" style="margin-bottom: var(--sp-4); padding: 20px;">
             <h3 class="card__title" style="margin-bottom: 15px;">Presupuesto Mensual</h3>
             <div>
@@ -3568,12 +3545,11 @@ const renderBudgetTracking = async () => {
         </div>
 
         <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-info), 0.3);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3 class="card__title" style="display: flex; align-items: center; gap: 10px; margin:0;">
-                    <span class="material-icons" style="color: var(--c-info);">trending_up</span>
-                    Cartera de Inversiones
-                </h3>
-            </div>
+            <h3 class="card__title" style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                <span class="material-icons" style="color: var(--c-info);">trending_up</span>
+                Cartera de Inversiones
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-bottom: 10px;">Última actualización y valor actual</p>
             
             ${inversionesListHTML}
             
@@ -3583,9 +3559,7 @@ const renderBudgetTracking = async () => {
         </div>
     `;
 
-    container.innerHTML = html;
-
-    // Inicializar gráficos si existen
+    // Inicializar gráficos
     if (typeof renderCharts === 'function') {
         setTimeout(() => renderCharts(startOfMonth, endOfMonth), 50);
     }
