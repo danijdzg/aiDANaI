@@ -9330,11 +9330,6 @@ const handleStart = (e) => {
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
-            'open-movement-form': (e) => {
-                const type = e.target.closest('[data-type]').dataset.type;
-                hideModal('main-add-sheet');
-                setTimeout(() => startMovementForm(null, false, type), 250);
-            },
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,
