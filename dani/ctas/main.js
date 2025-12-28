@@ -3416,201 +3416,150 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
     });
 };        
 
-const renderBudgetTracking = async () => {
-    const dashboardContainer = select('annual-budget-dashboard');
-    const placeholder = select('budget-init-placeholder');
-    const yearSelector = select('budget-year-selector');
-    if (!dashboardContainer || !placeholder || !yearSelector) return;
+// ===============================================================
+// === FUNCIÓN DE ANÁLISIS (CON FECHAS REALES EN INVERSIONES) ===
+// ===============================================================
+const renderBudgetTracking = () => {
+    const container = document.getElementById('planificar-content');
+    if (!container) return;
+
+    // LIMPIEZA INICIAL
+    container.innerHTML = '';
+
+    // 1. CÁLCULOS BÁSICOS
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    // Gasto total del mes
+    const totalGasto = db.movimientos
+        .filter(m => {
+            const d = new Date(m.fecha);
+            return m.tipo === 'gasto' && d >= startOfMonth && d <= endOfMonth;
+        })
+        .reduce((sum, m) => sum + m.cantidad, 0);
+
+    // Presupuesto (Ejemplo fijo, ajustable)
+    const presupuestoMensual = 2000; 
+    const porcentaje = Math.min((totalGasto / presupuestoMensual) * 100, 100);
     
-    const year = parseInt(yearSelector.value, 10);
+    // Color semáforo para el presupuesto
+    let colorBarra = 'var(--c-primary)';
+    if(porcentaje > 80) colorBarra = 'var(--c-warning)';
+    if(porcentaje >= 100) colorBarra = 'var(--c-danger)';
+
+    // --- 2. LÓGICA DE INVERSIONES CON FECHA REAL ---
+    // Filtramos las cuentas que son de inversión
+    const cuentasInversion = db.cuentas.filter(c => 
+        c.type === 'inversion' || c.tipo === 'inversion' || 
+        (c.nombre && c.nombre.toLowerCase().includes('inver')) ||
+        (c.nombre && c.nombre.toLowerCase().includes('fondo')) ||
+        (c.nombre && c.nombre.toLowerCase().includes('acciones'))
+    );
+
+    // Generamos el HTML de la lista de inversiones con la fecha
+    let inversionesListHTML = '';
     
-    const allYearBudgets = (db.presupuestos || [])
-        .filter(b => b.ano === year && db.conceptos.find(c => c.id === b.conceptoId));
-
-    if (allYearBudgets.length === 0) {
-        dashboardContainer.classList.add('hidden');
-        placeholder.classList.remove('hidden');
-        const titleEl = select('budget-placeholder-title');
-        const textEl = select('budget-placeholder-text');
-        if (titleEl) titleEl.textContent = `Configurar Presupuestos ${year}`;
-        if (textEl) textEl.textContent = `Aún no has definido metas de ingreso o límites de gasto para el año ${year}.`;
-        return;
-    }
-    
-    dashboardContainer.classList.remove('hidden');
-    placeholder.classList.add('hidden');
-
-    const { percentage: yearProgress, daysPassed, daysRemaining, totalDaysInYear } = getYearProgress();
-    
-    // --- INICIO DE LA SOLUCIÓN DEFINITIVA ---
-    // 1. En lugar de hacer una consulta compleja a Firebase, traemos TODOS los movimientos
-    //    usando una función que ya sabemos que es fiable y no depende de índices.
-    const allMovements = await AppStore.getAll();
-
-    // 2. Ahora, filtramos esos movimientos en JavaScript. Es más rápido y 100% seguro.
-    //    Nos aseguramos de que el movimiento sea del tipo correcto Y del año seleccionado.
-    const movements = allMovements.filter(mov => {
-        const movYear = new Date(mov.fecha).getFullYear();
-        return mov.tipo === 'movimiento' && movYear === year;
-    });
-    // --- FIN DE LA SOLUCIÓN DEFINITIVA ---
-
-    const monthlyIncomeData = {};
-    const monthlyExpenseData = {};
-    movements.forEach(mov => {
-        const month = new Date(mov.fecha).getMonth();
-        if (mov.cantidad > 0) {
-            monthlyIncomeData[month] = (monthlyIncomeData[month] || 0) + mov.cantidad;
-        } else {
-            monthlyExpenseData[month] = (monthlyExpenseData[month] || 0) + Math.abs(mov.cantidad);
-        }
-    });
-
-    const expenseBudgets = allYearBudgets.filter(b => b.cantidad < 0);
-    let totalBudgetedExpense = 0;
-    const expenseDetails = expenseBudgets.map(budget => {
-        const actualSpent = Math.abs(movements.filter(m => m.conceptoId === budget.conceptoId && m.cantidad < 0).reduce((sum, m) => sum + m.cantidad, 0));
-        const budgetLimit = Math.abs(budget.cantidad);
-        totalBudgetedExpense += budgetLimit;
-
-        const rawPacePercentage = (budgetLimit > 0 && yearProgress > 0) ? ((actualSpent / budgetLimit) / (yearProgress / 100)) * 100 : (actualSpent > 0 ? 200 : 100);
-        const pacePercentage = Math.min(rawPacePercentage, 200);
-
-        let status;
-        if (rawPacePercentage > 120) {
-            status = { text: 'Excedido', icon: 'cancel', color: 'text-danger' };
-        } else if (rawPacePercentage >= 80) {
-            status = { text: 'Vas bien', icon: 'check_circle', color: 'text-info' };
-        } else {
-            status = { text: 'Ahorrando', icon: 'verified', color: 'text-positive' };
-        }
-
-        const projectedAnnualSpent = (daysPassed > 0) ? (actualSpent / daysPassed) * totalDaysInYear : 0;
-        return { ...budget, actual: actualSpent, limit: budgetLimit, projected: projectedAnnualSpent, pacePercentage, status };
-    });
-    const totalProjectedExpense = expenseDetails.reduce((sum, b) => sum + b.projected, 0);
-
-    const incomeBudgets = allYearBudgets.filter(b => b.cantidad >= 0);
-    let totalBudgetedIncome = 0;
-    const incomeDetails = incomeBudgets.map(budget => {
-        const actualIncome = movements.filter(m => m.conceptoId === budget.conceptoId && m.cantidad > 0).reduce((sum, m) => sum + m.cantidad, 0);
-        const budgetGoal = budget.cantidad;
-        totalBudgetedIncome += budgetGoal;
-
-        const rawPacePercentage = (budgetGoal > 0 && yearProgress > 0) ? ((actualIncome / budgetGoal) / (yearProgress / 100)) * 100 : (actualIncome > 0 ? 200 : 0);
-        const pacePercentage = Math.min(rawPacePercentage, 200);
-
-        let status;
-        if (rawPacePercentage > 120) {
-            status = { text: 'Superado', icon: 'rocket_launch', color: 'text-positive' };
-        } else if (rawPacePercentage >= 80) {
-            status = { text: 'Vas bien', icon: 'check_circle', color: 'text-info' };
-        } else {
-            status = { text: 'Por debajo del objetivo', icon: 'trending_down', color: 'text-warning' };
-        }
-
-        const projectedAnnualIncome = (daysPassed > 0) ? (actualIncome / daysPassed) * totalDaysInYear : 0;
-        return { ...budget, actual: actualIncome, limit: budgetGoal, projected: projectedAnnualIncome, pacePercentage, status };
-    });
-    const totalProjectedIncome = incomeDetails.reduce((sum, b) => sum + b.projected, 0);
-
-    const projectedNet = totalProjectedIncome - totalProjectedExpense;
-    const kpiContainer = select('budget-kpi-container');
-    if (kpiContainer) kpiContainer.innerHTML = `
-        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Ingresos</h4><strong class="kpi-item__value text-positive">${formatCurrency(totalProjectedIncome)}</strong></div>
-        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Gastos</h4><strong class="kpi-item__value text-negative">${formatCurrency(totalProjectedExpense)}</strong></div>
-        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Neta Anual</h4><strong class="kpi-item__value ${projectedNet >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(projectedNet)}</strong></div>
-    `;
-    renderBudgetTrendChart(monthlyIncomeData, monthlyExpenseData, totalBudgetedExpense / 12);
-
-    const listContainer = select('budget-details-list');
-    let listHtml = '';
-
-    if (incomeDetails.length > 0) {
-        listHtml += `<h4 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2);">Metas de Ingresos</h4>`;
-        listHtml += incomeDetails.sort((a, b) => (a.projected / (a.limit || 1)) - (b.projected / (b.limit || 1))).map(b => {
-            const concepto = db.conceptos.find(c => c.id === b.conceptoId);
-            const conceptoNombre = (concepto && concepto.nombre) || 'Concepto no encontrado';
+    if (cuentasInversion.length > 0) {
+        inversionesListHTML = `<div style="margin-top: 15px; border-top: 1px solid var(--c-outline); padding-top: 10px;">`;
+        
+        cuentasInversion.forEach(cuenta => {
+            // A) BUSCAR ÚLTIMA FECHA: Buscamos el último movimiento de esta cuenta
+            const movimientosCuenta = db.movimientos.filter(m => 
+                m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id
+            );
             
-            // --- HTML MEJORADO CON CLASES RESPONSIVAS ---
-            return `
-            <div class="card" style="margin-bottom: var(--sp-3);">
-                <div class="card__content" style="padding: var(--sp-3);">
-                    <div class="budget-card-grid">
-                        <div class="budget-chart-wrapper">
-                            <canvas id="gauge-chart-${b.id}"></canvas>
-                            <div style="position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: var(--fs-lg); line-height:1;">
-                                ${b.pacePercentage.toFixed(0)}<span style="font-size: 0.6em;">%</span>
-                            </div>
-                        </div>
-                        <div class="budget-info-wrapper">
-                            <div class="budget-header-row">
-                                <h4 class="budget-title">${escapeHTML(conceptoNombre)}</h4>
-                                <span class="${b.status.color} budget-status-badge">
-                                    <span class="material-icons" style="font-size: 14px;">${b.status.icon}</span>
-                                    <span>${b.status.text}</span>
-                                </span>
-                            </div>
-                            <div class="budget-text-line">
-                                <strong>Ingresado:</strong> ${formatCurrency(b.actual)} / ${formatCurrency(b.limit)}
-                            </div>
-                            <div class="budget-text-line" style="font-weight: 600;">
-                                <strong>Proyección:</strong> 
-                                <span class="${b.projected >= b.limit ? 'text-positive' : 'text-danger'}">${formatCurrency(b.projected)}</span>
-                            </div>
-                        </div>
+            let fechaStr = '--/--'; // Por defecto si es nueva
+            
+            if (movimientosCuenta.length > 0) {
+                // Ordenamos por fecha (del más reciente al más antiguo)
+                movimientosCuenta.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+                const ultimaFecha = new Date(movimientosCuenta[0].fecha);
+                
+                // Formateamos a DD/MM
+                const dia = ultimaFecha.getDate().toString().padStart(2, '0');
+                const mes = (ultimaFecha.getMonth() + 1).toString().padStart(2, '0');
+                fechaStr = `${dia}/${mes}`;
+            }
+
+            // B) CREAR LA FILA (Fecha en gris pequeño + Importe en blanco)
+            inversionesListHTML += `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.9rem;">
+                    <div style="color: var(--c-on-surface); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 50%;">
+                        ${cuenta.nombre}
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <span style="font-size: 0.75rem; color: var(--c-on-surface-secondary); margin-right: 8px; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
+                            ${fechaStr}
+                        </span>
+                        <span style="font-weight: 600;">${formatCurrency(cuenta.saldo)}</span>
                     </div>
                 </div>
-            </div>`;
-        }).join('');
-    }
-    
-    if (expenseDetails.length > 0) {
-        listHtml += `<h4 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2);">Límites de Gasto</h4>`;
-        listHtml += expenseDetails.sort((a, b) => (b.projected / (b.limit || 1)) - (a.projected / (a.limit || 1))).map(b => {
-            const concepto = db.conceptos.find(c => c.id === b.conceptoId);
-            const conceptoNombre = (concepto && concepto.nombre) || 'Concepto no encontrado';
-            
-            // --- HTML MEJORADO CON CLASES RESPONSIVAS ---
-            return `
-            <div class="card" style="margin-bottom: var(--sp-3);">
-                <div class="card__content" style="padding: var(--sp-3);">
-                    <div class="budget-card-grid">
-                        <div class="budget-chart-wrapper">
-                            <canvas id="gauge-chart-${b.id}"></canvas>
-                            <div style="position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: var(--fs-lg); line-height:1;">
-                                ${b.pacePercentage.toFixed(0)}<span style="font-size: 0.6em;">%</span>
-                            </div>
-                        </div>
-                        <div class="budget-info-wrapper">
-                            <div class="budget-header-row">
-                                <h4 class="budget-title">${escapeHTML(conceptoNombre)}</h4>
-                                <span class="${b.status.color} budget-status-badge">
-                                    <span class="material-icons" style="font-size: 14px;">${b.status.icon}</span> 
-                                    <span>${b.status.text}</span>
-                                </span>
-                            </div>
-                            <div class="budget-text-line">
-                                <strong>Gastado:</strong> ${formatCurrency(b.actual)} / ${formatCurrency(b.limit)}
-                            </div>
-                            <div class="budget-text-line" style="font-weight: 600;">
-                                <strong>Proyección:</strong> 
-                                <span class="${b.projected > b.limit ? 'text-danger' : 'text-positive'}">${formatCurrency(b.projected)}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-    }
-    
-    if (listContainer) listContainer.innerHTML = listHtml;
-
-    setTimeout(() => {
-        [...incomeDetails, ...expenseDetails].forEach(b => {
-            renderGaugeChart(`gauge-chart-${b.id}`, b.pacePercentage, 100);
+            `;
         });
-    }, 50);
+        inversionesListHTML += `</div>`;
+    } else {
+        inversionesListHTML = `<p style="opacity:0.6; text-align:center; font-size:0.8rem; margin-top:10px;">No hay cuentas de inversión activas</p>`;
+    }
+
+    // 3. GENERAR EL HTML FINAL
+    const html = `
+        <div class="card fade-in-up" style="margin-bottom: var(--sp-4); padding: 20px;">
+            <h3 class="card__title" style="margin-bottom: 15px;">Presupuesto Mensual</h3>
+            <div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size: 0.9rem;">
+                    <span style="color: var(--c-on-surface-secondary);">Gastado: <strong style="color: var(--c-on-surface);">${formatCurrency(totalGasto)}</strong></span>
+                    <span style="color: var(--c-on-surface-secondary);">Límite: ${formatCurrency(presupuestoMensual)}</span>
+                </div>
+                <div style="width: 100%; height: 12px; background: var(--c-surface-variant); border-radius: 6px; overflow: hidden;">
+                    <div style="width: ${porcentaje}%; height: 100%; background: ${colorBarra}; transition: width 1s ease;"></div>
+                </div>
+                <p style="text-align: right; font-size: 0.8rem; margin-top: 8px; color: ${colorBarra}; font-weight: 600;">
+                    ${porcentaje.toFixed(1)}% utilizado
+                </p>
+            </div>
+        </div>
+
+        <div class="card fade-in-up" style="margin-bottom: var(--sp-4);">
+            <h3 class="card__title">Gastos por Categoría</h3>
+            <div class="chart-container" style="position: relative; height: 250px; margin-top: 10px;">
+                <canvas id="gastosPorCategoriaChart"></canvas>
+            </div>
+        </div>
+
+        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-primary), 0.3);">
+            <h3 class="card__title" style="display: flex; align-items: center; gap: 10px;">
+                <span class="material-icons" style="color: var(--c-primary);">savings</span>
+                Evolución de Patrimonio
+            </h3>
+            <div class="chart-container" style="position: relative; height: 250px;">
+                <canvas id="balanceNetoChart"></canvas>
+            </div>
+        </div>
+
+        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: var(--sp-4); border: 1px solid rgba(var(--rgb-info), 0.3);">
+            <h3 class="card__title" style="display: flex; align-items: center; gap: 10px;">
+                <span class="material-icons" style="color: var(--c-info);">trending_up</span>
+                Cartera de Inversiones
+            </h3>
+            <p style="font-size: 0.85rem; color: var(--c-on-surface-secondary); margin-bottom: 5px;">
+                Distribución y último valor registrado.
+            </p>
+            
+            ${inversionesListHTML}
+            
+            <div class="chart-container" style="position: relative; height: 250px; margin-top: 15px;">
+                <canvas id="inversionesChart"></canvas>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+
+    // 4. INICIALIZAR LOS GRÁFICOS
+    if (typeof renderCharts === 'function') {
+        setTimeout(() => renderCharts(startOfMonth, endOfMonth), 50);
+    }
 };
 const handleToggleInvestmentTypeFilter = (type) => {
     hapticFeedback('light');
