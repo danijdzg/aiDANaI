@@ -3417,15 +3417,18 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
 };        
 
 // ===============================================================
-// === FUNCIÓN DE ANÁLISIS (CORREGIDA: CLIC + FECHA VISIBLE) ===
+// === FUNCIÓN DE ANÁLISIS (CON VALOR REAL Y FECHA EXACTA) ===
 // ===============================================================
-const renderBudgetTracking = () => {
+const renderBudgetTracking = async () => {
     const container = document.getElementById('planificar-content');
     if (!container) return;
 
+    // Aseguramos que tenemos los datos de inversiones cargados para saber el valor real
+    if (!dataLoaded.inversiones) await loadInversiones();
+
     container.innerHTML = '';
 
-    // 1. CÁLCULOS GENERALES
+    // 1. CÁLCULOS GENERALES DEL PRESUPUESTO
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -3444,7 +3447,7 @@ const renderBudgetTracking = () => {
     if(porcentaje > 80) colorBarra = 'var(--c-warning)';
     if(porcentaje >= 100) colorBarra = 'var(--c-danger)';
 
-    // --- 2. GENERADOR DE LISTA DE INVERSIONES ---
+    // --- 2. GENERADOR DE LISTA DE INVERSIONES (LÓGICA MEJORADA) ---
     const cuentasInversion = db.cuentas.filter(c => 
         c.type === 'inversion' || c.tipo === 'inversion' || 
         (c.nombre && c.nombre.toLowerCase().includes('inver')) ||
@@ -3457,30 +3460,51 @@ const renderBudgetTracking = () => {
     let inversionesListHTML = '';
     
     if (cuentasInversion.length > 0) {
-        // Contenedor de la lista
         inversionesListHTML = `<div style="margin-top: 15px; border-top: 1px solid var(--c-outline); padding-top: 5px;">`;
         
         cuentasInversion.forEach(cuenta => {
-            // A) BUSCAR FECHA REAL (Buscamos en todo el historial)
-            const movs = db.movimientos.filter(m => 
+            // A) BUSCAR EL "VALOR REAL" (Mercado) Y SU FECHA
+            // 1. Buscamos en el historial de valoraciones (Actualizaciones manuales de precio)
+            const valoraciones = (db.inversiones_historial || [])
+                .filter(v => v.cuentaId === cuenta.id)
+                .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+            // 2. Buscamos en los movimientos (Aportaciones/Retiradas)
+            const movimientos = db.movimientos.filter(m => 
                 m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id
             );
-            
-            let fechaDisplay = '--/--';
-            
-            if (movs.length > 0) {
-                // Ordenar por fecha descendente
-                movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-                const lastDate = new Date(movs[0].fecha);
+            movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+            let valorMostrar = cuenta.saldo; // Por defecto el saldo contable
+            let fechaObj = null;
+
+            // PRIORIDAD: Si hay una valoración manual reciente, esa manda (Valor de Mercado)
+            if (valoraciones.length > 0) {
+                valorMostrar = valoraciones[0].valor;
+                fechaObj = new Date(valoraciones[0].fecha);
                 
-                // FORMATO FECHA: DD/MM
-                const dia = lastDate.getDate().toString().padStart(2, '0');
-                const mes = (lastDate.getMonth() + 1).toString().padStart(2, '0');
+                // Si el último movimiento es POSTERIOR a la valoración, la valoración podría estar obsoleta,
+                // pero generalmente en inversiones queremos ver el último precio marcado.
+                // Si prefieres ver la fecha del movimiento si es más reciente, descomenta esto:
+                /* if (movimientos.length > 0) {
+                    const fechaMov = new Date(movimientos[0].fecha);
+                    if (fechaMov > fechaObj) fechaObj = fechaMov;
+                }
+                */
+            } else if (movimientos.length > 0) {
+                // Si no hay valoraciones, usamos la fecha del último movimiento
+                fechaObj = new Date(movimientos[0].fecha);
+            }
+
+            // Formatear fecha (DD/MM)
+            let fechaDisplay = '--/--';
+            if (fechaObj) {
+                const dia = fechaObj.getDate().toString().padStart(2, '0');
+                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
                 fechaDisplay = `${dia}/${mes}`;
             }
 
-            // B) CREAR FILA INTERACTIVA (AQUÍ ESTÁ LA MAGIA)
-            // Añadimos onclick="openInvestmentHistory..." y cursor pointer
+            // B) CREAR FILA
             inversionesListHTML += `
                 <div onclick="openInvestmentHistory('${cuenta.id}')" 
                      style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: background 0.2s;">
@@ -3495,7 +3519,7 @@ const renderBudgetTracking = () => {
                         </span>
                         
                         <span style="font-weight: 700; color: #fff; font-size: 1rem;">
-                            ${formatCurrency(cuenta.saldo)}
+                            ${formatCurrency(valorMostrar)}
                         </span>
                         
                         <span class="material-icons" style="font-size: 16px; color: var(--c-on-surface-secondary); margin-left: 8px;">chevron_right</span>
@@ -3508,7 +3532,7 @@ const renderBudgetTracking = () => {
         inversionesListHTML = `<p style="opacity:0.5; text-align:center; padding:15px; font-size:0.85rem;">No tienes cuentas de inversión.</p>`;
     }
 
-    // 3. HTML FINAL
+    // 3. HTML FINAL DEL PANEL
     const html = `
         <div class="card fade-in-up" style="margin-bottom: var(--sp-4); padding: 20px;">
             <h3 class="card__title" style="margin-bottom: 15px;">Presupuesto Mensual</h3>
@@ -3561,6 +3585,7 @@ const renderBudgetTracking = () => {
 
     container.innerHTML = html;
 
+    // Inicializar gráficos si existen
     if (typeof renderCharts === 'function') {
         setTimeout(() => renderCharts(startOfMonth, endOfMonth), 50);
     }
