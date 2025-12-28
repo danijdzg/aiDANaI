@@ -3417,16 +3417,15 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
 };        
 
 // ===============================================================
-// === FUNCIÓN DE ANÁLISIS (VERSIÓN SEGURA Y ROBUSTA) ===
+// === FUNCIÓN DE ANÁLISIS: INVERSIONES CON FECHA OBLIGATORIA ===
 // ===============================================================
 const renderBudgetTracking = () => {
     const container = document.getElementById('planificar-content');
     if (!container) return;
 
-    // Limpiamos el contenedor
     container.innerHTML = '';
 
-    // 1. CÁLCULOS GENERALES (Gastos del mes)
+    // 1. CÁLCULOS GENERALES (Barra de presupuesto)
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -3445,7 +3444,7 @@ const renderBudgetTracking = () => {
     if(porcentaje > 80) colorBarra = 'var(--c-warning)';
     if(porcentaje >= 100) colorBarra = 'var(--c-danger)';
 
-    // 2. BUSCAR CUENTAS DE INVERSIÓN
+    // 2. FILTRO DE CUENTAS DE INVERSIÓN
     const cuentasInversion = db.cuentas.filter(c => 
         c.type === 'inversion' || c.tipo === 'inversion' || 
         (c.nombre && c.nombre.toLowerCase().includes('inver')) ||
@@ -3455,61 +3454,70 @@ const renderBudgetTracking = () => {
         (c.nombre && c.nombre.toLowerCase().includes('crypto'))
     );
 
-    // 3. GENERAR LA LISTA HTML
+    // 3. GENERAR LA LISTA
     let inversionesListHTML = '';
     
     if (cuentasInversion.length > 0) {
         inversionesListHTML = `<div style="margin-top: 15px; border-top: 1px solid var(--c-outline); padding-top: 5px;">`;
         
         cuentasInversion.forEach(cuenta => {
-            // A) DETECTIVE DE FECHAS: Buscar el último movimiento de esta cuenta
-            // Buscamos cualquier movimiento donde aparezca esta cuenta
+            // --- LÓGICA DE DETECTIVE DE FECHA ---
+            // Buscamos ABSOLUTAMENTE TODOS los movimientos de esta cuenta
             const movs = db.movimientos.filter(m => 
                 m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id
             );
             
-            // Ordenamos del más reciente al más antiguo
+            // Ordenamos: El más reciente primero
             movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-            let fechaDisplay = '--/--';
+            // Variable para guardar la fecha encontrada
+            let fechaTexto = 'Sin fecha'; 
             
-            // Si encontramos movimientos, cogemos la fecha del primero
             if (movs.length > 0) {
-                const lastDate = new Date(movs[0].fecha);
-                const dia = lastDate.getDate().toString().padStart(2, '0');
-                const mes = (lastDate.getMonth() + 1).toString().padStart(2, '0');
-                fechaDisplay = `${dia}/${mes}`;
+                // Cogemos el primer movimiento (el último que metiste)
+                const fechaObj = new Date(movs[0].fecha);
+                
+                // Formateamos día y mes
+                const dia = fechaObj.getDate().toString().padStart(2, '0');
+                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+                const year = fechaObj.getFullYear().toString().slice(-2); // Últimos 2 dígitos del año
+                
+                // GUARDAMOS EL TEXTO: "28/12/25"
+                fechaTexto = `${dia}/${mes}/${year}`;
             }
 
-            // B) DIBUJAR LA FILA
+            // --- RENDERIZADO VISUAL ---
             inversionesListHTML += `
                 <div onclick="openInvestmentHistory('${cuenta.id}')" 
-                     style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: background 0.2s;">
+                     style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer;">
                     
-                    <div style="font-weight: 500; color: var(--c-on-surface); font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;">
+                    <div style="font-weight: 500; color: var(--c-on-surface); font-size: 0.95rem; flex: 1;">
                         ${cuenta.nombre}
                     </div>
 
-                    <div style="display: flex; align-items: center;">
-                        <span style="color: #FFEB3B; font-family: monospace; font-weight: 700; font-size: 0.85rem; margin-right: 10px; background: rgba(255, 235, 59, 0.1); padding: 2px 6px; border-radius: 4px;">
-                            ${fechaDisplay}
-                        </span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        
+                        <div style="background: #333; border: 1px solid #555; border-radius: 4px; padding: 2px 6px;">
+                            <span style="color: #FFEB3B; font-family: monospace; font-size: 0.8rem; font-weight: bold; display: block;">
+                                ${fechaTexto}
+                            </span>
+                        </div>
                         
                         <span style="font-weight: 700; color: #fff; font-size: 1rem;">
                             ${formatCurrency(cuenta.saldo)}
                         </span>
                         
-                        <span class="material-icons" style="font-size: 16px; color: var(--c-on-surface-secondary); margin-left: 5px;">chevron_right</span>
+                        <span class="material-icons" style="font-size: 16px; color: var(--c-on-surface-secondary);">chevron_right</span>
                     </div>
                 </div>
             `;
         });
         inversionesListHTML += `</div>`;
     } else {
-        inversionesListHTML = `<p style="opacity:0.5; text-align:center; padding:15px; font-size:0.85rem;">No tienes cuentas de inversión activas.</p>`;
+        inversionesListHTML = `<p style="opacity:0.5; text-align:center; padding:15px;">No hay cuentas de inversión.</p>`;
     }
 
-    // 4. MONTAR EL HTML FINAL
+    // 4. HTML FINAL
     container.innerHTML = `
         <div class="card fade-in-up" style="margin-bottom: var(--sp-4); padding: 20px;">
             <h3 class="card__title" style="margin-bottom: 15px;">Presupuesto Mensual</h3>
@@ -3549,7 +3557,7 @@ const renderBudgetTracking = () => {
                 <span class="material-icons" style="color: var(--c-info);">trending_up</span>
                 Cartera de Inversiones
             </h3>
-            <p style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-bottom: 10px;">Última actualización y valor actual</p>
+            <p style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-bottom: 10px;">Valor actualizado y fecha del último apunte.</p>
             
             ${inversionesListHTML}
             
