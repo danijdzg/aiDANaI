@@ -11688,35 +11688,99 @@ window.toggleDiarioView = function(btnElement) {
     }
 };
 
-// 2. Control de Visibilidad al Navegar
+// ===============================================================
+// === GESTOR DE CLICS BLINDADO (SOLUCIÓN FINAL ERROR DATASET) ===
+// ===============================================================
+
 document.addEventListener('DOMContentLoaded', () => {
     
-    function actualizarIconos(paginaDestino) {
-        const herramientas = document.getElementById('header-diario-tools');
-        if (!herramientas) return;
+    // Solo activamos un escuchador global para toda la app
+    document.body.addEventListener('click', (event) => {
+        
+        // --- ZONA 1: MOVIMIENTOS Y TARJETAS (Editar) ---
+        // Buscamos si el clic fue en algo que parece un movimiento
+        const movCard = event.target.closest('.transaction-card, [data-action="open-movement-form"], [data-action="edit-movement-from-list"]');
+        
+        // ¡ESCUDO DEFENSIVO 1!
+        // Si hemos encontrado una tarjeta válida...
+        if (movCard) {
+            // Verificamos con cuidado si tiene dataset
+            if (!movCard.dataset) return; 
 
-        // ¿Estamos en la pestaña diario?
-        if (paginaDestino === 'diario' || paginaDestino === 'diario-page') {
-            herramientas.style.display = 'flex'; // MOSTRAR
-        } else {
-            herramientas.style.display = 'none'; // OCULTAR
+            const id = movCard.getAttribute('data-id') || movCard.dataset.id;
+            const type = movCard.dataset.type;
+
+            // Si tiene ID, es editar.
+            if (id) {
+                event.stopPropagation(); // Frenar otros eventos
+                
+                // Cerrar buscadores si estorban
+                const buscador = document.getElementById('global-search-modal');
+                if (buscador) buscador.classList.remove('active');
+
+                console.log("Editando movimiento:", id);
+                if (typeof startMovementForm === 'function') startMovementForm(id);
+                return; // Importante: Parar aquí
+            } 
+            // Si tiene Type (botón flotante nuevo), es crear.
+            else if (type) {
+                if (typeof startMovementForm === 'function') startMovementForm(null, type);
+                return;
+            }
         }
-    }
 
-    // Escuchar clics en el menú inferior
-    const botonesNav = document.querySelectorAll('.bottom-nav__item');
-    botonesNav.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const pagina = btn.dataset.page; // 'dashboard', 'diario', etc.
-            actualizarIconos(pagina);
-        });
+        // --- ZONA 2: NAVEGACIÓN INTELIGENTE (Patrimonio e Inversiones) ---
+        // Buscamos si es un botón de navegación
+        const navBtn = event.target.closest('[data-action="ver-balance-neto"], [data-action="ver-inversiones"]');
+        
+        // ¡ESCUDO DEFENSIVO 2!
+        if (navBtn) {
+            const action = navBtn.dataset.action; // Aquí ya es seguro leerlo
+            
+            // Navegar a Planificar
+            if (typeof navigateTo === 'function') navigateTo('planificar-page');
+            else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
+            
+            // Configurar destino según el botón
+            let targetID = (action === 'ver-balance-neto') ? 'seccion-balance-neto' : 'seccion-inversiones';
+            let keyWords = (action === 'ver-balance-neto') ? ['Patrimonio', 'Balance'] : ['Inversiones', 'Rentabilidad'];
+
+            // Esperar y buscar el gráfico
+            setTimeout(() => {
+                let destino = document.getElementById(targetID);
+                
+                // Plan B: Buscar por texto si falla el ID
+                if (!destino) {
+                    const titulos = document.querySelectorAll('h3, .card__title, .widget-title');
+                    for (const t of titulos) {
+                        const txt = (t.textContent || "").toLowerCase();
+                        if (keyWords.some(w => txt.includes(w.toLowerCase()))) {
+                            destino = t.closest('.card, .dashboard-widget');
+                            break;
+                        }
+                    }
+                }
+
+                if (destino) {
+                    if (destino.tagName === 'DETAILS') destino.open = true;
+                    destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Efecto visual
+                    destino.style.transition = 'transform 0.2s';
+                    destino.style.transform = 'scale(1.02)';
+                    setTimeout(() => destino.style.transform = 'scale(1)', 300);
+                }
+            }, 300);
+            return;
+        }
+
+        // --- ZONA 3: LISTA DE INVERSIONES (El historial que añadimos antes) ---
+        // Si pulsas en una fila de la lista de inversiones
+        const rowInversion = event.target.closest('[onclick^="openInvestmentHistory"]');
+        // Este caso ya lo maneja el propio HTML con el onclick, así que no hacemos nada aquí
+        // para no interferir, pero evitamos que lance errores.
+
     });
-
-    // Comprobación inicial al arrancar
-    const activoInicial = document.querySelector('.bottom-nav__item--active');
-    if (activoInicial) {
-        actualizarIconos(activoInicial.dataset.page);
-    }
 });
 
 /* ================================================================= */
