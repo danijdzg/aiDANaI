@@ -3417,7 +3417,7 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
 };        
 
 // ===============================================================
-// === PANTALLA ANÁLISIS: INVERSIONES CON FECHA REAL Y LÁPIZ ===
+// === PANTALLA ANÁLISIS: MUESTRA TU FECHA MANUAL ===
 // ===============================================================
 const renderBudgetTracking = () => {
     const container = document.getElementById('planificar-content');
@@ -3425,7 +3425,7 @@ const renderBudgetTracking = () => {
 
     container.innerHTML = '';
 
-    // --- CÁLCULOS DEL PRESUPUESTO (Igual que antes) ---
+    // --- CÁLCULOS DEL PRESUPUESTO (Estándar) ---
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -3439,9 +3439,7 @@ const renderBudgetTracking = () => {
 
     const presupuestoMensual = 2000; 
     const porcentaje = Math.min((totalGasto / presupuestoMensual) * 100, 100);
-    
-    let colorBarra = 'var(--c-primary)';
-    if(porcentaje > 80) colorBarra = 'var(--c-warning)';
+    let colorBarra = porcentaje > 80 ? 'var(--c-warning)' : 'var(--c-primary)';
     if(porcentaje >= 100) colorBarra = 'var(--c-danger)';
 
     // --- FILTRO INVERSIONES ---
@@ -3462,33 +3460,26 @@ const renderBudgetTracking = () => {
         
         cuentasInversion.forEach(cuenta => {
             
-            // A) BUSCAR LA FECHA REAL
-            // Primero miramos si tiene la fecha guardada manualmente (la que creamos en el Paso 1)
-            let fechaObj = null;
+            // A) BUSCAR LA FECHA A MOSTRAR
+            // 1. Prioridad: La fecha que TÚ has guardado manualmente
+            let fechaTexto = cuenta.fechaValoracion || 'Sin fecha';
             
-            if (cuenta.fechaActualizacion) {
-                fechaObj = new Date(cuenta.fechaActualizacion);
-            } else {
-                // Si no, buscamos fecha de movimientos (Plan B)
+            // 2. Si no has guardado ninguna fecha manual, intentamos sacar la fecha del último movimiento (Fallback)
+            if (fechaTexto === 'Sin fecha') {
                 const movs = db.movimientos.filter(m => 
                     m.cuentaId === cuenta.id || m.cuentaOrigenId === cuenta.id || m.cuentaDestinoId === cuenta.id
                 );
                 if (movs.length > 0) {
                     movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-                    fechaObj = new Date(movs[0].fecha);
+                    const d = new Date(movs[0].fecha);
+                    const dia = d.getDate().toString().padStart(2, '0');
+                    const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+                    const anio = d.getFullYear();
+                    fechaTexto = `${dia}/${mes}/${anio}`;
                 }
             }
 
-            // Formatear texto
-            let fechaTexto = 'Sin fecha';
-            if (fechaObj) {
-                const dia = fechaObj.getDate().toString().padStart(2, '0');
-                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
-                const year = fechaObj.getFullYear().toString().slice(-2);
-                fechaTexto = `${dia}/${mes}/${year}`;
-            }
-
-            // B) DIBUJAR LA FILA (CON BOTÓN DE LÁPIZ)
+            // B) DIBUJAR LA FILA
             inversionesListHTML += `
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid rgba(255,255,255,0.1);">
                     
@@ -3496,25 +3487,25 @@ const renderBudgetTracking = () => {
                         <div style="font-weight: 500; color: var(--c-on-surface); font-size: 0.95rem;">
                             ${cuenta.nombre}
                         </div>
-                         <div style="font-size: 0.75rem; color: var(--c-on-surface-secondary);">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary);">
                             Ver historial
                         </div>
                     </div>
 
                     <div style="display: flex; align-items: center; gap: 10px;">
                         
-                        <div style="text-align: right;">
-                            <span style="display: block; color: #FFEB3B; font-family: monospace; font-size: 0.8rem; font-weight: bold;">
+                        <div style="text-align: right; margin-right: 5px;">
+                            <span style="display: block; color: #FFEB3B; font-family: monospace; font-size: 0.8rem; font-weight: bold; background: rgba(255, 235, 59, 0.1); padding: 1px 4px; border-radius: 4px;">
                                 ${fechaTexto}
                             </span>
-                            <span style="font-weight: 700; color: #fff; font-size: 1rem;">
+                            <span style="font-weight: 700; color: #fff; font-size: 1rem; display: block;">
                                 ${formatCurrency(cuenta.saldo)}
                             </span>
                         </div>
                         
                         <button onclick="actualizarValorInversion('${cuenta.id}', event)" 
-                                style="background: rgba(255,255,255,0.1); border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--c-primary);">
-                            <span class="material-icons" style="font-size: 18px;">edit</span>
+                                style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--c-primary); box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                            <span class="material-icons" style="font-size: 20px;">edit</span>
                         </button>
 
                     </div>
@@ -3567,7 +3558,7 @@ const renderBudgetTracking = () => {
                 Cartera de Inversiones
             </h3>
             <p style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-bottom: 10px;">
-                Usa el lápiz para actualizar valor y fecha.
+                Pulsa el lápiz para fijar valor y fecha.
             </p>
             
             ${inversionesListHTML}
@@ -11917,50 +11908,61 @@ window.openInvestmentHistory = (cuentaId) => {
     showGenericModal(`Historial: ${cuenta.nombre}`, listHtml);
 };
 // ===============================================================
-// === ACTUALIZAR VALOR INVERSIÓN (CON FECHA REAL) ===
+// === ACTUALIZAR VALOR + FECHA MANUAL ===
 // ===============================================================
 window.actualizarValorInversion = async (cuentaId, event) => {
-    // Evitamos que se abra el historial al pulsar el botón de actualizar
     if (event) event.stopPropagation();
 
     const cuenta = db.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) return;
 
-    // 1. Pedimos el nuevo valor
-    const nuevoValorStr = prompt(`Actualizar valor para "${cuenta.nombre}".\nIntroduce el valor REAL actual:`, cuenta.saldo);
+    // 1. PEDIR VALOR
+    const valorActual = cuenta.saldo;
+    const nuevoValorStr = prompt(`PASO 1/2: Introduce el VALOR REAL de "${cuenta.nombre}":`, valorActual);
     
     if (nuevoValorStr === null) return; // Cancelado
 
-    // Convertimos a número (aceptamos coma o punto)
     const nuevoValor = parseFloat(nuevoValorStr.replace(',', '.'));
-
     if (isNaN(nuevoValor)) {
-        alert("Por favor, introduce un número válido.");
+        alert("Número no válido.");
         return;
     }
 
-    // 2. PREPARAMOS LOS DATOS (Saldo + FECHA DE HOY)
-    const ahora = new Date();
-    const updateData = {
-        saldo: nuevoValor,
-        // GUARDAMOS LA FECHA EXACTA DE ESTA ACTUALIZACIÓN
-        fechaActualizacion: now.toISOString() 
-    };
+    // 2. PEDIR FECHA
+    // Calculamos la fecha de hoy para sugerirla por defecto
+    const hoy = new Date();
+    const dia = hoy.getDate().toString().padStart(2, '0');
+    const mes = (hoy.getMonth() + 1).toString().padStart(2, '0');
+    const anio = hoy.getFullYear();
+    const fechaPorDefecto = `${dia}/${mes}/${anio}`;
 
+    const nuevaFechaStr = prompt(`PASO 2/2: ¿De qué FECHA es este valor?\n(Formato: DD/MM/AAAA)`, fechaPorDefecto);
+    
+    if (nuevaFechaStr === null) return; // Cancelado
+
+    // 3. GUARDAR EN LA BASE DE DATOS
     try {
-        // 3. GUARDAR EN FIREBASE (Nube)
+        // Convertimos la fecha de texto (28/12/2025) a un formato que el ordenador entienda
+        // Guardamos el string tal cual para mostrarlo luego sin líos
+        const updateData = {
+            saldo: nuevoValor,
+            fechaValoracion: nuevaFechaStr // Guardamos "28/12/2025" directamente
+        };
+
+        // Guardar en Firebase
         await fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId).update(updateData);
         
-        // 4. ACTUALIZAR EN LOCAL (Instantáneo)
+        // Actualizar en memoria local (para verlo al instante)
         cuenta.saldo = nuevoValor;
-        cuenta.fechaActualizacion = updateData.fechaActualizacion;
+        cuenta.fechaValoracion = nuevaFechaStr;
         
-        // 5. REFRESCAR PANTALLA
-        showToast(`Valor actualizado a ${formatCurrency(nuevoValor)}`);
+        showToast("Valor y Fecha actualizados correctamente.");
+        
+        // Recargar la pantalla para ver el cambio
         if (typeof renderBudgetTracking === 'function') renderBudgetTracking();
 
     } catch (error) {
-        console.error("Error al actualizar valor:", error);
-        showToast("Error al guardar el valor.", "danger");
+        console.error("Error al guardar:", error);
+        alert("Error al guardar en la nube. Revisa tu conexión.");
     }
 };
