@@ -2601,52 +2601,64 @@ const cleanupObservers = () => {
     }
 };
 
+// ===============================================================
+// === MOTOR DE NAVEGACIÓN (CON BOTONES FIJOS) ===
+// ===============================================================
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
-    const newView = select(pageId);
-    const mainScroller = selectOne('.app-layout__main');
+    const newView = document.getElementById(pageId); // Selección directa más segura
+    const mainScroller = document.querySelector('.app-layout__main');
 
-    const menu = select('main-menu-popover');
+    // Cerrar menús flotantes si los hay
+    const menu = document.getElementById('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // 1. Guardar scroll
+    // 1. Guardar posición del scroll antes de cambiar
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
 
     if (!newView || (oldView && oldView.id === pageId)) return;
     
+    // Limpieza de gráficos antiguos para ahorrar memoria
     destroyAllCharts();
-    if (!isInitial) hapticFeedback('light');
+    if (!isInitial && typeof hapticFeedback === 'function') hapticFeedback('light');
 
+    // Gestión del Historial del navegador (botón atrás)
     if (!isInitial && window.history.state?.page !== pageId) {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // Nav Inferior
-    const navItems = Array.from(selectAll('.bottom-nav__item'));
-    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
-    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-    const isForward = newIndex > oldIndex;
-
-    // Barra Superior
-    const actionsEl = select('top-bar-actions');
-    const leftEl = select('top-bar-left-button');
-    
-    // Acciones por defecto (Menú de 3 puntos)
+    // --- AQUÍ ESTÁ EL CAMBIO: DEFINICIÓN DE BOTONES FIJOS ---
+    // Estos botones aparecerán SIEMPRE en el encabezado
     const standardActions = `
-        <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
+        <button class="icon-btn" onclick="toggleDiarioView(this)" aria-label="Cambiar Vista">
+            <span class="material-icons">view_agenda</span>
+        </button>
+
+        <button class="icon-btn" onclick="openDiarioFilters()" aria-label="Filtrar">
+            <span class="material-icons">filter_list</span>
+        </button>
+
+        <button class="icon-btn" onclick="document.getElementById('global-search-modal').classList.add('active')" aria-label="Buscar">
+            <span class="material-icons">search</span>
+        </button>
+
+        <button data-action="open-external-calculator" class="icon-btn" title="Calculadora">
             <span class="material-icons">calculate</span>
         </button>
+
         <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
             <span class="material-icons">more_vert</span>
         </button>
     `;
     
+    // Carga de datos perezosa según la página
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
     if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
 
+    // Configuración de cada página
     const pageRenderers = {
         [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
         [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
@@ -2655,63 +2667,40 @@ const navigateTo = async (pageId, isInitial = false) => {
     };
 
     if (pageRenderers[pageId]) {
-        // 1. Actualizar el Título
+        // A) Poner Título
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
-            const rawTitle = pageRenderers[pageId].title;
-            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
+            // Si es Panel o Diario, a veces queremos el título vacío o personalizado, 
+            // pero aquí forzamos el nombre para que sepas dónde estás.
+            titleEl.textContent = pageRenderers[pageId].title;
         }
            
-        // 2. Botones extra del Diario (Filtro y Vista) - CORREGIDO
+        // B) INYECTAR LOS BOTONES FIJOS
+        const actionsEl = document.getElementById('top-bar-actions');
         if (actionsEl) {
-            let actionsHTML = pageRenderers[pageId].actions;
-            
-            if (pageId === PAGE_IDS.DIARIO) {
-                const diarioButtons = `
-                    <button onclick="toggleDiarioView(this)" class="icon-btn" title="Cambiar Vista">
-                        <span class="material-icons">${typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list' ? 'view_agenda' : 'list'}</span>
-                    </button>
-                    <button onclick="openDiarioFilters()" class="icon-btn" title="Filtrar">
-                        <span class="material-icons">filter_list</span>
-                    </button>
-                `;
-                actionsHTML = diarioButtons + actionsHTML;
-            }
-            
-            actionsEl.innerHTML = actionsHTML;
+            actionsEl.innerHTML = pageRenderers[pageId].actions;
         }
         
-        // 3. Renderizar la página
+        // C) Renderizar contenido
         await pageRenderers[pageId].render();
     }
     
-    // Animaciones y Clases
-    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+    // --- ANIMACIONES DE TRANSICIÓN (No tocar) ---
+    const navItems = document.querySelectorAll('.bottom-nav__item');
+    navItems.forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+    
     newView.classList.add('view--active'); 
     
     if (oldView && !isInitial) {
-        const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
-        const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
-        newView.classList.add(inClass);
-        oldView.classList.add(outClass);
-        oldView.addEventListener('animationend', () => {
-            oldView.classList.remove('view--active', outClass);
-            newView.classList.remove(inClass);
-        }, { once: true });
+        // Animación simple
+        oldView.classList.remove('view--active');
     } else if (oldView) {
         oldView.classList.remove('view--active');
     }
 
     // Restaurar Scroll
     if (mainScroller) {
-        const targetScroll = pageScrollPositions[pageId] || 0;
-        mainScroller.scrollTop = targetScroll;
-        if (pageId === PAGE_IDS.DIARIO && diarioViewMode === 'list') {
-            requestAnimationFrame(() => {
-                mainScroller.scrollTop = targetScroll; 
-                renderVisibleItems(); 
-            });
-        }
+        mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
     }
 
     if (pageId === PAGE_IDS.PANEL) {
@@ -11445,27 +11434,6 @@ const updateExtractoList = () => {
 };
 
 
-/* ================================================================ */
-/* === LÓGICA DE ICONOS DE DIARIO (PEGAR AL FINAL DE MAIN.JS) === */
-/* ================================================================ */
-
-// 1. Función para cambiar la vista (Lista <-> Compacta)
-window.toggleDiarioView = function(btnElement) {
-    const diarioContainer = document.getElementById('diario-page') || document.body;
-    const icono = btnElement.querySelector('.material-icons');
-    
-    // Alternar clase
-    diarioContainer.classList.toggle('view-mode-compact');
-    
-    // Cambiar icono
-    if (diarioContainer.classList.contains('view-mode-compact')) {
-        icono.textContent = 'view_list'; // Icono de lista
-        console.log("Vista cambiada a: Compacta");
-    } else {
-        icono.textContent = 'grid_view'; // Icono de cuadrícula/normal
-        console.log("Vista cambiada a: Normal");
-    }
-};
 
 // ===============================================================
 // === GESTOR DE CLICS BLINDADO (SOLUCIÓN FINAL ERROR DATASET) ===
@@ -11562,47 +11530,47 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-/* ================================================================= */
-/* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO (CORREGIDO) === */
-/* ================================================================= */
+// ===============================================================
+// === FUNCIONES DE LOS BOTONES DEL ENCABEZADO ===
+// ===============================================================
 
-// 1. Abrir Filtros
-window.openDiarioFilters = function() {
-    // Opción A: Usamos la función moderna si existe (la que creamos antes)
-    if (typeof showDiarioFiltersModal === 'function') {
-        showDiarioFiltersModal();
-    } 
-    // Opción B: Fallback manual (por seguridad)
-    else {
-        const modal = document.getElementById('diario-filters-modal');
-        if (modal) {
-            modal.style.display = 'flex';
-            setTimeout(() => modal.classList.add('active'), 10);
-        } else {
-            console.warn("El modal de filtros no se encuentra.");
+// 1. Cambiar Vista (Lista / Bloques)
+window.diarioViewMode = window.diarioViewMode || 'list'; // Por defecto lista
+
+window.toggleDiarioView = function(btnElement) {
+    // Cambiamos la variable
+    window.diarioViewMode = (window.diarioViewMode === 'list') ? 'compact' : 'list';
+    
+    // Cambiamos el icono del botón visualmente
+    if (btnElement) {
+        const iconSpan = btnElement.querySelector('.material-icons');
+        if (iconSpan) {
+            iconSpan.textContent = window.diarioViewMode === 'list' ? 'view_agenda' : 'view_list';
         }
+    }
+
+    // Si estamos en la página de Diario, repintamos para ver el cambio
+    // Si estamos en otra página, solo guardamos la preferencia
+    if (document.getElementById('diario-page').classList.contains('view--active')) {
+        if (typeof renderDiarioPage === 'function') renderDiarioPage();
+    }
+    
+    if (typeof showToast === 'function') {
+        showToast("Vista cambiada: " + (window.diarioViewMode === 'list' ? 'Detallada' : 'Compacta'));
     }
 };
 
-// 2. Cambiar Vista (Lista <-> Compacta)
-window.toggleDiarioView = function(btnElement) {
-    // Si existe la variable global, la alternamos
-    if (typeof diarioViewMode !== 'undefined') {
-        diarioViewMode = (diarioViewMode === 'list') ? 'compact' : 'list';
-        
-        // Refrescamos la pantalla para aplicar el cambio visualmente
-        if (typeof renderDiarioPage === 'function') renderDiarioPage();
-        
-        // Actualizamos el icono del propio botón
-        if (btnElement) {
-            const icono = btnElement.querySelector('.material-icons');
-            if (icono) icono.textContent = diarioViewMode === 'list' ? 'view_agenda' : 'list';
-        }
-        
-        // Feedback al usuario
-        if (typeof showToast === 'function') {
-            showToast(`Vista cambiada a: ${diarioViewMode === 'list' ? 'Detallada' : 'Compacta'}`);
-        }
+// 2. Abrir Filtros
+window.openDiarioFilters = function() {
+    // Buscamos el modal de filtros
+    const modal = document.getElementById('diario-filters-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('active'), 10);
+    } else {
+        // Si no existe el modal específico, intentamos abrir el buscador global como plan B
+        const searchModal = document.getElementById('global-search-modal');
+        if (searchModal) searchModal.classList.add('active');
     }
 };
 
