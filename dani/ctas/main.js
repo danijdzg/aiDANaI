@@ -2594,6 +2594,9 @@ const cleanupObservers = () => {
     }
 };
 
+/* ================================================================= */
+/* === FUNCIÓN DE NAVEGACIÓN CORREGIDA (FIX FINAL) === */
+/* ================================================================= */
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
@@ -2604,7 +2607,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // Guardar scroll
+    // Guardar posición del scroll
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
@@ -2618,9 +2621,8 @@ const navigateTo = async (pageId, isInitial = false) => {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-        
-    // Definimos el HTML de los botones que SIEMPRE deben estar
-    // Nota: Usamos 'calendar_month' o 'list' dependiendo del estado actual
+    // --- CORRECCIÓN: INYECCIÓN DE BOTONES ---
+    // 1. Definimos los botones
     const currentViewIcon = (typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list') ? 'calendar_month' : 'list';
     
     const globalActionsHTML = `
@@ -2645,8 +2647,16 @@ const navigateTo = async (pageId, isInitial = false) => {
         </button>
     `;
 
+    // 2. ¡IMPORTANTE! Inyectamos el HTML en la barra superior
+    // Esta es la parte que faltaba en tu código anterior
+    const actionsEl = document.getElementById('top-bar-actions');
+    if (actionsEl) {
+        actionsEl.innerHTML = globalActionsHTML;
+    }
+    // ----------------------------------------------------
+
     
-    // Lógica de carga de datos
+    // Lógica de carga de datos diferida
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
 
     const pageRenderers = {
@@ -2657,7 +2667,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     };
 
     if (pageRenderers[pageId]) {
-        // Actualizar título (si existe elemento)
+        // Actualizar título
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
             // En Panel y Diario dejamos el título vacío para dar espacio a los botones
@@ -2672,7 +2682,6 @@ const navigateTo = async (pageId, isInitial = false) => {
     const navItems = Array.from(document.querySelectorAll('.bottom-nav__item'));
     navItems.forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     
-    // Determinar dirección de animación
     const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
     const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
     const isForward = newIndex > oldIndex;
