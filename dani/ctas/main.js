@@ -366,24 +366,17 @@ const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
             abono = formatCurrency(mov.cantidad);
         }
     }
-	// --- LÓGICA DE COLOR UNIFICADA PARA LA CARTILLA ---
-    let colorMonto = 'text-credit'; // Por defecto Verde (Ingreso)
-    if (mov.tipo === 'traspaso') {
-        colorMonto = 'text-transfer'; // Morado si es Traspaso
-    } else if (mov.cantidad < 0) {
-        colorMonto = 'text-debit';    // Rojo si es Gasto
-    }
 
     return `
         <div class="cartilla-row">
             <div class="cartilla-cell cartilla-date">${fecha}</div>
             <div class="cartilla-cell cartilla-concept">${conceptoTexto}</div>
-            <div class="cartilla-cell cartilla-amount ${colorMonto}">${cargo}</div>
-            <div class="cartilla-cell cartilla-amount ${colorMonto}">${abono}</div>
+            <div class="cartilla-cell cartilla-amount text-debit">${cargo}</div>
+            <div class="cartilla-cell cartilla-amount text-credit">${abono}</div>
             <div class="cartilla-cell cartilla-balance">${formatCurrency(mov.runningBalance)}</div>
         </div>
     `;
-    };
+};
 
 const handleGenerateInformeCuenta = async (form, btn = null) => {
     // 1. Solo activamos la animación del botón si se proporciona (ahora es opcional)
@@ -2600,98 +2593,126 @@ const cleanupObservers = () => {
         movementsObserver = null;
     }
 };
-
-// ===============================================================
-// === MOTOR DE NAVEGACIÓN (CON BOTONES FIJOS FORZADOS) ===
-// ===============================================================
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
-    const newView = document.getElementById(pageId); 
-    const mainScroller = document.querySelector('.app-layout__main');
+    const newView = select(pageId);
+    const mainScroller = selectOne('.app-layout__main');
 
-    // Cerrar menús
-    const menu = document.getElementById('main-menu-popover');
+    const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // Guardar scroll
-    if (oldView && mainScroller) pageScrollPositions[oldView.id] = mainScroller.scrollTop;
+    // 1. Guardar scroll
+    if (oldView && mainScroller) {
+        pageScrollPositions[oldView.id] = mainScroller.scrollTop;
+    }
+
     if (!newView || (oldView && oldView.id === pageId)) return;
     
     destroyAllCharts();
-    if (!isInitial && typeof hapticFeedback === 'function') hapticFeedback('light');
+    if (!isInitial) hapticFeedback('light');
 
     if (!isInitial && window.history.state?.page !== pageId) {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // --- AQUÍ ESTÁ LA SOLUCIÓN: DEFINICIÓN DE BOTONES FIJOS ---
-    // Esta variable contiene EL HTML EXACTO de los botones.
-    const botonesFijosHeader = `
-        <button class="icon-btn" onclick="toggleDiarioView(this)" style="display: flex; align-items: center; justify-content: center;">
-            <span class="material-icons">view_agenda</span>
-        </button>
+    // Nav Inferior
+    const navItems = Array.from(selectAll('.bottom-nav__item'));
+    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
+    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+    const isForward = newIndex > oldIndex;
 
-        <button class="icon-btn" onclick="openDiarioFilters()" style="display: flex; align-items: center; justify-content: center;">
-            <span class="material-icons">filter_list</span>
-        </button>
-
-        <button class="icon-btn" onclick="document.getElementById('global-search-modal').classList.add('active')" style="display: flex; align-items: center; justify-content: center;">
-            <span class="material-icons">search</span>
-        </button>
-
-        <button class="icon-btn" data-action="open-external-calculator" style="display: flex; align-items: center; justify-content: center;">
+    // Barra Superior
+    const actionsEl = select('top-bar-actions');
+    const leftEl = select('top-bar-left-button');
+    
+    // Acciones por defecto (Menú de 3 puntos)
+    const standardActions = `
+        <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
             <span class="material-icons">calculate</span>
         </button>
-
-        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu" style="display: flex; align-items: center; justify-content: center;">
-            <span class="material-icons">more_vert</span>
-        </button>
+        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
+    <span class="material-icons">more_vert</span>
+</button>
     `;
     
-    // Cargas de datos
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
     if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
+	const patrimonioActions = `
+    <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
+        <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
+    </button>
+    ${standardActions}
+`;
 
-    // Configuración de páginas (TODAS usan botonesFijosHeader)
-    const pageRenderers = {
-        [PAGE_IDS.PANEL]: { title: 'Panel Global', render: renderPanelPage },
-        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage },
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage },
-    };
+const pageRenderers = {
+    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+};
 
     if (pageRenderers[pageId]) {
-        // A) Título
+        // 1. Actualizar el Título (Limpiamos si es Panel o Diario)
         const titleEl = document.getElementById('page-title-display');
-        if (titleEl) titleEl.textContent = pageRenderers[pageId].title;
-           
-        // B) INYECCIÓN FORZOSA DE BOTONES
-        // Buscamos el contenedor por ID o por clase para asegurarnos
-        const actionsEl = document.getElementById('top-bar-actions') || document.querySelector('.top-bar__actions');
-        
+        if (titleEl) {
+            const rawTitle = pageRenderers[pageId].title;
+            // Si es Panel o Diario, dejamos el texto vacío. Si no, ponemos el título (ej: Ajustes)
+            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
+        }
+
+        // 2. Botones extra del Diario (Filtro y Vista)
+        // Los inyectamos en la barra de acciones de la derecha si estamos en Diario
         if (actionsEl) {
-            actionsEl.innerHTML = botonesFijosHeader;
-            // Forzamos que se vean por si acaso hay un CSS ocultándolos
-            actionsEl.style.display = 'flex';
-            actionsEl.style.opacity = '1';
-        } else {
-            console.error("❌ ERROR CRÍTICO: No encuentro el div 'top-bar-actions' en el HTML.");
+            let actionsHTML = pageRenderers[pageId].actions;
+            
+            if (pageId === PAGE_IDS.DIARIO) {
+                // Añadimos los botones del diario al principio de las acciones
+                const diarioButtons = `
+                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista"><span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span></button>
+                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar"><span class="material-icons">filter_list</span></button>
+                `;
+                actionsHTML = diarioButtons + actionsHTML;
+            }
+            
+            actionsEl.innerHTML = actionsHTML;
         }
         
-        // C) Renderizar página
+        // 3. Renderizar la página
         await pageRenderers[pageId].render();
     }
     
     // Animaciones y Clases
-    const navItems = document.querySelectorAll('.bottom-nav__item');
-    navItems.forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
-    
+    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     newView.classList.add('view--active'); 
-    if (oldView) oldView.classList.remove('view--active');
+    if (oldView && !isInitial) {
+        const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
+        const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
+        newView.classList.add(inClass);
+        oldView.classList.add(outClass);
+        oldView.addEventListener('animationend', () => {
+            oldView.classList.remove('view--active', outClass);
+            newView.classList.remove(inClass);
+        }, { once: true });
+    } else if (oldView) {
+        oldView.classList.remove('view--active');
+    }
 
-    if (mainScroller) mainScroller.scrollTop = pageScrollPositions[pageId] || 0;
-    if (pageId === PAGE_IDS.PANEL) scheduleDashboardUpdate();
+    // Restaurar Scroll
+    if (mainScroller) {
+        const targetScroll = pageScrollPositions[pageId] || 0;
+        mainScroller.scrollTop = targetScroll;
+        if (pageId === PAGE_IDS.DIARIO && diarioViewMode === 'list') {
+            requestAnimationFrame(() => {
+                mainScroller.scrollTop = targetScroll; 
+                renderVisibleItems(); 
+            });
+        }
+    }
+
+    if (pageId === PAGE_IDS.PANEL) {
+        scheduleDashboardUpdate();
+    }
 };
 
 const getPendingRecurrents = () => {
@@ -3530,9 +3551,8 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                 }
                 
                 const cPorcentaje = cuenta.pnlPorcentual.toFixed(2) + '%';
-                const pnlColor = cuenta.pnlAbsoluto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-				const pnlSign = cuenta.pnlAbsoluto >= 0 ? '+' : '';
-				const fechaValoracion = cuenta.lastUpdate ? `(${new Date(cuenta.lastUpdate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'})})` : '';
+                const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
+                const pnlSign = cuenta.pnlAbsoluto >= 0 ? '+' : '';
                 
                 // Barra de peso (siempre basada en valoración EUR para ser relativa al total)
                 const peso = portfolioTotalValorado > 0 ? (cuenta.valorActual / portfolioTotalValorado) * 100 : 0;
@@ -3555,28 +3575,25 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                         <div style="width: ${peso}%; height: 100%; background-color: ${barColor};"></div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 8px; margin-top: 10px; background: var(--c-surface-variant); padding: 10px; border-radius: 8px; align-items: center; border-left: 4px solid ${pnlColor};">
-    
-    <div style="display:flex; flex-direction:column;">
-        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Invertido</span>
-        <span style="font-size:0.8rem; font-weight:600; color:${pnlColor}; opacity: 0.9;">${cInvertido}</span>
-    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; background: var(--c-surface-variant); padding: 8px; border-radius: 8px;">
+                        
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Invertido</span>
+                            <span style="font-size:0.85rem; font-weight:600; color:var(--c-on-surface);">${cInvertido}</span>
+                        </div>
 
-    <div style="display:flex; flex-direction:column; text-align:center;">
-        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Resultado</span>
-        <div style="font-size:0.75rem; font-weight:800; color:${pnlColor}; white-space: nowrap;">
-            ${pnlSign}${cPnl} <span style="font-size:0.65rem; font-weight:600; opacity:0.85;">(${pnlSign}${cPorcentaje})</span>
-        </div>
-    </div>
+                        <div style="display:flex; flex-direction:column; text-align:center;">
+                            <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">P&L</span>
+                            <div style="display:flex; flex-direction:column;">
+                                <span style="font-size:0.85rem; font-weight:700;" class="${pnlClass}">${pnlSign}${cPnl}</span>
+                                <span style="font-size:0.7rem; opacity:0.9;" class="${pnlClass}">(${pnlSign}${cPorcentaje})</span>
+                            </div>
+                        </div>
 
-    <div style="display:flex; flex-direction:column; text-align:right;">
-        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Valor Real</span>
-        <div style="font-size:0.85rem; font-weight:800; color:${pnlColor}; white-space: nowrap;">
-            ${cReal} <span style="font-size:0.6rem; font-weight:400; opacity:0.7; margin-left:2px;">${fechaValoracion}</span>
-        </div>
-    </div>
-
-</div>
+                        <div style="display:flex; flex-direction:column; text-align:right;">
+                            <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Valor Real</span>
+                            <span style="font-size:0.9rem; font-weight:800; color:var(--c-on-surface);">${cReal}</span>
+                        </div>
 
                     </div>
 
@@ -4932,6 +4949,63 @@ const renderPanelPage = async () => {
             break;
     }
 };
+// ===============================================================
+// === COMPONENTE TARJETA DE MOVIMIENTO (CORREGIDO) ===
+// ===============================================================
+const TransactionCardComponent = (m) => {
+    // 1. DEFINIR VARIABLES (Aquí estaba el fallo antes)
+    const concepto = db.conceptos.find(c => c.id === m.conceptoId);
+    
+    // Calculamos el nombre. Si no tiene concepto, ponemos 'Movimiento'
+    let conceptoName = concepto ? concepto.nombre : 'Movimiento';
+    
+    // Si es un traspaso, ignoramos el concepto y ponemos "Traspaso"
+    if (m.tipo === 'traspaso') conceptoName = 'Traspaso';
+
+    // 2. Formatos de fecha y dinero
+    const dateStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    
+    // Colores según tipo
+    let amountClass = 'var(--c-on-surface)';
+    let signo = '';
+    
+    if (m.tipo === 'ingreso') {
+        amountClass = 'var(--c-success)';
+        signo = '+';
+    } else if (m.tipo === 'gasto') {
+        amountClass = 'var(--c-on-surface)'; // O var(--c-danger) si prefieres rojo
+        signo = '-';
+    }
+
+    // Icono y color del avatar
+    const iconName = m.tipo === 'traspaso' ? 'swap_horiz' : (concepto?.icono || 'paid');
+    const iconColor = m.tipo === 'traspaso' ? '#999' : (concepto?.color || '#666');
+    const avatarHTML = `
+        <div style="width: 40px; height: 40px; border-radius: 50%; background: ${iconColor}20; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+            <span class="material-icons" style="font-size: 20px;">${iconName}</span>
+        </div>`;
+
+    // 3. RETORNAR EL HTML (Con sistema de clic para editar)
+    return `
+    <div class="transaction-card list-item-animate" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px 15px; display: flex; align-items: center; border-bottom: 1px solid var(--c-outline); cursor: pointer; transition: background 0.2s;">
+        
+        ${avatarHTML}
+        
+        <div style="flex: 1; min-width: 0; padding-right: 10px;">
+            <div style="font-weight: 600; font-size: 0.95rem; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${conceptoName}
+            </div>
+            <div style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-top: 2px;">
+                ${dateStr} • ${m.descripcion || 'Sin nota'}
+            </div>
+        </div>
+        
+        <div style="font-weight: 700; font-size: 0.95rem; color: ${amountClass}; white-space: nowrap;">
+            ${signo}${formatCurrency(m.cantidad)}
+        </div>
+    </div>
+    `;
+};
 
 // Variable para recordar la selección del usuario (por defecto 3 Meses)
 let currentPortfolioTimeRange = '3M';
@@ -5209,9 +5283,9 @@ window.showBulkUpdateModal = () => {
             <form id="bulk-update-form">
                 ${rowsHtml}
                 <div class="form-group" style="margin-top: 20px;">
-    <label class="form-label" style="font-size: 0.8rem; color: var(--c-on-surface-secondary);">Fecha de esta valoración (puedes elegir el pasado):</label>
-    <input type="date" id="bulk-update-date" class="form-input" value="${new Date().toISOString().slice(0,10)}" style="background: var(--c-surface); border: 1px solid var(--c-outline); padding: 8px;">
-</div>
+                    <label class="form-label">Fecha de valoración</label>
+                    <input type="date" id="bulk-update-date" class="form-input" value="${new Date().toISOString().slice(0,10)}">
+                </div>
                 <button type="button" class="btn btn--primary btn--full" onclick="saveBulkUpdate(this)">
                     Guardar Todo
                 </button>
@@ -7233,26 +7307,45 @@ const hideModal = (id) => {
     showGenericModal(`Desglose TIR: ${cuenta.nombre}`, modalHtml);
 };	
 const showDrillDownModal = (title, movements) => {
-    // Ordenar por fecha
+    // Ordenamos los movimientos para que se muestren cronológicamente
     movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-    // Si no hay nada, mostrar mensaje vacío
-    let modalContentHTML = movements.length === 0 ? 
-        `<div class="empty-state"><p>Sin movimientos.</p></div>` : 
-        movements.map(m => TransactionCardComponent(m)).join('');
+    // Construimos el contenido del modal
+    let modalContentHTML = movements.length === 0
+    ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
+           <span class="material-icons">search_off</span>
+           <h3>Sin movimientos</h3>
+           <p>No se han encontrado movimientos para esta selección.</p>
+       </div>`
+    : movements.map(m => 
+          // Mantenemos la clase de animación 'list-item-animate'
+          TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
+      )
+      .join('')
+      // Cambiamos la acción para que la edición funcione desde dentro del modal
+      .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
 
-    // Mostramos el modal
+    // Llamamos a la función para mostrar el modal
     showGenericModal(title, modalContentHTML);
-
-    // Aplicamos la animación de entrada
+    
+    // --- ¡LA MAGIA SUCEDE AQUÍ! ---
+    // Después de que el modal se muestra, activamos la animación en cascada.
     setTimeout(() => {
-        const body = document.getElementById('generic-modal-body');
-        if (body) {
-            body.querySelectorAll('.list-item-animate').forEach((item, index) => {
-                setTimeout(() => item.classList.add('item-enter-active'), index * 40);
+        const modalBody = document.getElementById('generic-modal-body');
+        if (modalBody) {
+            const itemsToAnimate = modalBody.querySelectorAll('.list-item-animate');
+            itemsToAnimate.forEach((item, index) => {
+                // Aplicamos la clase que dispara la animación con un pequeño retardo
+                // para cada elemento, creando el efecto cascada.
+                setTimeout(() => {
+                    item.classList.add('item-enter-active');
+                }, index * 40); // 40 milisegundos de retraso entre cada item
             });
         }
-    }, 50);
+    }, 50); // Un pequeño retardo para asegurar que el modal es visible
+	setTimeout(() => {
+        applyInvestmentItemInteractions(document.getElementById('generic-modal-body'));
+    }, 100);
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
 
@@ -11420,6 +11513,27 @@ const updateExtractoList = () => {
 };
 
 
+/* ================================================================ */
+/* === LÓGICA DE ICONOS DE DIARIO (PEGAR AL FINAL DE MAIN.JS) === */
+/* ================================================================ */
+
+// 1. Función para cambiar la vista (Lista <-> Compacta)
+window.toggleDiarioView = function(btnElement) {
+    const diarioContainer = document.getElementById('diario-page') || document.body;
+    const icono = btnElement.querySelector('.material-icons');
+    
+    // Alternar clase
+    diarioContainer.classList.toggle('view-mode-compact');
+    
+    // Cambiar icono
+    if (diarioContainer.classList.contains('view-mode-compact')) {
+        icono.textContent = 'view_list'; // Icono de lista
+        console.log("Vista cambiada a: Compacta");
+    } else {
+        icono.textContent = 'grid_view'; // Icono de cuadrícula/normal
+        console.log("Vista cambiada a: Normal");
+    }
+};
 
 // ===============================================================
 // === GESTOR DE CLICS BLINDADO (SOLUCIÓN FINAL ERROR DATASET) ===
@@ -11516,43 +11630,60 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// ===============================================================
-// === FUNCIONES DE LOS BOTONES FIJOS (SOPORTE) ===
-// ===============================================================
+/* ================================================================= */
+/* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO === */
+/* ================================================================= */
 
-// 1. Cambiar Vista
-window.diarioViewMode = window.diarioViewMode || 'list'; 
-window.toggleDiarioView = function(btnElement) {
-    window.diarioViewMode = (window.diarioViewMode === 'list') ? 'compact' : 'list';
-    
-    // Cambiar icono
-    if (btnElement) {
-        const icon = btnElement.querySelector('.material-icons');
-        if (icon) icon.textContent = window.diarioViewMode === 'list' ? 'view_agenda' : 'view_list';
-    }
+// Variable Global para controlar la vista (Por defecto: Lista)
+// Opciones: 'list' (Lista simple) | 'date' (Agrupado por Fechas)
+window.currentDiarioView = 'list'; 
 
-    // Refrescar SOLO si estamos en diario
-    if (document.querySelector('#diario-page.view--active') && typeof renderDiarioPage === 'function') {
-        renderDiarioPage();
-    }
-    
-    if (typeof showToast === 'function') showToast("Vista: " + window.diarioViewMode);
-};
-
-// 2. Abrir Filtros
+// --- 1. FUNCIÓN PARA EL BOTÓN DE FILTRO ---
 window.openDiarioFilters = function() {
     const modal = document.getElementById('diario-filters-modal');
     if (modal) {
-        modal.classList.add('active');
         modal.style.display = 'flex';
+        // Pequeño retardo para permitir la animación CSS
+        setTimeout(() => {
+            modal.classList.add('active');
+        }, 10);
+        console.log("Abriendo filtros de diario...");
     } else {
-        // Si falla el filtro específico, abrimos la búsqueda general como respaldo
-        console.warn("Filtro no encontrado, abriendo búsqueda general");
-        const search = document.getElementById('global-search-modal');
-        if(search) search.classList.add('active');
+        console.error("ERROR: No se encuentra el modal con id='diario-filters-modal' en index.html");
+        alert("Error: Falta el formulario de filtros en el HTML");
     }
 };
 
+// --- 2. FUNCIÓN PARA EL BOTÓN DE VISTA ---
+window.toggleDiarioView = function(btnElement) {
+    const icono = btnElement.querySelector('.material-icons');
+    
+    // A) CAMBIAR EL ESTADO
+    if (window.currentDiarioView === 'list') {
+        // Cambiamos a VISTA POR FECHA
+        window.currentDiarioView = 'date';
+        if (icono) icono.textContent = 'list'; // Ponemos icono de lista para volver
+        console.log("Cambiando a Vista: AGRUPADA POR FECHA");
+    } else {
+        // Volvemos a VISTA DE LISTA
+        window.currentDiarioView = 'list';
+        if (icono) icono.textContent = 'calendar_month'; // Ponemos icono de calendario
+        console.log("Cambiando a Vista: LISTA SIMPLE");
+    }
+
+    // B) EJECUTAR EL CAMBIO (RE-RENDERIZAR)
+    // Aquí llamamos a tu función principal que pinta la lista.
+    // Buscamos las funciones más probables en tu código.
+    if (typeof renderDiario === 'function') {
+        renderDiario(); 
+    } else if (typeof renderMovements === 'function') {
+        renderMovements();
+    } else if (typeof updateDiarioList === 'function') {
+        updateDiarioList();
+    } else {
+        console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
+    }
+};
 // ===============================================================
 // === NUEVA HERRAMIENTA: ABRIR HISTORIAL DE INVERSIÓN ===
 // ===============================================================
@@ -11745,26 +11876,10 @@ const renderBudgetTracking = () => {
     container.innerHTML = `
         <div class="card fade-in-up" style="margin-bottom: 20px; padding: 20px;">
             <h3>Presupuesto</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; align-items: center;">
-    
-    <div style="display:flex; flex-direction:column;">
-        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Límite</span>
-        <span style="font-size:0.8rem; font-weight:600; color:var(--c-on-surface);">${formatCurrency(presupuesto)}</span>
-    </div>
-    
-    <div style="display:flex; flex-direction:column; text-align:center;">
-        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Disponible</span>
-        <span style="font-size:0.75rem; font-weight:800; color:${color};">${formatCurrency(presupuesto - totalGasto)}</span>
-    </div>
-
-    <div style="display:flex; flex-direction:column; text-align:right;">
-        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Gastado</span>
-        <div style="font-size:0.85rem; font-weight:800; color:${color}; white-space: nowrap;">
-            ${formatCurrency(totalGasto)} <span style="font-size:0.65rem; font-weight:400; opacity:0.8;">(${pct}%)</span>
-        </div>
-    </div>
-
-</div>
+            <div style="display:flex; justify-content:space-between; margin:10px 0;">
+                <span>Gastado: ${formatCurrency(totalGasto)}</span>
+                <span>Límite: ${formatCurrency(presupuesto)}</span>
+            </div>
             <div style="width:100%; height:10px; background:#333;"><div style="width:${pct}%; height:100%; background:${color};"></div></div>
         </div>
 
@@ -11789,68 +11904,4 @@ const renderBudgetTracking = () => {
     `;
 
     if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 100);
-};
-/**
- * COMPONENTE UNIFICADO DE TARJETA DE MOVIMIENTO
- * Genera el mismo estilo visual que el Diario (Icono en burbuja + Colores)
- */
-const TransactionCardComponent = (m) => {
-    // 1. Obtener datos de nombres
-    const concepto = db.conceptos.find(c => c.id === m.conceptoId);
-    const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
-    const nombreConcepto = concepto ? concepto.nombre : 'Varios';
-    const nombreCuenta = cuenta ? cuenta.nombre : 'Cuenta';
-    
-    // 2. Lógica de Iconos y Colores
-    let iconName, bubbleClass, amountClass, amountSign, colorVar;
-    const isGasto = m.cantidad < 0;
-
-    if (m.tipo === 'traspaso') {
-        bubbleClass = 't-bubble--transfer'; // Clase CSS para el fondo morado
-        iconName = 'swap_horiz'; 
-        colorVar = 'var(--c-purple)'; // Morado
-        amountClass = 'text-info'; 
-        amountSign = '';
-    } else {
-        if (isGasto) {
-            bubbleClass = 't-bubble--expense'; // Rojo
-            iconName = 'arrow_downward'; 
-            colorVar = 'var(--c-danger)';
-            amountClass = 'text-negative';
-            amountSign = '';
-        } else {
-            bubbleClass = 't-bubble--income'; // Verde
-            iconName = 'arrow_upward'; 
-            colorVar = 'var(--c-success)';
-            amountClass = 'text-positive';
-            amountSign = '+';
-        }
-    }
-
-    // 3. Formato de fecha
-    const dateStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-
-    // 4. HTML final con Icono delante y colores sincronizados
-    return `
-    <div class="t-card list-item-animate" data-id="${m.id}" data-action="edit-movement-from-modal" 
-         style="display: flex; align-items: center; gap: 15px; padding: 12px 10px; border-bottom: 1px solid var(--c-outline); cursor: pointer;">
-        
-        <div class="t-icon-bubble ${bubbleClass}" style="width: 48px; height: 48px; border-radius: 50%; display: flex; justify-content: center; align-items: center; flex-shrink: 0;">
-            <span class="material-icons" style="color: white; font-size: 26px;">${iconName}</span>
-        </div>
-        
-        <div style="flex-grow: 1; min-width: 0;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                <span style="font-weight: 700; font-size: 0.95rem; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    ${m.tipo === 'traspaso' ? 'Traspaso' : escapeHTML(nombreConcepto)}
-                </span>
-                <span style="font-weight: 800; font-size: 1rem; color: ${colorVar};">
-                    ${amountSign}${formatCurrencyHTML(m.cantidad)}
-                </span>
-            </div>
-            <div style="font-size: 0.8rem; color: var(--c-on-surface-tertiary); margin-top: 2px;">
-                <span style="color: ${colorVar}; font-weight: 600;">${m.tipo === 'traspaso' ? 'Cuenta' : escapeHTML(nombreCuenta)}</span> • ${dateStr}
-            </div>
-        </div>
-    </div>`;
 };
