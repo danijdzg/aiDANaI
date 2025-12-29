@@ -2595,7 +2595,7 @@ const cleanupObservers = () => {
 };
 
 /* ================================================================= */
-/* === FUNCIÓN DE NAVEGACIÓN CORREGIDA (FIX FINAL) === */
+/* === FUNCIÓN DE NAVEGACIÓN (FIX GLOBALES) === */
 /* ================================================================= */
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
@@ -2603,11 +2603,11 @@ const navigateTo = async (pageId, isInitial = false) => {
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
 
-    // Cerrar menú si está abierto
+    // Cerrar menús flotantes
     const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // Guardar posición del scroll
+    // Guardar scroll anterior
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
@@ -2617,46 +2617,13 @@ const navigateTo = async (pageId, isInitial = false) => {
     destroyAllCharts();
     if (!isInitial) hapticFeedback('light');
 
+    // Actualizar historial
     if (!isInitial && window.history.state?.page !== pageId) {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // --- CORRECCIÓN: INYECCIÓN DE BOTONES ---
-    // 1. Definimos los botones
-    const currentViewIcon = (typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list') ? 'calendar_month' : 'list';
-    
-    const globalActionsHTML = `
-        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
-            <span class="material-icons">filter_list</span>
-        </button>
-        
-        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-            <span class="material-icons">${currentViewIcon}</span>
-        </button>
-
-        <button data-action="global-search" class="icon-btn" title="Buscar">
-             <span class="material-icons">search</span>
-        </button>
-
-        <button data-action="open-external-calculator" class="icon-btn" title="Calculadora">
-            <span class="material-icons">calculate</span>
-        </button>
-
-        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
-            <span class="material-icons">more_vert</span>
-        </button>
-    `;
-
-    // 2. ¡IMPORTANTE! Inyectamos el HTML en la barra superior
-    // Esta es la parte que faltaba en tu código anterior
-    const actionsEl = document.getElementById('top-bar-actions');
-    if (actionsEl) {
-        actionsEl.innerHTML = globalActionsHTML;
-    }
-    // ----------------------------------------------------
-
-    
-    // Lógica de carga de datos diferida
+    // --- RENDERIZADO DE PÁGINA ---
+    // Carga diferida de datos
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
 
     const pageRenderers = {
@@ -2667,18 +2634,17 @@ const navigateTo = async (pageId, isInitial = false) => {
     };
 
     if (pageRenderers[pageId]) {
-        // Actualizar título
+        // Limpiamos título en Panel y Diario para limpieza visual si se desea, 
+        // o lo dejamos fijo según preferencia. Aquí lo dejamos dinámico:
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
-            // En Panel y Diario dejamos el título vacío para dar espacio a los botones
-            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : pageRenderers[pageId].title;
+            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? 'aiDANaI' : pageRenderers[pageId].title;
         }
-
-        // Renderizar la página
+        // Renderizamos la vista
         await pageRenderers[pageId].render();
     }
     
-    // Animaciones de transición
+    // --- GESTIÓN DE VISTAS (Transiciones) ---
     const navItems = Array.from(document.querySelectorAll('.bottom-nav__item'));
     navItems.forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     
@@ -2704,6 +2670,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     if (mainScroller) {
         const targetScroll = pageScrollPositions[pageId] || 0;
         mainScroller.scrollTop = targetScroll;
+        // Ajuste especial para el Diario en modo lista
         if (pageId === PAGE_IDS.DIARIO && typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list') {
             requestAnimationFrame(() => {
                 mainScroller.scrollTop = targetScroll; 
@@ -2712,9 +2679,13 @@ const navigateTo = async (pageId, isInitial = false) => {
         }
     }
 
-    if (pageId === PAGE_IDS.PANEL) {
-        if(typeof scheduleDashboardUpdate === 'function') scheduleDashboardUpdate();
+    if (pageId === PAGE_IDS.PANEL && typeof scheduleDashboardUpdate === 'function') {
+        scheduleDashboardUpdate();
     }
+
+    // --- ¡CRUCIAL! INYECTAR BOTONES AL FINAL ---
+    // Esto asegura que los botones aparezcan siempre, sin importar qué haga la página
+    setTimeout(forceRenderGlobalHeader, 50);
 };
 
 const getPendingRecurrents = () => {
@@ -11908,3 +11879,41 @@ const renderBudgetTracking = () => {
 
     if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 100);
 };
+/* --- FUNCIÓN AUXILIAR PARA PINTAR CABECERA FIJA --- */
+function forceRenderGlobalHeader() {
+    const actionsEl = document.getElementById('top-bar-actions');
+    
+    // Si no encuentra el contenedor, salimos (ya no debería pasar con el nuevo HTML)
+    if (!actionsEl) return;
+
+    // Detectar modo de vista actual (lista o calendario)
+    const isListMode = (typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list');
+    const viewIcon = isListMode ? 'calendar_month' : 'list';
+
+    // Inyectar HTML de los botones
+    actionsEl.innerHTML = `
+        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
+            <span class="material-icons">filter_list</span>
+        </button>
+        
+        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+            <span class="material-icons">${viewIcon}</span>
+        </button>
+
+        <button data-action="global-search" class="icon-btn" title="Buscar">
+             <span class="material-icons">search</span>
+        </button>
+        
+        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
+            <span class="material-icons">more_vert</span>
+        </button>
+    `;
+    
+    // Forzar estilos de visibilidad por si acaso
+    actionsEl.style.display = 'flex';
+    actionsEl.style.visibility = 'visible';
+    actionsEl.style.opacity = '1';
+}
+
+// Ejecutar al cargar la página por primera vez
+window.addEventListener('DOMContentLoaded', () => setTimeout(forceRenderGlobalHeader, 100));
