@@ -3576,24 +3576,24 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                         <div style="width: ${peso}%; height: 100%; background-color: ${barColor};"></div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 8px; margin-top: 4px; background: var(--c-surface-variant); padding: 8px; border-radius: 8px; align-items: center;">
+                    <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 8px; margin-top: 10px; background: var(--c-surface-variant); padding: 10px; border-radius: 8px; align-items: center; border-left: 4px solid ${pnlColor};">
     
     <div style="display:flex; flex-direction:column;">
         <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Invertido</span>
-        <span style="font-size:0.8rem; font-weight:600; color:${pnlColor};">${cInvertido}</span>
+        <span style="font-size:0.8rem; font-weight:600; color:${pnlColor}; opacity: 0.9;">${cInvertido}</span>
     </div>
 
     <div style="display:flex; flex-direction:column; text-align:center;">
-        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">P&L Total</span>
+        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Resultado</span>
         <div style="font-size:0.75rem; font-weight:800; color:${pnlColor}; white-space: nowrap;">
-            ${pnlSign}${cPnl} <span style="font-size:0.65rem; font-weight:600; opacity:0.9;">(${pnlSign}${cPorcentaje})</span>
+            ${pnlSign}${cPnl} <span style="font-size:0.65rem; font-weight:600; opacity:0.85;">(${pnlSign}${cPorcentaje})</span>
         </div>
     </div>
 
     <div style="display:flex; flex-direction:column; text-align:right;">
         <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Valor Real</span>
-        <div style="color:${pnlColor}; font-size:0.85rem; font-weight:800; white-space: nowrap;">
-            ${cReal} <span style="font-size:0.65rem; font-weight:400; opacity:0.8; margin-left:2px;">${fechaValoracion}</span>
+        <div style="font-size:0.85rem; font-weight:800; color:${pnlColor}; white-space: nowrap;">
+            ${cReal} <span style="font-size:0.6rem; font-weight:400; opacity:0.7; margin-left:2px;">${fechaValoracion}</span>
         </div>
     </div>
 
@@ -5287,9 +5287,9 @@ window.showBulkUpdateModal = () => {
             <form id="bulk-update-form">
                 ${rowsHtml}
                 <div class="form-group" style="margin-top: 20px;">
-                    <label class="form-label">Fecha de valoración</label>
-                    <input type="date" id="bulk-update-date" class="form-input" value="${new Date().toISOString().slice(0,10)}">
-                </div>
+    <label class="form-label" style="font-size: 0.8rem; color: var(--c-on-surface-secondary);">Fecha de esta valoración (puedes elegir el pasado):</label>
+    <input type="date" id="bulk-update-date" class="form-input" value="${new Date().toISOString().slice(0,10)}" style="background: var(--c-surface); border: 1px solid var(--c-outline); padding: 8px;">
+</div>
                 <button type="button" class="btn btn--primary btn--full" onclick="saveBulkUpdate(this)">
                     Guardar Todo
                 </button>
@@ -11880,10 +11880,26 @@ const renderBudgetTracking = () => {
     container.innerHTML = `
         <div class="card fade-in-up" style="margin-bottom: 20px; padding: 20px;">
             <h3>Presupuesto</h3>
-            <div style="display:flex; justify-content:space-between; margin:10px 0;">
-                <span>Gastado: ${formatCurrency(totalGasto)}</span>
-                <span>Límite: ${formatCurrency(presupuesto)}</span>
-            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; align-items: center;">
+    
+    <div style="display:flex; flex-direction:column;">
+        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Límite</span>
+        <span style="font-size:0.8rem; font-weight:600; color:var(--c-on-surface);">${formatCurrency(presupuesto)}</span>
+    </div>
+    
+    <div style="display:flex; flex-direction:column; text-align:center;">
+        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Disponible</span>
+        <span style="font-size:0.75rem; font-weight:800; color:${color};">${formatCurrency(presupuesto - totalGasto)}</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; text-align:right;">
+        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Gastado</span>
+        <div style="font-size:0.85rem; font-weight:800; color:${color}; white-space: nowrap;">
+            ${formatCurrency(totalGasto)} <span style="font-size:0.65rem; font-weight:400; opacity:0.8;">(${pct}%)</span>
+        </div>
+    </div>
+
+</div>
             <div style="width:100%; height:10px; background:#333;"><div style="width:${pct}%; height:100%; background:${color};"></div></div>
         </div>
 
