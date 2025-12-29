@@ -3551,8 +3551,9 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                 }
                 
                 const cPorcentaje = cuenta.pnlPorcentual.toFixed(2) + '%';
-                const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
-                const pnlSign = cuenta.pnlAbsoluto >= 0 ? '+' : '';
+                const pnlColor = cuenta.pnlAbsoluto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+				const pnlSign = cuenta.pnlAbsoluto >= 0 ? '+' : '';
+				const fechaValoracion = cuenta.lastUpdate ? `(${new Date(cuenta.lastUpdate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'})})` : '';
                 
                 // Barra de peso (siempre basada en valoración EUR para ser relativa al total)
                 const peso = portfolioTotalValorado > 0 ? (cuenta.valorActual / portfolioTotalValorado) * 100 : 0;
@@ -3575,28 +3576,27 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                         <div style="width: ${peso}%; height: 100%; background-color: ${barColor};"></div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; background: var(--c-surface-variant); padding: 8px; border-radius: 8px;">
-                        
-                        <div style="display:flex; flex-direction:column;">
-                            <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Invertido</span>
-                            <span style="font-size:0.85rem; font-weight:600; color:var(--c-on-surface);">${cInvertido}</span>
-                        </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 8px; margin-top: 4px; background: var(--c-surface-variant); padding: 8px; border-radius: 8px; align-items: center;">
+    
+    <div style="display:flex; flex-direction:column;">
+        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Invertido</span>
+        <span style="font-size:0.8rem; font-weight:600; color:${pnlColor};">${cInvertido}</span>
+    </div>
 
-                        <div style="display:flex; flex-direction:column; text-align:center;">
-                            <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">P&L</span>
-                            <div style="display:flex; flex-direction:column;">
-                                <span style="font-size:0.85rem; font-weight:700;" class="${pnlClass}">${pnlSign}${cPnl}</span>
-                                <span style="font-size:0.7rem; opacity:0.9;" class="${pnlClass}">(${pnlSign}${cPorcentaje})</span>
-                            </div>
-                        </div>
+    <div style="display:flex; flex-direction:column; text-align:center;">
+        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">P&L Total</span>
+        <div style="font-size:0.75rem; font-weight:800; color:${pnlColor}; white-space: nowrap;">
+            ${pnlSign}${cPnl} <span style="font-size:0.65rem; font-weight:600; opacity:0.9;">(${pnlSign}${cPorcentaje})</span>
+        </div>
+    </div>
 
-                        <div style="display:flex; flex-direction:column; text-align:right;">
-    <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; margin-bottom: 2px;">
-        Valor Real (${cuenta.lastUpdate ? new Date(cuenta.lastUpdate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}) : 'S/D'})
-    </span>
-    <span style="font-size:0.9rem; font-weight:800; color:var(--c-on-surface); line-height: 1;">
-        ${cReal}
-    </span>
+    <div style="display:flex; flex-direction:column; text-align:right;">
+        <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; font-weight:700;">Valor Real</span>
+        <div style="color:${pnlColor}; font-size:0.85rem; font-weight:800; white-space: nowrap;">
+            ${cReal} <span style="font-size:0.65rem; font-weight:400; opacity:0.8; margin-left:2px;">${fechaValoracion}</span>
+        </div>
+    </div>
+
 </div>
 
                     </div>
