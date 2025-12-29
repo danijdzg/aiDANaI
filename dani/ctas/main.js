@@ -2593,21 +2593,16 @@ const cleanupObservers = () => {
         movementsObserver = null;
     }
 };
-
-/* ================================================================= */
-/* === FUNCIÓN DE NAVEGACIÓN (FIX GLOBALES) === */
-/* ================================================================= */
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
 
-    // Cerrar menús flotantes
     const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // Guardar scroll anterior
+    // 1. Guardar scroll
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
@@ -2617,41 +2612,78 @@ const navigateTo = async (pageId, isInitial = false) => {
     destroyAllCharts();
     if (!isInitial) hapticFeedback('light');
 
-    // Actualizar historial
     if (!isInitial && window.history.state?.page !== pageId) {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // --- RENDERIZADO DE PÁGINA ---
-    // Carga diferida de datos
-    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-
-    const pageRenderers = {
-        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage },
-        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage },
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage },
-    };
-
-    if (pageRenderers[pageId]) {
-        // Limpiamos título en Panel y Diario para limpieza visual si se desea, 
-        // o lo dejamos fijo según preferencia. Aquí lo dejamos dinámico:
-        const titleEl = document.getElementById('page-title-display');
-        if (titleEl) {
-            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? 'aiDANaI' : pageRenderers[pageId].title;
-        }
-        // Renderizamos la vista
-        await pageRenderers[pageId].render();
-    }
-    
-    // --- GESTIÓN DE VISTAS (Transiciones) ---
-    const navItems = Array.from(document.querySelectorAll('.bottom-nav__item'));
-    navItems.forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
-    
+    // Nav Inferior
+    const navItems = Array.from(selectAll('.bottom-nav__item'));
     const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
     const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
     const isForward = newIndex > oldIndex;
 
+    // Barra Superior
+    const actionsEl = select('top-bar-actions');
+    const leftEl = select('top-bar-left-button');
+    
+    // Acciones por defecto (Menú de 3 puntos)
+    const standardActions = `
+        <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
+            <span class="material-icons">calculate</span>
+        </button>
+        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
+    <span class="material-icons">more_vert</span>
+</button>
+    `;
+    
+    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
+    if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
+	const patrimonioActions = `
+    <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
+        <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
+    </button>
+    ${standardActions}
+`;
+
+const pageRenderers = {
+    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+};
+
+    if (pageRenderers[pageId]) {
+        // 1. Actualizar el Título (Limpiamos si es Panel o Diario)
+        const titleEl = document.getElementById('page-title-display');
+        if (titleEl) {
+            const rawTitle = pageRenderers[pageId].title;
+            // Si es Panel o Diario, dejamos el texto vacío. Si no, ponemos el título (ej: Ajustes)
+            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
+        }
+
+        // 2. Botones extra del Diario (Filtro y Vista)
+        // Los inyectamos en la barra de acciones de la derecha si estamos en Diario
+        if (actionsEl) {
+            let actionsHTML = pageRenderers[pageId].actions;
+            
+            if (pageId === PAGE_IDS.DIARIO) {
+                // Añadimos los botones del diario al principio de las acciones
+                const diarioButtons = `
+                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista"><span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span></button>
+                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar"><span class="material-icons">filter_list</span></button>
+                `;
+                actionsHTML = diarioButtons + actionsHTML;
+            }
+            
+            actionsEl.innerHTML = actionsHTML;
+        }
+        
+        // 3. Renderizar la página
+        await pageRenderers[pageId].render();
+    }
+    
+    // Animaciones y Clases
+    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     newView.classList.add('view--active'); 
     if (oldView && !isInitial) {
         const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
@@ -2670,22 +2702,17 @@ const navigateTo = async (pageId, isInitial = false) => {
     if (mainScroller) {
         const targetScroll = pageScrollPositions[pageId] || 0;
         mainScroller.scrollTop = targetScroll;
-        // Ajuste especial para el Diario en modo lista
-        if (pageId === PAGE_IDS.DIARIO && typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list') {
+        if (pageId === PAGE_IDS.DIARIO && diarioViewMode === 'list') {
             requestAnimationFrame(() => {
                 mainScroller.scrollTop = targetScroll; 
-                if(typeof renderVisibleItems === 'function') renderVisibleItems(); 
+                renderVisibleItems(); 
             });
         }
     }
 
-    if (pageId === PAGE_IDS.PANEL && typeof scheduleDashboardUpdate === 'function') {
+    if (pageId === PAGE_IDS.PANEL) {
         scheduleDashboardUpdate();
     }
-
-    // --- ¡CRUCIAL! INYECTAR BOTONES AL FINAL ---
-    // Esto asegura que los botones aparezcan siempre, sin importar qué haga la página
-    setTimeout(forceRenderGlobalHeader, 50);
 };
 
 const getPendingRecurrents = () => {
@@ -9152,7 +9179,6 @@ const handleStart = (e) => {
                 // Abrimos el modal incrustado
                 showModal('calculator-iframe-modal');
             },
-			'global-search': () => showModal('global-search-modal'),
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
@@ -11879,41 +11905,3 @@ const renderBudgetTracking = () => {
 
     if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 100);
 };
-/* --- FUNCIÓN AUXILIAR PARA PINTAR CABECERA FIJA --- */
-function forceRenderGlobalHeader() {
-    const actionsEl = document.getElementById('top-bar-actions');
-    
-    // Si no encuentra el contenedor, salimos (ya no debería pasar con el nuevo HTML)
-    if (!actionsEl) return;
-
-    // Detectar modo de vista actual (lista o calendario)
-    const isListMode = (typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list');
-    const viewIcon = isListMode ? 'calendar_month' : 'list';
-
-    // Inyectar HTML de los botones
-    actionsEl.innerHTML = `
-        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
-            <span class="material-icons">filter_list</span>
-        </button>
-        
-        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-            <span class="material-icons">${viewIcon}</span>
-        </button>
-
-        <button data-action="global-search" class="icon-btn" title="Buscar">
-             <span class="material-icons">search</span>
-        </button>
-        
-        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
-            <span class="material-icons">more_vert</span>
-        </button>
-    `;
-    
-    // Forzar estilos de visibilidad por si acaso
-    actionsEl.style.display = 'flex';
-    actionsEl.style.visibility = 'visible';
-    actionsEl.style.opacity = '1';
-}
-
-// Ejecutar al cargar la página por primera vez
-window.addEventListener('DOMContentLoaded', () => setTimeout(forceRenderGlobalHeader, 100));
