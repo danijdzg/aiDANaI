@@ -2594,6 +2594,9 @@ const cleanupObservers = () => {
     }
 };
 
+/* ================================================================= */
+/* === FUNCIÓN DE NAVEGACIÓN GLOBAL (CORREGIDA) === */
+/* ================================================================= */
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
@@ -2603,7 +2606,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // 1. Guardar scroll
+    // 1. Guardar posición del scroll
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
@@ -2617,33 +2620,32 @@ const navigateTo = async (pageId, isInitial = false) => {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // Nav Inferior
+    // Navegación Inferior (Tabs)
     const navItems = Array.from(selectAll('.bottom-nav__item'));
     const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
     const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
     const isForward = newIndex > oldIndex;
 
-    // Barra Superior
+    // Barra Superior (Header)
     const actionsEl = select('top-bar-actions');
-    const leftEl = select('top-bar-left-button');
     
-    // --- CAMBIO EXPERTO: Cabecera Unificada y Persistente ---
-    // Hemos movido los botones de Filtrar y Vista aquí para que estén siempre visibles.
-    // Orden: Filtrar | Vista | Buscar | Calculadora | Menú (Cerrar/Opciones)
+    // --- NUEVO: ACCIONES GLOBALES FIJAS ---
+    // Estos botones ahora aparecen en TODAS las pestañas.
+    // Orden: Filtrar | Vista | Buscar | Calculadora | Menú
     const standardActions = `
         <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
             <span class="material-icons">filter_list</span>
         </button>
         
         <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-            <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+            <span class="material-icons">${typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
         </button>
 
-        <button data-action="global-search" class="icon-btn" title="Buscar">
+        <button data-action="global-search" class="icon-btn" title="Buscar Global">
              <span class="material-icons">search</span>
         </button>
 
-        <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
+        <button data-action="open-external-calculator" class="icon-btn" title="Calculadora">
             <span class="material-icons">calculate</span>
         </button>
 
@@ -2652,45 +2654,35 @@ const navigateTo = async (pageId, isInitial = false) => {
         </button>
     `;
     
+    // Cargas perezosas de datos según la página
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
     
-    // Acciones específicas para Patrimonio (Moneda BTC/EUR) + Estándar
-    const patrimonioActions = `
-        <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
-            <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
-        </button>
-        ${standardActions}
-    `;
-
+    // Mapa de Renderizadores (Sin la referencia rota a Patrimonio)
     const pageRenderers = {
         [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
         [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
         [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
         [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-        // Si tienes una página separada de Patrimonio, usa patrimonioActions aquí
-        [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
     };
 
     if (pageRenderers[pageId]) {
-        // 1. Actualizar el Título
+        // 1. Actualizar el Título (Oculto en Panel/Diario para limpieza visual)
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
             const rawTitle = pageRenderers[pageId].title;
             titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
         }
 
-        // 2. Renderizar Acciones (Sin lógica condicional extraña, todo limpio)
+        // 2. Inyectar los botones en el encabezado
         if (actionsEl) {
-            // Usamos las acciones definidas en el objeto pageRenderers
-            actionsEl.innerHTML = pageRenderers[pageId].actions || standardActions;
+            actionsEl.innerHTML = pageRenderers[pageId].actions;
         }
         
-        // 3. Renderizar la página
+        // 3. Ejecutar la función de renderizado de la página
         await pageRenderers[pageId].render();
     }
     
-    // Animaciones y Clases (Resto de la función intacta)
+    // Gestión de Transiciones CSS
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     newView.classList.add('view--active'); 
     if (oldView && !isInitial) {
@@ -2710,7 +2702,8 @@ const navigateTo = async (pageId, isInitial = false) => {
     if (mainScroller) {
         const targetScroll = pageScrollPositions[pageId] || 0;
         mainScroller.scrollTop = targetScroll;
-        if (pageId === PAGE_IDS.DIARIO && diarioViewMode === 'list') {
+        // Caso especial para lista virtual del diario
+        if (pageId === PAGE_IDS.DIARIO && typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list') {
             requestAnimationFrame(() => {
                 mainScroller.scrollTop = targetScroll; 
                 renderVisibleItems(); 
@@ -2718,6 +2711,7 @@ const navigateTo = async (pageId, isInitial = false) => {
         }
     }
 
+    // Actualizar widgets si es el dashboard
     if (pageId === PAGE_IDS.PANEL) {
         scheduleDashboardUpdate();
     }
