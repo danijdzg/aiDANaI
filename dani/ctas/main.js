@@ -2594,19 +2594,17 @@ const cleanupObservers = () => {
     }
 };
 
-/* ================================================================= */
-/* === FUNCIÓN DE NAVEGACIÓN GLOBAL (CORREGIDA) === */
-/* ================================================================= */
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
     const newView = select(pageId);
     const mainScroller = selectOne('.app-layout__main');
 
+    // Cerrar menú si está abierto
     const menu = select('main-menu-popover');
     if (menu) menu.classList.remove('popover-menu--visible');
 
-    // 1. Guardar posición del scroll
+    // Guardar scroll
     if (oldView && mainScroller) {
         pageScrollPositions[oldView.id] = mainScroller.scrollTop;
     }
@@ -2620,28 +2618,21 @@ const navigateTo = async (pageId, isInitial = false) => {
         history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // Navegación Inferior (Tabs)
-    const navItems = Array.from(selectAll('.bottom-nav__item'));
-    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
-    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
-    const isForward = newIndex > oldIndex;
-
-    // Barra Superior (Header)
-    const actionsEl = select('top-bar-actions');
+        
+    // Definimos el HTML de los botones que SIEMPRE deben estar
+    // Nota: Usamos 'calendar_month' o 'list' dependiendo del estado actual
+    const currentViewIcon = (typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list') ? 'calendar_month' : 'list';
     
-    // --- NUEVO: ACCIONES GLOBALES FIJAS ---
-    // Estos botones ahora aparecen en TODAS las pestañas.
-    // Orden: Filtrar | Vista | Buscar | Calculadora | Menú
-    const standardActions = `
+    const globalActionsHTML = `
         <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
             <span class="material-icons">filter_list</span>
         </button>
         
         <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
-            <span class="material-icons">${typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+            <span class="material-icons">${currentViewIcon}</span>
         </button>
 
-        <button data-action="global-search" class="icon-btn" title="Buscar Global">
+        <button data-action="global-search" class="icon-btn" title="Buscar">
              <span class="material-icons">search</span>
         </button>
 
@@ -2653,37 +2644,39 @@ const navigateTo = async (pageId, isInitial = false) => {
             <span class="material-icons">more_vert</span>
         </button>
     `;
+
     
-    // Cargas perezosas de datos según la página
+    // Lógica de carga de datos
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-    
-    // Mapa de Renderizadores (Sin la referencia rota a Patrimonio)
+
     const pageRenderers = {
-        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage },
     };
 
     if (pageRenderers[pageId]) {
-        // 1. Actualizar el Título (Oculto en Panel/Diario para limpieza visual)
+        // Actualizar título (si existe elemento)
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
-            const rawTitle = pageRenderers[pageId].title;
-            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
+            // En Panel y Diario dejamos el título vacío para dar espacio a los botones
+            titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : pageRenderers[pageId].title;
         }
 
-        // 2. Inyectar los botones en el encabezado
-        if (actionsEl) {
-            actionsEl.innerHTML = pageRenderers[pageId].actions;
-        }
-        
-        // 3. Ejecutar la función de renderizado de la página
+        // Renderizar la página
         await pageRenderers[pageId].render();
     }
     
-    // Gestión de Transiciones CSS
-    selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+    // Animaciones de transición
+    const navItems = Array.from(document.querySelectorAll('.bottom-nav__item'));
+    navItems.forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
+    
+    // Determinar dirección de animación
+    const oldIndex = oldView ? navItems.findIndex(item => item.dataset.page === oldView.id) : -1;
+    const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
+    const isForward = newIndex > oldIndex;
+
     newView.classList.add('view--active'); 
     if (oldView && !isInitial) {
         const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
@@ -2702,18 +2695,16 @@ const navigateTo = async (pageId, isInitial = false) => {
     if (mainScroller) {
         const targetScroll = pageScrollPositions[pageId] || 0;
         mainScroller.scrollTop = targetScroll;
-        // Caso especial para lista virtual del diario
         if (pageId === PAGE_IDS.DIARIO && typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list') {
             requestAnimationFrame(() => {
                 mainScroller.scrollTop = targetScroll; 
-                renderVisibleItems(); 
+                if(typeof renderVisibleItems === 'function') renderVisibleItems(); 
             });
         }
     }
 
-    // Actualizar widgets si es el dashboard
     if (pageId === PAGE_IDS.PANEL) {
-        scheduleDashboardUpdate();
+        if(typeof scheduleDashboardUpdate === 'function') scheduleDashboardUpdate();
     }
 };
 
