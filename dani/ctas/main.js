@@ -2600,6 +2600,7 @@ const cleanupObservers = () => {
         movementsObserver = null;
     }
 };
+
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
@@ -2639,41 +2640,33 @@ const navigateTo = async (pageId, isInitial = false) => {
             <span class="material-icons">calculate</span>
         </button>
         <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
-    <span class="material-icons">more_vert</span>
-</button>
+            <span class="material-icons">more_vert</span>
+        </button>
     `;
     
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
     if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
-	const patrimonioActions = `
-    <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
-        <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
-    </button>
-    ${standardActions}
-`;
 
-const pageRenderers = {
-    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-};
+    const pageRenderers = {
+        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+    };
 
     if (pageRenderers[pageId]) {
-        // 1. Actualizar el Título (Limpiamos si es Panel o Diario)
+        // 1. Actualizar el Título
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
             const rawTitle = pageRenderers[pageId].title;
-            // Si es Panel o Diario, dejamos el texto vacío. Si no, ponemos el título (ej: Ajustes)
             titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
         }
            
-        // 2. Botones extra del Diario (Filtro y Vista)
+        // 2. Botones extra del Diario (Filtro y Vista) - CORREGIDO
         if (actionsEl) {
             let actionsHTML = pageRenderers[pageId].actions;
             
             if (pageId === PAGE_IDS.DIARIO) {
-                // CORRECCIÓN: Usamos onclick directo para asegurar que funcionan
                 const diarioButtons = `
                     <button onclick="toggleDiarioView(this)" class="icon-btn" title="Cambiar Vista">
                         <span class="material-icons">${typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list' ? 'view_agenda' : 'list'}</span>
@@ -2687,9 +2680,6 @@ const pageRenderers = {
             
             actionsEl.innerHTML = actionsHTML;
         }
-            
-            actionsEl.innerHTML = actionsHTML;
-        }
         
         // 3. Renderizar la página
         await pageRenderers[pageId].render();
@@ -2698,6 +2688,7 @@ const pageRenderers = {
     // Animaciones y Clases
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     newView.classList.add('view--active'); 
+    
     if (oldView && !isInitial) {
         const outClass = isForward ? 'view-transition-out-forward' : 'view-transition-out-backward';
         const inClass = isForward ? 'view-transition-in-forward' : 'view-transition-in-backward';
@@ -2726,7 +2717,7 @@ const pageRenderers = {
     if (pageId === PAGE_IDS.PANEL) {
         scheduleDashboardUpdate();
     }
-
+};
 
 const getPendingRecurrents = () => {
     const now = new Date();
