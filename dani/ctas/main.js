@@ -11563,33 +11563,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ================================================================= */
-/* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO === */
-/* ================================================================= */
-
-// Variable Global para controlar la vista (Por defecto: Lista)
-// Opciones: 'list' (Lista simple) | 'date' (Agrupado por Fechas)
-window.currentDiarioView = 'list'; 
-
-// 1. Abrir Filtros
-window.openDiarioFilters = function() {
-    // Intentamos usar la función moderna si existe
-    if (typeof showDiarioFiltersModal === 'function') {
-        showDiarioFiltersModal();
-    } else {
-        // Fallback al sistema básico
-        const modal = document.getElementById('diario-filters-modal');
-        if (modal) {
-            modal.style.display = 'flex';
-            setTimeout(() => modal.classList.add('active'), 10);
-        } else {
-            alert("El modal de filtros no se encuentra en el HTML.");
-        }
-    }
-};
-// 2. Cambiar Vista (Lista <-> Compacta)
-JavaScript
-
-/* ================================================================= */
 /* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO (CORREGIDO) === */
 /* ================================================================= */
 
