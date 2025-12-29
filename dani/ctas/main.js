@@ -2726,7 +2726,7 @@ const pageRenderers = {
     if (pageId === PAGE_IDS.PANEL) {
         scheduleDashboardUpdate();
     }
-};
+
 
 const getPendingRecurrents = () => {
     const now = new Date();
@@ -11596,20 +11596,49 @@ window.openDiarioFilters = function() {
     }
 };
 // 2. Cambiar Vista (Lista <-> Compacta)
+JavaScript
+
+/* ================================================================= */
+/* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO (CORREGIDO) === */
+/* ================================================================= */
+
+// 1. Abrir Filtros
+window.openDiarioFilters = function() {
+    // Opción A: Usamos la función moderna si existe (la que creamos antes)
+    if (typeof showDiarioFiltersModal === 'function') {
+        showDiarioFiltersModal();
+    } 
+    // Opción B: Fallback manual (por seguridad)
+    else {
+        const modal = document.getElementById('diario-filters-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+            setTimeout(() => modal.classList.add('active'), 10);
+        } else {
+            console.warn("El modal de filtros no se encuentra.");
+        }
+    }
+};
+
+// 2. Cambiar Vista (Lista <-> Compacta)
 window.toggleDiarioView = function(btnElement) {
     // Si existe la variable global, la alternamos
     if (typeof diarioViewMode !== 'undefined') {
         diarioViewMode = (diarioViewMode === 'list') ? 'compact' : 'list';
         
-        // Refrescamos la pantalla para aplicar el cambio
+        // Refrescamos la pantalla para aplicar el cambio visualmente
         if (typeof renderDiarioPage === 'function') renderDiarioPage();
         
-        // Actualizamos el icono del botón
-        const icono = btnElement.querySelector('.material-icons');
-        if (icono) icono.textContent = diarioViewMode === 'list' ? 'view_agenda' : 'list';
+        // Actualizamos el icono del propio botón
+        if (btnElement) {
+            const icono = btnElement.querySelector('.material-icons');
+            if (icono) icono.textContent = diarioViewMode === 'list' ? 'view_agenda' : 'list';
+        }
         
-        // Feedback
-        if (typeof showToast === 'function') showToast(`Vista cambiada a: ${diarioViewMode === 'list' ? 'Detallada' : 'Compacta'}`);
+        // Feedback al usuario
+        if (typeof showToast === 'function') {
+            showToast(`Vista cambiada a: ${diarioViewMode === 'list' ? 'Detallada' : 'Compacta'}`);
+        }
     }
 };
 
