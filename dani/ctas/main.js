@@ -2593,6 +2593,7 @@ const cleanupObservers = () => {
         movementsObserver = null;
     }
 };
+
 const navigateTo = async (pageId, isInitial = false) => {
     cleanupObservers();
     const oldView = document.querySelector('.view--active');
@@ -2626,63 +2627,70 @@ const navigateTo = async (pageId, isInitial = false) => {
     const actionsEl = select('top-bar-actions');
     const leftEl = select('top-bar-left-button');
     
-    // Acciones por defecto (Menú de 3 puntos)
+    // --- CAMBIO EXPERTO: Cabecera Unificada y Persistente ---
+    // Hemos movido los botones de Filtrar y Vista aquí para que estén siempre visibles.
+    // Orden: Filtrar | Vista | Buscar | Calculadora | Menú (Cerrar/Opciones)
     const standardActions = `
+        <button data-action="show-diario-filters" class="icon-btn" title="Filtrar">
+            <span class="material-icons">filter_list</span>
+        </button>
+        
+        <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista">
+            <span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span>
+        </button>
+
+        <button data-action="global-search" class="icon-btn" title="Buscar">
+             <span class="material-icons">search</span>
+        </button>
+
         <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
             <span class="material-icons">calculate</span>
         </button>
+
         <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
-    <span class="material-icons">more_vert</span>
-</button>
+            <span class="material-icons">more_vert</span>
+        </button>
     `;
     
     if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
     if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
-	const patrimonioActions = `
-    <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
-        <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
-    </button>
-    ${standardActions}
-`;
+    
+    // Acciones específicas para Patrimonio (Moneda BTC/EUR) + Estándar
+    const patrimonioActions = `
+        <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
+            <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
+        </button>
+        ${standardActions}
+    `;
 
-const pageRenderers = {
-    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-};
+    const pageRenderers = {
+        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
+        // Si tienes una página separada de Patrimonio, usa patrimonioActions aquí
+        [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
+    };
 
     if (pageRenderers[pageId]) {
-        // 1. Actualizar el Título (Limpiamos si es Panel o Diario)
+        // 1. Actualizar el Título
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
             const rawTitle = pageRenderers[pageId].title;
-            // Si es Panel o Diario, dejamos el texto vacío. Si no, ponemos el título (ej: Ajustes)
             titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
         }
 
-        // 2. Botones extra del Diario (Filtro y Vista)
-        // Los inyectamos en la barra de acciones de la derecha si estamos en Diario
+        // 2. Renderizar Acciones (Sin lógica condicional extraña, todo limpio)
         if (actionsEl) {
-            let actionsHTML = pageRenderers[pageId].actions;
-            
-            if (pageId === PAGE_IDS.DIARIO) {
-                // Añadimos los botones del diario al principio de las acciones
-                const diarioButtons = `
-                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista"><span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span></button>
-                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar"><span class="material-icons">filter_list</span></button>
-                `;
-                actionsHTML = diarioButtons + actionsHTML;
-            }
-            
-            actionsEl.innerHTML = actionsHTML;
+            // Usamos las acciones definidas en el objeto pageRenderers
+            actionsEl.innerHTML = pageRenderers[pageId].actions || standardActions;
         }
         
         // 3. Renderizar la página
         await pageRenderers[pageId].render();
     }
     
-    // Animaciones y Clases
+    // Animaciones y Clases (Resto de la función intacta)
     selectAll('.bottom-nav__item').forEach(b => b.classList.toggle('bottom-nav__item--active', b.dataset.page === newView.id));
     newView.classList.add('view--active'); 
     if (oldView && !isInitial) {
@@ -9179,6 +9187,7 @@ const handleStart = (e) => {
                 // Abrimos el modal incrustado
                 showModal('calculator-iframe-modal');
             },
+			'global-search': () => showModal('global-search-modal'),
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
