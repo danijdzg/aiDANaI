@@ -366,17 +366,24 @@ const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
             abono = formatCurrency(mov.cantidad);
         }
     }
+	// --- LÓGICA DE COLOR UNIFICADA PARA LA CARTILLA ---
+    let colorMonto = 'text-credit'; // Por defecto Verde (Ingreso)
+    if (mov.tipo === 'traspaso') {
+        colorMonto = 'text-transfer'; // Morado si es Traspaso
+    } else if (mov.cantidad < 0) {
+        colorMonto = 'text-debit';    // Rojo si es Gasto
+    }
 
     return `
         <div class="cartilla-row">
             <div class="cartilla-cell cartilla-date">${fecha}</div>
             <div class="cartilla-cell cartilla-concept">${conceptoTexto}</div>
-            <div class="cartilla-cell cartilla-amount text-debit">${cargo}</div>
-            <div class="cartilla-cell cartilla-amount text-credit">${abono}</div>
+            <div class="cartilla-cell cartilla-amount ${colorMonto}">${cargo}</div>
+            <div class="cartilla-cell cartilla-amount ${colorMonto}">${abono}</div>
             <div class="cartilla-cell cartilla-balance">${formatCurrency(mov.runningBalance)}</div>
         </div>
     `;
-};
+    };
 
 const handleGenerateInformeCuenta = async (form, btn = null) => {
     // 1. Solo activamos la animación del botón si se proporciona (ahora es opcional)
@@ -7311,45 +7318,26 @@ const hideModal = (id) => {
     showGenericModal(`Desglose TIR: ${cuenta.nombre}`, modalHtml);
 };	
 const showDrillDownModal = (title, movements) => {
-    // Ordenamos los movimientos para que se muestren cronológicamente
+    // Ordenar por fecha
     movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-    // Construimos el contenido del modal
-    let modalContentHTML = movements.length === 0
-    ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
-           <span class="material-icons">search_off</span>
-           <h3>Sin movimientos</h3>
-           <p>No se han encontrado movimientos para esta selección.</p>
-       </div>`
-    : movements.map(m => 
-          // Mantenemos la clase de animación 'list-item-animate'
-          TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
-      )
-      .join('')
-      // Cambiamos la acción para que la edición funcione desde dentro del modal
-      .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
+    // Si no hay nada, mostrar mensaje vacío
+    let modalContentHTML = movements.length === 0 ? 
+        `<div class="empty-state"><p>Sin movimientos.</p></div>` : 
+        movements.map(m => TransactionCardComponent(m)).join('');
 
-    // Llamamos a la función para mostrar el modal
+    // Mostramos el modal
     showGenericModal(title, modalContentHTML);
-    
-    // --- ¡LA MAGIA SUCEDE AQUÍ! ---
-    // Después de que el modal se muestra, activamos la animación en cascada.
+
+    // Aplicamos la animación de entrada
     setTimeout(() => {
-        const modalBody = document.getElementById('generic-modal-body');
-        if (modalBody) {
-            const itemsToAnimate = modalBody.querySelectorAll('.list-item-animate');
-            itemsToAnimate.forEach((item, index) => {
-                // Aplicamos la clase que dispara la animación con un pequeño retardo
-                // para cada elemento, creando el efecto cascada.
-                setTimeout(() => {
-                    item.classList.add('item-enter-active');
-                }, index * 40); // 40 milisegundos de retraso entre cada item
+        const body = document.getElementById('generic-modal-body');
+        if (body) {
+            body.querySelectorAll('.list-item-animate').forEach((item, index) => {
+                setTimeout(() => item.classList.add('item-enter-active'), index * 40);
             });
         }
-    }, 50); // Un pequeño retardo para asegurar que el modal es visible
-	setTimeout(() => {
-        applyInvestmentItemInteractions(document.getElementById('generic-modal-body'));
-    }, 100);
+    }, 50);
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
 
@@ -11924,4 +11912,68 @@ const renderBudgetTracking = () => {
     `;
 
     if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 100);
+};
+/**
+ * COMPONENTE UNIFICADO DE TARJETA DE MOVIMIENTO
+ * Genera el mismo estilo visual que el Diario (Icono en burbuja + Colores)
+ */
+const TransactionCardComponent = (m) => {
+    // 1. Obtener datos de nombres
+    const concepto = db.conceptos.find(c => c.id === m.conceptoId);
+    const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
+    const nombreConcepto = concepto ? concepto.nombre : 'Varios';
+    const nombreCuenta = cuenta ? cuenta.nombre : 'Cuenta';
+    
+    // 2. Lógica de Iconos y Colores
+    let iconName, bubbleClass, amountClass, amountSign, colorVar;
+    const isGasto = m.cantidad < 0;
+
+    if (m.tipo === 'traspaso') {
+        bubbleClass = 't-bubble--transfer'; // Clase CSS para el fondo morado
+        iconName = 'swap_horiz'; 
+        colorVar = 'var(--c-purple)'; // Morado
+        amountClass = 'text-info'; 
+        amountSign = '';
+    } else {
+        if (isGasto) {
+            bubbleClass = 't-bubble--expense'; // Rojo
+            iconName = 'arrow_downward'; 
+            colorVar = 'var(--c-danger)';
+            amountClass = 'text-negative';
+            amountSign = '';
+        } else {
+            bubbleClass = 't-bubble--income'; // Verde
+            iconName = 'arrow_upward'; 
+            colorVar = 'var(--c-success)';
+            amountClass = 'text-positive';
+            amountSign = '+';
+        }
+    }
+
+    // 3. Formato de fecha
+    const dateStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+
+    // 4. HTML final con Icono delante y colores sincronizados
+    return `
+    <div class="t-card list-item-animate" data-id="${m.id}" data-action="edit-movement-from-modal" 
+         style="display: flex; align-items: center; gap: 15px; padding: 12px 10px; border-bottom: 1px solid var(--c-outline); cursor: pointer;">
+        
+        <div class="t-icon-bubble ${bubbleClass}" style="width: 48px; height: 48px; border-radius: 50%; display: flex; justify-content: center; align-items: center; flex-shrink: 0;">
+            <span class="material-icons" style="color: white; font-size: 26px;">${iconName}</span>
+        </div>
+        
+        <div style="flex-grow: 1; min-width: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                <span style="font-weight: 700; font-size: 0.95rem; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${m.tipo === 'traspaso' ? 'Traspaso' : escapeHTML(nombreConcepto)}
+                </span>
+                <span style="font-weight: 800; font-size: 1rem; color: ${colorVar};">
+                    ${amountSign}${formatCurrencyHTML(m.cantidad)}
+                </span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--c-on-surface-tertiary); margin-top: 2px;">
+                <span style="color: ${colorVar}; font-weight: 600;">${m.tipo === 'traspaso' ? 'Cuenta' : escapeHTML(nombreCuenta)}</span> • ${dateStr}
+            </div>
+        </div>
+    </div>`;
 };
