@@ -2667,20 +2667,26 @@ const pageRenderers = {
             // Si es Panel o Diario, dejamos el texto vacío. Si no, ponemos el título (ej: Ajustes)
             titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
         }
-
+           
         // 2. Botones extra del Diario (Filtro y Vista)
-        // Los inyectamos en la barra de acciones de la derecha si estamos en Diario
         if (actionsEl) {
             let actionsHTML = pageRenderers[pageId].actions;
             
             if (pageId === PAGE_IDS.DIARIO) {
-                // Añadimos los botones del diario al principio de las acciones
+                // CORRECCIÓN: Usamos onclick directo para asegurar que funcionan
                 const diarioButtons = `
-                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista"><span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span></button>
-                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar"><span class="material-icons">filter_list</span></button>
+                    <button onclick="toggleDiarioView(this)" class="icon-btn" title="Cambiar Vista">
+                        <span class="material-icons">${typeof diarioViewMode !== 'undefined' && diarioViewMode === 'list' ? 'view_agenda' : 'list'}</span>
+                    </button>
+                    <button onclick="openDiarioFilters()" class="icon-btn" title="Filtrar">
+                        <span class="material-icons">filter_list</span>
+                    </button>
                 `;
                 actionsHTML = diarioButtons + actionsHTML;
             }
+            
+            actionsEl.innerHTML = actionsHTML;
+        }
             
             actionsEl.innerHTML = actionsHTML;
         }
@@ -11573,52 +11579,40 @@ document.addEventListener('DOMContentLoaded', () => {
 // Opciones: 'list' (Lista simple) | 'date' (Agrupado por Fechas)
 window.currentDiarioView = 'list'; 
 
-// --- 1. FUNCIÓN PARA EL BOTÓN DE FILTRO ---
+// 1. Abrir Filtros
 window.openDiarioFilters = function() {
-    const modal = document.getElementById('diario-filters-modal');
-    if (modal) {
-        modal.style.display = 'flex';
-        // Pequeño retardo para permitir la animación CSS
-        setTimeout(() => {
-            modal.classList.add('active');
-        }, 10);
-        console.log("Abriendo filtros de diario...");
+    // Intentamos usar la función moderna si existe
+    if (typeof showDiarioFiltersModal === 'function') {
+        showDiarioFiltersModal();
     } else {
-        console.error("ERROR: No se encuentra el modal con id='diario-filters-modal' en index.html");
-        alert("Error: Falta el formulario de filtros en el HTML");
+        // Fallback al sistema básico
+        const modal = document.getElementById('diario-filters-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+            setTimeout(() => modal.classList.add('active'), 10);
+        } else {
+            alert("El modal de filtros no se encuentra en el HTML.");
+        }
     }
 };
-
-// --- 2. FUNCIÓN PARA EL BOTÓN DE VISTA ---
+// 2. Cambiar Vista (Lista <-> Compacta)
 window.toggleDiarioView = function(btnElement) {
-    const icono = btnElement.querySelector('.material-icons');
-    
-    // A) CAMBIAR EL ESTADO
-    if (window.currentDiarioView === 'list') {
-        // Cambiamos a VISTA POR FECHA
-        window.currentDiarioView = 'date';
-        if (icono) icono.textContent = 'list'; // Ponemos icono de lista para volver
-        console.log("Cambiando a Vista: AGRUPADA POR FECHA");
-    } else {
-        // Volvemos a VISTA DE LISTA
-        window.currentDiarioView = 'list';
-        if (icono) icono.textContent = 'calendar_month'; // Ponemos icono de calendario
-        console.log("Cambiando a Vista: LISTA SIMPLE");
-    }
-
-    // B) EJECUTAR EL CAMBIO (RE-RENDERIZAR)
-    // Aquí llamamos a tu función principal que pinta la lista.
-    // Buscamos las funciones más probables en tu código.
-    if (typeof renderDiario === 'function') {
-        renderDiario(); 
-    } else if (typeof renderMovements === 'function') {
-        renderMovements();
-    } else if (typeof updateDiarioList === 'function') {
-        updateDiarioList();
-    } else {
-        console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
+    // Si existe la variable global, la alternamos
+    if (typeof diarioViewMode !== 'undefined') {
+        diarioViewMode = (diarioViewMode === 'list') ? 'compact' : 'list';
+        
+        // Refrescamos la pantalla para aplicar el cambio
+        if (typeof renderDiarioPage === 'function') renderDiarioPage();
+        
+        // Actualizamos el icono del botón
+        const icono = btnElement.querySelector('.material-icons');
+        if (icono) icono.textContent = diarioViewMode === 'list' ? 'view_agenda' : 'list';
+        
+        // Feedback
+        if (typeof showToast === 'function') showToast(`Vista cambiada a: ${diarioViewMode === 'list' ? 'Detallada' : 'Compacta'}`);
     }
 };
+
 // ===============================================================
 // === NUEVA HERRAMIENTA: ABRIR HISTORIAL DE INVERSIÓN ===
 // ===============================================================
