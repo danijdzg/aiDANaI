@@ -3591,9 +3591,13 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                         </div>
 
                         <div style="display:flex; flex-direction:column; text-align:right;">
-                            <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Valor Real</span>
-                            <span style="font-size:0.9rem; font-weight:800; color:var(--c-on-surface);">${cReal}</span>
-                        </div>
+    <span style="font-size:0.55rem; color:var(--c-on-surface-tertiary); text-transform:uppercase; margin-bottom: 2px;">
+        Valor Real (${cuenta.lastUpdate ? new Date(cuenta.lastUpdate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}) : 'S/D'})
+    </span>
+    <span style="font-size:0.9rem; font-weight:800; color:var(--c-on-surface); line-height: 1;">
+        ${cReal}
+    </span>
+</div>
 
                     </div>
 
