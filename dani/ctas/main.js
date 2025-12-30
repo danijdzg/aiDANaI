@@ -3741,12 +3741,14 @@ const renderVirtualListItem = (item) => {
 		} else {
         // --- ESTILO GASTO / INGRESO ---
         const isGasto = m.cantidad < 0;
+        
+        // CORRECCIÓN: Usamos las variables EXACTAS de tu style.css
+        // isGasto -> Rojo (--c-danger)
+        // No Gasto -> Verde (--c-success)
+        const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+
         bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
         iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
-
-        // 1. DEFINIR EL COLOR DE LA CUENTA
-        // Si es gasto -> Rojo, Si es ingreso -> Verde
-        const accountColor = isGasto ? 'var(--c-expense)' : 'var(--c-income)';
 
         const concepto = conceptos.find(c => c.id === m.conceptoId);
         const conceptoNombre = concepto ? concepto.nombre : 'Varios';
@@ -3758,13 +3760,15 @@ const renderVirtualListItem = (item) => {
         const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
         const separator = desc ? ' • ' : '';
         
-        // 2. APLICAR EL COLOR A LA CUENTA (t-account-badge)
-        // Mantenemos la clase para el tamaño/borde, pero forzamos el color con style
-        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}40; font-weight: 500;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+        // APLICAMOS EL COLOR:
+        // style="color: ${accountColor}" -> Pinta el texto
+        // style="border-color: ${accountColor}" -> Pinta el borde (si la clase t-account-badge tiene borde)
+        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
         
+        // El importe usa las clases de texto que ya tienes configuradas
         amountClass = isGasto ? 'text-negative' : 'text-positive';
         amountSign = isGasto ? '' : '+';
-		}
+    }
 
         // HTML FINAL: Sustituimos la barra por la burbuja de icono
         return `
@@ -11905,12 +11909,14 @@ const createUnifiedRowHTML = (m) => {
     } else {
         // --- ESTILO GASTO / INGRESO ---
         const isGasto = m.cantidad < 0;
+        
+        // CORRECCIÓN: Usamos las variables EXACTAS de tu style.css
+        // isGasto -> Rojo (--c-danger)
+        // No Gasto -> Verde (--c-success)
+        const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+
         bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
         iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
-
-        // 1. DEFINIR EL COLOR DE LA CUENTA
-        // Si es gasto -> Rojo, Si es ingreso -> Verde
-        const accountColor = isGasto ? 'var(--c-expense)' : 'var(--c-income)';
 
         const concepto = conceptos.find(c => c.id === m.conceptoId);
         const conceptoNombre = concepto ? concepto.nombre : 'Varios';
@@ -11922,10 +11928,12 @@ const createUnifiedRowHTML = (m) => {
         const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
         const separator = desc ? ' • ' : '';
         
-        // 2. APLICAR EL COLOR A LA CUENTA (t-account-badge)
-        // Mantenemos la clase para el tamaño/borde, pero forzamos el color con style
-        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}40; font-weight: 500;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+        // APLICAMOS EL COLOR:
+        // style="color: ${accountColor}" -> Pinta el texto
+        // style="border-color: ${accountColor}" -> Pinta el borde (si la clase t-account-badge tiene borde)
+        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
         
+        // El importe usa las clases de texto que ya tienes configuradas
         amountClass = isGasto ? 'text-negative' : 'text-positive';
         amountSign = isGasto ? '' : '+';
     }
