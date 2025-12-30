@@ -7279,45 +7279,44 @@ const hideModal = (id) => {
     showGenericModal(`Desglose TIR: ${cuenta.nombre}`, modalHtml);
 };	
 const showDrillDownModal = (title, movements) => {
-    // Ordenamos los movimientos para que se muestren cronológicamente
+    // 1. Orden cronológico (Más reciente arriba)
     movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-    // Construimos el contenido del modal
-    let modalContentHTML = movements.length === 0
-    ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
-           <span class="material-icons">search_off</span>
-           <h3>Sin movimientos</h3>
-           <p>No se han encontrado movimientos para esta selección.</p>
-       </div>`
-    : movements.map(m => 
-          // Mantenemos la clase de animación 'list-item-animate'
-          TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
-      )
-      .join('')
-      // Cambiamos la acción para que la edición funcione desde dentro del modal
-      .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
-
-    // Llamamos a la función para mostrar el modal
-    showGenericModal(title, modalContentHTML);
+    // 2. Generar contenido usando la NUEVA función maestra
+    let modalContentHTML = '';
     
-    // --- ¡LA MAGIA SUCEDE AQUÍ! ---
-    // Después de que el modal se muestra, activamos la animación en cascada.
+    if (movements.length === 0) {
+        modalContentHTML = `
+        <div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
+            <span class="material-icons">search_off</span>
+            <h3>Sin movimientos</h3>
+            <p>No se han encontrado movimientos para esta selección.</p>
+        </div>`;
+    } else {
+        // AQUÍ ESTÁ EL CAMBIO CLAVE: Usamos createUnifiedRowHTML
+        modalContentHTML = movements
+            .map(m => createUnifiedRowHTML(m))
+            .join('');
+            
+        // Ajustamos la acción para que funcione dentro del modal
+        modalContentHTML = modalContentHTML.replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
+    }
+
+    // 3. Mostrar Modal
+    showGenericModal(title, modalContentHTML);
+
+    // 4. Animación de entrada (Cascada)
     setTimeout(() => {
         const modalBody = document.getElementById('generic-modal-body');
         if (modalBody) {
             const itemsToAnimate = modalBody.querySelectorAll('.list-item-animate');
             itemsToAnimate.forEach((item, index) => {
-                // Aplicamos la clase que dispara la animación con un pequeño retardo
-                // para cada elemento, creando el efecto cascada.
                 setTimeout(() => {
                     item.classList.add('item-enter-active');
-                }, index * 40); // 40 milisegundos de retraso entre cada item
+                }, index * 30); 
             });
         }
-    }, 50); // Un pequeño retardo para asegurar que el modal es visible
-	setTimeout(() => {
-        applyInvestmentItemInteractions(document.getElementById('generic-modal-body'));
-    }, 100);
+    }, 50);
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
 
@@ -11876,4 +11875,72 @@ const renderBudgetTracking = () => {
     `;
 
     if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 100);
+};
+
+// ==========================================
+// NUEVA FUNCIÓN MAESTRA: Crea una fila idéntica al Diario
+// ==========================================
+const createUnifiedRowHTML = (m) => {
+    // 1. Preparar datos (Lógica extraída de renderVirtualListItem)
+    const dateObj = new Date(m.fecha);
+    const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    
+    // Variables visuales
+    let line1, line2, amountClass, amountSign, iconName, bubbleClass;
+    
+    const { cuentas, conceptos } = db; // Acceso directo a la base de datos global
+
+    if (m.tipo === 'traspaso') {
+        // --- ESTILO TRASPASO ---
+        bubbleClass = 't-bubble--transfer';
+        iconName = 'swap_horiz';
+
+        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+        
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part">De: ${escapeHTML(origen)}</span>`;
+        line2 = `<span class="t-transfer-part">A: ${escapeHTML(destino)}</span>`;
+        
+        amountClass = 'text-info'; 
+        amountSign = '';
+    } else {
+        // --- ESTILO GASTO / INGRESO ---
+        const isGasto = m.cantidad < 0;
+        bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
+        iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
+
+        const concepto = conceptos.find(c => c.id === m.conceptoId);
+        const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+        const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+        const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
+        
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+        
+        const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
+        const separator = desc ? ' • ' : '';
+        line2 = `<span class="t-account-badge">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+        
+        amountClass = isGasto ? 'text-negative' : 'text-positive';
+        amountSign = isGasto ? '' : '+';
+    }
+
+    // 2. Generar HTML (Estructura exacta del Diario)
+    return `
+    <div class="t-card list-item-animate" data-id="${m.id}" data-action="edit-movement-from-list" style="cursor:pointer;">
+        
+        <div class="t-icon-bubble ${bubbleClass}">
+            <span class="material-icons">${iconName}</span>
+        </div>
+        
+        <div class="t-content">
+            <div class="t-row-primary">
+                <div class="t-line-1">${line1}</div>
+                <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+            </div>
+            <div class="t-row-secondary">
+                <div class="t-line-2">${line2}</div>
+                ${m.runningBalance !== undefined ? `<div class="t-running-balance">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
+            </div>
+        </div>
+    </div>`;
 };
