@@ -3738,33 +3738,33 @@ const renderVirtualListItem = (item) => {
         
         amountClass = 'text-info'; // Esta clase ya ponía el importe en morado
         amountSign = '';
-		}else {
-            // --- GASTO O INGRESO ---
-            const isGasto = m.cantidad < 0;
-            
-            // Selección de Icono y Color
-            if (isGasto) {
-                bubbleClass = 't-bubble--expense';
-                iconName = 'arrow_downward'; // Flecha abajo para gasto
-            } else {
-                bubbleClass = 't-bubble--income';
-                iconName = 'arrow_upward'; // Flecha arriba para ingreso
-            }
+		} else {
+        // --- ESTILO GASTO / INGRESO ---
+        const isGasto = m.cantidad < 0;
+        bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
+        iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
 
-            const concepto = conceptos.find(c => c.id === m.conceptoId);
-            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
-            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
-            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-            
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
-            
-            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
-            const separator = desc ? ' • ' : '';
-            line2 = `<span class="t-account-badge">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
-            
-            amountClass = isGasto ? 'text-negative' : 'text-positive';
-            amountSign = isGasto ? '' : '+';
-        }
+        // 1. DEFINIR EL COLOR DE LA CUENTA
+        // Si es gasto -> Rojo, Si es ingreso -> Verde
+        const accountColor = isGasto ? 'var(--c-expense)' : 'var(--c-income)';
+
+        const concepto = conceptos.find(c => c.id === m.conceptoId);
+        const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+        const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+        const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
+        
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+        
+        const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
+        const separator = desc ? ' • ' : '';
+        
+        // 2. APLICAR EL COLOR A LA CUENTA (t-account-badge)
+        // Mantenemos la clase para el tamaño/borde, pero forzamos el color con style
+        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}40; font-weight: 500;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+        
+        amountClass = isGasto ? 'text-negative' : 'text-positive';
+        amountSign = isGasto ? '' : '+';
+		}
 
         // HTML FINAL: Sustituimos la barra por la burbuja de icono
         return `
@@ -11908,6 +11908,10 @@ const createUnifiedRowHTML = (m) => {
         bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
         iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
 
+        // 1. DEFINIR EL COLOR DE LA CUENTA
+        // Si es gasto -> Rojo, Si es ingreso -> Verde
+        const accountColor = isGasto ? 'var(--c-expense)' : 'var(--c-income)';
+
         const concepto = conceptos.find(c => c.id === m.conceptoId);
         const conceptoNombre = concepto ? concepto.nombre : 'Varios';
         const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
@@ -11917,7 +11921,10 @@ const createUnifiedRowHTML = (m) => {
         
         const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
         const separator = desc ? ' • ' : '';
-        line2 = `<span class="t-account-badge">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+        
+        // 2. APLICAR EL COLOR A LA CUENTA (t-account-badge)
+        // Mantenemos la clase para el tamaño/borde, pero forzamos el color con style
+        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}40; font-weight: 500;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
         
         amountClass = isGasto ? 'text-negative' : 'text-positive';
         amountSign = isGasto ? '' : '+';
