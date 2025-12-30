@@ -3724,24 +3724,21 @@ const renderVirtualListItem = (item) => {
         let iconName, bubbleClass; // <--- Nuevas variables para el icono
 
         if (m.tipo === 'traspaso') {
-            // --- TRASPASO (Azul/Morado) ---
-            bubbleClass = 't-bubble--transfer';
-            iconName = 'swap_horiz'; // Icono de intercambio
+        // --- ESTILO TRASPASO (MODIFICADO A MORADO) ---
+        bubbleClass = 't-bubble--transfer'; // Burbuja gris/neutra
+        iconName = 'swap_horiz';
 
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-            
-            // Saldos snapshot si existen
-            const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` : '';
-            const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
-
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
-            line2 = `<span class="t-transfer-part">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
-            
-            amountClass = 'text-info'; 
-            amountSign = '';
-
-        } else {
+        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+        
+        // AQUÍ EL CAMBIO: Añadimos style="color: var(--c-info)" para forzar el morado
+        // También ponemos font-weight: 500 para que se lea mejor el color
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)}</span>`;
+        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)}</span>`;
+        
+        amountClass = 'text-info'; // Esta clase ya ponía el importe en morado
+        amountSign = '';
+		}else {
             // --- GASTO O INGRESO ---
             const isGasto = m.cantidad < 0;
             
@@ -11891,17 +11888,19 @@ const createUnifiedRowHTML = (m) => {
     const { cuentas, conceptos } = db; // Acceso directo a la base de datos global
 
     if (m.tipo === 'traspaso') {
-        // --- ESTILO TRASPASO ---
-        bubbleClass = 't-bubble--transfer';
+        // --- ESTILO TRASPASO (MODIFICADO A MORADO) ---
+        bubbleClass = 't-bubble--transfer'; // Burbuja gris/neutra
         iconName = 'swap_horiz';
 
         const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
         const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
         
-        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part">De: ${escapeHTML(origen)}</span>`;
-        line2 = `<span class="t-transfer-part">A: ${escapeHTML(destino)}</span>`;
+        // AQUÍ EL CAMBIO: Añadimos style="color: var(--c-info)" para forzar el morado
+        // También ponemos font-weight: 500 para que se lea mejor el color
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)}</span>`;
+        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)}</span>`;
         
-        amountClass = 'text-info'; 
+        amountClass = 'text-info'; // Esta clase ya ponía el importe en morado
         amountSign = '';
     } else {
         // --- ESTILO GASTO / INGRESO ---
