@@ -10019,9 +10019,18 @@ const handleSaveMovement = async (form, btn) => {
     if (saveNewBtn && isSaveAndNew) setButtonLoading(saveNewBtn, true);
 
     const releaseButtons = () => {
-        if (saveBtn) setButtonLoading(saveBtn, false);
-        if (saveNewBtn) setButtonLoading(saveNewBtn, false);
-    };
+    // Forzamos a false y restauramos texto manualmente por seguridad
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false);
+        saveBtn.innerHTML = 'Guardar'; 
+        saveBtn.disabled = false;
+    }
+    if (saveNewBtn) {
+        setButtonLoading(saveNewBtn, false);
+        saveNewBtn.innerHTML = '+ Otro';
+        saveNewBtn.disabled = false;
+    }
+};
 
     try {
         // 2. Obtener datos del formulario
@@ -10226,8 +10235,13 @@ const handleSaveMovement = async (form, btn) => {
              btn.innerHTML = 'Guardar';
         }
     } finally {
-        releaseButtons();
+    // RESTAURAR BOTÓN SIEMPRE
+    const saveBtn = document.getElementById('btn-save-transaction'); 
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false, 'Guardar'); // O el texto que tuviera antes
+        saveBtn.disabled = false;
     }
+}
 };
 
 /**
@@ -11914,3 +11928,49 @@ const createUnifiedRowHTML = (m) => {
         </div>
     </div>`;
 };
+
+// =========================================================
+// 🛡️ SOLUCIÓN COMITÉ (ADAPTADA A TU CÓDIGO REAL)
+// =========================================================
+document.addEventListener('DOMContentLoaded', () => {
+    // Buscamos el botón real que está en tu index.html
+    const btnBorrar = document.getElementById('delete-movimiento-btn');
+
+    if (btnBorrar) {
+        // Le quitamos cualquier evento anterior para evitar duplicados
+        const nuevoBtn = btnBorrar.cloneNode(true);
+        btnBorrar.parentNode.replaceChild(nuevoBtn, btnBorrar);
+
+        // Añadimos el evento "Click" directo y robusto
+        nuevoBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // 1. Obtenemos el ID del movimiento del input oculto que usa tu formulario
+            const idInput = document.getElementById('movimiento-id');
+            const idToDelete = idInput ? idInput.value : null;
+            
+            // 2. Detectamos si es recurrente (tu código usa un dataset para esto)
+            const isRecurrent = nuevoBtn.dataset.isRecurrent === 'true';
+
+            if (!idToDelete) {
+                showToast("Error: No se encuentra el ID del movimiento.", "danger");
+                return;
+            }
+
+            // 3. Usamos tu propia función de confirmación
+            const mensaje = isRecurrent ? '¿Eliminar operación recurrente?' : '¿Eliminar movimiento permanentemente?';
+            
+            showConfirmationModal(mensaje, async () => {
+                // Cerramos el modal primero
+                const modal = document.getElementById('movimiento-modal');
+                if (modal) modal.classList.remove('modal-overlay--active');
+                
+                // 4. Llamamos a tu función de borrado existente que ya funciona bien
+                await deleteMovementAndAdjustBalance(idToDelete, isRecurrent);
+            });
+        });
+        
+        console.log("✅ Botón de borrar reparado y vinculado.");
+    }
+});
