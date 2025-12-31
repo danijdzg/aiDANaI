@@ -3622,7 +3622,7 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-/* --- renderVirtualListItem: VERSIÓN BLINDADA (Sin errores de sintaxis) --- */
+
 const renderVirtualListItem = (item) => {
     
     // 1. Header de Pendientes
@@ -3724,19 +3724,24 @@ const renderVirtualListItem = (item) => {
         let iconName, bubbleClass; // <--- Nuevas variables para el icono
 
         if (m.tipo === 'traspaso') {
-        // --- ESTILO TRASPASO (MODIFICADO A MORADO) ---
-        bubbleClass = 't-bubble--transfer'; // Burbuja gris/neutra
+        // --- ESTILO TRASPASO ---
+        bubbleClass = 't-bubble--transfer';
         iconName = 'swap_horiz';
 
         const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
         const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
         
-        // AQUÍ EL CAMBIO: Añadimos style="color: var(--c-info)" para forzar el morado
-        // También ponemos font-weight: 500 para que se lea mejor el color
-        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)}</span>`;
-        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)}</span>`;
+        // 1. RECUPERAMOS LOS SALDOS HISTÓRICOS (Ya calculados previamente)
+        // Usamos formateo de moneda, o cadena vacía si por alguna razón no existe el dato
+        const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
+        const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
+
+        // 2. CONSTRUIMOS EL TEXTO CON EL SALDO ENTRE PARÉNTESIS
+        // Mantenemos el color morado (--c-info) para todo el texto
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
+        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
         
-        amountClass = 'text-info'; // Esta clase ya ponía el importe en morado
+        amountClass = 'text-info'; 
         amountSign = '';
 		} else {
         // --- ESTILO GASTO / INGRESO ---
