@@ -379,8 +379,7 @@ const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
 };
 
 const handleGenerateInformeCuenta = async (form, btn = null) => {
-    // 1. Setup inicial y UI de carga
-    if (btn) setButtonLoading(btn, true, 'Imprimiendo...');
+    if (btn) setButtonLoading(btn, true, 'Descargando historial...');
     const cuentaId = select('informe-cuenta-select').value;
     const resultadoContainer = select('informe-resultado-container');
 
@@ -393,92 +392,82 @@ const handleGenerateInformeCuenta = async (form, btn = null) => {
     resultadoContainer.innerHTML = `
         <div style="text-align:center; padding: var(--sp-5);">
             <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
-            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Calculando saldos...</p>
+            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">
+                Analizando todo el historial...
+            </p>
         </div>`;
 
     try {
-        // 2. Obtener datos de la cuenta y movimientos
+        // 1. OBTENER TODO EL HISTORIAL (Forzamos carga si no estamos seguros)
+        // Llamamos a getAll. Si ya estaba cargado ("isFullyLoaded"), será instantáneo.
+        // Si solo tenías los últimos 3 meses, esto descargará el resto automáticamente.
         const todosLosMovimientos = await AppStore.getAll();
         
-        // --- CORRECCIÓN CLAVE AQUÍ: OBTENER EL SALDO INICIAL ---
-        // Buscamos la cuenta en la base de datos global para saber con cuánto dinero empezó
+        // Obtenemos saldo inicial de la cuenta
         const cuentaObj = db.cuentas.find(c => c.id === cuentaId);
         const saldoInicial = cuentaObj ? parseFloat(cuentaObj.saldoInicial || 0) : 0;
-        // -------------------------------------------------------
 
-        // Filtramos movimientos de esta cuenta
+        // 2. FILTRAR movimientos de esta cuenta
         let movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
             (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId)
         );
 
+        // Si no hay movimientos, mostramos aviso
         if (movimientosDeLaCuenta.length === 0 && saldoInicial === 0) {
-             resultadoContainer.innerHTML = `<div class="empty-state" style="background:transparent; border:none; padding:var(--sp-4);"><p>Sin movimientos registrados.</p></div>`;
+             resultadoContainer.innerHTML = `<div class="empty-state" style="padding:var(--sp-4); border:none;"><p>Sin movimientos en el historial.</p></div>`;
              if (btn) setButtonLoading(btn, false);
              return;
         }
 
-        // 3. Calcular Saldos (CRONOLÓGICAMENTE)
-        // Ordenamos por fecha ascendente (del más antiguo al más nuevo)
+        // 3. CALCULAR SALDOS (Orden cronológico: Antiguo -> Nuevo)
         movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-        // Iniciamos el contador con el SALDO INICIAL de la cuenta
         let saldoAcumulado = saldoInicial;
 
         for (const mov of movimientosDeLaCuenta) {
             let impacto = 0;
-            
             if (mov.tipo === 'traspaso') {
-                // Si es traspaso, afecta al saldo aunque luego lo ocultemos
-                if (mov.cuentaOrigenId === cuentaId) impacto = -Math.abs(mov.cantidad); // Sale dinero
-                if (mov.cuentaDestinoId === cuentaId) impacto = Math.abs(mov.cantidad);  // Entra dinero
+                if (mov.cuentaOrigenId === cuentaId) impacto = -Math.abs(mov.cantidad);
+                if (mov.cuentaDestinoId === cuentaId) impacto = Math.abs(mov.cantidad);
             } else {
-                // Ingreso (+) o Gasto (-)
-                // Asumimos que mov.cantidad ya tiene el signo correcto (negativo para gasto)
-                impacto = mov.cantidad;
+                impacto = mov.cantidad; // Asumimos signo correcto en cantidad
             }
-            
             saldoAcumulado += impacto;
-            
-            // Guardamos el saldo resultante en este movimiento para mostrarlo después
-            mov.runningBalance = saldoAcumulado; 
+            mov.runningBalance = saldoAcumulado;
         }
 
-        // 4. Filtrado Visual y Orden
-        // Invertimos para mostrar el más reciente arriba
+        // 4. PREPARAR VISTA (Orden visual: Nuevo -> Antiguo)
         movimientosDeLaCuenta.reverse(); 
         
-        // Filtramos: Ocultamos los traspasos visualmente para limpiar la lista,
-        // PERO el 'runningBalance' que calculamos arriba ya tiene en cuenta ese dinero.
+        // Filtro visual: Ocultar traspasos si se desea ver solo flujo real
         const movimientosVisibles = movimientosDeLaCuenta.filter(m => m.tipo !== 'traspaso');
 
         if (movimientosVisibles.length === 0) {
-             // Si solo había traspasos o saldo inicial
              resultadoContainer.innerHTML = `
                 <div class="transactions-list-container" style="padding: 0;">
                     <div style="padding: 15px; text-align: center; opacity: 0.7;">
                         <p>Saldo actual: <strong>${formatCurrency(saldoAcumulado)}</strong></p>
-                        <small>No hay ingresos ni gastos directos recientes.</small>
+                        <small>No hay ingresos/gastos directos, solo traspasos.</small>
                     </div>
                 </div>`;
              if (btn) setButtonLoading(btn, false);
              return;
         }
 
-        // 5. Renderizado
+        // 5. RENDERIZAR
         const listHTML = movimientosVisibles.map(m => renderVirtualListItem({ type: 'transaction', movement: m })).join('');
         
         resultadoContainer.innerHTML = `
             <div class="transactions-list-container" style="padding: 0;">
                 <div style="display: flex; justify-content: space-between; padding: 10px 15px; font-size: 0.8rem; opacity: 0.7; border-bottom: 1px solid var(--c-outline);">
-                    <span style="text-transform: uppercase; letter-spacing: 1px;">Extracto (Sin Traspasos)</span>
-                    <span>Saldo Actual: <strong style="color: var(--c-on-surface);">${formatCurrency(saldoAcumulado)}</strong></span>
+                    <span style="text-transform: uppercase; letter-spacing: 1px;">Historial Completo</span>
+                    <span>Saldo: <strong style="color: var(--c-on-surface);">${formatCurrency(saldoAcumulado)}</strong></span>
                 </div>
                 ${listHTML}
             </div>`;
 
     } catch (error) {
         console.error(error);
-        showToast("Error generando el extracto.", "danger");
         resultadoContainer.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar datos.</p></div>`;
     } finally {
         if (btn) setButtonLoading(btn, false);
@@ -778,27 +767,27 @@ const SpaceBackgroundEffect = (() => {
 })();
 
 // ==========================================
-// === CORE OPTIMIZATION: AppStore v1.0 ===
+// === CORE OPTIMIZATION: AppStore v1.1 ===
 // ==========================================
 const AppStore = {
     movements: [],
     isFullyLoaded: false,
     lastFetch: 0,
-    CACHE_DURATION: 5 * 60 * 1000, // 5 minutos de validez si se solicita recarga suave
 
-    // Carga TODO el historial una sola vez y lo guarda en memoria RAM
-    async getAll() {
+    // Carga TODO el historial. Si force=true, ignora la memoria y descarga de nuevo.
+    async getAll(force = false) {
         if (!currentUser) return [];
 
-        // Si ya tenemos datos y no forzamos recarga, devolvemos memoria (Instantáneo)
-        if (this.isFullyLoaded) {
+        // Si ya tenemos datos cargados y NO forzamos, devolvemos lo que hay en memoria (Rápido)
+        if (this.isFullyLoaded && !force) {
             return this.movements;
         }
 
-        console.log("🚀 AppStore: Descargando historial completo de Firestore...");
+        console.log("🚀 AppStore: Descargando historial COMPLETO de Firestore...");
         try {
+            // NOTA: No usamos .limit() aquí, queremos TODO el historial
             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-                .orderBy('fecha', 'desc') // Ordenamos por fecha descendente
+                .orderBy('fecha', 'desc') 
                 .get();
             
             this.movements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -809,42 +798,23 @@ const AppStore = {
             return this.movements;
         } catch (error) {
             console.error("❌ AppStore Error:", error);
+            showToast("Error cargando historial completo", "danger");
             return [];
         }
     },
 
-    // Métodos para mantener la memoria sincronizada sin llamar a la DB
-    add(item) {
-        // Añadimos al principio (es el más reciente)
-        this.movements.unshift(item);
-        // Re-ordenamos por seguridad si la fecha no es hoy
-        this.sort();
-    },
-
+    // Métodos auxiliares
+    add(item) { this.movements.unshift(item); this.sort(); },
     update(updatedItem) {
         const index = this.movements.findIndex(m => m.id === updatedItem.id);
-        if (index !== -1) {
-            this.movements[index] = updatedItem;
-            this.sort();
-        }
+        if (index !== -1) { this.movements[index] = updatedItem; this.sort(); }
     },
-
     delete(id) {
         const index = this.movements.findIndex(m => m.id === id);
-        if (index !== -1) {
-            this.movements.splice(index, 1);
-        }
+        if (index !== -1) this.movements.splice(index, 1);
     },
-
-    sort() {
-        this.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    },
-
-    // Reset total (al cerrar sesión)
-    clear() {
-        this.movements = [];
-        this.isFullyLoaded = false;
-    }
+    sort() { this.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
+    clear() { this.movements = []; this.isFullyLoaded = false; }
 };
 // ▼▼▼ REEMPLAZAR TU FUNCIÓN updateAnalisisWidgets CON ESTA VERSIÓN SIMPLIFICADA ▼▼▼
 const updateAnalisisWidgets = async () => {
