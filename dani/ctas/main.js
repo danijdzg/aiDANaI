@@ -393,66 +393,85 @@ const handleGenerateInformeCuenta = async (form, btn = null) => {
     resultadoContainer.innerHTML = `
         <div style="text-align:center; padding: var(--sp-5);">
             <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
-            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Analizando movimientos...</p>
+            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Calculando saldos...</p>
         </div>`;
 
     try {
-        // 2. Obtener datos (Usamos AppStore para velocidad)
+        // 2. Obtener datos de la cuenta y movimientos
         const todosLosMovimientos = await AppStore.getAll();
         
-        // Filtramos movimientos de esta cuenta (incluyendo traspasos donde participe)
+        // --- CORRECCIÓN CLAVE AQUÍ: OBTENER EL SALDO INICIAL ---
+        // Buscamos la cuenta en la base de datos global para saber con cuánto dinero empezó
+        const cuentaObj = db.cuentas.find(c => c.id === cuentaId);
+        const saldoInicial = cuentaObj ? parseFloat(cuentaObj.saldoInicial || 0) : 0;
+        // -------------------------------------------------------
+
+        // Filtramos movimientos de esta cuenta
         let movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
             (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId)
         );
 
-        if (movimientosDeLaCuenta.length === 0) {
+        if (movimientosDeLaCuenta.length === 0 && saldoInicial === 0) {
              resultadoContainer.innerHTML = `<div class="empty-state" style="background:transparent; border:none; padding:var(--sp-4);"><p>Sin movimientos registrados.</p></div>`;
              if (btn) setButtonLoading(btn, false);
              return;
         }
 
-        // 3. Calcular Saldos (IMPORTANTE: Calculamos ANTES de filtrar visualmente)
-        // Ordenamos por fecha ascendente para calcular el saldo acumulado paso a paso
+        // 3. Calcular Saldos (CRONOLÓGICAMENTE)
+        // Ordenamos por fecha ascendente (del más antiguo al más nuevo)
         movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-        let saldoAcumulado = 0;
+        // Iniciamos el contador con el SALDO INICIAL de la cuenta
+        let saldoAcumulado = saldoInicial;
+
         for (const mov of movimientosDeLaCuenta) {
             let impacto = 0;
+            
             if (mov.tipo === 'traspaso') {
-                if (mov.cuentaOrigenId === cuentaId) impacto = -mov.cantidad;
-                if (mov.cuentaDestinoId === cuentaId) impacto = mov.cantidad;
+                // Si es traspaso, afecta al saldo aunque luego lo ocultemos
+                if (mov.cuentaOrigenId === cuentaId) impacto = -Math.abs(mov.cantidad); // Sale dinero
+                if (mov.cuentaDestinoId === cuentaId) impacto = Math.abs(mov.cantidad);  // Entra dinero
             } else {
-                impacto = mov.cantidad; // Ingreso (+) o Gasto (-)
+                // Ingreso (+) o Gasto (-)
+                // Asumimos que mov.cantidad ya tiene el signo correcto (negativo para gasto)
+                impacto = mov.cantidad;
             }
+            
             saldoAcumulado += impacto;
-            mov.runningBalance = saldoAcumulado; // Guardamos el saldo en ese momento exacto
+            
+            // Guardamos el saldo resultante en este movimiento para mostrarlo después
+            mov.runningBalance = saldoAcumulado; 
         }
 
-        // 4. Filtrado Visual (Lo que pediste: Ocultar traspasos)
-        // Ahora invertimos el orden para mostrar el más reciente arriba
+        // 4. Filtrado Visual y Orden
+        // Invertimos para mostrar el más reciente arriba
         movimientosDeLaCuenta.reverse(); 
         
-        // AQUÍ ESTÁ EL CAMBIO: Filtramos para que solo queden Ingresos y Gastos reales
+        // Filtramos: Ocultamos los traspasos visualmente para limpiar la lista,
+        // PERO el 'runningBalance' que calculamos arriba ya tiene en cuenta ese dinero.
         const movimientosVisibles = movimientosDeLaCuenta.filter(m => m.tipo !== 'traspaso');
 
         if (movimientosVisibles.length === 0) {
+             // Si solo había traspasos o saldo inicial
              resultadoContainer.innerHTML = `
-                <div class="empty-state" style="background:transparent; border:none; padding:var(--sp-4);">
-                    <span class="material-icons">filter_alt_off</span>
-                    <p>No hay entradas ni salidas de dinero (solo traspasos).</p>
+                <div class="transactions-list-container" style="padding: 0;">
+                    <div style="padding: 15px; text-align: center; opacity: 0.7;">
+                        <p>Saldo actual: <strong>${formatCurrency(saldoAcumulado)}</strong></p>
+                        <small>No hay ingresos ni gastos directos recientes.</small>
+                    </div>
                 </div>`;
              if (btn) setButtonLoading(btn, false);
              return;
         }
 
-        // 5. Renderizado Moderno (Burbujas en vez de tabla blanca)
-        // Usamos map para generar el HTML de cada tarjeta reutilizando el estilo del Diario
+        // 5. Renderizado
         const listHTML = movimientosVisibles.map(m => renderVirtualListItem({ type: 'transaction', movement: m })).join('');
         
         resultadoContainer.innerHTML = `
             <div class="transactions-list-container" style="padding: 0;">
-                <div style="padding: 10px 15px; font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">
-                    Historial de Flujo Real
+                <div style="display: flex; justify-content: space-between; padding: 10px 15px; font-size: 0.8rem; opacity: 0.7; border-bottom: 1px solid var(--c-outline);">
+                    <span style="text-transform: uppercase; letter-spacing: 1px;">Extracto (Sin Traspasos)</span>
+                    <span>Saldo Actual: <strong style="color: var(--c-on-surface);">${formatCurrency(saldoAcumulado)}</strong></span>
                 </div>
                 ${listHTML}
             </div>`;
@@ -465,6 +484,7 @@ const handleGenerateInformeCuenta = async (form, btn = null) => {
         if (btn) setButtonLoading(btn, false);
     }
 };
+
 const handleGenerateGlobalExtract = async (btn = null) => {
     const resultadoContainer = select('informe-resultado-container');
     if (!resultadoContainer) return;
