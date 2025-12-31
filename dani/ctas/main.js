@@ -379,32 +379,28 @@ const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
 };
 
 const handleGenerateInformeCuenta = async (form, btn = null) => {
-    // 1. Solo activamos la animación del botón si se proporciona (ahora es opcional)
+    // 1. Setup inicial y UI de carga
     if (btn) setButtonLoading(btn, true, 'Imprimiendo...');
-    
     const cuentaId = select('informe-cuenta-select').value;
     const resultadoContainer = select('informe-resultado-container');
 
-    // 2. Si no hay cuenta seleccionada, limpiamos y salimos
     if (!cuentaId) {
         resultadoContainer.innerHTML = '';
         if (btn) setButtonLoading(btn, false);
         return;
     }
 
-    // 3. Mostramos un indicador de carga en el contenedor de resultados
     resultadoContainer.innerHTML = `
         <div style="text-align:center; padding: var(--sp-5);">
             <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
-            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Cargando movimientos...</p>
+            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Analizando movimientos...</p>
         </div>`;
 
-    const cuenta = db.cuentas.find(c => c.id === cuentaId);
-
     try {
-        // --- Obtención y cálculo de datos (IGUAL QUE ANTES) ---
+        // 2. Obtener datos (Usamos AppStore para velocidad)
         const todosLosMovimientos = await AppStore.getAll();
         
+        // Filtramos movimientos de esta cuenta (incluyendo traspasos donde participe)
         let movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
             (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId)
         );
@@ -415,6 +411,8 @@ const handleGenerateInformeCuenta = async (form, btn = null) => {
              return;
         }
 
+        // 3. Calcular Saldos (IMPORTANTE: Calculamos ANTES de filtrar visualmente)
+        // Ordenamos por fecha ascendente para calcular el saldo acumulado paso a paso
         movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
         let saldoAcumulado = 0;
@@ -424,37 +422,40 @@ const handleGenerateInformeCuenta = async (form, btn = null) => {
                 if (mov.cuentaOrigenId === cuentaId) impacto = -mov.cantidad;
                 if (mov.cuentaDestinoId === cuentaId) impacto = mov.cantidad;
             } else {
-                impacto = mov.cantidad;
+                impacto = mov.cantidad; // Ingreso (+) o Gasto (-)
             }
             saldoAcumulado += impacto;
-            mov.runningBalance = saldoAcumulado;
+            mov.runningBalance = saldoAcumulado; // Guardamos el saldo en ese momento exacto
         }
 
+        // 4. Filtrado Visual (Lo que pediste: Ocultar traspasos)
+        // Ahora invertimos el orden para mostrar el más reciente arriba
         movimientosDeLaCuenta.reverse(); 
-
-        // --- Renderizado HTML ---
-        let html = `
-            <div class="cartilla-container">
-                <div class="cartilla-header-info">
-                    <h4>EXTRACTO DE CUENTA</h4>
-                    <p><strong>Titular:</strong> ${escapeHTML(cuenta.nombre)}</p>
-                    <p class="cartilla-print-date">Fecha: ${new Date().toLocaleDateString()}</p>
-                </div>
-                <div class="cartilla-table">
-                    <div class="cartilla-row cartilla-head">
-                        <div class="cartilla-cell">FECHA</div>
-                        <div class="cartilla-cell">CONCEPTO</div>
-                        <div class="cartilla-cell text-right">CARGOS</div>
-                        <div class="cartilla-cell text-right">ABONOS</div>
-                        <div class="cartilla-cell text-right">SALDO</div>
-                    </div>`;
-                
-        for (const mov of movimientosDeLaCuenta) {
-            html += renderInformeCuentaRow(mov, cuentaId, db.cuentas);
-        }
         
-        html += `</div><div class="cartilla-footer">** FIN DEL EXTRACTO **</div></div>`;
-        resultadoContainer.innerHTML = html;
+        // AQUÍ ESTÁ EL CAMBIO: Filtramos para que solo queden Ingresos y Gastos reales
+        const movimientosVisibles = movimientosDeLaCuenta.filter(m => m.tipo !== 'traspaso');
+
+        if (movimientosVisibles.length === 0) {
+             resultadoContainer.innerHTML = `
+                <div class="empty-state" style="background:transparent; border:none; padding:var(--sp-4);">
+                    <span class="material-icons">filter_alt_off</span>
+                    <p>No hay entradas ni salidas de dinero (solo traspasos).</p>
+                </div>`;
+             if (btn) setButtonLoading(btn, false);
+             return;
+        }
+
+        // 5. Renderizado Moderno (Burbujas en vez de tabla blanca)
+        // Usamos map para generar el HTML de cada tarjeta reutilizando el estilo del Diario
+        const listHTML = movimientosVisibles.map(m => renderVirtualListItem({ type: 'transaction', movement: m })).join('');
+        
+        resultadoContainer.innerHTML = `
+            <div class="transactions-list-container" style="padding: 0;">
+                <div style="padding: 10px 15px; font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">
+                    Historial de Flujo Real
+                </div>
+                ${listHTML}
+            </div>`;
 
     } catch (error) {
         console.error(error);
@@ -468,110 +469,70 @@ const handleGenerateGlobalExtract = async (btn = null) => {
     const resultadoContainer = select('informe-resultado-container');
     if (!resultadoContainer) return;
 
-    // Si viene de un botón, mostramos estado de carga
     if (btn) setButtonLoading(btn, true, 'Procesando...');
     else hapticFeedback('medium');
     
-    // Limpiamos el selector de cuenta individual para evitar confusión
+    // Limpiamos el selector individual para evitar confusión
     const selectCuenta = select('informe-cuenta-select');
-    if (selectCuenta) {
-        selectCuenta.value = "";
-        // Reset visual del custom select
-        const wrapper = selectCuenta.closest('.custom-select-wrapper');
-        const trigger = wrapper?.querySelector('.custom-select__trigger');
-        if(trigger) trigger.innerHTML = `<span style="color: var(--c-on-surface-tertiary); opacity: 0.7;">Seleccionar cuenta...</span>`;
-    }
+    if (selectCuenta) selectCuenta.value = "";
 
     resultadoContainer.innerHTML = `
         <div style="text-align:center; padding: var(--sp-5);">
             <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
             <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">
-                Consolidando movimientos por fecha...
+                Consolidando flujo de caja global...
             </p>
         </div>`;
 
     try {
-        // 1. Obtener datos
         const allMovements = await AppStore.getAll();
-        const saldos = await getSaldos();
-        
-        // 2. Calcular Patrimonio Neto Actual (Punto de partida)
-        let currentGlobalBalance = Object.values(saldos).reduce((sum, s) => sum + s, 0);
-        
-        // 3. Filtrar movimientos de la contabilidad visible
         const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
         
+        // 1. Filtrado Inteligente (Lo que pediste)
+        // Solo nos quedamos con movimientos que NO sean traspasos internos.
+        // Es decir, solo entradas y salidas reales de dinero de la contabilidad actual.
         let globalMovements = allMovements.filter(m => {
-            if (m.tipo === 'traspaso') {
-                return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
-            }
+            // Si es traspaso, lo ignoramos por completo para el reporte global "limpio"
+            if (m.tipo === 'traspaso') return false; 
+            
+            // Si es movimiento normal, verificamos que sea de una cuenta visible
             return visibleAccountIds.has(m.cuentaId);
         });
 
-        // 4. ORDENAR POR FECHA (Reciente -> Antiguo)
+        // 2. Ordenar: Más reciente primero
         globalMovements.sort((a, b) => {
             const dateDiff = new Date(b.fecha) - new Date(a.fecha);
             if (dateDiff !== 0) return dateDiff;
             return b.id.localeCompare(a.id);
         });
 
-        // 5. Calcular Saldos Históricos (Running Balance Inverso)
-        let runningBalance = currentGlobalBalance;
-
-        for (const mov of globalMovements) {
-            mov.runningBalance = runningBalance; 
-
-            let impact = 0;
-            if (mov.tipo === 'traspaso') {
-                const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
-                const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-                
-                // Calculamos impacto neto en el patrimonio visible
-                if (origenVisible && !destinoVisible) impact = -mov.cantidad; // Sale
-                else if (!origenVisible && destinoVisible) impact = mov.cantidad; // Entra
-                
-                // Ajuste visual: Sobrescribimos cantidad para que se pinte en la columna correcta
-                mov.cantidad = impact; 
-                
-            } else {
-                impact = mov.cantidad;
-            }
-
-            // Restamos el impacto para saber el saldo anterior
-            runningBalance -= impact;
+        if (globalMovements.length === 0) {
+            resultadoContainer.innerHTML = `
+                <div class="empty-state" style="padding: 40px 0;">
+                    <span class="material-icons">savings</span>
+                    <p>No hay movimientos de flujo registrados.</p>
+                </div>`;
+            return;
         }
 
-        // 6. Renderizar HTML (AQUÍ ESTABA EL ERROR)
-        // Hemos cambiado 'isOffBalanceMode' por 'getLedgerName(currentLedger)'
-        let html = `
-            <div class="cartilla-container" style="border-top: 4px solid var(--c-primary);">
-                <div class="cartilla-header-info">
-                    <h4 style="color: var(--c-primary);">LIBRO MAYOR GLOBAL</h4>
-                    <p><strong>Contabilidad:</strong> ${getLedgerName(currentLedger)}</p>
-                    <p class="cartilla-print-date">Ordenado por fecha · ${new Date().toLocaleDateString()}</p>
+        // 3. Renderizado Unificado (Estilo Burbujas)
+        // Reutilizamos el renderizador del diario para consistencia total
+        const listHTML = globalMovements
+            .map(m => renderVirtualListItem({ type: 'transaction', movement: m }))
+            .join('');
+
+        resultadoContainer.innerHTML = `
+            <div class="transactions-list-container" style="padding: 0;">
+                <div style="display:flex; justify-content:space-between; padding: 10px 15px; border-bottom: 1px solid var(--c-outline);">
+                    <span style="font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">
+                        Flujo Global (Sin Traspasos)
+                    </span>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--c-primary);">
+                        ${getLedgerName(currentLedger)}
+                    </span>
                 </div>
-                
-                <div class="cartilla-table">
-                    <div class="cartilla-row cartilla-head">
-                        <div class="cartilla-cell">FECHA</div>
-                        <div class="cartilla-cell">CUENTA / CONCEPTO</div>
-                        <div class="cartilla-cell text-right">CARGOS</div>
-                        <div class="cartilla-cell text-right">ABONOS</div>
-                        <div class="cartilla-cell text-right">TOTAL</div>
-                    </div>`;
-                
-        for (const mov of globalMovements) {
-            // Pasamos null como cuentaId para activar el modo Global
-            html += renderInformeCuentaRow(mov, null, db.cuentas);
-        }
-        
-        html += `</div>
-            <div class="cartilla-footer">
-                ** FIN DEL INFORME **
-            </div>
-        </div>`;
-
-        resultadoContainer.innerHTML = html;
+                ${listHTML}
+            </div>`;
      
     } catch (error) {
         console.error(error);
