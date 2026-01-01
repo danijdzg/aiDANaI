@@ -1078,9 +1078,29 @@ let calculatorState = {
 };
 
 // Actualiza el display del historial
+// =========================================================
+// CORRECCIÓN: VISUALIZACIÓN COMPLETA DE OPERACIONES
+// =========================================================
 const updateCalculatorHistoryDisplay = () => {
     const historyDisplay = select('calculator-history-display');
-    if (historyDisplay) historyDisplay.textContent = calculatorState.historyValue;
+    if (!historyDisplay) return;
+    
+    // 1. Cogemos la base histórica (Ej: "50 +")
+    let fullHistory = calculatorState.historyValue || ''; 
+    
+    // 2. MAGIA: Si hay un operador activo y ya estamos escribiendo el siguiente número,
+    // lo concatenamos visualmente para que se vea la operación completa (Ej: "50 + 20")
+    if (calculatorState.operator && !calculatorState.waitingForNewValue) {
+        // Añadimos un espacio y el valor que estás tecleando ahora mismo
+        fullHistory += ' ' + calculatorState.displayValue;
+    }
+    
+    // 3. Renderizamos
+    historyDisplay.textContent = fullHistory;
+    
+    // Extra: Si el texto es muy largo, hacemos scroll automático al final
+    // para ver siempre el último número que escribimos
+    historyDisplay.scrollLeft = historyDisplay.scrollWidth;
 };
 
 // Mapea las claves a los símbolos visuales
@@ -11976,36 +11996,43 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 // =========================================================
 // 🚀 SOLUCIÓN: NAVEGACIÓN DESDE TARJETA PATRIMONIO
-// (Pegar al final de main.js)
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Buscamos si el clic fue dentro de una tarjeta (hero-card o card normal)
-    const card = e.target.closest('.hero-card, .card');
+    // 1. Detectamos si el clic fue dentro de la tarjeta Héroe (Patrimonio)
+    // Buscamos si lo que pulsaste es (o está dentro de) una .hero-card
+    const card = e.target.closest('.hero-card');
     
     if (card) {
-        // 2. Comprobamos si es la tarjeta de Patrimonio por su texto
+        // 2. Comprobamos si es la tarjeta de Patrimonio por su contenido
+        // Esto evita confundirla con otras tarjetas si hubiera más de estilo 'hero'
         const textoTarjeta = card.innerText || '';
         
-        // Si la tarjeta dice "Patrimonio" o "Neto", activamos el viaje
         if (textoTarjeta.includes('Patrimonio') || textoTarjeta.includes('Neto')) {
-            console.log("🚀 Clic en Patrimonio detectado. Navegando...");
+            console.log("🚀 Clic en Patrimonio detectado. Navegando al Balance...");
             
-            // 3. Navegamos a la pestaña de Análisis (cuyo ID interno es 'planificar-page')
+            // 3. Navegamos a la pestaña de Análisis
+            // El ID interno de la pestaña de análisis/informes es 'planificar-page'
             if (typeof navigateTo === 'function') {
                 navigateTo('planificar-page'); 
-                
+
                 // 4. Una vez cambiada la pestaña, buscamos el gráfico y hacemos scroll
                 setTimeout(() => {
+                    // Buscamos la sección específica del Balance Neto
                     const seccionObjetivo = document.getElementById('seccion-balance-neto');
+                    
                     if (seccionObjetivo) {
-                        seccionObjetivo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Scroll suave hasta el gráfico
+                        seccionObjetivo.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'center' 
+                        });
                         
-                        // Efecto visual de resaltado (destello)
+                        // Efecto visual: Iluminar la tarjeta un instante para guiar al ojo
                         seccionObjetivo.style.transition = "box-shadow 0.5s ease";
                         seccionObjetivo.style.boxShadow = "0 0 20px var(--c-primary)";
                         setTimeout(() => { seccionObjetivo.style.boxShadow = ""; }, 1000);
                     }
-                }, 150); // Pequeña pausa para dar tiempo a que la pestaña cargue
+                }, 300); // Damos 300ms de margen para que la pestaña termine de aparecer
             }
         }
     }
