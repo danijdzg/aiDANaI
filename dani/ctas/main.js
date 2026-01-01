@@ -11995,45 +11995,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 // =========================================================
-// 🚀 SOLUCIÓN: NAVEGACIÓN DESDE TARJETA PATRIMONIO
+// 🚀 SOLUCIÓN DEFINITIVA: PATRIMONIO -> BALANCE NETO
+// (Pegar al final de main.js)
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Detectamos si el clic fue dentro de la tarjeta Héroe (Patrimonio)
-    // Buscamos si lo que pulsaste es (o está dentro de) una .hero-card
-    const card = e.target.closest('.hero-card');
+    // 1. Detectamos el clic en cualquier tarjeta
+    const card = e.target.closest('.hero-card, .card');
     
-    if (card) {
-        // 2. Comprobamos si es la tarjeta de Patrimonio por su contenido
-        // Esto evita confundirla con otras tarjetas si hubiera más de estilo 'hero'
-        const textoTarjeta = card.innerText || '';
-        
-        if (textoTarjeta.includes('Patrimonio') || textoTarjeta.includes('Neto')) {
-            console.log("🚀 Clic en Patrimonio detectado. Navegando al Balance...");
-            
-            // 3. Navegamos a la pestaña de Análisis
-            // El ID interno de la pestaña de análisis/informes es 'planificar-page'
-            if (typeof navigateTo === 'function') {
-                navigateTo('planificar-page'); 
+    // Si no es tarjeta o es la propia tarjeta de destino (para evitar bucles), salimos
+    if (!card || card.id === 'seccion-balance-neto') return;
 
-                // 4. Una vez cambiada la pestaña, buscamos el gráfico y hacemos scroll
+    // 2. Verificamos si es la tarjeta de "Patrimonio" por su texto
+    const text = (card.innerText || '').toLowerCase();
+    
+    if (text.includes('patrimonio') || text.includes('neto')) {
+        console.log("🚀 Tarjeta Patrimonio detectada. Iniciando navegación...");
+
+        // 3. NAVEGACIÓN SEGURA: Simulamos clic en el botón del menú
+        // Esto garantiza que la navegación funcione igual que si pulsaras el icono de abajo
+        const menuBtn = document.querySelector('button[data-page="planificar-page"]');
+        if (menuBtn) menuBtn.click();
+
+        // 4. EL SABUESO: Buscamos el gráfico repetidamente hasta que aparezca
+        let intentos = 0;
+        const intervalo = setInterval(() => {
+            const objetivo = document.getElementById('seccion-balance-neto');
+            
+            if (objetivo) {
+                // ¡Lo encontramos! Hacemos scroll y lo iluminamos
+                clearInterval(intervalo); // Dejamos de buscar
+                
+                objetivo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Efecto visual de "Aquí estoy"
+                objetivo.style.transition = "box-shadow 0.5s ease, transform 0.3s";
+                objetivo.style.transform = "scale(1.02)";
+                objetivo.style.boxShadow = "0 0 25px var(--c-primary)"; // Brillo verde
+                
+                // Quitamos el efecto al segundo
                 setTimeout(() => {
-                    // Buscamos la sección específica del Balance Neto
-                    const seccionObjetivo = document.getElementById('seccion-balance-neto');
-                    
-                    if (seccionObjetivo) {
-                        // Scroll suave hasta el gráfico
-                        seccionObjetivo.scrollIntoView({ 
-                            behavior: 'smooth', 
-                            block: 'center' 
-                        });
-                        
-                        // Efecto visual: Iluminar la tarjeta un instante para guiar al ojo
-                        seccionObjetivo.style.transition = "box-shadow 0.5s ease";
-                        seccionObjetivo.style.boxShadow = "0 0 20px var(--c-primary)";
-                        setTimeout(() => { seccionObjetivo.style.boxShadow = ""; }, 1000);
-                    }
-                }, 300); // Damos 300ms de margen para que la pestaña termine de aparecer
+                    objetivo.style.transform = "scale(1)";
+                    objetivo.style.boxShadow = "none";
+                }, 1000);
             }
-        }
+
+            intentos++;
+            if (intentos > 20) clearInterval(intervalo); // Si en 2 seg no sale, nos rendimos
+        }, 100); // Buscamos cada 100ms
     }
 });
