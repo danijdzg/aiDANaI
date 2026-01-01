@@ -11975,35 +11975,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 // =========================================================
-// 🚀 ENLACE RÁPIDO: PATRIMONIO -> BALANCE NETO
+// 🚀 SOLUCIÓN: NAVEGACIÓN DESDE TARJETA PATRIMONIO
+// (Pegar al final de main.js)
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Detectamos si el clic fue en la tarjeta Héroe (Patrimonio)
-    // Buscamos la clase .hero-card o .card que contenga la palabra "Patrimonio"
-    const targetCard = e.target.closest('.hero-card, .card');
+    // 1. Buscamos si el clic fue dentro de una tarjeta (hero-card o card normal)
+    const card = e.target.closest('.hero-card, .card');
     
-    if (targetCard) {
-        // Verificamos si es la tarjeta de Patrimonio mirando su texto
-        const cardText = targetCard.innerText || '';
-        if (cardText.includes('Patrimonio') || cardText.includes('Neto')) {
+    if (card) {
+        // 2. Comprobamos si es la tarjeta de Patrimonio por su texto
+        const textoTarjeta = card.innerText || '';
+        
+        // Si la tarjeta dice "Patrimonio" o "Neto", activamos el viaje
+        if (textoTarjeta.includes('Patrimonio') || textoTarjeta.includes('Neto')) {
+            console.log("🚀 Clic en Patrimonio detectado. Navegando...");
             
-            // 2. Navegamos a la página de Análisis (Planificar)
-            // 'planificar-page' es el ID técnico de tu pestaña Análisis
-            navigateTo('planificar-page');
-
-            // 3. Esperamos un instante a que cargue y hacemos scroll suave hasta el gráfico
-            setTimeout(() => {
-                const seccionDestino = document.getElementById('seccion-balance-neto');
-                if (seccionDestino) {
-                    seccionDestino.scrollIntoView({ 
-                        behavior: 'smooth', 
-                        block: 'center' 
-                    });
-                    
-                    // Efecto visual para destacar la sección
-                    seccionDestino.classList.add('highlight-animation');
-                }
-            }, 300); // 300ms de cortesía para la transición
+            // 3. Navegamos a la pestaña de Análisis (cuyo ID interno es 'planificar-page')
+            if (typeof navigateTo === 'function') {
+                navigateTo('planificar-page'); 
+                
+                // 4. Una vez cambiada la pestaña, buscamos el gráfico y hacemos scroll
+                setTimeout(() => {
+                    const seccionObjetivo = document.getElementById('seccion-balance-neto');
+                    if (seccionObjetivo) {
+                        seccionObjetivo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // Efecto visual de resaltado (destello)
+                        seccionObjetivo.style.transition = "box-shadow 0.5s ease";
+                        seccionObjetivo.style.boxShadow = "0 0 20px var(--c-primary)";
+                        setTimeout(() => { seccionObjetivo.style.boxShadow = ""; }, 1000);
+                    }
+                }, 150); // Pequeña pausa para dar tiempo a que la pestaña cargue
+            }
         }
     }
 });
