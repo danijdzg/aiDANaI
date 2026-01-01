@@ -11996,85 +11996,73 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================================================
-// 🚀 SOLUCIÓN UNIVERSAL: NAVEGACIÓN INTELIGENTE DESDE TARJETAS
-// (Pegar al final de main.js)
+// 🚀 NAVEGACIÓN QUIRÚRGICA: PATRIMONIO E INVERSIONES
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Detectamos clic en cualquier elemento que parezca una tarjeta
-    // Añadimos 'div.card' genérico por si acaso no tiene las otras clases
-    const card = e.target.closest('.hero-card, .card, .kpi-card, div[class*="card"]');
+    // 1. Identificamos si el clic fue en una tarjeta
+    // Usamos .closest para capturar el clic aunque des al icono o al texto
+    const card = e.target.closest('.hero-card, .card, .kpi-card');
     
-    // Si no es una tarjeta, no hacemos nada
-    if (!card) return;
+    // Si no es tarjeta, o si es una de las tarjetas de destino (para evitar bucles), ignoramos
+    if (!card || card.id === 'seccion-balance-neto' || card.id === 'seccion-inversiones') return;
 
-    // 2. Limpiamos el texto para analizarlo mejor (minúsculas y sin espacios extra)
-    const text = (card.innerText || '').toLowerCase().trim();
-    const cardId = card.id || '';
+    // 2. Analizamos el texto de la tarjeta (en minúsculas para facilitar la búsqueda)
+    const text = (card.textContent || '').toLowerCase();
+    
+    // Variables de destino
+    let targetSectionId = null;
 
-    // Variables para definir a dónde vamos
-    let targetSectionId = '';
-    let triggerFound = false;
-
-    // --- CASO A: TARJETA PATRIMONIO ---
+    // --- CASO 1: TARJETA PATRIMONIO ---
+    // Si dice "patrimonio" o "neto" (ej: "Patrimonio Neto", "Valor Neto")
     if (text.includes('patrimonio') || text.includes('neto')) {
-        // Evitamos que se active si pulsamos en el propio gráfico destino
-        if (!cardId.includes('balance-neto')) {
-            console.log("🔹 Click detectado en: Patrimonio");
-            targetSectionId = 'seccion-balance-neto';
-            triggerFound = true;
-        }
+        console.log("📍 Tarjeta Patrimonio detectada -> Destino: Balance Neto");
+        targetSectionId = 'seccion-balance-neto';
     }
     
-    // --- CASO B: TARJETA VALOR MERCADO / INVERSIONES ---
-    // Buscamos "mercado", "valor real" o "inversiones"
+    // --- CASO 2: TARJETA VALOR MERCADO / INVERSIONES ---
+    // Si dice "mercado", "valor real" o "inversiones" (pero no es la sección de destino "mis inversiones")
     else if (text.includes('mercado') || text.includes('valor real') || (text.includes('inversiones') && !text.includes('mis inversiones'))) {
-        // Evitamos que se active si pulsamos en la propia sección destino
-        if (!cardId.includes('inversiones')) {
-            console.log("🔹 Click detectado en: Valor Mercado / Inversiones");
-            targetSectionId = 'seccion-inversiones';
-            triggerFound = true;
-        }
+        console.log("📍 Tarjeta Mercado/Inversiones detectada -> Destino: Mis Inversiones");
+        targetSectionId = 'seccion-inversiones';
     }
 
-    // 3. SI ENCONTRAMOS UNA TARJETA VÁLIDA, EJECUTAMOS LA ACCIÓN
-    if (triggerFound && targetSectionId) {
-        // A) Vamos a la pestaña de Informes (simulando clic en el menú)
-        const menuBtn = document.querySelector('button[data-page="planificar-page"]');
-        if (menuBtn) {
-            menuBtn.click();
-        } else {
-            console.warn("⚠️ No encuentro el botón del menú Informes");
-            return;
-        }
+    // 3. EJECUTAMOS LA MANIOBRA SI HAY DESTINO
+    if (targetSectionId) {
+        // A) Cambiamos de pestaña haciendo clic en el botón del menú "Informes"
+        const btnInformes = document.querySelector('button[data-page="planificar-page"]');
+        if (btnInformes) btnInformes.click();
 
-        // B) Esperamos a que el gráfico/sección aparezca (El Sabueso)
+        // B) Buscamos la sección repetidamente hasta que aparezca (Polling)
         let intentos = 0;
         const intervalo = setInterval(() => {
-            const objetivo = document.getElementById(targetSectionId);
+            const seccion = document.getElementById(targetSectionId);
             
-            // Verificamos que exista y tenga altura (sea visible)
-            if (objetivo && objetivo.offsetHeight > 0) {
-                clearInterval(intervalo); // ¡Encontrado!
+            // Verificamos que exista y sea visible (tenga altura)
+            if (seccion && seccion.offsetHeight > 0) {
+                clearInterval(intervalo); // ¡La encontramos!
+
+                // C) Scroll suave para ponerla en el centro de la pantalla
+                seccion.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // D) Efecto visual de "Apertura/Foco"
+                // Hacemos que la tarjeta parpadee o crezca para indicar "Aquí estoy"
+                seccion.style.transition = "transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease";
+                seccion.style.transform = "scale(1.03)"; // Un ligero "pop" hacia afuera
+                seccion.style.boxShadow = "0 0 30px rgba(0, 179, 77, 0.5)"; // Resplandor verde
+                seccion.style.zIndex = "10"; // Aseguramos que quede por encima
                 
-                // Scroll suave y centrado
-                objetivo.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                
-                // Efecto visual de destello para confirmar
-                objetivo.style.transition = "transform 0.4s ease, box-shadow 0.4s ease";
-                objetivo.style.transform = "scale(1.02)";
-                // Usamos un borde verde brillante genérico
-                objetivo.style.boxShadow = "0 0 25px rgba(0, 179, 77, 0.6)"; 
-                
+                // Quitamos el efecto después de 1.5 segundos
                 setTimeout(() => {
-                    objetivo.style.transform = "scale(1)";
-                    objetivo.style.boxShadow = "none";
-                }, 1000);
+                    seccion.style.transform = "scale(1)";
+                    seccion.style.boxShadow = "none";
+                    seccion.style.zIndex = "1";
+                }, 1500);
             }
 
             intentos++;
-            // Dejamos de buscar tras 3 segundos (30 intentos)
+            // Dejamos de buscar tras 3 segundos (30 intentos) por seguridad
             if (intentos > 30) clearInterval(intervalo);
             
-        }, 100); // Revisamos cada 0.1 segundos
+        }, 100); // Revisamos cada 100ms
     }
 });
