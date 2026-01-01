@@ -11974,3 +11974,36 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("✅ Botón de borrar reparado y vinculado.");
     }
 });
+// =========================================================
+// 🚀 ENLACE RÁPIDO: PATRIMONIO -> BALANCE NETO
+// =========================================================
+document.addEventListener('click', (e) => {
+    // 1. Detectamos si el clic fue en la tarjeta Héroe (Patrimonio)
+    // Buscamos la clase .hero-card o .card que contenga la palabra "Patrimonio"
+    const targetCard = e.target.closest('.hero-card, .card');
+    
+    if (targetCard) {
+        // Verificamos si es la tarjeta de Patrimonio mirando su texto
+        const cardText = targetCard.innerText || '';
+        if (cardText.includes('Patrimonio') || cardText.includes('Neto')) {
+            
+            // 2. Navegamos a la página de Análisis (Planificar)
+            // 'planificar-page' es el ID técnico de tu pestaña Análisis
+            navigateTo('planificar-page');
+
+            // 3. Esperamos un instante a que cargue y hacemos scroll suave hasta el gráfico
+            setTimeout(() => {
+                const seccionDestino = document.getElementById('seccion-balance-neto');
+                if (seccionDestino) {
+                    seccionDestino.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'center' 
+                    });
+                    
+                    // Efecto visual para destacar la sección
+                    seccionDestino.classList.add('highlight-animation');
+                }
+            }, 300); // 300ms de cortesía para la transición
+        }
+    }
+});
