@@ -11996,73 +11996,71 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================================================
-// 🚀 NAVEGACIÓN QUIRÚRGICA: PATRIMONIO E INVERSIONES
+// 🚀 SOLUCIÓN VIGILANTE: NAVEGACIÓN PRECISA A SECCIONES
+// (Pegar al final de main.js - Versión MutationObserver)
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Identificamos si el clic fue en una tarjeta
-    // Usamos .closest para capturar el clic aunque des al icono o al texto
+    // 1. Detectar clic en tarjeta
     const card = e.target.closest('.hero-card, .card, .kpi-card');
-    
-    // Si no es tarjeta, o si es una de las tarjetas de destino (para evitar bucles), ignoramos
-    if (!card || card.id === 'seccion-balance-neto' || card.id === 'seccion-inversiones') return;
+    if (!card) return;
 
-    // 2. Analizamos el texto de la tarjeta (en minúsculas para facilitar la búsqueda)
+    // 2. Determinar destino según el texto
     const text = (card.textContent || '').toLowerCase();
-    
-    // Variables de destino
-    let targetSectionId = null;
+    let targetId = null;
 
-    // --- CASO 1: TARJETA PATRIMONIO ---
-    // Si dice "patrimonio" o "neto" (ej: "Patrimonio Neto", "Valor Neto")
-    if (text.includes('patrimonio') || text.includes('neto')) {
-        console.log("📍 Tarjeta Patrimonio detectada -> Destino: Balance Neto");
-        targetSectionId = 'seccion-balance-neto';
+    // A) Caso Patrimonio -> Balance Neto
+    if ((text.includes('patrimonio') || text.includes('neto')) && !card.id.includes('balance')) {
+        targetId = 'seccion-balance-neto';
     }
-    
-    // --- CASO 2: TARJETA VALOR MERCADO / INVERSIONES ---
-    // Si dice "mercado", "valor real" o "inversiones" (pero no es la sección de destino "mis inversiones")
-    else if (text.includes('mercado') || text.includes('valor real') || (text.includes('inversiones') && !text.includes('mis inversiones'))) {
-        console.log("📍 Tarjeta Mercado/Inversiones detectada -> Destino: Mis Inversiones");
-        targetSectionId = 'seccion-inversiones';
+    // B) Caso Mercado/Inversiones -> Mis Inversiones
+    else if ((text.includes('mercado') || text.includes('valor real') || text.includes('inversiones')) && !card.id.includes('inversiones')) {
+        targetId = 'seccion-inversiones';
     }
 
-    // 3. EJECUTAMOS LA MANIOBRA SI HAY DESTINO
-    if (targetSectionId) {
-        // A) Cambiamos de pestaña haciendo clic en el botón del menú "Informes"
+    // 3. Si hay destino, iniciamos la maniobra
+    if (targetId) {
+        console.log(`📍 Iniciando viaje hacia: ${targetId}`);
+
+        // A) Pulsar botón del menú para cambiar de pestaña
         const btnInformes = document.querySelector('button[data-page="planificar-page"]');
         if (btnInformes) btnInformes.click();
 
-        // B) Buscamos la sección repetidamente hasta que aparezca (Polling)
-        let intentos = 0;
-        const intervalo = setInterval(() => {
-            const seccion = document.getElementById(targetSectionId);
+        // B) EL VIGILANTE: Observamos cambios en la página esperando al elemento
+        const observer = new MutationObserver((mutations, obs) => {
+            const elementoDestino = document.getElementById(targetId);
             
-            // Verificamos que exista y sea visible (tenga altura)
-            if (seccion && seccion.offsetHeight > 0) {
-                clearInterval(intervalo); // ¡La encontramos!
-
-                // C) Scroll suave para ponerla en el centro de la pantalla
-                seccion.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-                // D) Efecto visual de "Apertura/Foco"
-                // Hacemos que la tarjeta parpadee o crezca para indicar "Aquí estoy"
-                seccion.style.transition = "transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease";
-                seccion.style.transform = "scale(1.03)"; // Un ligero "pop" hacia afuera
-                seccion.style.boxShadow = "0 0 30px rgba(0, 179, 77, 0.5)"; // Resplandor verde
-                seccion.style.zIndex = "10"; // Aseguramos que quede por encima
+            // Si el elemento existe Y es visible (tiene altura)
+            if (elementoDestino && elementoDestino.offsetHeight > 0) {
+                // ¡Apareció! Dejamos de vigilar
+                obs.disconnect();
                 
-                // Quitamos el efecto después de 1.5 segundos
+                // Esperamos 100ms extra para que el gráfico termine de estirarse
                 setTimeout(() => {
-                    seccion.style.transform = "scale(1)";
-                    seccion.style.boxShadow = "none";
-                    seccion.style.zIndex = "1";
-                }, 1500);
-            }
+                    console.log("✅ Elemento renderizado. Haciendo scroll.");
+                    
+                    // Scroll suave al centro
+                    elementoDestino.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-            intentos++;
-            // Dejamos de buscar tras 3 segundos (30 intentos) por seguridad
-            if (intentos > 30) clearInterval(intervalo);
-            
-        }, 100); // Revisamos cada 100ms
+                    // Efecto visual potente "Aquí estoy"
+                    elementoDestino.style.transition = "transform 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28), box-shadow 0.5s ease";
+                    elementoDestino.style.transform = "scale(1.02)";
+                    elementoDestino.style.boxShadow = "0 0 30px rgba(0, 179, 77, 0.6)"; // Luz verde
+                    elementoDestino.style.border = "2px solid var(--c-primary)"; // Borde temporal
+                    
+                    // Quitar efecto
+                    setTimeout(() => {
+                        elementoDestino.style.transform = "scale(1)";
+                        elementoDestino.style.boxShadow = "none";
+                        elementoDestino.style.border = "none";
+                    }, 2000);
+                }, 100);
+            }
+        });
+
+        // Empezamos a vigilar todo el cuerpo de la página
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // C) Seguridad: Si en 10 segundos no aparece, el vigilante se retira (para no gastar batería)
+        setTimeout(() => observer.disconnect(), 10000);
     }
 });
