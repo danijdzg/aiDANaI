@@ -11994,53 +11994,133 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("✅ Botón de borrar reparado y vinculado.");
     }
 });
+
 // =========================================================
-// 🚀 SOLUCIÓN DEFINITIVA: PATRIMONIO -> BALANCE NETO
-// (Pegar al final de main.js)
+// 🚀 SOLUCIÓN MAESTRA: PATRIMONIO -> BALANCE NETO (CON ESPERA ACTIVA)
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Detectamos el clic en cualquier tarjeta
+    // 1. Detectamos clic en cualquier tarjeta (Hero o normal)
     const card = e.target.closest('.hero-card, .card');
     
-    // Si no es tarjeta o es la propia tarjeta de destino (para evitar bucles), salimos
-    if (!card || card.id === 'seccion-balance-neto') return;
+    // Si no es tarjeta, ignoramos
+    if (!card) return;
 
-    // 2. Verificamos si es la tarjeta de "Patrimonio" por su texto
+    // 2. Comprobamos si es la tarjeta de "Patrimonio" por su texto
     const text = (card.innerText || '').toLowerCase();
     
-    if (text.includes('patrimonio') || text.includes('neto')) {
-        console.log("🚀 Tarjeta Patrimonio detectada. Iniciando navegación...");
+    // Filtramos para asegurarnos que es la del Panel y no el propio gráfico
+    if ((text.includes('patrimonio') || text.includes('neto')) && !card.id.includes('balance-neto')) {
+        
+        console.log("🚀 Tarjeta Patrimonio pulsada. Iniciando secuencia...");
 
-        // 3. NAVEGACIÓN SEGURA: Simulamos clic en el botón del menú
-        // Esto garantiza que la navegación funcione igual que si pulsaras el icono de abajo
+        // 3. NAVEGACIÓN: Simulamos clic en el botón del menú "Informes"
+        // Usamos el selector exacto de tu HTML
         const menuBtn = document.querySelector('button[data-page="planificar-page"]');
-        if (menuBtn) menuBtn.click();
+        if (menuBtn) {
+            menuBtn.click();
+        } else {
+            console.error("No encuentro el botón de Informes");
+            return;
+        }
 
-        // 4. EL SABUESO: Buscamos el gráfico repetidamente hasta que aparezca
+        // 4. EL SABUESO: Buscamos el gráfico repetidamente
         let intentos = 0;
         const intervalo = setInterval(() => {
+            // Buscamos la sección por su ID exacto
             const objetivo = document.getElementById('seccion-balance-neto');
             
-            if (objetivo) {
-                // ¡Lo encontramos! Hacemos scroll y lo iluminamos
+            // Verificamos que exista Y que tenga altura (que sea visible)
+            if (objetivo && objetivo.offsetHeight > 0) {
+                
+                // ¡ENCONTRADO! 
                 clearInterval(intervalo); // Dejamos de buscar
                 
+                console.log("✅ Gráfico encontrado. Desplazando...");
+
+                // Hacemos scroll suave para que quede centrado
                 objetivo.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 
-                // Efecto visual de "Aquí estoy"
-                objetivo.style.transition = "box-shadow 0.5s ease, transform 0.3s";
+                // Efecto visual: Iluminar la tarjeta para decir "¡Aquí estoy!"
+                objetivo.style.transition = "transform 0.3s ease, box-shadow 0.3s ease";
                 objetivo.style.transform = "scale(1.02)";
-                objetivo.style.boxShadow = "0 0 25px var(--c-primary)"; // Brillo verde
+                objetivo.style.boxShadow = "0 0 25px var(--c-primary)"; // Resplandor verde
                 
-                // Quitamos el efecto al segundo
+                // Quitamos el efecto después de 1 segundo
                 setTimeout(() => {
                     objetivo.style.transform = "scale(1)";
                     objetivo.style.boxShadow = "none";
-                }, 1000);
+                }, 1200);
             }
 
             intentos++;
-            if (intentos > 20) clearInterval(intervalo); // Si en 2 seg no sale, nos rendimos
-        }, 100); // Buscamos cada 100ms
+            // Si después de 2.5 segundos (25 intentos) no aparece, paramos para no consumir memoria
+            if (intentos > 25) clearInterval(intervalo); 
+            
+        }, 100); // Revisamos cada 0.1 segundos
+    }
+});
+
+// =========================================================
+// 🚀 SOLUCIÓN MAESTRA: PATRIMONIO -> BALANCE NETO (CON ESPERA ACTIVA)
+// =========================================================
+document.addEventListener('click', (e) => {
+    // 1. Detectamos clic en cualquier tarjeta (Hero o normal)
+    const card = e.target.closest('.hero-card, .card');
+    
+    // Si no es tarjeta, ignoramos
+    if (!card) return;
+
+    // 2. Comprobamos si es la tarjeta de "Patrimonio" por su texto
+    const text = (card.innerText || '').toLowerCase();
+    
+    // Filtramos para asegurarnos que es la del Panel y no el propio gráfico
+    if ((text.includes('patrimonio') || text.includes('neto')) && !card.id.includes('balance-neto')) {
+        
+        console.log("🚀 Tarjeta Patrimonio pulsada. Iniciando secuencia...");
+
+        // 3. NAVEGACIÓN: Simulamos clic en el botón del menú "Informes"
+        // Usamos el selector exacto de tu HTML
+        const menuBtn = document.querySelector('button[data-page="planificar-page"]');
+        if (menuBtn) {
+            menuBtn.click();
+        } else {
+            console.error("No encuentro el botón de Informes");
+            return;
+        }
+
+        // 4. EL SABUESO: Buscamos el gráfico repetidamente
+        let intentos = 0;
+        const intervalo = setInterval(() => {
+            // Buscamos la sección por su ID exacto
+            const objetivo = document.getElementById('seccion-balance-neto');
+            
+            // Verificamos que exista Y que tenga altura (que sea visible)
+            if (objetivo && objetivo.offsetHeight > 0) {
+                
+                // ¡ENCONTRADO! 
+                clearInterval(intervalo); // Dejamos de buscar
+                
+                console.log("✅ Gráfico encontrado. Desplazando...");
+
+                // Hacemos scroll suave para que quede centrado
+                objetivo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Efecto visual: Iluminar la tarjeta para decir "¡Aquí estoy!"
+                objetivo.style.transition = "transform 0.3s ease, box-shadow 0.3s ease";
+                objetivo.style.transform = "scale(1.02)";
+                objetivo.style.boxShadow = "0 0 25px var(--c-primary)"; // Resplandor verde
+                
+                // Quitamos el efecto después de 1 segundo
+                setTimeout(() => {
+                    objetivo.style.transform = "scale(1)";
+                    objetivo.style.boxShadow = "none";
+                }, 1200);
+            }
+
+            intentos++;
+            // Si después de 2.5 segundos (25 intentos) no aparece, paramos para no consumir memoria
+            if (intentos > 25) clearInterval(intervalo); 
+            
+        }, 100); // Revisamos cada 0.1 segundos
     }
 });
