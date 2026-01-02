@@ -12062,3 +12062,83 @@ document.addEventListener('click', (e) => {
         setTimeout(() => observer.disconnect(), 5000);
     }
 });
+
+// =========================================================
+// 💰 SOLUCIÓN: REPARACIÓN GUARDADO DE INVERSIONES
+// (Pegar al final de main.js)
+// =========================================================
+document.addEventListener('click', async (e) => {
+    // 1. Detectamos si pulsas el botón de "Guardar" en el modal de Inversiones
+    // Buscamos por ID 'btn-save-inversion' o por acción 'save-inversion'
+    const btnSave = e.target.closest('#btn-save-inversion, [data-action="save-inversion"]');
+    
+    if (btnSave) {
+        e.preventDefault(); // Evitamos recargas raras
+        e.stopPropagation();
+
+        console.log("💰 Intentando guardar inversión...");
+
+        // 2. Recopilamos los datos del formulario
+        // Estos son los IDs estándar. Si tu formulario usa otros, el código avisa.
+        const inputId = document.getElementById('inversion-id');
+        const inputValor = document.getElementById('inversion-valor'); // O 'inversion-cantidad'
+        const inputFecha = document.getElementById('inversion-fecha');
+
+        // Verificamos que encontramos todo
+        if (!inputId || !inputValor) {
+            console.error("❌ No encuentro los campos del formulario (inversion-id o inversion-valor)");
+            showToast("Error: Campos no encontrados", "danger");
+            return;
+        }
+
+        const id = inputId.value;
+        const nuevoValor = parseFloat(inputValor.value);
+        const nuevaFecha = inputFecha ? inputFecha.value : new Date().toISOString().split('T')[0];
+
+        if (!id) {
+            showToast("Error: No hay ID de inversión", "danger");
+            return;
+        }
+
+        // 3. Animación de carga en el botón
+        const textoOriginal = btnSave.innerHTML;
+        btnSave.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
+        btnSave.disabled = true;
+
+        try {
+            // 4. GUARDAMOS EN FIREBASE
+            // Asumimos que la colección se llama 'inversiones' dentro del usuario
+            await fbDb.collection('users').doc(currentUser.uid).collection('inversiones').doc(id).update({
+                valorActual: nuevoValor,
+                fechaActualizacion: nuevaFecha,
+                ultimaModificacion: new Date().toISOString()
+            });
+
+            console.log("✅ Inversión actualizada correctamente.");
+            showToast("Inversión actualizada", "success");
+
+            // 5. Cerrar Modal y Refrescar
+            const modal = document.getElementById('inversion-modal');
+            if (modal) {
+                modal.classList.remove('modal-overlay--active');
+                modal.style.display = 'none'; // Forzamos ocultar por si acaso
+            }
+
+            // Recargamos la sección de inversiones si existe la función
+            if (typeof renderInversiones === 'function') {
+                renderInversiones(); 
+            } else if (typeof renderPlanificacionPage === 'function') {
+                // Si no, recargamos la página entera de informes
+                renderPlanificacionPage();
+            }
+
+        } catch (error) {
+            console.error("❌ Error guardando inversión:", error);
+            showToast("Error al guardar", "danger");
+        } finally {
+            // Restauramos el botón
+            btnSave.innerHTML = textoOriginal;
+            btnSave.disabled = false;
+        }
+    }
+});
