@@ -11996,71 +11996,69 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================================================
-// 🚀 SOLUCIÓN VIGILANTE: NAVEGACIÓN PRECISA A SECCIONES
-// (Pegar al final de main.js - Versión MutationObserver)
+// 🚀 SOLUCIÓN DEFINITIVA: VIGILANTE DE NAVEGACIÓN (MutationObserver)
+// (Pegar al final de main.js sustituyendo el código anterior de navegación)
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Detectar clic en tarjeta
-    const card = e.target.closest('.hero-card, .card, .kpi-card');
+    // 1. Detectar clic en cualquier tarjeta (Hero, KPI o Card genérica)
+    const card = e.target.closest('.hero-card, .card, .kpi-card, div[class*="card"]');
     if (!card) return;
 
-    // 2. Determinar destino según el texto
+    // 2. Analizar el texto para saber dónde ir
     const text = (card.textContent || '').toLowerCase();
     let targetId = null;
 
-    // A) Caso Patrimonio -> Balance Neto
+    // A) Si es Patrimonio -> Ir a Balance Neto
     if ((text.includes('patrimonio') || text.includes('neto')) && !card.id.includes('balance')) {
         targetId = 'seccion-balance-neto';
     }
-    // B) Caso Mercado/Inversiones -> Mis Inversiones
+    // B) Si es Mercado/Inversiones -> Ir a Mis Inversiones
     else if ((text.includes('mercado') || text.includes('valor real') || text.includes('inversiones')) && !card.id.includes('inversiones')) {
         targetId = 'seccion-inversiones';
     }
 
-    // 3. Si hay destino, iniciamos la maniobra
+    // 3. Ejecutar la maniobra si hay destino
     if (targetId) {
-        console.log(`📍 Iniciando viaje hacia: ${targetId}`);
+        console.log(`📍 Destino detectado: ${targetId}. Iniciando navegación...`);
 
-        // A) Pulsar botón del menú para cambiar de pestaña
+        // A) Cambiar de pestaña (Clic en el botón del menú)
         const btnInformes = document.querySelector('button[data-page="planificar-page"]');
         if (btnInformes) btnInformes.click();
 
-        // B) EL VIGILANTE: Observamos cambios en la página esperando al elemento
+        // B) EL VIGILANTE: Esperar a que el elemento aparezca físicamente
         const observer = new MutationObserver((mutations, obs) => {
-            const elementoDestino = document.getElementById(targetId);
+            const elemento = document.getElementById(targetId);
             
-            // Si el elemento existe Y es visible (tiene altura)
-            if (elementoDestino && elementoDestino.offsetHeight > 0) {
+            // Si existe Y tiene altura (es visible)
+            if (elemento && elemento.offsetHeight > 0) {
                 // ¡Apareció! Dejamos de vigilar
                 obs.disconnect();
                 
-                // Esperamos 100ms extra para que el gráfico termine de estirarse
+                // Pequeña pausa técnica para asegurar que el renderizado terminó
                 setTimeout(() => {
-                    console.log("✅ Elemento renderizado. Haciendo scroll.");
-                    
-                    // Scroll suave al centro
-                    elementoDestino.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Scroll suave
+                    elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-                    // Efecto visual potente "Aquí estoy"
-                    elementoDestino.style.transition = "transform 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28), box-shadow 0.5s ease";
-                    elementoDestino.style.transform = "scale(1.02)";
-                    elementoDestino.style.boxShadow = "0 0 30px rgba(0, 179, 77, 0.6)"; // Luz verde
-                    elementoDestino.style.border = "2px solid var(--c-primary)"; // Borde temporal
+                    // Efecto visual "Aquí estoy" (Borde y resplandor)
+                    elemento.style.transition = "transform 0.4s ease, box-shadow 0.4s ease";
+                    elemento.style.transform = "scale(1.02)";
+                    elemento.style.boxShadow = "0 0 30px rgba(0, 179, 77, 0.6)"; // Luz verde
+                    elemento.style.border = "2px solid var(--c-primary)"; // Borde de confirmación
                     
-                    // Quitar efecto
+                    // Quitar efecto a los 2 segundos
                     setTimeout(() => {
-                        elementoDestino.style.transform = "scale(1)";
-                        elementoDestino.style.boxShadow = "none";
-                        elementoDestino.style.border = "none";
+                        elemento.style.transform = "scale(1)";
+                        elemento.style.boxShadow = "none";
+                        elemento.style.border = "none";
                     }, 2000);
                 }, 100);
             }
         });
 
-        // Empezamos a vigilar todo el cuerpo de la página
+        // Empezamos a vigilar cambios en el cuerpo de la página
         observer.observe(document.body, { childList: true, subtree: true });
 
-        // C) Seguridad: Si en 10 segundos no aparece, el vigilante se retira (para no gastar batería)
-        setTimeout(() => observer.disconnect(), 10000);
+        // C) Seguridad: Si en 5 segundos no aparece, nos retiramos para ahorrar batería
+        setTimeout(() => observer.disconnect(), 5000);
     }
 });
