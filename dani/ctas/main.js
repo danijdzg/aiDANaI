@@ -10323,47 +10323,6 @@ const handleSaveMovement = async (form, btn) => {
 }
 };
 
-/**
-
-Prepara el formulario para duplicar un movimiento existente.
-
-@param {object} movementToDuplicate - El objeto del movimiento que se va a copiar.
-*/
-const handleDuplicateMovement = (movementToDuplicate) => {
-if (!movementToDuplicate) return;
-
-hapticFeedback('medium');
-
-// 1. Abrimos el formulario de edición con los datos del movimiento original.
-// Esto rellena todos los campos por nosotros (cantidad, descripción, etc.).
-startMovementForm(movementToDuplicate.id, false);
-
-// 2. Usamos un pequeño retardo para asegurarnos de que el formulario ya está visible
-// antes de modificarlo para que actúe como "Nuevo" en lugar de "Editar".
-setTimeout(() => {
- select('form-movimiento-title').textContent = 'Duplicar Movimiento';	
-// 3. Modificamos el estado del formulario para que sepa que vamos a crear
-// un movimiento NUEVO, no a actualizar el antiguo.
-select('movimiento-mode').value = 'new';
-select('movimiento-id').value = ''; // Borramos el ID antiguo, ¡muy importante!
-select('form-movimiento-title').textContent = 'Duplicar Movimiento';
-
-
-// 4. Ocultamos los botones que no tienen sentido aquí (borrar y duplicar de nuevo).
- select('delete-movimiento-btn').classList.add('hidden');
- select('duplicate-movimiento-btn').classList.add('hidden');
- 
- // 5. Ponemos la fecha de hoy por defecto, que es lo más común al duplicar.
- const today = new Date();
- const fechaInput = select('movimiento-fecha');
- fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
- updateDateDisplay(fechaInput); // Actualizamos el texto "Hoy"
-
- showToast('Datos duplicados. Ajusta y guarda.', 'info');
-
-}, 50); // 50 milisegundos es suficiente.
-};
-
 
 const handleAddConcept = async (btn) => { 
     const nombreInput = select('new-concepto-nombre');
