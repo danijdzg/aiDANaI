@@ -379,199 +379,169 @@ const renderInformeCuentaRow = (mov, cuentaId, allCuentas) => {
 };
 
 const handleGenerateInformeCuenta = async (form, btn = null) => {
-    // 1. Solo activamos la animación del botón si se proporciona (ahora es opcional)
-    if (btn) setButtonLoading(btn, true, 'Imprimiendo...');
-    
+    if (btn) setButtonLoading(btn, true, 'Descargando historial...');
     const cuentaId = select('informe-cuenta-select').value;
     const resultadoContainer = select('informe-resultado-container');
 
-    // 2. Si no hay cuenta seleccionada, limpiamos y salimos
     if (!cuentaId) {
         resultadoContainer.innerHTML = '';
         if (btn) setButtonLoading(btn, false);
         return;
     }
 
-    // 3. Mostramos un indicador de carga en el contenedor de resultados
     resultadoContainer.innerHTML = `
         <div style="text-align:center; padding: var(--sp-5);">
             <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
-            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">Cargando movimientos...</p>
+            <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">
+                Analizando todo el historial...
+            </p>
         </div>`;
 
-    const cuenta = db.cuentas.find(c => c.id === cuentaId);
-
     try {
-        // --- Obtención y cálculo de datos (IGUAL QUE ANTES) ---
+        // 1. OBTENER TODO EL HISTORIAL (Forzamos carga si no estamos seguros)
+        // Llamamos a getAll. Si ya estaba cargado ("isFullyLoaded"), será instantáneo.
+        // Si solo tenías los últimos 3 meses, esto descargará el resto automáticamente.
         const todosLosMovimientos = await AppStore.getAll();
         
+        // Obtenemos saldo inicial de la cuenta
+        const cuentaObj = db.cuentas.find(c => c.id === cuentaId);
+        const saldoInicial = cuentaObj ? parseFloat(cuentaObj.saldoInicial || 0) : 0;
+
+        // 2. FILTRAR movimientos de esta cuenta
         let movimientosDeLaCuenta = todosLosMovimientos.filter(m =>
             (m.cuentaId === cuentaId) || (m.cuentaOrigenId === cuentaId) || (m.cuentaDestinoId === cuentaId)
         );
 
-        if (movimientosDeLaCuenta.length === 0) {
-             resultadoContainer.innerHTML = `<div class="empty-state" style="background:transparent; border:none; padding:var(--sp-4);"><p>Sin movimientos registrados.</p></div>`;
+        // Si no hay movimientos, mostramos aviso
+        if (movimientosDeLaCuenta.length === 0 && saldoInicial === 0) {
+             resultadoContainer.innerHTML = `<div class="empty-state" style="padding:var(--sp-4); border:none;"><p>Sin movimientos en el historial.</p></div>`;
              if (btn) setButtonLoading(btn, false);
              return;
         }
 
+        // 3. CALCULAR SALDOS (Orden cronológico: Antiguo -> Nuevo)
         movimientosDeLaCuenta.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-        let saldoAcumulado = 0;
+        let saldoAcumulado = saldoInicial;
+
         for (const mov of movimientosDeLaCuenta) {
             let impacto = 0;
             if (mov.tipo === 'traspaso') {
-                if (mov.cuentaOrigenId === cuentaId) impacto = -mov.cantidad;
-                if (mov.cuentaDestinoId === cuentaId) impacto = mov.cantidad;
+                if (mov.cuentaOrigenId === cuentaId) impacto = -Math.abs(mov.cantidad);
+                if (mov.cuentaDestinoId === cuentaId) impacto = Math.abs(mov.cantidad);
             } else {
-                impacto = mov.cantidad;
+                impacto = mov.cantidad; // Asumimos signo correcto en cantidad
             }
             saldoAcumulado += impacto;
             mov.runningBalance = saldoAcumulado;
         }
 
+        // 4. PREPARAR VISTA (Orden visual: Nuevo -> Antiguo)
         movimientosDeLaCuenta.reverse(); 
-
-        // --- Renderizado HTML ---
-        let html = `
-            <div class="cartilla-container">
-                <div class="cartilla-header-info">
-                    <h4>EXTRACTO DE CUENTA</h4>
-                    <p><strong>Titular:</strong> ${escapeHTML(cuenta.nombre)}</p>
-                    <p class="cartilla-print-date">Fecha: ${new Date().toLocaleDateString()}</p>
-                </div>
-                <div class="cartilla-table">
-                    <div class="cartilla-row cartilla-head">
-                        <div class="cartilla-cell">FECHA</div>
-                        <div class="cartilla-cell">CONCEPTO</div>
-                        <div class="cartilla-cell text-right">CARGOS</div>
-                        <div class="cartilla-cell text-right">ABONOS</div>
-                        <div class="cartilla-cell text-right">SALDO</div>
-                    </div>`;
-                
-        for (const mov of movimientosDeLaCuenta) {
-            html += renderInformeCuentaRow(mov, cuentaId, db.cuentas);
-        }
         
-        html += `</div><div class="cartilla-footer">** FIN DEL EXTRACTO **</div></div>`;
-        resultadoContainer.innerHTML = html;
+        // Filtro visual: Ocultar traspasos si se desea ver solo flujo real
+        const movimientosVisibles = movimientosDeLaCuenta.filter(m => m.tipo !== 'traspaso');
+
+        if (movimientosVisibles.length === 0) {
+             resultadoContainer.innerHTML = `
+                <div class="transactions-list-container" style="padding: 0;">
+                    <div style="padding: 15px; text-align: center; opacity: 0.7;">
+                        <p>Saldo actual: <strong>${formatCurrency(saldoAcumulado)}</strong></p>
+                        <small>No hay ingresos/gastos directos, solo traspasos.</small>
+                    </div>
+                </div>`;
+             if (btn) setButtonLoading(btn, false);
+             return;
+        }
+
+        // 5. RENDERIZAR
+        const listHTML = movimientosVisibles.map(m => renderVirtualListItem({ type: 'transaction', movement: m })).join('');
+        
+        resultadoContainer.innerHTML = `
+            <div class="transactions-list-container" style="padding: 0;">
+                <div style="display: flex; justify-content: space-between; padding: 10px 15px; font-size: 0.8rem; opacity: 0.7; border-bottom: 1px solid var(--c-outline);">
+                    <span style="text-transform: uppercase; letter-spacing: 1px;">Historial Completo</span>
+                    <span>Saldo: <strong style="color: var(--c-on-surface);">${formatCurrency(saldoAcumulado)}</strong></span>
+                </div>
+                ${listHTML}
+            </div>`;
 
     } catch (error) {
         console.error(error);
-        showToast("Error generando el extracto.", "danger");
         resultadoContainer.innerHTML = `<div class="empty-state text-danger"><p>Error al cargar datos.</p></div>`;
     } finally {
         if (btn) setButtonLoading(btn, false);
     }
 };
+
 const handleGenerateGlobalExtract = async (btn = null) => {
     const resultadoContainer = select('informe-resultado-container');
     if (!resultadoContainer) return;
 
-    // Si viene de un botón, mostramos estado de carga
     if (btn) setButtonLoading(btn, true, 'Procesando...');
     else hapticFeedback('medium');
     
-    // Limpiamos el selector de cuenta individual para evitar confusión
+    // Limpiamos el selector individual para evitar confusión
     const selectCuenta = select('informe-cuenta-select');
-    if (selectCuenta) {
-        selectCuenta.value = "";
-        // Reset visual del custom select
-        const wrapper = selectCuenta.closest('.custom-select-wrapper');
-        const trigger = wrapper?.querySelector('.custom-select__trigger');
-        if(trigger) trigger.innerHTML = `<span style="color: var(--c-on-surface-tertiary); opacity: 0.7;">Seleccionar cuenta...</span>`;
-    }
+    if (selectCuenta) selectCuenta.value = "";
 
     resultadoContainer.innerHTML = `
         <div style="text-align:center; padding: var(--sp-5);">
             <span class="spinner" style="color:var(--c-primary); width: 24px; height:24px;"></span>
             <p style="font-size:var(--fs-xs); margin-top:8px; color:var(--c-on-surface-secondary);">
-                Consolidando movimientos por fecha...
+                Consolidando flujo de caja global...
             </p>
         </div>`;
 
     try {
-        // 1. Obtener datos
         const allMovements = await AppStore.getAll();
-        const saldos = await getSaldos();
-        
-        // 2. Calcular Patrimonio Neto Actual (Punto de partida)
-        let currentGlobalBalance = Object.values(saldos).reduce((sum, s) => sum + s, 0);
-        
-        // 3. Filtrar movimientos de la contabilidad visible
         const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
         
+        // 1. Filtrado Inteligente (Lo que pediste)
+        // Solo nos quedamos con movimientos que NO sean traspasos internos.
+        // Es decir, solo entradas y salidas reales de dinero de la contabilidad actual.
         let globalMovements = allMovements.filter(m => {
-            if (m.tipo === 'traspaso') {
-                return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
-            }
+            // Si es traspaso, lo ignoramos por completo para el reporte global "limpio"
+            if (m.tipo === 'traspaso') return false; 
+            
+            // Si es movimiento normal, verificamos que sea de una cuenta visible
             return visibleAccountIds.has(m.cuentaId);
         });
 
-        // 4. ORDENAR POR FECHA (Reciente -> Antiguo)
+        // 2. Ordenar: Más reciente primero
         globalMovements.sort((a, b) => {
             const dateDiff = new Date(b.fecha) - new Date(a.fecha);
             if (dateDiff !== 0) return dateDiff;
             return b.id.localeCompare(a.id);
         });
 
-        // 5. Calcular Saldos Históricos (Running Balance Inverso)
-        let runningBalance = currentGlobalBalance;
-
-        for (const mov of globalMovements) {
-            mov.runningBalance = runningBalance; 
-
-            let impact = 0;
-            if (mov.tipo === 'traspaso') {
-                const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
-                const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-                
-                // Calculamos impacto neto en el patrimonio visible
-                if (origenVisible && !destinoVisible) impact = -mov.cantidad; // Sale
-                else if (!origenVisible && destinoVisible) impact = mov.cantidad; // Entra
-                
-                // Ajuste visual: Sobrescribimos cantidad para que se pinte en la columna correcta
-                mov.cantidad = impact; 
-                
-            } else {
-                impact = mov.cantidad;
-            }
-
-            // Restamos el impacto para saber el saldo anterior
-            runningBalance -= impact;
+        if (globalMovements.length === 0) {
+            resultadoContainer.innerHTML = `
+                <div class="empty-state" style="padding: 40px 0;">
+                    <span class="material-icons">savings</span>
+                    <p>No hay movimientos de flujo registrados.</p>
+                </div>`;
+            return;
         }
 
-        // 6. Renderizar HTML (AQUÍ ESTABA EL ERROR)
-        // Hemos cambiado 'isOffBalanceMode' por 'getLedgerName(currentLedger)'
-        let html = `
-            <div class="cartilla-container" style="border-top: 4px solid var(--c-primary);">
-                <div class="cartilla-header-info">
-                    <h4 style="color: var(--c-primary);">LIBRO MAYOR GLOBAL</h4>
-                    <p><strong>Contabilidad:</strong> ${getLedgerName(currentLedger)}</p>
-                    <p class="cartilla-print-date">Ordenado por fecha · ${new Date().toLocaleDateString()}</p>
+        // 3. Renderizado Unificado (Estilo Burbujas)
+        // Reutilizamos el renderizador del diario para consistencia total
+        const listHTML = globalMovements
+            .map(m => renderVirtualListItem({ type: 'transaction', movement: m }))
+            .join('');
+
+        resultadoContainer.innerHTML = `
+            <div class="transactions-list-container" style="padding: 0;">
+                <div style="display:flex; justify-content:space-between; padding: 10px 15px; border-bottom: 1px solid var(--c-outline);">
+                    <span style="font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">
+                        Flujo Global (Sin Traspasos)
+                    </span>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--c-primary);">
+                        ${getLedgerName(currentLedger)}
+                    </span>
                 </div>
-                
-                <div class="cartilla-table">
-                    <div class="cartilla-row cartilla-head">
-                        <div class="cartilla-cell">FECHA</div>
-                        <div class="cartilla-cell">CUENTA / CONCEPTO</div>
-                        <div class="cartilla-cell text-right">CARGOS</div>
-                        <div class="cartilla-cell text-right">ABONOS</div>
-                        <div class="cartilla-cell text-right">TOTAL</div>
-                    </div>`;
-                
-        for (const mov of globalMovements) {
-            // Pasamos null como cuentaId para activar el modo Global
-            html += renderInformeCuentaRow(mov, null, db.cuentas);
-        }
-        
-        html += `</div>
-            <div class="cartilla-footer">
-                ** FIN DEL INFORME **
-            </div>
-        </div>`;
-
-        resultadoContainer.innerHTML = html;
+                ${listHTML}
+            </div>`;
      
     } catch (error) {
         console.error(error);
@@ -646,33 +616,178 @@ const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", auth
 const PAGE_IDS = {
     PANEL: 'panel-page',
     DIARIO: 'diario-page',
-    PATRIMONIO: 'patrimonio-page',
     PLANIFICAR: 'planificar-page',
     AJUSTES: 'ajustes-page',
 };
+/* =============================================================== */
+/* === MOTOR DE FONDO ESPACIAL ESPECTACULAR === */
+/* =============================================================== */
+const SpaceBackgroundEffect = (() => {
+    let canvas, ctx, w, h, animationFrameId;
+    let stars = [];
+    let shootingStars = [];
+    let isActive = false;
+
+    // Configuración para que sea "Espectacular"
+    const CONFIG = {
+        starCount: 450, // ¡Muchas estrellas!
+        baseSpeed: 0.3, // Velocidad del desplazamiento vertical
+        shootingStarFrequency: 0.04, // Probabilidad alta de estrellas fugaces por frame
+    };
+
+    // Clase para una estrella normal
+    class Star {
+        constructor() {
+            this.reset();
+            // Posición inicial aleatoria en toda la pantalla
+            this.y = Math.random() * h; 
+        }
+        reset() {
+            this.x = Math.random() * w;
+            this.y = -10; // Empieza justo arriba de la pantalla
+            this.z = Math.random() * 1.5 + 0.5; // Profundidad (afecta velocidad y tamaño)
+            this.size = Math.random() * 1.2 * this.z;
+            this.brightness = Math.random() * 0.8 + 0.2;
+            // Velocidad parpadeo
+            this.twinkleSpeed = Math.random() * 0.05; 
+            this.twinkleDir = Math.random() > 0.5 ? 1 : -1;
+        }
+        update() {
+            this.y += CONFIG.baseSpeed * this.z;
+            // Efecto parpadeo
+            this.brightness += this.twinkleSpeed * this.twinkleDir;
+            if (this.brightness > 1 || this.brightness < 0.2) this.twinkleDir *= -1;
+            
+            // Si sale por abajo, reiniciar arriba
+            if (this.y > h) this.reset();
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.brightness})`;
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Clase para estrella fugaz espectacular
+    class ShootingStar {
+        constructor() {
+            this.reset();
+        }
+        reset() {
+            this.x = Math.random() * w * 1.5 - w * 0.25; // Empezar fuera de pantalla horizontalmente
+            this.y = Math.random() * h * 0.5; // Empezar en la mitad superior
+            this.len = Math.random() * 200 + 100; // Longitud de la cola
+            this.speed = Math.random() * 15 + 10; // ¡Muy rápidas!
+            this.size = Math.random() * 2 + 0.5;
+            // Ángulo aleatorio entre 30 y 60 grados hacia abajo/derecha
+            this.angle = (Math.random() * 30 + 30) * (Math.PI / 180); 
+            this.opacity = 1;
+            this.active = true;
+        }
+        update() {
+            this.x += this.speed * Math.cos(this.angle);
+            this.y += this.speed * Math.sin(this.angle);
+            this.opacity -= 0.015; // Desvanecer cola
+            if (this.x > w + this.len || this.y > h + this.len || this.opacity <= 0) {
+                this.active = false;
+            }
+        }
+        draw() {
+            if (!this.active) return;
+            const tailX = this.x - this.len * Math.cos(this.angle);
+            const tailY = this.y - this.len * Math.sin(this.angle);
+            
+            const gradient = ctx.createLinearGradient(this.x, this.y, tailX, tailY);
+            gradient.addColorStop(0, `rgba(255,255,255,${this.opacity})`); // Cabeza brillante
+            gradient.addColorStop(0.2, `rgba(100,200,255,${this.opacity * 0.6})`); // Cuerpo azulado
+            gradient.addColorStop(1, `rgba(0,0,0,0)`); // Cola transparente
+
+            ctx.beginPath();
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = this.size;
+            ctx.lineCap = 'round';
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(tailX, tailY);
+            ctx.stroke();
+        }
+    }
+
+    const init = () => {
+        canvas = document.getElementById('space-canvas');
+        if (!canvas) return;
+        ctx = canvas.getContext('2d');
+        resize();
+        window.addEventListener('resize', resize);
+        // Crear estrellas iniciales
+        for (let i = 0; i < CONFIG.starCount; i++) stars.push(new Star());
+    };
+
+    const resize = () => {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+    };
+
+    const animate = () => {
+        if (!isActive) return;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; // Rastro suave para movimiento
+        ctx.fillRect(0, 0, w, h); // Limpiar pantalla (fondo negro)
+
+        // Dibujar estrellas normales
+        stars.forEach(star => { star.update(); star.draw(); });
+
+        // Gestionar estrellas fugaces
+        if (Math.random() < CONFIG.shootingStarFrequency) {
+            shootingStars.push(new ShootingStar());
+        }
+        shootingStars.forEach(ss => { ss.update(); ss.draw(); });
+        // Eliminar estrellas fugaces inactivas para ahorrar memoria
+        shootingStars = shootingStars.filter(ss => ss.active);
+
+        animationFrameId = requestAnimationFrame(animate);
+    };
+
+    return {
+        start: () => {
+            if (!canvas) init();
+            if (isActive) return;
+            isActive = true;
+            canvas.classList.add('active');
+            animate();
+            console.log('🌌 Motor espacial espectacular INICIADO');
+        },
+        stop: () => {
+            if (!isActive) return;
+            isActive = false;
+            if (canvas) canvas.classList.remove('active');
+            cancelAnimationFrame(animationFrameId);
+            console.log('🛑 Motor espacial DETENIDO (Ahorro de energía)');
+        }
+    };
+})();
 
 // ==========================================
-// === CORE OPTIMIZATION: AppStore v1.0 ===
+// === CORE OPTIMIZATION: AppStore v1.1 ===
 // ==========================================
 const AppStore = {
     movements: [],
     isFullyLoaded: false,
     lastFetch: 0,
-    CACHE_DURATION: 5 * 60 * 1000, // 5 minutos de validez si se solicita recarga suave
 
-    // Carga TODO el historial una sola vez y lo guarda en memoria RAM
-    async getAll() {
+    // Carga TODO el historial. Si force=true, ignora la memoria y descarga de nuevo.
+    async getAll(force = false) {
         if (!currentUser) return [];
 
-        // Si ya tenemos datos y no forzamos recarga, devolvemos memoria (Instantáneo)
-        if (this.isFullyLoaded) {
+        // Si ya tenemos datos cargados y NO forzamos, devolvemos lo que hay en memoria (Rápido)
+        if (this.isFullyLoaded && !force) {
             return this.movements;
         }
 
-        console.log("🚀 AppStore: Descargando historial completo de Firestore...");
+        console.log("🚀 AppStore: Descargando historial COMPLETO de Firestore...");
         try {
+            // NOTA: No usamos .limit() aquí, queremos TODO el historial
             const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-                .orderBy('fecha', 'desc') // Ordenamos por fecha descendente
+                .orderBy('fecha', 'desc') 
                 .get();
             
             this.movements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -683,42 +798,23 @@ const AppStore = {
             return this.movements;
         } catch (error) {
             console.error("❌ AppStore Error:", error);
+            showToast("Error cargando historial completo", "danger");
             return [];
         }
     },
 
-    // Métodos para mantener la memoria sincronizada sin llamar a la DB
-    add(item) {
-        // Añadimos al principio (es el más reciente)
-        this.movements.unshift(item);
-        // Re-ordenamos por seguridad si la fecha no es hoy
-        this.sort();
-    },
-
+    // Métodos auxiliares
+    add(item) { this.movements.unshift(item); this.sort(); },
     update(updatedItem) {
         const index = this.movements.findIndex(m => m.id === updatedItem.id);
-        if (index !== -1) {
-            this.movements[index] = updatedItem;
-            this.sort();
-        }
+        if (index !== -1) { this.movements[index] = updatedItem; this.sort(); }
     },
-
     delete(id) {
         const index = this.movements.findIndex(m => m.id === id);
-        if (index !== -1) {
-            this.movements.splice(index, 1);
-        }
+        if (index !== -1) this.movements.splice(index, 1);
     },
-
-    sort() {
-        this.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    },
-
-    // Reset total (al cerrar sesión)
-    clear() {
-        this.movements = [];
-        this.isFullyLoaded = false;
-    }
+    sort() { this.movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
+    clear() { this.movements = []; this.isFullyLoaded = false; }
 };
 // ▼▼▼ REEMPLAZAR TU FUNCIÓN updateAnalisisWidgets CON ESTA VERSIÓN SIMPLIFICADA ▼▼▼
 const updateAnalisisWidgets = async () => {
@@ -982,9 +1078,29 @@ let calculatorState = {
 };
 
 // Actualiza el display del historial
+// =========================================================
+// CORRECCIÓN: VISUALIZACIÓN COMPLETA DE OPERACIONES
+// =========================================================
 const updateCalculatorHistoryDisplay = () => {
     const historyDisplay = select('calculator-history-display');
-    if (historyDisplay) historyDisplay.textContent = calculatorState.historyValue;
+    if (!historyDisplay) return;
+    
+    // 1. Cogemos la base histórica (Ej: "50 +")
+    let fullHistory = calculatorState.historyValue || ''; 
+    
+    // 2. MAGIA: Si hay un operador activo y ya estamos escribiendo el siguiente número,
+    // lo concatenamos visualmente para que se vea la operación completa (Ej: "50 + 20")
+    if (calculatorState.operator && !calculatorState.waitingForNewValue) {
+        // Añadimos un espacio y el valor que estás tecleando ahora mismo
+        fullHistory += ' ' + calculatorState.displayValue;
+    }
+    
+    // 3. Renderizamos
+    historyDisplay.textContent = fullHistory;
+    
+    // Extra: Si el texto es muy largo, hacemos scroll automático al final
+    // para ver siempre el último número que escribimos
+    historyDisplay.scrollLeft = historyDisplay.scrollWidth;
 };
 
 // Mapea las claves a los símbolos visuales
@@ -1897,14 +2013,41 @@ const formatCurrencyHTML = (numInCents) => {
     return db.config?.ledgerNames?.[letter] || `Caja ${letter}`;
 };
 const updateLedgerButtonUI = () => {
-    const btn = select('ledger-toggle-btn');
+    // 1. Seleccionamos los elementos
+    const btn = document.getElementById('ledger-toggle-btn');
+    const oneDriveBtn = document.getElementById('main-menu-btn');
+    
+    // 2. Definimos los colores (A=Azul, B=Rojo, C=Verde)
+    const colors = {
+        'A': '#007bff', 
+        'B': '#dc3545', 
+        'C': '#28a745'
+    };
+    
+    // 3. Obtenemos el color actual
+    const activeColor = colors[currentLedger] || colors['A'];
+
+    // 4. Aplicamos el cambio al botón de CAJA (Caja A, B, C)
     if (btn) {
-        // Obtenemos el nombre usando tu función helper existente
         const name = getLedgerName(currentLedger);
-        
-        // Actualizamos el texto y el título
         btn.textContent = name;
         btn.title = `Estás en: ${name}`;
+        
+        // Forzamos el color con prioridad máxima
+        btn.style.setProperty('color', activeColor, 'important');
+        btn.style.setProperty('border-color', activeColor, 'important');
+    }
+
+    // 5. Aplicamos el cambio al botón de ONEDRIVE (Cartera)
+    if (oneDriveBtn) {
+        // Cambiamos el color del botón
+        oneDriveBtn.style.setProperty('color', activeColor, 'important');
+        
+        // TRUCO EXTRA: Buscamos el icono de dentro y también lo pintamos
+        const iconInside = oneDriveBtn.querySelector('.material-icons');
+        if (iconInside) {
+            iconInside.style.setProperty('color', activeColor, 'important');
+        }
     }
 };
 /* --- HELPER: Convierte HEX a RGBA para los gradientes --- */
@@ -2088,21 +2231,38 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
         useGrouping: true // ¡Esta es la opción clave!
     }).format(num);
 };
-		const showPinScreen = (user) => {
-            currentUser = user;
-            const pinScreen = select('pin-login-screen');
-            const loginScreen = select('login-screen');
-            const appRoot = select('app-root');
+	const showPinScreen = (user) => {
+    // 1. Encender estrellas (IMPORTANTE)
+    if (typeof SpaceBackgroundEffect !== 'undefined') {
+        SpaceBackgroundEffect.start();
+    }
 
-            if (appRoot) appRoot.classList.remove('app-layout--visible');
-            if (loginScreen) loginScreen.classList.remove('login-view--visible');
-            if (pinScreen) pinScreen.classList.add('login-view--visible');
-            
-            const pinInputs = selectAll('#pin-inputs-container .pin-input');
-            pinInputs.forEach(input => input.value = '');
-            (select('pin-error')).textContent = '';
-            if (pinInputs.length > 0) pinInputs[0].focus();
-        };
+    currentUser = user;
+    const pinScreen = select('pin-login-screen');
+    const loginScreen = select('login-screen');
+    const appRoot = select('app-root'); // O 'app-container', verifica tu ID
+
+    // 2. Ocultar todo lo demás
+    if (appRoot) appRoot.classList.remove('app-layout--visible'); 
+    if (loginScreen) loginScreen.classList.remove('login-view--visible');
+
+    // 3. Mostrar PIN y quitarle el fondo
+    if (pinScreen) {
+        pinScreen.classList.add('login-view--visible');
+        
+        // --- ESTA LÍNEA ES LA MAGIA QUE FALTA ---
+        pinScreen.style.background = 'transparent'; 
+        pinScreen.style.backgroundColor = 'transparent';
+        // ----------------------------------------
+    }
+    
+    // Lógica de inputs (sin cambios)
+    const pinInputs = selectAll('#pin-inputs-container .pin-input');
+    pinInputs.forEach(input => input.value = '');
+    const errorMsg = select('pin-error');
+    if (errorMsg) errorMsg.textContent = '';
+    if (pinInputs.length > 0) pinInputs[0].focus();
+};
 
         const handlePinSubmit = async () => {
             const pinInputs = selectAll('#pin-inputs-container .pin-input');
@@ -2187,6 +2347,7 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
             });
         };
     const initApp = async () => {
+	SpaceBackgroundEffect.start();	
     const procederConCargaDeApp = () => {
         document.documentElement.lang = 'es';
         setupTheme();
@@ -2214,9 +2375,11 @@ window.addEventListener('offline', () => {
     updateSyncStatusIcon();
 });
     const startMainApp = async () => {
-    const loginScreen = select('login-screen');
+	const loginScreen = select('login-screen');
     const pinLoginScreen = select('pin-login-screen');
+	SpaceBackgroundEffect.stop();	
     const appRoot = select('app-root');
+	if (appRoot) appRoot.style.display = 'block';
 	if (localStorage.getItem('privacyMode') === 'true') {
     document.body.classList.add('privacy-mode');
 	}
@@ -2430,66 +2593,35 @@ const navigateTo = async (pageId, isInitial = false) => {
     const newIndex = navItems.findIndex(item => item.dataset.page === newView.id);
     const isForward = newIndex > oldIndex;
 
-    // Barra Superior
-    const actionsEl = select('top-bar-actions');
-    const leftEl = select('top-bar-left-button');
-    
-    // Acciones por defecto (Menú de 3 puntos)
-    const standardActions = `
-        <button data-action="open-external-calculator" class="icon-btn" title="Abrir Calculadora">
-            <span class="material-icons">calculate</span>
-        </button>
-        <button id="header-menu-btn" class="icon-btn" data-action="show-main-menu">
-    <span class="material-icons">more_vert</span>
-</button>
-    `;
-    
-    if (pageId === PAGE_IDS.PLANIFICAR && !dataLoaded.presupuestos) await loadPresupuestos();
-    if (pageId === PAGE_IDS.PATRIMONIO && !dataLoaded.inversiones) await loadInversiones();
-	const patrimonioActions = `
-    <button data-action="toggle-portfolio-currency" class="icon-btn" title="Cambiar moneda (EUR/BTC)">
-        <span class="material-icons" id="currency-toggle-icon">currency_bitcoin</span>
-    </button>
-    ${standardActions}
-`;
+    // --- CORRECCIÓN CRÍTICA AQUÍ ---
+    // En lugar de intentar inyectar HTML, simplemente mostramos/ocultamos 
+    // el bloque de herramientas que ya tienes en tu HTML (id="header-diario-tools")
+    const diarioTools = document.getElementById('header-diario-tools');
+    if (diarioTools) {
+        if (pageId === PAGE_IDS.DIARIO) {
+            diarioTools.style.display = 'flex'; // Mostrar en Diario
+        } else {
+            diarioTools.style.display = 'none'; // Ocultar en el resto
+        }
+    }
+    // -------------------------------
 
-const pageRenderers = {
-    [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage, actions: standardActions },
-    [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    // ▼▼▼ CAMBIO AQUÍ ▼▼▼
-    [PAGE_IDS.PATRIMONIO]: { title: 'Patrimonio', render: renderPatrimonioPage, actions: patrimonioActions },
-    // ▲▲▲ FIN CAMBIO ▲▲▲
-    [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage, actions: standardActions },
-    [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage, actions: standardActions },
-};
+    const pageRenderers = {
+        [PAGE_IDS.PANEL]: { title: 'Panel', render: renderPanelPage },
+        [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage },
+        [PAGE_IDS.PLANIFICAR]: { title: 'Planificar', render: renderPlanificacionPage },
+        [PAGE_IDS.AJUSTES]: { title: 'Ajustes', render: renderAjustesPage },
+    };
 
     if (pageRenderers[pageId]) {
-        // 1. Actualizar el Título (Limpiamos si es Panel o Diario)
+        // Actualizar el Título (Limpiamos si es Panel o Diario)
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
             const rawTitle = pageRenderers[pageId].title;
-            // Si es Panel o Diario, dejamos el texto vacío. Si no, ponemos el título (ej: Ajustes)
             titleEl.textContent = (pageId === PAGE_IDS.PANEL || pageId === PAGE_IDS.DIARIO) ? '' : rawTitle;
         }
-
-        // 2. Botones extra del Diario (Filtro y Vista)
-        // Los inyectamos en la barra de acciones de la derecha si estamos en Diario
-        if (actionsEl) {
-            let actionsHTML = pageRenderers[pageId].actions;
-            
-            if (pageId === PAGE_IDS.DIARIO) {
-                // Añadimos los botones del diario al principio de las acciones
-                const diarioButtons = `
-                    <button data-action="toggle-diario-view" class="icon-btn" title="Cambiar Vista"><span class="material-icons">${diarioViewMode === 'list' ? 'calendar_month' : 'list'}</span></button>
-                    <button data-action="show-diario-filters" class="icon-btn" title="Filtrar"><span class="material-icons">filter_list</span></button>
-                `;
-                actionsHTML = diarioButtons + actionsHTML;
-            }
-            
-            actionsEl.innerHTML = actionsHTML;
-        }
         
-        // 3. Renderizar la página
+        // Renderizar la página
         await pageRenderers[pageId].render();
     }
     
@@ -3227,202 +3359,7 @@ const renderGaugeChart = (canvasId, percentageConsumed, yearProgressPercentage) 
     });
 };        
 
-const renderBudgetTracking = async () => {
-    const dashboardContainer = select('annual-budget-dashboard');
-    const placeholder = select('budget-init-placeholder');
-    const yearSelector = select('budget-year-selector');
-    if (!dashboardContainer || !placeholder || !yearSelector) return;
-    
-    const year = parseInt(yearSelector.value, 10);
-    
-    const allYearBudgets = (db.presupuestos || [])
-        .filter(b => b.ano === year && db.conceptos.find(c => c.id === b.conceptoId));
 
-    if (allYearBudgets.length === 0) {
-        dashboardContainer.classList.add('hidden');
-        placeholder.classList.remove('hidden');
-        const titleEl = select('budget-placeholder-title');
-        const textEl = select('budget-placeholder-text');
-        if (titleEl) titleEl.textContent = `Configurar Presupuestos ${year}`;
-        if (textEl) textEl.textContent = `Aún no has definido metas de ingreso o límites de gasto para el año ${year}.`;
-        return;
-    }
-    
-    dashboardContainer.classList.remove('hidden');
-    placeholder.classList.add('hidden');
-
-    const { percentage: yearProgress, daysPassed, daysRemaining, totalDaysInYear } = getYearProgress();
-    
-    // --- INICIO DE LA SOLUCIÓN DEFINITIVA ---
-    // 1. En lugar de hacer una consulta compleja a Firebase, traemos TODOS los movimientos
-    //    usando una función que ya sabemos que es fiable y no depende de índices.
-    const allMovements = await AppStore.getAll();
-
-    // 2. Ahora, filtramos esos movimientos en JavaScript. Es más rápido y 100% seguro.
-    //    Nos aseguramos de que el movimiento sea del tipo correcto Y del año seleccionado.
-    const movements = allMovements.filter(mov => {
-        const movYear = new Date(mov.fecha).getFullYear();
-        return mov.tipo === 'movimiento' && movYear === year;
-    });
-    // --- FIN DE LA SOLUCIÓN DEFINITIVA ---
-
-    const monthlyIncomeData = {};
-    const monthlyExpenseData = {};
-    movements.forEach(mov => {
-        const month = new Date(mov.fecha).getMonth();
-        if (mov.cantidad > 0) {
-            monthlyIncomeData[month] = (monthlyIncomeData[month] || 0) + mov.cantidad;
-        } else {
-            monthlyExpenseData[month] = (monthlyExpenseData[month] || 0) + Math.abs(mov.cantidad);
-        }
-    });
-
-    const expenseBudgets = allYearBudgets.filter(b => b.cantidad < 0);
-    let totalBudgetedExpense = 0;
-    const expenseDetails = expenseBudgets.map(budget => {
-        const actualSpent = Math.abs(movements.filter(m => m.conceptoId === budget.conceptoId && m.cantidad < 0).reduce((sum, m) => sum + m.cantidad, 0));
-        const budgetLimit = Math.abs(budget.cantidad);
-        totalBudgetedExpense += budgetLimit;
-
-        const rawPacePercentage = (budgetLimit > 0 && yearProgress > 0) ? ((actualSpent / budgetLimit) / (yearProgress / 100)) * 100 : (actualSpent > 0 ? 200 : 100);
-        const pacePercentage = Math.min(rawPacePercentage, 200);
-
-        let status;
-        if (rawPacePercentage > 120) {
-            status = { text: 'Excedido', icon: 'cancel', color: 'text-danger' };
-        } else if (rawPacePercentage >= 80) {
-            status = { text: 'Vas bien', icon: 'check_circle', color: 'text-info' };
-        } else {
-            status = { text: 'Ahorrando', icon: 'verified', color: 'text-positive' };
-        }
-
-        const projectedAnnualSpent = (daysPassed > 0) ? (actualSpent / daysPassed) * totalDaysInYear : 0;
-        return { ...budget, actual: actualSpent, limit: budgetLimit, projected: projectedAnnualSpent, pacePercentage, status };
-    });
-    const totalProjectedExpense = expenseDetails.reduce((sum, b) => sum + b.projected, 0);
-
-    const incomeBudgets = allYearBudgets.filter(b => b.cantidad >= 0);
-    let totalBudgetedIncome = 0;
-    const incomeDetails = incomeBudgets.map(budget => {
-        const actualIncome = movements.filter(m => m.conceptoId === budget.conceptoId && m.cantidad > 0).reduce((sum, m) => sum + m.cantidad, 0);
-        const budgetGoal = budget.cantidad;
-        totalBudgetedIncome += budgetGoal;
-
-        const rawPacePercentage = (budgetGoal > 0 && yearProgress > 0) ? ((actualIncome / budgetGoal) / (yearProgress / 100)) * 100 : (actualIncome > 0 ? 200 : 0);
-        const pacePercentage = Math.min(rawPacePercentage, 200);
-
-        let status;
-        if (rawPacePercentage > 120) {
-            status = { text: 'Superado', icon: 'rocket_launch', color: 'text-positive' };
-        } else if (rawPacePercentage >= 80) {
-            status = { text: 'Vas bien', icon: 'check_circle', color: 'text-info' };
-        } else {
-            status = { text: 'Por debajo del objetivo', icon: 'trending_down', color: 'text-warning' };
-        }
-
-        const projectedAnnualIncome = (daysPassed > 0) ? (actualIncome / daysPassed) * totalDaysInYear : 0;
-        return { ...budget, actual: actualIncome, limit: budgetGoal, projected: projectedAnnualIncome, pacePercentage, status };
-    });
-    const totalProjectedIncome = incomeDetails.reduce((sum, b) => sum + b.projected, 0);
-
-    const projectedNet = totalProjectedIncome - totalProjectedExpense;
-    const kpiContainer = select('budget-kpi-container');
-    if (kpiContainer) kpiContainer.innerHTML = `
-        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Ingresos</h4><strong class="kpi-item__value text-positive">${formatCurrency(totalProjectedIncome)}</strong></div>
-        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Gastos</h4><strong class="kpi-item__value text-negative">${formatCurrency(totalProjectedExpense)}</strong></div>
-        <div class="kpi-item"><h4 class="kpi-item__label">Proyección Neta Anual</h4><strong class="kpi-item__value ${projectedNet >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrency(projectedNet)}</strong></div>
-    `;
-    renderBudgetTrendChart(monthlyIncomeData, monthlyExpenseData, totalBudgetedExpense / 12);
-
-    const listContainer = select('budget-details-list');
-    let listHtml = '';
-
-    if (incomeDetails.length > 0) {
-        listHtml += `<h4 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2);">Metas de Ingresos</h4>`;
-        listHtml += incomeDetails.sort((a, b) => (a.projected / (a.limit || 1)) - (b.projected / (b.limit || 1))).map(b => {
-            const concepto = db.conceptos.find(c => c.id === b.conceptoId);
-            const conceptoNombre = (concepto && concepto.nombre) || 'Concepto no encontrado';
-            
-            // --- HTML MEJORADO CON CLASES RESPONSIVAS ---
-            return `
-            <div class="card" style="margin-bottom: var(--sp-3);">
-                <div class="card__content" style="padding: var(--sp-3);">
-                    <div class="budget-card-grid">
-                        <div class="budget-chart-wrapper">
-                            <canvas id="gauge-chart-${b.id}"></canvas>
-                            <div style="position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: var(--fs-lg); line-height:1;">
-                                ${b.pacePercentage.toFixed(0)}<span style="font-size: 0.6em;">%</span>
-                            </div>
-                        </div>
-                        <div class="budget-info-wrapper">
-                            <div class="budget-header-row">
-                                <h4 class="budget-title">${escapeHTML(conceptoNombre)}</h4>
-                                <span class="${b.status.color} budget-status-badge">
-                                    <span class="material-icons" style="font-size: 14px;">${b.status.icon}</span>
-                                    <span>${b.status.text}</span>
-                                </span>
-                            </div>
-                            <div class="budget-text-line">
-                                <strong>Ingresado:</strong> ${formatCurrency(b.actual)} / ${formatCurrency(b.limit)}
-                            </div>
-                            <div class="budget-text-line" style="font-weight: 600;">
-                                <strong>Proyección:</strong> 
-                                <span class="${b.projected >= b.limit ? 'text-positive' : 'text-danger'}">${formatCurrency(b.projected)}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-    }
-    
-    if (expenseDetails.length > 0) {
-        listHtml += `<h4 style="margin-top: var(--sp-5); margin-bottom: var(--sp-2);">Límites de Gasto</h4>`;
-        listHtml += expenseDetails.sort((a, b) => (b.projected / (b.limit || 1)) - (a.projected / (a.limit || 1))).map(b => {
-            const concepto = db.conceptos.find(c => c.id === b.conceptoId);
-            const conceptoNombre = (concepto && concepto.nombre) || 'Concepto no encontrado';
-            
-            // --- HTML MEJORADO CON CLASES RESPONSIVAS ---
-            return `
-            <div class="card" style="margin-bottom: var(--sp-3);">
-                <div class="card__content" style="padding: var(--sp-3);">
-                    <div class="budget-card-grid">
-                        <div class="budget-chart-wrapper">
-                            <canvas id="gauge-chart-${b.id}"></canvas>
-                            <div style="position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: var(--fs-lg); line-height:1;">
-                                ${b.pacePercentage.toFixed(0)}<span style="font-size: 0.6em;">%</span>
-                            </div>
-                        </div>
-                        <div class="budget-info-wrapper">
-                            <div class="budget-header-row">
-                                <h4 class="budget-title">${escapeHTML(conceptoNombre)}</h4>
-                                <span class="${b.status.color} budget-status-badge">
-                                    <span class="material-icons" style="font-size: 14px;">${b.status.icon}</span> 
-                                    <span>${b.status.text}</span>
-                                </span>
-                            </div>
-                            <div class="budget-text-line">
-                                <strong>Gastado:</strong> ${formatCurrency(b.actual)} / ${formatCurrency(b.limit)}
-                            </div>
-                            <div class="budget-text-line" style="font-weight: 600;">
-                                <strong>Proyección:</strong> 
-                                <span class="${b.projected > b.limit ? 'text-danger' : 'text-positive'}">${formatCurrency(b.projected)}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-    }
-    
-    if (listContainer) listContainer.innerHTML = listHtml;
-
-    setTimeout(() => {
-        [...incomeDetails, ...expenseDetails].forEach(b => {
-            renderGaugeChart(`gauge-chart-${b.id}`, b.pacePercentage, 100);
-        });
-    }, 50);
-};
 const handleToggleInvestmentTypeFilter = (type) => {
     hapticFeedback('light');
     if (deselectedInvestmentTypesFilter.has(type)) {
@@ -3656,7 +3593,7 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-/* --- renderVirtualListItem: VERSIÓN BLINDADA (Sin errores de sintaxis) --- */
+
 const renderVirtualListItem = (item) => {
     
     // 1. Header de Pendientes
@@ -3758,50 +3695,56 @@ const renderVirtualListItem = (item) => {
         let iconName, bubbleClass; // <--- Nuevas variables para el icono
 
         if (m.tipo === 'traspaso') {
-            // --- TRASPASO (Azul/Morado) ---
-            bubbleClass = 't-bubble--transfer';
-            iconName = 'swap_horiz'; // Icono de intercambio
+        // --- ESTILO TRASPASO ---
+        bubbleClass = 't-bubble--transfer';
+        iconName = 'swap_horiz';
 
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-            
-            // Saldos snapshot si existen
-            const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` : '';
-            const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
+        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+        
+        // 1. RECUPERAMOS LOS SALDOS HISTÓRICOS (Ya calculados previamente)
+        // Usamos formateo de moneda, o cadena vacía si por alguna razón no existe el dato
+        const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
+        const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
 
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
-            line2 = `<span class="t-transfer-part">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
-            
-            amountClass = 'text-info'; 
-            amountSign = '';
+        // 2. CONSTRUIMOS EL TEXTO CON EL SALDO ENTRE PARÉNTESIS
+        // Mantenemos el color morado (--c-info) para todo el texto
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
+        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
+        
+        amountClass = 'text-info'; 
+        amountSign = '';
+		} else {
+        // --- ESTILO GASTO / INGRESO ---
+        const isGasto = m.cantidad < 0;
+        
+        // CORRECCIÓN: Usamos las variables EXACTAS de tu style.css
+        // isGasto -> Rojo (--c-danger)
+        // No Gasto -> Verde (--c-success)
+        const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
 
-        } else {
-            // --- GASTO O INGRESO ---
-            const isGasto = m.cantidad < 0;
-            
-            // Selección de Icono y Color
-            if (isGasto) {
-                bubbleClass = 't-bubble--expense';
-                iconName = 'arrow_downward'; // Flecha abajo para gasto
-            } else {
-                bubbleClass = 't-bubble--income';
-                iconName = 'arrow_upward'; // Flecha arriba para ingreso
-            }
+        bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
+        iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
 
-            const concepto = conceptos.find(c => c.id === m.conceptoId);
-            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
-            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
-            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-            
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
-            
-            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
-            const separator = desc ? ' • ' : '';
-            line2 = `<span class="t-account-badge">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
-            
-            amountClass = isGasto ? 'text-negative' : 'text-positive';
-            amountSign = isGasto ? '' : '+';
-        }
+        const concepto = conceptos.find(c => c.id === m.conceptoId);
+        const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+        const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+        const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
+        
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+        
+        const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
+        const separator = desc ? ' • ' : '';
+        
+        // APLICAMOS EL COLOR:
+        // style="color: ${accountColor}" -> Pinta el texto
+        // style="border-color: ${accountColor}" -> Pinta el borde (si la clase t-account-badge tiene borde)
+        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+        
+        // El importe usa las clases de texto que ya tienes configuradas
+        amountClass = isGasto ? 'text-negative' : 'text-positive';
+        amountSign = isGasto ? '' : '+';
+    }
 
         // HTML FINAL: Sustituimos la barra por la burbuja de icono
         return `
@@ -4761,7 +4704,6 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             const userEmailEl = select('config-user-email'); 
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
-/* EN main.js - REEMPLAZO DE renderPanelPage (SIN SALUDO, SIN GRÁFICOS DE SALUD, CON DRILLDOWN) */
 
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
@@ -4956,118 +4898,62 @@ const renderPanelPage = async () => {
             break;
     }
 };
-// =====================================================================
-// === INICIO: PASO 1 - REEMPLAZA ESTA FUNCIÓN POR COMPLETO          ===
-// =====================================================================
-/**
- * Genera el HTML para una tarjeta de movimiento o traspaso con sus acciones de swipe.
- * @param {object} m - El objeto del movimiento.
- * @param {object} dbData - Objeto con acceso a `db.cuentas` y `db.conceptos`.
- * @returns {string} El string HTML del componente completo.
- */
-const TransactionCardComponent = (m, dbData) => {
-    const { cuentas, conceptos } = dbData;
-    const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
+// ===============================================================
+// === COMPONENTE TARJETA DE MOVIMIENTO (CORREGIDO) ===
+// ===============================================================
+const TransactionCardComponent = (m) => {
+    // 1. DEFINIR VARIABLES (Aquí estaba el fallo antes)
+    const concepto = db.conceptos.find(c => c.id === m.conceptoId);
     
-    // Formato de fecha corto (ej: 12 oct)
-    const formattedDate = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    // Calculamos el nombre. Si no tiene concepto, ponemos 'Movimiento'
+    let conceptoName = concepto ? concepto.nombre : 'Movimiento';
+    
+    // Si es un traspaso, ignoramos el concepto y ponemos "Traspaso"
+    if (m.tipo === 'traspaso') conceptoName = 'Traspaso';
 
-    let avatarHTML = '';
-    let title = '';
-    let subtitle = '';
-    let amountClass = '';
-    let amountSign = '';
-
-    // --- Helper para extraer emoji ---
-    const extractEmoji = (str) => {
-        if (!str) return null;
-        const match = str.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
-        return match ? match[0] : null;
-    };
-
-    // Helper para formatear saldo de forma compacta
-    const formatCompact = (cents) => {
-        const val = cents / 100;
-        return val.toLocaleString('es-ES', { 
-            minimumFractionDigits: 0, 
-            maximumFractionDigits: 2 
-        }) + '€';
-    };
-
-    if (m.tipo === 'traspaso') {
-        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || '?';
-        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '?';
-        
-        // Obtener saldos tras el traspaso
-        const saldoOrigen = m.runningBalanceOrigen !== undefined ? formatCompact(m.runningBalanceOrigen) : '...';
-        const saldoDestino = m.runningBalanceDestino !== undefined ? formatCompact(m.runningBalanceDestino) : '...';
-
-        // Icono de Traspaso
-        avatarHTML = `<div class="transaction-avatar avatar--transfer"><span class="material-icons">swap_horiz</span></div>`;
-        
-        // Título: Descripción o "Traspaso"
-        title = m.descripcion && m.descripcion !== 'Traspaso' ? escapeHTML(m.descripcion) : 'Traspaso entre cuentas';
-        
-        // Subtítulo: Origen (Saldo) -> Destino (Saldo)
-        subtitle = `<span style="font-size: 0.7rem;">${escapeHTML(origen)} (<strong>${saldoOrigen}</strong>) ➔ ${escapeHTML(destino)} (<strong>${saldoDestino}</strong>)</span>`;
-        
-        amountClass = 'text-info';
-    } else {
-        const concepto = conceptos.find(c => c.id === m.conceptoId);
-        const cuentaObj = cuentas.find(c => c.id === m.cuentaId); // Buscamos la cuenta
-        
-        const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Sin concepto';
-        const nombreCuenta = cuentaObj ? escapeHTML(cuentaObj.nombre) : 'Cuenta?'; // Nombre de la cuenta
-        
-        // 1. Avatar: Emoji o Inicial del concepto
-        const emoji = extractEmoji(conceptoNombre);
-        const content = emoji || conceptoNombre.charAt(0).toUpperCase();
-        const typeClass = m.cantidad >= 0 ? 'avatar--income' : 'avatar--expense';
-        
-        avatarHTML = `<div class="transaction-avatar ${typeClass}">${content}</div>`;
-        
-        // 2. Título (Negrita): Priorizamos la DESCRIPCIÓN
-        const conceptoLimpio = emoji ? conceptoNombre.replace(emoji, '').trim() : conceptoNombre;
-        
-        if (m.descripcion && m.descripcion.trim().length > 0) {
-            title = escapeHTML(m.descripcion);
-        } else {
-            title = conceptoLimpio;
-        }
-        
-        // 3. Subtítulo: Fecha • Concepto • Cuenta
-        // Aquí añadimos la variable nombreCuenta
-        subtitle = `${formattedDate} • ${conceptoLimpio} • ${nombreCuenta}`;
-        
-        amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
-        amountSign = m.cantidad > 0 ? '+' : '';
+    // 2. Formatos de fecha y dinero
+    const dateStr = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    
+    // Colores según tipo
+    let amountClass = 'var(--c-on-surface)';
+    let signo = '';
+    
+    if (m.tipo === 'ingreso') {
+        amountClass = 'var(--c-success)';
+        signo = '+';
+    } else if (m.tipo === 'gasto') {
+        amountClass = 'var(--c-on-surface)'; // O var(--c-danger) si prefieres rojo
+        signo = '-';
     }
 
-    return `
-    <div class="list-item-animate"> 
-        <div class="transaction-card ${highlightClass}" data-id="${m.id}" style="padding-left: var(--sp-2); padding-right: var(--sp-2);">
-            
-            ${avatarHTML}
+    // Icono y color del avatar
+    const iconName = m.tipo === 'traspaso' ? 'swap_horiz' : (concepto?.icono || 'paid');
+    const iconColor = m.tipo === 'traspaso' ? '#999' : (concepto?.color || '#666');
+    const avatarHTML = `
+        <div style="width: 40px; height: 40px; border-radius: 50%; background: ${iconColor}20; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+            <span class="material-icons" style="font-size: 20px;">${iconName}</span>
+        </div>`;
 
-            <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__row-1" style="font-size: 0.95rem; font-weight: 700; color: var(--c-on-surface); margin-bottom: 2px;">
-                        ${title}
-                    </div>
-                    <div class="transaction-card__row-2" style="opacity: 0.8; font-size: 0.75rem; color: var(--c-on-surface-secondary);">
-                        ${subtitle}
-                    </div>
-                </div>
-                <div class="transaction-card__figures">
-                    <div class="transaction-card__amount ${amountClass}" style="font-size: 1rem;">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
-                    ${ m.tipo !== 'traspaso' 
-                       ? `<div class="transaction-card__balance" style="font-size: 0.7rem; opacity: 0.6; margin-top:2px;">${formatCurrencyHTML(m.runningBalance)}</div>` 
-                       : '' 
-                    }
-                </div>
+    // 3. RETORNAR EL HTML (Con sistema de clic para editar)
+    return `
+    <div class="transaction-card list-item-animate" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px 15px; display: flex; align-items: center; border-bottom: 1px solid var(--c-outline); cursor: pointer; transition: background 0.2s;">
+        
+        ${avatarHTML}
+        
+        <div style="flex: 1; min-width: 0; padding-right: 10px;">
+            <div style="font-weight: 600; font-size: 0.95rem; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${conceptoName}
+            </div>
+            <div style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-top: 2px;">
+                ${dateStr} • ${m.descripcion || 'Sin nota'}
             </div>
         </div>
-    </div>`;
+        
+        <div style="font-weight: 700; font-size: 0.95rem; color: ${amountClass}; white-space: nowrap;">
+            ${signo}${formatCurrency(m.cantidad)}
+        </div>
+    </div>
+    `;
 };
 
 // Variable para recordar la selección del usuario (por defecto 3 Meses)
@@ -5886,227 +5772,231 @@ const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICAR);
     if (!container) return;
 
-    // Estructura HTML final
+    // Preparamos controles de filtro
+    const filterControlsHTML = typeof generateReportFilterControls === 'function' 
+        ? generateReportFilterControls('flujo_caja') 
+        : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
+
+    // --- NUEVO HTML CON DISEÑO PREMIUM ---
     container.innerHTML = `
-        <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">event_repeat</span>Movimientos Recurrentes</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div id="pending-recurrents-container"></div>
-                    <p class="form-label" style="margin-bottom: var(--sp-3);">Pulsa en una operación para editarla. Estas son las que se ejecutarán en el futuro.</p>
-                    <div id="recurrentes-list-container"></div>
+        <header style="padding: 24px 16px 8px 16px;">
+            <h1 style="font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; margin: 0;">
+                Análisis <span style="color: var(--c-primary);">Global</span>
+            </h1>
+            <p style="color: var(--c-on-surface-secondary); margin-top: 4px; font-size: 0.95rem;">
+                Tu salud financiera en tiempo real
+            </p>
+        </header>
+
+        <div class="analysis-section-label">MI PATRIMONIO</div>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Balance Neto</h3>
+                    <p class="widget-subtitle">Tus activos menos tus deudas</p>
                 </div>
-            </details>
-        </div>
-        <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">request_quote</span>Presupuestos Anuales</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
-                        <div class="form-group" style="flex-grow: 1; margin: 0;">
-                            <label for="budget-year-selector" class="form-label">Año del Presupuesto</label>
-                            <select id="budget-year-selector" class="form-select"></select>
-                        </div>
-                        <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: var(--sp-3);">
-                            <span class="material-icons" style="font-size: 16px;">edit_calendar</span><span>Gestionar</span>
-                        </button>
-                    </div>
-                    <div id="annual-budget-dashboard">
-                        <div id="budget-kpi-container" class="kpi-grid"></div>
-                        <div class="card" style="margin-top: var(--sp-4);">
-                            <h3 class="card__title"><span class="material-icons">trending_up</span>Tendencia Ingresos y Gastos</h3>
-                            <div class="card__content">
-                                <div class="chart-container" style="height: 220px;"><canvas id="budget-trend-chart"></canvas></div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" id="patrimonio-overview-container">
+                <div class="skeleton" style="height: 400px; border-radius: 12px; margin-top: 16px;"></div>
+            </div>
+        </details>
+
+        <details id="acordeon-portafolio" class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Inversiones</h3>
+                    <p class="widget-subtitle">Evolución de tu portafolio</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content">
+                <div id="portfolio-evolution-container" style="margin-top: 16px;">
+                    <div class="chart-container skeleton" style="height: 220px; border-radius: 12px;"></div>
+                </div>
+                <div id="portfolio-main-content" style="margin-top: 20px;">
+                    <div class="skeleton" style="height: 300px; border-radius: 12px;"></div>
+                </div>
+            </div>
+        </details>
+
+        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon">
+            <summary id="summary-extracto-trigger" class="widget-header">
+                <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Extracto de Cuenta</h3>
+                    <p class="widget-subtitle">Movimientos detallados por cuenta</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content">
+                <div id="informe-content-extracto_cuenta" style="padding-top: 16px;">
+                    <div id="informe-cuenta-wrapper">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="informe-cuenta-select" class="form-label">Cuenta a consultar:</label>
+                            <div style="display: flex; gap: 8px; width: 100%;">
+                                <div class="input-wrapper" style="flex-grow: 1;">
+                                    <select id="informe-cuenta-select" class="form-select"></select>
+                                </div>
+                                <button id="btn-extracto-todo" class="btn btn--secondary" style="font-weight: 700;">TODO</button>
                             </div>
                         </div>
-                        <div id="budget-details-list" style="margin-top: var(--sp-4);"></div>
                     </div>
-                    <div id="budget-init-placeholder" class="empty-state hidden">
-                        <span class="material-icons">edit_calendar</span>
-                        <h3 id="budget-placeholder-title">Define tu Plan Financiero</h3>
-                        <p id="budget-placeholder-text">Establece límites de gasto y metas de ingreso para tomar el control de tu año. ¡Empieza ahora!</p>
-                        <button data-action="update-budgets" class="btn btn--primary" style="margin-top: var(--sp-4);">
-                            <span class="material-icons" style="font-size: 16px;">add_circle_outline</span><span>Crear Presupuestos</span>
-                        </button>
+                    <div id="informe-resultado-container" style="margin-top: 16px;">
+                        <div class="empty-state" style="background:transparent; padding:10px; border:none;">
+                            <p style="font-size:0.85rem;">Selecciona una cuenta.</p>
+                        </div>
                     </div>
                 </div>
-            </details>
-        </div>
+            </div>
+        </details>
+
+        <details id="acordeon-flujo_caja" class="dashboard-widget informe-acordeon">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Flujo de Caja</h3>
+                    <p class="widget-subtitle">Entradas vs. Salidas mensuales</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                ${filterControlsHTML}
+                <div id="informe-content-flujo_caja" style="min-height: 250px; margin-top: 10px;">
+                     <div class="skeleton" style="height: 250px; border-radius: 12px;"></div>
+                </div>
+            </div>
+        </details>
+
+
+        <div class="analysis-section-label">FUTURO Y METAS</div>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--reloj"><span class="material-icons">update</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Recurrentes</h3>
+                    <p class="widget-subtitle">Suscripciones y pagos fijos</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                <div id="pending-recurrents-container"></div>
+                <p class="form-label" style="margin-bottom: 12px;">Toca para editar:</p>
+                <div id="recurrentes-list-container"></div>
+            </div>
+        </details>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--presu"><span class="material-icons">savings</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Presupuestos</h3>
+                    <p class="widget-subtitle">Control de gasto anual</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="form-group" style="flex-grow: 1; margin: 0;">
+                        <label for="budget-year-selector" class="form-label">Año Fiscal</label>
+                        <select id="budget-year-selector" class="form-select"></select>
+                    </div>
+                    <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: 12px;">
+                        <span class="material-icons" style="font-size: 16px;">edit</span> Gestionar
+                    </button>
+                </div>
+                
+                <div id="annual-budget-dashboard">
+                    <div id="budget-kpi-container" class="kpi-grid"></div>
+                    <div class="card" style="margin-top: 16px; box-shadow: none; border: 1px solid var(--c-outline);">
+                        <h3 class="card__title" style="font-size: 0.9rem;">Tendencia</h3>
+                        <div class="card__content">
+                            <div class="chart-container" style="height: 200px;"><canvas id="budget-trend-chart"></canvas></div>
+                        </div>
+                    </div>
+                    <div id="budget-details-list" style="margin-top: 16px;"></div>
+                </div>
+
+                <div id="budget-init-placeholder" class="empty-state hidden">
+                    <span class="material-icons" style="font-size: 48px; color: var(--c-outline);">savings</span>
+                    <h3 style="margin-top: 10px;">Sin Presupuesto</h3>
+                    <button data-action="update-budgets" class="btn btn--primary" style="margin-top: 16px;">
+                        Crear Plan
+                    </button>
+                </div>
+            </div>
+        </details>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--informe"><span class="material-icons">auto_graph</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Informe Custom</h3>
+                    <p class="widget-subtitle">Tus métricas favoritas</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h4 id="informe-widget-title" style="margin: 0; font-size: 0.9rem; font-weight: 700;">Mi Informe</h4>
+                    <button class="btn btn--secondary" data-action="show-informe-builder" style="padding: 4px 10px; font-size: 0.75rem;">
+                        <span class="material-icons" style="font-size: 14px;">settings</span>
+                    </button>
+                </div>
+                <div id="informe-widget-content">
+                    <div class="skeleton" style="height: 200px; border-radius: 12px;"></div>
+                </div>
+            </div>
+        </details>
         
-        <div class="card card--no-bg accordion-wrapper">
-            <details class="accordion">
-                <summary>
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">auto_graph</span>Informe Personalizado</h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-3);">
-                        <h4 id="informe-widget-title" style="margin: 0; font-size: var(--fs-base); font-weight: 700; color: var(--c-on-surface);">Mi Informe</h4>
-                        <button class="btn btn--secondary" data-action="show-informe-builder" style="padding: 4px 10px; font-size: 0.75rem;">
-                            <span class="material-icons" style="font-size: 14px;">settings</span> Configurar
-                        </button>
-                    </div>
-                    <div id="informe-widget-content">
-                        <div class="skeleton" style="height: 240px; border-radius: var(--border-radius-lg);"></div>
-                    </div>
-                    </div>
-            </details>
-        </div>
+        <div style="height: 80px;"></div>
     `;
-    
-    // Inicialización del selector de año para presupuestos
+
+    // --- LÓGICA JAVASCRIPT (IGUAL QUE ANTES) ---
+    // 1. Planificación
     const yearSelect = container.querySelector('#budget-year-selector');
     if (yearSelect) {
         const currentYear = new Date().getFullYear();
         const years = new Set([currentYear]);
         (db.presupuestos || []).forEach(p => years.add(p.ano));
-        
-        yearSelect.innerHTML = [...years]
-            .sort((a, b) => b - a)
-            .map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`)
-            .join('');
-
-        yearSelect.addEventListener('change', () => {
-            hapticFeedback('light');
-            renderBudgetTracking();
-        });
+        yearSelect.innerHTML = [...years].sort((a, b) => b - a).map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('');
+        yearSelect.addEventListener('change', () => { hapticFeedback('light'); renderBudgetTracking(); });
     }
-    
     populateAllDropdowns();
     renderBudgetTracking();
     renderPendingRecurrents();
-    renderRecurrentsListOnPage();
-
-    // Cargamos el contenido del informe personalizado
+    renderRecurrentsListOnPage(); 
     renderInformeWidgetContent();
-};
 
-const renderPatrimonioPage = () => {
-    const container = select(PAGE_IDS.PATRIMONIO);
-    if (!container) return;
-
-    // Estructura HTML
-    container.innerHTML = `
-        <details class="accordion" style="margin-bottom: var(--sp-4);">
-            <summary>
-                <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                    <span class="material-icons">account_balance</span>
-                    Visión General
-                </h3>
-                <span class="material-icons accordion__icon">expand_more</span>
-            </summary>
-            <div class="accordion__content" id="patrimonio-overview-container" style="padding: 0 var(--sp-2);">
-                <div class="skeleton" style="height: 400px; border-radius: var(--border-radius-lg);"></div>
-            </div>
-        </details>
-
-        <details id="acordeon-portafolio" class="accordion" style="margin-bottom: var(--sp-4);">
-            <summary>
-                <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                    <span class="material-icons">rocket_launch</span>
-                    Portafolio de Inversión
-                </h3>
-                <span class="material-icons accordion__icon">expand_more</span>
-            </summary>
-            <div class="accordion__content" style="padding: 0 var(--sp-2);">
-                <div id="portfolio-evolution-container">
-                     <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
-                </div>
-                <div id="portfolio-main-content" style="margin-top: var(--sp-4);">
-                    <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
-                </div>
-            </div>
-        </details>
-        
-        <div class="card card--no-bg accordion-wrapper">
-            <details id="acordeon-extracto_cuenta" class="accordion informe-acordeon">
-                <summary id="summary-extracto-trigger" style="user-select: none; -webkit-user-select: none;"> 
-                    <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                        <span class="material-icons">wysiwyg</span>
-                        <span>Extracto de Cuenta</span>
-                    </h3>
-                    <span class="material-icons accordion__icon">expand_more</span>
-                </summary>
-                <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
-                    <div id="informe-content-extracto_cuenta">
-                         <div id="informe-cuenta-wrapper">
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label for="informe-cuenta-select" class="form-label">Selecciona una cuenta:</label>
-                                
-                                <div style="display: flex; gap: 8px; align-items: stretch; width: 100%;">
-                                    <div class="input-wrapper" style="flex-grow: 1; min-width: 0;">
-                                        <select id="informe-cuenta-select" class="form-select"></select>
-                                    </div>
-                                    <button id="btn-extracto-todo" class="btn btn--secondary" style="flex-shrink: 0; min-width: auto; padding: 0 16px; font-weight: 700; white-space: nowrap;" title="Ver todo ordenado por fecha">
-                                        TODO
-                                    </button>
-                                </div>
-                                </div>
-                        </div>
-                        <div id="informe-resultado-container" style="margin-top: var(--sp-4);">
-                            <div class="empty-state" style="background:transparent; padding:var(--sp-2); border:none;">
-                                <p style="font-size:0.85rem;">
-                                    Selecciona una cuenta o pulsa <strong>TODO</strong>.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </details>
-        </div>
-    `;
-
+    // 2. Patrimonio
     setTimeout(async () => {
-        // Carga Visión General
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
         
-        // --- LÓGICA DEL BOTÓN "TODO" REFORZADA ---
         const btnTodo = select('btn-extracto-todo');
         if (btnTodo) {
-            // Eliminamos listeners previos clonando el nodo (truco de seguridad)
             const newBtn = btnTodo.cloneNode(true);
             btnTodo.parentNode.replaceChild(newBtn, btnTodo);
-            
             newBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation(); // Evitar que cierre el acordeón
-                e.target.blur();
-                
-                // Aseguramos que la función existe antes de llamarla
-                if (typeof handleGenerateGlobalExtract === 'function') {
-                    handleGenerateGlobalExtract(e.target);
-                } else {
-                    console.error("La función handleGenerateGlobalExtract no está definida.");
-                    showToast("Error interno: función no encontrada.", "danger");
-                }
+                e.preventDefault(); e.stopPropagation(); e.target.blur();
+                if (typeof handleGenerateGlobalExtract === 'function') handleGenerateGlobalExtract(e.target);
             });
         }
-        // ------------------------------
-
-        // Lógica Selector Individual
         const selectCuenta = select('informe-cuenta-select');
         if (selectCuenta) {
             const populate = (el, data) => {
                 let opts = '<option value="">Seleccionar cuenta...</option>';
-                [...data].sort((a,b) => a.nombre.localeCompare(b.nombre))
-                         .forEach(i => opts += `<option value="${i.id}">${i.nombre}</option>`);
+                [...data].sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach(i => opts += `<option value="${i.id}">${i.nombre}</option>`);
                 el.innerHTML = opts;
             };
             populate(selectCuenta, getVisibleAccounts());
             createCustomSelect(selectCuenta);
-
-            selectCuenta.addEventListener('change', () => {
-                handleGenerateInformeCuenta(null, null);
-            });
+            selectCuenta.addEventListener('change', () => { handleGenerateInformeCuenta(null, null); });
         }
-
-        // Lógica Portafolio
+        
         const acordeonPortafolio = select('acordeon-portafolio');
         if (acordeonPortafolio) {
             const loadPortfolioData = async () => {
@@ -6116,44 +6006,28 @@ const renderPatrimonioPage = () => {
             acordeonPortafolio.addEventListener('toggle', async () => {
                 if (acordeonPortafolio.open && !acordeonPortafolio.dataset.loaded) {
                     await loadPortfolioData();
-                    acordeonPortafolio.dataset.loaded = "true"; 
+                    acordeonPortafolio.dataset.loaded = "true";
                 }
             });
         }
-        
+
+        const acordeonFlujo = select('acordeon-flujo_caja');
+        if (acordeonFlujo) {
+            acordeonFlujo.addEventListener('toggle', () => {
+                if (acordeonFlujo.open && !acordeonFlujo.dataset.loaded) {
+                    const flujoContainer = select('informe-content-flujo_caja');
+                    if (flujoContainer && typeof renderInformeFlujoCaja === 'function') {
+                        renderInformeFlujoCaja(flujoContainer);
+                        acordeonFlujo.dataset.loaded = "true";
+                    } else {
+                         if(flujoContainer) flujoContainer.innerHTML = '<p class="form-error">Error al cargar gráfico.</p>';
+                    }
+                }
+            });
+        }
     }, 50);
 };
 
-const renderEstrategiaPage = () => {
-    const container = select(PAGE_IDS.ESTRATEGIA);
-    if (!container) return;
-
-    // Se mantiene igual: dibuja el esqueleto una sola vez.
-    container.innerHTML = `
-        <div class="tabs">
-            <button class="tab-item" data-action="switch-estrategia-tab" data-tab="planificacion">
-                <span class="material-icons">edit_calendar</span>
-                <span>Planificación</span>
-            </button>
-            <button class="tab-item" data-action="switch-estrategia-tab" data-tab="activos">
-                <span class="material-icons">account_balance</span>
-                <span>Activos</span>
-            </button>
-            <button class="tab-item" data-action="switch-estrategia-tab" data-tab="informes">
-                <span class="material-icons">assessment</span>
-                <span>Informes</span>
-            </button>
-        </div>
-        
-        <div class="tab-content" id="estrategia-planificacion-content"></div>
-        <div class="tab-content" id="estrategia-activos-content"></div>
-        <div class="tab-content" id="estrategia-informes-content"></div>
-    `;
-
-    // AHORA, llamamos a nuestra función controladora para que muestre la pestaña por defecto.
-    // Al hacer esto, garantizamos que el HTML ya existe cuando se intente renderizar el contenido.
-    showEstrategiaTab('planificacion');
-};
   // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES Y PDF      ===
 // =================================================================
@@ -7382,45 +7256,44 @@ const hideModal = (id) => {
     showGenericModal(`Desglose TIR: ${cuenta.nombre}`, modalHtml);
 };	
 const showDrillDownModal = (title, movements) => {
-    // Ordenamos los movimientos para que se muestren cronológicamente
+    // 1. Orden cronológico (Más reciente arriba)
     movements.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-    // Construimos el contenido del modal
-    let modalContentHTML = movements.length === 0
-    ? `<div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
-           <span class="material-icons">search_off</span>
-           <h3>Sin movimientos</h3>
-           <p>No se han encontrado movimientos para esta selección.</p>
-       </div>`
-    : movements.map(m => 
-          // Mantenemos la clase de animación 'list-item-animate'
-          TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
-      )
-      .join('')
-      // Cambiamos la acción para que la edición funcione desde dentro del modal
-      .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
-
-    // Llamamos a la función para mostrar el modal
-    showGenericModal(title, modalContentHTML);
+    // 2. Generar contenido usando la NUEVA función maestra
+    let modalContentHTML = '';
     
-    // --- ¡LA MAGIA SUCEDE AQUÍ! ---
-    // Después de que el modal se muestra, activamos la animación en cascada.
+    if (movements.length === 0) {
+        modalContentHTML = `
+        <div class="empty-state" style="background:transparent; border:none; padding-top: var(--sp-4);">
+            <span class="material-icons">search_off</span>
+            <h3>Sin movimientos</h3>
+            <p>No se han encontrado movimientos para esta selección.</p>
+        </div>`;
+    } else {
+        // AQUÍ ESTÁ EL CAMBIO CLAVE: Usamos createUnifiedRowHTML
+        modalContentHTML = movements
+            .map(m => createUnifiedRowHTML(m))
+            .join('');
+            
+        // Ajustamos la acción para que funcione dentro del modal
+        modalContentHTML = modalContentHTML.replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
+    }
+
+    // 3. Mostrar Modal
+    showGenericModal(title, modalContentHTML);
+
+    // 4. Animación de entrada (Cascada)
     setTimeout(() => {
         const modalBody = document.getElementById('generic-modal-body');
         if (modalBody) {
             const itemsToAnimate = modalBody.querySelectorAll('.list-item-animate');
             itemsToAnimate.forEach((item, index) => {
-                // Aplicamos la clase que dispara la animación con un pequeño retardo
-                // para cada elemento, creando el efecto cascada.
                 setTimeout(() => {
                     item.classList.add('item-enter-active');
-                }, index * 40); // 40 milisegundos de retraso entre cada item
+                }, index * 30); 
             });
         }
-    }, 50); // Un pequeño retardo para asegurar que el modal es visible
-	setTimeout(() => {
-        applyInvestmentItemInteractions(document.getElementById('generic-modal-body'));
-    }, 100);
+    }, 50);
 };
         const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
 
@@ -7738,108 +7611,111 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
             }, 100);
         };
         
-        // REEMPLAZA TU FUNCIÓN performGlobalSearch POR ESTA VERSIÓN MEJORADA
+ // ===============================================================
+// === NUEVO BUSCADOR GLOBAL POTENTE (Sustituye al anterior) ===
+// ===============================================================
 const performGlobalSearch = async (query) => {
-    const resultsContainer = select('global-search-results');
+    const resultsContainer = document.getElementById('global-search-results');
     if (!resultsContainer) return;
 
+    // 1. Limpieza inicial: Si no hay texto, mostrar mensaje de ayuda
     if (!query || query.trim().length < 2) {
-        resultsContainer.innerHTML = `<div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">manage_search</span><h3>Encuéntralo todo</h3><p>Busca movimientos, cuentas o conceptos. <br>Atajo: <strong>Cmd/Ctrl + K</strong></p></div>`;
+        resultsContainer.innerHTML = `
+            <div class="empty-state" style="padding: 2rem; opacity: 0.6; text-align: center;">
+                <span class="material-icons" style="font-size: 48px;">manage_search</span>
+                <p>Escribe para buscar cuentas, conceptos o importes...</p>
+            </div>`;
         return;
     }
 
-    resultsContainer.innerHTML = `<div style="text-align: center; padding: var(--sp-5);"><span class="spinner"></span><p style="margin-top: var(--sp-2);">Buscando en toda tu base de datos...</p></div>`;
+    // 2. Indicador de carga
+    resultsContainer.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <span class="spinner" style="color: var(--c-primary);"></span>
+            <p style="font-size: 0.8rem; margin-top: 10px;">Buscando en todo el historial...</p>
+        </div>`;
+
+    // 3. Obtener TODOS los datos (Usamos AppStore para velocidad si está disponible)
+    let allMovs = [];
+    if (typeof AppStore !== 'undefined') {
+        if (!AppStore.isFullyLoaded) await AppStore.getAll(); // Carga forzada si falta
+        allMovs = AppStore.movements;
+    } else {
+        allMovs = db.movimientos; // Fallback por seguridad
+    }
+
+    // 4. EL FILTRO INTELIGENTE (Ignora mayúsculas y acentos)
+    const term = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     
-    const queryLower = query.toLowerCase();
-    let resultsHtml = '';
-    const MAX_RESULTS_PER_GROUP = 10;
+    const hits = allMovs.filter(m => {
+        // Preparamos los datos del movimiento para buscar en ellos
+        const concepto = db.conceptos.find(c => c.id === m.conceptoId);
+        const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
+        
+        // Limpiamos textos (quitamos acentos y pasamos a minúsculas)
+        const tConcepto = (concepto?.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const tDesc = (m.descripcion || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const tCuenta = (cuenta?.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        // Truco para buscar importes (ej: buscas "50" y encuentra "50.00")
+        const cantidadReal = (Math.abs(m.cantidad) / 100).toString(); 
+        
+        // ¿Coincide con algo?
+        return tConcepto.includes(term) || 
+               tDesc.includes(term) || 
+               tCuenta.includes(term) ||
+               cantidadReal.includes(term);
+    });
 
-    const allMovements = await AppStore.getAll();
+    // 5. Ordenar: Lo más reciente primero
+    hits.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-    // --- SECCIÓN DE MOVIMIENTOS MEJORADA ---
-    const movs = allMovements
-        .map(m => {
+    // 6. Pintar los resultados en pantalla
+    if (hits.length === 0) {
+        resultsContainer.innerHTML = `
+            <div class="empty-state" style="padding: 20px; text-align:center;">
+                <p>No encontré nada con "${query}"</p>
+            </div>`;
+    } else {
+        resultsContainer.innerHTML = hits.map(m => {
             const concepto = db.conceptos.find(c => c.id === m.conceptoId);
-            const conceptoNombre = (concepto && concepto.nombre) || '';
-            let cuentaInfo = '';
-            if (m.tipo === 'traspaso') {
-                const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId);
-                const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId);
-                cuentaInfo = `${(origen && origen.nombre) || ''} → ${(destino && destino.nombre) || ''}`;
-            } else {
-                const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
-                cuentaInfo = (cuenta && cuenta.nombre) || '';
-            }
-            const fecha = new Date(m.fecha).toLocaleDateString('es-ES');
-            const importe = (m.cantidad / 100).toLocaleString('es-ES');
-            const searchableText = `${m.descripcion} ${conceptoNombre} ${cuentaInfo} ${fecha} ${importe}`.toLowerCase();
-            return { movement: m, text: searchableText, cuentaInfo: cuentaInfo };
-        })
-        .filter(item => item.text.includes(queryLower))
-        .sort((a, b) => new Date(b.movement.fecha) - new Date(a.movement.fecha))
-        .slice(0, MAX_RESULTS_PER_GROUP)
-        .map(item => item); // Devolvemos el objeto completo con cuentaInfo
-
-    if (movs.length > 0) {
-        resultsHtml += `<div class="search-result-group">
-                            <div class="search-result-group__title">Movimientos Encontrados</div>`;
-        movs.forEach(item => {
-            const m = item.movement;
-            const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
-            resultsHtml += `
-                <button class="search-result-item" data-action="search-result-movimiento" data-id="${m.id}">
-                    <span class="material-icons search-result-item__icon">receipt_long</span>
-                    <div class="search-result-item__details">
-                        <p>${escapeHTML(m.descripcion)}</p>
-                        <small>${new Date(m.fecha).toLocaleDateString('es-ES')} • ${escapeHTML(item.cuentaInfo)}</small>
+            const date = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+            
+            // Colores según si es gasto (-) o ingreso (+)
+            const amountClass = m.cantidad < 0 ? 'text-negative' : 'text-positive'; // Usa tus clases CSS
+            const amountSign = m.cantidad > 0 ? '+' : '';
+            
+            // Al hacer clic, abrimos el formulario de editar (startMovementForm)
+            return `
+            <div class="search-result-item" onclick="hideModal('global-search-modal'); startMovementForm('${m.id}', false)" style="padding: 12px; border-bottom: 1px solid var(--c-outline); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${concepto?.nombre || 'Movimiento'}
                     </div>
-                    <strong class="search-result-item__amount ${amountClass}">${formatCurrency(m.cantidad)}</strong>
-                </button>`;
-        });
-        resultsHtml += `</div>`;
-    }
-
-    // --- SECCIÓN DE CUENTAS MEJORADA ---
-    const cuentas = (db.cuentas || []).filter(c => c.nombre.toLowerCase().includes(queryLower) || c.tipo.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
-    if (cuentas.length > 0) {
-        resultsHtml += `<div class="search-result-group">
-                            <div class="search-result-group__title">Cuentas</div>`;
-        cuentas.forEach(c => {
-            resultsHtml += `
-                <button class="search-result-item" data-action="search-result-cuenta" data-id="${c.id}">
-                    <span class="material-icons search-result-item__icon">account_balance_wallet</span>
-                    <div class="search-result-item__details">
-                        <p>${escapeHTML(c.nombre)}</p>
-                        <small>${escapeHTML(c.tipo)}</small>
+                    <div style="font-size: 0.75rem; color: var(--c-on-surface-secondary); margin-top: 4px;">
+                        ${date} • <span style="font-style: italic;">${m.descripcion || 'Sin detalles'}</span>
                     </div>
-                </button>`;
-        });
-        resultsHtml += `</div>`;
+                </div>
+                <div class="${amountClass}" style="font-weight: 700; font-size: 0.95rem; margin-left: 10px; white-space: nowrap;">
+                    ${amountSign}${formatCurrency(m.cantidad)}
+                </div>
+            </div>`;
+        }).join('');
+        
+        // Espacio final para que el último elemento no quede pegado al borde si haces scroll
+        resultsContainer.insertAdjacentHTML('beforeend', `<div style="height: 40px; text-align:center; font-size:0.7rem; opacity:0.5; margin-top:10px;">${hits.length} resultados encontrados</div>`);
     }
-
-    // --- SECCIÓN DE CONCEPTOS MEJORADA ---
-    const conceptos = (db.conceptos || []).filter(c => c.nombre.toLowerCase().includes(queryLower)).slice(0, MAX_RESULTS_PER_GROUP);
-    if (conceptos.length > 0) {
-        resultsHtml += `<div class="search-result-group">
-                            <div class="search-result-group__title">Conceptos</div>`;
-        conceptos.forEach(c => {
-            resultsHtml += `
-                <button class="search-result-item" data-action="search-result-concepto" data-id="${c.id}">
-                    <span class="material-icons search-result-item__icon">label</span>
-                    <div class="search-result-item__details">
-                        <p>${escapeHTML(c.nombre)}</p>
-                    </div>
-                </button>`;
-        });
-        resultsHtml += `</div>`;
-    }
-
-    if (!resultsHtml) {
-        resultsHtml = `<div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">search_off</span><h3>Sin resultados</h3><p>No se encontró nada para "${escapeHTML(query)}".</p></div>`;
-    }
-    
-    resultsContainer.innerHTML = resultsHtml;
 };
+
+// 7. AUTO-ACTIVACIÓN (Esto asegura que funcione aunque el HTML no tenga 'oninput')
+document.addEventListener('DOMContentLoaded', () => {
+    // Buscamos el input del buscador
+    const input = document.getElementById('global-search-input');
+    // Si existe, le decimos: "Cuando escriban, ejecuta la función performGlobalSearch"
+    if (input) {
+        input.addEventListener('input', (e) => performGlobalSearch(e.target.value));
+    }
+});
 
 		// REEMPLAZA tu función showValoracionModal con esta versión
 const showValoracionModal = (cuentaId) => {
@@ -8868,15 +8744,13 @@ const handleInputFocus = (e) => {
     hapticFeedback('light');
     showCalculator(e.target);
 };
-// --- PARCHES DE COMPATIBILIDAD ---
-// Añade esto al final de main.js o en el bloque de funciones globales
 const renderInversionesView = async () => {
-    await navigateTo(PAGE_IDS.PATRIMONIO);
+    // Redirigimos a la nueva pestaña unificada
+    await navigateTo(PAGE_IDS.PLANIFICAR); 
 };
-
-const renderInversionesPage = async (containerId) => {
-    // Si se llama con un ID específico, ignoramos y renderizamos la página completa de patrimonio
-    await renderPatrimonioPage();
+const renderInversionesPage = async (containerId) => { 
+    // Usamos la nueva función de renderizado
+    await renderPlanificacionPage(); 
 };
 
 
@@ -8925,75 +8799,7 @@ if (action === 'show-main-menu') {
             if (page) navigateTo(page);
         }
     });
-	// --- LÓGICA DE MODO PRIVACIDAD ---
-    // Al hacer clic en el valor del Patrimonio Neto (KPI principal), alternamos el modo.
-    document.body.addEventListener('click', (e) => {
-		// 1. Abrir OneDrive
-    if (action === 'open-onedrive') {
-        window.open('https://onedrive.live.com/personal/7e83c02dcfc2b265/_layouts/15/doc2.aspx?sourcedoc=%7B76934C85-AB73-427F-BF3E-27519B683C73%7D&file=CUENTAS-DANINORMA.xlsx&action=default&mobileredirect=true', '_blank');
-        return;
-    }
-
-    // 2. Abrir Filtros (Lógica robusta)
-    if (action === 'open-filters') {
-        const modal = document.getElementById('diario-filters-modal');
-        if (modal) {
-            modal.style.display = 'flex';
-            // Pequeño delay para permitir que el display:flex se renderice antes de la opacidad
-            requestAnimationFrame(() => {
-                modal.classList.add('active');
-            });
-        } else {
-            console.error('Modal de filtros no encontrado en el DOM');
-        }
-        return;
-    }
-
-    // 3. Abrir Búsqueda Global
-    if (action === 'open-search') {
-        const modal = document.getElementById('global-search-modal');
-        const input = document.getElementById('global-search-input');
-        if (modal) {
-            modal.style.display = 'flex';
-            requestAnimationFrame(() => {
-                modal.classList.add('active');
-                if (input) input.focus(); // Foco automático inteligente
-            });
-        }
-        return;
-    }
-
-    // 4. Alternar Vista (Grid/Lista)
-    if (action === 'toggle-view') {
-        const diarioPage = document.getElementById('diario-page');
-        const iconSpan = btn.querySelector('.material-icons');
-        
-        if (diarioPage) {
-            diarioPage.classList.toggle('view-mode-grid');
-            // Cambiar icono visualmente
-            if (iconSpan) {
-                const isGrid = diarioPage.classList.contains('view-mode-grid');
-                iconSpan.textContent = isGrid ? 'view_list' : 'grid_view';
-            }
-        }
-        return;
-    }
-        // Buscamos si el clic fue en el valor del patrimonio o en su etiqueta
-        const kpiPatrimonio = e.target.closest('#kpi-patrimonio-neto-value') || 
-                              e.target.closest('#patrimonio-total-balance');
-        
-        if (kpiPatrimonio) {
-            // Alternamos la clase en el body
-            document.body.classList.toggle('privacy-mode');
-            
-            // Feedback táctil para confirmar la acción
-            hapticFeedback('medium');
-            
-            // Opcional: Guardar la preferencia del usuario para la próxima vez
-            const isPrivacyActive = document.body.classList.contains('privacy-mode');
-            localStorage.setItem('privacyMode', isPrivacyActive);
-        }
-    });
+	
 	// --- INICIO: LÓGICA DE PULSACIÓN PROLONGADA PARA DIARIO ---
     const diarioPage = document.getElementById('diario-page');
     if (diarioPage) {
@@ -9210,6 +9016,7 @@ const handleStart = (e) => {
 
     // 5. GESTIÓN DE CLICS (Delegación de eventos)
     document.body.addEventListener('click', async (e) => {
+
         const target = e.target;
 
         // Cerrar dropdowns personalizados al hacer clic fuera
@@ -9221,12 +9028,6 @@ const handleStart = (e) => {
         const actionTarget = e.target.closest('[data-action]');
     if (!actionTarget) return;
     
-    // MEJORA: Prevención de doble clic si el botón ya está cargando o deshabilitado
-    if (actionTarget.classList.contains('btn--loading') || actionTarget.disabled) {
-        e.stopImmediatePropagation();
-        return;
-    }
-
         const { action, id, page, type, modalId, reportId } = actionTarget.dataset;
         const btn = actionTarget.closest('button');
         
@@ -9329,11 +9130,6 @@ const handleStart = (e) => {
             'show-main-add-sheet': () => showModal('main-add-sheet'),
             'show-pnl-breakdown': () => handleShowPnlBreakdown(actionTarget.dataset.id),
             'show-irr-breakdown': () => handleShowIrrBreakdown(actionTarget.dataset.id),
-            'open-movement-form': (e) => {
-                const type = e.target.closest('[data-type]').dataset.type;
-                hideModal('main-add-sheet');
-                setTimeout(() => startMovementForm(null, false, type), 250);
-            },
             'export-filtered-csv': () => handleExportFilteredCsv(btn),
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,
@@ -9499,7 +9295,57 @@ const handleStart = (e) => {
             'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
             'recalculate-balances': () => { showConfirmationModal('Se recalcularán todos los saldos. ¿Continuar?', () => auditAndFixAllBalances(btn), 'Confirmar Auditoría'); },
             'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
-            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { /* Lógica PIN */ },
+            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(),
+			'set-pin': async () => {
+    // 1. Creamos el HTML del Modal
+    const html = `
+        <div style="text-align: center;">
+            <p class="form-label" style="margin-bottom: 20px;">
+                Protege tu acceso. Introduce un código de 4 números.
+            </p>
+            <div class="form-group">
+                <input type="tel" id="new-pin-input" class="form-input" 
+                       pattern="[0-9]*" inputmode="numeric" maxlength="4" 
+                       placeholder="• • • •" 
+                       style="text-align: center; font-size: 2rem; letter-spacing: 10px; width: 80%; margin: 0 auto;">
+            </div>
+            <button id="save-pin-btn" class="btn btn--primary btn--full" style="margin-top: 20px;">
+                Guardar PIN
+            </button>
+        </div>
+    `;
+    
+    // 2. Mostramos el Modal
+    showGenericModal('Configurar Seguridad', html);
+
+    // 3. Damos vida al botón Guardar
+    setTimeout(() => {
+        const input = document.getElementById('new-pin-input');
+        const btn = document.getElementById('save-pin-btn');
+        if(input) input.focus();
+
+        btn.addEventListener('click', async () => {
+            const pin = input.value;
+            if (pin.length === 4 && !isNaN(pin)) {
+                try {
+                    // Usamos tu función existente hashPin
+                    const hash = await hashPin(pin);
+                    localStorage.setItem('pinUserHash', hash);
+                    // IMPORTANTE: Guardamos que el usuario tiene PIN
+                    if(currentUser) localStorage.setItem('pinUserEmail', currentUser.email);
+                    
+                    hideModal('generic-modal');
+                    showToast('¡PIN de seguridad activado!');
+                } catch (e) {
+                    console.error(e);
+                    showToast('Error al guardar', 'error');
+                }
+            } else {
+                showToast('El PIN deben ser 4 números', 'warning');
+            }
+        });
+    }, 100);
+},
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
             'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
@@ -10193,9 +10039,18 @@ const handleSaveMovement = async (form, btn) => {
     if (saveNewBtn && isSaveAndNew) setButtonLoading(saveNewBtn, true);
 
     const releaseButtons = () => {
-        if (saveBtn) setButtonLoading(saveBtn, false);
-        if (saveNewBtn) setButtonLoading(saveNewBtn, false);
-    };
+    // Forzamos a false y restauramos texto manualmente por seguridad
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false);
+        saveBtn.innerHTML = 'Guardar'; 
+        saveBtn.disabled = false;
+    }
+    if (saveNewBtn) {
+        setButtonLoading(saveNewBtn, false);
+        saveNewBtn.innerHTML = '+ Otro';
+        saveNewBtn.disabled = false;
+    }
+};
 
     try {
         // 2. Obtener datos del formulario
@@ -10400,8 +10255,13 @@ const handleSaveMovement = async (form, btn) => {
              btn.innerHTML = 'Guardar';
         }
     } finally {
-        releaseButtons();
+    // RESTAURAR BOTÓN SIEMPRE
+    const saveBtn = document.getElementById('btn-save-transaction'); 
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false, 'Guardar'); // O el texto que tuviera antes
+        saveBtn.disabled = false;
     }
+}
 };
 
 /**
@@ -11462,8 +11322,6 @@ const initSpeedDial = () => {
 
     if (!container || !trigger) return;
 
-    // --- Funciones de Control ---
-    
     const openMenu = () => {
         container.classList.add('active');
         hapticFeedback('medium');
@@ -11473,54 +11331,18 @@ const initSpeedDial = () => {
         container.classList.remove('active');
     };
 
-    const toggleMenu = (e) => {
-        // Detenemos la propagación para que no llegue al "document" y se cierre inmediatamente
+    trigger.onclick = (e) => {
         e.stopPropagation();
-        
-        if (container.classList.contains('active')) {
-            closeMenu();
-        } else {
-            openMenu();
-        }
+        container.classList.contains('active') ? closeMenu() : openMenu();
     };
 
-    // --- EVENTO 1: BOTÓN PRINCIPAL (+) ---
-    // Usamos 'click' estándar. Es compatible con Móvil y PC.
-    trigger.onclick = toggleMenu;
+    if (backdrop) backdrop.onclick = closeMenu;
 
-    // --- EVENTO 2: FONDO OSCURO (Cerrar al tocar fuera) ---
-    // Esta es la clave para lo que pediste: si tocas lo oscuro, se cierra.
-    if (backdrop) {
-        backdrop.onclick = (e) => {
-            e.stopPropagation();
-            closeMenu();
-        };
-    }
-
-    // --- EVENTO 3: LAS OPCIONES (Pago, Traspaso, Ingreso) ---
     options.forEach(btn => {
         btn.onclick = (e) => {
-            e.stopPropagation(); // Evitar cerrar antes de tiempo
-            
-            const type = btn.dataset.type; // 'gasto', 'ingreso', 'traspaso'
-            
-            // 1. Feedback y Cierre visual inmediato
-            hapticFeedback('light');
+            const type = btn.dataset.type;
             closeMenu();
-
-            // 2. Ejecutar la acción tras una micro-pausa (para que se vea la animación)
-            setTimeout(() => {
-                try {
-                    if (typeof startMovementForm === 'function') {
-                        startMovementForm(null, false, type);
-                    } else {
-                        console.error("Error: startMovementForm no encontrada");
-                        showToast("Error interno", "danger");
-                    }
-                } catch (err) {
-                    console.error(err);
-                }
-            }, 75);
+            setTimeout(() => startMovementForm(null, false, type), 200);
         };
     });
 };
@@ -11652,135 +11474,478 @@ const updateExtractoList = () => {
     listContainer.innerHTML = html;
 };
 
-/* ================================================================= */
-/* === GESTOR DE ACCIONES DE CABECERA (Iconos Directos) === */
-/* ================================================================= */
 
-document.addEventListener('click', (e) => {
-    // Buscamos si se ha pulsado un botón con data-action
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
+/* ================================================================ */
+/* === LÓGICA DE ICONOS DE DIARIO (PEGAR AL FINAL DE MAIN.JS) === */
+/* ================================================================ */
 
-    const action = btn.dataset.action;
-
-    // --- ACCIÓN: BUSCAR ---
-    if (action === 'global-search') {
-        // Si tienes una función de búsqueda, llámala aquí.
-        // Si no, mostramos un aviso temporal
-        if (typeof showSearchModal === 'function') {
-            showSearchModal();
-        } 
-    }
-
-    // --- ACCIÓN: AJUSTES ---
-    if (action === 'navigate') {
-        const pageId = btn.dataset.page;
-        if (typeof navigateTo === 'function') {
-            navigateTo(pageId);
-        }
-    }
-
-    // --- ACCIÓN: CALCULADORA ---
-    if (action === 'open-calculator') {
-        const modal = document.getElementById('calculator-iframe-modal');
-        if (modal) {
-            modal.style.display = 'flex'; // Asegurar visibilidad
-            modal.classList.add('active');
-            // Recargar iframe si es necesario
-            const iframe = document.getElementById('calculator-frame');
-            if(iframe && !iframe.src) iframe.src = 'calculadora.html';
-        }
-    }
-
-    // --- ACCIÓN: CERRAR SESIÓN ---
-    if (action === 'logout') {
-        if (confirm("¿Seguro que quieres cerrar sesión?")) {
-            if (typeof firebase !== 'undefined') {
-                firebase.auth().signOut().then(() => {
-                    window.location.reload();
-                });
-            } else {
-                window.location.reload();
-            }
-        }
-    }
-});
-
-/* ================================================================= */
-/* === GESTOR MAESTRO V5 (Calculadora Independiente) === */
-/* ================================================================= */
-
-window.addEventListener('click', (e) => {
-    // 1. REGLA DE ORO: Si pulsamos DENTRO del iframe o su contenedor (y no es el botón cerrar)
-    // NO HACEMOS NADA. Dejamos que la calculadora gestione sus propios clics.
-    if (e.target.closest('#calculator-iframe-modal') && !e.target.closest('[data-action="close-modal"]')) {
-        return; 
-    }
-
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-
-    const action = btn.dataset.action;
-
-    // --- A. ABRIR CALCULADORA ---
-    if (action === 'open-calculator') {
-        e.preventDefault();
-        e.stopPropagation(); // Detenemos la propagación para aislar el evento
-        
-        const modal = document.getElementById('calculator-iframe-modal');
-        const iframe = document.getElementById('calculator-frame');
-
-        if (modal && iframe) {
-            console.log("🧮 Iniciando App Calculadora...");
-            
-            // Cargar archivo si está vacío
-            if (!iframe.getAttribute('src') || iframe.getAttribute('src') === '') {
-                iframe.src = 'calculadora.html';
-            }
-
-            // ABRIR VISUALMENTE
-            modal.style.display = 'flex';
-            // Pequeño timeout para asegurar que el display:flex se aplica antes de la opacidad
-            setTimeout(() => {
-                modal.classList.add('active');
-                modal.style.opacity = '1';
-                modal.style.pointerEvents = 'auto'; // Forzamos interactividad JS
-                
-                // TRUCO FINAL: Darle el foco al iframe para que funcione el teclado
-                iframe.focus();
-                if (iframe.contentWindow) iframe.contentWindow.focus();
-            }, 10);
-
-        } else {
-            alert("Error: No se encuentra el modal de la calculadora.");
-        }
-        return;
-    }
-
-    // --- B. CERRAR CALCULADORA ---
-    if (action === 'close-modal') {
-        const modalId = btn.dataset.modalId;
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('active');
-            modal.style.opacity = '0';
-            setTimeout(() => {
-                modal.style.display = 'none';
-            }, 300); // Esperar a la animación de cierre
-        }
-        return;
-    }
-
-    // --- C. OTRAS ACCIONES (Header) ---
-    if (action === 'navigate') {
-        const page = btn.dataset.page;
-        if (typeof navigateTo === 'function') navigateTo(page);
-    }
+// 1. Función para cambiar la vista (Lista <-> Compacta)
+window.toggleDiarioView = function(btnElement) {
+    const diarioContainer = document.getElementById('diario-page') || document.body;
+    const icono = btnElement.querySelector('.material-icons');
     
-    if (action === 'logout') {
-        if (confirm("¿Cerrar sesión?")) {
-            if (typeof firebase !== 'undefined') firebase.auth().signOut().then(() => window.location.reload());
-            else window.location.reload();
-        }
+    // Alternar clase
+    diarioContainer.classList.toggle('view-mode-compact');
+    
+    // Cambiar icono
+    if (diarioContainer.classList.contains('view-mode-compact')) {
+        icono.textContent = 'view_list'; // Icono de lista
+        console.log("Vista cambiada a: Compacta");
+    } else {
+        icono.textContent = 'grid_view'; // Icono de cuadrícula/normal
+        console.log("Vista cambiada a: Normal");
     }
+};
+
+// ===============================================================
+// === GESTOR DE CLICS BLINDADO (SOLUCIÓN FINAL ERROR DATASET) ===
+// ===============================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // Solo activamos un escuchador global para toda la app
+    document.body.addEventListener('click', (event) => {
+        
+        // --- ZONA 1: MOVIMIENTOS Y TARJETAS (Editar) ---
+        // Buscamos si el clic fue en algo que parece un movimiento
+        const movCard = event.target.closest('.transaction-card, [data-action="open-movement-form"], [data-action="edit-movement-from-list"]');
+        
+        // ¡ESCUDO DEFENSIVO 1!
+        // Si hemos encontrado una tarjeta válida...
+        if (movCard) {
+            // Verificamos con cuidado si tiene dataset
+            if (!movCard.dataset) return; 
+
+            const id = movCard.getAttribute('data-id') || movCard.dataset.id;
+            const type = movCard.dataset.type;
+
+            // Si tiene ID, es editar.
+            if (id) {
+                event.stopPropagation(); // Frenar otros eventos
+                
+                // Cerrar buscadores si estorban
+                const buscador = document.getElementById('global-search-modal');
+                if (buscador) buscador.classList.remove('active');
+
+                console.log("Editando movimiento:", id);
+                if (typeof startMovementForm === 'function') startMovementForm(id);
+                return; // Importante: Parar aquí
+            } 
+            // Si tiene Type (botón flotante nuevo), es crear.
+            else if (type) {
+                if (typeof startMovementForm === 'function') startMovementForm(null, type);
+                return;
+            }
+        }
+
+        // --- ZONA 2: NAVEGACIÓN INTELIGENTE (Patrimonio e Inversiones) ---
+        // Buscamos si es un botón de navegación
+        const navBtn = event.target.closest('[data-action="ver-balance-neto"], [data-action="ver-inversiones"]');
+        
+        // ¡ESCUDO DEFENSIVO 2!
+        if (navBtn) {
+            const action = navBtn.dataset.action; // Aquí ya es seguro leerlo
+            
+            // Navegar a Planificar
+            if (typeof navigateTo === 'function') navigateTo('planificar-page');
+            else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
+            
+            // Configurar destino según el botón
+            let targetID = (action === 'ver-balance-neto') ? 'seccion-balance-neto' : 'seccion-inversiones';
+            let keyWords = (action === 'ver-balance-neto') ? ['Patrimonio', 'Balance'] : ['Inversiones', 'Rentabilidad'];
+
+            // Esperar y buscar el gráfico
+            setTimeout(() => {
+                let destino = document.getElementById(targetID);
+                
+                // Plan B: Buscar por texto si falla el ID
+                if (!destino) {
+                    const titulos = document.querySelectorAll('h3, .card__title, .widget-title');
+                    for (const t of titulos) {
+                        const txt = (t.textContent || "").toLowerCase();
+                        if (keyWords.some(w => txt.includes(w.toLowerCase()))) {
+                            destino = t.closest('.card, .dashboard-widget');
+                            break;
+                        }
+                    }
+                }
+
+                if (destino) {
+                    if (destino.tagName === 'DETAILS') destino.open = true;
+                    destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Efecto visual
+                    destino.style.transition = 'transform 0.2s';
+                    destino.style.transform = 'scale(1.02)';
+                    setTimeout(() => destino.style.transform = 'scale(1)', 300);
+                }
+            }, 300);
+            return;
+        }
+
+        // --- ZONA 3: LISTA DE INVERSIONES (El historial que añadimos antes) ---
+        // Si pulsas en una fila de la lista de inversiones
+        const rowInversion = event.target.closest('[onclick^="openInvestmentHistory"]');
+        // Este caso ya lo maneja el propio HTML con el onclick, así que no hacemos nada aquí
+        // para no interferir, pero evitamos que lance errores.
+
+    });
 });
+
+/* ================================================================= */
+/* === LÓGICA DE ENLACE: FILTROS Y VISTAS DE DIARIO === */
+/* ================================================================= */
+
+// Variable Global para controlar la vista (Por defecto: Lista)
+// Opciones: 'list' (Lista simple) | 'date' (Agrupado por Fechas)
+window.currentDiarioView = 'list'; 
+
+// --- 1. FUNCIÓN PARA EL BOTÓN DE FILTRO ---
+window.openDiarioFilters = function() {
+    const modal = document.getElementById('diario-filters-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Pequeño retardo para permitir la animación CSS
+        setTimeout(() => {
+            modal.classList.add('active');
+        }, 10);
+        console.log("Abriendo filtros de diario...");
+    } else {
+        console.error("ERROR: No se encuentra el modal con id='diario-filters-modal' en index.html");
+        alert("Error: Falta el formulario de filtros en el HTML");
+    }
+};
+
+// --- 2. FUNCIÓN PARA EL BOTÓN DE VISTA ---
+window.toggleDiarioView = function(btnElement) {
+    const icono = btnElement.querySelector('.material-icons');
+    
+    // A) CAMBIAR EL ESTADO
+    if (window.currentDiarioView === 'list') {
+        // Cambiamos a VISTA POR FECHA
+        window.currentDiarioView = 'date';
+        if (icono) icono.textContent = 'list'; // Ponemos icono de lista para volver
+        console.log("Cambiando a Vista: AGRUPADA POR FECHA");
+    } else {
+        // Volvemos a VISTA DE LISTA
+        window.currentDiarioView = 'list';
+        if (icono) icono.textContent = 'calendar_month'; // Ponemos icono de calendario
+        console.log("Cambiando a Vista: LISTA SIMPLE");
+    }
+
+    // B) EJECUTAR EL CAMBIO (RE-RENDERIZAR)
+    // Aquí llamamos a tu función principal que pinta la lista.
+    // Buscamos las funciones más probables en tu código.
+    if (typeof renderDiario === 'function') {
+        renderDiario(); 
+    } else if (typeof renderMovements === 'function') {
+        renderMovements();
+    } else if (typeof updateDiarioList === 'function') {
+        updateDiarioList();
+    } else {
+        console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
+    }
+};
+// ===============================================================
+// === NUEVA HERRAMIENTA: ABRIR HISTORIAL DE INVERSIÓN ===
+// ===============================================================
+window.openInvestmentHistory = (cuentaId) => {
+    // 1. Buscamos la cuenta y sus movimientos
+    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+    if (!cuenta) return;
+
+    // Filtramos movimientos donde esta cuenta participe
+    const movs = db.movimientos.filter(m => 
+        m.cuentaId === cuentaId || m.cuentaOrigenId === cuentaId || m.cuentaDestinoId === cuentaId
+    );
+
+    // Ordenamos: El más nuevo arriba
+    movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    // 2. Generamos el HTML de la lista
+    let listHtml = `<div style="display: flex; flex-direction: column; gap: 10px;">`;
+    
+    if (movs.length === 0) {
+        listHtml += `<p style="opacity: 0.6; text-align: center; padding: 20px;">No hay movimientos registrados.</p>`;
+    } else {
+        listHtml += movs.map(m => {
+            const date = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+            // Calculamos si suma o resta para esta cuenta
+            let cantidad = m.cantidad;
+            let color = 'var(--c-on-surface)';
+            let signo = '';
+
+            // Lógica para saber si es verde o rojo en ESTA cuenta específica
+            if (m.tipo === 'gasto') {
+                color = 'var(--c-on-surface)'; // Gasto normal en blanco
+                signo = '-';
+            } else if (m.tipo === 'ingreso') {
+                color = 'var(--c-success)';
+                signo = '+';
+            } else if (m.tipo === 'traspaso') {
+                if (m.cuentaOrigenId === cuentaId) {
+                    color = 'var(--c-on-surface)'; // Sale dinero
+                    signo = '-';
+                } else {
+                    color = 'var(--c-success)'; // Entra dinero
+                    signo = '+';
+                }
+            }
+
+            const conceptoObj = db.conceptos.find(c => c.id === m.conceptoId);
+            const titulo = m.tipo === 'traspaso' ? 'Traspaso' : (conceptoObj?.nombre || 'Movimiento');
+
+            // Reutilizamos tu sistema de clic para editar (data-action)
+            return `
+            <div class="card" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <div>
+                    <div style="font-weight: 600; font-size: 0.95rem;">${titulo}</div>
+                    <div style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-top: 2px;">${date} • ${m.descripcion || ''}</div>
+                </div>
+                <div style="font-weight: 700; color: ${color};">
+                    ${signo}${formatCurrency(m.cantidad)}
+                </div>
+            </div>`;
+        }).join('');
+    }
+    listHtml += `</div>`;
+
+    // 3. Mostramos el Modal usando tu sistema existente
+    showGenericModal(`Historial: ${cuenta.nombre}`, listHtml);
+};
+// ===============================================================
+// === 1. LÓGICA DEL LÁPIZ (Pedir Valor + Fecha Manualmente) ===
+// ===============================================================
+window.actualizarValorInversion = async (cuentaId, event) => {
+    if (event) { event.stopPropagation(); event.preventDefault(); }
+
+    // 1. Buscamos la cuenta en la memoria global
+    const indice = db.cuentas.findIndex(c => c.id === cuentaId);
+    if (indice === -1) return;
+    const cuenta = db.cuentas[indice];
+
+    // 2. Pedimos datos
+    const nuevoValorStr = prompt(`Nuevo Valor para ${cuenta.nombre}:`, cuenta.saldo);
+    if (nuevoValorStr === null) return;
+    const nuevoValor = parseFloat(nuevoValorStr.replace(',', '.'));
+    if (isNaN(nuevoValor)) { alert("Número inválido"); return; }
+
+    // Truco: Si no escribes nada, usa la fecha de hoy
+    const hoy = new Date();
+    const fechaDefecto = `${hoy.getDate().toString().padStart(2,'0')}/${(hoy.getMonth()+1).toString().padStart(2,'0')}/${hoy.getFullYear()}`;
+    const nuevaFecha = prompt("Fecha (DD/MM/AAAA):", cuenta.fechaValoracion || fechaDefecto);
+    if (nuevaFecha === null) return;
+
+    try {
+        // 3. GUARDADO CRÍTICO (Actualizamos Firebase y FORZAMOS la memoria local)
+        await fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId).update({
+            saldo: nuevoValor,
+            fechaValoracion: nuevaFecha
+        });
+
+        // AQUÍ ESTÁ LA CLAVE: Actualizamos el objeto original directamente
+        db.cuentas[indice].saldo = nuevoValor;
+        db.cuentas[indice].fechaValoracion = nuevaFecha;
+
+        // Feedback visual inmediato
+        alert(`✅ Guardado: ${nuevoValor}€ con fecha ${nuevaFecha}`);
+        
+        // Forzamos el repintado
+        renderBudgetTracking();
+
+    } catch (e) {
+        console.error(e);
+        alert("Error al guardar en la nube.");
+    }
+};
+// ===============================================================
+// === 2. PANTALLA ANÁLISIS (VISUALIZACIÓN CON FECHA) ===
+// ===============================================================
+const renderBudgetTracking = () => {
+    const container = document.getElementById('planificar-content');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // --- CÁLCULOS ESTÁNDAR (No tocamos esto) ---
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const totalGasto = db.movimientos.filter(m => {
+        const d = new Date(m.fecha);
+        return m.tipo === 'gasto' && d >= startOfMonth && d <= endOfMonth;
+    }).reduce((sum, m) => sum + m.cantidad, 0);
+    const presupuesto = 2000; 
+    const pct = Math.min((totalGasto / presupuesto) * 100, 100);
+    const color = pct > 80 ? 'var(--c-warning)' : 'var(--c-primary)';
+
+    // --- AQUÍ ESTÁ EL CAMBIO: INVERSIONES ---
+    // Filtramos las cuentas
+    const invs = db.cuentas.filter(c => 
+        c.type === 'inversion' || c.tipo === 'inversion' || 
+        (c.nombre && c.nombre.toLowerCase().match(/inver|fondo|acciones|btc|crypto|ahorro/))
+    );
+
+    let htmlInversiones = '';
+    
+    if (invs.length > 0) {
+        // Creamos la lista
+        htmlInversiones = `<div style="margin-top: 20px;">`;
+        
+        invs.forEach(c => {
+            // LEEMOS LA FECHA DIRECTAMENTE DE LA MEMORIA
+            // Si no existe, ponemos "Sin fecha"
+            const fecha = c.fechaValoracion ? c.fechaValoracion : "Sin fecha";
+            
+            htmlInversiones += `
+                <div style="
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center; 
+                    padding: 15px 10px; 
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                    background: rgba(255,255,255,0.02);
+                    margin-bottom: 5px;
+                    border-radius: 8px;">
+                    
+                    <div onclick="openInvestmentHistory('${c.id}')" style="flex:1; cursor:pointer;">
+                        <div style="font-weight:bold; font-size:1rem; color:#fff;">${c.nombre}</div>
+                    </div>
+
+                    <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; margin-right:10px;">
+                        
+                        <span style="color: #FFFF00; font-size: 0.85rem; font-family: monospace; letter-spacing:1px;">
+                            📅 ${fecha}
+                        </span>
+
+                        <span style="color: #fff; font-weight: bold; font-size: 1.1rem;">
+                            ${formatCurrency(c.saldo)}
+                        </span>
+                    </div>
+
+                    <button onclick="actualizarValorInversion('${c.id}', event)" 
+                            style="background:none; border:1px solid #666; border-radius:50%; width:35px; height:35px; color:#0f0; cursor:pointer;">
+                        ✏️
+                    </button>
+                </div>
+            `;
+        });
+        htmlInversiones += `</div>`;
+    } else {
+        htmlInversiones = `<p style="padding:20px; text-align:center;">No hay inversiones</p>`;
+    }
+
+    // PINTAMOS TODO EL HTML
+    container.innerHTML = `
+        <div class="card fade-in-up" style="margin-bottom: 20px; padding: 20px;">
+            <h3>Presupuesto</h3>
+            <div style="display:flex; justify-content:space-between; margin:10px 0;">
+                <span>Gastado: ${formatCurrency(totalGasto)}</span>
+                <span>Límite: ${formatCurrency(presupuesto)}</span>
+            </div>
+            <div style="width:100%; height:10px; background:#333;"><div style="width:${pct}%; height:100%; background:${color};"></div></div>
+        </div>
+
+        <div class="card fade-in-up" style="margin-bottom: 20px;">
+            <h3>Gastos por Categoría</h3>
+            <div class="chart-container" style="height: 200px;"><canvas id="gastosPorCategoriaChart"></canvas></div>
+        </div>
+
+        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: 20px;">
+            <h3>Patrimonio Neto</h3>
+            <div class="chart-container" style="height: 200px;"><canvas id="balanceNetoChart"></canvas></div>
+        </div>
+
+        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: 20px; border: 1px solid #00B34D;">
+            <h3 style="color:#00B34D;">💰 Mis Inversiones</h3>
+            <p style="color:#aaa; font-size:0.8rem;">Usa el lápiz para poner Fecha y Valor.</p>
+            
+            ${htmlInversiones}
+            
+            <div class="chart-container" style="height: 200px; margin-top:20px;"><canvas id="inversionesChart"></canvas></div>
+        </div>
+    `;
+
+    if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 100);
+};
+
+// ==========================================
+// NUEVA FUNCIÓN MAESTRA: Crea una fila idéntica al Diario
+// ==========================================
+const createUnifiedRowHTML = (m) => {
+    // 1. Preparar datos (Lógica extraída de renderVirtualListItem)
+    const dateObj = new Date(m.fecha);
+    const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    
+    // Variables visuales
+    let line1, line2, amountClass, amountSign, iconName, bubbleClass;
+    
+    const { cuentas, conceptos } = db; // Acceso directo a la base de datos global
+
+    if (m.tipo === 'traspaso') {
+        // --- ESTILO TRASPASO (MODIFICADO A MORADO) ---
+        bubbleClass = 't-bubble--transfer'; // Burbuja gris/neutra
+        iconName = 'swap_horiz';
+
+        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+        
+        // AQUÍ EL CAMBIO: Añadimos style="color: var(--c-info)" para forzar el morado
+        // También ponemos font-weight: 500 para que se lea mejor el color
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)}</span>`;
+        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)}</span>`;
+        
+        amountClass = 'text-info'; // Esta clase ya ponía el importe en morado
+        amountSign = '';
+    } else {
+        // --- ESTILO GASTO / INGRESO ---
+        const isGasto = m.cantidad < 0;
+        
+        // CORRECCIÓN: Usamos las variables EXACTAS de tu style.css
+        // isGasto -> Rojo (--c-danger)
+        // No Gasto -> Verde (--c-success)
+        const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+
+        bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
+        iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
+
+        const concepto = conceptos.find(c => c.id === m.conceptoId);
+        const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+        const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+        const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
+        
+        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+        
+        const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
+        const separator = desc ? ' • ' : '';
+        
+        // APLICAMOS EL COLOR:
+        // style="color: ${accountColor}" -> Pinta el texto
+        // style="border-color: ${accountColor}" -> Pinta el borde (si la clase t-account-badge tiene borde)
+        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+        
+        // El importe usa las clases de texto que ya tienes configuradas
+        amountClass = isGasto ? 'text-negative' : 'text-positive';
+        amountSign = isGasto ? '' : '+';
+    }
+
+    // 2. Generar HTML (Estructura exacta del Diario)
+    return `
+    <div class="t-card list-item-animate" data-id="${m.id}" data-action="edit-movement-from-list" style="cursor:pointer;">
+        
+        <div class="t-icon-bubble ${bubbleClass}">
+            <span class="material-icons">${iconName}</span>
+        </div>
+        
+        <div class="t-content">
+            <div class="t-row-primary">
+                <div class="t-line-1">${line1}</div>
+                <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+            </div>
+            <div class="t-row-secondary">
+                <div class="t-line-2">${line2}</div>
+                ${m.runningBalance !== undefined ? `<div class="t-running-balance">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
+            </div>
+        </div>
+    </div>`;
+};
+
