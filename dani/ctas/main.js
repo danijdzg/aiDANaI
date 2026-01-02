@@ -9285,21 +9285,49 @@ const handleStart = (e) => {
 },
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
-            'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Eliminar operación recurrente?' : '¿Eliminar movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
-			'duplicate-movement-from-modal': () => {
-    const id = select('movimiento-id').value;
-    // Buscamos el movimiento original en la base de datos local
-    const movement = db.movimientos.find(m => m.id === id);
-    
-    if (movement) {
-        // Usamos la función que ya tienes creada
-        handleDuplicateMovement(movement);
-    } else {
-        // Por si acaso es un recurrente o hay un error
-        showToast("No se pudo cargar el movimiento original para duplicar.", "warning");
-    }
+     // ACCIÓN 1: BORRAR (Directo, sin preguntas, sin cuadros de texto estorbando)
+    'delete-movement-from-modal': async () => {
+        // 1. Coger el ID del movimiento
+        const idToDelete = document.getElementById('movimiento-id').value;
+        // 2. Ver si es recurrente
+        const isRecurrent = (actionTarget.dataset.isRecurrent === 'true');
+
+        // 3. ¡IMPORTANTE! Cerrar el modal PRIMERO para que desaparezca de la pantalla
+        hideModal('movimiento-modal');
+
+        // 4. Borrar inmediatamente
+        if (idToDelete) {
+            await deleteMovementAndAdjustBalance(idToDelete, isRecurrent);
+            showToast('Movimiento eliminado'); // Confirmación visual pequeña
+        }
+    },
+
+    // ACCIÓN 2: DUPLICAR (Crea uno nuevo con fecha de hoy)
+    'duplicate-movement-from-modal': () => {
+        // 1. Borrar el ID oculto. 
+        // ALERTA: Esto es lo que hace que se cree uno NUEVO en vez de sobrescribir el viejo.
+        const idField = document.getElementById('movimiento-id');
+        if (idField) idField.value = ''; 
+
+        // 2. Poner fecha de HOY automáticamente
+        const dateField = document.getElementById('movimiento-fecha');
+        if (dateField) {
+            dateField.value = new Date().toISOString().split('T')[0];
+        }
+
+        // 3. Cambiar el texto del botón Guardar para que sepas que es una copia
+        const saveBtn = document.getElementById('btn-save-movement');
+        if (saveBtn) saveBtn.textContent = 'Guardar Copia';
+
+        // 4. Aviso pequeño
+        showToast('Duplicado. Revisa y Guarda.');
+    },
+    'swipe-delete-movement': () => {
+    const isRecurrent = actionTarget.dataset.isRecurrent === 'true';
+    hapticFeedback('medium');
+    // Borrado directo sin modal
+    deleteMovementAndAdjustBalance(id, isRecurrent);
 },
-            'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
             'swipe-duplicate-movement': () => { const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id); if (movement) handleDuplicateMovement(movement); },
             'search-result-movimiento': (e) => { hideModal('global-search-modal'); startMovementForm(e.target.closest('[data-id]').dataset.id, false); },
             'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso.","warning"); return; } showConfirmationModal('¿Eliminar concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); renderConceptosModalList(); }); },
