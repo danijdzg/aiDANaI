@@ -11950,187 +11950,104 @@ const createUnifiedRowHTML = (m) => {
 };
 
 // =============================================================================
-// ☢️ SOLUCIÓN FINAL: SISTEMA DE NAVEGACIÓN Y EDICIÓN (MODO CAPTURA)
+// 🛑 SOLUCIÓN ÚNICA: FORZAR APERTURA DE FORMULARIO INVERSIONES (MODO CAPTURA)
 // =============================================================================
 
-// Variable global para recordar a dónde ir entre reinicios de pestaña
-window.globalTargetIntent = null;
-
-/**
- * 1. INTERCEPTOR MAESTRO (FASE DE CAPTURA)
- * Este evento se dispara ANTES que cualquier otro clic en la página.
- */
 document.addEventListener('click', (e) => {
-    
-    // --- A) LÓGICA DEL BOTÓN EDITAR INVERSIONES (El Lápiz) ---
-    // Buscamos si el clic va dirigido a un icono de edición o su botón
+    // 1. Identificamos qué se ha pulsado
     const target = e.target;
-    const btnEdit = target.closest('button');
-    const isEditIcon = target.innerText === 'edit' || target.innerText === 'mode_edit' || target.innerText === 'create';
     
-    // Si es un botón de editar O un icono de editar...
-    if ((btnEdit && btnEdit.innerHTML.includes('edit')) || isEditIcon) {
+    // Verificamos si es el icono del lápiz (texto 'edit', 'mode_edit', etc.)
+    const esIcono = target.classList.contains('material-icons');
+    const textoIcono = target.innerText.trim();
+    const esLapiz = esIcono && (textoIcono === 'edit' || textoIcono === 'mode_edit' || textoIcono === 'create');
+    
+    // Verificamos si es el botón que contiene el lápiz
+    const esBotonLapiz = target.tagName === 'BUTTON' && target.innerHTML.includes('edit');
+    const botonPadre = target.closest('button'); // Por si pulsas el borde del botón
+
+    // SI EL USUARIO PULSÓ EL LÁPIZ...
+    if (esLapiz || esBotonLapiz || (botonPadre && botonPadre.innerHTML.includes('edit'))) {
         
-        // Verificamos si está dentro de una tarjeta de inversión (para no romper otros botones)
-        const card = target.closest('.card, .t-card');
-        // Filtramos para asegurarnos que es la zona de inversiones (buscamos texto de dinero o fechas)
-        if (card && (card.innerHTML.includes('€') || card.innerHTML.includes('$') || card.querySelector('.t-amount'))) {
+        // Buscamos si este lápiz está dentro de una tarjeta de inversión
+        // (Buscamos hacia arriba un elemento con clase .card o .t-card)
+        const tarjeta = target.closest('.card, .t-card');
+
+        // Confirmamos que es una tarjeta de inversión (debe tener dinero o fechas)
+        // Esto evita romper botones de otras pantallas
+        if (tarjeta && (tarjeta.querySelector('.t-amount') || tarjeta.innerText.includes('€') || tarjeta.innerText.includes('$'))) {
             
-            console.log("🛑 INTERCEPTADO: Clic en Editar Inversión. Deteniendo propagación.");
+            console.log("🛑 INTERCEPTADO: Has pulsado editar inversión.");
             
-            // 1. MATAMOS EL EVENTO (Nadie más se entera, ni la tarjeta padre)
-            e.stopPropagation();
+            // 2. ¡DETENEMOS EL EVENTO AQUÍ! (Esto evita que se abran los movimientos)
+            e.stopPropagation(); 
             e.stopImmediatePropagation();
             e.preventDefault();
 
-            // 2. EJECUTAMOS LA APERTURA MANUAL DEL MODAL
-            abrirModalInversionManual(card);
-            return; // Salimos, trabajo terminado
+            // 3. ABRIMOS EL FORMULARIO MANUALMENTE
+            abrirFormularioInversion(tarjeta);
+            
+            return; // Terminamos
         }
     }
-
-    // --- B) LÓGICA DE NAVEGACIÓN (Patrimonio -> Balance) ---
-    // Buscamos si es una tarjeta del panel
-    const navCard = target.closest('.hero-card, .card, .kpi-card');
-    
-    if (navCard) {
-        const text = (navCard.textContent || '').toLowerCase();
-        const cardId = navCard.id || '';
-        let destino = null;
-
-        // Detectar Patrimonio -> Balance Neto
-        if ((text.includes('patrimonio') || text.includes('neto')) && !cardId.includes('balance')) {
-            destino = 'seccion-balance-neto';
-        }
-        // Detectar Inversiones/Mercado -> Mis Inversiones
-        else if ((text.includes('mercado') || text.includes('valor real') || text.includes('capital') || text.includes('inversiones')) && !cardId.includes('inversiones')) {
-            destino = 'seccion-inversiones';
-        }
-
-        if (destino) {
-            console.log(`📍 Navegación detectada hacia: ${destino}`);
-            window.globalTargetIntent = destino; // Guardamos la intención
-
-            // Cambiamos de pestaña
-            const btnInformes = document.querySelector('button[data-page="planificar-page"]');
-            if (btnInformes) btnInformes.click();
-            else if (typeof navigateTo === 'function') navigateTo('planificar-page');
-
-            // Lanzamos el buscador persistente
-            buscarYAbrirSeccion();
-        }
-    }
-
-}, true); // <--- IMPORTANTE: 'true' activa la fase de CAPTURA (Prioridad Máxima)
+}, true); // <--- ESTE 'TRUE' ES LA CLAVE (Intercepta antes de llegar a la tarjeta)
 
 
-/**
- * 2. FUNCION DE BÚSQUEDA Y APERTURA (Resistente a re-renderizados)
- */
-function buscarYAbrirSeccion() {
-    if (!window.globalTargetIntent) return;
-
-    let intentos = 0;
-    // Buscamos muy rápido (cada 50ms)
-    const intervalo = setInterval(() => {
-        const targetId = window.globalTargetIntent;
-        const elemento = document.getElementById(targetId);
-
-        // Si el elemento existe y es visible (tiene altura)
-        if (elemento) {
-            clearInterval(intervalo);
-            window.globalTargetIntent = null; // Limpiamos
-
-            console.log("🔓 Elemento encontrado. Intentando expandir...");
-
-            // A) EXPANDIR (Abrir Acordeón)
-            // 1. Si es <details>
-            if (elemento.tagName === 'DETAILS') elemento.open = true;
-            
-            // 2. Buscamos botones de cabecera y hacemos click si no están abiertos
-            const triggers = elemento.querySelectorAll('.card-header, .accordion-button, summary, h3, h4');
-            const esVisible = elemento.querySelector('.card-body, .content')?.offsetParent !== null;
-            
-            if (triggers.length > 0 && !esVisible) {
-                triggers[0].click(); // Forzamos clic en la cabecera
-            }
-
-            // B) SCROLL Y FOCO
-            setTimeout(() => {
-                elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                
-                // Efecto visual
-                elemento.style.transition = "transform 0.3s ease, box-shadow 0.3s ease";
-                elemento.style.transform = "scale(1.02)";
-                elemento.style.boxShadow = "0 0 40px rgba(0, 255, 128, 0.5)"; // Resplandor verde
-                elemento.style.border = "2px solid var(--c-primary)";
-
-                setTimeout(() => {
-                    elemento.style.transform = "scale(1)";
-                    elemento.style.boxShadow = "none";
-                    elemento.style.border = "none";
-                }, 1500);
-            }, 200); // Pequeña espera para que la animación de abrir termine
-        }
-
-        intentos++;
-        if (intentos > 60) clearInterval(intervalo); // 3 segundos límite
-    }, 50);
-}
-
-
-/**
- * 3. FUNCIÓN AUXILIAR: Extraer datos y abrir modal (Scraping)
- */
-function abrirModalInversionManual(card) {
+// --- FUNCIÓN QUE ABRE EL FORMULARIO (Rellena los datos leyendo la tarjeta) ---
+function abrirFormularioInversion(card) {
     const modal = document.getElementById('inversion-modal');
-    if (!modal) return;
+    if (!modal) {
+        console.error("❌ Error: No encuentro el modal con id 'inversion-modal'");
+        return;
+    }
 
-    // A) EXTRAER DATOS DEL HTML A LA FUERZA
+    // A) EXTRAER DATOS (SCRAPING DEL HTML DE LA TARJETA)
+    // 1. ID: Buscamos en data-id o en el onclick
     let id = card.dataset.id;
-    
-    // Si no tiene data-id, buscamos en el onclick="algo('ID')"
     if (!id && card.getAttribute('onclick')) {
         const match = card.getAttribute('onclick').match(/['"]([^'"]+)['"]/);
         if (match) id = match[1];
     }
     
-    // Buscar valor monetario (contiene € o $)
-    // Filtramos nodos de texto para encontrar el precio
-    const moneyEl = Array.from(card.querySelectorAll('*')).find(el => 
-        el.innerText && (el.innerText.includes('€') || el.innerText.includes('$')) && el.innerText.length < 20
-    );
+    // 2. VALOR: Buscamos el texto que tenga el símbolo de moneda
+    // Buscamos clases comunes de precio (.t-amount, .amount) o por símbolo
+    const moneyEl = card.querySelector('.t-amount, .amount') || 
+                    Array.from(card.querySelectorAll('*')).find(el => el.innerText && (el.innerText.includes('€') || el.innerText.includes('$')));
     
     let valor = 0;
     if (moneyEl) {
-        // Limpiamos "1.200,50 €" -> 1200.50
+        // Limpiamos el texto: "1.500,50 €" -> 1500.50
         let textoLimpio = moneyEl.innerText.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.');
         valor = parseFloat(textoLimpio);
     }
 
-    // Buscar Nombre (suele estar en negrita o en la primera línea)
+    // 3. NOMBRE: Buscamos el título (negrita o clase t-line-1)
     const nameEl = card.querySelector('.t-line-1, strong, h4, h3');
     const nombre = nameEl ? nameEl.innerText : 'Inversión';
 
-    console.log(`✏️ Datos extraídos -> ID: ${id}, Val: ${valor}, Nom: ${nombre}`);
+    console.log(`📝 Abriendo formulario para: ${nombre} (${valor}€)`);
 
-    // B) RELLENAR FORMULARIO
+    // B) RELLENAR LOS CAMPOS DEL FORMULARIO
+    // Asegúrate de que estos IDs coinciden con tu HTML
     const inputId = document.getElementById('inversion-id');
     const inputValor = document.getElementById('inversion-valor');
     const inputFecha = document.getElementById('inversion-fecha');
-    // Si tienes un elemento para mostrar el nombre (opcional)
-    const labelNombre = document.getElementById('inversion-nombre-display');
+    const labelNombre = document.getElementById('inversion-nombre-display'); // Si tienes un label para el nombre
 
     if (inputId) inputId.value = id || '';
     if (inputValor) inputValor.value = valor || 0;
+    // Ponemos la fecha de hoy por defecto
     if (inputFecha) inputFecha.value = new Date().toISOString().split('T')[0];
+    
+    // Si existe un campo de texto para mostrar qué estamos editando
     if (labelNombre) labelNombre.innerText = nombre;
 
-    // C) MOSTRAR MODAL
+    // C) MOSTRAR EL MODAL
     modal.style.display = 'flex';
-    // Forzamos un pequeño repaint para que la animación CSS funcione
-    requestAnimationFrame(() => {
+    // Pequeño retardo para activar la clase de animación si existe
+    setTimeout(() => {
         modal.classList.add('modal-overlay--active');
-        modal.style.zIndex = "10000"; // Asegurar que esté encima de todo
-    });
+        // Z-Index alto para asegurar que se vea encima de todo
+        modal.style.zIndex = "10000"; 
+    }, 10);
 }
