@@ -8733,6 +8733,68 @@ const renderInversionesPage = async (containerId) => {
     await renderPlanificacionPage(); 
 };
 
+/* --- FUNCIÓN NUEVA: Lógica para Duplicar Movimiento --- */
+const handleDuplicateMovement = (originalMovement) => {
+    // 1. Cerramos el modal actual para evitar conflictos
+    hideModal('movimiento-modal');
+
+    // 2. Esperamos brevemente a que cierre la animación
+    setTimeout(() => {
+        // 3. Abrimos el formulario en modo 'nuevo' pero pasando el tipo
+        startMovementForm(null, false, originalMovement.tipo);
+
+        // 4. Rellenamos los datos una vez el formulario está renderizado
+        setTimeout(() => {
+            // Título personalizado
+            const titleEl = select('form-movimiento-title');
+            if (titleEl) titleEl.textContent = 'Duplicar Movimiento';
+
+            // Cantidad
+            const cantidadInput = select('movimiento-cantidad');
+            if (cantidadInput) {
+                // Usamos tu formateador existente o raw
+                cantidadInput.value = formatAsCurrencyInput(originalMovement.cantidad);
+                updateInputMirror(cantidadInput); // Actualizar espejo visual
+            }
+
+            // Descripción (Añadimos marca de copia)
+            const descInput = select('movimiento-descripcion');
+            if (descInput) descInput.value = `${originalMovement.descripcion} (Copia)`;
+
+            // Concepto
+            const conceptoSelect = select('movimiento-concepto');
+            if (conceptoSelect) {
+                conceptoSelect.value = originalMovement.conceptoId;
+                // Disparamos evento para que se actualicen los selectores visuales custom
+                conceptoSelect.dispatchEvent(new Event('change')); 
+            }
+
+            // Cuenta(s)
+            if (originalMovement.tipo === 'traspaso') {
+                const origenSelect = select('movimiento-cuenta-origen');
+                const destinoSelect = select('movimiento-cuenta-destino');
+                if (origenSelect) {
+                    origenSelect.value = originalMovement.cuentaOrigenId;
+                    origenSelect.dispatchEvent(new Event('change'));
+                }
+                if (destinoSelect) {
+                    destinoSelect.value = originalMovement.cuentaDestinoId;
+                    destinoSelect.dispatchEvent(new Event('change'));
+                }
+            } else {
+                const cuentaSelect = select('movimiento-cuenta');
+                if (cuentaSelect) {
+                    cuentaSelect.value = originalMovement.cuentaId;
+                    cuentaSelect.dispatchEvent(new Event('change'));
+                }
+            }
+            
+            hapticFeedback('success');
+            showToast('Datos duplicados. Revisa y guarda.');
+
+        }, 150); // Pequeño retardo para asegurar que el DOM del modal está listo
+    }, 300);
+};
 
 // ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
 const attachEventListeners = () => {
@@ -9271,7 +9333,24 @@ const handleStart = (e) => {
             'global-search': () => { showGlobalSearchModal(); hapticFeedback('medium'); },
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
-            'duplicate-movement': () => { /* Lógica duplicar */ },
+            'duplicate-movement': () => {
+    const id = select('movimiento-id').value;
+    const movement = db.movimientos.find(m => m.id === id);
+    if (movement) {
+        handleDuplicateMovement(movement);
+    } else {
+        showToast("Error: No se encuentra el movimiento original.", "danger");
+    }
+},
+
+// Asegúrate también de que esta otra acción use la misma lógica:
+'duplicate-movement-from-modal': () => {
+    const id = select('movimiento-id').value;
+    const movement = db.movimientos.find(m => m.id === id);
+    if (movement) {
+        handleDuplicateMovement(movement);
+    }
+},
             'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
             'recalculate-balances': () => { showConfirmationModal('Se recalcularán todos los saldos. ¿Continuar?', () => auditAndFixAllBalances(btn), 'Confirmar Auditoría'); },
             'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
