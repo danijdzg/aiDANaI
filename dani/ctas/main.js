@@ -1064,8 +1064,7 @@ const clearDiarioFilters = async () => {
 			renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
 		};
         
-
-// --- LÓGICA CALCULADORA INTEGRADA V2 ---
+ // ▼▼▼ COPIA Y PEGA ESTE BLOQUE ÚNICO EN LUGAR DEL CÓDIGO DE LA CALCULADORA QUE TENGAS ▼▼▼
 
 let calculatorState = {
     displayValue: '0',
@@ -1073,188 +1072,10 @@ let calculatorState = {
     operator: null,
     waitingForNewValue: true,
     targetInput: null,
-    historyValue: '', 
+    isVisible: false, 
+    isResultDisplayed: false,
+    historyValue: '', // Guarda la operación en curso
 };
-
-// 1. Mostrar Calculadora y Pegar Formulario
-const showCalculator = (targetInput) => {
-    calculatorState.targetInput = targetInput;
-    calculatorState.displayValue = targetInput.value || '0';
-    calculatorState.waitingForNewValue = true; // Empezar sobrescribiendo al teclear
-    
-    // UI Updates
-    updateCalculatorDisplay();
-    
-    // Activar Overlay
-    const overlay = document.getElementById('calculator-overlay');
-    overlay.classList.add('calculator-visible');
-    overlay.classList.add('modal-overlay--active');
-    
-    // Activar Modo Pegajoso en el Body
-    document.body.classList.add('calculator-mode-active');
-    
-    // Scroll suave para que el input quede visible justo encima de la calculadora
-    setTimeout(() => {
-        targetInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 300);
-};
-
-// 2. Ocultar Calculadora
-const hideCalculator = () => {
-    const overlay = document.getElementById('calculator-overlay');
-    overlay.classList.remove('calculator-visible');
-    overlay.classList.remove('modal-overlay--active');
-    
-    document.body.classList.remove('calculator-mode-active');
-    
-    // Quitar foco para cerrar teclado nativo si se hubiera abierto
-    if (calculatorState.targetInput) calculatorState.targetInput.blur();
-};
-
-// 3. Motor de Cálculo
-const handleCalculatorInput = (key) => {
-    hapticFeedback('light'); // Vibración para sensación física
-    
-    let { displayValue, operand1, operator, waitingForNewValue } = calculatorState;
-    const historyDisplay = document.getElementById('calculator-history-display');
-
-    if (key === 'clear') {
-        calculatorState = { ...calculatorState, displayValue: '0', operand1: null, operator: null, waitingForNewValue: true, historyValue: '' };
-        updateCalculatorDisplay();
-        return;
-    }
-
-    if (key === 'backspace') {
-        if (!waitingForNewValue && displayValue.length > 1) {
-            calculatorState.displayValue = displayValue.slice(0, -1);
-        } else {
-            calculatorState.displayValue = '0';
-            calculatorState.waitingForNewValue = true;
-        }
-        updateCalculatorDisplay();
-        return;
-    }
-
-    if (['add', 'subtract', 'multiply', 'divide'].includes(key)) {
-        const symbols = { add: '+', subtract: '−', multiply: '×', divide: '÷' };
-        
-        if (operator && !waitingForNewValue) {
-            calculateResult(); // Encadenar operaciones (5 + 5 + ...)
-            displayValue = calculatorState.displayValue;
-        }
-        
-        calculatorState.operand1 = parseFloat(displayValue.replace(',', '.'));
-        calculatorState.operator = key;
-        calculatorState.waitingForNewValue = true;
-        calculatorState.historyValue = `${displayValue} ${symbols[key]}`;
-        updateCalculatorDisplay();
-        return;
-    }
-
-    if (key === 'done') {
-        if (operator) calculateResult();
-        
-        // TRANSFERIR RESULTADO AL INPUT
-        if (calculatorState.targetInput) {
-            calculatorState.targetInput.value = calculatorState.displayValue;
-            // Disparar evento para que otras partes de la app sepan que cambió
-            calculatorState.targetInput.dispatchEvent(new Event('input'));
-            calculatorState.targetInput.dispatchEvent(new Event('change'));
-        }
-        
-        hideCalculator();
-        return;
-    }
-
-    if (key === 'comma') {
-        if (waitingForNewValue) {
-            calculatorState.displayValue = '0,';
-            calculatorState.waitingForNewValue = false;
-        } else if (!displayValue.includes(',')) {
-            calculatorState.displayValue += ',';
-        }
-        updateCalculatorDisplay();
-        return;
-    }
-
-    // Números
-    if (waitingForNewValue) {
-        calculatorState.displayValue = key;
-        calculatorState.waitingForNewValue = false;
-    } else {
-        calculatorState.displayValue = displayValue === '0' ? key : displayValue + key;
-    }
-    updateCalculatorDisplay();
-};
-
-const calculateResult = () => {
-    const { operand1, displayValue, operator } = calculatorState;
-    const val1 = operand1;
-    const val2 = parseFloat(displayValue.replace(',', '.'));
-    let result = 0;
-
-    if (isNaN(val1) || isNaN(val2)) return;
-
-    switch (operator) {
-        case 'add': result = val1 + val2; break;
-        case 'subtract': result = val1 - val2; break;
-        case 'multiply': result = val1 * val2; break;
-        case 'divide': result = val2 !== 0 ? val1 / val2 : 0; break;
-    }
-
-    // Formato español y redondeo a 2 decimales si es necesario
-    calculatorState.displayValue = parseFloat(result.toFixed(2)).toString().replace('.', ',');
-    calculatorState.operand1 = null;
-    calculatorState.operator = null;
-    calculatorState.waitingForNewValue = true;
-    calculatorState.historyValue = '';
-};
-
-const updateCalculatorDisplay = () => {
-    const mainScreen = document.getElementById('calculator-main-display');
-    const histScreen = document.getElementById('calculator-history-display');
-    
-    // Actualizar pantalla principal
-    mainScreen.textContent = calculatorState.displayValue;
-    
-    // Actualizar historial visual (ej: "50 +")
-    histScreen.textContent = calculatorState.historyValue;
-    
-    // Resaltar operador activo si existe
-    document.querySelectorAll('.btn-operator').forEach(btn => btn.classList.remove('btn-operator--active'));
-    if (calculatorState.operator) {
-        const opBtn = document.querySelector(`.btn-operator[data-key="${calculatorState.operator}"]`);
-        if (opBtn) opBtn.classList.add('btn-operator--active');
-    }
-};
-
-// 4. Inicialización (Llamar al cargar la app)
-const initCalculatorInputs = () => {
-    // Buscar todos los inputs que deban usar esta calculadora
-    // Sugiero añadir la clase 'input-amount-calculator' a tus inputs de dinero en el HTML
-    const inputs = document.querySelectorAll('.input-amount-calculator, #movimiento-cantidad');
-    
-    inputs.forEach(input => {
-        // Prevenir teclado nativo en móviles
-        input.setAttribute('inputmode', 'none'); 
-        
-        input.addEventListener('click', (e) => {
-            showCalculator(e.target);
-        });
-        
-        // Por si acaso entra el foco por tabulación
-        input.addEventListener('focus', (e) => {
-            showCalculator(e.target);
-        });
-    });
-};
-
-// Cerrar al hacer clic fuera (en el área transparente superior)
-document.getElementById('calculator-overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'calculator-overlay') {
-        hideCalculator();
-    }
-});
 
 // Actualiza el display del historial
 const updateCalculatorHistoryDisplay = () => {
@@ -1295,6 +1116,105 @@ const fetchBtcPrice = async () => {
         showToast("No se pudo actualizar el precio de BTC", "warning");
     }
     return btcPriceData.price || 0; // Retorna 0 o el último precio conocido si falla
+};
+const handleCalculatorInput = (key) => {
+    hapticFeedback('light');
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
+    
+    // Reset si venimos de un resultado y se escribe número
+    if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
+        displayValue = '0';
+        isResultDisplayed = false;
+        historyValue = ''; 
+    }
+
+    const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
+
+    if (isOperator) {
+        if (operand1 !== null && operator !== null && !waitingForNewValue) {
+            calculate();
+            displayValue = calculatorState.displayValue; 
+        }
+        operand1 = parseFloat(displayValue.replace(',', '.'));
+        operator = key;
+        // Mostramos la operación en la barrita pequeña de historial
+        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`;
+        waitingForNewValue = true;
+        isResultDisplayed = false;
+    } else {
+        switch(key) {
+            case 'done':
+                hapticFeedback('medium');
+                // Calcular final si hay pendiente
+                if (operand1 !== null && operator !== null && !waitingForNewValue) {
+                    calculate();
+                    displayValue = calculatorState.displayValue;
+                }
+                
+                // Actualizar input final
+                updateTargetInput(displayValue);
+                
+                historyValue = '';
+                hideCalculator(); 
+
+                // --- AVANCE AUTOMÁTICO AL SIGUIENTE CAMPO ---
+                // Al dar OK, pasamos al concepto automáticamente
+                setTimeout(() => {
+                    const conceptoSelect = document.getElementById('movimiento-concepto');
+                    // Buscamos el trigger del custom select
+                    const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
+                    const trigger = wrapper?.querySelector('.custom-select__trigger');
+                    
+                    if (trigger) {
+                        trigger.focus(); // Enfocar para navegación teclado
+                        trigger.click(); // Abrir el menú
+                    }
+                }, 100); 
+                return;
+
+            case 'comma':
+                if (waitingForNewValue) { displayValue = '0,'; waitingForNewValue = false; } 
+                else if (!displayValue.includes(',')) displayValue += ',';
+                break;
+
+            case 'clear': 
+                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; historyValue = '';
+                break;
+
+            case 'backspace': 
+                displayValue = displayValue.length > 1 ? displayValue.slice(0, -1) : '0';
+                if (displayValue === '0') waitingForNewValue = true;
+                break;
+
+            case 'sign': 
+                if (displayValue !== '0') displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
+                break;
+
+            default: // Dígitos (0-9)
+                if (waitingForNewValue || displayValue === '0') {
+                    displayValue = key;
+                    waitingForNewValue = false;
+                } else if (displayValue.length < 12) { 
+                    displayValue += key;
+                }
+                break;
+        }
+    }
+    
+    // Guardamos estado
+    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue });
+    
+    // Actualizamos UI interna
+    updateCalculatorDisplay();
+    updateCalculatorHistoryDisplay();
+    updateActiveOperatorButton();
+
+    // === MEJORA 1: ACTUALIZACIÓN EN TIEMPO REAL ===
+    // Actualizamos el input objetivo SIEMPRE, no solo al dar OK.
+    // Excepto si estamos a mitad de una operación (ej. escribiendo el segundo número de una suma)
+    if (!operand1 || isResultDisplayed) {
+        updateTargetInput(displayValue);
+    }
 };
 
 // Función auxiliar para escribir en el input real
@@ -1369,7 +1289,43 @@ const calculate = () => {
     
     updateCalculatorDisplay();
 };
-             
+
+// Mejora visual: Escala dinámica de fuente en el display
+/* Reemplaza updateCalculatorDisplay por esta versión */
+const updateCalculatorDisplay = () => {
+    const display = select('calculator-display');
+    if (!display) return;
+    
+    const value = calculatorState.displayValue; // Es un string tipo "125,5"
+    
+    // Lógica de formateo manual para respetar lo que el usuario está escribiendo (incluyendo comas a medias)
+    let html = '';
+    
+    if (value === 'Error') {
+        html = 'Error';
+    } else {
+        const parts = value.split(',');
+        const integerPart = parts[0];
+        // Formateamos la parte entera con puntos de miles si es necesario
+        const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        
+        const decimalPart = parts.length > 1 ? ',' + parts[1] : '';
+        
+        // Aplicamos las clases CSS de estilo
+        html = `<span class="currency-major">${formattedInteger}</span><small class="currency-minor">${decimalPart}</small>`;
+    }
+
+    display.innerHTML = html; // Usamos innerHTML en lugar de textContent
+    
+    // Ajuste de tamaño dinámico
+    const length = value.length;
+    if (length > 9) display.style.fontSize = '2rem';
+    else if (length > 7) display.style.fontSize = '2.5rem';
+    else display.style.fontSize = '3rem';
+};
+// --- FIN: BLOQUE CALCULADORA ---
+                    
+
 		let isDashboardRendering = false;
 		let isDiarioPageRendering = false; // <-- AÑADE ESTA LÍNEA
 		let dashboardUpdateDebounceTimer = null;
@@ -8621,6 +8577,94 @@ function populateOptions(selectElement, optionsContainer, trigger, wrapper) {
     trigger.innerHTML = selectedHTML;
 }
 
+/* EN main.js - Reemplaza showCalculator */
+
+const showCalculator = (targetInput) => {
+    const calculatorOverlay = select('calculator-overlay');
+    const calculatorUi = select('calculator-ui');
+    
+    if (!calculatorOverlay) return;
+    
+    // 1. Mostrar la UI (sin bloquear scroll de fondo visualmente)
+    calculatorOverlay.classList.add('modal-overlay--active');
+    calculatorState.isVisible = true;
+    calculatorState.targetInput = targetInput;
+    
+    // 2. Cargar valor inicial
+    const currentValue = parseCurrencyString(targetInput.value);
+    calculatorState.displayValue = currentValue ? currentValue.toString().replace('.', ',') : '0';
+    calculatorState.waitingForNewValue = true;
+    
+    updateCalculatorDisplay(); 
+    updateCalculatorHistoryDisplay();
+
+    // 3. Gestión de Teclado Físico (PC)
+    if (calculatorKeyboardHandler) document.removeEventListener('keydown', calculatorKeyboardHandler);
+    calculatorKeyboardHandler = (e) => {
+        const key = e.key;
+        if (key >= '0' && key <= '9') { e.preventDefault(); handleCalculatorInput(key); }
+        else if (key === ',' || key === '.') { e.preventDefault(); handleCalculatorInput('comma'); }
+        else if (key === 'Enter') { e.preventDefault(); handleCalculatorInput('done'); }
+        else if (key === 'Backspace') { e.preventDefault(); handleCalculatorInput('backspace'); }
+        else if (key === 'Escape') { e.preventDefault(); hideCalculator(); }
+        else if (key === '+') { e.preventDefault(); handleCalculatorInput('add'); }
+        else if (key === '-') { e.preventDefault(); handleCalculatorInput('subtract'); }
+        else if (key === '*' || key.toLowerCase() === 'x') { e.preventDefault(); handleCalculatorInput('multiply'); }
+        else if (key === '/') { e.preventDefault(); handleCalculatorInput('divide'); }
+    };
+    document.addEventListener('keydown', calculatorKeyboardHandler);
+
+    // 4. Feedback Visual en el Input
+    document.querySelectorAll('.form-input--active-calc').forEach(el => el.classList.remove('form-input--active-calc'));
+    targetInput.classList.add('form-input--active-calc');
+    
+    // 5. === SCROLL INTELIGENTE PARA NO TAPAR ===
+    setTimeout(() => {
+        // Altura real del teclado (~260px con los nuevos estilos)
+        const uiHeight = calculatorUi ? calculatorUi.offsetHeight : 260;
+        
+        const inputRect = targetInput.getBoundingClientRect();
+        const windowHeight = window.innerHeight;
+        
+        // Calculamos dónde termina el input visualmente
+        const inputBottom = inputRect.bottom;
+        // Calculamos dónde empieza el teclado
+        const keyboardTop = windowHeight - uiHeight;
+        
+        // Si el input está por debajo del inicio del teclado (tapado)
+        if (inputBottom > keyboardTop) {
+            // Calculamos cuánto hay que subir (con 20px de margen extra para que respire)
+            const scrollAmount = (inputBottom - keyboardTop) + 20;
+            
+            // Buscamos quién tiene el scroll (el modal o la página principal)
+            const scrollContainer = targetInput.closest('.modal__body') || selectOne('.app-layout__main');
+            
+            if (scrollContainer) {
+                scrollContainer.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+            }
+        }
+    }, 250); // Esperamos a que termine la animación de subida del teclado
+};
+
+const hideCalculator = () => {
+    const calculatorOverlay = select('calculator-overlay');
+    if (calculatorOverlay) {
+        calculatorOverlay.classList.remove('modal-overlay--active');
+    }
+    calculatorState.isVisible = false;
+    
+    // Limpiamos el listener del teclado físico
+    if (calculatorKeyboardHandler) {
+        document.removeEventListener('keydown', calculatorKeyboardHandler);
+        calculatorKeyboardHandler = null;
+    }
+    
+    // Devolvemos el foco al documento para quitarlo de cualquier input residual
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+	document.querySelectorAll('.form-input--active-calc').forEach(el => el.classList.remove('form-input--active-calc'));
+};
 
 // =============================================================
 // === LÓGICA DEL BOTÓN FLOTANTE INTELIGENTE (FAB)           ===
