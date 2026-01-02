@@ -11950,104 +11950,109 @@ const createUnifiedRowHTML = (m) => {
 };
 
 // =============================================================================
-// 🛑 SOLUCIÓN ÚNICA: FORZAR APERTURA DE FORMULARIO INVERSIONES (MODO CAPTURA)
+// 🛠️ SOLUCIÓN MAESTRA: AISLAMIENTO DEL BOTÓN DE EDICIÓN
+// (Estrategia: Desactivar la tarjeta padre al interactuar con el lápiz)
 // =============================================================================
 
-document.addEventListener('click', (e) => {
-    // 1. Identificamos qué se ha pulsado
-    const target = e.target;
-    
-    // Verificamos si es el icono del lápiz (texto 'edit', 'mode_edit', etc.)
-    const esIcono = target.classList.contains('material-icons');
-    const textoIcono = target.innerText.trim();
-    const esLapiz = esIcono && (textoIcono === 'edit' || textoIcono === 'mode_edit' || textoIcono === 'create');
-    
-    // Verificamos si es el botón que contiene el lápiz
-    const esBotonLapiz = target.tagName === 'BUTTON' && target.innerHTML.includes('edit');
-    const botonPadre = target.closest('button'); // Por si pulsas el borde del botón
+// 1. EL "LINTERNA VERDE": Detecta cuando el ratón/dedo entra en el botón de editar
+document.addEventListener('mouseover', (e) => {
+    handleButtonInteraction(e.target, true);
+}, true);
 
-    // SI EL USUARIO PULSÓ EL LÁPIZ...
-    if (esLapiz || esBotonLapiz || (botonPadre && botonPadre.innerHTML.includes('edit'))) {
+document.addEventListener('touchstart', (e) => {
+    handleButtonInteraction(e.target, true);
+}, { passive: false, capture: true });
+
+// 2. EL "APAGAGAFUEGOS": Detecta cuando sales del botón
+document.addEventListener('mouseout', (e) => {
+    handleButtonInteraction(e.target, false);
+}, true);
+
+
+// --- LÓGICA CENTRAL ---
+function handleButtonInteraction(target, isEntering) {
+    // Buscamos si estamos tocando un botón de editar (o su icono)
+    const btn = target.closest('button');
+    
+    // Verificamos que sea el botón de editar (tiene el icono 'edit' o 'mode_edit')
+    if (btn && (btn.innerText.includes('edit') || btn.innerText.includes('mode_edit') || btn.querySelector('.material-icons')?.innerText.includes('edit'))) {
         
-        // Buscamos si este lápiz está dentro de una tarjeta de inversión
-        // (Buscamos hacia arriba un elemento con clase .card o .t-card)
-        const tarjeta = target.closest('.card, .t-card');
-
-        // Confirmamos que es una tarjeta de inversión (debe tener dinero o fechas)
-        // Esto evita romper botones de otras pantallas
-        if (tarjeta && (tarjeta.querySelector('.t-amount') || tarjeta.innerText.includes('€') || tarjeta.innerText.includes('$'))) {
-            
-            console.log("🛑 INTERCEPTADO: Has pulsado editar inversión.");
-            
-            // 2. ¡DETENEMOS EL EVENTO AQUÍ! (Esto evita que se abran los movimientos)
-            e.stopPropagation(); 
-            e.stopImmediatePropagation();
-            e.preventDefault();
-
-            // 3. ABRIMOS EL FORMULARIO MANUALMENTE
-            abrirFormularioInversion(tarjeta);
-            
-            return; // Terminamos
+        // Buscamos la tarjeta padre (la que causa el problema)
+        const card = btn.closest('.card, .t-card, .list-item');
+        
+        if (card) {
+            if (isEntering) {
+                // ESTRATEGIA: Si entras en el botón, CONGELAMOS la tarjeta padre
+                // Le quitamos la capacidad de recibir clics temporalmente
+                if (!card.dataset.originalOnclick) {
+                    // Guardamos su evento original por si acaso
+                    card.dataset.originalOnclick = card.getAttribute('onclick') || '';
+                }
+                // ¡AQUÍ ESTÁ EL TRUCO! Borramos el evento de la tarjeta
+                card.removeAttribute('onclick');
+                card.style.pointerEvents = 'none'; // La tarjeta se vuelve "fantasma"
+                
+                // Pero reactivamos el botón para que SÍ se pueda pulsar
+                btn.style.pointerEvents = 'auto'; 
+                
+                // Asignamos nuestro evento de apertura manual al botón
+                btn.onclick = (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    console.log("✏️ Botón pulsado. Abriendo formulario...");
+                    abrirFormularioInversion(card);
+                };
+            } else {
+                // Si sales del botón, RESTAURAMOS la tarjeta a la normalidad
+                card.style.pointerEvents = '';
+                if (card.dataset.originalOnclick) {
+                    card.setAttribute('onclick', card.dataset.originalOnclick);
+                }
+            }
         }
     }
-}, true); // <--- ESTE 'TRUE' ES LA CLAVE (Intercepta antes de llegar a la tarjeta)
+}
 
 
-// --- FUNCIÓN QUE ABRE EL FORMULARIO (Rellena los datos leyendo la tarjeta) ---
+// --- FUNCIÓN DE APERTURA MANUAL DEL FORMULARIO ---
 function abrirFormularioInversion(card) {
     const modal = document.getElementById('inversion-modal');
-    if (!modal) {
-        console.error("❌ Error: No encuentro el modal con id 'inversion-modal'");
-        return;
-    }
+    if (!modal) return console.error("No encuentro el modal inversion-modal");
 
-    // A) EXTRAER DATOS (SCRAPING DEL HTML DE LA TARJETA)
-    // 1. ID: Buscamos en data-id o en el onclick
+    // A) RECUPERAR DATOS (Usando la copia de seguridad del onclick o atributos)
     let id = card.dataset.id;
-    if (!id && card.getAttribute('onclick')) {
-        const match = card.getAttribute('onclick').match(/['"]([^'"]+)['"]/);
+    
+    // Si no hay ID, buscamos en el onclick guardado
+    if (!id && card.dataset.originalOnclick) {
+        const match = card.dataset.originalOnclick.match(/['"]([^'"]+)['"]/);
         if (match) id = match[1];
     }
-    
-    // 2. VALOR: Buscamos el texto que tenga el símbolo de moneda
-    // Buscamos clases comunes de precio (.t-amount, .amount) o por símbolo
-    const moneyEl = card.querySelector('.t-amount, .amount') || 
-                    Array.from(card.querySelectorAll('*')).find(el => el.innerText && (el.innerText.includes('€') || el.innerText.includes('$')));
-    
+
+    // Buscar valor (texto con € o $)
+    const moneyEl = Array.from(card.querySelectorAll('*')).find(el => el.innerText && (el.innerText.includes('€') || el.innerText.includes('$')));
     let valor = 0;
     if (moneyEl) {
-        // Limpiamos el texto: "1.500,50 €" -> 1500.50
-        let textoLimpio = moneyEl.innerText.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.');
-        valor = parseFloat(textoLimpio);
+        let limpio = moneyEl.innerText.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.');
+        valor = parseFloat(limpio);
     }
 
-    // 3. NOMBRE: Buscamos el título (negrita o clase t-line-1)
-    const nameEl = card.querySelector('.t-line-1, strong, h4, h3');
+    // Buscar nombre
+    const nameEl = card.querySelector('.t-line-1, h3, h4, strong');
     const nombre = nameEl ? nameEl.innerText : 'Inversión';
 
-    console.log(`📝 Abriendo formulario para: ${nombre} (${valor}€)`);
+    console.log(`📝 Editando: ${nombre} (${id})`);
 
-    // B) RELLENAR LOS CAMPOS DEL FORMULARIO
-    // Asegúrate de que estos IDs coinciden con tu HTML
-    const inputId = document.getElementById('inversion-id');
-    const inputValor = document.getElementById('inversion-valor');
-    const inputFecha = document.getElementById('inversion-fecha');
-    const labelNombre = document.getElementById('inversion-nombre-display'); // Si tienes un label para el nombre
+    // B) LLENAR Y MOSTRAR
+    const iId = document.getElementById('inversion-id');
+    const iVal = document.getElementById('inversion-valor');
+    const iFec = document.getElementById('inversion-fecha');
+    const lNom = document.getElementById('inversion-nombre-display');
 
-    if (inputId) inputId.value = id || '';
-    if (inputValor) inputValor.value = valor || 0;
-    // Ponemos la fecha de hoy por defecto
-    if (inputFecha) inputFecha.value = new Date().toISOString().split('T')[0];
-    
-    // Si existe un campo de texto para mostrar qué estamos editando
-    if (labelNombre) labelNombre.innerText = nombre;
+    if (iId) iId.value = id || '';
+    if (iVal) iVal.value = valor || 0;
+    if (iFec) iFec.value = new Date().toISOString().split('T')[0];
+    if (lNom) lNom.innerText = nombre;
 
-    // C) MOSTRAR EL MODAL
     modal.style.display = 'flex';
-    // Pequeño retardo para activar la clase de animación si existe
-    setTimeout(() => {
-        modal.classList.add('modal-overlay--active');
-        // Z-Index alto para asegurar que se vea encima de todo
-        modal.style.zIndex = "10000"; 
-    }, 10);
+    setTimeout(() => modal.classList.add('modal-overlay--active'), 10);
 }
