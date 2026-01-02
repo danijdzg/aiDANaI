@@ -11963,13 +11963,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("🛡️ Modal de confirmación movido al body para evitar bloqueos.");
     }
 });
-// --- CIERRE DE EMERGENCIA ---
-// Si falta una llave arriba, esto lo arregla. 
-// Prueba primero con una llave:
-}};
 
-// Si sigue fallando, prueba cambiando la llave de arriba por esto:
-// });
 /* ================================================================= */
 /* === MOTOR DE CALCULADORA GLOBAL (FIX DEFINITIVO) === */
 /* ================================================================= */
