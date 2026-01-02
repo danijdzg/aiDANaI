@@ -3354,20 +3354,24 @@ const handleToggleInvestmentTypeFilter = (type) => {
     renderPortfolioEvolutionChart('portfolio-evolution-container');
 };
 
-/* --- FUNCIÓN ACTUALIZADA: RENDERIZADO PORTAFOLIO CON FECHA --- */
+/* ================================================================= */
+/* === FUNCIÓN MAESTRA PORTAFOLIO: GRÁFICOS + LISTA + FECHAS === */
+/* ================================================================= */
 const renderPortfolioMainContent = async (targetContainerId) => {
-    const container = select(targetContainerId);
+    const container = document.getElementById(targetContainerId);
     if (!container) return;
 
+    // 1. Filtrar cuentas de inversión
     const investmentAccounts = getVisibleAccounts().filter((c) => c.esInversion);
     const CHART_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
 
+    // CASO VACÍO: Si no hay cuentas
     if (investmentAccounts.length === 0) {
         container.innerHTML = `<div id="empty-investments" class="empty-state" style="margin-top: 0; border: none; background: transparent;"><span class="material-icons">rocket_launch</span><h3>Tu Portafolio empieza aquí</h3><p>Ve a 'Ajustes' > 'Cuentas' y marca una cuenta como 'de inversión'.</p></div>`;
         return;
     }
 
-    // 1. Obtener Datos
+    // 2. Calcular Rendimiento de cada cuenta
     const performanceData = await Promise.all(
         investmentAccounts.map(async (cuenta) => {
             const performance = await calculatePortfolioPerformance(cuenta.id);
@@ -3375,27 +3379,29 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         })
     );
 
+    // Aplicar filtros (si has desmarcado alguno)
     const displayAssetsData = performanceData.filter(asset => !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T')));
 
-    // 2. Cálculos Totales
+    // 3. Calcular Totales Generales
     let portfolioTotalInvertido = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.capitalInvertido, 0);
     let portfolioTotalValorado = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.valorActual, 0);
     let rentabilidadTotalAbsoluta = portfolioTotalValorado - portfolioTotalInvertido;
     let rentabilidadTotalPorcentual = portfolioTotalInvertido !== 0 ? (rentabilidadTotalAbsoluta / portfolioTotalInvertido) * 100 : 0;
     
+    // Formatos de texto para la cabecera
     let displayTotalInvertido = formatCurrencyHTML(portfolioTotalInvertido);
     let displayRentabilidadAbsoluta = formatCurrencyHTML(rentabilidadTotalAbsoluta);
     let displayTotalValorado = formatCurrencyHTML(portfolioTotalValorado);
     let displayPorcentajeTotal = rentabilidadTotalPorcentual.toFixed(2) + '%';
-
     const rentabilidadClass = rentabilidadTotalAbsoluta >= 0 ? 'text-positive' : 'text-negative';
     const signo = rentabilidadTotalAbsoluta >= 0 ? '+' : '';
 
-    // 3. Renderizado HTML (Cabecera y Filtros)
+    // Preparar colores y etiquetas para filtros
     const allInvestmentTypes = [...new Set(performanceData.map(asset => toSentenceCase(asset.tipo || 'S/T')))].sort();
     const colorMap = {};
     allInvestmentTypes.forEach((label, index) => { colorMap[label] = CHART_COLORS[index % CHART_COLORS.length]; });
     
+    // HTML de los filtros (botones de colores)
     const pillsHTML = allInvestmentTypes.map(t => {
         const isActive = !deselectedInvestmentTypesFilter.has(t);
         const color = colorMap[t];
@@ -3403,6 +3409,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-investment-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('');
 
+    // Aviso si estás viendo en BTC
     let btcInfoHTML = '';
     if (typeof portfolioViewMode !== 'undefined' && portfolioViewMode === 'BTC' && btcPriceData.price > 0) {
         btcInfoHTML = `<div style="text-align:center; font-size:0.7rem; color:var(--c-warning); margin-top:-10px; margin-bottom:10px;">
@@ -3411,9 +3418,10 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         </div>`;
     }
 
+    // --- RENDERIZADO DEL HTML PRINCIPAL ---
     container.innerHTML = `
         ${btcInfoHTML}
-        <div class="card" style="margin-bottom: var(--sp-4);">
+        <div class="card" style="margin-bottom: var(--sp-3);">
             <div class="card__content" style="padding: var(--sp-3);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid var(--c-outline); padding-bottom:10px;">
                     <h3 style="margin:0; font-size:1rem;">Resumen del Portafolio (Total €)</h3>
@@ -3421,7 +3429,6 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                         <span class="material-icons" style="font-size:14px;">update</span> Actualizar
                     </button>
                 </div>
-
                 <div style="display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; text-align: center; gap: 4px;">
                     <div style="display:flex; flex-direction:column; align-items:center;">
                         <h4 class="kpi-item__label" style="font-size:0.65rem;">Invertido</h4>
@@ -3429,9 +3436,8 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                     </div>
                     <div style="font-weight:700; color:var(--c-on-surface-tertiary); font-size:0.8rem;">+/-</div>
                     <div style="display:flex; flex-direction:column; align-items:center;">
-                        <h4 class="kpi-item__label" style="font-size:0.65rem;">Ganancia/Pérdida</h4>
+                        <h4 class="kpi-item__label" style="font-size:0.65rem;">G/P</h4>
                         <strong class="kpi-item__value ${rentabilidadClass}" style="font-size: 0.9rem;">${signo}${displayRentabilidadAbsoluta}</strong>
-                        <small class="${rentabilidadClass}" style="font-size:0.7rem; font-weight:700;">(${signo}${displayPorcentajeTotal})</small>
                     </div>
                     <div style="font-weight:700; color:var(--c-on-surface-tertiary); font-size:0.8rem;">=</div>
                     <div style="display:flex; flex-direction:column; align-items:center;">
@@ -3441,25 +3447,30 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                 </div>
             </div>
         </div>
+
+        <div class="card" style="margin-bottom: var(--sp-3); padding: 15px;">
+            <h4 style="margin: 0 0 10px 0; font-size: 0.85rem; color: var(--c-on-surface-secondary); text-align:center;">Rendimiento: Invertido vs Real</h4>
+            <div style="position: relative; height: 200px; width: 100%;">
+                <canvas id="investedVsValueChart"></canvas>
+            </div>
+        </div>
         
         <div class="filter-pills" style="margin-bottom: var(--sp-3); overflow-x:auto;">${pillsHTML}</div>
         <div id="investment-assets-list"></div>`;
 
-    // 4. Renderizado Lista de Activos
-    const listContainer = select('investment-assets-list');
+    // 4. Generar la lista de tarjetas (Assets)
+    const listContainer = document.getElementById('investment-assets-list');
     if (listContainer) {
         const listHtml = displayAssetsData
             .sort((a, b) => b.valorActual - a.valorActual)
             .map(cuenta => {
                 const showInBTC = typeof portfolioViewMode !== 'undefined' && portfolioViewMode === 'BTC' && isCryptoType(cuenta.tipo) && btcPriceData.price > 0;
-
                 let cInvertido, cPnl, cReal;
 
                 if (showInBTC) {
                     cInvertido = formatBTC((cuenta.capitalInvertido / 100) / btcPriceData.price);
                     cReal = formatBTC((cuenta.valorActual / 100) / btcPriceData.price);
-                    const pnlVal = (cuenta.pnlAbsoluto / 100) / btcPriceData.price;
-                    cPnl = formatBTC(pnlVal);
+                    cPnl = formatBTC((cuenta.pnlAbsoluto / 100) / btcPriceData.price);
                 } else {
                     cInvertido = formatCurrencyHTML(cuenta.capitalInvertido);
                     cReal = formatCurrencyHTML(cuenta.valorActual);
@@ -3469,19 +3480,17 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                 const cPorcentaje = cuenta.pnlPorcentual.toFixed(2) + '%';
                 const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
                 const pnlSign = cuenta.pnlAbsoluto >= 0 ? '+' : '';
-                
                 const peso = portfolioTotalValorado > 0 ? (cuenta.valorActual / portfolioTotalValorado) * 100 : 0;
                 const barColor = colorMap[toSentenceCase(cuenta.tipo || 'S/T')] || 'var(--c-primary)';
                 const cardStyle = showInBTC ? 'border-left: 3px solid #F7931A;' : '';
-
-                // --- NUEVO: Formateo de la fecha de actualización ---
+                
+                // Fecha formateada
                 const lastUpdateStr = cuenta.lastUpdate 
                     ? new Date(cuenta.lastUpdate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
                     : '-';
 
                 return `
                 <div class="portfolio-asset-card" data-action="view-account-details" data-id="${cuenta.id}" data-is-investment="true" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; ${cardStyle}">
-                    
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div class="asset-card__name" style="font-size:1rem;">
                             ${escapeHTML(cuenta.nombre)} 
@@ -3492,14 +3501,11 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                     <div style="width: 100%; height: 3px; background: var(--c-surface-variant); border-radius: 2px; overflow: hidden; margin-top:-4px;">
                         <div style="width: ${peso}%; height: 100%; background-color: ${barColor};"></div>
                     </div>
-
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; background: var(--c-surface-variant); padding: 8px; border-radius: 8px;">
-                        
                         <div style="display:flex; flex-direction:column;">
                             <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Invertido</span>
                             <span style="font-size:0.85rem; font-weight:600; color:var(--c-on-surface);">${cInvertido}</span>
                         </div>
-
                         <div style="display:flex; flex-direction:column; text-align:center;">
                             <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">P&L</span>
                             <div style="display:flex; flex-direction:column;">
@@ -3507,7 +3513,6 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                                 <span style="font-size:0.7rem; opacity:0.9;" class="${pnlClass}">(${pnlSign}${cPorcentaje})</span>
                             </div>
                         </div>
-
                         <div style="display:flex; flex-direction:column; text-align:right;">
                             <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Valor Real</span>
                             <span style="font-size:0.9rem; font-weight:800; color:var(--c-on-surface);">${cReal}</span>
@@ -3515,9 +3520,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                                 <span class="material-icons" style="font-size:10px; vertical-align:middle;">history</span> ${lastUpdateStr}
                             </span>
                         </div>
-
                     </div>
-
                     <div style="display:flex; justify-content:flex-end;">
                          <button class="asset-card__valoracion-btn" data-action="update-asset-value" data-id="${cuenta.id}" style="padding: 4px 10px; font-size: 0.7rem;">
                             <span class="material-icons" style="font-size: 14px;">edit</span> Actualizar Valor
@@ -3529,6 +3532,88 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         listContainer.innerHTML = listHtml ? `<div class="card fade-in-up"><div class="card__content" style="padding: 0;">${listHtml}</div></div>` : '';
         applyInvestmentItemInteractions(listContainer);
     }
+
+    // 5. RENDERIZAR EL GRÁFICO (Chart.js)
+    setTimeout(() => {
+        const ctx = document.getElementById('investedVsValueChart');
+        if (ctx && typeof Chart !== 'undefined') {
+            // Agrupar datos por TIPO
+            const groups = {};
+            displayAssetsData.forEach(asset => {
+                const tipo = toSentenceCase(asset.tipo || 'Otros');
+                if (!groups[tipo]) groups[tipo] = { invertido: 0, valor: 0 };
+                groups[tipo].invertido += asset.capitalInvertido;
+                groups[tipo].valor += asset.valorActual;
+            });
+
+            const labels = Object.keys(groups);
+            // Convertimos a euros (desde céntimos)
+            const dataInvertido = labels.map(l => groups[l].invertido / 100);
+            const dataValor = labels.map(l => groups[l].valor / 100);
+
+            // Colores: Verde si ganamos, Rojo si perdemos
+            const valorColors = labels.map(l => {
+                return groups[l].valor >= groups[l].invertido 
+                    ? 'rgba(48, 209, 88, 0.8)'  // Verde
+                    : 'rgba(255, 69, 58, 0.8)'; // Rojo
+            });
+
+            if (window.myInvestmentChart) window.myInvestmentChart.destroy();
+
+            window.myInvestmentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Invertido (€)',
+                            data: dataInvertido,
+                            backgroundColor: 'rgba(142, 142, 147, 0.5)',
+                            borderRadius: 4,
+                            barPercentage: 0.6
+                        },
+                        {
+                            label: 'Valor Actual (€)',
+                            data: dataValor,
+                            backgroundColor: valorColors,
+                            borderRadius: 4,
+                            barPercentage: 0.6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }, // Ocultamos leyenda para limpiar
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) {
+                                        label += new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#888', font: { size: 10 } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#AAA', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+    }, 150);
 };
 
 
