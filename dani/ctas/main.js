@@ -1063,163 +1063,269 @@ const clearDiarioFilters = async () => {
 			heights: {}, 
 			renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
 		};
-         
-// --- MOTOR DE CALCULADORA UNIFICADO ---
+        
+ // ▼▼▼ COPIA Y PEGA ESTE BLOQUE ÚNICO EN LUGAR DEL CÓDIGO DE LA CALCULADORA QUE TENGAS ▼▼▼
 
 let calculatorState = {
     displayValue: '0',
-    historyValue: '',
-    firstOperand: null,
-    waitingForSecondOperand: false,
+    operand1: null,
     operator: null,
-    targetInput: null // Aquí guardaremos qué input abrió la calculadora
+    waitingForNewValue: true,
+    targetInput: null,
+    isVisible: false, 
+    isResultDisplayed: false,
+    historyValue: '', // Guarda la operación en curso
 };
 
-// Función Maestra: Gestiona todas las teclas
-window.handleCalculatorInput = (key) => {
-    // 1. Caso especial: EL BOTÓN OK (DONE)
-    if (key === 'done') {
-        finalizeCalculation();
-        return;
+// Actualiza el display del historial
+const updateCalculatorHistoryDisplay = () => {
+    const historyDisplay = select('calculator-history-display');
+    if (historyDisplay) historyDisplay.textContent = calculatorState.historyValue;
+};
+
+// Mapea las claves a los símbolos visuales
+const getOperatorSymbol = (key) => ({
+    'add': '+', 'subtract': '−', 'multiply': '×', 'divide': '÷'
+}[key] || '');
+
+// Gestiona qué botón de operador se ve activo
+const updateActiveOperatorButton = () => {
+    selectAll('.calculator-btn.btn-operator').forEach(btn => btn.classList.remove('btn-operator--active'));
+    if (calculatorState.operator) {
+        const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
+        if (activeBtn) activeBtn.classList.add('btn-operator--active');
+    }
+};      
+const fetchBtcPrice = async () => {
+    // Evitar llamadas excesivas (cache de 60 segundos)
+    const now = Date.now();
+    if (btcPriceData.lastUpdated && (now - btcPriceData.lastUpdated < 60000)) {
+        return btcPriceData.price;
     }
 
-    const { displayValue, waitingForSecondOperand } = calculatorState;
-
-    // 2. Números
-    if (!isNaN(key) || key === 'comma') {
-        if (waitingForSecondOperand) {
-            calculatorState.displayValue = key === 'comma' ? '0,' : key;
-            calculatorState.waitingForSecondOperand = false;
-        } else {
-            // Si es coma y ya hay una, no hacemos nada
-            if (key === 'comma' && displayValue.includes(',')) return;
-            // Si es 0 y pulsamos número, reemplazamos, si no añadimos
-            calculatorState.displayValue = displayValue === '0' && key !== 'comma' ? key : displayValue + (key === 'comma' ? ',' : key);
+    try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur');
+        const data = await response.json();
+        if (data && data.bitcoin && data.bitcoin.eur) {
+            btcPriceData.price = data.bitcoin.eur;
+            btcPriceData.lastUpdated = now;
+            return data.bitcoin.eur;
         }
-    } 
-    // 3. Borrar todo (AC)
-    else if (key === 'clear') {
-        resetCalculator();
+    } catch (error) {
+        console.error("Error al obtener precio BTC:", error);
+        showToast("No se pudo actualizar el precio de BTC", "warning");
     }
-    // 4. Borrar último dígito (Backspace)
-    else if (key === 'backspace') {
-        calculatorState.displayValue = calculatorState.displayValue.length > 1 ? calculatorState.displayValue.slice(0, -1) : '0';
-    }
-    // 5. Operadores (+ - * /)
-    else {
-        handleOperator(key);
+    return btcPriceData.price || 0; // Retorna 0 o el último precio conocido si falla
+};
+const handleCalculatorInput = (key) => {
+    hapticFeedback('light');
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
+    
+    // Reset si venimos de un resultado y se escribe número
+    if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
+        displayValue = '0';
+        isResultDisplayed = false;
+        historyValue = ''; 
     }
 
-    updateCalculatorScreen();
+    const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
+
+    if (isOperator) {
+        if (operand1 !== null && operator !== null && !waitingForNewValue) {
+            calculate();
+            displayValue = calculatorState.displayValue; 
+        }
+        operand1 = parseFloat(displayValue.replace(',', '.'));
+        operator = key;
+        // Mostramos la operación en la barrita pequeña de historial
+        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`;
+        waitingForNewValue = true;
+        isResultDisplayed = false;
+    } else {
+        switch(key) {
+            case 'done':
+                hapticFeedback('medium');
+                // Calcular final si hay pendiente
+                if (operand1 !== null && operator !== null && !waitingForNewValue) {
+                    calculate();
+                    displayValue = calculatorState.displayValue;
+                }
+                
+                // Actualizar input final
+                updateTargetInput(displayValue);
+                
+                historyValue = '';
+                hideCalculator(); 
+
+                // --- AVANCE AUTOMÁTICO AL SIGUIENTE CAMPO ---
+                // Al dar OK, pasamos al concepto automáticamente
+                setTimeout(() => {
+                    const conceptoSelect = document.getElementById('movimiento-concepto');
+                    // Buscamos el trigger del custom select
+                    const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
+                    const trigger = wrapper?.querySelector('.custom-select__trigger');
+                    
+                    if (trigger) {
+                        trigger.focus(); // Enfocar para navegación teclado
+                        trigger.click(); // Abrir el menú
+                    }
+                }, 100); 
+                return;
+
+            case 'comma':
+                if (waitingForNewValue) { displayValue = '0,'; waitingForNewValue = false; } 
+                else if (!displayValue.includes(',')) displayValue += ',';
+                break;
+
+            case 'clear': 
+                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; historyValue = '';
+                break;
+
+            case 'backspace': 
+                displayValue = displayValue.length > 1 ? displayValue.slice(0, -1) : '0';
+                if (displayValue === '0') waitingForNewValue = true;
+                break;
+
+            case 'sign': 
+                if (displayValue !== '0') displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
+                break;
+
+            default: // Dígitos (0-9)
+                if (waitingForNewValue || displayValue === '0') {
+                    displayValue = key;
+                    waitingForNewValue = false;
+                } else if (displayValue.length < 12) { 
+                    displayValue += key;
+                }
+                break;
+        }
+    }
+    
+    // Guardamos estado
+    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue });
+    
+    // Actualizamos UI interna
+    updateCalculatorDisplay();
+    updateCalculatorHistoryDisplay();
+    updateActiveOperatorButton();
+
+    // === MEJORA 1: ACTUALIZACIÓN EN TIEMPO REAL ===
+    // Actualizamos el input objetivo SIEMPRE, no solo al dar OK.
+    // Excepto si estamos a mitad de una operación (ej. escribiendo el segundo número de una suma)
+    if (!operand1 || isResultDisplayed) {
+        updateTargetInput(displayValue);
+    }
 };
 
-function handleOperator(nextOperator) {
-    const { firstOperand, displayValue, operator } = calculatorState;
-    // Convertimos "1.200,50" a float JS standard
-    const inputValue = parseFloat(displayValue.replace(/\./g, '').replace(',', '.'));
-
-    if (operator && calculatorState.waitingForSecondOperand) {
-        calculatorState.operator = nextOperator;
-        return;
-    }
-
-    if (firstOperand == null) {
-        calculatorState.firstOperand = inputValue;
-    } else if (operator) {
-        const result = performCalculation(operator, firstOperand, inputValue);
-        calculatorState.displayValue = String(result).replace('.', ','); // Volver a formato ES visual simple
-        calculatorState.firstOperand = result;
-    }
-
-    calculatorState.waitingForSecondOperand = true;
-    calculatorState.operator = nextOperator;
-    
-    // Actualizamos el historial visual
-    const symbol = { add: '+', subtract: '-', multiply: '×', divide: '÷' }[nextOperator];
-    calculatorState.historyValue = `${parseFloat(calculatorState.firstOperand).toLocaleString('es-ES')} ${symbol}`;
-}
-
-function performCalculation(op, a, b) {
-    switch(op) {
-        case 'add': return a + b;
-        case 'subtract': return a - b;
-        case 'multiply': return a * b;
-        case 'divide': return b !== 0 ? a / b : 0;
-        default: return b;
-    }
-}
-
-function finalizeCalculation() {
-    // Si quedó una operación pendiente (ej: "50 + 10" y le das a OK directamnte), calcúlala
-    if (calculatorState.operator && !calculatorState.waitingForSecondOperand) {
-        handleOperator(calculatorState.operator); // Esto fuerza el cálculo final
-    }
-
-    // Formatear el resultado final bonito para el formulario
-    // Ojo: Usamos el displayValue actual o el firstOperand si acabamos de calcular
-    let finalRaw = calculatorState.firstOperand !== null ? calculatorState.firstOperand : parseFloat(calculatorState.displayValue.replace(',', '.'));
-    
-    // Formateo profesional: 1.250,50
-    const finalFormatted = finalRaw.toLocaleString('es-ES', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-
-    // --- TRANSFERENCIA AL FORMULARIO ---
+// Función auxiliar para escribir en el input real
+const updateTargetInput = (val) => {
     if (calculatorState.targetInput) {
-        calculatorState.targetInput.value = finalFormatted;
+        // 1. Preparamos el número
+        const num = parseFloat(val.replace(',', '.')) || 0;
         
-        // Disparamos eventos para que el resto de tu app se entere del cambio
+        // 2. Escribimos en el input REAL (el invisible)
+        calculatorState.targetInput.value = num.toLocaleString('es-ES', { 
+            useGrouping: false, // Importante: Sin puntos para que sea fácil de procesar luego
+            minimumFractionDigits: 0, 
+            maximumFractionDigits: 2 
+        });
+        
+        // 3. Disparamos el evento para que otros scripts sepan que cambió
         calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        calculatorState.targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        // 4. ¡LA CLAVE! Forzamos la actualización visual manualmente
+        updateInputMirror(calculatorState.targetInput);
     }
-
-    closeCalculator();
-}
-
-function updateCalculatorScreen() {
-    // Pantalla Grande
-    const display = document.getElementById('calculator-display');
-    // Formatear visualmente mientras se escribe (ej: poner puntos de mil)
-    // Truco: Quitamos puntos, convertimos a numero, y volvemos a formatear si no acaba en coma
-    let val = calculatorState.displayValue;
-    // Aquí podrías añadir lógica compleja de formateo en tiempo real, 
-    // pero por seguridad mostramos lo que hay:
-    display.textContent = val;
-
-    // Historial
-    const history = document.getElementById('calculator-history-display');
-    history.textContent = calculatorState.historyValue;
-}
-
-function resetCalculator() {
-    calculatorState.displayValue = '0';
-    calculatorState.historyValue = '';
-    calculatorState.firstOperand = null;
-    calculatorState.waitingForSecondOperand = false;
-    calculatorState.operator = null;
-    updateCalculatorScreen();
-}
-
-// --- FUNCIONES DE APERTURA/CIERRE ---
-
-window.openCalculator = (inputElement) => {
-    calculatorState.targetInput = inputElement;
-    resetCalculator(); // Empezar limpio o podrías cargar el valor actual del input aquí
-    
-    // Si el input ya tiene valor, cárgalo:
-    if(inputElement.value && inputElement.value !== '') {
-        calculatorState.displayValue = inputElement.value.replace('€','').trim();
-    }
-    updateCalculatorScreen();
-
-    document.getElementById('calculator-overlay').classList.add('modal-overlay--active');
 };
 
-function closeCalculator() {
-    document.getElementById('calculator-overlay').classList.remove('modal-overlay--active');
-}
-		 
+// --- INICIO: BLOQUE CALCULADORA REPARADO Y BLINDADO ---
+
+// Función auxiliar segura: Convierte cualquier entrada a CÉNTIMOS (entero)
+const parseCalculatorValue = (val) => {
+    if (val === null || val === undefined || val === '') return NaN;
+    // Convierte a string, cambia coma por punto y multiplica por 100
+    const num = parseFloat(val.toString().replace(',', '.'));
+    return Math.round(num * 100);
+};
+
+const calculate = () => {
+    // 1. Convertimos todo a enteros (céntimos)
+    const val1 = parseCalculatorValue(calculatorState.operand1);
+    const val2 = parseCalculatorValue(calculatorState.displayValue);
+    
+    // 2. Seguridad
+    if (isNaN(val1) || isNaN(val2) || !calculatorState.operator) return;
+
+    let resultInCents = 0;
+    
+    // 3. Operamos en enteros para precisión perfecta
+    switch (calculatorState.operator) {
+        case 'add': resultInCents = val1 + val2; break;
+        case 'subtract': resultInCents = val1 - val2; break;
+        case 'multiply': resultInCents = Math.round((val1 * val2) / 100); break; 
+        case 'divide':
+            if (val2 === 0) { 
+                showToast("No se puede dividir por cero.", "danger"); 
+                calculatorState.displayValue = 'Error';
+                return; 
+            }
+            resultInCents = Math.round((val1 * 100) / val2); 
+            break;
+    }
+
+    // 4. Formateamos bonito para el usuario
+    const result = resultInCents / 100;
+    calculatorState.displayValue = result.toLocaleString('es-ES', { 
+        minimumFractionDigits: 0, 
+        maximumFractionDigits: 2,
+        useGrouping: false 
+    }); 
+    
+    // 5. Reset de estado
+    calculatorState.operand1 = null;
+    calculatorState.operator = null;
+    calculatorState.waitingForNewValue = true;
+    calculatorState.isResultDisplayed = true;
+    
+    updateCalculatorDisplay();
+};
+
+// Mejora visual: Escala dinámica de fuente en el display
+/* Reemplaza updateCalculatorDisplay por esta versión */
+const updateCalculatorDisplay = () => {
+    const display = select('calculator-display');
+    if (!display) return;
+    
+    const value = calculatorState.displayValue; // Es un string tipo "125,5"
+    
+    // Lógica de formateo manual para respetar lo que el usuario está escribiendo (incluyendo comas a medias)
+    let html = '';
+    
+    if (value === 'Error') {
+        html = 'Error';
+    } else {
+        const parts = value.split(',');
+        const integerPart = parts[0];
+        // Formateamos la parte entera con puntos de miles si es necesario
+        const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        
+        const decimalPart = parts.length > 1 ? ',' + parts[1] : '';
+        
+        // Aplicamos las clases CSS de estilo
+        html = `<span class="currency-major">${formattedInteger}</span><small class="currency-minor">${decimalPart}</small>`;
+    }
+
+    display.innerHTML = html; // Usamos innerHTML en lugar de textContent
+    
+    // Ajuste de tamaño dinámico
+    const length = value.length;
+    if (length > 9) display.style.fontSize = '2rem';
+    else if (length > 7) display.style.fontSize = '2.5rem';
+    else display.style.fontSize = '3rem';
+};
+// --- FIN: BLOQUE CALCULADORA ---
+                    
+
 		let isDashboardRendering = false;
 		let isDiarioPageRendering = false; // <-- AÑADE ESTA LÍNEA
 		let dashboardUpdateDebounceTimer = null;
@@ -7432,24 +7538,7 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
     
     // Rellenamos los desplegables
     populateAllDropdowns();
-	// --- INICIO: CONEXIÓN CALCULADORA ---
-    const inputCantidad = document.getElementById('movimiento-cantidad');
-    if (inputCantidad) {
-        // 1. Bloqueamos el teclado nativo del móvil para que no estorbe
-        inputCantidad.setAttribute('readonly', 'true'); 
-        inputCantidad.setAttribute('inputmode', 'none'); 
-        
-        // 2. Asignamos el evento CLICK (usamos .onclick para evitar duplicar eventos si abres muchas veces)
-        inputCantidad.onclick = function() {
-            // Si la función de abrir existe, la llamamos pasando este input
-            if (typeof window.openCalculator === 'function') {
-                window.openCalculator(this);
-            } else {
-                console.error("Error: La función openCalculator no está cargada.");
-            }
-        };
-    }
-    // --- FIN: CONEXIÓN CALCULADORA ---
+
     // Resetear selector de días semanal
     selectAll('.day-selector-btn').forEach(btn => btn.classList.remove('active'));
     const weeklySelector = select('weekly-day-selector');
@@ -7566,39 +7655,15 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
 
     // ▼▼▼ AQUÍ ESTÁ LA MEJORA 1: AUTO-APERTURA INTELIGENTE ▼▼▼
     if (mode === 'new') {
-        // --- CONEXIÓN SEGURA CON LA CALCULADORA ---
-    setTimeout(() => {
-        const amountInput = document.getElementById('movimiento-cantidad');
-        
-        if (amountInput) {
-            // 1. Configuración visual del input
-            amountInput.setAttribute('inputmode', 'none'); // Sin teclado móvil
-            amountInput.setAttribute('readonly', 'true');  // Solo lectura
-            amountInput.style.caretColor = 'transparent';  // Sin cursor parpadeando
-            
-            // 2. Función de apertura (Click)
-            const abrirCalc = function(e) {
-                if(e) e.preventDefault();
-                // Intentamos abrir con el nuevo nombre, si falla, usamos el alias
-                if (typeof window.openCalculator === 'function') {
-                    window.openCalculator(amountInput);
-                } else if (typeof window.showCalculator === 'function') {
-                    window.showCalculator(amountInput);
-                } else {
-                    console.error("⚠️ La calculadora aún no se ha cargado. Revisa que el código esté al final de main.js");
-                }
-            };
-
-            // Asignamos el evento click
-            amountInput.onclick = abrirCalc;
-            
-            // Si estamos en modo 'new' (nuevo movimiento), abrimos automáticamente
-            // (Asegúrate de que 'mode' esté definido en tu función, si no, quita esta línea)
-            if (typeof mode !== 'undefined' && mode === 'new') {
-                abrirCalc();
+        setTimeout(() => {
+            const amountInput = select('movimiento-cantidad');
+            if (amountInput) {
+                // En lugar de solo focus(), llamamos directamente a la calculadora
+                showCalculator(amountInput);
             }
-        }
-    }, 500); // Damos 500ms para asegurar que el DOM y las funciones window. estén listas
+        }, 300); // Un poco más de tiempo para asegurar que el modal terminó de subir
+    }
+};
         
         
         const showGlobalSearchModal = () => {
@@ -8512,6 +8577,95 @@ function populateOptions(selectElement, optionsContainer, trigger, wrapper) {
     trigger.innerHTML = selectedHTML;
 }
 
+/* EN main.js - Reemplaza showCalculator */
+
+const showCalculator = (targetInput) => {
+    const calculatorOverlay = select('calculator-overlay');
+    const calculatorUi = select('calculator-ui');
+    
+    if (!calculatorOverlay) return;
+    
+    // 1. Mostrar la UI (sin bloquear scroll de fondo visualmente)
+    calculatorOverlay.classList.add('modal-overlay--active');
+    calculatorState.isVisible = true;
+    calculatorState.targetInput = targetInput;
+    
+    // 2. Cargar valor inicial
+    const currentValue = parseCurrencyString(targetInput.value);
+    calculatorState.displayValue = currentValue ? currentValue.toString().replace('.', ',') : '0';
+    calculatorState.waitingForNewValue = true;
+    
+    updateCalculatorDisplay(); 
+    updateCalculatorHistoryDisplay();
+
+    // 3. Gestión de Teclado Físico (PC)
+    if (calculatorKeyboardHandler) document.removeEventListener('keydown', calculatorKeyboardHandler);
+    calculatorKeyboardHandler = (e) => {
+        const key = e.key;
+        if (key >= '0' && key <= '9') { e.preventDefault(); handleCalculatorInput(key); }
+        else if (key === ',' || key === '.') { e.preventDefault(); handleCalculatorInput('comma'); }
+        else if (key === 'Enter') { e.preventDefault(); handleCalculatorInput('done'); }
+        else if (key === 'Backspace') { e.preventDefault(); handleCalculatorInput('backspace'); }
+        else if (key === 'Escape') { e.preventDefault(); hideCalculator(); }
+        else if (key === '+') { e.preventDefault(); handleCalculatorInput('add'); }
+        else if (key === '-') { e.preventDefault(); handleCalculatorInput('subtract'); }
+        else if (key === '*' || key.toLowerCase() === 'x') { e.preventDefault(); handleCalculatorInput('multiply'); }
+        else if (key === '/') { e.preventDefault(); handleCalculatorInput('divide'); }
+    };
+    document.addEventListener('keydown', calculatorKeyboardHandler);
+
+    // 4. Feedback Visual en el Input
+    document.querySelectorAll('.form-input--active-calc').forEach(el => el.classList.remove('form-input--active-calc'));
+    targetInput.classList.add('form-input--active-calc');
+    
+    // 5. === SCROLL INTELIGENTE PARA NO TAPAR ===
+    setTimeout(() => {
+        // Altura real del teclado (~260px con los nuevos estilos)
+        const uiHeight = calculatorUi ? calculatorUi.offsetHeight : 260;
+        
+        const inputRect = targetInput.getBoundingClientRect();
+        const windowHeight = window.innerHeight;
+        
+        // Calculamos dónde termina el input visualmente
+        const inputBottom = inputRect.bottom;
+        // Calculamos dónde empieza el teclado
+        const keyboardTop = windowHeight - uiHeight;
+        
+        // Si el input está por debajo del inicio del teclado (tapado)
+        if (inputBottom > keyboardTop) {
+            // Calculamos cuánto hay que subir (con 20px de margen extra para que respire)
+            const scrollAmount = (inputBottom - keyboardTop) + 20;
+            
+            // Buscamos quién tiene el scroll (el modal o la página principal)
+            const scrollContainer = targetInput.closest('.modal__body') || selectOne('.app-layout__main');
+            
+            if (scrollContainer) {
+                scrollContainer.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+            }
+        }
+    }, 250); // Esperamos a que termine la animación de subida del teclado
+};
+
+const hideCalculator = () => {
+    const calculatorOverlay = select('calculator-overlay');
+    if (calculatorOverlay) {
+        calculatorOverlay.classList.remove('modal-overlay--active');
+    }
+    calculatorState.isVisible = false;
+    
+    // Limpiamos el listener del teclado físico
+    if (calculatorKeyboardHandler) {
+        document.removeEventListener('keydown', calculatorKeyboardHandler);
+        calculatorKeyboardHandler = null;
+    }
+    
+    // Devolvemos el foco al documento para quitarlo de cualquier input residual
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+	document.querySelectorAll('.form-input--active-calc').forEach(el => el.classList.remove('form-input--active-calc'));
+};
+
 // =============================================================
 // === LÓGICA DEL BOTÓN FLOTANTE INTELIGENTE (FAB)           ===
 // =============================================================
@@ -8617,29 +8771,35 @@ const updateInputMirror = (input) => {
 
 
 
+/* --- 3. INICIALIZADOR DE INPUTS --- */
 const initAmountInput = () => {
     const amountInputs = document.querySelectorAll('.input-amount-calculator');
     
+    // Ocultar botón de calculadora antiguo si existe
+    const toggle = document.getElementById('calculator-toggle-btn');
+    if (toggle) toggle.style.display = 'none';
+
     amountInputs.forEach(input => {
-        // Evita que salga el teclado del móvil
-        input.setAttribute('inputmode', 'none'); 
-        input.setAttribute('readonly', 'true'); // Forzar solo lectura
+        input.readOnly = true; 
+        input.setAttribute('inputmode', 'none');
         
-        // Limpiar eventos anteriores clonando el nodo
+        // Clonar para limpiar eventos viejos
         const newInput = input.cloneNode(true);
         input.parentNode.replaceChild(newInput, input);
-        
-        // Crear el "espejo visual" (el número bonito que se ve detrás)
+    
+        // Inicializar visualización
         updateInputMirror(newInput); 
-        
-        // AL TOCAR: Abrir calculadora
+
+        // Listener para Click (Abrir calculadora)
         newInput.addEventListener('click', (e) => {
-            e.preventDefault(); 
-            e.target.blur(); // Quitar foco real
+            e.preventDefault();
+            // Actualizar visual por si acaso
+            updateInputMirror(newInput);
+            hapticFeedback('light');
             showCalculator(newInput);
         });
-        
-        // Por si acaso, escuchar cambios manuales
+
+        // Listener para cambios manuales (por si acaso)
         newInput.addEventListener('input', () => updateInputMirror(newInput));
     });
 };
@@ -11964,154 +12124,3 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-/* ================================================================= */
-/* === MOTOR DE CALCULADORA GLOBAL (FIX DEFINITIVO) === */
-/* ================================================================= */
-
-// Definimos el estado globalmente
-window.calculatorState = {
-    displayValue: '0',
-    historyValue: '',
-    firstOperand: null,
-    waitingForSecondOperand: false,
-    operator: null,
-    targetInput: null
-};
-
-// --- FUNCIÓN DE APERTURA (La que busca tu código) ---
-window.openCalculator = function(inputElement) {
-    window.calculatorState.targetInput = inputElement;
-    
-    // Reseteamos o cargamos valor
-    window.resetCalculator();
-    if(inputElement.value && inputElement.value !== '') {
-        // Limpiar € y espacios
-        let cleanVal = inputElement.value.replace(/[€\s]/g, '').trim();
-        // Si es 0,00 lo dejamos en 0
-        if(cleanVal === '0,00') cleanVal = '0';
-        // Quitamos puntos de mil para la lógica interna
-        window.calculatorState.displayValue = cleanVal.replace(/\./g, '');
-    }
-    
-    window.updateCalculatorScreen();
-    
-    const overlay = document.getElementById('calculator-overlay');
-    if(overlay) overlay.classList.add('modal-overlay--active');
-};
-
-// --- ALIAS DE SEGURIDAD (IMPORTANTE) ---
-// Esto arregla tu error: si el código antiguo llama a "showCalculator",
-// nosotros lo redirigimos a "openCalculator" automáticamente.
-window.showCalculator = window.openCalculator;
-
-// --- FUNCIÓN DE CIERRE ---
-window.closeCalculator = function() {
-    const overlay = document.getElementById('calculator-overlay');
-    if(overlay) overlay.classList.remove('modal-overlay--active');
-};
-
-// --- MOTOR DE TECLAS ---
-window.handleCalculatorInput = function(key) {
-    if (key === 'done') {
-        window.finalizeCalculation();
-        return;
-    }
-
-    const { displayValue, waitingForSecondOperand } = window.calculatorState;
-
-    if (!isNaN(key) || key === 'comma') {
-        if (waitingForSecondOperand) {
-            window.calculatorState.displayValue = key === 'comma' ? '0,' : key;
-            window.calculatorState.waitingForSecondOperand = false;
-        } else {
-            if (key === 'comma' && displayValue.includes(',')) return;
-            window.calculatorState.displayValue = displayValue === '0' && key !== 'comma' ? key : displayValue + (key === 'comma' ? ',' : key);
-        }
-    } else if (key === 'clear') {
-        window.resetCalculator();
-    } else if (key === 'backspace') {
-        window.calculatorState.displayValue = window.calculatorState.displayValue.length > 1 ? window.calculatorState.displayValue.slice(0, -1) : '0';
-    } else {
-        window.handleOperator(key);
-    }
-    window.updateCalculatorScreen();
-};
-
-window.handleOperator = function(nextOperator) {
-    const { firstOperand, displayValue, operator } = window.calculatorState;
-    const inputValue = parseFloat(displayValue.replace(/\./g, '').replace(',', '.'));
-
-    if (operator && window.calculatorState.waitingForSecondOperand) {
-        window.calculatorState.operator = nextOperator;
-        return;
-    }
-
-    if (firstOperand == null) {
-        window.calculatorState.firstOperand = inputValue;
-    } else if (operator) {
-        const result = window.performCalculation(operator, firstOperand, inputValue);
-        // Formatear resultado intermedio (string con coma)
-        window.calculatorState.displayValue = String(result).replace('.', ','); 
-        window.calculatorState.firstOperand = result;
-    }
-
-    window.calculatorState.waitingForSecondOperand = true;
-    window.calculatorState.operator = nextOperator;
-    
-    const symbol = { add: '+', subtract: '-', multiply: '×', divide: '÷' }[nextOperator];
-    window.calculatorState.historyValue = `${window.calculatorState.firstOperand.toLocaleString('es-ES')} ${symbol}`;
-};
-
-window.performCalculation = function(op, a, b) {
-    switch(op) {
-        case 'add': return a + b;
-        case 'subtract': return a - b;
-        case 'multiply': return a * b;
-        case 'divide': return b !== 0 ? a / b : 0;
-        default: return b;
-    }
-};
-
-window.finalizeCalculation = function() {
-    if (window.calculatorState.operator && !window.calculatorState.waitingForSecondOperand) {
-        window.handleOperator(window.calculatorState.operator);
-    }
-    
-    // Obtenemos el valor final numérico
-    let finalRaw = window.calculatorState.firstOperand !== null ? window.calculatorState.firstOperand : parseFloat(window.calculatorState.displayValue.replace(/\./g, '').replace(',', '.'));
-    
-    if (isNaN(finalRaw)) finalRaw = 0;
-
-    // Formatear bonito: 1.250,50
-    const finalFormatted = finalRaw.toLocaleString('es-ES', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-
-    if (window.calculatorState.targetInput) {
-        window.calculatorState.targetInput.value = finalFormatted;
-        window.calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        window.calculatorState.targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    window.closeCalculator();
-};
-
-window.resetCalculator = function() {
-    window.calculatorState.displayValue = '0';
-    window.calculatorState.historyValue = '';
-    window.calculatorState.firstOperand = null;
-    window.calculatorState.waitingForSecondOperand = false;
-    window.calculatorState.operator = null;
-    window.updateCalculatorScreen();
-};
-
-window.updateCalculatorScreen = function() {
-    const display = document.getElementById('calculator-display');
-    const history = document.getElementById('calculator-history-display');
-    if(!display) return;
-    
-    // Renderizar valor principal
-    display.textContent = window.calculatorState.displayValue;
-    // Renderizar historial
-    if(history) history.textContent = window.calculatorState.historyValue;
-};
