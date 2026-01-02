@@ -11950,109 +11950,130 @@ const createUnifiedRowHTML = (m) => {
 };
 
 // =============================================================================
-// 🛠️ SOLUCIÓN MAESTRA: AISLAMIENTO DEL BOTÓN DE EDICIÓN
-// (Estrategia: Desactivar la tarjeta padre al interactuar con el lápiz)
+// 🛠️ SOLUCIÓN FINAL: ASIGNACIÓN DIRECTA (The "Direct Patch")
 // =============================================================================
 
-// 1. EL "LINTERNA VERDE": Detecta cuando el ratón/dedo entra en el botón de editar
-document.addEventListener('mouseover', (e) => {
-    handleButtonInteraction(e.target, true);
-}, true);
+// 1. EL ESCÁNER: Vigila cambios en la pantalla para encontrar botones nuevos
+const scanner = new MutationObserver((mutations) => {
+    // Cada vez que algo cambia en la pantalla, buscamos los botones de editar
+    parchearBotonesDeEdicion();
+});
 
-document.addEventListener('touchstart', (e) => {
-    handleButtonInteraction(e.target, true);
-}, { passive: false, capture: true });
-
-// 2. EL "APAGAGAFUEGOS": Detecta cuando sales del botón
-document.addEventListener('mouseout', (e) => {
-    handleButtonInteraction(e.target, false);
-}, true);
+// Iniciamos el escáner en todo el cuerpo de la página
+scanner.observe(document.body, { childList: true, subtree: true });
 
 
-// --- LÓGICA CENTRAL ---
-function handleButtonInteraction(target, isEntering) {
-    // Buscamos si estamos tocando un botón de editar (o su icono)
-    const btn = target.closest('button');
+// 2. EL PARCHEADOR: Busca botones y les asigna la función correcta
+function parchearBotonesDeEdicion() {
+    // Buscamos todos los botones que tengan el icono 'edit' o 'mode_edit'
+    // Selector: Buscamos cualquier elemento con clase material-icons que contenga 'edit'
+    const iconos = document.querySelectorAll('.material-icons');
     
-    // Verificamos que sea el botón de editar (tiene el icono 'edit' o 'mode_edit')
-    if (btn && (btn.innerText.includes('edit') || btn.innerText.includes('mode_edit') || btn.querySelector('.material-icons')?.innerText.includes('edit'))) {
-        
-        // Buscamos la tarjeta padre (la que causa el problema)
-        const card = btn.closest('.card, .t-card, .list-item');
-        
-        if (card) {
-            if (isEntering) {
-                // ESTRATEGIA: Si entras en el botón, CONGELAMOS la tarjeta padre
-                // Le quitamos la capacidad de recibir clics temporalmente
-                if (!card.dataset.originalOnclick) {
-                    // Guardamos su evento original por si acaso
-                    card.dataset.originalOnclick = card.getAttribute('onclick') || '';
-                }
-                // ¡AQUÍ ESTÁ EL TRUCO! Borramos el evento de la tarjeta
-                card.removeAttribute('onclick');
-                card.style.pointerEvents = 'none'; // La tarjeta se vuelve "fantasma"
+    iconos.forEach(icono => {
+        if (icono.innerText === 'edit' || icono.innerText === 'mode_edit' || icono.innerText === 'create') {
+            
+            // Encontramos el botón que envuelve al icono
+            const boton = icono.closest('button');
+            
+            // Si existe el botón y no lo hemos parcheado ya...
+            if (boton && !boton.dataset.parcheado) {
                 
-                // Pero reactivamos el botón para que SÍ se pueda pulsar
-                btn.style.pointerEvents = 'auto'; 
-                
-                // Asignamos nuestro evento de apertura manual al botón
-                btn.onclick = (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    console.log("✏️ Botón pulsado. Abriendo formulario...");
-                    abrirFormularioInversion(card);
-                };
-            } else {
-                // Si sales del botón, RESTAURAMOS la tarjeta a la normalidad
-                card.style.pointerEvents = '';
-                if (card.dataset.originalOnclick) {
-                    card.setAttribute('onclick', card.dataset.originalOnclick);
+                // Comprobamos si está dentro de una tarjeta de inversión (tiene dinero o fechas)
+                const tarjeta = boton.closest('.card, .t-card');
+                if (tarjeta && (tarjeta.innerText.includes('€') || tarjeta.innerText.includes('$') || tarjeta.querySelector('.t-amount'))) {
+                    
+                    console.log("🔧 Botón de inversión detectado y parcheado.");
+                    
+                    // --- APLICAMOS EL PARCHE ---
+                    
+                    // 1. Borramos cualquier evento anterior
+                    boton.onclick = null; 
+                    
+                    // 2. Asignamos NUESTRO evento directo
+                    boton.onclick = function(e) {
+                        // ¡ALTO! Detenemos todo para que no se abra el historial
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        
+                        console.log("✏️ Botón pulsado. Ejecutando apertura manual.");
+                        
+                        // 3. Abrimos el modal
+                        ejecutarAperturaModal(tarjeta);
+                        
+                        return false;
+                    };
+                    
+                    // 3. También bloqueamos el 'mousedown' para evitar efectos raros
+                    boton.onmousedown = function(e) { e.stopPropagation(); };
+                    
+                    // Marcamos el botón para no volver a procesarlo
+                    boton.dataset.parcheado = "true";
                 }
             }
         }
-    }
+    });
 }
 
 
-// --- FUNCIÓN DE APERTURA MANUAL DEL FORMULARIO ---
-function abrirFormularioInversion(card) {
+// 3. LA LÓGICA DE APERTURA (Robusta y a prueba de fallos)
+function ejecutarAperturaModal(card) {
     const modal = document.getElementById('inversion-modal');
-    if (!modal) return console.error("No encuentro el modal inversion-modal");
-
-    // A) RECUPERAR DATOS (Usando la copia de seguridad del onclick o atributos)
-    let id = card.dataset.id;
-    
-    // Si no hay ID, buscamos en el onclick guardado
-    if (!id && card.dataset.originalOnclick) {
-        const match = card.dataset.originalOnclick.match(/['"]([^'"]+)['"]/);
-        if (match) id = match[1];
+    if (!modal) {
+        alert("Error crítico: No se encuentra el modal 'inversion-modal' en el HTML.");
+        return;
     }
 
-    // Buscar valor (texto con € o $)
-    const moneyEl = Array.from(card.querySelectorAll('*')).find(el => el.innerText && (el.innerText.includes('€') || el.innerText.includes('$')));
-    let valor = 0;
-    if (moneyEl) {
-        let limpio = moneyEl.innerText.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.');
-        valor = parseFloat(limpio);
+    try {
+        // A) EXTRAER DATOS (A prueba de balas)
+        let id = card.dataset.id;
+        // Si no hay ID, buscamos en el onclick antiguo
+        if (!id && card.getAttribute('onclick')) {
+            const match = card.getAttribute('onclick').match(/['"]([^'"]+)['"]/);
+            if (match) id = match[1];
+        }
+
+        // Buscar precio (buscamos cualquier número seguido de € o $)
+        let valor = 0;
+        // Estrategia: Buscar todos los elementos de texto y ver cual tiene el símbolo
+        const elementosTexto = card.querySelectorAll('*');
+        for (let el of elementosTexto) {
+            if (el.innerText && (el.innerText.includes('€') || el.innerText.includes('$'))) {
+                // Limpiamos el texto para dejar solo el número float
+                let limpio = el.innerText.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.');
+                valor = parseFloat(limpio);
+                break; // Ya lo tenemos
+            }
+        }
+
+        // Buscar nombre
+        const nameEl = card.querySelector('.t-line-1, strong, h4, h3');
+        const nombre = nameEl ? nameEl.innerText : 'Inversión';
+
+        // B) RELLENAR FORMULARIO
+        const iId = document.getElementById('inversion-id');
+        const iVal = document.getElementById('inversion-valor');
+        const iFec = document.getElementById('inversion-fecha');
+        const lNom = document.getElementById('inversion-nombre-display');
+
+        if (iId) iId.value = id || 'temp-id';
+        if (iVal) iVal.value = valor || 0;
+        if (iFec) iFec.value = new Date().toISOString().split('T')[0];
+        if (lNom) lNom.innerText = nombre;
+
+        // C) MOSTRAR MODAL
+        modal.style.display = 'flex';
+        // Forzar repintado
+        setTimeout(() => {
+            modal.classList.add('modal-overlay--active');
+            modal.style.zIndex = "99999"; // Encima de todo
+        }, 10);
+
+    } catch (err) {
+        console.error("Error abriendo modal:", err);
+        alert("Error al intentar abrir el formulario: " + err.message);
     }
-
-    // Buscar nombre
-    const nameEl = card.querySelector('.t-line-1, h3, h4, strong');
-    const nombre = nameEl ? nameEl.innerText : 'Inversión';
-
-    console.log(`📝 Editando: ${nombre} (${id})`);
-
-    // B) LLENAR Y MOSTRAR
-    const iId = document.getElementById('inversion-id');
-    const iVal = document.getElementById('inversion-valor');
-    const iFec = document.getElementById('inversion-fecha');
-    const lNom = document.getElementById('inversion-nombre-display');
-
-    if (iId) iId.value = id || '';
-    if (iVal) iVal.value = valor || 0;
-    if (iFec) iFec.value = new Date().toISOString().split('T')[0];
-    if (lNom) lNom.innerText = nombre;
-
-    modal.style.display = 'flex';
-    setTimeout(() => modal.classList.add('modal-overlay--active'), 10);
 }
+
+// Ejecutamos una vez al inicio por si acaso
+parchearBotonesDeEdicion();
