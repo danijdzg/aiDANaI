@@ -12034,155 +12034,197 @@ document.addEventListener('click', (e) => {
         setTimeout(() => observer.disconnect(), 8000);
     }
 });
+
 // =========================================================
-// 🚀 SOLUCIÓN DEFINITIVA: VIGILANTE DE NAVEGACIÓN (MutationObserver)
-// (Pegar al final de main.js sustituyendo el código anterior de navegación)
+// ☢️ SOLUCIÓN EJECUTOR: NAVEGACIÓN + APERTURA FORZADA
+// (Pegar al final de main.js - Versión Definitiva)
 // =========================================================
 document.addEventListener('click', (e) => {
-    // 1. Detectar clic en cualquier tarjeta (Hero, KPI o Card genérica)
+    // 1. CAPTURA: Detectamos clic en cualquier tarjeta
     const card = e.target.closest('.hero-card, .card, .kpi-card, div[class*="card"]');
     if (!card) return;
 
-    // 2. Analizar el texto para saber dónde ir
     const text = (card.textContent || '').toLowerCase();
+    const cardId = card.id || '';
     let targetId = null;
 
-    // A) Si es Patrimonio -> Ir a Balance Neto
-    if ((text.includes('patrimonio') || text.includes('neto')) && !card.id.includes('balance')) {
+    // --- DEFINICIÓN DE OBJETIVOS ---
+    
+    // CASO A: Patrimonio -> Balance Neto
+    if ((text.includes('patrimonio') || text.includes('neto')) && !cardId.includes('balance')) {
         targetId = 'seccion-balance-neto';
     }
-    // B) Si es Mercado/Inversiones -> Ir a Mis Inversiones
-    else if ((text.includes('mercado') || text.includes('valor real') || text.includes('inversiones')) && !card.id.includes('inversiones')) {
+    
+    // CASO B: Capital Invertido / Valor Mercado -> Inversiones
+    else if ((text.includes('mercado') || text.includes('valor real') || text.includes('capital') || text.includes('inversiones')) && !cardId.includes('inversiones')) {
         targetId = 'seccion-inversiones';
     }
 
-    // 3. Ejecutar la maniobra si hay destino
+    // 2. EJECUCIÓN
     if (targetId) {
-        console.log(`📍 Destino detectado: ${targetId}. Iniciando navegación...`);
+        console.log(`🚀 EJECUTOR: Objetivo ${targetId} detectado. Iniciando maniobra.`);
 
-        // A) Cambiar de pestaña (Clic en el botón del menú)
+        // A) Navegación forzada (Click en menú)
         const btnInformes = document.querySelector('button[data-page="planificar-page"]');
-        if (btnInformes) btnInformes.click();
+        if (btnInformes) {
+            btnInformes.click();
+        } else {
+            // Plan B: Si no encuentra el botón, intentamos llamar a la función global si existe
+            if (typeof navigateTo === 'function') navigateTo('planificar-page');
+        }
 
-        // B) EL VIGILANTE: Esperar a que el elemento aparezca físicamente
-        const observer = new MutationObserver((mutations, obs) => {
+        // B) BUCLE DE BÚSQUEDA AGRESIVA (Polling)
+        // Buscamos cada 50ms durante 2 segundos. No esperamos a nadie.
+        let intentos = 0;
+        const intervalo = setInterval(() => {
             const elemento = document.getElementById(targetId);
             
-            // Si existe Y tiene altura (es visible)
-            if (elemento && elemento.offsetHeight > 0) {
-                // ¡Apareció! Dejamos de vigilar
-                obs.disconnect();
+            // Si el elemento existe...
+            if (elemento) {
                 
-                // Pequeña pausa técnica para asegurar que el renderizado terminó
+                // --- PASO CLAVE: EXTENDER / ABRIR ---
+                
+                // 1. Si es un acordeón nativo (<details>), lo abrimos
+                if (elemento.tagName === 'DETAILS') {
+                    elemento.open = true;
+                }
+                
+                // 2. Si es un acordeón manual, buscamos su cabecera y le hacemos click
+                // Buscamos clases comunes de cabeceras o botones de desplegar
+                const trigger = elemento.querySelector('.card-header, .accordion-button, summary, .btn-collapse, [data-toggle="collapse"]');
+                
+                // Solo hacemos clic si NO tiene la clase "active" o "open" (para no cerrarlo si ya estaba abierto)
+                if (trigger) {
+                    const isOpen = elemento.classList.contains('open') || elemento.classList.contains('show') || trigger.classList.contains('active');
+                    if (!isOpen) {
+                        trigger.click(); 
+                        console.log("🔓 Sección forzada a abrirse.");
+                    }
+                }
+                
+                // 3. Forzamos que el elemento sea visible (por si tiene display:none)
+                elemento.style.display = 'block'; 
+
+                // --- VISUALIZACIÓN ---
+                
+                // Detenemos el buscador porque ya lo tenemos
+                clearInterval(intervalo);
+
+                // Esperamos 100ms a que la animación de apertura termine
                 setTimeout(() => {
-                    // Scroll suave
+                    // Scroll al centro
                     elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-                    // Efecto visual "Aquí estoy" (Borde y resplandor)
-                    elemento.style.transition = "transform 0.4s ease, box-shadow 0.4s ease";
+                    // Efecto visual de confirmación
+                    elemento.style.transition = "transform 0.3s ease, box-shadow 0.3s ease";
                     elemento.style.transform = "scale(1.02)";
-                    elemento.style.boxShadow = "0 0 30px rgba(0, 179, 77, 0.6)"; // Luz verde
-                    elemento.style.border = "2px solid var(--c-primary)"; // Borde de confirmación
+                    elemento.style.boxShadow = "0 0 40px rgba(0, 255, 128, 0.6)"; // Luz verde fuerte
+                    elemento.style.zIndex = "999"; 
                     
-                    // Quitar efecto a los 2 segundos
                     setTimeout(() => {
                         elemento.style.transform = "scale(1)";
                         elemento.style.boxShadow = "none";
-                        elemento.style.border = "none";
-                    }, 2000);
-                }, 100);
+                        elemento.style.zIndex = "1";
+                    }, 1500);
+                }, 150);
             }
-        });
 
-        // Empezamos a vigilar cambios en el cuerpo de la página
-        observer.observe(document.body, { childList: true, subtree: true });
-
-        // C) Seguridad: Si en 5 segundos no aparece, nos retiramos para ahorrar batería
-        setTimeout(() => observer.disconnect(), 5000);
+            intentos++;
+            if (intentos > 40) clearInterval(intervalo); // Paramos a los 2 segundos
+        }, 50);
     }
 });
 
 // =========================================================
-// 🔧 SOLUCIÓN DEFINITIVA: ACTUALIZAR INVERSIONES (Anti-Burbujeo)
-// (Pegar al final de main.js)
+// ☢️ SOLUCIÓN NUCLEAR: EDICIÓN DE INVERSIONES
+// (Pegar al final de main.js - Sustituye a la anterior)
 // =========================================================
 
-// 1. Definimos la función para abrir el modal correctamente
-window.openInversionModal = (id, nombre, valorActual) => {
+// 1. Definimos la función de apertura del modal (por si no existe)
+window.forceOpenInversionModal = (card) => {
     const modal = document.getElementById('inversion-modal');
     if (!modal) return;
 
-    // Rellenamos los campos
+    // A) EXTRAER DATOS DEL HTML DE LA TARJETA
+    // Buscamos el ID. Puede estar en data-id o en el onclick
+    let id = card.dataset.id; 
+    if (!id && card.getAttribute('onclick')) {
+        // Intenta sacar 'ID' de onclick="algo('ID')"
+        const match = card.getAttribute('onclick').match(/['"]([^'"]+)['"]/);
+        if (match) id = match[1];
+    }
+
+    // Buscamos el valor (dinero)
+    // Buscamos cualquier cosa que parezca dinero (tiene € o $)
+    const moneyEl = Array.from(card.querySelectorAll('*')).find(el => el.innerText && (el.innerText.includes('€') || el.innerText.includes('$')));
+    let rawValue = moneyEl ? moneyEl.innerText : '0';
+    // Limpieza: "5.000,00 €" -> 5000.00
+    let valor = parseFloat(rawValue.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.'));
+    if (isNaN(valor)) valor = 0;
+
+    // Buscamos el nombre (suele ser negrita o título)
+    const nameEl = card.querySelector('strong, h3, h4, .t-line-1');
+    const nombre = nameEl ? nameEl.innerText : 'Inversión';
+
+    // B) RELLENAR EL FORMULARIO
     const inputId = document.getElementById('inversion-id');
-    const inputNombre = document.getElementById('inversion-nombre-display'); // Si existe un campo de texto
     const inputValor = document.getElementById('inversion-valor');
     const inputFecha = document.getElementById('inversion-fecha');
-    
-    if (inputId) inputId.value = id;
-    if (inputValor) inputValor.value = valorActual;
-    
-    // Ponemos la fecha de hoy por defecto
-    if (inputFecha) inputFecha.value = new Date().toISOString().split('T')[0];
+    const labelNombre = document.getElementById('inversion-nombre-display');
 
-    // Mostramos el modal
-    modal.style.display = 'flex';
-    // Pequeño timeout para permitir la transición CSS si la hay
-    setTimeout(() => modal.classList.add('modal-overlay--active'), 10);
+    if (inputId) inputId.value = id || '';
+    if (inputValor) inputValor.value = valor;
+    if (inputFecha) inputFecha.value = new Date().toISOString().split('T')[0];
     
-    console.log(`✏️ Editando inversión: ${nombre} (${id})`);
+    // Si tienes un sitio para mostrar el nombre, ponlo
+    if (labelNombre) labelNombre.innerText = nombre;
+
+    console.log(`✏️ Forzando edición: ${nombre} (${valor}€)`);
+
+    // C) MOSTRAR MODAL
+    modal.style.display = 'flex';
+    // Pequeño retardo para la animación
+    setTimeout(() => {
+        modal.classList.add('modal-overlay--active');
+        // Hack visual: aseguramos z-index máximo
+        modal.style.zIndex = "99999"; 
+    }, 10);
 };
 
-// 2. El Escudo "Jedi" (Captura el clic ANTES de que llegue a la tarjeta)
+// 2. EL INTERCEPTOR (Fase de Captura: TRUE)
 document.addEventListener('click', (e) => {
-    // Buscamos si el clic fue en un botón dentro de la sección de inversiones
-    // Buscamos botones o iconos 'edit' dentro de #seccion-inversiones
-    const btnEdit = e.target.closest('#seccion-inversiones button, #seccion-inversiones .btn-icon');
+    const target = e.target;
     
-    // Si encontramos el botón Y parece ser el de editar (tiene el icono edit o lápiz)
-    if (btnEdit && (btnEdit.innerHTML.includes('edit') || btnEdit.innerHTML.includes('lápiz'))) {
+    // Verificamos si lo que has tocado es un ICONO DE LÁPIZ o un botón que lo contiene
+    const isIcon = target.classList.contains('material-icons');
+    const text = target.innerText;
+    
+    // Lista de nombres posibles para el icono de editar
+    const esLapiz = isIcon && (text === 'edit' || text === 'mode_edit' || text === 'create' || text === 'pencil');
+    
+    // También miramos si pulsaste el botón contenedor del lápiz
+    const btnContainer = target.closest('button');
+    const esBotonEditar = btnContainer && btnContainer.innerHTML.includes('edit');
+
+    // SI ES EL LÁPIZ...
+    if (esLapiz || esBotonEditar) {
+        // Buscamos si este lápiz está dentro de una tarjeta de inversión
+        // (Buscamos 'card' hacia arriba)
+        const card = target.closest('.card, .t-card');
         
-        // ¡ALTO AHÍ! Detenemos el evento inmediatamente.
-        // Al usar 'true' abajo (Fase de Captura), lo pillamos antes de que la tarjeta lo sepa.
-        e.stopPropagation();
-        e.preventDefault();
-
-        // Ahora recuperamos los datos para abrir el modal
-        // Intentamos sacarlos de la propia tarjeta padre
-        const card = btnEdit.closest('.card');
+        // Si está en una tarjeta, ¡ES NUESTRO OBJETIVO!
         if (card) {
-            // A) Intentamos sacar el ID de la tarjeta (data-id)
-            // B) Intentamos sacar el valor del texto visible
+            console.log("🛑 INTERCEPTADO: Clic en editar inversión.");
             
-            // Buscamos el ID. Normalmente está en la tarjeta para abrir los movimientos.
-            // Si tu código usa onclick="showDrillDownModal('ID_CUENTA',...)" intentaremos extraerlo.
-            let id = card.dataset.id; 
+            // 1. MATAMOS EL EVENTO AQUÍ Y AHORA
+            e.stopImmediatePropagation(); // Nadie más se entera
+            e.stopPropagation();          // No sube a la tarjeta
+            e.preventDefault();           // No hace nada por defecto
             
-            // Si no tiene data-id, intentamos buscarlo en el onclick
-            if (!id && card.getAttribute('onclick')) {
-                const match = card.getAttribute('onclick').match(/'([^']+)'/);
-                if (match) id = match[1];
-            }
-
-            // Buscamos el valor actual (el texto con el dinero)
-            // Suele estar en un h3, h2 o una clase .amount
-            const valueEl = card.querySelector('h2, h3, .amount, .t-amount');
-            // Limpiamos el texto para dejar solo el número (quitamos €, $, puntos)
-            let rawValue = valueEl ? valueEl.innerText : '0';
-            // Convertimos "5.000,00 €" -> 5000.00
-            let valorNumerico = parseFloat(rawValue.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.'));
-            if (isNaN(valorNumerico)) valorNumerico = 0;
-
-            // Buscamos el nombre
-            const nameEl = card.querySelector('h4, strong, .t-line-1');
-            const nombre = nameEl ? nameEl.innerText : 'Inversión';
-
-            if (id) {
-                // Abrimos el modal manualmente
-                openInversionModal(id, nombre, valorNumerico);
-            } else {
-                console.error("❌ No se pudo encontrar el ID de la inversión en la tarjeta.");
-                showToast("Error: ID no encontrado", "danger");
-            }
+            // 2. ABRIMOS EL MODAL NOSOTROS MISMOS
+            forceOpenInversionModal(card);
+            
+            return false;
         }
     }
-}, true); // <--- IMPORTANTE: 'true' activa la fase de CAPTURA (Prioridad máxima)
+}, true); // <--- EL "TRUE" ES LA CLAVE (Capture Phase)
