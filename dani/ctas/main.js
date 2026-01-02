@@ -11299,28 +11299,75 @@ const validateField = (id, silent = false) => {
     return isValid;
 };
 
+/* --- VERSIÓN CORREGIDA DE VALIDACIÓN --- */
 const validateMovementForm = () => {
-    let isValid = true;
+    // 1. Obtener elementos con seguridad
+    const cantidadInput = document.getElementById('movimiento-cantidad');
+    const conceptoSelect = document.getElementById('movimiento-concepto');
+    const cuentaSelect = document.getElementById('movimiento-cuenta');
     
-    // Obtenemos el tipo de formulario a partir del botón activo
-    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
+    // Para traspasos
+    const cuentaOrigen = document.getElementById('movimiento-cuenta-origen');
+    const cuentaDestino = document.getElementById('movimiento-cuenta-destino');
+    
+    // Tipo de movimiento (leemos del botón activo o del input oculto)
+    const typeSelector = document.querySelector('.type-selector .type-btn.active');
+    const tipo = typeSelector ? typeSelector.dataset.type : 'gasto';
 
-    // Validamos los campos comunes
-    if (!validateField('movimiento-cantidad')) isValid = false;
-    if (!validateField('movimiento-fecha')) isValid = false;
+    let isValid = true;
+    let errors = [];
 
-    // Validamos los campos específicos según el tipo
-    if (selectedType === 'traspaso') {
-        if (!validateField('movimiento-cuenta-origen')) isValid = false;
-        if (!validateField('movimiento-cuenta-destino')) isValid = false;
-    } else { // para 'gasto' e 'ingreso'
-        if (!validateField('movimiento-descripcion')) isValid = false;
-        if (!validateField('movimiento-concepto')) isValid = false;
-        if (!validateField('movimiento-cuenta')) isValid = false;
+    // 2. Validar Cantidad
+    if (!cantidadInput || !cantidadInput.value || parseFloat(cantidadInput.value) <= 0) {
+        isValid = false;
+        errors.push("Introduce una cantidad válida.");
+        if(cantidadInput) cantidadInput.classList.add('input-error');
+    } else {
+        if(cantidadInput) cantidadInput.classList.remove('input-error');
     }
-    if (!isValid) { // <-- AÑADE ESTE BLOQUE IF AL FINAL
-        hapticFeedback('error'); 
+
+    // 3. Validar Concepto (Solo si no es traspaso)
+    if (tipo !== 'traspaso') {
+        if (!conceptoSelect || !conceptoSelect.value) {
+            isValid = false;
+            errors.push("Selecciona una categoría.");
+            // Intentamos marcar el selector visual si existe
+            const trigger = document.getElementById('concepto-trigger');
+            if (trigger) trigger.style.borderColor = 'var(--c-error)';
+        } else {
+             const trigger = document.getElementById('concepto-trigger');
+             if (trigger) trigger.style.borderColor = '';
+        }
     }
+
+    // 4. Validar Cuentas
+    if (tipo === 'traspaso') {
+        if (!cuentaOrigen || !cuentaOrigen.value) {
+            isValid = false;
+            errors.push("Falta cuenta origen.");
+        }
+        if (!cuentaDestino || !cuentaDestino.value) {
+            isValid = false;
+            errors.push("Falta cuenta destino.");
+        }
+        if (cuentaOrigen && cuentaDestino && cuentaOrigen.value === cuentaDestino.value) {
+            isValid = false;
+            errors.push("Las cuentas deben ser diferentes.");
+        }
+    } else {
+        // Ingreso o Gasto
+        if (!cuentaSelect || !cuentaSelect.value) {
+            isValid = false;
+            errors.push("Selecciona una cuenta.");
+        }
+    }
+
+    // 5. Mostrar errores si los hay
+    if (!isValid) {
+        showToast(errors[0], 'error');
+        hapticFeedback('error');
+    }
+
     return isValid;
 };
  
@@ -12017,5 +12064,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         console.log("✅ Botón de borrar reparado y vinculado.");
+    }
+});
+
+// --- PARCHE DE SEGURIDAD PARA MODALES ---
+// Esto mueve el modal de confirmación al final del <body> para que nada lo tape
+document.addEventListener('DOMContentLoaded', () => {
+    const confirmModal = document.getElementById('confirmation-modal');
+    if (confirmModal) {
+        document.body.appendChild(confirmModal);
+        console.log("🛡️ Modal de confirmación movido al body para evitar bloqueos.");
     }
 });
