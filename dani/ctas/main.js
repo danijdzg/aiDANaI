@@ -7034,7 +7034,6 @@ function handleModalDragEnd(e) {
     modalDragState.targetModal = null;
 }
 
-// En main.js
 
 const showModal = (id) => {
     const m = select(id);
@@ -7550,13 +7549,20 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
     
     // Gestión de botones
     const deleteBtn = select('delete-movimiento-btn');
-    const duplicateBtn = select('duplicate-movimiento-btn'); 
+    const duplicateBtn = select('duplicate-movimiento-btn');
+
     if (deleteBtn) {
+        // Muestra el botón solo si estamos editando (hay ID)
         deleteBtn.classList.toggle('hidden', !id || !data);
-        deleteBtn.dataset.isRecurrent = String(isRecurrent);
+        
+        // ESTA ES LA LÍNEA CLAVE QUE NECESITAS:
+        // Le dice al botón si lo que vamos a borrar es un recurrente o normal
+        deleteBtn.dataset.isRecurrent = String(isRecurrent); 
     }
+
     if (duplicateBtn) {
-        duplicateBtn.classList.toggle('hidden', !(mode === 'edit-single' && data));
+        // El botón duplicar se ve si estamos editando un movimiento normal O recurrente
+        duplicateBtn.classList.toggle('hidden', !id || !data);
     }
 
     showModal('movimiento-modal');
@@ -8733,74 +8739,74 @@ const renderInversionesPage = async (containerId) => {
     await renderPlanificacionPage(); 
 };
 
-/* --- FUNCIÓN NUEVA: Lógica para Duplicar Movimiento --- */
-const handleDuplicateMovement = (originalMovement) => {
+/* --- FUNCIÓN DE DUPLICADO (Soporte Recurrentes) --- */
+const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
     if (!originalMovement) return;
 
-    // 1. Cerramos el modal actual para evitar conflictos visuales
     hideModal('movimiento-modal');
 
-    // 2. Esperamos un poco a que termine la animación de cierre
     setTimeout(() => {
-        // 3. Abrimos el formulario como "NUEVO" (null en ID), pero pasando el tipo original
-        startMovementForm(null, false, originalMovement.tipo);
+        // Abrimos formulario NUEVO indicando si es recurrente o no
+        startMovementForm(null, isRecurrent, originalMovement.tipo);
 
-        // 4. Rellenamos los datos visuales una vez el formulario se ha dibujado
         setTimeout(() => {
-            // Cambiar título para que el usuario sepa que es una copia
+            // 1. Título
             const titleEl = document.getElementById('form-movimiento-title');
-            if (titleEl) titleEl.textContent = 'Duplicar Movimiento';
+            if (titleEl) titleEl.textContent = isRecurrent ? 'Duplicar Recurrente' : 'Duplicar Movimiento';
 
-            // Copiar Cantidad
+            // 2. Cantidad e Input Visual
             const cantidadInput = document.getElementById('movimiento-cantidad');
             if (cantidadInput) {
-                // Usamos el valor numérico directo
-                cantidadInput.value = originalMovement.cantidad; 
-                // Actualizamos el "espejo" visual (los números grandes)
-                if (typeof updateInputMirror === 'function') {
-                    updateInputMirror(cantidadInput);
-                }
+                // Formateamos el número para que la calculadora visual lo entienda
+                const valorFormateado = (Math.abs(originalMovement.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false });
+                cantidadInput.value = valorFormateado;
+                if (typeof updateInputMirror === 'function') updateInputMirror(cantidadInput);
             }
 
-            // Copiar Descripción (Añadiendo "Copia")
+            // 3. Resto de datos
             const descInput = document.getElementById('movimiento-descripcion');
             if (descInput) descInput.value = `${originalMovement.descripcion} (Copia)`;
 
-            // Copiar Concepto/Categoría
             const conceptoSelect = document.getElementById('movimiento-concepto');
             if (conceptoSelect) {
                 conceptoSelect.value = originalMovement.conceptoId;
-                // Forzamos el evento 'change' para que se actualicen los iconos visuales
                 conceptoSelect.dispatchEvent(new Event('change')); 
             }
 
-            // Copiar Cuenta(s)
-            if (originalMovement.tipo === 'traspaso') {
-                const origenSelect = document.getElementById('movimiento-cuenta-origen');
-                const destinoSelect = document.getElementById('movimiento-cuenta-destino');
+            // 4. Si es recurrente, copiamos la frecuencia
+            if (isRecurrent) {
+                const frecuenciaSelect = document.getElementById('recurrent-frequency'); // Ojo al ID
+                if (frecuenciaSelect && originalMovement.frequency) {
+                    frecuenciaSelect.value = originalMovement.frequency;
+                }
                 
-                if (origenSelect) {
-                    origenSelect.value = originalMovement.cuentaOrigenId;
-                    origenSelect.dispatchEvent(new Event('change'));
-                }
-                if (destinoSelect) {
-                    destinoSelect.value = originalMovement.cuentaDestinoId;
-                    destinoSelect.dispatchEvent(new Event('change'));
-                }
-            } else {
-                const cuentaSelect = document.getElementById('movimiento-cuenta');
-                if (cuentaSelect) {
-                    cuentaSelect.value = originalMovement.cuentaId;
-                    cuentaSelect.dispatchEvent(new Event('change'));
+                // Copiar días de la semana si es semanal
+                if (originalMovement.frequency === 'weekly' && originalMovement.weekDays) {
+                    const selectorDiv = document.getElementById('weekly-day-selector');
+                    if (selectorDiv) selectorDiv.classList.remove('hidden');
+                    
+                    originalMovement.weekDays.forEach(day => {
+                        const btn = document.querySelector(`.day-selector-btn[data-day="${day}"]`);
+                        if (btn) btn.classList.add('active');
+                    });
                 }
             }
-            
-            // Feedback para el usuario
-            if (typeof hapticFeedback === 'function') hapticFeedback('success');
-            if (typeof showToast === 'function') showToast('Datos copiados. Revisa y guarda.');
 
-        }, 200); // Pequeña espera para asegurar que el DOM del nuevo modal existe
-    }, 350); // Espera para que el modal anterior se cierre bien
+            // 5. Cuentas
+            if (originalMovement.tipo === 'traspaso') {
+                const origen = document.getElementById('movimiento-cuenta-origen');
+                const destino = document.getElementById('movimiento-cuenta-destino');
+                if (origen) { origen.value = originalMovement.cuentaOrigenId; origen.dispatchEvent(new Event('change')); }
+                if (destino) { destino.value = originalMovement.cuentaDestinoId; destino.dispatchEvent(new Event('change')); }
+            } else {
+                const cuenta = document.getElementById('movimiento-cuenta');
+                if (cuenta) { cuenta.value = originalMovement.cuentaId; cuenta.dispatchEvent(new Event('change')); }
+            }
+            
+            showToast('Datos copiados. Revisa y guarda.');
+
+        }, 300); 
+    }, 350); 
 };
 
 // ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
@@ -9204,7 +9210,11 @@ const handleStart = (e) => {
 },
             'edit-movement-from-modal': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; hideModal('generic-modal'); startMovementForm(movementId, false); },
             'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
-            'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
+            'edit-recurrente': () => {
+    hideModal('generic-modal');
+    // Usamos actionTarget.dataset.id para obtener el ID correcto
+    startMovementForm(actionTarget.dataset.id, true); 
+},
             'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
             'show-concept-drilldown': () => {
                 const conceptId = actionTarget.dataset.conceptId;
@@ -9341,14 +9351,24 @@ const handleStart = (e) => {
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
             'duplicate-movement': () => {
-    const id = select('movimiento-id').value;
-    const movement = db.movimientos.find(m => m.id === id);
-    if (movement) {
-        handleDuplicateMovement(movement);
-    } else {
-        showToast("Error: No se encuentra el movimiento original.", "danger");
-    }
-},
+        const id = document.getElementById('movimiento-id').value;
+        
+        // 1. Buscamos primero en movimientos normales
+        let movement = db.movimientos.find(m => m.id === id);
+        let isRecurrent = false;
+
+        // 2. Si no está, buscamos en recurrentes (programados)
+        if (!movement && db.recurrentes) { 
+            movement = db.recurrentes.find(m => m.id === id);
+            isRecurrent = true;
+        }
+
+        if (movement) {
+            handleDuplicateMovement(movement, isRecurrent);
+        } else {
+            showToast("Error: No se pudo localizar el movimiento original.", "danger");
+        }
+    },
 
 // Asegúrate también de que esta otra acción use la misma lógica:
 'duplicate-movement-from-modal': () => {
