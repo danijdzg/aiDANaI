@@ -10211,7 +10211,7 @@ const handleSaveMovement = async (form, btn) => {
 
             hapticFeedback('success');
             showToast('Recurrente guardado.');
-            
+            hideModal('movimiento-modal'); // Cerramos el modal explícitamente
             const activePage = document.querySelector('.view--active');
             if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) renderPlanificacionPage();
 
