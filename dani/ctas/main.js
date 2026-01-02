@@ -11966,7 +11966,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- CIERRE DE EMERGENCIA ---
 // Si falta una llave arriba, esto lo arregla. 
 // Prueba primero con una llave:
-});
+};
 
 // Si sigue fallando, prueba cambiando la llave de arriba por esto:
 // });
