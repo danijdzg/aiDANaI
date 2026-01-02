@@ -1078,29 +1078,9 @@ let calculatorState = {
 };
 
 // Actualiza el display del historial
-// =========================================================
-// CORRECCIÓN: VISUALIZACIÓN COMPLETA DE OPERACIONES
-// =========================================================
 const updateCalculatorHistoryDisplay = () => {
     const historyDisplay = select('calculator-history-display');
-    if (!historyDisplay) return;
-    
-    // 1. Cogemos la base histórica (Ej: "50 +")
-    let fullHistory = calculatorState.historyValue || ''; 
-    
-    // 2. MAGIA: Si hay un operador activo y ya estamos escribiendo el siguiente número,
-    // lo concatenamos visualmente para que se vea la operación completa (Ej: "50 + 20")
-    if (calculatorState.operator && !calculatorState.waitingForNewValue) {
-        // Añadimos un espacio y el valor que estás tecleando ahora mismo
-        fullHistory += ' ' + calculatorState.displayValue;
-    }
-    
-    // 3. Renderizamos
-    historyDisplay.textContent = fullHistory;
-    
-    // Extra: Si el texto es muy largo, hacemos scroll automático al final
-    // para ver siempre el último número que escribimos
-    historyDisplay.scrollLeft = historyDisplay.scrollWidth;
+    if (historyDisplay) historyDisplay.textContent = calculatorState.historyValue;
 };
 
 // Mapea las claves a los símbolos visuales
@@ -7295,47 +7275,8 @@ const showDrillDownModal = (title, movements) => {
         }
     }, 50);
 };
-       // Función Maestra de Confirmación
-const showConfirmationModal = (message, onConfirm, title = "Confirmar Acción") => {
-    const modal = document.getElementById('confirmation-modal');
-    if (!modal) {
-        console.error("CRÍTICO: Falta el HTML del #confirmation-modal");
-        return;
-    }
+        const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
 
-    // 1. Inyectar Texto
-    const titleEl = modal.querySelector('#confirmation-title');
-    const msgEl = modal.querySelector('#confirmation-message');
-    if (titleEl) titleEl.textContent = title;
-    if (msgEl) msgEl.textContent = message;
-
-    // 2. Preparar el Botón de "Sí, eliminar"
-    const confirmBtn = modal.querySelector('#btn-confirm-action');
-    
-    // TRUCO ELITE: Clonamos el botón para eliminar cualquier evento 'click' antiguo
-    // y evitar que se borren cosas por duplicado.
-    const newConfirmBtn = confirmBtn.cloneNode(true);
-    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-
-    newConfirmBtn.onclick = () => {
-        // Ejecutamos la acción de borrado
-        onConfirm();
-        // Cerramos el modal
-        modal.classList.remove('modal-overlay--active');
-    };
-
-    // 3. Configurar botón Cancelar
-    const cancelBtn = modal.querySelector('[data-action="cancel-confirmation"]');
-    if(cancelBtn) {
-        cancelBtn.onclick = () => {
-            modal.classList.remove('modal-overlay--active');
-        };
-    }
-
-    // 4. Feedback físico y Mostrar
-    if (typeof hapticFeedback === 'function') hapticFeedback('warning'); // Vibración de advertencia
-    modal.classList.add('modal-overlay--active');
-};
 		
 // =================================================================
 // === INICIO: FUNCIÓN showToast (CORRECCIÓN CRÍTICA) ===
@@ -9285,49 +9226,21 @@ const handleStart = (e) => {
 },
             'toggle-off-balance': async () => { const checkbox = target.closest('input[type="checkbox"]'); if (!checkbox) return; hapticFeedback('light'); await saveDoc('cuentas', checkbox.dataset.id, { offBalance: checkbox.checked }); },
             'apply-filters': () => { hapticFeedback('light'); scheduleDashboardUpdate(); },
-     // ACCIÓN 1: BORRAR (Directo, sin preguntas, sin cuadros de texto estorbando)
-    'delete-movement-from-modal': async () => {
-        // 1. Coger el ID del movimiento
-        const idToDelete = document.getElementById('movimiento-id').value;
-        // 2. Ver si es recurrente
-        const isRecurrent = (actionTarget.dataset.isRecurrent === 'true');
-
-        // 3. ¡IMPORTANTE! Cerrar el modal PRIMERO para que desaparezca de la pantalla
-        hideModal('movimiento-modal');
-
-        // 4. Borrar inmediatamente
-        if (idToDelete) {
-            await deleteMovementAndAdjustBalance(idToDelete, isRecurrent);
-            showToast('Movimiento eliminado'); // Confirmación visual pequeña
-        }
-    },
-
-    // ACCIÓN 2: DUPLICAR (Crea uno nuevo con fecha de hoy)
-    'duplicate-movement-from-modal': () => {
-        // 1. Borrar el ID oculto. 
-        // ALERTA: Esto es lo que hace que se cree uno NUEVO en vez de sobrescribir el viejo.
-        const idField = document.getElementById('movimiento-id');
-        if (idField) idField.value = ''; 
-
-        // 2. Poner fecha de HOY automáticamente
-        const dateField = document.getElementById('movimiento-fecha');
-        if (dateField) {
-            dateField.value = new Date().toISOString().split('T')[0];
-        }
-
-        // 3. Cambiar el texto del botón Guardar para que sepas que es una copia
-        const saveBtn = document.getElementById('btn-save-movement');
-        if (saveBtn) saveBtn.textContent = 'Guardar Copia';
-
-        // 4. Aviso pequeño
-        showToast('Duplicado. Revisa y Guarda.');
-    },
-    'swipe-delete-movement': () => {
-    const isRecurrent = actionTarget.dataset.isRecurrent === 'true';
-    hapticFeedback('medium');
-    // Borrado directo sin modal
-    deleteMovementAndAdjustBalance(id, isRecurrent);
+            'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Eliminar operación recurrente?' : '¿Eliminar movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
+			'duplicate-movement-from-modal': () => {
+    const id = select('movimiento-id').value;
+    // Buscamos el movimiento original en la base de datos local
+    const movement = db.movimientos.find(m => m.id === id);
+    
+    if (movement) {
+        // Usamos la función que ya tienes creada
+        handleDuplicateMovement(movement);
+    } else {
+        // Por si acaso es un recurrente o hay un error
+        showToast("No se pudo cargar el movimiento original para duplicar.", "warning");
+    }
 },
+            'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
             'swipe-duplicate-movement': () => { const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id); if (movement) handleDuplicateMovement(movement); },
             'search-result-movimiento': (e) => { hideModal('global-search-modal'); startMovementForm(e.target.closest('[data-id]').dataset.id, false); },
             'delete-concepto': async () => { const movsCheck = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').where('conceptoId', '==', id).limit(1).get(); if(!movsCheck.empty) { showToast("Concepto en uso.","warning"); return; } showConfirmationModal('¿Eliminar concepto?', async () => { await deleteDoc('conceptos', id); hapticFeedback('success'); showToast("Concepto eliminado."); renderConceptosModalList(); }); },
@@ -12016,3 +11929,48 @@ const createUnifiedRowHTML = (m) => {
     </div>`;
 };
 
+// =========================================================
+// 🛡️ SOLUCIÓN COMITÉ (ADAPTADA A TU CÓDIGO REAL)
+// =========================================================
+document.addEventListener('DOMContentLoaded', () => {
+    // Buscamos el botón real que está en tu index.html
+    const btnBorrar = document.getElementById('delete-movimiento-btn');
+
+    if (btnBorrar) {
+        // Le quitamos cualquier evento anterior para evitar duplicados
+        const nuevoBtn = btnBorrar.cloneNode(true);
+        btnBorrar.parentNode.replaceChild(nuevoBtn, btnBorrar);
+
+        // Añadimos el evento "Click" directo y robusto
+        nuevoBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // 1. Obtenemos el ID del movimiento del input oculto que usa tu formulario
+            const idInput = document.getElementById('movimiento-id');
+            const idToDelete = idInput ? idInput.value : null;
+            
+            // 2. Detectamos si es recurrente (tu código usa un dataset para esto)
+            const isRecurrent = nuevoBtn.dataset.isRecurrent === 'true';
+
+            if (!idToDelete) {
+                showToast("Error: No se encuentra el ID del movimiento.", "danger");
+                return;
+            }
+
+            // 3. Usamos tu propia función de confirmación
+            const mensaje = isRecurrent ? '¿Eliminar operación recurrente?' : '¿Eliminar movimiento permanentemente?';
+            
+            showConfirmationModal(mensaje, async () => {
+                // Cerramos el modal primero
+                const modal = document.getElementById('movimiento-modal');
+                if (modal) modal.classList.remove('modal-overlay--active');
+                
+                // 4. Llamamos a tu función de borrado existente que ya funciona bien
+                await deleteMovementAndAdjustBalance(idToDelete, isRecurrent);
+            });
+        });
+        
+        console.log("✅ Botón de borrar reparado y vinculado.");
+    }
+});
