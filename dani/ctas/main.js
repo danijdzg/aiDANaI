@@ -3354,6 +3354,7 @@ const handleToggleInvestmentTypeFilter = (type) => {
     renderPortfolioEvolutionChart('portfolio-evolution-container');
 };
 
+/* --- FUNCIÓN ACTUALIZADA: RENDERIZADO PORTAFOLIO CON FECHA --- */
 const renderPortfolioMainContent = async (targetContainerId) => {
     const container = select(targetContainerId);
     if (!container) return;
@@ -3376,7 +3377,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
 
     const displayAssetsData = performanceData.filter(asset => !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T')));
 
-    // 2. Cálculos Totales (SIEMPRE EN EUROS para mantener coherencia del Resumen Global)
+    // 2. Cálculos Totales
     let portfolioTotalInvertido = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.capitalInvertido, 0);
     let portfolioTotalValorado = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.valorActual, 0);
     let rentabilidadTotalAbsoluta = portfolioTotalValorado - portfolioTotalInvertido;
@@ -3390,8 +3391,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
     const rentabilidadClass = rentabilidadTotalAbsoluta >= 0 ? 'text-positive' : 'text-negative';
     const signo = rentabilidadTotalAbsoluta >= 0 ? '+' : '';
 
-    // 3. Renderizado HTML
-    // Filtros (Pills)
+    // 3. Renderizado HTML (Cabecera y Filtros)
     const allInvestmentTypes = [...new Set(performanceData.map(asset => toSentenceCase(asset.tipo || 'S/T')))].sort();
     const colorMap = {};
     allInvestmentTypes.forEach((label, index) => { colorMap[label] = CHART_COLORS[index % CHART_COLORS.length]; });
@@ -3403,9 +3403,8 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-investment-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('');
 
-    // Información de Tasa de Cambio (Solo si el modo BTC está activo)
     let btcInfoHTML = '';
-    if (portfolioViewMode === 'BTC' && btcPriceData.price > 0) {
+    if (typeof portfolioViewMode !== 'undefined' && portfolioViewMode === 'BTC' && btcPriceData.price > 0) {
         btcInfoHTML = `<div style="text-align:center; font-size:0.7rem; color:var(--c-warning); margin-top:-10px; margin-bottom:10px;">
             <span class="material-icons" style="font-size:10px; vertical-align:middle;">info</span> 
             Mostrando Criptos en BTC (1 BTC = ${formatCurrency(Math.round(btcPriceData.price * 100))})
@@ -3446,43 +3445,39 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         <div class="filter-pills" style="margin-bottom: var(--sp-3); overflow-x:auto;">${pillsHTML}</div>
         <div id="investment-assets-list"></div>`;
 
-    // 4. Renderizado Lista de Activos (LÓGICA HÍBRIDA)
+    // 4. Renderizado Lista de Activos
     const listContainer = select('investment-assets-list');
     if (listContainer) {
         const listHtml = displayAssetsData
             .sort((a, b) => b.valorActual - a.valorActual)
             .map(cuenta => {
-                // Comprobamos si esta cuenta específica es cripto y si el modo BTC está activo
-                const showInBTC = portfolioViewMode === 'BTC' && isCryptoType(cuenta.tipo) && btcPriceData.price > 0;
+                const showInBTC = typeof portfolioViewMode !== 'undefined' && portfolioViewMode === 'BTC' && isCryptoType(cuenta.tipo) && btcPriceData.price > 0;
 
                 let cInvertido, cPnl, cReal;
-                let unitLabel = '€'; // Etiqueta de unidad por defecto
 
                 if (showInBTC) {
-                    // CONVERSIÓN A BTC PARA ESTA TARJETA
-                    unitLabel = '₿';
                     cInvertido = formatBTC((cuenta.capitalInvertido / 100) / btcPriceData.price);
                     cReal = formatBTC((cuenta.valorActual / 100) / btcPriceData.price);
-                    
                     const pnlVal = (cuenta.pnlAbsoluto / 100) / btcPriceData.price;
                     cPnl = formatBTC(pnlVal);
                 } else {
-                    // MODO NORMAL (EUROS)
                     cInvertido = formatCurrencyHTML(cuenta.capitalInvertido);
-					cReal = formatCurrencyHTML(cuenta.valorActual);
-					cPnl = formatCurrencyHTML(cuenta.pnlAbsoluto);
+                    cReal = formatCurrencyHTML(cuenta.valorActual);
+                    cPnl = formatCurrencyHTML(cuenta.pnlAbsoluto);
                 }
                 
                 const cPorcentaje = cuenta.pnlPorcentual.toFixed(2) + '%';
                 const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
                 const pnlSign = cuenta.pnlAbsoluto >= 0 ? '+' : '';
                 
-                // Barra de peso (siempre basada en valoración EUR para ser relativa al total)
                 const peso = portfolioTotalValorado > 0 ? (cuenta.valorActual / portfolioTotalValorado) * 100 : 0;
                 const barColor = colorMap[toSentenceCase(cuenta.tipo || 'S/T')] || 'var(--c-primary)';
-                
-                // Estilo especial para tarjetas en modo BTC
                 const cardStyle = showInBTC ? 'border-left: 3px solid #F7931A;' : '';
+
+                // --- NUEVO: Formateo de la fecha de actualización ---
+                const lastUpdateStr = cuenta.lastUpdate 
+                    ? new Date(cuenta.lastUpdate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
+                    : '-';
 
                 return `
                 <div class="portfolio-asset-card" data-action="view-account-details" data-id="${cuenta.id}" data-is-investment="true" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; ${cardStyle}">
@@ -3516,6 +3511,9 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                         <div style="display:flex; flex-direction:column; text-align:right;">
                             <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Valor Real</span>
                             <span style="font-size:0.9rem; font-weight:800; color:var(--c-on-surface);">${cReal}</span>
+                            <span style="font-size:0.65rem; color:var(--c-on-surface-tertiary); margin-top:2px; font-weight:500;">
+                                <span class="material-icons" style="font-size:10px; vertical-align:middle;">history</span> ${lastUpdateStr}
+                            </span>
                         </div>
 
                     </div>
