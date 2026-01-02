@@ -12124,3 +12124,162 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// ===============================================
+// === LÓGICA DE LA SUPER CALCULADORA (v2.0) ===
+// ===============================================
+
+const Calculator = {
+    currentInput: '',       // Lo que el usuario escribe
+    previousInput: '',      // El número anterior a la operación
+    operation: undefined,   // La operación (+, -, *, /)
+    targetInput: null,      // El input HTML donde pondremos el resultado
+    
+    init() {
+        // Vincular todos los inputs de dinero para que abran la calc
+        // Busca inputs de tipo 'number' o con clase 'input-amount'
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('input[type="number"], .input-amount')) {
+                // Prevenir teclado nativo móvil (opcional, si prefieres solo calc)
+                e.target.blur(); 
+                this.open(e.target);
+            }
+        });
+
+        // Eventos de los botones
+        document.querySelector('.calc-keypad').addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            
+            const key = btn.dataset.key;
+            this.handleInput(key);
+        });
+
+        // Cerrar al hacer clic fuera (en el fondo oscuro)
+        document.getElementById('calculator-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'calculator-modal') this.close();
+        });
+    },
+
+    open(targetElement) {
+        this.targetInput = targetElement;
+        this.currentInput = targetElement.value || '0';
+        this.previousInput = '';
+        this.operation = undefined;
+        this.updateDisplay();
+        
+        const modal = document.getElementById('calculator-modal');
+        modal.style.display = 'flex';
+        // Pequeño delay para la animación CSS
+        setTimeout(() => modal.classList.add('active'), 10);
+    },
+
+    close() {
+        const modal = document.getElementById('calculator-modal');
+        modal.classList.remove('active');
+        setTimeout(() => modal.style.display = 'none', 300);
+    },
+
+    handleInput(key) {
+        if (!isNaN(key) || key === '.') {
+            this.appendNumber(key);
+        } else if (key === 'C') {
+            this.clear();
+        } else if (key === 'backspace') {
+            this.delete();
+        } else if (key === '%') {
+             // Lógica simple de porcentaje
+             this.currentInput = (parseFloat(this.currentInput) / 100).toString();
+        } else if (['+', '-', '*', '/'].includes(key)) {
+            this.chooseOperation(key);
+        } else if (key === 'check' || key === undefined) { // Check es confirmar
+             // Si es el botón de check, simplemente cerramos y mantenemos el valor
+             // (o calculamos si había una operación pendiente)
+             if (this.operation != null) this.compute();
+             this.confirmResult();
+        }
+        this.updateDisplay();
+    },
+
+    appendNumber(number) {
+        if (number === '.' && this.currentInput.includes('.')) return;
+        if (this.currentInput === '0' && number !== '.') {
+            this.currentInput = number;
+        } else {
+            this.currentInput = this.currentInput.toString() + number.toString();
+        }
+    },
+
+    chooseOperation(op) {
+        if (this.currentInput === '') return;
+        if (this.previousInput !== '') {
+            this.compute();
+        }
+        this.operation = op;
+        this.previousInput = this.currentInput;
+        this.currentInput = '';
+    },
+
+    compute() {
+        let computation;
+        const prev = parseFloat(this.previousInput);
+        const current = parseFloat(this.currentInput);
+        if (isNaN(prev) || isNaN(current)) return;
+        
+        switch (this.operation) {
+            case '+': computation = prev + current; break;
+            case '-': computation = prev - current; break;
+            case '*': computation = prev * current; break;
+            case '/': computation = prev / current; break;
+            default: return;
+        }
+        this.currentInput = computation;
+        this.operation = undefined;
+        this.previousInput = '';
+    },
+
+    clear() {
+        this.currentInput = '0';
+        this.previousInput = '';
+        this.operation = undefined;
+    },
+
+    delete() {
+        this.currentInput = this.currentInput.toString().slice(0, -1);
+        if (this.currentInput === '') this.currentInput = '0';
+    },
+
+    updateDisplay() {
+        document.getElementById('calc-result').innerText = this.formatNumber(this.currentInput);
+        if (this.operation != null) {
+            document.getElementById('calc-operation').innerText = 
+                `${this.formatNumber(this.previousInput)} ${this.operation}`;
+        } else {
+            document.getElementById('calc-operation').innerText = '';
+        }
+    },
+    
+    formatNumber(num) {
+        // Formato bonito visual (no afecta al valor real)
+        if(!num) return '';
+        const n = parseFloat(num);
+        if (isNaN(n)) return '';
+        return n.toLocaleString('es-ES', { maximumFractionDigits: 2 });
+    },
+
+    confirmResult() {
+        if (this.targetInput) {
+            // Asigna el valor al input original
+            this.targetInput.value = parseFloat(this.currentInput); 
+            // Dispara evento para que la app sepa que cambió
+            this.targetInput.dispatchEvent(new Event('input')); 
+            this.targetInput.dispatchEvent(new Event('change'));
+        }
+        this.close();
+    }
+};
+
+// Inicializar la calculadora cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    Calculator.init();
+    console.log("🚀 Calculadora Nativa Integrada");
+});
