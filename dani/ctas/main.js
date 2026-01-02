@@ -8735,44 +8735,50 @@ const renderInversionesPage = async (containerId) => {
 
 /* --- FUNCIÓN NUEVA: Lógica para Duplicar Movimiento --- */
 const handleDuplicateMovement = (originalMovement) => {
-    // 1. Cerramos el modal actual para evitar conflictos
+    if (!originalMovement) return;
+
+    // 1. Cerramos el modal actual para evitar conflictos visuales
     hideModal('movimiento-modal');
 
-    // 2. Esperamos brevemente a que cierre la animación
+    // 2. Esperamos un poco a que termine la animación de cierre
     setTimeout(() => {
-        // 3. Abrimos el formulario en modo 'nuevo' pero pasando el tipo
+        // 3. Abrimos el formulario como "NUEVO" (null en ID), pero pasando el tipo original
         startMovementForm(null, false, originalMovement.tipo);
 
-        // 4. Rellenamos los datos una vez el formulario está renderizado
+        // 4. Rellenamos los datos visuales una vez el formulario se ha dibujado
         setTimeout(() => {
-            // Título personalizado
-            const titleEl = select('form-movimiento-title');
+            // Cambiar título para que el usuario sepa que es una copia
+            const titleEl = document.getElementById('form-movimiento-title');
             if (titleEl) titleEl.textContent = 'Duplicar Movimiento';
 
-            // Cantidad
-            const cantidadInput = select('movimiento-cantidad');
+            // Copiar Cantidad
+            const cantidadInput = document.getElementById('movimiento-cantidad');
             if (cantidadInput) {
-                // Usamos tu formateador existente o raw
-                cantidadInput.value = formatAsCurrencyInput(originalMovement.cantidad);
-                updateInputMirror(cantidadInput); // Actualizar espejo visual
+                // Usamos el valor numérico directo
+                cantidadInput.value = originalMovement.cantidad; 
+                // Actualizamos el "espejo" visual (los números grandes)
+                if (typeof updateInputMirror === 'function') {
+                    updateInputMirror(cantidadInput);
+                }
             }
 
-            // Descripción (Añadimos marca de copia)
-            const descInput = select('movimiento-descripcion');
+            // Copiar Descripción (Añadiendo "Copia")
+            const descInput = document.getElementById('movimiento-descripcion');
             if (descInput) descInput.value = `${originalMovement.descripcion} (Copia)`;
 
-            // Concepto
-            const conceptoSelect = select('movimiento-concepto');
+            // Copiar Concepto/Categoría
+            const conceptoSelect = document.getElementById('movimiento-concepto');
             if (conceptoSelect) {
                 conceptoSelect.value = originalMovement.conceptoId;
-                // Disparamos evento para que se actualicen los selectores visuales custom
+                // Forzamos el evento 'change' para que se actualicen los iconos visuales
                 conceptoSelect.dispatchEvent(new Event('change')); 
             }
 
-            // Cuenta(s)
+            // Copiar Cuenta(s)
             if (originalMovement.tipo === 'traspaso') {
-                const origenSelect = select('movimiento-cuenta-origen');
-                const destinoSelect = select('movimiento-cuenta-destino');
+                const origenSelect = document.getElementById('movimiento-cuenta-origen');
+                const destinoSelect = document.getElementById('movimiento-cuenta-destino');
+                
                 if (origenSelect) {
                     origenSelect.value = originalMovement.cuentaOrigenId;
                     origenSelect.dispatchEvent(new Event('change'));
@@ -8782,18 +8788,19 @@ const handleDuplicateMovement = (originalMovement) => {
                     destinoSelect.dispatchEvent(new Event('change'));
                 }
             } else {
-                const cuentaSelect = select('movimiento-cuenta');
+                const cuentaSelect = document.getElementById('movimiento-cuenta');
                 if (cuentaSelect) {
                     cuentaSelect.value = originalMovement.cuentaId;
                     cuentaSelect.dispatchEvent(new Event('change'));
                 }
             }
             
-            hapticFeedback('success');
-            showToast('Datos duplicados. Revisa y guarda.');
+            // Feedback para el usuario
+            if (typeof hapticFeedback === 'function') hapticFeedback('success');
+            if (typeof showToast === 'function') showToast('Datos copiados. Revisa y guarda.');
 
-        }, 150); // Pequeño retardo para asegurar que el DOM del modal está listo
-    }, 300);
+        }, 200); // Pequeña espera para asegurar que el DOM del nuevo modal existe
+    }, 350); // Espera para que el modal anterior se cierre bien
 };
 
 // ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
