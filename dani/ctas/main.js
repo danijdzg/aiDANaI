@@ -12135,29 +12135,44 @@ const Calculator = {
     targetInput: null,      // El input HTML donde pondremos el resultado
     
     init() {
-        // Vincular todos los inputs de dinero para que abran la calc
-        // Busca inputs de tipo 'number' o con clase 'input-amount'
+        // 1. Detectar clics en CUALQUIER input de dinero o cantidad
         document.addEventListener('click', (e) => {
-            if (e.target.matches('input[type="number"], .input-amount')) {
-                // Prevenir teclado nativo móvil (opcional, si prefieres solo calc)
-                e.target.blur(); 
+            // Si el elemento clickeado es un input y (es de tipo number O tiene id 'cantidad' O tiene clase 'monto')
+            if (e.target.tagName === 'INPUT' && 
+               (e.target.type === 'number' || e.target.id.includes('cantidad') || e.target.classList.contains('form-input'))) {
+                
+                // Evitamos que salga el teclado del móvil
+                e.target.blur();
+                e.preventDefault(); 
+                
+                // Abrimos nuestra calculadora
+                console.log("🚀 Abriendo calculadora para:", e.target.id);
                 this.open(e.target);
             }
         });
 
-        // Eventos de los botones
-        document.querySelector('.calc-keypad').addEventListener('click', (e) => {
-            const btn = e.target.closest('button');
-            if (!btn) return;
-            
-            const key = btn.dataset.key;
-            this.handleInput(key);
-        });
+        // 2. Eventos de los botones de la calculadora
+        const keypad = document.querySelector('.calc-keypad');
+        if (keypad) {
+            keypad.addEventListener('click', (e) => {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+                // Efecto visual de pulsación
+                btn.style.transform = "scale(0.95)";
+                setTimeout(()=> btn.style.transform = "scale(1)", 100);
 
-        // Cerrar al hacer clic fuera (en el fondo oscuro)
-        document.getElementById('calculator-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'calculator-modal') this.close();
-        });
+                const key = btn.dataset.key;
+                this.handleInput(key);
+            });
+        }
+
+        // 3. Cerrar al hacer clic fuera
+        const modal = document.getElementById('calculator-modal');
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target.id === 'calculator-modal') this.close();
+            });
+        }
     },
 
     open(targetElement) {
