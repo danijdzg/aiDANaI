@@ -7295,8 +7295,47 @@ const showDrillDownModal = (title, movements) => {
         }
     }, 50);
 };
-        const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
+       // Función Maestra de Confirmación
+const showConfirmationModal = (message, onConfirm, title = "Confirmar Acción") => {
+    const modal = document.getElementById('confirmation-modal');
+    if (!modal) {
+        console.error("CRÍTICO: Falta el HTML del #confirmation-modal");
+        return;
+    }
 
+    // 1. Inyectar Texto
+    const titleEl = modal.querySelector('#confirmation-title');
+    const msgEl = modal.querySelector('#confirmation-message');
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+
+    // 2. Preparar el Botón de "Sí, eliminar"
+    const confirmBtn = modal.querySelector('#btn-confirm-action');
+    
+    // TRUCO ELITE: Clonamos el botón para eliminar cualquier evento 'click' antiguo
+    // y evitar que se borren cosas por duplicado.
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+    newConfirmBtn.onclick = () => {
+        // Ejecutamos la acción de borrado
+        onConfirm();
+        // Cerramos el modal
+        modal.classList.remove('modal-overlay--active');
+    };
+
+    // 3. Configurar botón Cancelar
+    const cancelBtn = modal.querySelector('[data-action="cancel-confirmation"]');
+    if(cancelBtn) {
+        cancelBtn.onclick = () => {
+            modal.classList.remove('modal-overlay--active');
+        };
+    }
+
+    // 4. Feedback físico y Mostrar
+    if (typeof hapticFeedback === 'function') hapticFeedback('warning'); // Vibración de advertencia
+    modal.classList.add('modal-overlay--active');
+};
 		
 // =================================================================
 // === INICIO: FUNCIÓN showToast (CORRECCIÓN CRÍTICA) ===
