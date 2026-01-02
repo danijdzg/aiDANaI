@@ -7566,15 +7566,39 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
 
     // ▼▼▼ AQUÍ ESTÁ LA MEJORA 1: AUTO-APERTURA INTELIGENTE ▼▼▼
     if (mode === 'new') {
-        setTimeout(() => {
-            const amountInput = select('movimiento-cantidad');
-            if (amountInput) {
-                // En lugar de solo focus(), llamamos directamente a la calculadora
-                showCalculator(amountInput);
+        // --- CONEXIÓN SEGURA CON LA CALCULADORA ---
+    setTimeout(() => {
+        const amountInput = document.getElementById('movimiento-cantidad');
+        
+        if (amountInput) {
+            // 1. Configuración visual del input
+            amountInput.setAttribute('inputmode', 'none'); // Sin teclado móvil
+            amountInput.setAttribute('readonly', 'true');  // Solo lectura
+            amountInput.style.caretColor = 'transparent';  // Sin cursor parpadeando
+            
+            // 2. Función de apertura (Click)
+            const abrirCalc = function(e) {
+                if(e) e.preventDefault();
+                // Intentamos abrir con el nuevo nombre, si falla, usamos el alias
+                if (typeof window.openCalculator === 'function') {
+                    window.openCalculator(amountInput);
+                } else if (typeof window.showCalculator === 'function') {
+                    window.showCalculator(amountInput);
+                } else {
+                    console.error("⚠️ La calculadora aún no se ha cargado. Revisa que el código esté al final de main.js");
+                }
+            };
+
+            // Asignamos el evento click
+            amountInput.onclick = abrirCalc;
+            
+            // Si estamos en modo 'new' (nuevo movimiento), abrimos automáticamente
+            // (Asegúrate de que 'mode' esté definido en tu función, si no, quita esta línea)
+            if (typeof mode !== 'undefined' && mode === 'new') {
+                abrirCalc();
             }
-        }, 300); // Un poco más de tiempo para asegurar que el modal terminó de subir
-    }
-};
+        }
+    }, 500); // Damos 500ms para asegurar que el DOM y las funciones window. estén listas
         
         
         const showGlobalSearchModal = () => {
@@ -11940,3 +11964,154 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+/* ================================================================= */
+/* === MOTOR DE CALCULADORA GLOBAL (FIX DEFINITIVO) === */
+/* ================================================================= */
+
+// Definimos el estado globalmente
+window.calculatorState = {
+    displayValue: '0',
+    historyValue: '',
+    firstOperand: null,
+    waitingForSecondOperand: false,
+    operator: null,
+    targetInput: null
+};
+
+// --- FUNCIÓN DE APERTURA (La que busca tu código) ---
+window.openCalculator = function(inputElement) {
+    window.calculatorState.targetInput = inputElement;
+    
+    // Reseteamos o cargamos valor
+    window.resetCalculator();
+    if(inputElement.value && inputElement.value !== '') {
+        // Limpiar € y espacios
+        let cleanVal = inputElement.value.replace(/[€\s]/g, '').trim();
+        // Si es 0,00 lo dejamos en 0
+        if(cleanVal === '0,00') cleanVal = '0';
+        // Quitamos puntos de mil para la lógica interna
+        window.calculatorState.displayValue = cleanVal.replace(/\./g, '');
+    }
+    
+    window.updateCalculatorScreen();
+    
+    const overlay = document.getElementById('calculator-overlay');
+    if(overlay) overlay.classList.add('modal-overlay--active');
+};
+
+// --- ALIAS DE SEGURIDAD (IMPORTANTE) ---
+// Esto arregla tu error: si el código antiguo llama a "showCalculator",
+// nosotros lo redirigimos a "openCalculator" automáticamente.
+window.showCalculator = window.openCalculator;
+
+// --- FUNCIÓN DE CIERRE ---
+window.closeCalculator = function() {
+    const overlay = document.getElementById('calculator-overlay');
+    if(overlay) overlay.classList.remove('modal-overlay--active');
+};
+
+// --- MOTOR DE TECLAS ---
+window.handleCalculatorInput = function(key) {
+    if (key === 'done') {
+        window.finalizeCalculation();
+        return;
+    }
+
+    const { displayValue, waitingForSecondOperand } = window.calculatorState;
+
+    if (!isNaN(key) || key === 'comma') {
+        if (waitingForSecondOperand) {
+            window.calculatorState.displayValue = key === 'comma' ? '0,' : key;
+            window.calculatorState.waitingForSecondOperand = false;
+        } else {
+            if (key === 'comma' && displayValue.includes(',')) return;
+            window.calculatorState.displayValue = displayValue === '0' && key !== 'comma' ? key : displayValue + (key === 'comma' ? ',' : key);
+        }
+    } else if (key === 'clear') {
+        window.resetCalculator();
+    } else if (key === 'backspace') {
+        window.calculatorState.displayValue = window.calculatorState.displayValue.length > 1 ? window.calculatorState.displayValue.slice(0, -1) : '0';
+    } else {
+        window.handleOperator(key);
+    }
+    window.updateCalculatorScreen();
+};
+
+window.handleOperator = function(nextOperator) {
+    const { firstOperand, displayValue, operator } = window.calculatorState;
+    const inputValue = parseFloat(displayValue.replace(/\./g, '').replace(',', '.'));
+
+    if (operator && window.calculatorState.waitingForSecondOperand) {
+        window.calculatorState.operator = nextOperator;
+        return;
+    }
+
+    if (firstOperand == null) {
+        window.calculatorState.firstOperand = inputValue;
+    } else if (operator) {
+        const result = window.performCalculation(operator, firstOperand, inputValue);
+        // Formatear resultado intermedio (string con coma)
+        window.calculatorState.displayValue = String(result).replace('.', ','); 
+        window.calculatorState.firstOperand = result;
+    }
+
+    window.calculatorState.waitingForSecondOperand = true;
+    window.calculatorState.operator = nextOperator;
+    
+    const symbol = { add: '+', subtract: '-', multiply: '×', divide: '÷' }[nextOperator];
+    window.calculatorState.historyValue = `${window.calculatorState.firstOperand.toLocaleString('es-ES')} ${symbol}`;
+};
+
+window.performCalculation = function(op, a, b) {
+    switch(op) {
+        case 'add': return a + b;
+        case 'subtract': return a - b;
+        case 'multiply': return a * b;
+        case 'divide': return b !== 0 ? a / b : 0;
+        default: return b;
+    }
+};
+
+window.finalizeCalculation = function() {
+    if (window.calculatorState.operator && !window.calculatorState.waitingForSecondOperand) {
+        window.handleOperator(window.calculatorState.operator);
+    }
+    
+    // Obtenemos el valor final numérico
+    let finalRaw = window.calculatorState.firstOperand !== null ? window.calculatorState.firstOperand : parseFloat(window.calculatorState.displayValue.replace(/\./g, '').replace(',', '.'));
+    
+    if (isNaN(finalRaw)) finalRaw = 0;
+
+    // Formatear bonito: 1.250,50
+    const finalFormatted = finalRaw.toLocaleString('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+
+    if (window.calculatorState.targetInput) {
+        window.calculatorState.targetInput.value = finalFormatted;
+        window.calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        window.calculatorState.targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    window.closeCalculator();
+};
+
+window.resetCalculator = function() {
+    window.calculatorState.displayValue = '0';
+    window.calculatorState.historyValue = '';
+    window.calculatorState.firstOperand = null;
+    window.calculatorState.waitingForSecondOperand = false;
+    window.calculatorState.operator = null;
+    window.updateCalculatorScreen();
+};
+
+window.updateCalculatorScreen = function() {
+    const display = document.getElementById('calculator-display');
+    const history = document.getElementById('calculator-history-display');
+    if(!display) return;
+    
+    // Renderizar valor principal
+    display.textContent = window.calculatorState.displayValue;
+    // Renderizar historial
+    if(history) history.textContent = window.calculatorState.historyValue;
+};
