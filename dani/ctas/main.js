@@ -4766,23 +4766,7 @@ async function calculateHistoricalIrrForGroup(accountIds) {
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
-	// Lógica de Saludo Empático aiDANaI
-    const hora = new Date().getHours();
-    let saludo = "Hola";
-    if (hora >= 5 && hora < 12) saludo = "Buenos días";
-    else if (hora >= 12 && hora < 20) saludo = "Buenas tardes";
-    else saludo = "Buenas noches";
-    
-    // Si tenemos el nombre del usuario, lo usamos (o "Jefe" por defecto)
-    const nombreUsuario = currentUser?.displayName ? currentUser.displayName.split(' ')[0] : 'Jefe';
 
-    container.innerHTML = `
-        <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
-            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <div style="font-size: 0.9rem; font-weight: 700; color: var(--c-on-surface); opacity: 0.9;">
-                        ${saludo}, ${nombreUsuario} </div>
-                    ```
     container.innerHTML = `
         <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
             
@@ -7438,58 +7422,7 @@ const showDrillDownModal = (title, movements) => {
         applyInvestmentItemInteractions(document.getElementById('generic-modal-body'));
     }, 100);
 };
-        /* EN main.js - SUSTITITUYE LA FUNCIÓN showConfirmationModal POR ESTA */
-
-const showConfirmationModal = (msg, onConfirm, title = "Confirmar Acción") => {
-    hapticFeedback('medium');
-    const id = 'confirmation-modal';
-    
-    // Limpieza de seguridad
-    const existingModal = document.getElementById(id);
-    if (existingModal) existingModal.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = id;
-    overlay.className = 'modal-overlay modal-overlay--active';
-    
-    // CORRECCIÓN aiDANaI: Elevamos el z-index para superar al formulario de edición (1050)
-    // Usamos 1300 para estar seguros, pero sin tapar el Login (2000) ni la Calculadora (12000)
-    overlay.style.zIndex = '1300'; 
-
-    overlay.innerHTML = `
-        <div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg); max-width: 320px;">
-            <div class="modal__header" style="margin-bottom: var(--sp-2);">
-                <h3 class="modal__title" style="font-size: 1.1rem; color: var(--c-danger);">${title}</h3>
-            </div>
-            <div class="modal__body" style="padding-right: 0;">
-                <p style="font-size: 0.95rem; color: var(--c-on-surface);">${msg}</p>
-                <div style="display:flex; gap:var(--sp-3); margin-top:var(--sp-4);">
-                    <button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button>
-                    <button class="btn btn--danger btn--full" data-action="confirm-action">Sí, eliminar</button>
-                </div>
-            </div>
-        </div>`;
-
-    document.body.appendChild(overlay);
-
-    // Manejadores de eventos
-    const confirmBtn = overlay.querySelector('[data-action="confirm-action"]');
-    const cancelBtn = overlay.querySelector('[data-action="close-modal"]');
-
-    if (confirmBtn) {
-        confirmBtn.onclick = () => {
-            hapticFeedback('medium');
-            onConfirm();
-            overlay.remove();
-        };
-        // Foco automático en el botón peligroso para confirmar rápido (o en cancelar si prefieres seguridad)
-        confirmBtn.focus(); 
-    }
-
-    if (cancelBtn) {
-        cancelBtn.onclick = () => overlay.remove();
-    }
-};
+        const showConfirmationModal=(msg, onConfirm, title="Confirmar Acción")=>{ hapticFeedback('medium'); const id='confirmation-modal';const existingModal = document.getElementById(id); if(existingModal) existingModal.remove(); const overlay=document.createElement('div');overlay.id=id;overlay.className='modal-overlay modal-overlay--active'; overlay.innerHTML=`<div class="modal" role="alertdialog" style="border-radius:var(--border-radius-lg)"><div class="modal__header"><h3 class="modal__title">${title}</h3></div><div class="modal__body"><p>${msg}</p><div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4);"><button class="btn btn--secondary btn--full" data-action="close-modal" data-modal-id="confirmation-modal">Cancelar</button><button class="btn btn--danger btn--full" data-action="confirm-action">Sí, continuar</button></div></div></div>`; document.body.appendChild(overlay); (overlay.querySelector('[data-action="confirm-action"]')).onclick=()=>{hapticFeedback('medium');onConfirm();overlay.remove();}; (overlay.querySelector('[data-action="close-modal"]')).onclick=()=>overlay.remove(); };
 
 		
 // =================================================================
