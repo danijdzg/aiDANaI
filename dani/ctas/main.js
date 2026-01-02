@@ -11950,51 +11950,90 @@ const createUnifiedRowHTML = (m) => {
 };
 
 // =========================================================
-// 🛡️ SOLUCIÓN COMITÉ (ADAPTADA A TU CÓDIGO REAL)
+// 🚀 SOLUCIÓN FINAL: NAVEGACIÓN EXTENDIDA (AUTO-EXPANDIR)
+// (Pegar al final de main.js - Versión "Abrir y Mostrar")
 // =========================================================
-document.addEventListener('DOMContentLoaded', () => {
-    // Buscamos el botón real que está en tu index.html
-    const btnBorrar = document.getElementById('delete-movimiento-btn');
+document.addEventListener('click', (e) => {
+    // 1. Detectar clic en tarjetas del Panel
+    const card = e.target.closest('.hero-card, .card, .kpi-card, div[class*="card"]');
+    if (!card) return;
 
-    if (btnBorrar) {
-        // Le quitamos cualquier evento anterior para evitar duplicados
-        const nuevoBtn = btnBorrar.cloneNode(true);
-        btnBorrar.parentNode.replaceChild(nuevoBtn, btnBorrar);
+    // 2. Analizar el texto de la tarjeta
+    const text = (card.textContent || '').toLowerCase();
+    let targetId = null;
 
-        // Añadimos el evento "Click" directo y robusto
-        nuevoBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+    // --- MAPA DE DESTINOS ---
+    
+    // A) Tarjeta PATRIMONIO -> Balance Neto
+    if ((text.includes('patrimonio') || text.includes('neto')) && !card.id.includes('balance')) {
+        targetId = 'seccion-balance-neto';
+    }
+    
+    // B) Tarjeta CAPITAL INVERTIDO / MERCADO -> Inversiones
+    // Añadimos "capital" y "invertido" a la búsqueda
+    else if ((text.includes('mercado') || text.includes('valor real') || text.includes('inversiones') || text.includes('capital')) && !card.id.includes('inversiones')) {
+        targetId = 'seccion-inversiones';
+    }
 
-            // 1. Obtenemos el ID del movimiento del input oculto que usa tu formulario
-            const idInput = document.getElementById('movimiento-id');
-            const idToDelete = idInput ? idInput.value : null;
+    // 3. EJECUTAR MANIOBRA
+    if (targetId) {
+        console.log(`📍 Destino detectado: ${targetId}. Iniciando navegación extendida...`);
+
+        // A) Cambiar pestaña a "Informes"
+        const btnInformes = document.querySelector('button[data-page="planificar-page"]');
+        if (btnInformes) btnInformes.click();
+
+        // B) EL VIGILANTE: Esperar a que la sección exista
+        const observer = new MutationObserver((mutations, obs) => {
+            const elemento = document.getElementById(targetId);
             
-            // 2. Detectamos si es recurrente (tu código usa un dataset para esto)
-            const isRecurrent = nuevoBtn.dataset.isRecurrent === 'true';
+            // Si el elemento existe en el DOM
+            if (elemento) {
+                // ¡Apareció! Dejamos de vigilar
+                obs.disconnect();
 
-            if (!idToDelete) {
-                showToast("Error: No se encuentra el ID del movimiento.", "danger");
-                return;
-            }
-
-            // 3. Usamos tu propia función de confirmación
-            const mensaje = isRecurrent ? '¿Eliminar operación recurrente?' : '¿Eliminar movimiento permanentemente?';
-            
-            showConfirmationModal(mensaje, async () => {
-                // Cerramos el modal primero
-                const modal = document.getElementById('movimiento-modal');
-                if (modal) modal.classList.remove('modal-overlay--active');
+                // C) LÓGICA DE "EXTENDIDO" (Auto-Abrir)
+                // 1. Si es un elemento <details>, lo forzamos a abrirse
+                if (elemento.tagName === 'DETAILS') {
+                    elemento.open = true;
+                }
                 
-                // 4. Llamamos a tu función de borrado existente que ya funciona bien
-                await deleteMovementAndAdjustBalance(idToDelete, isRecurrent);
-            });
+                // 2. Buscamos si hay un botón de "toggle", "header" o "summary" para abrirlo
+                // Intentamos hacer clic en la cabecera por si está colapsado
+                const trigger = elemento.querySelector('summary, .card-header, .accordion-button, .header-toggle');
+                if (trigger) {
+                    // Solo hacemos clic si parece estar cerrado (opcional, pero seguro pulsar)
+                    trigger.click();
+                }
+
+                // D) SCROLL Y FOCO (Tras una micro-pausa para que la animación de abrir termine)
+                setTimeout(() => {
+                    // Scroll suave para centrar el gráfico
+                    elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    // Efecto visual "Aquí está el gráfico"
+                    elemento.style.transition = "transform 0.4s ease, box-shadow 0.4s ease";
+                    elemento.style.transform = "scale(1.02)";
+                    elemento.style.boxShadow = "0 0 30px rgba(0, 179, 77, 0.6)"; // Luz verde
+                    elemento.style.border = "2px solid var(--c-primary)"; 
+                    
+                    // Limpieza del efecto
+                    setTimeout(() => {
+                        elemento.style.transform = "scale(1)";
+                        elemento.style.boxShadow = "none";
+                        elemento.style.border = "none";
+                    }, 2000);
+                }, 300); // Damos 300ms para que se despliegue el acordeón
+            }
         });
-        
-        console.log("✅ Botón de borrar reparado y vinculado.");
+
+        // Iniciamos la vigilancia
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Seguridad: Desconectar a los 8 segundos si no se encuentra
+        setTimeout(() => observer.disconnect(), 8000);
     }
 });
-
 // =========================================================
 // 🚀 SOLUCIÓN DEFINITIVA: VIGILANTE DE NAVEGACIÓN (MutationObserver)
 // (Pegar al final de main.js sustituyendo el código anterior de navegación)
@@ -12064,81 +12103,86 @@ document.addEventListener('click', (e) => {
 });
 
 // =========================================================
-// 💰 SOLUCIÓN: REPARACIÓN GUARDADO DE INVERSIONES
+// 🔧 SOLUCIÓN DEFINITIVA: ACTUALIZAR INVERSIONES (Anti-Burbujeo)
 // (Pegar al final de main.js)
 // =========================================================
-document.addEventListener('click', async (e) => {
-    // 1. Detectamos si pulsas el botón de "Guardar" en el modal de Inversiones
-    // Buscamos por ID 'btn-save-inversion' o por acción 'save-inversion'
-    const btnSave = e.target.closest('#btn-save-inversion, [data-action="save-inversion"]');
+
+// 1. Definimos la función para abrir el modal correctamente
+window.openInversionModal = (id, nombre, valorActual) => {
+    const modal = document.getElementById('inversion-modal');
+    if (!modal) return;
+
+    // Rellenamos los campos
+    const inputId = document.getElementById('inversion-id');
+    const inputNombre = document.getElementById('inversion-nombre-display'); // Si existe un campo de texto
+    const inputValor = document.getElementById('inversion-valor');
+    const inputFecha = document.getElementById('inversion-fecha');
     
-    if (btnSave) {
-        e.preventDefault(); // Evitamos recargas raras
+    if (inputId) inputId.value = id;
+    if (inputValor) inputValor.value = valorActual;
+    
+    // Ponemos la fecha de hoy por defecto
+    if (inputFecha) inputFecha.value = new Date().toISOString().split('T')[0];
+
+    // Mostramos el modal
+    modal.style.display = 'flex';
+    // Pequeño timeout para permitir la transición CSS si la hay
+    setTimeout(() => modal.classList.add('modal-overlay--active'), 10);
+    
+    console.log(`✏️ Editando inversión: ${nombre} (${id})`);
+};
+
+// 2. El Escudo "Jedi" (Captura el clic ANTES de que llegue a la tarjeta)
+document.addEventListener('click', (e) => {
+    // Buscamos si el clic fue en un botón dentro de la sección de inversiones
+    // Buscamos botones o iconos 'edit' dentro de #seccion-inversiones
+    const btnEdit = e.target.closest('#seccion-inversiones button, #seccion-inversiones .btn-icon');
+    
+    // Si encontramos el botón Y parece ser el de editar (tiene el icono edit o lápiz)
+    if (btnEdit && (btnEdit.innerHTML.includes('edit') || btnEdit.innerHTML.includes('lápiz'))) {
+        
+        // ¡ALTO AHÍ! Detenemos el evento inmediatamente.
+        // Al usar 'true' abajo (Fase de Captura), lo pillamos antes de que la tarjeta lo sepa.
         e.stopPropagation();
+        e.preventDefault();
 
-        console.log("💰 Intentando guardar inversión...");
-
-        // 2. Recopilamos los datos del formulario
-        // Estos son los IDs estándar. Si tu formulario usa otros, el código avisa.
-        const inputId = document.getElementById('inversion-id');
-        const inputValor = document.getElementById('inversion-valor'); // O 'inversion-cantidad'
-        const inputFecha = document.getElementById('inversion-fecha');
-
-        // Verificamos que encontramos todo
-        if (!inputId || !inputValor) {
-            console.error("❌ No encuentro los campos del formulario (inversion-id o inversion-valor)");
-            showToast("Error: Campos no encontrados", "danger");
-            return;
-        }
-
-        const id = inputId.value;
-        const nuevoValor = parseFloat(inputValor.value);
-        const nuevaFecha = inputFecha ? inputFecha.value : new Date().toISOString().split('T')[0];
-
-        if (!id) {
-            showToast("Error: No hay ID de inversión", "danger");
-            return;
-        }
-
-        // 3. Animación de carga en el botón
-        const textoOriginal = btnSave.innerHTML;
-        btnSave.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
-        btnSave.disabled = true;
-
-        try {
-            // 4. GUARDAMOS EN FIREBASE
-            // Asumimos que la colección se llama 'inversiones' dentro del usuario
-            await fbDb.collection('users').doc(currentUser.uid).collection('inversiones').doc(id).update({
-                valorActual: nuevoValor,
-                fechaActualizacion: nuevaFecha,
-                ultimaModificacion: new Date().toISOString()
-            });
-
-            console.log("✅ Inversión actualizada correctamente.");
-            showToast("Inversión actualizada", "success");
-
-            // 5. Cerrar Modal y Refrescar
-            const modal = document.getElementById('inversion-modal');
-            if (modal) {
-                modal.classList.remove('modal-overlay--active');
-                modal.style.display = 'none'; // Forzamos ocultar por si acaso
+        // Ahora recuperamos los datos para abrir el modal
+        // Intentamos sacarlos de la propia tarjeta padre
+        const card = btnEdit.closest('.card');
+        if (card) {
+            // A) Intentamos sacar el ID de la tarjeta (data-id)
+            // B) Intentamos sacar el valor del texto visible
+            
+            // Buscamos el ID. Normalmente está en la tarjeta para abrir los movimientos.
+            // Si tu código usa onclick="showDrillDownModal('ID_CUENTA',...)" intentaremos extraerlo.
+            let id = card.dataset.id; 
+            
+            // Si no tiene data-id, intentamos buscarlo en el onclick
+            if (!id && card.getAttribute('onclick')) {
+                const match = card.getAttribute('onclick').match(/'([^']+)'/);
+                if (match) id = match[1];
             }
 
-            // Recargamos la sección de inversiones si existe la función
-            if (typeof renderInversiones === 'function') {
-                renderInversiones(); 
-            } else if (typeof renderPlanificacionPage === 'function') {
-                // Si no, recargamos la página entera de informes
-                renderPlanificacionPage();
-            }
+            // Buscamos el valor actual (el texto con el dinero)
+            // Suele estar en un h3, h2 o una clase .amount
+            const valueEl = card.querySelector('h2, h3, .amount, .t-amount');
+            // Limpiamos el texto para dejar solo el número (quitamos €, $, puntos)
+            let rawValue = valueEl ? valueEl.innerText : '0';
+            // Convertimos "5.000,00 €" -> 5000.00
+            let valorNumerico = parseFloat(rawValue.replace(/[^0-9,-]+/g,"").replace('.','').replace(',','.'));
+            if (isNaN(valorNumerico)) valorNumerico = 0;
 
-        } catch (error) {
-            console.error("❌ Error guardando inversión:", error);
-            showToast("Error al guardar", "danger");
-        } finally {
-            // Restauramos el botón
-            btnSave.innerHTML = textoOriginal;
-            btnSave.disabled = false;
+            // Buscamos el nombre
+            const nameEl = card.querySelector('h4, strong, .t-line-1');
+            const nombre = nameEl ? nameEl.innerText : 'Inversión';
+
+            if (id) {
+                // Abrimos el modal manualmente
+                openInversionModal(id, nombre, valorNumerico);
+            } else {
+                console.error("❌ No se pudo encontrar el ID de la inversión en la tarjeta.");
+                showToast("Error: ID no encontrado", "danger");
+            }
         }
     }
-});
+}, true); // <--- IMPORTANTE: 'true' activa la fase de CAPTURA (Prioridad máxima)
