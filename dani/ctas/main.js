@@ -12168,3 +12168,58 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// ==========================================
+// === GESTIÓN DE AJUSTES Y TEMAS ===
+// ==========================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    
+    const themeToggle = document.getElementById('theme-toggle');
+    const settingsModal = document.getElementById('settings-modal');
+    // Asumimos que tienes un botón para abrir ajustes, si no, hay que crearlo.
+    // Buscamos cualquier botón que diga 'abrir ajustes' por si acaso
+    const openSettingsBtns = document.querySelectorAll('[data-action="open-settings"]'); 
+    const closeSettingsBtns = document.querySelectorAll('.close-modal-btn[data-target="settings-modal"]');
+
+    // 1. LÓGICA DEL TEMA (Por defecto Oscuro)
+    // Verificamos si el usuario ya eligió tema claro antes
+    const savedTheme = localStorage.getItem('appTheme');
+    
+    // Si guardó 'light', activamos el modo claro. Si no, no hacemos nada (se queda oscuro por defecto)
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+        if(themeToggle) themeToggle.checked = true; // Encendemos el switch visualmente
+    }
+
+    // 2. ESCUCHAR EL CAMBIO DEL INTERRUPTOR
+    if (themeToggle) {
+        themeToggle.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                // Usuario quiere TEMA CLARO
+                document.body.classList.add('light-theme');
+                localStorage.setItem('appTheme', 'light');
+                console.log('☀️ Tema Claro activado');
+            } else {
+                // Usuario quiere TEMA OSCURO (Por defecto)
+                document.body.classList.remove('light-theme');
+                localStorage.setItem('appTheme', 'dark'); // O remove item
+                console.log('🌑 Tema Oscuro activado');
+            }
+        });
+    }
+
+    // 3. ABRIR Y CERRAR EL MODAL DE AJUSTES
+    // Si ya tienes un botón en tu HTML para ajustes, añadele data-action="open-settings"
+    openSettingsBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            settingsModal.classList.add('modal-overlay--active');
+        });
+    });
+
+    closeSettingsBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            settingsModal.classList.remove('modal-overlay--active');
+        });
+    });
+});
