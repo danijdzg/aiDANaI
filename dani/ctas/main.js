@@ -1118,78 +1118,57 @@ const fetchBtcPrice = async () => {
     return btcPriceData.price || 0; // Retorna 0 o el último precio conocido si falla
 };
 
-// VARIABLES GLOBALES DE ESTADO (Asegúrate de que no estén duplicadas arriba)
+// Variable global para controlar el doble toque (mantenemos esto igual)
 let lastCalcActionTime = 0;
 let calcConfirmState = false; 
 
 const handleCalculatorInput = (key) => {
-    // 1. Elementos del DOM (Obtenidos en tiempo real para evitar errores de referencia)
-    const historyEl = document.getElementById('calculator-history-display');
+    // 1. Elementos (YA NO buscamos historyEl)
     const currentEl = document.getElementById('calculator-display');
     const doneBtn = document.getElementById('calculator-btn-done');
 
-    // 2. Desestructuración del estado actual
-    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed } = calculatorState;
 
-    // --- LÓGICA DE CONFIRMACIÓN (OK / ENTER) ---
+    // --- LÓGICA CONFIRMACIÓN (Igual que antes) ---
     if (key === 'done') {
         const now = Date.now();
         const timeDiff = now - lastCalcActionTime;
 
-        // CASO A: PRIMER CLICK (Pedir confirmación)
-        // Se activa si no estamos en modo confirmación O si ha pasado mucho tiempo (>2s)
         if (!calcConfirmState || timeDiff > 2000) {
+            // Primer Click
             hapticFeedback('medium');
-            
-            // Si hay una operación a medio hacer (ej: "50 + 10"), la resolvemos primero
             if (operand1 !== null && operator !== null) {
                 calculate();
-                displayValue = calculatorState.displayValue; // Actualizamos valor visual
-                // Limpiamos operadores pendientes
+                displayValue = calculatorState.displayValue;
                 operand1 = null; operator = null; waitingForNewValue = true; isResultDisplayed = true;
             }
-
-            // Entramos en MODO CONFIRMACIÓN
             calcConfirmState = true;
             lastCalcActionTime = now;
-            
-            // Feedback Visual en Botón
             if (doneBtn) {
                 doneBtn.textContent = '¿CONFIRMAR?';
-                doneBtn.style.backgroundColor = '#FFD700'; // Dorado Advertencia
+                doneBtn.style.backgroundColor = '#FFD700'; 
                 doneBtn.style.color = '#000';
             }
-            
-            // Actualizamos pantalla y estado
+            // Actualizamos estado y pantalla
             Object.assign(calculatorState, { displayValue, operand1, operator, waitingForNewValue, isResultDisplayed });
             if (currentEl) currentEl.textContent = displayValue;
-            return; // Esperamos el segundo click
-        }
-
-        // CASO B: SEGUNDO CLICK (Confirmación Exitosa)
-        // Solo si estamos en modo confirmación y el click es reciente (<2s)
-        if (calcConfirmState && timeDiff <= 2000) {
+            return;
+        } else {
+            // Segundo Click (Guardar)
             hapticFeedback('success');
-            
-            // Transferir valor
             updateTargetInput(displayValue);
             
-            // Resetear todo
+            // Reset y cerrar
             calcConfirmState = false;
-            historyValue = '';
-            
-            if (doneBtn) { // Restaurar estilo botón
+            if (doneBtn) {
                 doneBtn.textContent = 'OK';
                 doneBtn.style.backgroundColor = ''; 
                 doneBtn.style.color = '';
             }
-
             hideCalculator();
-            
-            // Salto al siguiente campo (UX)
             setTimeout(() => {
+                // Lógica de salto de campo
                 const conceptoSelect = document.getElementById('movimiento-concepto');
-                // Intentar abrir el siguiente select si existe
                 if (conceptoSelect) {
                     const wrapper = conceptoSelect.closest('.custom-select-wrapper');
                     const trigger = wrapper?.querySelector('.custom-select__trigger');
@@ -1200,7 +1179,7 @@ const handleCalculatorInput = (key) => {
         }
     }
 
-    // --- CUALQUIER OTRA TECLA (Resetea la confirmación) ---
+    // Reset de confirmación si toca otra tecla
     if (key !== 'done' && calcConfirmState) {
         calcConfirmState = false;
         if (doneBtn) {
@@ -1210,7 +1189,7 @@ const handleCalculatorInput = (key) => {
         }
     }
 
-    // --- LÓGICA ESTÁNDAR DE CALCULADORA ---
+    // --- LÓGICA OPERATIVA (Sin actualizar historyValue) ---
     const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
 
     if (isOperator) {
@@ -1220,14 +1199,13 @@ const handleCalculatorInput = (key) => {
         }
         operand1 = parseFloat(displayValue.replace(',', '.'));
         operator = key;
-        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`;
+        // Eliminamos la línea historyValue = ...
         waitingForNewValue = true;
         isResultDisplayed = false;
     } else {
         switch(key) {
             case 'clear': 
                 displayValue = '0'; 
-                historyValue = '';
                 operand1 = null; operator = null; waitingForNewValue = false; isResultDisplayed = false;
                 break;
             case 'backspace': 
@@ -1238,24 +1216,23 @@ const handleCalculatorInput = (key) => {
                 if (waitingForNewValue) { displayValue = '0,'; waitingForNewValue = false; }
                 else if (!displayValue.includes(',')) displayValue += ',';
                 break;
-            default: // Números 0-9
+            default: 
                 if (waitingForNewValue || displayValue === '0' || isResultDisplayed) {
                     displayValue = key;
                     waitingForNewValue = false;
                     isResultDisplayed = false;
-                } else if (displayValue.length < 15) { // Límite de caracteres
+                } else if (displayValue.length < 15) {
                     displayValue += key;
                 }
                 break;
         }
     }
 
-    // Guardar estado final
-    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue });
+    // Guardar estado
+    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed });
 
-    // ACTUALIZACIÓN VISUAL OBLIGATORIA
+    // ACTUALIZAR PANTALLA (Solo el número principal)
     if (currentEl) currentEl.textContent = displayValue;
-    if (historyEl) historyEl.textContent = historyValue;
 };
 
 // Función auxiliar para escribir en el input real
