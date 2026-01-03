@@ -7652,35 +7652,7 @@ const updateTargetInput = (val) => {
         fechaInput.value = localIsoDate;
         updateDateDisplay(fechaInput);
     }
- // --- INICIO DEL FIX DEL BOTÓN GUARDAR (VERSIÓN CORREGIDA SIN CONFLICTOS) ---
-const saveBtn = document.getElementById('movimiento-save-btn');
-// CAMBIO IMPORTANTE: La llamamos 'formElement' para que no choque con tu variable 'form' existente
-const formElement = document.getElementById('movimiento-form');
 
-if (saveBtn) {
-    // 1. Clonar el botón para eliminar cualquier listener viejo
-    const newSaveBtn = saveBtn.cloneNode(true);
-    saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
-
-    // 2. Asignar el listener de nuevo
-    newSaveBtn.addEventListener('click', async (e) => {
-        e.preventDefault(); 
-        
-        console.log("✅ Click detectado en Guardar. Iniciando proceso...");
-        
-        // Efecto visual
-        newSaveBtn.style.transform = "scale(0.95)";
-        setTimeout(() => newSaveBtn.style.transform = "scale(1)", 100);
-
-        // 3. Llamada a guardar usando la nueva referencia 'formElement'
-        await handleSaveMovement(formElement, newSaveBtn);
-    });
-    
-    console.log("🔧 Botón Guardar reparado y vinculado correctamente.");
-} else {
-    console.error("❌ ERROR CRÍTICO: No se encuentra el botón #movimiento-save-btn");
-}
-// --- FIN DEL FIX ---
     // Gestión de botones
     const deleteBtn = select('delete-movimiento-btn');
     const duplicateBtn = select('duplicate-movimiento-btn');
@@ -12141,3 +12113,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// ===============================================================
+// === FUNCIÓN AUXILIAR: ACTUALIZACIÓN OPTIMISTA (CEREBRO LOCAL) ===
+// ===============================================================
+const updateLocalStateOptimistic = (mov, tipo) => {
+    // 1. Actualizar Saldo de las Cuentas en Memoria (db.cuentas)
+    if (tipo === 'traspaso') {
+        const origen = db.cuentas.find(c => c.id === mov.cuentaOrigenId);
+        const destino = db.cuentas.find(c => c.id === mov.cuentaDestinoId);
+        
+        // Si las encontramos en memoria, actualizamos su saldo
+        if (origen) origen.saldo -= mov.cantidad;
+        if (destino) destino.saldo += mov.cantidad;
+        
+    } else {
+        // Gasto o Ingreso
+        const c = db.cuentas.find(c => c.id === mov.cuentaId);
+        if (c) c.saldo += mov.cantidad; 
+    }
+
+    // 2. Añadir el movimiento al historial local (db.movimientos)
+    // Lo ponemos el primero (unshift) para que salga arriba
+    if (Array.isArray(db.movimientos)) {
+        db.movimientos.unshift(mov);
+        
+        // Opcional: Limitar el tamaño del array local para no saturar memoria
+        if (db.movimientos.length > 2000) db.movimientos.pop(); 
+    }
+    
+    console.log("⚡ Estado local actualizado optimísticamente.");
+};
+
+// ===============================================================
+// === LISTENER GLOBAL ROBUSTO PARA EL BOTÓN GUARDAR ===
+// ===============================================================
+document.addEventListener('click', (e) => {
+    // Buscamos si el clic fue en el botón o dentro de él (por si pulsa el icono)
+    const btn = e.target.closest('#movimiento-save-btn');
+
+    // Si pulsó el botón guardar Y el botón no está deshabilitado/cargando
+    if (btn && !btn.hasAttribute('disabled')) {
+        e.preventDefault();
+        e.stopPropagation(); // Evitar doble disparo
+
+        console.log("✅ Click global detectado en Guardar.");
+        
+        const formElement = document.getElementById('movimiento-form');
+        
+        if (formElement) {
+             // Llamamos a la función maestra
+             handleSaveMovement(formElement, btn);
+        } else {
+             console.error("❌ No se encuentra el formulario #movimiento-form");
+        }
+    }
+});
