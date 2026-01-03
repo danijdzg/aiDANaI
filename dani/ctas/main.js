@@ -7652,7 +7652,35 @@ const updateTargetInput = (val) => {
         fechaInput.value = localIsoDate;
         updateDateDisplay(fechaInput);
     }
+    // --- INICIO DEL FIX DEL BOTÓN GUARDAR ---
+const saveBtn = document.getElementById('movimiento-save-btn');
+const form = document.getElementById('movimiento-form');
+
+if (saveBtn) {
+    // 1. Clonar el botón para eliminar cualquier listener viejo o corrupto (limpieza profunda)
+    const newSaveBtn = saveBtn.cloneNode(true);
+    saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+
+    // 2. Asignar el listener de nuevo, fresco y directo
+    newSaveBtn.addEventListener('click', async (e) => {
+        e.preventDefault(); // Evita que el formulario recargue la página
+        
+        console.log("✅ Click detectado en Guardar. Iniciando proceso...");
+        
+        // Efecto visual de pulsación (Feedback inmediato)
+        newSaveBtn.style.transform = "scale(0.95)";
+        setTimeout(() => newSaveBtn.style.transform = "scale(1)", 100);
+
+        // 3. Llamada explícita a la función de guardado
+        // Asegúrate de que handleSaveMovement esté accesible aquí
+        await handleSaveMovement(form, newSaveBtn);
+    });
     
+    console.log("🔧 Botón Guardar reparado y vinculado correctamente.");
+} else {
+    console.error("❌ ERROR CRÍTICO: No se encuentra el botón #movimiento-save-btn en el DOM");
+}
+// --- FIN DEL FIX ---
     // Gestión de botones
     const deleteBtn = select('delete-movimiento-btn');
     const duplicateBtn = select('duplicate-movimiento-btn');
@@ -10218,6 +10246,24 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
 // En main.js
 
 const handleSaveMovement = async (form, btn) => {
+	console.log("🚀 Ejecutando handleSaveMovement..."); // Log para confirmar entrada
+
+    // 1. Validaciones explícitas con logs
+    const cantidad = select('movimiento-cantidad').value;
+    const cuenta = select('movimiento-cuenta').value; // O cuenta origen/destino si es traspaso
+
+    if (!cantidad || parseFloat(cantidad) === 0) {
+        console.warn("⚠️ Validación fallida: Cantidad es 0 o vacía");
+        showToast("Introduce una cantidad válida", "warning");
+        hapticFeedback('error');
+        return; // Detener aquí
+    }
+
+    if (!cuenta) {
+        console.warn("⚠️ Validación fallida: No hay cuenta seleccionada");
+        showToast("Selecciona una cuenta", "warning");
+        return; // Detener aquí
+    }
     // 1. Validaciones Previas
     if (!validateMovementForm()) {
         hapticFeedback('error');
