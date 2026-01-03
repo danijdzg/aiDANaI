@@ -10243,156 +10243,156 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     // --- ⭐ FIN DE LA CORRECCIÓN ⭐ ---
 };
 
-// En main.js
+// ===============================================================
+// === FUNCIÓN DE GUARDADO MAESTRA (VERSIÓN UNIFICADA FINAL) ===
+// ===============================================================
+const handleSaveMovement = async (formElement, btn) => {
+    console.log("🚀 Ejecutando handleSaveMovement...");
 
-const handleSaveMovement = async (form, btn) => {
-	console.log("🚀 Ejecutando handleSaveMovement..."); // Log para confirmar entrada
+    // --- 1. OBTENCIÓN DE DATOS Y VALIDACIÓN INICIAL ---
+    const rawAmount = select('movimiento-cantidad').value; 
+    // Usamos parseCurrencyString si la tienes definida, o parseFloat simple como fallback
+    const cantidadFloat = typeof parseCurrencyString === 'function' ? parseCurrencyString(rawAmount) : parseFloat(rawAmount.replace(',', '.'));
 
-    // 1. Validaciones explícitas con logs
-    const cantidad = select('movimiento-cantidad').value;
-    const cuenta = select('movimiento-cuenta').value; // O cuenta origen/destino si es traspaso
-
-    if (!cantidad || parseFloat(cantidad) === 0) {
-        console.warn("⚠️ Validación fallida: Cantidad es 0 o vacía");
-        showToast("Introduce una cantidad válida", "warning");
-        hapticFeedback('error');
-        return; // Detener aquí
-    }
-
-    if (!cuenta) {
-        console.warn("⚠️ Validación fallida: No hay cuenta seleccionada");
-        showToast("Selecciona una cuenta", "warning");
-        return; // Detener aquí
-    }
-    // 1. Validaciones Previas
-    if (!validateMovementForm()) {
-        hapticFeedback('error');
-        return false;
-    }
-
-    setButtonLoading(btn, true, 'Guardando...');
-    
-    // 2. Obtención de Datos del DOM
-    const rawAmount = select('movimiento-cantidad').value; // Asumimos que viene de tu calculadora formateada
-    const cantidad = parseCurrencyString(rawAmount); // Asegúrate que esta función devuelva ENTEROS (céntimos) o floats consistentes. 
-    // RECOMENDACIÓN: Trabaja siempre en céntimos (x100) para evitar errores de float de JS (0.1 + 0.2 !== 0.3)
-    const cantidadCentimos = Math.round(parseCurrencyString(rawAmount) * 100);
-
-    const conceptoId = select('movimiento-concepto').value;
-    const descripcion = select('movimiento-descripcion').value.trim();
-    const fecha = select('movimiento-fecha').value || new Date().toISOString().split('T')[0];
-    
-    // Detectar Tipo
+    // Detectar Tipo de Movimiento (Gasto, Ingreso, Traspaso)
     const activeTypeBtn = document.querySelector('.filter-pill[data-action="set-movimiento-type"].filter-pill--active');
     const tipoUI = activeTypeBtn ? activeTypeBtn.dataset.type : 'gasto'; // 'gasto', 'ingreso', 'traspaso'
 
-    // 3. Preparar el Objeto Movimiento
-    const newId = generateId(); // Tu función existente
-    const movimiento = {
-        id: newId,
-        fecha: new Date(fecha).toISOString(), // Estandarizar fecha
-        conceptoId: conceptoId,
-        descripcion: descripcion,
-        cantidad: tipoUI === 'gasto' ? -Math.abs(cantidadCentimos) : Math.abs(cantidadCentimos), // Guardamos en céntimos
-        tipo: tipoUI === 'traspaso' ? 'traspaso' : 'movimiento',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
+    // Validación 1: Cantidad
+    if (!rawAmount || isNaN(cantidadFloat) || cantidadFloat === 0) {
+        console.warn("⚠️ Validación fallida: Cantidad es 0 o inválida");
+        showToast("Introduce una cantidad válida", "warning");
+        hapticFeedback('error');
+        return; // DETIENE LA EJECUCIÓN AQUÍ
+    }
 
-    // 4. Lógica de Traspaso vs Normal
+    // Validación 2: Cuentas
     let cuentaId, cuentaOrigenId, cuentaDestinoId;
 
     if (tipoUI === 'traspaso') {
         cuentaOrigenId = select('movimiento-cuenta-origen').value;
         cuentaDestinoId = select('movimiento-cuenta-destino').value;
         
-        if (cuentaOrigenId === cuentaDestinoId) {
-            showToast('La cuenta origen y destino no pueden ser iguales', 'warning');
-            setButtonLoading(btn, false);
+        if (!cuentaOrigenId || !cuentaDestinoId) {
+            showToast('Selecciona cuenta origen y destino', 'warning');
             return;
         }
+        if (cuentaOrigenId === cuentaDestinoId) {
+            showToast('La cuenta origen y destino no pueden ser iguales', 'warning');
+            return;
+        }
+    } else {
+        // Ingreso o Gasto
+        cuentaId = select('movimiento-cuenta').value;
+        if (!cuentaId) {
+            showToast('Selecciona una cuenta', 'warning');
+            return;
+        }
+    }
+
+    // --- 2. PROCESAMIENTO ---
+    setButtonLoading(btn, true, 'Guardando...');
+
+    // Convertir a céntimos para evitar errores decimales (Best Practice)
+    const cantidadCentimos = Math.round(cantidadFloat * 100);
+
+    const conceptoId = select('movimiento-concepto').value;
+    const descripcion = select('movimiento-descripcion').value.trim();
+    const fecha = select('movimiento-fecha').value || new Date().toISOString().split('T')[0];
+
+    // Generar ID único
+    const newId = generateId(); 
+
+    // Crear Objeto Base
+    const movimiento = {
+        id: newId,
+        fecha: new Date(fecha).toISOString(), 
+        conceptoId: conceptoId,
+        descripcion: descripcion,
+        // Si es gasto, guardamos negativo. Si es ingreso o traspaso, positivo (el signo se maneja en lógica)
+        cantidad: tipoUI === 'gasto' ? -Math.abs(cantidadCentimos) : Math.abs(cantidadCentimos),
+        tipo: tipoUI === 'traspaso' ? 'traspaso' : 'movimiento',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    // Completar objeto según tipo
+    if (tipoUI === 'traspaso') {
         movimiento.cuentaOrigenId = cuentaOrigenId;
         movimiento.cuentaDestinoId = cuentaDestinoId;
-        // En traspaso, la cantidad siempre es positiva (valor absoluto transferido)
-        movimiento.cantidad = Math.abs(cantidadCentimos); 
+        movimiento.cantidad = Math.abs(cantidadCentimos); // En traspaso guardamos valor absoluto
     } else {
-        cuentaId = select('movimiento-cuenta').value;
         movimiento.cuentaId = cuentaId;
     }
 
-    // 5. 🔥 ATOMIC BATCH WRITE (El corazón de la solución) 🔥
-    const batch = fbDb.batch();
-    const userRef = fbDb.collection('users').doc(currentUser.uid);
-
-    // A. Referencia al nuevo movimiento
-    const movRef = userRef.collection('movimientos').doc(newId);
-    batch.set(movRef, movimiento);
-
-    // B. Referencias a las cuentas para actualizar saldo
-    if (tipoUI === 'traspaso') {
-        const origenRef = userRef.collection('cuentas').doc(cuentaOrigenId);
-        const destinoRef = userRef.collection('cuentas').doc(cuentaDestinoId);
-        
-        // Restar de origen, Sumar a destino
-        batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(-movimiento.cantidad) });
-        batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
-    } else {
-        const cuentaRef = userRef.collection('cuentas').doc(cuentaId);
-        // Sumar (si es ingreso es +positive, si es gasto es +negative)
-        batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
-    }
-
+    // --- 3. GUARDADO ATÓMICO (BATCH WRITE) ---
+    // Esto asegura que o se guarda TODO (movimiento + saldo) o NADA.
     try {
-        // 6. Ejecutar Guardado
+        const batch = fbDb.batch();
+        const userRef = fbDb.collection('users').doc(currentUser.uid);
+
+        // A. Operación: Crear Movimiento
+        const movRef = userRef.collection('movimientos').doc(newId);
+        batch.set(movRef, movimiento);
+
+        // B. Operación: Actualizar Saldo(s)
+        if (tipoUI === 'traspaso') {
+            const origenRef = userRef.collection('cuentas').doc(cuentaOrigenId);
+            const destinoRef = userRef.collection('cuentas').doc(cuentaDestinoId);
+            
+            // Restar de origen, Sumar a destino
+            batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(-movimiento.cantidad) });
+            batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
+        } else {
+            const cuentaRef = userRef.collection('cuentas').doc(cuentaId);
+            // Sumar la cantidad (que ya viene con signo negativo si es gasto)
+            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
+        }
+
+        // Ejecutar todo junto
         await batch.commit();
 
-        // 7. Actualización Local Optimista & UI
-        // Actualizamos db.cuentas localmente para reflejar cambio inmediato sin esperar listener
-        updateLocalStateOptimistic(movimiento, tipoUI); 
+        // --- 4. ACTUALIZACIÓN UI (ÉXITO) ---
+        
+        // Actualización Optimista Local (para que se vea instantáneo)
+        if (typeof updateLocalStateOptimistic === 'function') {
+            updateLocalStateOptimistic(movimiento, tipoUI);
+        } else {
+            // Fallback si no definiste la función auxiliar: refresco básico
+            console.log("Actualización optimista no definida, esperando listener...");
+        }
         
         hapticFeedback('success');
         
-        // Animación de éxito en el botón antes de cerrar
+        // Animación visual de éxito en el botón
         const originalBtnText = btn.innerHTML;
-        btn.classList.add('btn--success');
+        btn.classList.add('btn--success'); // Asegúrate de tener este estilo CSS
         btn.innerHTML = '<span class="material-icons">check</span> ¡Guardado!';
         
         setTimeout(() => {
             hideModal('movimiento-modal');
-            form.reset();
+            if(formElement) formElement.reset(); // Reseteo seguro
+            
             // Restaurar botón
             btn.classList.remove('btn--success');
             btn.innerHTML = originalBtnText;
             setButtonLoading(btn, false);
             
-            // Refrescar vistas
-            if (document.querySelector('.view--active').id === PAGE_IDS.DIARIO) renderDiarioPage();
-            if (document.querySelector('.view--active').id === PAGE_IDS.PANEL) scheduleDashboardUpdate();
+            // Refrescar vistas activas si es necesario
+            if (document.querySelector('.view--active')?.id === 'view-diario') {
+                if(typeof renderDiarioPage === 'function') renderDiarioPage();
+            }
+            if (document.querySelector('.view--active')?.id === 'view-panel') {
+                if(typeof scheduleDashboardUpdate === 'function') scheduleDashboardUpdate();
+            }
             
-        }, 600); // Pequeña pausa para ver el éxito
+        }, 600); 
 
     } catch (error) {
-        console.error("Error batch save:", error);
+        console.error("❌ Error CRÍTICO guardando batch:", error);
         hapticFeedback('error');
-        showToast('Error al guardar. Inténtalo de nuevo.', 'danger');
+        showToast('Error de conexión. No se guardaron datos.', 'danger');
         setButtonLoading(btn, false);
     }
-};
-
-// Función auxiliar para mantener la coherencia local instantánea
-const updateLocalStateOptimistic = (mov, tipo) => {
-    if (tipo === 'traspaso') {
-        const origen = db.cuentas.find(c => c.id === mov.cuentaOrigenId);
-        const destino = db.cuentas.find(c => c.id === mov.cuentaDestinoId);
-        if (origen) origen.saldo -= mov.cantidad;
-        if (destino) destino.saldo += mov.cantidad;
-    } else {
-        const c = db.cuentas.find(c => c.id === mov.cuentaId);
-        if (c) c.saldo += mov.cantidad;
-    }
-    // Añadir movimiento al inicio de la caché local
-    db.movimientos.unshift(mov);
-    // Limitar caché local si es necesario
-    if (db.movimientos.length > 2000) db.movimientos.pop(); 
 };
 
 const handleAddConcept = async (btn) => { 
