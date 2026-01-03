@@ -7526,7 +7526,30 @@ const renderQuickAccessChips = () => {
 
 
 const startMovementForm = async (id = null, isRecurrent = false, initialType = 'gasto') => {
-    hapticFeedback('medium');
+    // Al abrir el modal
+const inputCantidad = select('movimiento-cantidad');
+inputCantidad.readOnly = true; // Bloquea teclado nativo
+inputCantidad.value = '0,00'; // Valor inicial limpio
+
+// Al hacer click, abrir TU calculadora
+inputCantidad.addEventListener('click', () => {
+    showCalculator(inputCantidad); // Tu función existente
+    hapticFeedback('light');
+});
+
+// MODIFICAR tu función updateTargetInput en la lógica de la calculadora
+// para ajustar el tamaño de fuente dinámicamente
+const updateTargetInput = (val) => {
+    // ... tu lógica existente ...
+    
+    // Nueva lógica de tamaño de fuente
+    const length = val.length;
+    if (length > 8) calculatorState.targetInput.style.fontSize = '2rem';
+    else if (length > 5) calculatorState.targetInput.style.fontSize = '2.5rem';
+    else calculatorState.targetInput.style.fontSize = '3rem';
+};
+	
+	hapticFeedback('medium');
     const form = select('form-movimiento');
     if (!form) return;
     
@@ -10191,192 +10214,140 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     }
     // --- ⭐ FIN DE LA CORRECCIÓN ⭐ ---
 };
-/* --- FUNCIÓN CORREGIDA: GUARDAR MOVIMIENTO (SOPORTE TOTAL RECURRENTES) --- */
+
+// En main.js
+
 const handleSaveMovement = async (form, btn) => {
-    // 1. Validaciones
-    if (typeof clearAllErrors === 'function') clearAllErrors(form.id);
-    
-    // Usamos la validación blindada que pusimos antes
+    // 1. Validaciones Previas
     if (!validateMovementForm()) {
         hapticFeedback('error');
         return false;
     }
 
-    const saveBtn = document.getElementById('save-movimiento-btn');
-    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
+    setButtonLoading(btn, true, 'Guardando...');
+    
+    // 2. Obtención de Datos del DOM
+    const rawAmount = select('movimiento-cantidad').value; // Asumimos que viene de tu calculadora formateada
+    const cantidad = parseCurrencyString(rawAmount); // Asegúrate que esta función devuelva ENTEROS (céntimos) o floats consistentes. 
+    // RECOMENDACIÓN: Trabaja siempre en céntimos (x100) para evitar errores de float de JS (0.1 + 0.2 !== 0.3)
+    const cantidadCentimos = Math.round(parseCurrencyString(rawAmount) * 100);
 
-    if (saveBtn) setButtonLoading(saveBtn, true);
+    const conceptoId = select('movimiento-concepto').value;
+    const descripcion = select('movimiento-descripcion').value.trim();
+    const fecha = select('movimiento-fecha').value || new Date().toISOString().split('T')[0];
+    
+    // Detectar Tipo
+    const activeTypeBtn = document.querySelector('.filter-pill[data-action="set-movimiento-type"].filter-pill--active');
+    const tipoUI = activeTypeBtn ? activeTypeBtn.dataset.type : 'gasto'; // 'gasto', 'ingreso', 'traspaso'
+
+    // 3. Preparar el Objeto Movimiento
+    const newId = generateId(); // Tu función existente
+    const movimiento = {
+        id: newId,
+        fecha: new Date(fecha).toISOString(), // Estandarizar fecha
+        conceptoId: conceptoId,
+        descripcion: descripcion,
+        cantidad: tipoUI === 'gasto' ? -Math.abs(cantidadCentimos) : Math.abs(cantidadCentimos), // Guardamos en céntimos
+        tipo: tipoUI === 'traspaso' ? 'traspaso' : 'movimiento',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    // 4. Lógica de Traspaso vs Normal
+    let cuentaId, cuentaOrigenId, cuentaDestinoId;
+
+    if (tipoUI === 'traspaso') {
+        cuentaOrigenId = select('movimiento-cuenta-origen').value;
+        cuentaDestinoId = select('movimiento-cuenta-destino').value;
+        
+        if (cuentaOrigenId === cuentaDestinoId) {
+            showToast('La cuenta origen y destino no pueden ser iguales', 'warning');
+            setButtonLoading(btn, false);
+            return;
+        }
+        movimiento.cuentaOrigenId = cuentaOrigenId;
+        movimiento.cuentaDestinoId = cuentaDestinoId;
+        // En traspaso, la cantidad siempre es positiva (valor absoluto transferido)
+        movimiento.cantidad = Math.abs(cantidadCentimos); 
+    } else {
+        cuentaId = select('movimiento-cuenta').value;
+        movimiento.cuentaId = cuentaId;
+    }
+
+    // 5. 🔥 ATOMIC BATCH WRITE (El corazón de la solución) 🔥
+    const batch = fbDb.batch();
+    const userRef = fbDb.collection('users').doc(currentUser.uid);
+
+    // A. Referencia al nuevo movimiento
+    const movRef = userRef.collection('movimientos').doc(newId);
+    batch.set(movRef, movimiento);
+
+    // B. Referencias a las cuentas para actualizar saldo
+    if (tipoUI === 'traspaso') {
+        const origenRef = userRef.collection('cuentas').doc(cuentaOrigenId);
+        const destinoRef = userRef.collection('cuentas').doc(cuentaDestinoId);
+        
+        // Restar de origen, Sumar a destino
+        batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(-movimiento.cantidad) });
+        batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
+    } else {
+        const cuentaRef = userRef.collection('cuentas').doc(cuentaId);
+        // Sumar (si es ingreso es +positive, si es gasto es +negative)
+        batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
+    }
 
     try {
-        // 2. Recogida de datos comunes
-        const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
-        const mode = getVal('movimiento-mode');
-        const id = getVal('movimiento-id') || generateId();
+        // 6. Ejecutar Guardado
+        await batch.commit();
+
+        // 7. Actualización Local Optimista & UI
+        // Actualizamos db.cuentas localmente para reflejar cambio inmediato sin esperar listener
+        updateLocalStateOptimistic(movimiento, tipoUI); 
         
-        // Detectar tipo
-        const typeSelector = document.querySelector('.type-selector .type-btn.active');
-        // Si no hay selector visible (ej. edición), intentamos deducirlo o usar default
-        const typePill = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
-        let tipoMovimiento = typeSelector ? typeSelector.dataset.type : (typePill ? typePill.dataset.type : 'gasto');
+        hapticFeedback('success');
         
-        // Si venimos de duplicar, a veces el tipo está en un atributo oculto, aseguramos:
-        if(form.dataset.currentType) tipoMovimiento = form.dataset.currentType;
-
-        const cantidadPositiva = parseCurrencyString(getVal('movimiento-cantidad'));
-        const cantidadEnCentimos = Math.round(cantidadPositiva * 100);
+        // Animación de éxito en el botón antes de cerrar
+        const originalBtnText = btn.innerHTML;
+        btn.classList.add('btn--success');
+        btn.innerHTML = '<span class="material-icons">check</span> ¡Guardado!';
         
-        const recurrenteCheck = document.getElementById('movimiento-recurrente');
-        const isRecurrent = recurrenteCheck ? recurrenteCheck.checked : false;
-
-        // Construir objeto base
-        const baseData = {
-            descripcion: getVal('movimiento-descripcion').trim(),
-            cantidad: tipoMovimiento === 'gasto' ? -Math.abs(cantidadEnCentimos) : Math.abs(cantidadEnCentimos),
-            tipo: tipoMovimiento,
-            conceptoId: getVal('movimiento-concepto'),
-        };
-
-        if (tipoMovimiento === 'traspaso') {
-            baseData.tipo = 'traspaso';
-            baseData.cantidad = Math.abs(cantidadEnCentimos); // Traspaso siempre positivo en valor absoluto
-            baseData.cuentaOrigenId = getVal('movimiento-cuenta-origen');
-            baseData.cuentaDestinoId = getVal('movimiento-cuenta-destino');
-            baseData.cuentaId = null;
-        } else {
-            baseData.tipo = 'movimiento'; // Ingreso o Gasto
-            baseData.cuentaId = getVal('movimiento-cuenta');
-            baseData.cuentaOrigenId = null;
-            baseData.cuentaDestinoId = null;
-        }
-
-        // --- BLOQUE A: GUARDADO DE RECURRENTE ---
-        if (isRecurrent) {
-            const frequency = getVal('recurrent-frequency') || 'monthly';
-            let rawNextDate = getVal('recurrent-next-date');
-            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha');
-
-            let weekDays = [];
-            if (frequency === 'weekly') {
-                weekDays = Array.from(document.querySelectorAll('.day-selector-btn.active')).map(b => b.dataset.day);
-                // Validación específica de recurrente
-                if (weekDays.length === 0) throw new Error("Selecciona al menos un día de la semana.");
-            }
-
-            const recurrentData = {
-                id: id,
-                ...baseData,
-                frequency: frequency,
-                nextDate: rawNextDate,
-                endDate: getVal('recurrent-end-date') || null,
-                weekDays: weekDays,
-                active: true
-            };
-
-            await saveDoc('recurrentes', id, recurrentData);
-
-            // Actualizar memoria local al instante
-            if (db.recurrentes) {
-                const idx = db.recurrentes.findIndex(r => r.id === id);
-                if (idx > -1) db.recurrentes[idx] = recurrentData;
-                else db.recurrentes.push(recurrentData);
-                db.recurrentes.sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
-            }
-
-            hapticFeedback('success');
-            showToast('Programación guardada correctamente.');
+        setTimeout(() => {
+            hideModal('movimiento-modal');
+            form.reset();
+            // Restaurar botón
+            btn.classList.remove('btn--success');
+            btn.innerHTML = originalBtnText;
+            setButtonLoading(btn, false);
             
-            // --- ¡LA CORRECCIÓN ESTÁ AQUÍ! ---
-            hideModal('movimiento-modal'); // Cerramos el modal explícitamente
+            // Refrescar vistas
+            if (document.querySelector('.view--active').id === PAGE_IDS.DIARIO) renderDiarioPage();
+            if (document.querySelector('.view--active').id === PAGE_IDS.PANEL) scheduleDashboardUpdate();
             
-            // Refrescar página si estamos en Planificar
-            const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === 'planificar-page' && typeof renderPlanificacionPage === 'function') {
-                renderPlanificacionPage();
-            }
-        } 
-        
-        // --- BLOQUE B: GUARDADO DE MOVIMIENTO NORMAL ---
-        else {
-            let oldData = null;
-            if (mode.startsWith('edit')) {
-                const original = db.movimientos.find(m => m.id === id);
-                if (original) oldData = { ...original };
-            }
-
-            // Fechas
-            const rawDate = getVal('movimiento-fecha');
-            const safeDateISO = rawDate ? new Date(rawDate + 'T12:00:00Z').toISOString() : new Date().toISOString();
-            
-            const dataToSave = { id: id, fecha: safeDateISO, ...baseData };
-
-            // 1. Optimismo Local
-            if (oldData) {
-                const index = db.movimientos.findIndex(m => m.id === id);
-                if (index > -1) db.movimientos[index] = dataToSave;
-            } else {
-                db.movimientos.unshift(dataToSave);
-            }
-            
-            if (typeof applyOptimisticBalanceUpdate === 'function') {
-                applyOptimisticBalanceUpdate(dataToSave, oldData);
-            }
-
-            // 2. Guardado en Firebase
-            const batch = fbDb.batch();
-            const userRef = fbDb.collection('users').doc(currentUser.uid);
-
-            // Revertir saldo anterior
-            if (oldData) {
-                if (oldData.tipo === 'traspaso') {
-                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldData.cantidad) });
-                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
-                } else {
-                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
-                }
-            }
-
-            // Guardar documento
-            batch.set(userRef.collection('movimientos').doc(id), dataToSave);
-
-            // Aplicar nuevo saldo
-            if (dataToSave.tipo === 'traspaso') {
-                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataToSave.cantidad) });
-                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
-            } else {
-                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
-            }
-            
-            if (typeof AppStore !== 'undefined') {
-                if (oldData) AppStore.update(dataToSave); else AppStore.add(dataToSave);
-            }
-
-            await batch.commit();
-
-            // 3. UI y Cierre
-            if (!isSaveAndNew) {
-                hideModal('movimiento-modal');
-                // Si tienes la función de resaltar, úsala
-                if (typeof navigateToAndHighlight === 'function') navigateToAndHighlight(id);
-            } else {
-                if (typeof startMovementForm === 'function') startMovementForm(); 
-            }
-            
-            hapticFeedback('success');
-            
-            // Actualizar listas
-            setTimeout(() => {
-                if (typeof updateLocalDataAndRefreshUI === 'function') updateLocalDataAndRefreshUI();
-            }, 50);
-        }
+        }, 600); // Pequeña pausa para ver el éxito
 
     } catch (error) {
-        console.error("Error guardando:", error);
-        showToast(error.message || "Error al guardar los datos.", "danger");
-    } finally {
-        if (saveBtn) setButtonLoading(saveBtn, false, 'Guardar');
+        console.error("Error batch save:", error);
+        hapticFeedback('error');
+        showToast('Error al guardar. Inténtalo de nuevo.', 'danger');
+        setButtonLoading(btn, false);
     }
 };
 
+// Función auxiliar para mantener la coherencia local instantánea
+const updateLocalStateOptimistic = (mov, tipo) => {
+    if (tipo === 'traspaso') {
+        const origen = db.cuentas.find(c => c.id === mov.cuentaOrigenId);
+        const destino = db.cuentas.find(c => c.id === mov.cuentaDestinoId);
+        if (origen) origen.saldo -= mov.cantidad;
+        if (destino) destino.saldo += mov.cantidad;
+    } else {
+        const c = db.cuentas.find(c => c.id === mov.cuentaId);
+        if (c) c.saldo += mov.cantidad;
+    }
+    // Añadir movimiento al inicio de la caché local
+    db.movimientos.unshift(mov);
+    // Limitar caché local si es necesario
+    if (db.movimientos.length > 2000) db.movimientos.pop(); 
+};
 
 const handleAddConcept = async (btn) => { 
     const nombreInput = select('new-concepto-nombre');
