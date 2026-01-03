@@ -7652,33 +7652,33 @@ const updateTargetInput = (val) => {
         fechaInput.value = localIsoDate;
         updateDateDisplay(fechaInput);
     }
-    // --- INICIO DEL FIX DEL BOTÓN GUARDAR ---
+ // --- INICIO DEL FIX DEL BOTÓN GUARDAR (VERSIÓN CORREGIDA SIN CONFLICTOS) ---
 const saveBtn = document.getElementById('movimiento-save-btn');
-const form = document.getElementById('movimiento-form');
+// CAMBIO IMPORTANTE: La llamamos 'formElement' para que no choque con tu variable 'form' existente
+const formElement = document.getElementById('movimiento-form');
 
 if (saveBtn) {
-    // 1. Clonar el botón para eliminar cualquier listener viejo o corrupto (limpieza profunda)
+    // 1. Clonar el botón para eliminar cualquier listener viejo
     const newSaveBtn = saveBtn.cloneNode(true);
     saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
 
-    // 2. Asignar el listener de nuevo, fresco y directo
+    // 2. Asignar el listener de nuevo
     newSaveBtn.addEventListener('click', async (e) => {
-        e.preventDefault(); // Evita que el formulario recargue la página
+        e.preventDefault(); 
         
         console.log("✅ Click detectado en Guardar. Iniciando proceso...");
         
-        // Efecto visual de pulsación (Feedback inmediato)
+        // Efecto visual
         newSaveBtn.style.transform = "scale(0.95)";
         setTimeout(() => newSaveBtn.style.transform = "scale(1)", 100);
 
-        // 3. Llamada explícita a la función de guardado
-        // Asegúrate de que handleSaveMovement esté accesible aquí
-        await handleSaveMovement(form, newSaveBtn);
+        // 3. Llamada a guardar usando la nueva referencia 'formElement'
+        await handleSaveMovement(formElement, newSaveBtn);
     });
     
     console.log("🔧 Botón Guardar reparado y vinculado correctamente.");
 } else {
-    console.error("❌ ERROR CRÍTICO: No se encuentra el botón #movimiento-save-btn en el DOM");
+    console.error("❌ ERROR CRÍTICO: No se encuentra el botón #movimiento-save-btn");
 }
 // --- FIN DEL FIX ---
     // Gestión de botones
