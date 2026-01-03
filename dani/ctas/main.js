@@ -4687,7 +4687,7 @@ const handleShowIrrHistory = async (options) => {
                 label: 'TIR Anualizada',
                 data: historyData.map(d => d.irr * 100),
                 borderColor: 'var(--c-info)',
-                backgroundColor: 'rgba(191, 90, 242, 0.2)',
+                backgroundColor: 'rgba(41, 121, 255, 0.2)',
                 fill: true,
                 tension: 0.1
             }]
@@ -4859,7 +4859,7 @@ const renderPanelPage = async () => {
                     <div style="height: 30px; background-color: var(--c-outline);"></div>
 
                     <div style="text-align: center;">
-                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #2979FF; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
                             <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
                             <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
                         </div>
@@ -4869,7 +4869,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(41, 121, 255, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
                     <div style="text-align: left;">
@@ -5458,7 +5458,7 @@ async function renderInformeAsignacionActivos(container) {
             labels, 
             datasets: [{ 
                 data, 
-                backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6', '#FF9F0A', '#45B6E9', '#D158A7'] 
+                backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#2979FF', '#5E5CE6', '#FF9F0A', '#45B6E9', '#D158A7'] 
             }] 
         },
         options: { 
@@ -6215,7 +6215,7 @@ const renderRecurrentsListOnPage = () => {
 const NET_WORTH_COMPONENT_COLORS = {
     'Líquido': 'rgba(0, 122, 255, 0.7)',      // Azul (var(--c-primary))
     'Inversión': 'rgba(48, 209, 88, 0.7)',   // Verde (var(--c-success))
-    'Propiedades': 'rgba(191, 90, 242, 0.7)', // Púrpura (var(--c-info))
+    'Propiedades': 'rgba(41, 121, 255, 0.7)', // azul (var(--c-info))
     'Deuda': 'rgba(255, 69, 58, 0.7)'         // Rojo (var(--c-danger))
 };
 
@@ -6998,7 +6998,7 @@ const generateInformeData = async (config) => {
 
     const labels = Object.keys(groupedData).sort();
     let datasets = [];
-    const colorPalette = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6'];
+    const colorPalette = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#2979FF', '#5E5CE6'];
 
     if (config.desglose === 'total') {
         const data = labels.map(label => {
@@ -7973,7 +7973,7 @@ const showHelpModal = () => {
                 </div>
 
                 <div class="aidanai-section tech-flex">
-                    <h4><span class="material-icons" style="color: #BF5AF2;">speed</span> Velocidad Absurda</h4>
+                    <h4><span class="material-icons" style="color: #2979FF;">speed</span> Velocidad Absurda</h4>
                     <p>
                         ¿Notas lo rápido que hago scroll en tu Diario aunque tengas 5.000 movimientos? 
                         No es magia, es mi motor de <strong>Virtual Scrolling</strong>.
