@@ -4835,36 +4835,36 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 const renderPanelPage = async () => {
-	// === 1. LÓGICA DEL SALUDO (NUEVO) ===
+    // 1. CORRECCIÓN DEL ERROR: Usamos el ID correcto 'panel-page'
+    const content = document.getElementById('panel-page');
+    if (!content) return; // Esto evita que la app se rompa si algo falla
+
+    // 2. LÓGICA DE SALUDO EXACTA (05:00-14:00, 14:01-20:00, Resto)
     const ahora = new Date();
-    const horas = ahora.getHours();
-    const minutos = ahora.getMinutes().toString().padStart(2, '0'); // Asegura "09" en vez de "9"
+    const minutosTotal = ahora.getHours() * 60 + ahora.getMinutes(); // Convertimos hora a minutos
     
-    let saludo = "";
-    // Reglas: 05:00 a 14:00 (Días), 14:01 a 20:00 (Tardes), Resto (Noches)
-    if (horas >= 5 && horas < 14) {
+    let saludo = "Buenas noches";
+    if (minutosTotal >= 300 && minutosTotal <= 840) { // 05:00 (300m) a 14:00 (840m)
         saludo = "Buenos días";
-    } else if (horas >= 14 && horas < 20) { 
+    } else if (minutosTotal > 840 && minutosTotal <= 1200) { // 14:01 (841m) a 20:00 (1200m)
         saludo = "Buenas tardes";
-    } else {
-        saludo = "Buenas noches";
     }
 
-    // Formato de fecha: "Lunes" y "4 de enero de 2026"
-    const diaSemana = now => now.toLocaleDateString('es-ES', { weekday: 'long' }); // "lunes"
-    const fechaCompleta = now => now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }); // "4 de enero de 2026"
+    const horas = ahora.getHours().toString().padStart(2, '0'); // Ej: "09"
+    const minutos = ahora.getMinutes().toString().padStart(2, '0'); // Ej: "05"
     
-    // Capitalizar la primera letra del día (lunes -> Lunes)
-    const diaCapitalizado = diaSemana(ahora).charAt(0).toUpperCase() + diaSemana(ahora).slice(1);
+    // Formato de fecha español: "Domingo 4 de enero de 2026"
+    const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const fechaTexto = ahora.toLocaleDateString('es-ES', opcionesFecha);
+    const fechaCapitalizada = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
 
     const htmlSaludo = `
-        <div class="fade-in-down" style="padding: 10px 20px 0px; margin-bottom: 10px; color: var(--c-on-surface-variant); font-size: 0.95rem; font-weight: 500; text-align: left; line-height: 1.5;">
-            Hola, ${saludo}, son las ${horas}:${minutos} del ${diaCapitalizado} ${fechaCompleta(ahora)}
+        <div class="fade-in-down" style="padding: 15px 20px 5px; margin-bottom: 5px; color: var(--c-on-surface-variant); font-size: 0.9rem; font-weight: 500; line-height: 1.4;">
+            Hola, ${saludo}, son las ${horas}:${minutos} del ${fechaCapitalizada}
         </div>
     `;
-    // ======================================
 
-    const content = document.getElementById('content');
+    // 3. RENDERIZADO: Asegúrate de que aquí abajo siga tu código de las tarjetas
     content.innerHTML = `
         ${htmlSaludo} <div class="hero-card fade-in-up" data-action="ver-balance-neto" ...
     `;
