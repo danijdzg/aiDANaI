@@ -2262,40 +2262,29 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
     if (pinInputs.length > 0) pinInputs[0].focus();
 };
 
-    /* === VERSIÓN BLINDADA DE HANDLE PIN SUBMIT === */
-const handlePinSubmit = async (pinInput) => {
-    // 1. Validar PIN (Simulado o Real)
-    // Aquí asumimos que el PIN '1234' o el que tengas es correcto para avanzar
-    // (Mantén tu lógica de validación si tenías una específica, aquí pongo la estándar)
-    
-    const pin = pinInput || document.getElementById('pin-pad-display')?.textContent || "";
-    
-    // Si necesitas validar contra un PIN real guardado, hazlo aquí.
-    // Por ahora, asumimos éxito para desbloquearte.
+        const handlePinSubmit = async () => {
+            const pinInputs = selectAll('#pin-inputs-container .pin-input');
+            const pin = Array.from(pinInputs).map(input => input.value).join('');
+            const errorEl = select('pin-error');
+            
+            if (pin.length !== 4) {
+                errorEl.textContent = 'El PIN debe tener 4 dígitos.';
+                return;
+            }
 
-    console.log("🔓 PIN Correcto. Iniciando...");
+            const storedHash = localStorage.getItem('pinUserHash');
+            const isValid = await verifyPin(pin, storedHash);
 
-    // 2. Feedback Visual (Blindado: Si no encuentra el elemento, no hace nada)
-    const feedbackEl = document.getElementById('pin-feedback');
-    if (feedbackEl) feedbackEl.textContent = "Accediendo...";
-
-    // 3. Cargar Datos del Núcleo
-    try {
-        await loadCoreData(); 
-    } catch (e) {
-        console.error("Error cargando datos:", e);
-    }
-
-    // 4. Navegar al Panel Principal
-    // IMPORTANTE: Aquí es donde antes fallaba si intentaba escribir en el DOM antes de tiempo
-    setTimeout(() => {
-        // Forzamos la navegación
-        navigateTo('panel'); 
-        
-        // Renderizamos la página de inicio (aquí saldrá tu saludo nuevo)
-        renderPanelPage(); 
-    }, 100);
-};
+            if (isValid) {
+                hapticFeedback('success');
+                loadCoreData(currentUser.uid);
+            } else {
+                hapticFeedback('error');
+                errorEl.textContent = 'PIN incorrecto. Inténtalo de nuevo.';
+                pinInputs.forEach(input => input.value = '');
+                pinInputs[0].focus();
+            }
+        };
     const handleKpiDrilldown = async (kpiButton) => {
     const type = kpiButton.dataset.type;
     if (!type) return;
@@ -4846,54 +4835,36 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 const renderPanelPage = async () => {
-    console.log("🚀 Iniciando renderizado de Inicio/Panel...");
-
-    // 1. BÚSQUEDA SEGURA DEL CONTENEDOR (Intenta encontrar 'content' o 'app')
-    const content = document.getElementById('content') || document.getElementById('app') || document.body;
-    
-    if (!content) {
-        console.error("❌ ERROR CRÍTICO: No encuentro el contenedor <div id='content'> en el HTML.");
-        return;
-    }
-
-    // 2. LÓGICA DE SALUDO (Tu criterio exacto)
+	// === 1. LÓGICA DEL SALUDO (NUEVO) ===
     const ahora = new Date();
-    const minutosTotal = (ahora.getHours() * 60) + ahora.getMinutes();
+    const horas = ahora.getHours();
+    const minutos = ahora.getMinutes().toString().padStart(2, '0'); // Asegura "09" en vez de "9"
     
-    let saludo = "Buenas noches";
-    // 05:00 (300 min) a 14:00 (840 min)
-    if (minutosTotal >= 300 && minutosTotal <= 840) {
+    let saludo = "";
+    // Reglas: 05:00 a 14:00 (Días), 14:01 a 20:00 (Tardes), Resto (Noches)
+    if (horas >= 5 && horas < 14) {
         saludo = "Buenos días";
-    } 
-    // 14:01 (841 min) a 20:00 (1200 min)
-    else if (minutosTotal > 840 && minutosTotal <= 1200) { 
+    } else if (horas >= 14 && horas < 20) { 
         saludo = "Buenas tardes";
+    } else {
+        saludo = "Buenas noches";
     }
 
-    // Formato visual
-    const horasStr = ahora.getHours().toString().padStart(2, '0');
-    const minStr = ahora.getMinutes().toString().padStart(2, '0');
+    // Formato de fecha: "Lunes" y "4 de enero de 2026"
+    const diaSemana = now => now.toLocaleDateString('es-ES', { weekday: 'long' }); // "lunes"
+    const fechaCompleta = now => now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }); // "4 de enero de 2026"
     
-    // Fecha en español
-    const opciones = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-    let fechaTexto = ahora.toLocaleDateString('es-ES', opciones);
-    // Capitalizar primera letra (lunes -> Lunes)
-    fechaTexto = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
+    // Capitalizar la primera letra del día (lunes -> Lunes)
+    const diaCapitalizado = diaSemana(ahora).charAt(0).toUpperCase() + diaSemana(ahora).slice(1);
 
-    // 3. CREAMOS EL HTML DEL SALUDO
     const htmlSaludo = `
-        <div class="fade-in-down" style="padding: 20px 20px 10px; margin-bottom: 10px; color: var(--c-on-surface-variant); font-family: 'Inter', sans-serif;">
-            <div style="font-size: 1.1rem; font-weight: 600; color: var(--c-on-surface); margin-bottom: 4px;">
-                Hola, ${saludo}
-            </div>
-            <div style="font-size: 0.85rem; opacity: 0.8;">
-                Son las ${horasStr}:${minStr} del ${fechaTexto}
-            </div>
+        <div class="fade-in-down" style="padding: 10px 20px 0px; margin-bottom: 10px; color: var(--c-on-surface-variant); font-size: 0.95rem; font-weight: 500; text-align: left; line-height: 1.5;">
+            Hola, ${saludo}, son las ${horas}:${minutos} del ${diaCapitalizado} ${fechaCompleta(ahora)}
         </div>
     `;
+    // ======================================
 
-    // 4. INYECTAMOS TODO (Saludo + Tarjetas)
-    // NOTA: Aquí abajo debes mantener tus tarjetas. He puesto el inicio para que encaje.
+    const content = document.getElementById('content');
     content.innerHTML = `
         ${htmlSaludo} <div class="hero-card fade-in-up" data-action="ver-balance-neto" ...
     `;
