@@ -4835,39 +4835,7 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 const renderPanelPage = async () => {
-	// === 1. LÓGICA DEL SALUDO (NUEVO) ===
-    const ahora = new Date();
-    const horas = ahora.getHours();
-    const minutos = ahora.getMinutes().toString().padStart(2, '0'); // Asegura "09" en vez de "9"
-    
-    let saludo = "";
-    // Reglas: 05:00 a 14:00 (Días), 14:01 a 20:00 (Tardes), Resto (Noches)
-    if (horas >= 5 && horas < 14) {
-        saludo = "Buenos días";
-    } else if (horas >= 14 && horas < 20) { 
-        saludo = "Buenas tardes";
-    } else {
-        saludo = "Buenas noches";
-    }
-
-    // Formato de fecha: "Lunes" y "4 de enero de 2026"
-    const diaSemana = now => now.toLocaleDateString('es-ES', { weekday: 'long' }); // "lunes"
-    const fechaCompleta = now => now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }); // "4 de enero de 2026"
-    
-    // Capitalizar la primera letra del día (lunes -> Lunes)
-    const diaCapitalizado = diaSemana(ahora).charAt(0).toUpperCase() + diaSemana(ahora).slice(1);
-
-    const htmlSaludo = `
-        <div class="fade-in-down" style="padding: 10px 20px 0px; margin-bottom: 10px; color: var(--c-on-surface-variant); font-size: 0.95rem; font-weight: 500; text-align: left; line-height: 1.5;">
-            Hola, ${saludo}, son las ${horas}:${minutos} del ${diaCapitalizado} ${fechaCompleta(ahora)}
-        </div>
-    `;
-    // ======================================
-
-    const content = document.getElementById('content');
-    content.innerHTML = `
-        ${htmlSaludo} <div class="hero-card fade-in-up" data-action="ver-balance-neto" ...
-    `;
+	
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
