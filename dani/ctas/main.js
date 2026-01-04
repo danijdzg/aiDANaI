@@ -4835,36 +4835,54 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 const renderPanelPage = async () => {
-    // 1. CORRECCIÓN DEL ERROR: Usamos el ID correcto 'panel-page'
-    const content = document.getElementById('panel-page');
-    if (!content) return; // Esto evita que la app se rompa si algo falla
+    console.log("🚀 Iniciando renderizado de Inicio/Panel...");
 
-    // 2. LÓGICA DE SALUDO EXACTA (05:00-14:00, 14:01-20:00, Resto)
+    // 1. BÚSQUEDA SEGURA DEL CONTENEDOR (Intenta encontrar 'content' o 'app')
+    const content = document.getElementById('content') || document.getElementById('app') || document.body;
+    
+    if (!content) {
+        console.error("❌ ERROR CRÍTICO: No encuentro el contenedor <div id='content'> en el HTML.");
+        return;
+    }
+
+    // 2. LÓGICA DE SALUDO (Tu criterio exacto)
     const ahora = new Date();
-    const minutosTotal = ahora.getHours() * 60 + ahora.getMinutes(); // Convertimos hora a minutos
+    const minutosTotal = (ahora.getHours() * 60) + ahora.getMinutes();
     
     let saludo = "Buenas noches";
-    if (minutosTotal >= 300 && minutosTotal <= 840) { // 05:00 (300m) a 14:00 (840m)
+    // 05:00 (300 min) a 14:00 (840 min)
+    if (minutosTotal >= 300 && minutosTotal <= 840) {
         saludo = "Buenos días";
-    } else if (minutosTotal > 840 && minutosTotal <= 1200) { // 14:01 (841m) a 20:00 (1200m)
+    } 
+    // 14:01 (841 min) a 20:00 (1200 min)
+    else if (minutosTotal > 840 && minutosTotal <= 1200) { 
         saludo = "Buenas tardes";
     }
 
-    const horas = ahora.getHours().toString().padStart(2, '0'); // Ej: "09"
-    const minutos = ahora.getMinutes().toString().padStart(2, '0'); // Ej: "05"
+    // Formato visual
+    const horasStr = ahora.getHours().toString().padStart(2, '0');
+    const minStr = ahora.getMinutes().toString().padStart(2, '0');
     
-    // Formato de fecha español: "Domingo 4 de enero de 2026"
-    const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    const fechaTexto = ahora.toLocaleDateString('es-ES', opcionesFecha);
-    const fechaCapitalizada = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
+    // Fecha en español
+    const opciones = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    let fechaTexto = ahora.toLocaleDateString('es-ES', opciones);
+    // Capitalizar primera letra (lunes -> Lunes)
+    fechaTexto = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
 
+    // 3. CREAMOS EL HTML DEL SALUDO
     const htmlSaludo = `
-        <div class="fade-in-down" style="padding: 15px 20px 5px; margin-bottom: 5px; color: var(--c-on-surface-variant); font-size: 0.9rem; font-weight: 500; line-height: 1.4;">
-            Hola, ${saludo}, son las ${horas}:${minutos} del ${fechaCapitalizada}
+        <div class="fade-in-down" style="padding: 20px 20px 10px; margin-bottom: 10px; color: var(--c-on-surface-variant); font-family: 'Inter', sans-serif;">
+            <div style="font-size: 1.1rem; font-weight: 600; color: var(--c-on-surface); margin-bottom: 4px;">
+                Hola, ${saludo}
+            </div>
+            <div style="font-size: 0.85rem; opacity: 0.8;">
+                Son las ${horasStr}:${minStr} del ${fechaTexto}
+            </div>
         </div>
     `;
 
-    // 3. RENDERIZADO: Asegúrate de que aquí abajo siga tu código de las tarjetas
+    // 4. INYECTAMOS TODO (Saludo + Tarjetas)
+    // NOTA: Aquí abajo debes mantener tus tarjetas. He puesto el inicio para que encaje.
     content.innerHTML = `
         ${htmlSaludo} <div class="hero-card fade-in-up" data-action="ver-balance-neto" ...
     `;
