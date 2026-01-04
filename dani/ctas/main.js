@@ -2393,6 +2393,7 @@ function procesarRecurrentes() {
 }
 
     const initApp = async () => {
+	setupRecurrenceLogic();	
 	SpaceBackgroundEffect.start();	
     const procederConCargaDeApp = () => {
         document.documentElement.lang = 'es';
@@ -2403,6 +2404,25 @@ function procesarRecurrentes() {
     };
 
     procederConCargaDeApp();
+	/* === REEMPLAZO QUIRÚRGICO DE aiDANaI === */
+    // Esto busca el formulario, lo clona (para borrar cualquier memoria vieja) 
+    // y le inyecta nuestra nueva inteligencia.
+    
+    const oldForm = document.getElementById('form-movimiento');
+    if (oldForm) {
+        console.log("Actualizando sistema de guardado...");
+        
+        // 1. Clonamos el formulario (Esto elimina los eventos antiguos que no encontrabas)
+        const newForm = oldForm.cloneNode(true);
+        oldForm.parentNode.replaceChild(newForm, oldForm);
+        
+        // 2. Le asignamos nuestra nueva función maestra
+        newForm.addEventListener('submit', handleSaveMovimiento);
+        
+        // 3. IMPORTANTE: Como hemos clonado, hay que reactivar los botones de recurrencia
+        setupRecurrenceLogic();
+    }
+    /* === FIN DEL REEMPLAZO === */
 };
 
 		window.addEventListener('online', () => {
@@ -8980,7 +9000,186 @@ const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
     }, 350); 
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
+/* =============================================================== */
+/* === LÓGICA DE RECURRENCIA (aiDANaI - Cerebro) === */
+/* =============================================================== */
+
+// 1. Configurar la interactividad visual (Mostrar/Ocultar menús)
+const setupRecurrenceLogic = () => {
+    const toggle = document.getElementById('is-recurrent-toggle');
+    const options = document.getElementById('recurrence-options');
+    const freqSelect = document.getElementById('recurrent-frequency');
+    const weekSelector = document.getElementById('weekly-day-selector');
+    
+    // Si no encuentra el interruptor, no hacemos nada (seguridad)
+    if(!toggle) return;
+
+    // A. Mostrar/Ocultar opciones al activar el interruptor
+    toggle.addEventListener('change', (e) => {
+        if(e.target.checked) {
+            options.classList.remove('hidden');
+        } else {
+            options.classList.add('hidden');
+        }
+    });
+
+    // B. Mostrar selector de días solo si elegimos "Semanal"
+    freqSelect.addEventListener('change', (e) => {
+        if(e.target.value === 'weekly') {
+            weekSelector.classList.remove('hidden');
+        } else {
+            weekSelector.classList.add('hidden');
+        }
+    });
+
+    // C. Hacer que los botones de L, M, X... se marquen al clic
+    const dayBtns = document.querySelectorAll('.day-selector-btn');
+    dayBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            btn.classList.toggle('active'); // Pone o quita la clase 'active'
+            
+            // Cambio visual directo para que se note
+            if(btn.classList.contains('active')) {
+                btn.style.backgroundColor = 'var(--c-primary)';
+                btn.style.color = '#fff';
+            } else {
+                btn.style.backgroundColor = 'var(--c-surface)';
+                btn.style.color = 'var(--c-on-surface)';
+            }
+        });
+    });
+};
+
+// 2. FUNCIÓN MAESTRA DE GUARDADO (Sustituye al guardado normal)
+const handleSaveMovimiento = async (e) => {
+    e.preventDefault(); // Evita que la página se recargue de golpe
+    
+    const btn = document.getElementById('save-movimiento-btn') || e.target.querySelector('button[type="submit"]');
+    
+    // Usamos tu validador existente
+    if (typeof validateMovementForm === 'function' && !validateMovementForm()) return;
+
+    // Efecto visual de "Cargando..."
+    const originalBtnText = btn ? btn.innerText : 'Guardar';
+    if(btn) {
+        btn.innerText = 'Guardando...';
+        btn.disabled = true;
+    }
+
+    try {
+        // --- RECOLECCIÓN DE DATOS DEL FORMULARIO ---
+        const userRef = fbDb.collection('users').doc(currentUser.uid);
+        
+        // Obtenemos el tipo (Gasto, Ingreso...) del selector visual
+        const typeSelector = document.querySelector('.filter-pill--active[data-action="set-movimiento-type"]');
+        const tipoUI = typeSelector ? typeSelector.dataset.type : 'gasto'; // Por defecto gasto
+
+        // Obtenemos el monto y aplicamos signo según sea gasto o ingreso
+        const rawMonto = document.getElementById('movimiento-cantidad').value; 
+        // Nota: Asumo que tienes una función parseCurrencyString, si no, usamos parseFloat
+        let cantidadVal = typeof parseCurrencyString === 'function' ? parseCurrencyString(rawMonto) : parseFloat(rawMonto);
+        
+        let cantidadFinal = Math.abs(cantidadVal);
+        if (tipoUI === 'gasto' || tipoUI === 'transferencia_saliente') cantidadFinal = -cantidadFinal;
+
+        const descripcion = document.getElementById('movimiento-descripcion').value.trim();
+        const conceptoId = document.getElementById('movimiento-concepto').value;
+        const fechaInput = document.getElementById('movimiento-fecha').value; 
+        const cuentaId = document.getElementById('movimiento-cuenta').value;
+
+        // VERIFICAMOS: ¿Está encendido el interruptor de Recurrencia?
+        const isRecurrent = document.getElementById('is-recurrent-toggle').checked;
+
+        if (isRecurrent) {
+            // === CAMINO A: ES UN MOVIMIENTO RECURRENTE ===
+            // No guardamos movimiento, guardamos una "REGLA"
+            const freq = document.getElementById('recurrent-frequency').value;
+            // Recogemos qué días de la semana se marcaron (si aplica)
+            const weekDays = Array.from(document.querySelectorAll('.day-selector-btn.active')).map(b => b.dataset.day);
+            
+            const recurrenceData = {
+                id: (Date.now() + Math.random().toString(36).substr(2, 9)), // ID único simple
+                tipo: tipoUI,
+                cantidad: cantidadFinal,
+                descripcion: descripcion,
+                conceptoId: conceptoId,
+                cuentaId: cuentaId,
+                cuentaOrigenId: document.getElementById('movimiento-cuenta-origen')?.value || null,
+                cuentaDestinoId: document.getElementById('movimiento-cuenta-destino')?.value || null,
+                
+                // Configuración del motor de tiempo
+                frequency: freq,
+                nextDate: fechaInput, // La primera vez será en la fecha que pusiste
+                weekDays: freq === 'weekly' ? weekDays : [],
+                active: true, // La regla nace activa
+                createdAt: new Date().toISOString()
+            };
+
+            // Guardamos en la colección 'recurrentes'
+            await userRef.collection('recurrentes').doc(recurrenceData.id).set(recurrenceData);
+            
+            // Usamos tu sistema de notificaciones si existe, o un alert simple
+            if(typeof showToast === 'function') showToast('✅ Movimiento programado correctamente');
+            else alert('Movimiento programado');
+
+        } else {
+            // === CAMINO B: ES UN MOVIMIENTO NORMAL (Lo de siempre) ===
+            const newMov = {
+                id: (Date.now() + Math.random().toString(36).substr(2, 9)),
+                fecha: new Date(fechaInput + 'T12:00:00Z').toISOString(),
+                cantidad: cantidadFinal,
+                descripcion: descripcion,
+                conceptoId: conceptoId,
+                tipo: tipoUI,
+                cuentaId: cuentaId,
+                cuentaOrigenId: document.getElementById('movimiento-cuenta-origen')?.value || null,
+                cuentaDestinoId: document.getElementById('movimiento-cuenta-destino')?.value || null
+            };
+
+            const batch = fbDb.batch();
+            batch.set(userRef.collection('movimientos').doc(newMov.id), newMov);
+
+            // Actualizar saldos (Lógica simplificada para asegurar funcionamiento)
+            if (tipoUI === 'traspaso') {
+                 // Lógica de traspaso si aplica
+            } else {
+                batch.update(userRef.collection('cuentas').doc(cuentaId), { 
+                    saldo: firebase.firestore.FieldValue.increment(cantidadFinal) 
+                });
+            }
+
+            await batch.commit();
+            
+            // Actualización visual rápida
+            if(typeof updateLocalStateOptimistic === 'function') updateLocalStateOptimistic(newMov, tipoUI);
+            if(typeof showToast === 'function') showToast('Movimiento guardado');
+        }
+
+        // --- LIMPIEZA FINAL ---
+        // Cerramos el modal
+        const modal = document.getElementById('movimiento-modal');
+        if(modal) {
+            modal.classList.remove('modal--open'); // O la clase que uses para cerrar
+            if(typeof hideModal === 'function') hideModal('movimiento-modal');
+        }
+        
+        // Reseteamos el formulario
+        document.getElementById('form-movimiento').reset();
+        // IMPORTANTE: Apagamos el interruptor y ocultamos el menú extra
+        document.getElementById('is-recurrent-toggle').checked = false;
+        document.getElementById('recurrence-options').classList.add('hidden');
+
+    } catch (error) {
+        console.error("Error crítico guardando:", error);
+        alert("Hubo un error al guardar. Revisa la consola.");
+    } finally {
+        if(btn) {
+            btn.innerText = originalBtnText;
+            btn.disabled = false;
+        }
+    }
+};
+
 const attachEventListeners = () => {
 	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
     document.addEventListener('click', async (e) => {
