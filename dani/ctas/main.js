@@ -2344,6 +2344,54 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
                 });
             });
         };
+	
+function procesarRecurrentes() {
+    const hoy = new Date();
+    hoy.setHours(0,0,0,0);
+    
+    let huboCambios = false;
+
+    db.movimientos.forEach(mov => {
+        // Si es recurrente y tiene fecha próxima válida
+        if (mov.esRecurrente && mov.proximaFecha) {
+            let fechaProxima = new Date(mov.proximaFecha);
+            
+            // Mientras la fecha programada sea hoy o ya haya pasado...
+            while (fechaProxima <= hoy) {
+                console.log(`🔄 Ejecutando recurrencia para: ${mov.concepto}`);
+                
+                // 1. Crear el nuevo movimiento "hijo"
+                const nuevoMov = { ...mov }; // Copia exacta
+                nuevoMov.id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+                nuevoMov.fecha = fechaProxima.toISOString().split('T')[0]; // Fecha que tocaba
+                nuevoMov.esRecurrente = false; // El hijo ya no es recurrente, es un hecho real
+                delete nuevoMov.proximaFecha;
+                delete nuevoMov.frecuencia;
+
+                db.movimientos.push(nuevoMov);
+                huboCambios = true;
+
+                // 2. Calcular la SIGUIENTE fecha para el "padre"
+                // (Usando date-fns si está disponible, o lógica simple JS)
+                if (mov.frecuencia === 'mensual') {
+                    fechaProxima.setMonth(fechaProxima.getMonth() + 1);
+                } else if (mov.frecuencia === 'semanal') {
+                    fechaProxima.setDate(fechaProxima.getDate() + 7);
+                } else if (mov.frecuencia === 'anual') {
+                    fechaProxima.setFullYear(fechaProxima.getFullYear() + 1);
+                }
+                
+                // Actualizamos la fecha del padre para la próxima vez
+                mov.proximaFecha = fechaProxima.toISOString().split('T')[0];
+            }
+        }
+    });
+
+    if (huboCambios) {
+        recalcularSaldosGlobales(); // ¡Importante! Recalcular saldos con los nuevos hijos
+    }
+}
+
     const initApp = async () => {
 	SpaceBackgroundEffect.start();	
     const procederConCargaDeApp = () => {
@@ -12145,7 +12193,35 @@ const updateLocalStateOptimistic = (mov, tipo) => {
     } else {
         // Gasto o Ingreso
         const c = db.cuentas.find(c => c.id === mov.cuentaId);
-        if (c) c.saldo += mov.cantidad; 
+// === INICIO DEL CAMBIO ===
+    
+    // 1. Insertar o Actualizar en el Array
+    if (editingId) {
+        // MODO EDICIÓN: Buscamos y reemplazamos
+        const index = db.movimientos.findIndex(m => m.id === editingId);
+        if (index !== -1) {
+            db.movimientos[index] = newMov; // Reemplazo total
+        }
+    } else {
+        // MODO NUEVO: Añadimos al principio
+        db.movimientos.push(newMov);
+    }
+
+    // 2. ¡LA MAGIA! Recalculamos todo el historial
+    // Esto arregla automáticamente cualquier error de saldo previo
+    recalcularSaldosGlobales();
+
+    // 3. Actualizar la UI
+    renderPanelPage(); // Actualizar panel principal (saldos nuevos)
+    
+    // Si estuviéramos en la página de diario, recargarla
+    if (currentPage === 'diario') {
+        renderDiarioPage();
+    }
+
+    // === FIN DEL CAMBIO (Borra lo que hubiera de c.saldo += ...) ===
+
+    closeModal('modal-add-movimiento'); 
     }
 
     // 2. Añadir el movimiento al historial local (db.movimientos)
@@ -12184,3 +12260,52 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// ==========================================
+// === MOTOR DE RECÁLCULO FINANCIERO (CORE) ===
+// ==========================================
+function recalcularSaldosGlobales() {
+    console.time("Recálculo Financiero");
+
+    // 1. Resetear saldos de todas las cuentas a su estado base (0 o saldo inicial si existiera)
+    // Asumimos que el saldo inicial se gestiona mediante un movimiento de "Ajuste" o empieza en 0.
+    db.cuentas.forEach(cuenta => {
+        cuenta.saldo = 0; 
+        // Si en el futuro añades un campo 'saldo_inicial' a la cuenta, súmalo aquí:
+        // cuenta.saldo = cuenta.saldo_inicial || 0;
+    });
+
+    // 2. Ordenar movimientos por fecha (CRÍTICO para el Diario y saldos progresivos)
+    // Ordenamos de más antiguo a más nuevo para sumar en orden
+    db.movimientos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+    // 3. Replay (Repetición) de la historia
+    db.movimientos.forEach(mov => {
+        // A. Si es un movimiento normal (Ingreso o Gasto)
+        if (mov.tipo === 'ingreso' || mov.tipo === 'gasto') {
+            const cuenta = db.cuentas.find(c => c.id === mov.cuentaId);
+            if (cuenta) {
+                // Sumamos (ingresos son positivos, gastos negativos en la BBDD o gestionados por signo)
+                // Aseguramos que sea número
+                const monto = parseFloat(mov.cantidad);
+                cuenta.saldo += monto;
+            }
+        }
+        // B. Si es una transferencia (Mueve dinero de A a B)
+        else if (mov.tipo === 'transferencia') {
+            const cuentaOrigen = db.cuentas.find(c => c.id === mov.cuentaId); // Sale de aquí
+            const cuentaDestino = db.cuentas.find(c => c.id === mov.cuentaDestinoId); // Entra aquí
+            
+            const monto = Math.abs(parseFloat(mov.cantidad)); // Siempre positivo para la lógica
+
+            if (cuentaOrigen) cuentaOrigen.saldo -= monto;
+            if (cuentaDestino) cuentaDestino.saldo += monto;
+        }
+    });
+
+    console.log("✅ Saldos saneados y recalculados correctamente.");
+    console.timeEnd("Recálculo Financiero");
+    
+    // 4. Guardar el estado saneado
+    saveDB();
+}
