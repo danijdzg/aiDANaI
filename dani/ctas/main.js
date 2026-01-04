@@ -8728,7 +8728,7 @@ function populateOptions(selectElement, optionsContainer, trigger, wrapper) {
 
 /* EN main.js - Reemplaza showCalculator */
 
-function showCalculator = (targetInput) => {
+const showCalculator = (targetInput) => {
     const calculatorOverlay = select('calculator-overlay');
     const calculatorUi = select('calculator-ui');
     
