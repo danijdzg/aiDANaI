@@ -4876,14 +4876,12 @@ const renderPanelPage = async () => {
 
                     <div style="height: 30px; background-color: var(--c-outline);"></div>
 
-                    <div style="text-align: center;">
-                        <div style="font-size: 0.65rem; font-weight: 700; color: #2979FF; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
-                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
-                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
-                        </div>
-                        <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
-                    </div>
-
+                    <div style="text-align: center; cursor: pointer;" data-action="ver-inversiones">
+						<div style="font-size: 0.65rem; font-weight: 700; color: #2979FF; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+							<span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv. <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+						</div>
+						<div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+						</div>
                 </div>
             </div>
 
