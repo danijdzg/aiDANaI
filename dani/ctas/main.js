@@ -4818,38 +4818,22 @@ const renderPanelPage = async () => {
                         <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
                     </div>
                 </div>
-                       
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
-    
-    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" 
-                 style="background: #000000; padding: 12px; border-radius: 16px; border: 1px solid #333333; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
                 
-                <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #00E676; box-shadow: 0 0 10px #00E676;"></div>
-                
-                <div style="font-size: 0.7rem; font-weight: 700; color: #888; text-transform: uppercase; margin-top: 5px; margin-bottom: 2px; letter-spacing: 1px;">
-                    INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos" style="opacity: 0.5;">?</button>
-                </div>
-                
-                <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" 
-                     style="font-size: 1.8rem; font-weight: 900; color: #00E676; line-height: 1.1; letter-spacing: -0.5px;">
-                     +0,00 €
-                </div>
-            </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: rgba(0, 179, 77, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(0, 179, 77, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-success); text-transform: uppercase; margin-bottom: 2px;">
+                            INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos">?</button>
+                        </div>
+                        <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-success);">+0,00 €</div>
+                    </div>
 
-            <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" 
-                 style="background: #000000; padding: 12px; border-radius: 16px; border: 1px solid #333333; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
-                
-                <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #FF3B30; box-shadow: 0 0 10px #FF3B30;"></div>
-
-                <div style="font-size: 0.7rem; font-weight: 700; color: #888; text-transform: uppercase; margin-top: 5px; margin-bottom: 2px; letter-spacing: 1px;">
-                    GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos" style="opacity: 0.5;">?</button>
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="background: rgba(255, 59, 48, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 59, 48, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-danger); text-transform: uppercase; margin-bottom: 2px;">
+                            GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos">?</button>
+                        </div>
+                        <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-danger);">-0,00 €</div>
+                    </div>
                 </div>
-                
-                <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" 
-                     style="font-size: 1.8rem; font-weight: 900; color: #FF3B30; line-height: 1.1; letter-spacing: -0.5px;">
-                     -0,00 €
-                </div>
-            </div>
 
                 <div style="height: 1px; background-color: var(--c-outline); margin: 15px 0; opacity: 0.5;"></div>
 
@@ -4870,7 +4854,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15); background: #000000;">
+<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
     <div style="margin-bottom: 20px;">
         <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
             PATRIMONIO NETO
@@ -4902,7 +4886,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-           <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: #000000; border: 1px solid var(--c-info); box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+           <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
                     <div style="text-align: left;">
@@ -4924,7 +4908,7 @@ const renderPanelPage = async () => {
                     <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--c-on-surface-tertiary); margin-bottom: 5px;">
                         = Valor Real de Mercado <button class="help-btn" data-action="show-kpi-help" data-kpi="posicion_real">?</button>
                     </div>
-                    <div id="new-card-market-value" class="skeleton" style="font-size: 2.4rem; font-weight: 800; line-height: 1; color: #fff;">0,00 €</div>
+                    <div id="new-card-market-value" class="skeleton" style="font-size: 1.8rem; font-weight: 800; line-height: 1;">0,00 €</div>
                 </div>
             </div>
 
