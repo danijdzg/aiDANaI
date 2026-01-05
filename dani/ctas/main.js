@@ -4578,22 +4578,21 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
             const accountsInType = accountsByType[tipo];
             const typeBalance = accountsInType.reduce((sum, acc) => sum + (saldos[acc.id] || 0), 0);
             const porcentajeGlobal = totalFiltrado > 0 ? (typeBalance / totalFiltrado) * 100 : 0;
-            const accountsHtml = accountsInType.sort((a,b) => a.nombre.localeCompare(b.nombre)).map(c => 
-                `<div class="modal__list-item" 
-                     data-action="view-account-details" 
-                     data-id="${c.id}" 
-                     ${c.esInversion ? 'data-is-investment="true"' : ''}
-                     style="cursor: pointer; padding: var(--sp-2) 0;">
-                    <div>
-                        <span style="display: block;">${c.nombre}</span>
-                        <small style="color: var(--c-on-surface-secondary);">${(saldos[c.id] || 0) / typeBalance * 100 > 0 ? ((saldos[c.id] || 0) / typeBalance * 100).toFixed(1) + '% de ' + tipo : ''}</small>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: var(--sp-2);">
-                        ${formatCurrencyHTML(saldos[c.id] || 0)}
-                        <span class="material-icons" style="font-size: 18px;">chevron_right</span>
-                    </div>
-                </div>`
-            ).join('');
+            const accountsHtml = accountsInType
+                .filter(c => (saldos[c.id] || 0) !== 0) // <--- ESTO ES LO QUE AÑADIMOS (Oculta si es 0)
+                .sort((a,b) => a.nombre.localeCompare(b.nombre))
+                .map(c => 
+                    `<div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" ${c.esInversion ? 'data-is-investment="true"' : ''} style="cursor: pointer; padding: var(--sp-2) 0;">
+                        <div>
+                            <span style="display: block;">${c.nombre}</span>
+                            <small style="color: var(--c-on-surface-secondary);">${(saldos[c.id] || 0) / typeBalance * 100 > 0 ? ((saldos[c.id] || 0) / typeBalance * 100).toFixed(1) + '% de ' + tipo : ''}</small>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: var(--sp-2);">
+                             ${formatCurrencyHTML(saldos[c.id] || 0)}
+                             <span class="material-icons" style="font-size: 18px;">chevron_right</span>
+                        </div>
+                    </div>`
+                ).join('');
 
             if (!accountsHtml) return '';
 
