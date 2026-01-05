@@ -2361,52 +2361,101 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
             });
         };
 	
-function procesarRecurrentes() {
+// ==========================================================
+// === MOTOR DE RECURRENTES V2.0 (Logic Fix by aiDANaI) ===
+// ==========================================================
+
+const procesarRecurrentes = async () => {
+    // 1. DIAGNÓSTICO: Verificar si hay datos
+    if (!db.recurrentes || db.recurrentes.length === 0) {
+        console.log("📭 No hay operaciones recurrentes configuradas.");
+        return;
+    }
+
     const hoy = new Date();
-    hoy.setHours(0,0,0,0);
-    
-    let huboCambios = false;
+    hoy.setHours(0, 0, 0, 0); // Normalizamos hoy a medianoche para comparar peras con peras
 
-    db.movimientos.forEach(mov => {
-        // Si es recurrente y tiene fecha próxima válida
-        if (mov.esRecurrente && mov.proximaFecha) {
-            let fechaProxima = new Date(mov.proximaFecha);
+    const batch = fbDb.batch(); // Preparamos un paquete de cambios para Firebase
+    let operacionesGeneradas = 0;
+
+    console.log("🔄 Iniciando procesamiento de recurrentes...");
+
+    // 2. ITERACIÓN: Recorremos LA IMPRENTA (db.recurrentes), no los libros.
+    db.recurrentes.forEach(recurrente => {
+        // Validación de seguridad: Si no tiene fecha próxima, la ignoramos
+        if (!recurrente.nextDate) return;
+
+        let proximaFechaObj = new Date(recurrente.nextDate);
+        let huboGeneracion = false;
+        
+        // Freno de emergencia: Máximo 24 ejecuciones por item para evitar bucles infinitos
+        // si la fecha es muy antigua (ej. 2010).
+        let safetyCounter = 0; 
+        const SAFETY_LIMIT = 24; 
+
+        // 3. BUCLE TEMPORAL: Mientras la fecha programada sea HOY o ANTES...
+        while (proximaFechaObj <= hoy && safetyCounter < SAFETY_LIMIT) {
             
-            // Mientras la fecha programada sea hoy o ya haya pasado...
-            while (fechaProxima <= hoy) {
-                console.log(`🔄 Ejecutando recurrencia para: ${mov.concepto}`);
-                
-                // 1. Crear el nuevo movimiento "hijo"
-                const nuevoMov = { ...mov }; // Copia exacta
-                nuevoMov.id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
-                nuevoMov.fecha = fechaProxima.toISOString().split('T')[0]; // Fecha que tocaba
-                nuevoMov.esRecurrente = false; // El hijo ya no es recurrente, es un hecho real
-                delete nuevoMov.proximaFecha;
-                delete nuevoMov.frecuencia;
+            // A. CREAR EL MOVIMIENTO (EL LIBRO)
+            const nuevoId = generateId(); // Usamos tu helper generateId
+            const nuevoMovimiento = {
+                id: nuevoId,
+                cantidad: recurrente.cantidad,
+                conceptoId: recurrente.conceptoId || 'VARIO',
+                cuentaId: recurrente.cuentaId,
+                descripcion: recurrente.descripcion + ' (Recurrente)',
+                fecha: proximaFechaObj.toISOString().split('T')[0], // YYYY-MM-DD
+                tipo: recurrente.tipo || 'gasto', // Por defecto gasto
+                esRecurrente: false, // El hijo NO es recurrente, es real
+                runningBalance: 0 // Se calculará luego
+            };
 
-                db.movimientos.push(nuevoMov);
-                huboCambios = true;
+            // B. AÑADIR AL PAQUETE DE GUARDADO
+            // Referencia: users/{uid}/movimientos/{id}
+            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(nuevoId);
+            batch.set(movRef, nuevoMovimiento);
+            
+            // Actualizar saldo de la cuenta (Optimista)
+            const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(recurrente.cuentaId);
+            const impacto = (recurrente.tipo === 'gasto') ? -Math.abs(recurrente.cantidad) : Math.abs(recurrente.cantidad);
+            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(impacto) });
 
-                // 2. Calcular la SIGUIENTE fecha para el "padre"
-                // (Usando date-fns si está disponible, o lógica simple JS)
-                if (mov.frecuencia === 'mensual') {
-                    fechaProxima.setMonth(fechaProxima.getMonth() + 1);
-                } else if (mov.frecuencia === 'semanal') {
-                    fechaProxima.setDate(fechaProxima.getDate() + 7);
-                } else if (mov.frecuencia === 'anual') {
-                    fechaProxima.setFullYear(fechaProxima.getFullYear() + 1);
-                }
-                
-                // Actualizamos la fecha del padre para la próxima vez
-                mov.proximaFecha = fechaProxima.toISOString().split('T')[0];
-            }
+            // C. CALCULAR LA SIGUIENTE FECHA (AVANZAR RELOJ)
+            // Usamos tu función helper existente 'calculateNextDueDate'
+            proximaFechaObj = calculateNextDueDate(proximaFechaObj.toISOString().split('T')[0], recurrente.frequency);
+            
+            operacionesGeneradas++;
+            huboGeneracion = true;
+            safetyCounter++;
+        }
+
+        // 4. ACTUALIZAR LA IMPRENTA: Guardamos la nueva "próxima fecha" en el recurrente
+        if (huboGeneracion) {
+            const recurrenteRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(recurrente.id);
+            batch.update(recurrenteRef, { 
+                nextDate: proximaFechaObj.toISOString().split('T')[0] 
+            });
+            console.log(`✅ [${recurrente.descripcion}] procesado. Próxima fecha: ${proximaFechaObj.toISOString().split('T')[0]}`);
         }
     });
 
-    if (huboCambios) {
-        recalcularSaldosGlobales(); // ¡Importante! Recalcular saldos con los nuevos hijos
+    // 5. COMMIT: Enviar todo a Firebase de una sola vez
+    if (operacionesGeneradas > 0) {
+        try {
+            await batch.commit();
+            showToast(`Se han generado ${operacionesGeneradas} movimientos recurrentes.`, 'success');
+            hapticFeedback('success');
+            
+            // Recargar datos para ver los cambios
+            loadCoreData(currentUser.uid); 
+        } catch (error) {
+            console.error("❌ Error guardando recurrentes:", error);
+            showToast("Error al procesar recurrentes", "danger");
+        }
+    } else {
+        console.log("👍 Todo al día. No hay recurrentes pendientes.");
     }
-}
+};
 
     const initApp = async () => {
 	SpaceBackgroundEffect.start();	
@@ -2458,6 +2507,10 @@ window.addEventListener('offline', () => {
         
     // === ¡LA CORRECCIÓN CLAVE ESTÁ AQUÍ! ===
     navigateTo(PAGE_IDS.PANEL, true); 
+	// Esperamos 2 segundos para asegurar que la BBDD ha cargado antes de procesar
+    setTimeout(() => {
+        procesarRecurrentes();
+    }, 2000);
     // =====================================
 
       isInitialLoadComplete = true;
