@@ -10350,150 +10350,133 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
 };
 
 // ===============================================================
-// === HANDLE SAVE MOVEMENT V2.0 (Soporte Real para Recurrentes) ===
+// === HANDLE SAVE MOVEMENT V3.0 (Depurado y Blindado) ===
 // ===============================================================
 const handleSaveMovement = async (formElement, btn) => {
-    console.log("🚀 Ejecutando handleSaveMovement V2.0...");
+    console.log("🚀 INICIANDO GUARDADO...");
 
-    // --- 1. OBTENCIÓN DE DATOS ---
-    const rawAmount = select('movimiento-cantidad').value;
-    const cantidadFloat = typeof parseCurrencyString === 'function' ? parseCurrencyString(rawAmount) : parseFloat(rawAmount.replace(',', '.'));
+    // 1. OBTENCIÓN DE DATOS DIRECTA (Sin helpers intermedios para evitar fallos)
+    const rawAmount = document.getElementById('movimiento-cantidad').value; // O el ID de tu display
+    // Si usas display de calculadora, usa: document.getElementById('calculator-display').innerText
     
-    // Detectar Tipo (Gasto/Ingreso/Traspaso)
-    const activeTypeBtn = document.querySelector('.filter-pill[data-action="set-movimiento-type"].filter-pill--active');
-    const tipoUI = activeTypeBtn ? activeTypeBtn.dataset.type : 'gasto';
+    // TRUCO: Limpiamos el valor numérico
+    const cantidadFloat = parseFloat(rawAmount.replace(/[^0-9.-]+/g,""));
 
-    // --- NUEVO: Datos de Recurrencia ---
-    // Usamos los IDs que ya vi en tu código (Snippet 17)
-    const esRecurrente = select('movimiento-recurrente') ? select('movimiento-recurrente').checked : false;
-    const frecuencia = select('recurrent-frequency') ? select('recurrent-frequency').value : 'monthly';
-    // -----------------------------------
+    // LEEMOS LOS ELEMENTOS DEL DOM
+    const elRecurrente = document.getElementById('movimiento-recurrente');
+    const elFrecuencia = document.getElementById('recurrent-frequency');
+    const elConcepto = document.getElementById('movimiento-concepto');
+    const elCuenta = document.getElementById('movimiento-cuenta');
+    const elFecha = document.getElementById('movimiento-fecha');
+    const elDesc = document.getElementById('movimiento-descripcion');
 
-    // Validación Básica
-    if (!rawAmount || isNaN(cantidadFloat) || cantidadFloat === 0) {
-        showToast("Introduce una cantidad válida", "warning");
-        hapticFeedback('error');
+    // VERIFICACIÓN VISUAL (Mira la consola del navegador F12)
+    const esRecurrente = elRecurrente ? elRecurrente.checked : false;
+    const frecuencia = elFrecuencia ? elFrecuencia.value : 'monthly';
+    
+    console.log("Estado Recurrente:", esRecurrente); 
+    console.log("Frecuencia:", frecuencia);
+
+    // Validaciones
+    if (!cantidadFloat || cantidadFloat === 0) {
+        showToast("Cantidad inválida", "warning");
+        return;
+    }
+    if (!elCuenta.value) {
+        showToast("Falta cuenta", "warning");
         return;
     }
 
-    let cuentaId, cuentaOrigenId, cuentaDestinoId;
-    if (tipoUI === 'traspaso') {
-        cuentaOrigenId = select('movimiento-cuenta-origen').value;
-        cuentaDestinoId = select('movimiento-cuenta-destino').value;
-        if (!cuentaOrigenId || !cuentaDestinoId) { showToast('Faltan cuentas', 'warning'); return; }
-    } else {
-        cuentaId = select('movimiento-cuenta').value;
-        if (!cuentaId) { showToast('Selecciona una cuenta', 'warning'); return; }
-    }
+    // Preparar UI del botón
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Guardando...';
+    btn.disabled = true;
 
-    setButtonLoading(btn, true, 'Guardando...');
-
-    // Preparar datos comunes
-    const cantidadCentimos = Math.round(cantidadFloat * 100); // Guardamos en céntimos
-    const conceptoId = select('movimiento-concepto').value;
-    const descripcion = select('movimiento-descripcion').value.trim();
-    const fecha = select('movimiento-fecha').value || new Date().toISOString().split('T')[0];
+    // Detectar Tipo (Gasto/Ingreso) basado en UI o signo
+    // Asumimos que si no hay selector de tipo, es Gasto por defecto
+    const tipo = cantidadFloat >= 0 ? 'ingreso' : 'gasto'; // Ajusta según tu lógica de signos
+    
+    const fechaISO = elFecha.value || new Date().toISOString().split('T')[0];
     const newId = generateId();
 
-    const movimiento = {
-        id: newId,
-        fecha: new Date(fecha).toISOString(), // Guardamos ISO completo
-        conceptoId: conceptoId,
-        descripcion: descripcion,
-        // Gasto es negativo, Ingreso/Traspaso positivo (lógica visual)
-        cantidad: tipoUI === 'gasto' ? -Math.abs(cantidadCentimos) : Math.abs(cantidadCentimos),
-        tipo: tipoUI === 'traspaso' ? 'traspaso' : 'movimiento',
-        esRecurrente: false, // Este movimiento individual NO es la regla
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
-    if (tipoUI === 'traspaso') {
-        movimiento.cuentaOrigenId = cuentaOrigenId;
-        movimiento.cuentaDestinoId = cuentaDestinoId;
-        movimiento.cantidad = Math.abs(cantidadCentimos);
-    } else {
-        movimiento.cuentaId = cuentaId;
-    }
-
-    // --- 2. ESCRITURA EN BASE DE DATOS (BATCH) ---
     try {
         const batch = fbDb.batch();
         const userRef = fbDb.collection('users').doc(currentUser.uid);
 
-        // A) Guardar el movimiento de hoy (Historial)
+        // A) MOVIMIENTO DE HOY (Historial)
+        // ------------------------------------------------
         const movRef = userRef.collection('movimientos').doc(newId);
-        batch.set(movRef, movimiento);
+        batch.set(movRef, {
+            id: newId,
+            cantidad: cantidadFloat, // Asegúrate de gestionar el signo negativo si es gasto
+            conceptoId: elConcepto.value,
+            cuentaId: elCuenta.value,
+            descripcion: elDesc.value,
+            fecha: fechaISO,
+            tipo: tipo,
+            esRecurrente: false, 
+            createdAt: new Date().toISOString()
+        });
 
-        // B) Actualizar Saldos
-        if (tipoUI === 'traspaso') {
-            const origenRef = userRef.collection('cuentas').doc(cuentaOrigenId);
-            const destinoRef = userRef.collection('cuentas').doc(cuentaDestinoId);
-            batch.update(origenRef, { saldo: firebase.firestore.FieldValue.increment(-movimiento.cantidad) });
-            batch.update(destinoRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
-        } else {
-            const cuentaRef = userRef.collection('cuentas').doc(cuentaId);
-            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(movimiento.cantidad) });
-        }
+        // B) ACTUALIZAR SALDO
+        // ------------------------------------------------
+        const cuentaRef = userRef.collection('cuentas').doc(elCuenta.value);
+        batch.update(cuentaRef, { 
+            saldo: firebase.firestore.FieldValue.increment(cantidadFloat) 
+        });
 
-        // C) --- NUEVO: SI ES RECURRENTE, CREAR LA REGLA ---
-        if (esRecurrente && tipoUI !== 'traspaso') { // (Omitimos recurrentes en traspasos por simplicidad inicial)
-            console.log("🔄 Creando regla recurrente...");
+        // C) LA REGLA RECURRENTE (La clave del problema)
+        // ------------------------------------------------
+        if (esRecurrente) {
+            console.log("✅ DENTRO DEL IF RECURRENTE: Creando regla...");
             
-            // Calcular PRÓXIMA fecha
-            // Si hoy es el pago, la próxima es segun la frecuencia
-            const nextDateObj = calculateNextDueDate(fecha, frecuencia);
-            
+            const nextDate = calculateNextDueDate(fechaISO, frecuencia);
             const ruleId = generateId();
             const ruleRef = userRef.collection('recurrentes').doc(ruleId);
             
             const nuevaRegla = {
                 id: ruleId,
-                descripcion: descripcion || 'Pago Recurrente',
-                cantidad: movimiento.cantidad, // Ya lleva el signo correcto (- o +)
-                cuentaId: cuentaId,
-                conceptoId: conceptoId,
-                tipo: tipoUI, // 'gasto' o 'ingreso'
+                descripcion: elDesc.value || 'Pago Recurrente',
+                cantidad: cantidadFloat,
+                cuentaId: elCuenta.value,
+                conceptoId: elConcepto.value,
+                tipo: tipo,
                 frequency: frecuencia,
-                startDate: fecha,
-                nextDate: nextDateObj.toISOString().split('T')[0], // YYYY-MM-DD
+                startDate: fechaISO,
+                nextDate: nextDate.toISOString().split('T')[0], // La fecha CLAVE
                 activo: true
             };
-            
+
+            // ¡IMPORTANTE! Escribimos en el batch
             batch.set(ruleRef, nuevaRegla);
-        }
-        // --------------------------------------------------
-
-        await batch.commit();
-
-        // --- 3. FINALIZACIÓN ---
-        hapticFeedback('success');
-        
-        // Animación visual botón
-        const originalBtnText = btn.innerHTML;
-        btn.classList.add('btn--success');
-        btn.innerHTML = '<span class="material-icons">check</span> ¡Guardado!';
-        
-        // Si tienes la función de actualización optimista, la usamos
-        if (typeof updateLocalStateOptimistic === 'function') {
-            updateLocalStateOptimistic(movimiento, tipoUI);
+            console.log("📦 Regla empaquetada:", nuevaRegla);
         } else {
-            // Si no, recarga forzosa
-            loadCoreData(currentUser.uid);
+            console.log("ℹ️ No es recurrente, saltando paso C");
         }
 
-        setTimeout(() => {
-            hideModal('movimiento-modal');
-            if(formElement) formElement.reset();
-            btn.classList.remove('btn--success');
-            btn.innerHTML = originalBtnText;
-            setButtonLoading(btn, false);
-        }, 600);
+        // D) COMMIT FINAL
+        // ------------------------------------------------
+        await batch.commit();
+        console.log("🎉 GUARDADO EN FIREBASE EXITOSO");
+
+        showToast('Guardado correctamente', 'success');
+        hapticFeedback('success');
+
+        // Cerrar y limpiar
+        if(typeof closeAddModal === 'function') closeAddModal();
+        
+        // Restaurar botón
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        // Recargar
+        loadCoreData(currentUser.uid);
 
     } catch (error) {
-        console.error("❌ Error guardando:", error);
-        hapticFeedback('error');
-        showToast('Error al guardar. Inténtalo de nuevo.', 'danger');
-        setButtonLoading(btn, false);
+        console.error("❌ ERROR CRÍTICO:", error);
+        showToast('Error: ' + error.message, 'danger');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     }
 };
 
