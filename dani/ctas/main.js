@@ -4854,43 +4854,37 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" 
-     style="background-color: #000000 !important; border: 1px solid #333333; border-radius: 20px; padding: 25px 20px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: pointer; position: relative; overflow: hidden;">
-    
-    <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--c-primary); opacity: 0.8;"></div>
-
-    <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 10px;">
-        <span style="font-size: 0.75rem; font-weight: 700; color: #888888; text-transform: uppercase; letter-spacing: 2px;">
-            Patrimonio Neto
-        </span>
-        <button onclick="event.stopPropagation(); showKPIHelp('neto')" style="background:none; border:none; color:#555; font-size:12px;">?</button>
-    </div>
-
-    <div id="kpi-patrimonio-neto-value" class="skeleton" 
-         data-current-value="0" 
-         style="font-size: 3.5rem !important; font-weight: 800; color: #ffffff; text-align: center; line-height: 1.1; margin-bottom: 20px; text-shadow: 0 0 20px rgba(255,255,255,0.1);">
-        0,00 €
-    </div>
-
-    <div style="background-color: #111111; border-radius: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222;">
-        
-        <div style="text-align: center; flex: 1;">
-            <div style="font-size: 0.65rem; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; font-weight: 700;">
-                <span class="material-icons" style="font-size: 10px; vertical-align: middle;">account_balance_wallet</span> Liquidez
-            </div>
-            <div id="kpi-liquidez-value" class="skeleton" style="font-size: 1.1rem; font-weight: 700; color: #fff;">0,00 €</div>
+<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="background-color: #000000 !important; style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+    <div style="margin-bottom: 20px;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+            PATRIMONIO NETO
+            <button class="help-btn" onclick="event.stopPropagation(); showKPIHelp('neto')">?</button>
         </div>
-
-        <div style="width: 1px; height: 30px; background-color: #333;"></div>
-
-        <div style="text-align: center; flex: 1;">
-            <div style="font-size: 0.65rem; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; font-weight: 700;">
-                <span class="material-icons" style="font-size: 10px; vertical-align: middle;">savings</span> Invertido
-            </div>
-            <div id="kpi-capital-invertido-total" class="skeleton" style="font-size: 1.1rem; font-weight: 700; color: #fff;">0,00 €</div>
-        </div>
+        <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
     </div>
-</div>
+
+                <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
+                    
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">account_balance_wallet</span> Liquidez
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez">?</button>
+                        </div>
+                        <div id="kpi-liquidez-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
+                    <div style="height: 30px; background-color: var(--c-outline);"></div>
+
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+                        </div>
+                        <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
+                </div>
+            </div>
 
            <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
                 
