@@ -4821,21 +4821,35 @@ const renderPanelPage = async () => {
                        
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
     
-    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: #000000; padding: 10px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
-        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-success); text-transform: uppercase; margin-bottom: 2px;">
-            INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos">?</button>
-        </div>
-        <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1.6rem; font-weight: 800; color: var(--c-success); line-height: 1.1;">+0,00 €</div>
-    </div>
+    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" 
+                 style="background: #000000; padding: 12px; border-radius: 16px; border: 1px solid #333333; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #00E676; box-shadow: 0 0 10px #00E676;"></div>
+                
+                <div style="font-size: 0.7rem; font-weight: 700; color: #888; text-transform: uppercase; margin-top: 5px; margin-bottom: 2px; letter-spacing: 1px;">
+                    INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos" style="opacity: 0.5;">?</button>
+                </div>
+                
+                <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" 
+                     style="font-size: 1.8rem; font-weight: 900; color: #00E676; line-height: 1.1; letter-spacing: -0.5px;">
+                     +0,00 €
+                </div>
+            </div>
 
-    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="background: #000000; padding: 10px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
-        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-danger); text-transform: uppercase; margin-bottom: 2px;">
-            GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos">?</button>
-        </div>
-        <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" style="font-size: 1.6rem; font-weight: 800; color: var(--c-danger); line-height: 1.1;">-0,00 €</div>
-    </div>
+            <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" 
+                 style="background: #000000; padding: 12px; border-radius: 16px; border: 1px solid #333333; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #FF3B30; box-shadow: 0 0 10px #FF3B30;"></div>
 
-</div>
+                <div style="font-size: 0.7rem; font-weight: 700; color: #888; text-transform: uppercase; margin-top: 5px; margin-bottom: 2px; letter-spacing: 1px;">
+                    GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos" style="opacity: 0.5;">?</button>
+                </div>
+                
+                <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" 
+                     style="font-size: 1.8rem; font-weight: 900; color: #FF3B30; line-height: 1.1; letter-spacing: -0.5px;">
+                     -0,00 €
+                </div>
+            </div>
 
                 <div style="height: 1px; background-color: var(--c-outline); margin: 15px 0; opacity: 0.5;"></div>
 
