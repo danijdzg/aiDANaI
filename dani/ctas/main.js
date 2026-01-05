@@ -10262,43 +10262,92 @@ const handleSaveMovement = async (form, btn) => {
             baseData.cuentaDestinoId = null;
         }
 
-        // --- 3. GUARDADO DE RECURRENTE (Lógica separada) ---
-        if (isRecurrent) {
-            const frequency = getVal('recurrent-frequency') || 'monthly';
-            let rawNextDate = getVal('recurrent-next-date');
-            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha');
-            
-            let weekDays = [];
-            if (frequency === 'weekly') {
-                weekDays = Array.from(document.querySelectorAll('.day-selector-btn.active')).map(b => b.dataset.day);
-                if (weekDays.length === 0) throw new Error("Selecciona al menos un día.");
-            }
+     
+    // CASO A: ES UN MOVIMIENTO RECURRENTE (El "Contrato")
+    if (isRecurrent) {
+        const frequency = document.getElementById('recurrent-frequency').value;
+        const endDate = document.getElementById('recurrent-end-date').value || null;
 
-            const recurrentData = {
-                id: id,
-                ...baseData,
-                frequency: frequency,
-                nextDate: rawNextDate, 
-                endDate: getVal('recurrent-end-date') || null,
-                weekDays: weekDays,
-                active: true
+        // 1. Guardar la Regla de Recurrencia (Para el futuro)
+        const recurrenceData = {
+            userId: user.uid,
+            type: currentType,
+            amount: amount,
+            conceptId: conceptId,
+            accountId: accountId, // Cuenta origen (o única)
+            destAccountId: destAccountId || null, // Solo si es traspaso
+            description: description,
+            startDate: date, // Fecha elegida por el usuario
+            endDate: endDate,
+            frequency: frequency,
+            lastExecution: null, // Aún no se ha ejecutado automáticamente
+            createdAt: new Date().toISOString()
+        };
+
+        // Guardamos la regla en Firebase
+        const docRef = await db.collection('recurrences').add(recurrenceData);
+        console.log("🔄 Regla recurrente guardada con ID:", docRef.id);
+
+        // 2. ¿Debemos crear el PRIMER movimiento YA? (La "Primera Cuota")
+        // Comparamos fechas (ponemos horas a 0 para comparar solo días)
+        const fechaInicio = new Date(date);
+        fechaInicio.setHours(0,0,0,0);
+        
+        const hoy = new Date();
+        hoy.setHours(0,0,0,0);
+
+        // Si la fecha puesta es Hoy o Pasada, creamos el movimiento "físico"
+        if (fechaInicio <= hoy) {
+            console.log("📅 La fecha es hoy o anterior. Creando movimiento inicial inmediato...");
+            
+            const firstMovement = {
+                userId: user.uid,
+                type: currentType,
+                amount: amount,
+                conceptId: conceptId,
+                accountId: accountId,
+                destAccountId: destAccountId || null,
+                description: description, // Texto limpio
+                date: date, // Usamos la fecha seleccionada
+                createdAt: new Date().toISOString(),
+                recurrenceLinkId: docRef.id // (Opcional) Para saber que vino de esta regla
             };
 
-            await saveDoc('recurrentes', id, recurrentData);
+            // Guardamos el movimiento REAL y actualizamos saldo
+            await db.collection('movimientos').add(firstMovement);
+            await updateAccountBalance(accountId, amount, currentType, destAccountId);
+            
+            showToast("Recurrencia activada y primer movimiento añadido", "success");
+        } else {
+            showToast("Recurrencia programada para el futuro", "success");
+        }
 
-            // Actualizar memoria local
-            const idx = db.recurrentes.findIndex(r => r.id === id);
-            if (idx > -1) db.recurrentes[idx] = recurrentData;
-            else db.recurrentes.push(recurrentData);
-            db.recurrentes.sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+    } 
+    // CASO B: ES UN MOVIMIENTO NORMAL (Puntual)
+    else {
+        const movementData = {
+            userId: user.uid,
+            type: currentType,
+            amount: amount,
+            conceptId: conceptId,
+            accountId: accountId,
+            destAccountId: destAccountId || null,
+            description: description,
+            date: date,
+            createdAt: new Date().toISOString()
+        };
 
-            hapticFeedback('success');
-            showToast('Recurrente guardado.');
-            hideModal('movimiento-modal'); // Cerramos el modal explícitamente
-            const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) renderPlanificacionPage();
+        await db.collection('movimientos').add(movementData);
+        await updateAccountBalance(accountId, amount, currentType, destAccountId); // Actualizar Saldo
+        showToast("Movimiento guardado correctamente", "success");
+    }
 
-        } 
+    // --- LIMPIEZA FINAL ---
+    closeModal('movimiento-modal');
+    form.reset();
+    // Volver a poner la fecha de hoy por defecto para el próximo
+    document.getElementById('movimiento-fecha').valueAsDate = new Date();
+    renderDateDisplay(); // Actualizar el botón de la fecha visual
         // --- 4. GUARDADO DE MOVIMIENTO NORMAL ---
         else {
             let oldData = null;
