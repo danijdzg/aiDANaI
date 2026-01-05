@@ -6830,61 +6830,109 @@ body {
 }
 
 /* =============================================================== */
-/* === CORRECCIÓN BOTÓN CENTRAL FLOTANTE (TRANSPARENTE) === */
+/* === SOLUCIÓN DEFINITIVA: FAB CENTRADO + FONDO OSCURO FUNCIONAL === */
 /* =============================================================== */
 
-/* 1. Centrar el Contenedor FAB */
+/* 1. CONTENEDOR PRINCIPAL (Sin 'transform' para no romper el fondo) */
 .fab-container {
-    left: 50% !important;
-    right: auto !important;
-    bottom: 0 !important;          /* Pegado abajo */
-    transform: translateX(-50%) !important; /* Centrado horizontal exacto */
-    width: auto !important;        /* Que ocupe solo lo que necesite */
+    position: fixed;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important; /* Ocupa todo el ancho */
+    height: 0; /* Altura 0 para que no sea una barrera invisible sobre los menús */
+    
+    /* Centrado seguro usando Flexbox */
+    display: flex !important;
+    justify-content: center !important;
     align-items: flex-end !important;
+    
     z-index: 12000 !important;
+    transform: none !important; /* CRUCIAL: Esto arregla el bug del fondo */
 }
 
-/* 2. Estilo del Botón (+) */
-.fab-main-btn {
-    /* POSICIÓN: Sobresalir de la barra */
-    margin-bottom: 30px !important; /* Lo elevamos para que 'flote' sobre la barra de 60px */
+/* 2. EL TELÓN DE FONDO (Ahora sí cubre toda la pantalla) */
+.fab-backdrop {
+    position: fixed !important;
+    top: 0; 
+    left: 0;
+    width: 100vw;
+    height: 100vh;
     
-    /* TRANSPARENCIA: 30% más transparente */
-    /* Antes tenías 0.3 de opacidad, lo bajamos a 0.15 para un efecto cristal sutil */
+    /* Negro profundo al 85% para resaltar las opciones */
+    background-color: rgba(0, 0, 0, 0.85) !important; 
+    
+    /* Desenfoque para ocultar la app detrás */
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+    
+    z-index: -1 !important; /* Se coloca detrás del botón */
+    pointer-events: auto;   /* Captura el clic para cerrar el menú */
+}
+
+/* Estado activo: Muestra el fondo */
+.fab-container.active .fab-backdrop {
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* 3. EL BOTÓN (+) DE CRISTAL */
+.fab-main-btn {
+    pointer-events: auto; /* Reactivamos los clics solo en el botón */
+    
+    /* POSICIÓN: Margen inferior para sobresalir de la barra */
+    margin-bottom: 25px !important; 
+    
+    /* ESTÉTICA: 30% más transparente (Opacidad 0.15) */
     background: rgba(255, 255, 0, 0.15) !important; 
     
-    /* EFECTOS VISUALES: Para que no se pierda al ser tan transparente */
-    backdrop-filter: blur(10px) !important;  /* Difuminado fuerte del fondo */
-    -webkit-backdrop-filter: blur(10px) !important;
-    border: 1px solid rgba(255, 255, 0, 0.4) !important; /* Borde más visible para definir el círculo */
-    box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.3) !important; /* Sombra hacia arriba para dar volumen */
+    /* Efecto cristal esmerilado */
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
     
-    /* TAMAÑO Y FORMA */
+    /* Bordes y sombras para definición */
+    border: 1px solid rgba(255, 255, 100, 0.3) !important;
+    box-shadow: 0 0 15px rgba(255, 255, 0, 0.15), 
+                0 4px 10px rgba(0,0,0,0.3) !important;
+    
     width: 64px !important;
     height: 64px !important;
     border-radius: 50% !important;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-/* 3. Ajuste del despliegue de opciones (Abanico centrado) */
-/* Al estar en el centro, las opciones deben salir hacia los lados y arriba */
+/* Efecto al pulsar */
+.fab-main-btn:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 0, 0.25) !important;
+}
 
+/* 4. OPCIONES DESPLEGABLES (Ajustadas al nuevo centrado) */
 .fab-options {
-    bottom: 85px !important; /* Salen desde arriba del botón principal */
+    /* Posicionadas relativas al contenedor central */
+    position: absolute;
+    bottom: 85px !important; /* Altura desde donde salen */
     left: 50% !important;
-    margin-left: 0 !important; /* Reseteo */
+    width: 0; 
+    height: 0;
+    display: flex;
+    justify-content: center;
 }
 
-/* Opción Izquierda (Gasto) */
+/* Animaciones de salida (Abanico) */
 .fab-container.active .fab-option--gasto {
-    transform: translate(-80px, 10px) scale(1) !important;
+    transform: translate(-90px, 10px) scale(1) !important;
 }
-
-/* Opción Central-Arriba (Ingreso) */
 .fab-container.active .fab-option--ingreso {
-    transform: translate(0px, -60px) scale(1) !important;
+    transform: translate(0px, -70px) scale(1) !important;
 }
-
-/* Opción Derecha (Traspaso) */
 .fab-container.active .fab-option--traspaso {
-    transform: translate(80px, 10px) scale(1) !important;
+    transform: translate(90px, 10px) scale(1) !important;
 }
