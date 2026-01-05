@@ -1479,17 +1479,33 @@ async function loadCoreData(uid) {
 
     const userRef = fbDb.collection('users').doc(uid);
     const collectionsToLoad = ['cuentas', 'conceptos'];
-
+    
     collectionsToLoad.forEach(collectionName => {
         const unsubscribe = userRef.collection(collectionName).onSnapshot(snapshot => {
+            // 1. Actualizamos la memoria local con la Verdad del Árbitro
             db[collectionName] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // 2. Refrescamos los selectores (para que aparezcan cuentas nuevas al crear movimientos)
             populateAllDropdowns();
             
-            // === ¡LA OTRA CORRECIÓN CLAVE ESTÁ AQUÍ! ===
-            if (select(PAGE_IDS.PANEL)?.classList.contains('view--active')) {
-                scheduleDashboardUpdate();
+            // 3. DETECCIÓN INTELIGENTE DE PANTALLA ACTIVA
+            // Aquí estaba el fallo: solo actualizabas el Panel.
+            const activePage = document.querySelector('.view--active');
+            
+            if (activePage) {
+                if (activePage.id === PAGE_IDS.PANEL) {
+                    // Si estamos en el Inicio, recalcula gráficos y KPIs
+                    scheduleDashboardUpdate();
+                } else if (activePage.id === PAGE_IDS.DIARIO) {
+                    // NUEVO: Si estamos en el Diario, recalcula la lista de movimientos
+                    // Esto asegura que el "Saldo tras movimiento" se corrija al instante
+                    updateLocalDataAndRefreshUI();
+                } else if (activePage.id === PAGE_IDS.PLANIFICAR) {
+                     // Si estamos en Planificación/Inversiones, refrescamos esa vista
+                     // (Por si has cambiado el saldo de una cuenta de inversión manualmente)
+                     if (typeof renderPlanificacionPage === 'function') renderPlanificacionPage();
+                }
             }
-            // =========================================
 
         }, error => console.error(`Error escuchando ${collectionName}: `, error));
         unsubscribeListeners.push(unsubscribe);
@@ -2430,7 +2446,7 @@ window.addEventListener('offline', () => {
     document.body.classList.add('privacy-mode');
 	}
     if (loginScreen) loginScreen.classList.remove('login-view--visible');
-    if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
+    id-bbf (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
     if (appRoot) appRoot.classList.add('app-layout--visible');
     
     populateAllDropdowns();
@@ -12195,17 +12211,30 @@ const updateLocalStateOptimistic = (mov, tipo) => {
         // Gasto o Ingreso
         const c = db.cuentas.find(c => c.id === mov.cuentaId);
 // === INICIO DEL CAMBIO ===
-    
+    // 1. Primero actualizamos el array de movimientos en memoria (db.movimientos)
+if (isNew) {
+    db.movimientos.push(newMovement); 
+} else {
+    // Actualizar el existente
+    const index = db.movimientos.findIndex(m => m.id === id);
+    if (index !== -1) db.movimientos[index] = newMovement;
+}
+
+// 2. Aplicamos el cambio optimista a los saldos
+applyOptimisticBalanceUpdate(newMovement, oldMovement);
+
+// 3. Y FINALMENTE refrescamos la UI
+updateLocalDataAndRefreshUI();
     // 1. Insertar o Actualizar en el Array
     if (editingId) {
         // MODO EDICIÓN: Buscamos y reemplazamos
         const index = db.movimientos.findIndex(m => m.id === editingId);
         if (index !== -1) {
-            db.movimientos[index] = newMov; // Reemplazo total
+            db.movimientos[index] = newMovement; // Reemplazo total
         }
     } else {
         // MODO NUEVO: Añadimos al principio
-        db.movimientos.push(newMov);
+        db.movimientos.push(newMovement);
     }
 
     // 2. ¡LA MAGIA! Recalculamos todo el historial
