@@ -1117,6 +1117,7 @@ const fetchBtcPrice = async () => {
     }
     return btcPriceData.price || 0; // Retorna 0 o el último precio conocido si falla
 };
+let lastOkTapTime = 0; // Variable para controlar el doble click
 const handleCalculatorInput = (key) => {
     hapticFeedback('light');
     let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
@@ -1144,32 +1145,38 @@ const handleCalculatorInput = (key) => {
     } else {
         switch(key) {
             case 'done':
-                hapticFeedback('medium');
-                // Calcular final si hay pendiente
+                // 1. Si hay una operación pendiente (ej: 50 + 20), la calculamos primero
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
                     displayValue = calculatorState.displayValue;
                 }
-                
-                // Actualizar input final
-                updateTargetInput(displayValue);
-                
-                historyValue = '';
-                hideCalculator(); 
 
-                // --- AVANCE AUTOMÁTICO AL SIGUIENTE CAMPO ---
-                // Al dar OK, pasamos al concepto automáticamente
-                setTimeout(() => {
-                    const conceptoSelect = document.getElementById('movimiento-concepto');
-                    // Buscamos el trigger del custom select
-                    const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
-                    const trigger = wrapper?.querySelector('.custom-select__trigger');
+                // 2. Lógica de DOBLE CLICK (Magic Touch)
+                const now = new Date().getTime();
+                
+                // Si ha pasado menos de 300ms desde la última vez que pulsaste...
+                if (now - lastOkTapTime < 300) {
+                    // ¡DOBLE TAP CONFIRMADO! -> Copiamos y cerramos
+                    hapticFeedback('medium');
                     
-                    if (trigger) {
-                        trigger.focus(); // Enfocar para navegación teclado
-                        trigger.click(); // Abrir el menú
-                    }
-                }, 100); 
+                    updateTargetInput(displayValue); // Escribe el valor en el formulario
+                    historyValue = '';
+                    hideCalculator(); // Cierra la calculadora
+                    
+                    // Avance automático al siguiente campo (Concepto)
+                    setTimeout(() => {
+                        const conceptoSelect = document.getElementById('movimiento-concepto');
+                        const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
+                        const trigger = wrapper?.querySelector('.custom-select__trigger');
+                        if (trigger) { trigger.focus(); trigger.click(); }
+                    }, 100); 
+                    
+                    lastOkTapTime = 0; // Reseteamos el reloj
+                } else {
+                    // UN SOLO TAP -> Actúa solo como botón "Igual" (=) sin cerrar
+                    hapticFeedback('light');
+                    lastOkTapTime = now; // Guardamos la hora de este click
+                }
                 return;
 
             case 'comma':
