@@ -12203,47 +12203,55 @@ function animateTransfer(startElem, targetElem, value) {
 
 
 /* ================================================================
-   SISTEMA DE NAVEGACIÓN ROBUSTA (A PRUEBA DE RETRASOS)
+   SISTEMA DE NAVEGACIÓN INTELIGENTE (Versión Acordeones)
    Sustituye las funciones anteriores por estas
    ================================================================ */
 
-// Función auxiliar: Busca el botón insistentemente hasta que aparece
-function clickButtonWhenReady(selector, textHint) {
+// Función auxiliar: Busca el acordeón, lo abre y viaja hasta él
+function openAccordionWhenReady(targetId, containerId) {
     let attempts = 0;
-    const maxAttempts = 20; // Intentará durante 2 segundos (20 * 100ms)
+    const maxAttempts = 20; // Intentará durante 2 segundos
     
     const interval = setInterval(() => {
         attempts++;
         
-        // 1. Buscamos por selector exacto (lo ideal)
-        let btn = document.querySelector(selector);
-        
-        // 2. Si no lo encuentra, buscamos por texto (plan B)
-        if (!btn && textHint) {
-            const allBtns = document.querySelectorAll('#planificar-page button');
-            for (let b of allBtns) {
-                if (b.textContent.toLowerCase().includes(textHint.toLowerCase())) {
-                    btn = b;
-                    break;
-                }
-            }
+        // 1. Buscamos el elemento objetivo
+        // Puede ser el <details> directo (targetId) o un div dentro de él (containerId)
+        let targetElement = null;
+        if (targetId) targetElement = document.getElementById(targetId);
+        else if (containerId) {
+            const inner = document.getElementById(containerId);
+            if (inner) targetElement = inner.closest('details');
         }
 
-        // 3. Si lo encuentra, ¡CLICK! y terminamos
-        if (btn) {
-            console.log(`✅ Botón encontrado y pulsado: ${textHint || selector}`);
-            btn.click();
-            clearInterval(interval); // Detener búsqueda
+        // 2. Si lo encuentra, ¡MAGIA!
+        if (targetElement) {
+            clearInterval(interval);
             
-            // Refuerzo: Pulsar otra vez un poco después por si la animación interfiere
-            setTimeout(() => btn.click(), 300); 
+            // A. Abrir el acordeón si está cerrado
+            if (!targetElement.open) {
+                targetElement.open = true;
+                
+                // Disparamos evento 'toggle' manualmente por si hay gráficas que cargan al abrir
+                targetElement.dispatchEvent(new Event('toggle'));
+            }
+
+            // B. Viajar hasta él (Scroll suave)
+            setTimeout(() => {
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // C. Efecto visual (Flash) para que sepas qué estás mirando
+                targetElement.style.transition = 'all 0.5s ease';
+                targetElement.style.boxShadow = '0 0 0 2px var(--c-primary)';
+                setTimeout(() => targetElement.style.boxShadow = 'none', 1000);
+                
+                console.log("✅ Sección abierta y enfocada.");
+            }, 100); // Pequeña pausa para que el navegador renderice la apertura
         } 
         
-        // 4. Si se agota el tiempo, nos rendimos
-        if (attempts >= maxAttempts) {
-            console.warn(`❌ No se encontró el botón para: ${textHint}`);
-            clearInterval(interval);
-        }
+        // 3. Si se agota el tiempo, paramos
+        if (attempts >= maxAttempts) clearInterval(interval);
+        
     }, 100); // Revisa cada 100ms
 }
 
@@ -12252,13 +12260,13 @@ window.goToPatrimonioChart = function() {
     console.log("🚀 Viajando al gráfico de Patrimonio...");
     if (typeof hapticFeedback === 'function') hapticFeedback('medium');
 
-    // 1. Ir a la pestaña Análisis
+    // 1. Navegar a la pestaña 'Planificar' (Análisis)
     const tabBtn = document.querySelector('button[data-page="planificar-page"]');
     if (tabBtn) tabBtn.click();
 
-    // 2. Buscar y pulsar el botón "Neto" o "Patrimonio"
-    // Busca un botón con data-type="neto" O que contenga el texto "Neto"
-    clickButtonWhenReady('button[data-type="neto"]', 'Neto');
+    // 2. Buscar el contenedor del gráfico de patrimonio y abrir su acordeón padre
+    // En tu código, el gráfico de patrimonio está dentro de id="patrimonio-overview-container"
+    openAccordionWhenReady(null, 'patrimonio-overview-container');
 };
 
 // --- FUNCIÓN 2: IR A INVERSIONES ---
@@ -12266,13 +12274,13 @@ window.goToInversionesChart = function() {
     console.log("🚀 Viajando al gráfico de Inversiones...");
     if (typeof hapticFeedback === 'function') hapticFeedback('medium');
 
-    // 1. Ir a la pestaña Análisis
+    // 1. Navegar a la pestaña 'Planificar'
     const tabBtn = document.querySelector('button[data-page="planificar-page"]');
     if (tabBtn) tabBtn.click();
 
-    // 2. Buscar y pulsar el botón de Inversiones
-    // Busca data-type="inversion", "rentabilidad" o texto "Inver"
-    clickButtonWhenReady('button[data-type="inversion"]', 'Inver');
+    // 2. Buscar el acordeón de portafolio directamente
+    // En tu código, este acordeón tiene id="acordeon-portafolio"
+    openAccordionWhenReady('acordeon-portafolio', null);
 };
 
 /* ================================================================
