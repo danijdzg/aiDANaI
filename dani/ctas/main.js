@@ -4818,8 +4818,7 @@ const renderPanelPage = async () => {
                         <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
                     </div>
                 </div>
-                
-                /* --- BLOQUE CORREGIDO: INGRESOS Y GASTOS (NEGRO AMOLED + NÚMEROS GRANDES) --- */
+                       
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
     
     <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: #000000; padding: 10px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
