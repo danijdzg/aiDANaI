@@ -4862,14 +4862,14 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-<div class="hero-card fade-in-up" data-action="show-kpi-drilldown" data-type="saldoNeto" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
     <div style="margin-bottom: 20px;">
         <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
             PATRIMONIO NETO
-            <button class="help-btn" data-action="show-kpi-help" data-kpi="patrimonio">?</button>
+            <button class="help-btn" onclick="event.stopPropagation(); showKPIHelp('neto')">?</button>
         </div>
         <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
-                </div>
+    </div>
 
                 <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
                     
@@ -5882,7 +5882,7 @@ const renderPlanificacionPage = () => {
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
-                    <h3 class="widget-title">Balance Neto</h3>
+                    <h3 class="widget-title">Patrimonio Neto</h3>
                     <p class="widget-subtitle">Tus activos menos tus deudas</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
@@ -12264,3 +12264,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+window.goToPatrimonioChart = function() {
+    console.log("🚀 Viajando al gráfico de Patrimonio...");
+    hapticFeedback('medium');
+
+    // 1. Navegar a la página de Análisis (Planificar)
+    const btnAnalisis = document.querySelector('button[data-page="planificar-page"]');
+    if (btnAnalisis) btnAnalisis.click();
+
+    // 2. Esperar un instante a que cargue y pulsar el filtro "NETO"
+    setTimeout(() => {
+        // Buscamos el botón que activa el gráfico Neto (suele ser una píldora o filtro)
+        // Intentamos encontrarlo por el texto o por el atributo data-type="neto"
+        const btnNeto = document.querySelector('button[data-type="neto"]');
+        
+        if (btnNeto) {
+            btnNeto.click();
+            console.log("✅ Gráfico de Patrimonio activado.");
+        } else {
+            // Si no encuentra el botón específico, intentamos buscar por texto
+            const allBtns = document.querySelectorAll('button');
+            for (let btn of allBtns) {
+                if (btn.textContent.includes('Neto') || btn.textContent.includes('neto')) {
+                    btn.click();
+                    break;
+                }
+            }
+        }
+    }, 100); // Pequeña pausa técnica de 100ms
+};
