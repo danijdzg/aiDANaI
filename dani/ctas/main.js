@@ -10,8 +10,8 @@ const KPI_EXPLANATIONS = {
         text: 'Dinero que ha salido de tu bolsillo para no volver (compras, facturas, ocio...).' 
     },
     'neto': { 
-        title: 'Flujo Neto (Ahorro del Periodo)', 
-        text: 'Es la resta simple: <strong>Lo que entró - Lo que salió</strong>.<br><br>Si es positivo (Verde), has gastado menos de lo que ganaste. Si es negativo (Rojo), has tenido que tirar de ahorros anteriores.' 
+        title: 'Patrimonio Neto', // ANTES: 'Flujo Neto' o 'Balance Neto'
+        text: 'Es el reflejo de tu salud financiera real. Muestra cómo crece tu riqueza acumulada restando tus gastos a tus ingresos totales. <br><br><strong>Patrimonio positivo = Crecimiento de riqueza.</strong>' 
     },
     'tasa_ahorro': { 
         title: 'Tasa de Ahorro', 
@@ -4862,13 +4862,13 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div class="hero-card fade-in-up" style="padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
-                
-                <div style="margin-bottom: 20px;">
-                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
-                        PATRIMONIO (CAPITAL TOTAL) <button class="help-btn" data-action="show-kpi-help" data-kpi="patrimonio">?</button>
-                    </div>
-                    <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
+<div class="hero-card fade-in-up" data-action="show-kpi-drilldown" data-type="saldoNeto" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+    <div style="margin-bottom: 20px;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+            PATRIMONIO NETO
+            <button class="help-btn" data-action="show-kpi-help" data-kpi="patrimonio">?</button>
+        </div>
+        <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
                 </div>
 
                 <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
@@ -12213,3 +12213,54 @@ function animateTransfer(startElem, targetElem, value) {
         }, 300);
     };
 }
+
+/* ================================================================
+   EN main.js - PEGAR AL FINAL DEL ARCHIVO
+   FUNCIONALIDAD: NAVEGACIÓN DIRECTA A PATRIMONIO
+   ================================================================ */
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Identificamos la tarjeta de Patrimonio (Suele ser la del Saldo Total o la KPI de Neto)
+    // Buscamos la tarjeta que contiene el saldo total o la etiqueta "Patrimonio"
+    const patrimonioCard = document.querySelector('.balance-card') || document.querySelector('[data-kpi="neto"]');
+    
+    // 2. Identificamos el botón o función que abre el detalle
+    // Asumimos que hay un botón de "Ver más" o "Analizar" asociado al KPI Neto
+    const openAnalysisBtn = document.querySelector('[data-action="open-neto-details"]');
+    
+    // OPCIÓN A: Si ya tienes un botón que abre ese modal, simulamos el click
+    if (patrimonioCard) {
+        patrimonioCard.style.cursor = 'pointer'; // Manita para indicar que es clicable
+        
+        patrimonioCard.addEventListener('click', (e) => {
+            // Evitamos que dispare otros eventos si hay botones dentro
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'I') return;
+            
+            console.log("👆 Clic en Patrimonio: Abriendo detalles...");
+            hapticFeedback('light');
+
+            // Si tienes una función global para abrir el modal, úsala aquí.
+            // Si no, simulamos el clic en el filtro de "Neto" o abrimos el modal directamente.
+            
+            // Ejemplo: Si usas la lógica de KPIs, forzamos la vista de Patrimonio
+            if (typeof updateChart === 'function') {
+                // Activar visualmente el filtro/pill de Patrimonio/Neto
+                const netoPill = document.querySelector('[data-type="neto"]');
+                if (netoPill) netoPill.click();
+                
+                // Si el gráfico está en un modal, ábrelo
+                const statsModal = document.getElementById('stats-modal');
+                if (statsModal) {
+                    showModal('stats-modal');
+                    // Actualizar título del modal
+                    const modalTitle = statsModal.querySelector('.modal-title');
+                    if(modalTitle) modalTitle.textContent = "Evolución del Patrimonio Neto";
+                } else {
+                    // Si no hay modal, quizás hace scroll a la gráfica
+                    const chartSection = document.getElementById('chart-container');
+                    if (chartSection) chartSection.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        });
+    }
+});
