@@ -1145,37 +1145,56 @@ const handleCalculatorInput = (key) => {
     } else {
         switch(key) {
             case 'done':
-                // 1. Si hay una operación pendiente (ej: 50 + 20), la calculamos primero
+                // 1. Calcular operación pendiente si existe
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
                     displayValue = calculatorState.displayValue;
                 }
 
-                // 2. Lógica de DOBLE CLICK (Magic Touch)
                 const now = new Date().getTime();
+                const btn = document.querySelector('[data-key="done"]'); // Referencia al botón
                 
-                // Si ha pasado menos de 300ms desde la última vez que pulsaste...
+                // --- LÓGICA DOBLE TAP (< 300ms) ---
                 if (now - lastOkTapTime < 300) {
-                    // ¡DOBLE TAP CONFIRMADO! -> Copiamos y cerramos
-                    hapticFeedback('medium');
+                    console.log("🚀 Doble Tap: Iniciando transferencia visual...");
                     
-                    updateTargetInput(displayValue); // Escribe el valor en el formulario
-                    historyValue = '';
-                    hideCalculator(); // Cierra la calculadora
+                    // A. Feedback Visual en Botón (Color Verde)
+                    if(btn) btn.classList.add('success-pulse');
                     
-                    // Avance automático al siguiente campo (Concepto)
-                    setTimeout(() => {
-                        const conceptoSelect = document.getElementById('movimiento-concepto');
-                        const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
-                        const trigger = wrapper?.querySelector('.custom-select__trigger');
-                        if (trigger) { trigger.focus(); trigger.click(); }
-                    }, 100); 
+                    // B. Obtener elementos para la animación
+                    const displayEl = document.getElementById('calculator-display') || document.querySelector('.calculator-display');
+                    const inputTarget = document.getElementById('movimiento-cantidad');
                     
-                    lastOkTapTime = 0; // Reseteamos el reloj
-                } else {
-                    // UN SOLO TAP -> Actúa solo como botón "Igual" (=) sin cerrar
+                    // C. Ejecutar animación y copiar
+                    if (displayEl && inputTarget) {
+                        // Lanzar animación de vuelo
+                        animateTransfer(displayEl, inputTarget, displayValue);
+                        
+                        // Copiar valor (esperamos un pelín para sincronizar con la llegada visual)
+                        setTimeout(() => {
+                            updateTargetInput(displayValue);
+                            hapticFeedback('success'); // Vibración de éxito
+                            
+                            // Cerrar calculadora
+                            hideCalculator();
+                            
+                            // Resetear estilo botón
+                            if(btn) btn.classList.remove('success-pulse');
+                            
+                            // Enfocar siguiente campo
+                             const conceptoSelect = document.getElementById('movimiento-concepto');
+                             if (conceptoSelect) conceptoSelect.focus();
+                             
+                        }, 350); // Casi al final de la animación de 400ms
+                    }
+                    
+                    lastOkTapTime = 0; // Reset
+                } 
+                // --- UN SOLO TAP ---
+                else {
                     hapticFeedback('light');
-                    lastOkTapTime = now; // Guardamos la hora de este click
+                    lastOkTapTime = now;
+                    // Solo calculamos (ya hecho arriba), no cerramos.
                 }
                 return;
 
@@ -12153,3 +12172,41 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("🛡️ Modal de confirmación movido al body para evitar bloqueos.");
     }
 });
+
+// Función auxiliar para animar el vuelo del dinero
+function animateTransfer(startElem, targetElem, value) {
+    // 1. Crear el clon volador
+    const flyer = document.createElement('div');
+    flyer.textContent = value;
+    flyer.className = 'flying-number';
+    document.body.appendChild(flyer);
+
+    // 2. Calcular coordenadas
+    const startRect = startElem.getBoundingClientRect();
+    const targetRect = targetElem.getBoundingClientRect();
+
+    // Posición inicial (centro de la calculadora)
+    flyer.style.top = `${startRect.top + (startRect.height/2) - 20}px`;
+    flyer.style.left = `${startRect.left + (startRect.width/2) - 20}px`;
+
+    // 3. Animar (Web Animations API)
+    const animation = flyer.animate([
+        { transform: 'translate(0,0) scale(1)', opacity: 1 },
+        { 
+            transform: `translate(${targetRect.left - startRect.left}px, ${targetRect.top - startRect.top}px) scale(0.5)`, 
+            opacity: 0.8 
+        }
+    ], {
+        duration: 400, // Velocidad del vuelo (ms)
+        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' // Efecto de aceleración suave
+    });
+
+    // 4. Limpiar al terminar
+    animation.onfinish = () => {
+        flyer.remove();
+        // Pequeño flash en el input destino para confirmar llegada
+        targetElem.style.transition = 'background 0.2s';
+        targetElem.style.backgroundColor = 'rgba(45, 204, 205, 0.2)';
+        setTimeout(() => targetElem.style.backgroundColor = '', 200);
+    };
+}
