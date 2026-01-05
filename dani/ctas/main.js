@@ -1145,55 +1145,53 @@ const handleCalculatorInput = (key) => {
     } else {
         switch(key) {
             case 'done':
-                // 1. Calcular operación pendiente siempre (actúa como IGUAL)
+                // A. Siempre calculamos primero para tener el dato fresco
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
-                    displayValue = calculatorState.displayValue;
                 }
-
-                // 2. Lógica de DOBLE CLICK
+                
+                // B. Lógica de Doble Click
                 const now = new Date().getTime();
-                const timeDiff = now - lastOkTapTime;
-                const doneBtn = document.querySelector('[data-key="done"]');
+                const timeDiff = now - lastOkTapTime; // ¿Cuánto ha pasado desde el último click?
+                
+                // Si pulsas 2 veces en menos de 0.3 segundos...
+                if (timeDiff < 300 && timeDiff > 0) {
+                    console.log("🚀 DOBLE CLICK: Iniciando transferencia...");
+                    
+                    // 1. CAPTURAR EL VALOR AHORA (Antes de que se borre nada)
+                    const valorFinal = currentCalcValue; 
+                    
+                    // 2. Feedback visual en botón
+                    const btnDone = document.querySelector('.calculator-btn[data-key="done"]');
+                    if(btnDone) btnDone.classList.add('success-pulse');
 
-                // Si pulsas dos veces en menos de 300ms...
-                if (timeDiff < 300) {
-                    console.log("🚀 Doble Tap: Transfiriendo...");
-                    hapticFeedback('success');
-
-                    // A. Efecto Visual en Botón
-                    if (doneBtn) doneBtn.classList.add('success-pulse');
-
-                    // B. Obtener elementos para la animación
-                    const displayEl = document.getElementById('calculator-display');
-                    const targetInput = calculatorState.targetInput; // El input destino
-
-                    // C. Lanzar animación
-                    animateTransfer(displayEl, targetInput, displayValue);
-
-                    // D. Copiar valor y cerrar (con pequeño retraso para ver la animación)
+                    // 3. INICIAR ANIMACIÓN DE VUELO
+                    // Usamos la función que añadiremos en el paso 3
+                    animateTransfer(valorFinal); 
+                    
+                    // 4. ESPERAR Y PEGAR (Sincronizado con la animación)
                     setTimeout(() => {
-                        updateTargetInput(displayValue); // Escribimos el valor
+                        const inputCantidad = document.getElementById('movimiento-cantidad');
+                        if (inputCantidad) {
+                            inputCantidad.value = valorFinal; // Pegamos el valor capturado
+                            inputCantidad.dispatchEvent(new Event('input')); // Avisamos al formulario
+                        }
                         
-                        hideCalculator(); // Cerramos
+                        // 5. AHORA SÍ, Cerramos y reiniciamos
+                        toggleCalculator(false);
+                        if(btnDone) btnDone.classList.remove('success-pulse');
                         
-                        if (doneBtn) doneBtn.classList.remove('success-pulse');
+                        // Enfocar siguiente campo
+                        const concepto = document.getElementById('movimiento-concepto');
+                        if(concepto) concepto.focus();
                         
-                        // Enfocar siguiente campo (Concepto)
-                        const conceptoSelect = document.getElementById('movimiento-concepto');
-                        const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
-                        const trigger = wrapper?.querySelector('.custom-select__trigger');
-                        if (trigger) { trigger.focus(); trigger.click(); }
-                        
-                    }, 350); // Sincronizado con la animación
-
-                    lastOkTapTime = 0; // Resetear timer
-                } 
-                // Si es un SOLO toque...
-                else {
+                    }, 500); // 500ms es lo que dura el vuelo
+                    
+                    lastOkTapTime = 0; // Resetear cronómetro
+                } else {
+                    // UN SOLO CLICK: Solo guardamos la hora, no cerramos ni borramos
                     hapticFeedback('light');
-                    lastOkTapTime = now; // Guardamos hora del toque
-                    // NO cerramos, solo calculamos (ya hecho arriba)
+                    lastOkTapTime = now;
                 }
                 return;
 
@@ -1315,39 +1313,28 @@ const calculate = () => {
     updateCalculatorDisplay();
 };
 
-// Mejora visual: Escala dinámica de fuente en el display
-/* Reemplaza updateCalculatorDisplay por esta versión */
 const updateCalculatorDisplay = () => {
-    const display = select('calculator-display');
-    if (!display) return;
-    
-    const value = calculatorState.displayValue; // Es un string tipo "125,5"
-    
-    // Lógica de formateo manual para respetar lo que el usuario está escribiendo (incluyendo comas a medias)
-    let html = '';
-    
-    if (value === 'Error') {
-        html = 'Error';
-    } else {
-        const parts = value.split(',');
-        const integerPart = parts[0];
-        // Formateamos la parte entera con puntos de miles si es necesario
-        const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-        
-        const decimalPart = parts.length > 1 ? ',' + parts[1] : '';
-        
-        // Aplicamos las clases CSS de estilo
-        html = `<span class="currency-major">${formattedInteger}</span><small class="currency-minor">${decimalPart}</small>`;
-    }
+    // 1. Buscamos la pantalla de la calculadora
+    const display = document.getElementById('calculator-display');
+    const displayInner = document.querySelector('.calc-current'); 
 
-    display.innerHTML = html; // Usamos innerHTML en lugar de textContent
+    // 2. Seguridad: Si no existe la pantalla, no hacemos nada
+    if (!display && !displayInner) return;
+
+    // 3. Formateamos el valor para que se vea bien (opcional)
+    let textodMostar = currentCalcValue;
     
-    // Ajuste de tamaño dinámico
-    const length = value.length;
-    if (length > 9) display.style.fontSize = '2rem';
-    else if (length > 7) display.style.fontSize = '2.5rem';
-    else display.style.fontSize = '3rem';
+    // 4. ACTUALIZAMOS SOLO LA PANTALLA (Nada más)
+    if (display) display.textContent = textodMostar;
+    if (displayInner) displayInner.textContent = textodMostar;
+
+    // Ajuste de tamaño de fuente para números largos
+    if (display) {
+        if (currentCalcValue.length > 9) display.style.fontSize = '2.5rem';
+        else display.style.fontSize = '4rem';
+    }
 };
+
 // --- FIN: BLOQUE CALCULADORA ---
                     
 
@@ -12287,3 +12274,46 @@ window.goToInversionesChart = function() {
     // Busca data-type="inversion", "rentabilidad" o texto "Inver"
     clickButtonWhenReady('button[data-type="inversion"]', 'Inver');
 };
+
+/* ================================================================
+   FUNCIÓN DE ANIMACIÓN (Pegar al final de main.js)
+   ================================================================ */
+function animateTransfer(valor) {
+    // 1. Origen (Pantalla Calculadora) y Destino (Input Cantidad)
+    const source = document.getElementById('calculator-display') || document.querySelector('.calc-current');
+    const target = document.getElementById('movimiento-cantidad');
+    
+    if (!source || !target) return;
+
+    // 2. Crear el clon que vuela
+    const flyer = document.createElement('div');
+    flyer.textContent = valor;
+    flyer.className = 'flying-number'; // Importante: Clase definida en CSS
+    document.body.appendChild(flyer);
+
+    // 3. Calcular posiciones
+    const sRect = source.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    
+    // Posición inicial (Centro de la pantalla negra)
+    flyer.style.top = (sRect.top + sRect.height/2 - 20) + 'px';
+    flyer.style.left = (sRect.left + sRect.width/2 - 40) + 'px';
+
+    // 4. Animar
+    const anim = flyer.animate([
+        { transform: 'translate(0,0) scale(1)', opacity: 1 },
+        { transform: `translate(${tRect.left - sRect.left}px, ${tRect.top - sRect.top}px) scale(0.5)`, opacity: 0.5 }
+    ], {
+        duration: 500,
+        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+    });
+
+    // 5. Limpieza al terminar
+    anim.onfinish = () => {
+        flyer.remove();
+        // Flash verde en el destino
+        target.style.transition = 'background 0.3s';
+        target.style.backgroundColor = 'rgba(45, 204, 205, 0.3)';
+        setTimeout(() => target.style.backgroundColor = '', 300);
+    };
+}
