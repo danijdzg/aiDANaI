@@ -2446,7 +2446,7 @@ window.addEventListener('offline', () => {
     document.body.classList.add('privacy-mode');
 	}
     if (loginScreen) loginScreen.classList.remove('login-view--visible');
-    id-bbf (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
+    if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
     if (appRoot) appRoot.classList.add('app-layout--visible');
     
     populateAllDropdowns();
