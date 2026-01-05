@@ -12214,122 +12214,76 @@ function animateTransfer(startElem, targetElem, value) {
     };
 }
 
+
 /* ================================================================
-   EN main.js - PEGAR AL FINAL DEL ARCHIVO
-   FUNCIONALIDAD: NAVEGACIÓN DIRECTA A PATRIMONIO
+   SISTEMA DE NAVEGACIÓN ROBUSTA (A PRUEBA DE RETRASOS)
+   Sustituye las funciones anteriores por estas
    ================================================================ */
 
-document.addEventListener('DOMContentLoaded', () => {
-    // 1. Identificamos la tarjeta de Patrimonio (Suele ser la del Saldo Total o la KPI de Neto)
-    // Buscamos la tarjeta que contiene el saldo total o la etiqueta "Patrimonio"
-    const patrimonioCard = document.querySelector('.balance-card') || document.querySelector('[data-kpi="neto"]');
+// Función auxiliar: Busca el botón insistentemente hasta que aparece
+function clickButtonWhenReady(selector, textHint) {
+    let attempts = 0;
+    const maxAttempts = 20; // Intentará durante 2 segundos (20 * 100ms)
     
-    // 2. Identificamos el botón o función que abre el detalle
-    // Asumimos que hay un botón de "Ver más" o "Analizar" asociado al KPI Neto
-    const openAnalysisBtn = document.querySelector('[data-action="open-neto-details"]');
-    
-    // OPCIÓN A: Si ya tienes un botón que abre ese modal, simulamos el click
-    if (patrimonioCard) {
-        patrimonioCard.style.cursor = 'pointer'; // Manita para indicar que es clicable
+    const interval = setInterval(() => {
+        attempts++;
         
-        patrimonioCard.addEventListener('click', (e) => {
-            // Evitamos que dispare otros eventos si hay botones dentro
-            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'I') return;
-            
-            console.log("👆 Clic en Patrimonio: Abriendo detalles...");
-            hapticFeedback('light');
-
-            // Si tienes una función global para abrir el modal, úsala aquí.
-            // Si no, simulamos el clic en el filtro de "Neto" o abrimos el modal directamente.
-            
-            // Ejemplo: Si usas la lógica de KPIs, forzamos la vista de Patrimonio
-            if (typeof updateChart === 'function') {
-                // Activar visualmente el filtro/pill de Patrimonio/Neto
-                const netoPill = document.querySelector('[data-type="neto"]');
-                if (netoPill) netoPill.click();
-                
-                // Si el gráfico está en un modal, ábrelo
-                const statsModal = document.getElementById('stats-modal');
-                if (statsModal) {
-                    showModal('stats-modal');
-                    // Actualizar título del modal
-                    const modalTitle = statsModal.querySelector('.modal-title');
-                    if(modalTitle) modalTitle.textContent = "Evolución del Patrimonio Neto";
-                } else {
-                    // Si no hay modal, quizás hace scroll a la gráfica
-                    const chartSection = document.getElementById('chart-container');
-                    if (chartSection) chartSection.scrollIntoView({ behavior: 'smooth' });
+        // 1. Buscamos por selector exacto (lo ideal)
+        let btn = document.querySelector(selector);
+        
+        // 2. Si no lo encuentra, buscamos por texto (plan B)
+        if (!btn && textHint) {
+            const allBtns = document.querySelectorAll('#planificar-page button');
+            for (let b of allBtns) {
+                if (b.textContent.toLowerCase().includes(textHint.toLowerCase())) {
+                    btn = b;
+                    break;
                 }
             }
-        });
-    }
-});
+        }
 
-/* ================================================================
-   FUNCIÓN: IR DIRECTO AL GRÁFICO DE PATRIMONIO
-   ================================================================ */
+        // 3. Si lo encuentra, ¡CLICK! y terminamos
+        if (btn) {
+            console.log(`✅ Botón encontrado y pulsado: ${textHint || selector}`);
+            btn.click();
+            clearInterval(interval); // Detener búsqueda
+            
+            // Refuerzo: Pulsar otra vez un poco después por si la animación interfiere
+            setTimeout(() => btn.click(), 300); 
+        } 
+        
+        // 4. Si se agota el tiempo, nos rendimos
+        if (attempts >= maxAttempts) {
+            console.warn(`❌ No se encontró el botón para: ${textHint}`);
+            clearInterval(interval);
+        }
+    }, 100); // Revisa cada 100ms
+}
+
+// --- FUNCIÓN 1: IR A PATRIMONIO ---
 window.goToPatrimonioChart = function() {
     console.log("🚀 Viajando al gráfico de Patrimonio...");
-    hapticFeedback('medium');
-
-    // 1. Navegar a la página de Análisis (Planificar)
-    const btnAnalisis = document.querySelector('button[data-page="planificar-page"]');
-    if (btnAnalisis) btnAnalisis.click();
-
-    // 2. Esperar un instante a que cargue y pulsar el filtro "NETO"
-    setTimeout(() => {
-        // Buscamos el botón que activa el gráfico Neto (suele ser una píldora o filtro)
-        // Intentamos encontrarlo por el texto o por el atributo data-type="neto"
-        const btnNeto = document.querySelector('button[data-type="neto"]');
-        
-        if (btnNeto) {
-            btnNeto.click();
-            console.log("✅ Gráfico de Patrimonio activado.");
-        } else {
-            // Si no encuentra el botón específico, intentamos buscar por texto
-            const allBtns = document.querySelectorAll('button');
-            for (let btn of allBtns) {
-                if (btn.textContent.includes('Neto') || btn.textContent.includes('neto')) {
-                    btn.click();
-                    break;
-                }
-            }
-        }
-    }, 100); // Pequeña pausa técnica de 100ms
-};
-
-/* ================================================================
-   FUNCIÓN: IR DIRECTO AL GRÁFICO DE INVERSIONES
-      ================================================================ */
-window.goToInversionesChart = function() {
-    console.log("🚀 Viajando al gráfico de Inversiones...");
-    // Efecto de vibración (si está disponible)
     if (typeof hapticFeedback === 'function') hapticFeedback('medium');
 
-    // 1. Navegar a la página de Análisis
-    const btnAnalisis = document.querySelector('button[data-page="planificar-page"]');
-    if (btnAnalisis) btnAnalisis.click();
+    // 1. Ir a la pestaña Análisis
+    const tabBtn = document.querySelector('button[data-page="planificar-page"]');
+    if (tabBtn) tabBtn.click();
 
-    // 2. Esperar y pulsar el botón de Inversiones/Rentabilidad
-    setTimeout(() => {
-        // Buscamos el botón/filtro específico de Inversiones
-        // Probamos varias opciones comunes por seguridad
-        const btnInversion = document.querySelector('button[data-type="inversion"]') || 
-                             document.querySelector('button[data-type="rentabilidad"]') ||
-                             document.querySelector('button[data-type="ahorro"]'); // A veces se agrupa aquí
-        
-        if (btnInversion) {
-            btnInversion.click();
-            console.log("✅ Gráfico de Inversiones activado.");
-        } else {
-            // Si no tiene etiqueta data-type, buscamos por texto
-            const allBtns = document.querySelectorAll('#planificar-page button');
-            for (let btn of allBtns) {
-                if (btn.textContent.includes('Inversi') || btn.textContent.includes('Rentabilidad')) {
-                    btn.click();
-                    break;
-                }
-            }
-        }
-    }, 100);
+    // 2. Buscar y pulsar el botón "Neto" o "Patrimonio"
+    // Busca un botón con data-type="neto" O que contenga el texto "Neto"
+    clickButtonWhenReady('button[data-type="neto"]', 'Neto');
+};
+
+// --- FUNCIÓN 2: IR A INVERSIONES ---
+window.goToInversionesChart = function() {
+    console.log("🚀 Viajando al gráfico de Inversiones...");
+    if (typeof hapticFeedback === 'function') hapticFeedback('medium');
+
+    // 1. Ir a la pestaña Análisis
+    const tabBtn = document.querySelector('button[data-page="planificar-page"]');
+    if (tabBtn) tabBtn.click();
+
+    // 2. Buscar y pulsar el botón de Inversiones
+    // Busca data-type="inversion", "rentabilidad" o texto "Inver"
+    clickButtonWhenReady('button[data-type="inversion"]', 'Inver');
 };
