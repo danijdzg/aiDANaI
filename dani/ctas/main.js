@@ -1145,39 +1145,39 @@ const handleCalculatorInput = (key) => {
     } else {
         switch(key) {
             case 'done':
-                // A. Siempre calculamos primero para tener el dato fresco
+                // A. Siempre calculamos primero
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
                 }
                 
                 // B. Lógica de Doble Click
                 const now = new Date().getTime();
-                const timeDiff = now - lastOkTapTime; // ¿Cuánto ha pasado desde el último click?
+                const timeDiff = now - lastOkTapTime;
                 
-                // Si pulsas 2 veces en menos de 0.3 segundos...
                 if (timeDiff < 300 && timeDiff > 0) {
                     console.log("🚀 DOBLE CLICK: Iniciando transferencia...");
                     
-                    // 1. CAPTURAR EL VALOR AHORA (Antes de que se borre nada)
-                    const valorFinal = currentCalcValue; 
+                    // 1. CORRECCIÓN: Usamos la variable correcta
+                    const valorFinal = calculatorState.displayValue; 
                     
-                    // 2. Feedback visual en botón
+                    // 2. Feedback visual
                     const btnDone = document.querySelector('.calculator-btn[data-key="done"]');
                     if(btnDone) btnDone.classList.add('success-pulse');
 
-                    // 3. INICIAR ANIMACIÓN DE VUELO
-                    // Usamos la función que añadiremos en el paso 3
-                    animateTransfer(valorFinal); 
+                    // 3. Iniciar animación
+                    if (typeof animateTransfer === 'function') {
+                        animateTransfer(valorFinal);
+                    }
                     
-                    // 4. ESPERAR Y PEGAR (Sincronizado con la animación)
+                    // 4. Esperar y pegar
                     setTimeout(() => {
                         const inputCantidad = document.getElementById('movimiento-cantidad');
                         if (inputCantidad) {
-                            inputCantidad.value = valorFinal; // Pegamos el valor capturado
-                            inputCantidad.dispatchEvent(new Event('input')); // Avisamos al formulario
+                            inputCantidad.value = valorFinal;
+                            inputCantidad.dispatchEvent(new Event('input'));
                         }
                         
-                        // 5. AHORA SÍ, Cerramos y reiniciamos
+                        // 5. Cerrar
                         toggleCalculator(false);
                         if(btnDone) btnDone.classList.remove('success-pulse');
                         
@@ -1185,11 +1185,11 @@ const handleCalculatorInput = (key) => {
                         const concepto = document.getElementById('movimiento-concepto');
                         if(concepto) concepto.focus();
                         
-                    }, 500); // 500ms es lo que dura el vuelo
+                    }, 500);
                     
-                    lastOkTapTime = 0; // Resetear cronómetro
+                    lastOkTapTime = 0;
                 } else {
-                    // UN SOLO CLICK: Solo guardamos la hora, no cerramos ni borramos
+                    // Un solo click
                     hapticFeedback('light');
                     lastOkTapTime = now;
                 }
@@ -1314,23 +1314,22 @@ const calculate = () => {
 };
 
 const updateCalculatorDisplay = () => {
-    // 1. Buscamos la pantalla de la calculadora
+    // 1. Buscamos la pantalla
     const display = document.getElementById('calculator-display');
-    const displayInner = document.querySelector('.calc-current'); 
+    const displayInner = document.querySelector('.calc-current');
 
-    // 2. Seguridad: Si no existe la pantalla, no hacemos nada
     if (!display && !displayInner) return;
 
-    // 3. Formateamos el valor para que se vea bien (opcional)
-    let textodMostar = currentCalcValue;
-    
-    // 4. ACTUALIZAMOS SOLO LA PANTALLA (Nada más)
-    if (display) display.textContent = textodMostar;
-    if (displayInner) displayInner.textContent = textodMostar;
+    // 2. CORRECCIÓN: Usamos la variable correcta del estado
+    const valor = calculatorState.displayValue; 
 
-    // Ajuste de tamaño de fuente para números largos
+    // 3. Actualizamos la pantalla
+    if (display) display.textContent = valor;
+    if (displayInner) displayInner.textContent = valor;
+
+    // 4. Ajuste de tamaño de texto
     if (display) {
-        if (currentCalcValue.length > 9) display.style.fontSize = '2.5rem';
+        if (valor.length > 9) display.style.fontSize = '2.5rem';
         else display.style.fontSize = '4rem';
     }
 };
