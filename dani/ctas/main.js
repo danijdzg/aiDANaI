@@ -4894,7 +4894,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+           <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
                     <div style="text-align: left;">
@@ -12265,6 +12265,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+/* ================================================================
+   FUNCIÓN: IR DIRECTO AL GRÁFICO DE PATRIMONIO
+   ================================================================ */
 window.goToPatrimonioChart = function() {
     console.log("🚀 Viajando al gráfico de Patrimonio...");
     hapticFeedback('medium');
@@ -12293,4 +12296,40 @@ window.goToPatrimonioChart = function() {
             }
         }
     }, 100); // Pequeña pausa técnica de 100ms
+};
+
+/* ================================================================
+   FUNCIÓN: IR DIRECTO AL GRÁFICO DE INVERSIONES
+      ================================================================ */
+window.goToInversionesChart = function() {
+    console.log("🚀 Viajando al gráfico de Inversiones...");
+    // Efecto de vibración (si está disponible)
+    if (typeof hapticFeedback === 'function') hapticFeedback('medium');
+
+    // 1. Navegar a la página de Análisis
+    const btnAnalisis = document.querySelector('button[data-page="planificar-page"]');
+    if (btnAnalisis) btnAnalisis.click();
+
+    // 2. Esperar y pulsar el botón de Inversiones/Rentabilidad
+    setTimeout(() => {
+        // Buscamos el botón/filtro específico de Inversiones
+        // Probamos varias opciones comunes por seguridad
+        const btnInversion = document.querySelector('button[data-type="inversion"]') || 
+                             document.querySelector('button[data-type="rentabilidad"]') ||
+                             document.querySelector('button[data-type="ahorro"]'); // A veces se agrupa aquí
+        
+        if (btnInversion) {
+            btnInversion.click();
+            console.log("✅ Gráfico de Inversiones activado.");
+        } else {
+            // Si no tiene etiqueta data-type, buscamos por texto
+            const allBtns = document.querySelectorAll('#planificar-page button');
+            for (let btn of allBtns) {
+                if (btn.textContent.includes('Inversi') || btn.textContent.includes('Rentabilidad')) {
+                    btn.click();
+                    break;
+                }
+            }
+        }
+    }, 100);
 };
