@@ -10189,75 +10189,88 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
             if (cuenta) cuenta.saldo += newData.cantidad; // Solo opera si la cuenta existe
         }
     }
-    // --- ⭐ FIN DE LA CORRECCIÓN ⭐ ---
 };
 
+
 const handleSaveMovement = async (form, btn) => {
-    // 1. Validaciones iniciales
+    // 1. Validaciones básicas de formulario
     clearAllErrors(form.id);
     if (!validateMovementForm()) {
         hapticFeedback('error');
-        showToast('Revisa los campos marcados.', 'warning');
+        showToast('Revisa los campos obligatorios.', 'warning');
         return false;
     }
 
+    // Preparar botones de carga
     const saveBtn = select('save-movimiento-btn');
     const saveNewBtn = select('save-and-new-movimiento-btn');
     const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
-
+    
     if (saveBtn) setButtonLoading(saveBtn, true);
     if (saveNewBtn && isSaveAndNew) setButtonLoading(saveNewBtn, true);
 
     try {
-        // 2. Obtener datos del formulario
-        const getVal = (id) => { const el = select(id); return el ? el.value : ''; };
-        const mode = getVal('movimiento-mode');
-        // Si es nuevo, generamos ID. Si es edición, usamos el existente.
-        const id = getVal('movimiento-id') || generateId(); 
+        // 2. Recolección de Datos
+        const getVal = (id) => select(id) ? select(id).value : '';
         
+        // Detectamos modo edición y el ID
+        const mode = getVal('movimiento-mode'); // 'new', 'edit-single', 'edit-recurrent'
+        const id = getVal('movimiento-id') || generateId();
+        
+        // Datos del tipo de operación
         const typePill = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
         const tipoMovimiento = typePill ? typePill.dataset.type : 'gasto';
         
+        // Importe (siempre positivo en lógica, el signo lo decide el tipo)
         const cantidadPositiva = parseCurrencyString(getVal('movimiento-cantidad'));
         const cantidadEnCentimos = Math.round(cantidadPositiva * 100);
         
+        // ¿Es recurrente?
         const recurrenteCheck = select('movimiento-recurrente');
         const isRecurrent = recurrenteCheck ? recurrenteCheck.checked : false;
 
-        // Objeto Base
+        // Objeto Base Común
         const baseData = {
             descripcion: getVal('movimiento-descripcion').trim(),
+            // Gasto = Negativo, Ingreso/Traspaso = Positivo (se ajusta luego)
             cantidad: tipoMovimiento === 'gasto' ? -Math.abs(cantidadEnCentimos) : Math.abs(cantidadEnCentimos),
             tipo: tipoMovimiento,
             conceptoId: getVal('movimiento-concepto'),
+            // Timestamp de actualización para ordenamientos internos
+            updatedAt: new Date().toISOString()
         };
 
-        // Lógica de Traspasos vs Normal
+        // Ajustes específicos para Traspasos
         if (tipoMovimiento === 'traspaso') {
             baseData.tipo = 'traspaso';
-            baseData.cantidad = Math.abs(cantidadEnCentimos); // En traspasos suele guardarse positivo y la lógica decide el signo
+            baseData.cantidad = Math.abs(cantidadEnCentimos); // Traspaso siempre valor absoluto positivo en registro
             baseData.cuentaOrigenId = getVal('movimiento-cuenta-origen');
             baseData.cuentaDestinoId = getVal('movimiento-cuenta-destino');
-            baseData.cuentaId = null;
+            
+            // Validar que no sea la misma cuenta
+            if (baseData.cuentaOrigenId === baseData.cuentaDestinoId) {
+                throw new Error("La cuenta de origen y destino no pueden ser la misma.");
+            }
         } else {
-            baseData.tipo = 'movimiento';
             baseData.cuentaId = getVal('movimiento-cuenta');
-            baseData.cuentaOrigenId = null;
-            baseData.cuentaDestinoId = null;
         }
 
-        // --- 3. LÓGICA DE GUARDADO ---
-
-        // CASO A: ES RECURRENTE (Guardamos la Regla)
+        // =========================================================
+        // 🔹 CAMINO A: ES UN MOVIMIENTO RECURRENTE (REGLA)
+        // =========================================================
         if (isRecurrent) {
             const frequency = getVal('recurrent-frequency') || 'monthly';
             let rawNextDate = getVal('recurrent-next-date');
-            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha'); // Si no hay próxima fecha específica, usa la del movimiento
+            
+            // Si no hay fecha de inicio, usamos la fecha del formulario o HOY
+            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha') || new Date().toISOString().split('T')[0];
 
-            let weekDays = [];
+            // Capturar días de la semana (si es semanal)
+            const weekDays = [];
             if (frequency === 'weekly') {
-                weekDays = Array.from(document.querySelectorAll('.day-selector-btn.active')).map(b => b.dataset.day);
-                if (weekDays.length === 0) throw new Error("Selecciona al menos un día.");
+                document.querySelectorAll('.day-selector-btn.active').forEach(b => {
+                    weekDays.push(parseInt(b.dataset.day));
+                });
             }
 
             const recurrentData = {
@@ -10270,121 +10283,59 @@ const handleSaveMovement = async (form, btn) => {
                 active: true
             };
 
-            // 1. Guardar la Regla en Firebase
-            await saveDoc('recurrentes', id, recurrentData);
+            // 1. Guardar en colección 'recurrentes'
+            await saveDoc('recurrentes', id, recurrentData, null); // btn null para no resetear loading aún
 
-            // Actualizar memoria local
-            const idx = db.recurrentes.findIndex(r => r.id === id);
-            if (idx > -1) db.recurrentes[idx] = recurrentData;
-            else db.recurrentes.push(recurrentData);
-            db.recurrentes.sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
-
-            // 2. ¿Debemos ejecutar el PRIMER pago YA?
-            const fechaInicio = new Date(rawNextDate);
-            const hoy = new Date();
-            fechaInicio.setHours(0,0,0,0);
-            hoy.setHours(0,0,0,0);
-
-            if (fechaInicio <= hoy) {
-                // ¡Sí! La fecha es hoy o anterior. Creamos el movimiento REAL.
-                console.log("📅 Creando movimiento inicial inmediato para la recurrencia...");
-                
-                const movId = generateId(); // Nuevo ID para el movimiento real
-                const movData = {
-                    id: movId,
-                    fecha: new Date(rawNextDate + 'T12:00:00Z').toISOString(), // Usamos la fecha elegida
-                    ...baseData,
-                    recurrenceId: id // Vinculamos a la regla padre
-                };
-
-                const batch = fbDb.batch();
-                const userRef = fbDb.collection('users').doc(currentUser.uid);
-
-                // Guardar movimiento
-                batch.set(userRef.collection('movimientos').doc(movId), movData);
-
-                // Actualizar Saldos
-                if (movData.tipo === 'traspaso') {
-                    batch.update(userRef.collection('cuentas').doc(movData.cuentaOrigenId), { 
-                        saldo: firebase.firestore.FieldValue.increment(-movData.cantidad) 
-                    });
-                    batch.update(userRef.collection('cuentas').doc(movData.cuentaDestinoId), { 
-                        saldo: firebase.firestore.FieldValue.increment(movData.cantidad) 
-                    });
-                } else {
-                    batch.update(userRef.collection('cuentas').doc(movData.cuentaId), { 
-                        saldo: firebase.firestore.FieldValue.increment(movData.cantidad) 
-                    });
-                }
-
-                await batch.commit();
-                
-                // Actualizar memoria local para verlo ya
-                db.movimientos.unshift(movData);
-                AppStore.add(movData);
-                applyOptimisticBalanceUpdate(movData, null);
-
-                showToast('Recurrencia guardada y primer movimiento ejecutado.', 'success');
-            } else {
-                showToast('Recurrencia programada correctamente.', 'success');
+            // 2. LIMPIEZA CRUZADA: Si veníamos de editar un movimiento normal ('edit-single'),
+            // significa que el usuario lo convirtió en regla. Borramos el movimiento original.
+            if (mode === 'edit-single') {
+                await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id).delete();
+                // Ajustar saldo (revertir el movimiento que acabamos de borrar)
+                await revertBalance(id, baseData); // Función auxiliar o lógica manual necesaria
+                // Nota: Para simplificar, asumimos que si conviertes a regla, el movimiento 'desaparece' del historial.
+                // Si prefieres mantenerlo, quita este bloque 'if'.
             }
 
+            hapticFeedback('success');
+            showToast('Programación guardada correctamente.');
+            
+            // Cerrar y salir
             hideModal('movimiento-modal');
-            const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) renderPlanificacionPage();
             
-            // Actualizar vista global por si se creó movimiento
-            setTimeout(() => updateLocalDataAndRefreshUI(), 50);
+            if (saveBtn) setButtonLoading(saveBtn, false);
+            return; // ¡IMPORTANTE! Cortamos ejecución aquí.
         }
+
+        // =========================================================
+        // 🔹 CAMINO B: ES UN MOVIMIENTO NORMAL (HISTORIAL)
+        // =========================================================
         
-        // CASO B: ES MOVIMIENTO NORMAL (Puntual)
-        else {
-            let oldData = null;
-            if (mode.startsWith('edit')) {
-                const original = db.movimientos.find(m => m.id === id);
-                if (original) oldData = { ...original };
-            }
+        // Fecha del movimiento
+        const fechaInput = getVal('movimiento-fecha');
+        // Añadimos hora actual para evitar problemas de ordenación si es hoy
+        const now = new Date();
+        const fechaFinal = fechaInput ? 
+            (fechaInput === now.toISOString().split('T')[0] ? now.toISOString() : `${fechaInput}T12:00:00.000Z`) 
+            : now.toISOString();
 
-            // CORRECCIÓN DE FECHA: Forzamos mediodía UTC
-            const rawDate = getVal('movimiento-fecha');
-            const safeDateISO = rawDate ? new Date(rawDate + 'T12:00:00Z').toISOString() : new Date().toISOString();
+        const dataToSave = {
+            id: id,
+            ...baseData,
+            fecha: fechaFinal
+        };
+
+        // 1. Preparar Batch (Lote de operaciones atómicas)
+        const batch = fbDb.batch();
+        const userRef = fbDb.collection('users').doc(currentUser.uid);
+
+        // 2. Gestionar Saldos (Revertir anterior + Aplicar nuevo)
+        // Necesitamos saber si estamos editando para revertir el saldo previo
+        let oldData = null;
+        if (mode === 'edit-single') {
+            // Buscamos en caché local para ser rápidos
+            oldData = db.movimientos.find(m => m.id === id);
             
-            const dataToSave = {
-                id: id,
-                fecha: safeDateISO,
-                ...baseData
-            };
-
-            // 4.1. Actualizar Memoria Local (Optimista)
-            if (oldData) {
-                const index = db.movimientos.findIndex(m => m.id === id);
-                if (index > -1) db.movimientos[index] = dataToSave;
-            } else {
-                db.movimientos.unshift(dataToSave);
-            }
-
-            // 4.2. Actualizar Saldos (Optimista)
-            applyOptimisticBalanceUpdate(dataToSave, oldData);
-
-            // 4.3. Feedback Visual en Botón (Mejora UX)
-            if (btn) {
-                btn.classList.remove('btn--loading');
-                btn.classList.add('btn--success-state');
-                btn.innerHTML = `
-                    <div class="btn-content-visible" style="display:flex; align-items:center; gap:8px; justify-content:center;">
-                        <span class="material-icons" style="font-size: 20px;">check_circle</span>
-                        <span>¡Guardado!</span>
-                    </div>`;
-                hapticFeedback('success');
-                // Pequeña espera para ver el éxito
-                await new Promise(r => setTimeout(r, 650));
-            }
-
-            // 4.4. Batch Write a Firebase (Persistencia)
-            const batch = fbDb.batch();
-            const userRef = fbDb.collection('users').doc(currentUser.uid);
-
-            // Revertir saldo viejo
+            // Revertir impacto anterior
             if (oldData) {
                 if (oldData.tipo === 'traspaso') {
                     batch.update(userRef.collection('cuentas').doc(oldData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldData.cantidad) });
@@ -10393,79 +10344,54 @@ const handleSaveMovement = async (form, btn) => {
                     batch.update(userRef.collection('cuentas').doc(oldData.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
                 }
             }
-
-            // Guardar nuevo
-            batch.set(userRef.collection('movimientos').doc(id), dataToSave);
-
-            // Aplicar saldo nuevo
-            if (dataToSave.tipo === 'traspaso') {
-                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataToSave.cantidad) });
-                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
-            } else {
-                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
-            }
-
-            // Actualizar AppStore
-            if (oldData) { AppStore.update(dataToSave); } 
-            else { AppStore.add(dataToSave); }
-
-            await batch.commit();
-
-            // 4.5. Efecto Confeti (Solo ingresos)
-            if (dataToSave.cantidad > 0 && dataToSave.tipo !== 'traspaso') {
-                if(typeof confetti === 'function') {
-                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#39FF14', '#00B34D', '#FFD60A'], disableForReducedMotion: true });
-                }
-            }
-
-            // 4.6. NAVEGACIÓN Y RESALTADO
-            if (!isSaveAndNew) {
-                hideModal('movimiento-modal');
-                // Llamamos a la función mágica para ir al diario y resaltar
-                navigateToAndHighlight(id);
-                
-                // Restaurar botón después
-                setTimeout(() => {
-                    if(btn) {
-                        btn.classList.remove('btn--success-state');
-                        btn.innerHTML = 'Guardar';
-                        btn.removeAttribute('disabled');
-                    }
-                }, 500);
-            } else {
-                startMovementForm();
-                // Restaurar botón inmediatamente
-                if(btn) {
-                    btn.classList.remove('btn--success-state');
-                    btn.innerHTML = '+ Otro';
-                    btn.removeAttribute('disabled');
-                }
-            }
-
-            // Refrescar UI global
-            setTimeout(() => updateLocalDataAndRefreshUI(), 50);
         }
+
+        // 3. LIMPIEZA CRUZADA: Si veníamos de editar una regla recurrente ('edit-recurrent'),
+        // y ahora es normal, borramos la regla de 'recurrentes'.
+        if (mode === 'edit-recurrent') {
+            batch.delete(userRef.collection('recurrentes').doc(id));
+        }
+
+        // 4. Guardar el Movimiento
+        batch.set(userRef.collection('movimientos').doc(id), dataToSave);
+
+        // 5. Aplicar Nuevo Saldo
+        if (tipoMovimiento === 'traspaso') {
+            batch.update(userRef.collection('cuentas').doc(baseData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-baseData.cantidad) });
+            batch.update(userRef.collection('cuentas').doc(baseData.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(baseData.cantidad) });
+        } else {
+            batch.update(userRef.collection('cuentas').doc(baseData.cuentaId), { saldo: firebase.firestore.FieldValue.increment(baseData.cantidad) });
+        }
+
+        // Ejecutar todo
+        await batch.commit();
+
+        // Actualizar caché local
+        if (oldData) AppStore.update(dataToSave);
+        else AppStore.add(dataToSave);
+
+        // Feedback y Cierre
+        hapticFeedback('success');
+        if (!isSaveAndNew) {
+            hideModal('movimiento-modal');
+            // Si quieres resaltar el movimiento creado en la lista:
+            if (typeof navigateToAndHighlight === 'function') navigateToAndHighlight(id);
+        } else {
+            // Resetear para añadir otro
+            startMovementForm(); 
+            showToast('Movimiento guardado. Listo para el siguiente.');
+        }
+
+        // Actualizar UI
+        setTimeout(() => updateLocalDataAndRefreshUI(), 50);
 
     } catch (error) {
-        console.error("Error al guardar:", error);
-        showToast(error.message || "Error al guardar.", "danger");
-        // Restaurar botón en caso de error
-        if(btn) {
-            btn.classList.remove('btn--success-state');
-            btn.innerHTML = 'Guardar';
-        }
+        console.error("Error al guardar movimiento:", error);
+        if (error.message.includes("cuenta")) showToast(error.message, "warning");
+        else showToast("Error al guardar. Inténtalo de nuevo.", "danger");
     } finally {
-        // Restaurar estado de carga siempre
-        const saveBtn = document.getElementById('save-movimiento-btn');
-        if (saveBtn) {
-            setButtonLoading(saveBtn, false, 'Guardar');
-            saveBtn.disabled = false;
-        }
-        const saveNewBtn = select('save-and-new-movimiento-btn');
-        if (saveNewBtn) {
-            setButtonLoading(saveNewBtn, false, '+ Otro');
-            saveNewBtn.disabled = false;
-        }
+        if (saveBtn) setButtonLoading(saveBtn, false);
+        if (saveNewBtn) setButtonLoading(saveNewBtn, false);
     }
 };
 
