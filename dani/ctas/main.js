@@ -8892,47 +8892,8 @@ const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
     }, 350); 
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
 const attachEventListeners = () => {
-	// --- NUEVO: GESTOR DE ENVÍO DE FORMULARIOS (EL CABLE QUE FALTABA) ---
-    document.body.addEventListener('submit', async (e) => {
-        const target = e.target; // El formulario que se ha enviado
-
-        // 1. Caso: Formulario de Nuevo Movimiento
-        if (target.id === 'form-movimiento') {
-            e.preventDefault(); // ¡Alto! No recargues la página
-            const btn = document.getElementById('save-movimiento-btn');
-            // Llamamos a tu función de guardado existente
-            handleSaveMovement(target, btn);
-        }
-        
-        // 2. Caso: Filtros del Diario
-        if (target.id === 'diario-filters-form') {
-            e.preventDefault();
-            applyDiarioFilters();
-        }
-
-        // 3. Caso: Crear Cuenta
-        if (target.id === 'add-cuenta-form') {
-            e.preventDefault();
-            const btn = target.querySelector('button[type="submit"]');
-            handleAddAccount(btn);
-        }
-
-        // 4. Caso: Crear Concepto
-        if (target.id === 'add-concepto-form') {
-            e.preventDefault();
-            const btn = target.querySelector('button[type="submit"]');
-            handleAddConcept(btn);
-        }
-        
-        // 5. Caso: Login (Evitar recarga si falla JS)
-        if (target.id === 'login-form') {
-            e.preventDefault();
-            const btn = target.querySelector('button[type="submit"]');
-            handleLogin(btn);
-        }
-    });
+	
 	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
     document.addEventListener('click', async (e) => {
         
