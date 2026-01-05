@@ -2344,49 +2344,11 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
                 });
             });
         };
-		
-// === LÓGICA DE TEMA (MODO CLARO/OSCURO) ===
-const toggleTheme = () => {
-    const body = document.body;
-    // 1. Cambiar la clase
-    body.classList.toggle('light-theme');
-    
-    // 2. Guardar preferencia
-    const isLight = body.classList.contains('light-theme');
-    localStorage.setItem('themePreference', isLight ? 'light' : 'dark');
-    
-    // 3. Feedback al usuario
-    hapticFeedback('medium');
-    const msg = isLight ? 'Tema Cristal activado' : 'Tema Abismo activado';
-    showToast(msg);
-    
-    // 4. Actualizar el icono del botón si existe
-    updateThemeButtonIcon();
-};
-
-const loadSavedTheme = () => {
-    const savedTheme = localStorage.getItem('themePreference');
-    if (savedTheme === 'light') {
-        document.body.classList.add('light-theme');
-    }
-};
-
-const updateThemeButtonIcon = () => {
-    // Busca el icono dentro del botón de tema (si está visible)
-    const btnIcon = document.querySelector('[data-action="toggle-theme-settings"] .material-icons');
-    if (btnIcon) {
-        const isLight = document.body.classList.contains('light-theme');
-        btnIcon.textContent = isLight ? 'dark_mode' : 'light_mode'; // Sol si es oscuro, Luna si es claro
-    }
-};
-	
-	
     const initApp = async () => {
 	SpaceBackgroundEffect.start();	
     const procederConCargaDeApp = () => {
         document.documentElement.lang = 'es';
         setupTheme();
-		loadSavedTheme(); // <--- AÑADIR ESTA LÍNEA
         // Ya no necesitamos cargar tema, el CSS lo fuerza
         attachEventListeners();
         checkAuthState(); 
@@ -4424,14 +4386,6 @@ const renderAjustesPage = () => {
             <span class="settings-item__label">Renombrar Cajas (A/B/C)</span>
             <span class="material-icons">chevron_right</span>
         </button>
-		<button class="settings-item" data-action="toggle-theme-settings">
-                            <span class="material-icons" style="color: var(--c-warning);">light_mode</span>
-                            <span class="settings-item__label">Cambiar Tema (Día/Noche)</span>
-                            <div class="form-switch">
-                                <input type="checkbox" ${document.body.classList.contains('light-theme') ? 'checked' : ''} style="pointer-events: none;">
-                                <span class="slider"></span>
-                            </div>
-                        </button>
     </div>
 </div>
                     <button class="settings-item text-danger" data-action="logout">
@@ -9335,7 +9289,6 @@ const handleStart = (e) => {
             'show-diario-filters': showDiarioFiltersModal,
             'clear-diario-filters': clearDiarioFilters,
             'toggle-amount-type': () => { /* Ya no se usa botón toggle, pero se mantiene por compatibilidad */ },
-			'toggle-theme-settings': toggleTheme,
             'show-kpi-drilldown': () => handleKpiDrilldown(actionTarget),
 			'show-kpi-help': (e) => {
     e.stopPropagation(); // Evitar que el clic active cosas debajo (ej. drilldown)
