@@ -1117,122 +1117,104 @@ const fetchBtcPrice = async () => {
     }
     return btcPriceData.price || 0; // Retorna 0 o el último precio conocido si falla
 };
-
-// Variable global para controlar el doble toque (mantenemos esto igual)
-let lastCalcActionTime = 0;
-let calcConfirmState = false; 
-
 const handleCalculatorInput = (key) => {
-    // 1. Elementos (YA NO buscamos historyEl)
-    const currentEl = document.getElementById('calculator-display');
-    const doneBtn = document.getElementById('calculator-btn-done');
-
-    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed } = calculatorState;
-
-    // --- LÓGICA CONFIRMACIÓN (Igual que antes) ---
-    if (key === 'done') {
-        const now = Date.now();
-        const timeDiff = now - lastCalcActionTime;
-
-        if (!calcConfirmState || timeDiff > 2000) {
-            // Primer Click
-            hapticFeedback('medium');
-            if (operand1 !== null && operator !== null) {
-                calculate();
-                displayValue = calculatorState.displayValue;
-                operand1 = null; operator = null; waitingForNewValue = true; isResultDisplayed = true;
-            }
-            calcConfirmState = true;
-            lastCalcActionTime = now;
-            if (doneBtn) {
-                doneBtn.textContent = '¿CONFIRMAR?';
-                doneBtn.style.backgroundColor = '#FFD700'; 
-                doneBtn.style.color = '#000';
-            }
-            // Actualizamos estado y pantalla
-            Object.assign(calculatorState, { displayValue, operand1, operator, waitingForNewValue, isResultDisplayed });
-            if (currentEl) currentEl.textContent = displayValue;
-            return;
-        } else {
-            // Segundo Click (Guardar)
-            hapticFeedback('success');
-            updateTargetInput(displayValue);
-            
-            // Reset y cerrar
-            calcConfirmState = false;
-            if (doneBtn) {
-                doneBtn.textContent = 'OK';
-                doneBtn.style.backgroundColor = ''; 
-                doneBtn.style.color = '';
-            }
-            hideCalculator();
-            setTimeout(() => {
-                // Lógica de salto de campo
-                const conceptoSelect = document.getElementById('movimiento-concepto');
-                if (conceptoSelect) {
-                    const wrapper = conceptoSelect.closest('.custom-select-wrapper');
-                    const trigger = wrapper?.querySelector('.custom-select__trigger');
-                    if (trigger) trigger.click();
-                }
-            }, 100);
-            return;
-        }
+    hapticFeedback('light');
+    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
+    
+    // Reset si venimos de un resultado y se escribe número
+    if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
+        displayValue = '0';
+        isResultDisplayed = false;
+        historyValue = ''; 
     }
 
-    // Reset de confirmación si toca otra tecla
-    if (key !== 'done' && calcConfirmState) {
-        calcConfirmState = false;
-        if (doneBtn) {
-            doneBtn.textContent = 'OK';
-            doneBtn.style.backgroundColor = '';
-            doneBtn.style.color = '';
-        }
-    }
-
-    // --- LÓGICA OPERATIVA (Sin actualizar historyValue) ---
     const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
 
     if (isOperator) {
         if (operand1 !== null && operator !== null && !waitingForNewValue) {
             calculate();
-            displayValue = calculatorState.displayValue;
+            displayValue = calculatorState.displayValue; 
         }
         operand1 = parseFloat(displayValue.replace(',', '.'));
         operator = key;
-        // Eliminamos la línea historyValue = ...
+        // Mostramos la operación en la barrita pequeña de historial
+        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`;
         waitingForNewValue = true;
         isResultDisplayed = false;
     } else {
         switch(key) {
-            case 'clear': 
-                displayValue = '0'; 
-                operand1 = null; operator = null; waitingForNewValue = false; isResultDisplayed = false;
-                break;
-            case 'backspace': 
-                displayValue = displayValue.length > 1 ? displayValue.slice(0, -1) : '0';
-                if (waitingForNewValue) displayValue = '0';
-                break;
+            case 'done':
+                hapticFeedback('medium');
+                // Calcular final si hay pendiente
+                if (operand1 !== null && operator !== null && !waitingForNewValue) {
+                    calculate();
+                    displayValue = calculatorState.displayValue;
+                }
+                
+                // Actualizar input final
+                updateTargetInput(displayValue);
+                
+                historyValue = '';
+                hideCalculator(); 
+
+                // --- AVANCE AUTOMÁTICO AL SIGUIENTE CAMPO ---
+                // Al dar OK, pasamos al concepto automáticamente
+                setTimeout(() => {
+                    const conceptoSelect = document.getElementById('movimiento-concepto');
+                    // Buscamos el trigger del custom select
+                    const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
+                    const trigger = wrapper?.querySelector('.custom-select__trigger');
+                    
+                    if (trigger) {
+                        trigger.focus(); // Enfocar para navegación teclado
+                        trigger.click(); // Abrir el menú
+                    }
+                }, 100); 
+                return;
+
             case 'comma':
-                if (waitingForNewValue) { displayValue = '0,'; waitingForNewValue = false; }
+                if (waitingForNewValue) { displayValue = '0,'; waitingForNewValue = false; } 
                 else if (!displayValue.includes(',')) displayValue += ',';
                 break;
-            default: 
-                if (waitingForNewValue || displayValue === '0' || isResultDisplayed) {
+
+            case 'clear': 
+                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; historyValue = '';
+                break;
+
+            case 'backspace': 
+                displayValue = displayValue.length > 1 ? displayValue.slice(0, -1) : '0';
+                if (displayValue === '0') waitingForNewValue = true;
+                break;
+
+            case 'sign': 
+                if (displayValue !== '0') displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
+                break;
+
+            default: // Dígitos (0-9)
+                if (waitingForNewValue || displayValue === '0') {
                     displayValue = key;
                     waitingForNewValue = false;
-                    isResultDisplayed = false;
-                } else if (displayValue.length < 15) {
+                } else if (displayValue.length < 12) { 
                     displayValue += key;
                 }
                 break;
         }
     }
+    
+    // Guardamos estado
+    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue });
+    
+    // Actualizamos UI interna
+    updateCalculatorDisplay();
+    updateCalculatorHistoryDisplay();
+    updateActiveOperatorButton();
 
-    // Guardar estado
-    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed });
-
-    // ACTUALIZAR PANTALLA (Solo el número principal)
-    if (currentEl) currentEl.textContent = displayValue;
+    // === MEJORA 1: ACTUALIZACIÓN EN TIEMPO REAL ===
+    // Actualizamos el input objetivo SIEMPRE, no solo al dar OK.
+    // Excepto si estamos a mitad de una operación (ej. escribiendo el segundo número de una suma)
+    if (!operand1 || isResultDisplayed) {
+        updateTargetInput(displayValue);
+    }
 };
 
 // Función auxiliar para escribir en el input real
@@ -1479,33 +1461,17 @@ async function loadCoreData(uid) {
 
     const userRef = fbDb.collection('users').doc(uid);
     const collectionsToLoad = ['cuentas', 'conceptos'];
-    
+
     collectionsToLoad.forEach(collectionName => {
         const unsubscribe = userRef.collection(collectionName).onSnapshot(snapshot => {
-            // 1. Actualizamos la memoria local con la Verdad del Árbitro
             db[collectionName] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // 2. Refrescamos los selectores (para que aparezcan cuentas nuevas al crear movimientos)
             populateAllDropdowns();
             
-            // 3. DETECCIÓN INTELIGENTE DE PANTALLA ACTIVA
-            // Aquí estaba el fallo: solo actualizabas el Panel.
-            const activePage = document.querySelector('.view--active');
-            
-            if (activePage) {
-                if (activePage.id === PAGE_IDS.PANEL) {
-                    // Si estamos en el Inicio, recalcula gráficos y KPIs
-                    scheduleDashboardUpdate();
-                } else if (activePage.id === PAGE_IDS.DIARIO) {
-                    // NUEVO: Si estamos en el Diario, recalcula la lista de movimientos
-                    // Esto asegura que el "Saldo tras movimiento" se corrija al instante
-                    updateLocalDataAndRefreshUI();
-                } else if (activePage.id === PAGE_IDS.PLANIFICAR) {
-                     // Si estamos en Planificación/Inversiones, refrescamos esa vista
-                     // (Por si has cambiado el saldo de una cuenta de inversión manualmente)
-                     if (typeof renderPlanificacionPage === 'function') renderPlanificacionPage();
-                }
+            // === ¡LA OTRA CORRECIÓN CLAVE ESTÁ AQUÍ! ===
+            if (select(PAGE_IDS.PANEL)?.classList.contains('view--active')) {
+                scheduleDashboardUpdate();
             }
+            // =========================================
 
         }, error => console.error(`Error escuchando ${collectionName}: `, error));
         unsubscribeListeners.push(unsubscribe);
@@ -2360,103 +2326,6 @@ const animateCountUp = (el, end, duration = 700, formatAsCurrency = true, prefix
                 });
             });
         };
-	
-// ==========================================================
-// === MOTOR DE RECURRENTES V2.0 (Logic Fix by aiDANaI) ===
-// ==========================================================
-
-const procesarRecurrentes = async () => {
-    // 1. DIAGNÓSTICO: Verificar si hay datos
-    if (!db.recurrentes || db.recurrentes.length === 0) {
-        console.log("📭 No hay operaciones recurrentes configuradas.");
-        return;
-    }
-
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0); // Normalizamos hoy a medianoche para comparar peras con peras
-
-    const batch = fbDb.batch(); // Preparamos un paquete de cambios para Firebase
-    let operacionesGeneradas = 0;
-
-    console.log("🔄 Iniciando procesamiento de recurrentes...");
-
-    // 2. ITERACIÓN: Recorremos LA IMPRENTA (db.recurrentes), no los libros.
-    db.recurrentes.forEach(recurrente => {
-        // Validación de seguridad: Si no tiene fecha próxima, la ignoramos
-        if (!recurrente.nextDate) return;
-
-        let proximaFechaObj = new Date(recurrente.nextDate);
-        let huboGeneracion = false;
-        
-        // Freno de emergencia: Máximo 24 ejecuciones por item para evitar bucles infinitos
-        // si la fecha es muy antigua (ej. 2010).
-        let safetyCounter = 0; 
-        const SAFETY_LIMIT = 24; 
-
-        // 3. BUCLE TEMPORAL: Mientras la fecha programada sea HOY o ANTES...
-        while (proximaFechaObj <= hoy && safetyCounter < SAFETY_LIMIT) {
-            
-            // A. CREAR EL MOVIMIENTO (EL LIBRO)
-            const nuevoId = generateId(); // Usamos tu helper generateId
-            const nuevoMovimiento = {
-                id: nuevoId,
-                cantidad: recurrente.cantidad,
-                conceptoId: recurrente.conceptoId || 'VARIO',
-                cuentaId: recurrente.cuentaId,
-                descripcion: recurrente.descripcion + ' (Recurrente)',
-                fecha: proximaFechaObj.toISOString().split('T')[0], // YYYY-MM-DD
-                tipo: recurrente.tipo || 'gasto', // Por defecto gasto
-                esRecurrente: false, // El hijo NO es recurrente, es real
-                runningBalance: 0 // Se calculará luego
-            };
-
-            // B. AÑADIR AL PAQUETE DE GUARDADO
-            // Referencia: users/{uid}/movimientos/{id}
-            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(nuevoId);
-            batch.set(movRef, nuevoMovimiento);
-            
-            // Actualizar saldo de la cuenta (Optimista)
-            const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(recurrente.cuentaId);
-            const impacto = (recurrente.tipo === 'gasto') ? -Math.abs(recurrente.cantidad) : Math.abs(recurrente.cantidad);
-            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(impacto) });
-
-            // C. CALCULAR LA SIGUIENTE FECHA (AVANZAR RELOJ)
-            // Usamos tu función helper existente 'calculateNextDueDate'
-            proximaFechaObj = calculateNextDueDate(proximaFechaObj.toISOString().split('T')[0], recurrente.frequency);
-            
-            operacionesGeneradas++;
-            huboGeneracion = true;
-            safetyCounter++;
-        }
-
-        // 4. ACTUALIZAR LA IMPRENTA: Guardamos la nueva "próxima fecha" en el recurrente
-        if (huboGeneracion) {
-            const recurrenteRef = fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(recurrente.id);
-            batch.update(recurrenteRef, { 
-                nextDate: proximaFechaObj.toISOString().split('T')[0] 
-            });
-            console.log(`✅ [${recurrente.descripcion}] procesado. Próxima fecha: ${proximaFechaObj.toISOString().split('T')[0]}`);
-        }
-    });
-
-    // 5. COMMIT: Enviar todo a Firebase de una sola vez
-    if (operacionesGeneradas > 0) {
-        try {
-            await batch.commit();
-            showToast(`Se han generado ${operacionesGeneradas} movimientos recurrentes.`, 'success');
-            hapticFeedback('success');
-            
-            // Recargar datos para ver los cambios
-            loadCoreData(currentUser.uid); 
-        } catch (error) {
-            console.error("❌ Error guardando recurrentes:", error);
-            showToast("Error al procesar recurrentes", "danger");
-        }
-    } else {
-        console.log("👍 Todo al día. No hay recurrentes pendientes.");
-    }
-};
-
     const initApp = async () => {
 	SpaceBackgroundEffect.start();	
     const procederConCargaDeApp = () => {
@@ -2507,10 +2376,6 @@ window.addEventListener('offline', () => {
         
     // === ¡LA CORRECCIÓN CLAVE ESTÁ AQUÍ! ===
     navigateTo(PAGE_IDS.PANEL, true); 
-	// Esperamos 2 segundos para asegurar que la BBDD ha cargado antes de procesar
-    setTimeout(() => {
-        procesarRecurrentes();
-    }, 2000);
     // =====================================
 
       isInitialLoadComplete = true;
@@ -4822,7 +4687,7 @@ const handleShowIrrHistory = async (options) => {
                 label: 'TIR Anualizada',
                 data: historyData.map(d => d.irr * 100),
                 borderColor: 'var(--c-info)',
-                backgroundColor: 'rgba(41, 121, 255, 0.2)',
+                backgroundColor: 'rgba(191, 90, 242, 0.2)',
                 fill: true,
                 tension: 0.1
             }]
@@ -4904,7 +4769,6 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 const renderPanelPage = async () => {
-	
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
@@ -4973,7 +4837,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div class="hero-card fade-in-up" data-action="ver-balance-neto" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+            <div class="hero-card fade-in-up" style="padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
                 
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
@@ -4994,16 +4858,18 @@ const renderPanelPage = async () => {
 
                     <div style="height: 30px; background-color: var(--c-outline);"></div>
 
-                    <div style="text-align: center; cursor: pointer;" data-action="ver-inversiones">
-						<div style="font-size: 0.65rem; font-weight: 700; color: #2979FF; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
-							<span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv. <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
-						</div>
-						<div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
-						</div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+                        </div>
+                        <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
                 </div>
             </div>
 
-            <div class="hero-card fade-in-up" data-action="ver-inversiones" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(41, 121, 255, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
                     <div style="text-align: left;">
@@ -5592,7 +5458,7 @@ async function renderInformeAsignacionActivos(container) {
             labels, 
             datasets: [{ 
                 data, 
-                backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#2979FF', '#5E5CE6', '#FF9F0A', '#45B6E9', '#D158A7'] 
+                backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6', '#FF9F0A', '#45B6E9', '#D158A7'] 
             }] 
         },
         options: { 
@@ -6349,7 +6215,7 @@ const renderRecurrentsListOnPage = () => {
 const NET_WORTH_COMPONENT_COLORS = {
     'Líquido': 'rgba(0, 122, 255, 0.7)',      // Azul (var(--c-primary))
     'Inversión': 'rgba(48, 209, 88, 0.7)',   // Verde (var(--c-success))
-    'Propiedades': 'rgba(41, 121, 255, 0.7)', // azul (var(--c-info))
+    'Propiedades': 'rgba(191, 90, 242, 0.7)', // Púrpura (var(--c-info))
     'Deuda': 'rgba(255, 69, 58, 0.7)'         // Rojo (var(--c-danger))
 };
 
@@ -7132,7 +6998,7 @@ const generateInformeData = async (config) => {
 
     const labels = Object.keys(groupedData).sort();
     let datasets = [];
-    const colorPalette = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#2979FF', '#5E5CE6'];
+    const colorPalette = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6'];
 
     if (config.desglose === 'total') {
         const data = labels.map(label => {
@@ -7660,30 +7526,7 @@ const renderQuickAccessChips = () => {
 
 
 const startMovementForm = async (id = null, isRecurrent = false, initialType = 'gasto') => {
-    // Al abrir el modal
-const inputCantidad = select('movimiento-cantidad');
-inputCantidad.readOnly = true; // Bloquea teclado nativo
-inputCantidad.value = '0,00'; // Valor inicial limpio
-
-// Al hacer click, abrir TU calculadora
-inputCantidad.addEventListener('click', () => {
-    showCalculator(inputCantidad); // Tu función existente
-    hapticFeedback('light');
-});
-
-// MODIFICAR tu función updateTargetInput en la lógica de la calculadora
-// para ajustar el tamaño de fuente dinámicamente
-const updateTargetInput = (val) => {
-    // ... tu lógica existente ...
-    
-    // Nueva lógica de tamaño de fuente
-    const length = val.length;
-    if (length > 8) calculatorState.targetInput.style.fontSize = '2rem';
-    else if (length > 5) calculatorState.targetInput.style.fontSize = '2.5rem';
-    else calculatorState.targetInput.style.fontSize = '3rem';
-};
-	
-	hapticFeedback('medium');
+    hapticFeedback('medium');
     const form = select('form-movimiento');
     if (!form) return;
     
@@ -7786,7 +7629,7 @@ const updateTargetInput = (val) => {
         fechaInput.value = localIsoDate;
         updateDateDisplay(fechaInput);
     }
-
+    
     // Gestión de botones
     const deleteBtn = select('delete-movimiento-btn');
     const duplicateBtn = select('duplicate-movimiento-btn');
@@ -8107,7 +7950,7 @@ const showHelpModal = () => {
                 </div>
 
                 <div class="aidanai-section tech-flex">
-                    <h4><span class="material-icons" style="color: #2979FF;">speed</span> Velocidad Absurda</h4>
+                    <h4><span class="material-icons" style="color: #BF5AF2;">speed</span> Velocidad Absurda</h4>
                     <p>
                         ¿Notas lo rápido que hago scroll en tu Diario aunque tengas 5.000 movimientos? 
                         No es magia, es mi motor de <strong>Virtual Scrolling</strong>.
@@ -9051,6 +8894,45 @@ const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
 
 // ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
 const attachEventListeners = () => {
+	// --- NUEVO: GESTOR DE ENVÍO DE FORMULARIOS (EL CABLE QUE FALTABA) ---
+    document.body.addEventListener('submit', async (e) => {
+        const target = e.target; // El formulario que se ha enviado
+
+        // 1. Caso: Formulario de Nuevo Movimiento
+        if (target.id === 'form-movimiento') {
+            e.preventDefault(); // ¡Alto! No recargues la página
+            const btn = document.getElementById('save-movimiento-btn');
+            // Llamamos a tu función de guardado existente
+            handleSaveMovement(target, btn);
+        }
+        
+        // 2. Caso: Filtros del Diario
+        if (target.id === 'diario-filters-form') {
+            e.preventDefault();
+            applyDiarioFilters();
+        }
+
+        // 3. Caso: Crear Cuenta
+        if (target.id === 'add-cuenta-form') {
+            e.preventDefault();
+            const btn = target.querySelector('button[type="submit"]');
+            handleAddAccount(btn);
+        }
+
+        // 4. Caso: Crear Concepto
+        if (target.id === 'add-concepto-form') {
+            e.preventDefault();
+            const btn = target.querySelector('button[type="submit"]');
+            handleAddConcept(btn);
+        }
+        
+        // 5. Caso: Login (Evitar recarga si falla JS)
+        if (target.id === 'login-form') {
+            e.preventDefault();
+            const btn = target.querySelector('button[type="submit"]');
+            handleLogin(btn);
+        }
+    });
 	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
     document.addEventListener('click', async (e) => {
         
@@ -10348,137 +10230,248 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     }
     // --- ⭐ FIN DE LA CORRECCIÓN ⭐ ---
 };
-
-// ===============================================================
-// === HANDLE SAVE MOVEMENT V3.0 (Depurado y Blindado) ===
-// ===============================================================
-const handleSaveMovement = async (formElement, btn) => {
-    console.log("🚀 INICIANDO GUARDADO...");
-
-    // 1. OBTENCIÓN DE DATOS DIRECTA (Sin helpers intermedios para evitar fallos)
-    const rawAmount = document.getElementById('movimiento-cantidad').value; // O el ID de tu display
-    // Si usas display de calculadora, usa: document.getElementById('calculator-display').innerText
-    
-    // TRUCO: Limpiamos el valor numérico
-    const cantidadFloat = parseFloat(rawAmount.replace(/[^0-9.-]+/g,""));
-
-    // LEEMOS LOS ELEMENTOS DEL DOM
-    const elRecurrente = document.getElementById('movimiento-recurrente');
-    const elFrecuencia = document.getElementById('recurrent-frequency');
-    const elConcepto = document.getElementById('movimiento-concepto');
-    const elCuenta = document.getElementById('movimiento-cuenta');
-    const elFecha = document.getElementById('movimiento-fecha');
-    const elDesc = document.getElementById('movimiento-descripcion');
-
-    // VERIFICACIÓN VISUAL (Mira la consola del navegador F12)
-    const esRecurrente = elRecurrente ? elRecurrente.checked : false;
-    const frecuencia = elFrecuencia ? elFrecuencia.value : 'monthly';
-    
-    console.log("Estado Recurrente:", esRecurrente); 
-    console.log("Frecuencia:", frecuencia);
-
-    // Validaciones
-    if (!cantidadFloat || cantidadFloat === 0) {
-        showToast("Cantidad inválida", "warning");
-        return;
-    }
-    if (!elCuenta.value) {
-        showToast("Falta cuenta", "warning");
-        return;
+const handleSaveMovement = async (form, btn) => {
+    // 1. Validaciones iniciales
+    clearAllErrors(form.id);
+    if (!validateMovementForm()) {
+        hapticFeedback('error');
+        showToast('Revisa los campos marcados.', 'warning');
+        return false;
     }
 
-    // Preparar UI del botón
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Guardando...';
-    btn.disabled = true;
+    const saveBtn = select('save-movimiento-btn');
+    const saveNewBtn = select('save-and-new-movimiento-btn');
+    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
 
-    // Detectar Tipo (Gasto/Ingreso) basado en UI o signo
-    // Asumimos que si no hay selector de tipo, es Gasto por defecto
-    const tipo = cantidadFloat >= 0 ? 'ingreso' : 'gasto'; // Ajusta según tu lógica de signos
-    
-    const fechaISO = elFecha.value || new Date().toISOString().split('T')[0];
-    const newId = generateId();
+    if (saveBtn) setButtonLoading(saveBtn, true);
+    if (saveNewBtn && isSaveAndNew) setButtonLoading(saveNewBtn, true);
 
-    try {
-        const batch = fbDb.batch();
-        const userRef = fbDb.collection('users').doc(currentUser.uid);
-
-        // A) MOVIMIENTO DE HOY (Historial)
-        // ------------------------------------------------
-        const movRef = userRef.collection('movimientos').doc(newId);
-        batch.set(movRef, {
-            id: newId,
-            cantidad: cantidadFloat, // Asegúrate de gestionar el signo negativo si es gasto
-            conceptoId: elConcepto.value,
-            cuentaId: elCuenta.value,
-            descripcion: elDesc.value,
-            fecha: fechaISO,
-            tipo: tipo,
-            esRecurrente: false, 
-            createdAt: new Date().toISOString()
-        });
-
-        // B) ACTUALIZAR SALDO
-        // ------------------------------------------------
-        const cuentaRef = userRef.collection('cuentas').doc(elCuenta.value);
-        batch.update(cuentaRef, { 
-            saldo: firebase.firestore.FieldValue.increment(cantidadFloat) 
-        });
-
-        // C) LA REGLA RECURRENTE (La clave del problema)
-        // ------------------------------------------------
-        if (esRecurrente) {
-            console.log("✅ DENTRO DEL IF RECURRENTE: Creando regla...");
-            
-            const nextDate = calculateNextDueDate(fechaISO, frecuencia);
-            const ruleId = generateId();
-            const ruleRef = userRef.collection('recurrentes').doc(ruleId);
-            
-            const nuevaRegla = {
-                id: ruleId,
-                descripcion: elDesc.value || 'Pago Recurrente',
-                cantidad: cantidadFloat,
-                cuentaId: elCuenta.value,
-                conceptoId: elConcepto.value,
-                tipo: tipo,
-                frequency: frecuencia,
-                startDate: fechaISO,
-                nextDate: nextDate.toISOString().split('T')[0], // La fecha CLAVE
-                activo: true
-            };
-
-            // ¡IMPORTANTE! Escribimos en el batch
-            batch.set(ruleRef, nuevaRegla);
-            console.log("📦 Regla empaquetada:", nuevaRegla);
-        } else {
-            console.log("ℹ️ No es recurrente, saltando paso C");
-        }
-
-        // D) COMMIT FINAL
-        // ------------------------------------------------
-        await batch.commit();
-        console.log("🎉 GUARDADO EN FIREBASE EXITOSO");
-
-        showToast('Guardado correctamente', 'success');
-        hapticFeedback('success');
-
-        // Cerrar y limpiar
-        if(typeof closeAddModal === 'function') closeAddModal();
-        
-        // Restaurar botón
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        
-        // Recargar
-        loadCoreData(currentUser.uid);
-
-    } catch (error) {
-        console.error("❌ ERROR CRÍTICO:", error);
-        showToast('Error: ' + error.message, 'danger');
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+    const releaseButtons = () => {
+    // Forzamos a false y restauramos texto manualmente por seguridad
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false);
+        saveBtn.innerHTML = 'Guardar'; 
+        saveBtn.disabled = false;
+    }
+    if (saveNewBtn) {
+        setButtonLoading(saveNewBtn, false);
+        saveNewBtn.innerHTML = '+ Otro';
+        saveNewBtn.disabled = false;
     }
 };
+
+    try {
+        // 2. Obtener datos del formulario
+        const getVal = (id) => {
+            const el = select(id);
+            return el ? el.value : '';
+        };
+
+        const mode = getVal('movimiento-mode');
+        const id = getVal('movimiento-id') || generateId();
+        
+        const typePill = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
+        const tipoMovimiento = typePill ? typePill.dataset.type : 'gasto';
+        
+        const cantidadPositiva = parseCurrencyString(getVal('movimiento-cantidad'));
+        const cantidadEnCentimos = Math.round(cantidadPositiva * 100);
+        
+        const recurrenteCheck = select('movimiento-recurrente');
+        const isRecurrent = recurrenteCheck ? recurrenteCheck.checked : false;
+
+        // Objeto Base
+        const baseData = {
+            descripcion: getVal('movimiento-descripcion').trim(),
+            cantidad: tipoMovimiento === 'gasto' ? -Math.abs(cantidadEnCentimos) : Math.abs(cantidadEnCentimos),
+            tipo: tipoMovimiento,
+            conceptoId: getVal('movimiento-concepto'),
+        };
+
+        // Lógica de Traspasos vs Normal
+        if (tipoMovimiento === 'traspaso') {
+            baseData.tipo = 'traspaso';
+            baseData.cantidad = Math.abs(cantidadEnCentimos);
+            baseData.cuentaOrigenId = getVal('movimiento-cuenta-origen');
+            baseData.cuentaDestinoId = getVal('movimiento-cuenta-destino');
+            baseData.cuentaId = null;
+        } else {
+            baseData.tipo = 'movimiento';
+            baseData.cuentaId = getVal('movimiento-cuenta');
+            baseData.cuentaOrigenId = null;
+            baseData.cuentaDestinoId = null;
+        }
+
+        // --- 3. GUARDADO DE RECURRENTE (Lógica separada) ---
+        if (isRecurrent) {
+            const frequency = getVal('recurrent-frequency') || 'monthly';
+            let rawNextDate = getVal('recurrent-next-date');
+            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha');
+            
+            let weekDays = [];
+            if (frequency === 'weekly') {
+                weekDays = Array.from(document.querySelectorAll('.day-selector-btn.active')).map(b => b.dataset.day);
+                if (weekDays.length === 0) throw new Error("Selecciona al menos un día.");
+            }
+
+            const recurrentData = {
+                id: id,
+                ...baseData,
+                frequency: frequency,
+                nextDate: rawNextDate, 
+                endDate: getVal('recurrent-end-date') || null,
+                weekDays: weekDays,
+                active: true
+            };
+
+            await saveDoc('recurrentes', id, recurrentData);
+
+            // Actualizar memoria local
+            const idx = db.recurrentes.findIndex(r => r.id === id);
+            if (idx > -1) db.recurrentes[idx] = recurrentData;
+            else db.recurrentes.push(recurrentData);
+            db.recurrentes.sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+
+            hapticFeedback('success');
+            showToast('Recurrente guardado.');
+            hideModal('movimiento-modal'); // Cerramos el modal explícitamente
+            const activePage = document.querySelector('.view--active');
+            if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) renderPlanificacionPage();
+
+        } 
+        // --- 4. GUARDADO DE MOVIMIENTO NORMAL ---
+        else {
+            let oldData = null;
+            if (mode.startsWith('edit')) {
+                const original = db.movimientos.find(m => m.id === id);
+                if (original) oldData = { ...original };
+            }
+
+            // CORRECCIÓN DE FECHA: Forzamos mediodía UTC
+            const rawDate = getVal('movimiento-fecha');
+            const safeDateISO = rawDate ? new Date(rawDate + 'T12:00:00Z').toISOString() : new Date().toISOString();
+
+            const dataToSave = {
+                id: id,
+                fecha: safeDateISO,
+                ...baseData
+            };
+
+            // 4.1. Actualizar Memoria Local (Optimista)
+            if (oldData) {
+                const index = db.movimientos.findIndex(m => m.id === id);
+                if (index > -1) db.movimientos[index] = dataToSave;
+            } else {
+                db.movimientos.unshift(dataToSave);
+            }
+
+            // 4.2. Actualizar Saldos (Optimista)
+            applyOptimisticBalanceUpdate(dataToSave, oldData);
+
+            // 4.3. Feedback Visual en Botón (Mejora UX)
+            if (btn) {
+                btn.classList.remove('btn--loading');
+                btn.classList.add('btn--success-state');
+                btn.innerHTML = `
+                    <div class="btn-content-visible" style="display:flex; align-items:center; gap:8px; justify-content:center;">
+                        <span class="material-icons" style="font-size: 20px;">check_circle</span>
+                        <span>¡Guardado!</span>
+                    </div>`;
+                hapticFeedback('success');
+                // Pequeña espera para ver el éxito
+                await new Promise(r => setTimeout(r, 650));
+            }
+
+            // 4.4. Batch Write a Firebase (Persistencia)
+            const batch = fbDb.batch();
+            const userRef = fbDb.collection('users').doc(currentUser.uid);
+
+            // Revertir saldo viejo
+            if (oldData) {
+                if (oldData.tipo === 'traspaso') {
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldData.cantidad) });
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
+                } else {
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
+                }
+            }
+
+            // Guardar nuevo
+            batch.set(userRef.collection('movimientos').doc(id), dataToSave);
+
+            // Aplicar saldo nuevo
+            if (dataToSave.tipo === 'traspaso') {
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataToSave.cantidad) });
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
+            } else {
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
+            }
+            
+            // Actualizar AppStore
+			if (oldData) {
+				AppStore.update(dataToSave);
+			} else {
+				AppStore.add(dataToSave);
+			}
+            
+            await batch.commit();
+            
+            // 4.5. Efecto Confeti (Solo ingresos)
+			if (dataToSave.cantidad > 0 && dataToSave.tipo !== 'traspaso') {
+				confetti({
+    				particleCount: 100,
+    				spread: 70,
+    				origin: { y: 0.7 },
+    				colors: ['#39FF14', '#00B34D', '#FFD60A'],
+    			    disableForReducedMotion: true
+			    });
+		    }
+
+            // 4.6. NAVEGACIÓN Y RESALTADO (Nuevo Flujo)
+            if (!isSaveAndNew) {
+                hideModal('movimiento-modal');
+                // Llamamos a la función mágica para ir al diario y resaltar
+                navigateToAndHighlight(id); 
+                
+                // Restaurar botón después
+                setTimeout(() => {
+                    if(btn) {
+                        btn.classList.remove('btn--success-state');
+                        btn.innerHTML = 'Guardar';
+                        btn.removeAttribute('disabled');
+                    }
+                }, 500);
+            } else {
+                startMovementForm();
+                // Restaurar botón inmediatamente
+                if(btn) {
+                    btn.classList.remove('btn--success-state');
+                    btn.innerHTML = '+ Otro';
+                    btn.removeAttribute('disabled');
+                }
+            }
+            
+            // Refrescar UI global
+            setTimeout(() => updateLocalDataAndRefreshUI(), 50);
+        }
+
+    } catch (error) { // <--- AQUÍ ESTABA EL PROBLEMA (Faltaba la llave de cierre arriba)
+        console.error("Error al guardar:", error);
+        showToast(error.message || "Error al guardar.", "danger");
+        // Restaurar botón en caso de error
+        if(btn) {
+             btn.classList.remove('btn--success-state');
+             btn.innerHTML = 'Guardar';
+        }
+    } finally {
+    // RESTAURAR BOTÓN SIEMPRE
+    const saveBtn = document.getElementById('btn-save-transaction'); 
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false, 'Guardar'); // O el texto que tuviera antes
+        saveBtn.disabled = false;
+    }
+}
+};
+
 
 const handleAddConcept = async (btn) => { 
     const nombreInput = select('new-concepto-nombre');
@@ -12223,166 +12216,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (confirmModal) {
         document.body.appendChild(confirmModal);
         console.log("🛡️ Modal de confirmación movido al body para evitar bloqueos.");
-    }
-});
-
-// ===============================================================
-// === FUNCIÓN AUXILIAR: ACTUALIZACIÓN OPTIMISTA (CEREBRO LOCAL) ===
-// ===============================================================
-const updateLocalStateOptimistic = (mov, tipo) => {
-    // 1. Actualizar Saldo de las Cuentas en Memoria (db.cuentas)
-    if (tipo === 'traspaso') {
-        const origen = db.cuentas.find(c => c.id === mov.cuentaOrigenId);
-        const destino = db.cuentas.find(c => c.id === mov.cuentaDestinoId);
-        
-        // Si las encontramos en memoria, actualizamos su saldo
-        if (origen) origen.saldo -= mov.cantidad;
-        if (destino) destino.saldo += mov.cantidad;
-        
-    } else {
-        // Gasto o Ingreso
-        const c = db.cuentas.find(c => c.id === mov.cuentaId);
-// === INICIO DEL CAMBIO ===
-    // 1. Primero actualizamos el array de movimientos en memoria (db.movimientos)
-if (isNew) {
-    db.movimientos.push(newMovement); 
-} else {
-    // Actualizar el existente
-    const index = db.movimientos.findIndex(m => m.id === id);
-    if (index !== -1) db.movimientos[index] = newMovement;
-}
-
-// 2. Aplicamos el cambio optimista a los saldos
-applyOptimisticBalanceUpdate(newMovement, oldMovement);
-
-// 3. Y FINALMENTE refrescamos la UI
-updateLocalDataAndRefreshUI();
-    // 1. Insertar o Actualizar en el Array
-    if (editingId) {
-        // MODO EDICIÓN: Buscamos y reemplazamos
-        const index = db.movimientos.findIndex(m => m.id === editingId);
-        if (index !== -1) {
-            db.movimientos[index] = newMovement; // Reemplazo total
-        }
-    } else {
-        // MODO NUEVO: Añadimos al principio
-        db.movimientos.push(newMovement);
-    }
-
-    // 2. ¡LA MAGIA! Recalculamos todo el historial
-    // Esto arregla automáticamente cualquier error de saldo previo
-    recalcularSaldosGlobales();
-
-    // 3. Actualizar la UI
-    renderPanelPage(); // Actualizar panel principal (saldos nuevos)
-    
-    // Si estuviéramos en la página de diario, recargarla
-    if (currentPage === 'diario') {
-        renderDiarioPage();
-    }
-
-    // === FIN DEL CAMBIO (Borra lo que hubiera de c.saldo += ...) ===
-
-    closeModal('modal-add-movimiento'); 
-    }
-
-    // 2. Añadir el movimiento al historial local (db.movimientos)
-    // Lo ponemos el primero (unshift) para que salga arriba
-    if (Array.isArray(db.movimientos)) {
-        db.movimientos.unshift(mov);
-        
-        // Opcional: Limitar el tamaño del array local para no saturar memoria
-        if (db.movimientos.length > 2000) db.movimientos.pop(); 
-    }
-    
-    console.log("⚡ Estado local actualizado optimísticamente.");
-};
-
-// ===============================================================
-// === LISTENER GLOBAL ROBUSTO PARA EL BOTÓN GUARDAR ===
-// ===============================================================
-document.addEventListener('click', (e) => {
-    // Buscamos si el clic fue en el botón o dentro de él (por si pulsa el icono)
-    const btn = e.target.closest('#movimiento-save-btn');
-
-    // Si pulsó el botón guardar Y el botón no está deshabilitado/cargando
-    if (btn && !btn.hasAttribute('disabled')) {
-        e.preventDefault();
-        e.stopPropagation(); // Evitar doble disparo
-
-        console.log("✅ Click global detectado en Guardar.");
-        
-        const formElement = document.getElementById('movimiento-form');
-        
-        if (formElement) {
-             // Llamamos a la función maestra
-             handleSaveMovement(formElement, btn);
-        } else {
-             console.error("❌ No se encuentra el formulario #movimiento-form");
-        }
-    }
-});
-
-// ==========================================
-// === MOTOR DE RECÁLCULO FINANCIERO (CORE) ===
-// ==========================================
-function recalcularSaldosGlobales() {
-    console.time("Recálculo Financiero");
-
-    // 1. Resetear saldos de todas las cuentas a su estado base (0 o saldo inicial si existiera)
-    // Asumimos que el saldo inicial se gestiona mediante un movimiento de "Ajuste" o empieza en 0.
-    db.cuentas.forEach(cuenta => {
-        cuenta.saldo = 0; 
-        // Si en el futuro añades un campo 'saldo_inicial' a la cuenta, súmalo aquí:
-        // cuenta.saldo = cuenta.saldo_inicial || 0;
-    });
-
-    // 2. Ordenar movimientos por fecha (CRÍTICO para el Diario y saldos progresivos)
-    // Ordenamos de más antiguo a más nuevo para sumar en orden
-    db.movimientos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-
-    // 3. Replay (Repetición) de la historia
-    db.movimientos.forEach(mov => {
-        // A. Si es un movimiento normal (Ingreso o Gasto)
-        if (mov.tipo === 'ingreso' || mov.tipo === 'gasto') {
-            const cuenta = db.cuentas.find(c => c.id === mov.cuentaId);
-            if (cuenta) {
-                // Sumamos (ingresos son positivos, gastos negativos en la BBDD o gestionados por signo)
-                // Aseguramos que sea número
-                const monto = parseFloat(mov.cantidad);
-                cuenta.saldo += monto;
-            }
-        }
-        // B. Si es una transferencia (Mueve dinero de A a B)
-        else if (mov.tipo === 'transferencia') {
-            const cuentaOrigen = db.cuentas.find(c => c.id === mov.cuentaId); // Sale de aquí
-            const cuentaDestino = db.cuentas.find(c => c.id === mov.cuentaDestinoId); // Entra aquí
-            
-            const monto = Math.abs(parseFloat(mov.cantidad)); // Siempre positivo para la lógica
-
-            if (cuentaOrigen) cuentaOrigen.saldo -= monto;
-            if (cuentaDestino) cuentaDestino.saldo += monto;
-        }
-    });
-
-    console.log("✅ Saldos saneados y recalculados correctamente.");
-    console.timeEnd("Recálculo Financiero");
-    
-    // 4. Guardar el estado saneado
-    saveDB();
-}
-// Listener para mostrar/ocultar opciones de recurrencia
-document.addEventListener('DOMContentLoaded', () => {
-    const switchRec = document.getElementById('movimiento-recurrente');
-    const optionsDiv = document.getElementById('recurrent-options');
-
-    if (switchRec && optionsDiv) {
-        switchRec.addEventListener('change', (e) => {
-            if (e.target.checked) {
-                optionsDiv.classList.remove('hidden');
-            } else {
-                optionsDiv.classList.add('hidden');
-            }
-        });
     }
 });
