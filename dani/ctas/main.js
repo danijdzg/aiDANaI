@@ -10191,45 +10191,52 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     }
 };
 
-// 1. La Función Cerebro (Autónoma)
 const handleSaveMovement = async (event) => {
     // Si viene de un evento (click), evitamos que recargue la página
-    if (event) event.preventDefault();
+    if (event && event.preventDefault) event.preventDefault();
 
     console.log("🟢 Iniciando proceso de guardado...");
 
-    // A. Localizamos los elementos nosotros mismos (Más seguro)
+    // 1. Localización segura de elementos
     const form = document.getElementById('movimiento-form');
     const saveBtn = document.getElementById('save-movimiento-btn');
     const saveNewBtn = document.getElementById('save-and-new-movimiento-btn');
     
-    // Detectar qué botón se pulsó (si el evento viene de saveNewBtn)
+    // Detectar botón activo con seguridad
     const isSaveAndNew = event && event.target && event.target.id === 'save-and-new-movimiento-btn';
     const btnActivo = isSaveAndNew ? saveNewBtn : saveBtn;
 
-    // B. Validaciones Visuales
-    // (Asumimos que existen funciones auxiliares clearAllErrors y validateMovementForm en tu código)
-    // Si no existen, puedes comentar estas dos líneas siguientes.
-    if (typeof clearAllErrors === 'function') clearAllErrors(form.id);
-    if (typeof validateMovementForm === 'function' && !validateMovementForm()) {
+    // 🔍 SEGURIDAD: Si el formulario no existe, usamos un ID falso para evitar el crash
+    const formId = form ? form.id : 'temp-form-id'; 
+
+    // 2. Validaciones Visuales (Solo si las funciones existen)
+    // Usamos el 'formId' seguro que acabamos de crear
+    if (typeof clearAllErrors === 'function') clearAllErrors(formId);
+    
+    // Si validateMovementForm requiere el form y no existe, saltamos la validación estricta del form
+    // pero validamos los campos manualmente abajo.
+    if (form && typeof validateMovementForm === 'function' && !validateMovementForm()) {
         showToast('Faltan datos obligatorios', 'warning');
         return;
     }
 
-    // Efecto de carga
+    // Efecto de carga visual
     if (btnActivo) {
-        const originalText = btnActivo.innerHTML;
+        // Guardamos texto original por si acaso
+        if (!btnActivo.dataset.originalText) btnActivo.dataset.originalText = btnActivo.innerHTML;
         btnActivo.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
         btnActivo.disabled = true;
     }
 
     try {
-        // C. Recolección de Datos (Helpers internos para evitar fallos externos)
+        // 3. Recolección de Datos (Helpers internos a prueba de fallos)
         const getVal = (id) => {
             const el = document.getElementById(id);
+            // Si el elemento no existe, devolvemos cadena vacía para no romper nada
             return el ? el.value : '';
         };
 
+        // ID del movimiento
         const id = getVal('movimiento-id') || (typeof generateId === 'function' ? generateId() : Date.now().toString());
         const mode = getVal('movimiento-mode'); // 'new', 'edit-single', 'edit-recurrent'
         
@@ -10237,14 +10244,21 @@ const handleSaveMovement = async (event) => {
         const typePill = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
         const tipoMovimiento = typePill ? typePill.dataset.type : 'gasto';
 
-        // Cantidad
+        // Cantidad: Limpieza agresiva para evitar NaN
+        let rawCantidad = getVal('movimiento-cantidad');
         let cantidadValor = 0;
-        // Intentamos usar tu parser si existe, si no, parseamos a mano
         if (typeof parseCurrencyString === 'function') {
-            cantidadValor = parseCurrencyString(getVal('movimiento-cantidad'));
+            cantidadValor = parseCurrencyString(rawCantidad);
         } else {
-            cantidadValor = parseFloat(getVal('movimiento-cantidad').replace(/[^0-9,.-]/g, '').replace(',', '.')) || 0;
+            // Fallback manual: quitar todo lo que no sea número, punto o coma
+            cantidadValor = parseFloat(rawCantidad.replace(/[^0-9,.-]/g, '').replace(',', '.')) || 0;
         }
+        
+        // Validación crítica manual: Si la cantidad es 0, paramos aquí
+        if (cantidadValor === 0) {
+            throw new Error("La cantidad no puede ser 0.");
+        }
+
         const cantidadEnCentimos = Math.round(cantidadValor * 100);
 
         // ¿Es recurrente?
@@ -10261,13 +10275,16 @@ const handleSaveMovement = async (event) => {
         };
 
         if (tipoMovimiento === 'traspaso') {
-            baseData.tipo = 'traspaso'; // Forzar tipo
-            baseData.cantidad = Math.abs(cantidadEnCentimos); // En traspaso suele guardarse positivo
+            baseData.tipo = 'traspaso'; 
+            baseData.cantidad = Math.abs(cantidadEnCentimos); 
             baseData.cuentaOrigenId = getVal('movimiento-cuenta-origen');
             baseData.cuentaDestinoId = getVal('movimiento-cuenta-destino');
-            if (baseData.cuentaOrigenId === baseData.cuentaDestinoId) throw new Error("Cuentas deben ser distintas");
+            
+            if (!baseData.cuentaOrigenId || !baseData.cuentaDestinoId) throw new Error("Selecciona ambas cuentas para el traspaso.");
+            if (baseData.cuentaOrigenId === baseData.cuentaDestinoId) throw new Error("Las cuentas de origen y destino deben ser distintas.");
         } else {
             baseData.cuentaId = getVal('movimiento-cuenta');
+            if (!baseData.cuentaId) throw new Error("Debes seleccionar una cuenta.");
         }
 
         // =========================================================
@@ -10277,9 +10294,11 @@ const handleSaveMovement = async (event) => {
             console.log("🔄 Guardando como Recurrente...");
             const frequency = getVal('recurrent-frequency') || 'monthly';
             let rawNextDate = getVal('recurrent-next-date');
+            
+            // Si no hay fecha próxima, usamos la del movimiento o HOY
             if (!rawNextDate) rawNextDate = getVal('movimiento-fecha') || new Date().toISOString().split('T')[0];
 
-            // Días de la semana
+            // Días de la semana (solo si es semanal)
             const weekDays = [];
             if (frequency === 'weekly') {
                 document.querySelectorAll('.day-selector-btn.active').forEach(b => weekDays.push(parseInt(b.dataset.day)));
@@ -10295,18 +10314,19 @@ const handleSaveMovement = async (event) => {
                 active: true
             };
 
-            // Guardar en 'recurrentes'
+            // Guardar en Firestore: colección 'recurrentes'
             await fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(id).set(recurrentData);
 
-            // LIMPIEZA: Si antes era movimiento normal, borrarlo
+            // LIMPIEZA CRUZADA: Si venía de ser movimiento normal, borrarlo del historial
             if (mode === 'edit-single') {
                 await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id).delete();
-                // Nota: Aquí habría que revertir saldo, pero por simplicidad de emergencia lo omitimos por ahora
+                // Opcional: Revertir saldo aquí si fuera necesario
             }
 
-            showToast('Programación guardada.');
-            hideModal('movimiento-modal'); // Cierra el modal
-            return; // FIN
+            hapticFeedback('success');
+            showToast('Programación recurrente guardada.');
+            hideModal('movimiento-modal'); 
+            return; // FIN EXITO RECURRENTE
         }
 
         // =========================================================
@@ -10316,6 +10336,7 @@ const handleSaveMovement = async (event) => {
         
         const fechaInput = getVal('movimiento-fecha');
         const now = new Date();
+        // Si la fecha es hoy, ponemos la hora actual. Si no, mediodía para evitar cambios de zona horaria.
         const fechaFinal = fechaInput ? 
             (fechaInput === now.toISOString().split('T')[0] ? now.toISOString() : `${fechaInput}T12:00:00.000Z`) 
             : now.toISOString();
@@ -10329,18 +10350,15 @@ const handleSaveMovement = async (event) => {
         const batch = fbDb.batch();
         const userRef = fbDb.collection('users').doc(currentUser.uid);
 
-        // 1. Revertir saldo anterior si es edición (Simplificado para que funcione YA)
-        // (Si el saldo te descuadra, lo arreglaremos en el siguiente paso, primero quiero que guarde)
-        
-        // 2. Limpieza cruzada: Si era recurrente, borrar la regla
+        // 1. Limpieza cruzada: Si venía de ser recurrente, borrar la regla
         if (mode === 'edit-recurrent') {
             batch.delete(userRef.collection('recurrentes').doc(id));
         }
 
-        // 3. Guardar el movimiento
+        // 2. Guardar el movimiento en historial
         batch.set(userRef.collection('movimientos').doc(id), dataToSave);
 
-        // 4. Actualizar saldo (Incremento atómico)
+        // 3. Actualizar saldo de cuentas
         if (tipoMovimiento === 'traspaso') {
             batch.update(userRef.collection('cuentas').doc(baseData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-baseData.cantidad) });
             batch.update(userRef.collection('cuentas').doc(baseData.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(baseData.cantidad) });
@@ -10350,54 +10368,38 @@ const handleSaveMovement = async (event) => {
 
         await batch.commit();
 
-        // Actualizar UI local si existe AppStore
-        if (typeof AppStore !== 'undefined') {
-            const existing = AppStore.movimientos.find(m => m.id === id);
-            if (existing) Object.assign(existing, dataToSave);
+        // Actualizar UI local (AppStore)
+        if (typeof AppStore !== 'undefined' && AppStore.movimientos) {
+            const existingIndex = AppStore.movimientos.findIndex(m => m.id === id);
+            if (existingIndex >= 0) AppStore.movimientos[existingIndex] = dataToSave;
             else AppStore.movimientos.push(dataToSave);
         }
 
+        hapticFeedback('success');
         showToast('Movimiento guardado');
         
         if (isSaveAndNew) {
-            // Resetear formulario
-             if (typeof startMovementForm === 'function') startMovementForm();
+            if (typeof startMovementForm === 'function') startMovementForm();
         } else {
             hideModal('movimiento-modal');
+            if (typeof navigateToAndHighlight === 'function') navigateToAndHighlight(id);
         }
         
-        // Refrescar lista
-        if (typeof updateLocalDataAndRefreshUI === 'function') updateLocalDataAndRefreshUI();
+        // Refrescar totales y lista
+        if (typeof updateLocalDataAndRefreshUI === 'function') setTimeout(updateLocalDataAndRefreshUI, 100);
 
     } catch (error) {
-        console.error("❌ Error FATAL al guardar:", error);
-        showToast("Error: " + error.message, "danger");
+        console.error("❌ Error controlado al guardar:", error);
+        hapticFeedback('error');
+        showToast(error.message || "Error al guardar", "danger");
     } finally {
         // Restaurar botón
         if (btnActivo) {
-            btnActivo.innerHTML = isSaveAndNew ? 'Guardar y Nuevo' : 'Guardar';
+            btnActivo.innerHTML = btnActivo.dataset.originalText || (isSaveAndNew ? 'Guardar y Nuevo' : 'Guardar');
             btnActivo.disabled = false;
         }
     }
 };
-
-// 2. CONEXIÓN DE CABLES (EL "LISTENERS")
-// Esto asegura que los botones realmente llamen a la función
-document.addEventListener('DOMContentLoaded', () => {
-    const btnSave = document.getElementById('save-movimiento-btn');
-    const btnSaveNew = document.getElementById('save-and-new-movimiento-btn');
-
-    if (btnSave) {
-        // Quitamos listeners viejos clonando (truco rápido) o simplemente agregamos el nuevo
-        btnSave.onclick = handleSaveMovement; 
-        console.log("✅ Botón Guardar conectado.");
-    }
-    
-    if (btnSaveNew) {
-        btnSaveNew.onclick = handleSaveMovement;
-        console.log("✅ Botón Guardar y Nuevo conectado.");
-    }
-});
 
 const handleAddConcept = async (btn) => { 
     const nombreInput = select('new-concepto-nombre');
