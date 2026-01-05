@@ -12159,48 +12159,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Función para animar el vuelo del dinero desde la calculadora
-function animateTransfer(startElem, targetElem, value) {
-    if (!startElem || !targetElem) return;
-
-    // 1. Crear el elemento volador
-    const flyer = document.createElement('div');
-    flyer.textContent = value;
-    flyer.className = 'flying-number';
-    document.body.appendChild(flyer);
-
-    // 2. Calcular coordenadas de inicio y fin
-    const startRect = startElem.getBoundingClientRect();
-    const targetRect = targetElem.getBoundingClientRect();
-
-    // Posición inicial (Centro de la pantalla de la calculadora)
-    flyer.style.top = `${startRect.top + (startRect.height / 2) - 25}px`;
-    flyer.style.left = `${startRect.left + (startRect.width / 2) - 50}px`;
-
-    // 3. Animar hacia el input de cantidad
-    const animation = flyer.animate([
-        { transform: 'translate(0,0) scale(1)', opacity: 1 },
-        { 
-            transform: `translate(${targetRect.left - startRect.left}px, ${targetRect.top - startRect.top}px) scale(0.4)`, 
-            opacity: 0.5 
-        }
-    ], {
-        duration: 400, // Duración del vuelo
-        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' // Efecto suave
-    });
-
-    // 4. Limpiar al terminar
-    animation.onfinish = () => {
-        flyer.remove();
-        // Flash verde en el input destino para confirmar llegada
-        targetElem.parentElement.style.transition = 'background-color 0.3s';
-        targetElem.parentElement.style.backgroundColor = 'rgba(45, 204, 205, 0.2)';
-        setTimeout(() => {
-            targetElem.parentElement.style.backgroundColor = '';
-        }, 300);
-    };
-}
-
 
 /* ================================================================
    SISTEMA DE NAVEGACIÓN INTELIGENTE (Versión Acordeones)
