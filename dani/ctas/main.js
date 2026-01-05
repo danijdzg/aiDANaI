@@ -1157,7 +1157,7 @@ const handleCalculatorInput = (key) => {
                 if (timeDiff < 300 && timeDiff > 0) {
                     console.log("🚀 DOBLE CLICK: Iniciando transferencia...");
                     
-                    // 1. CORRECCIÓN: Usamos la variable correcta
+                    // 1. Usamos la variable correcta
                     const valorFinal = calculatorState.displayValue; 
                     
                     // 2. Feedback visual
@@ -1177,8 +1177,15 @@ const handleCalculatorInput = (key) => {
                             inputCantidad.dispatchEvent(new Event('input'));
                         }
                         
-                        // 5. Cerrar
-                        toggleCalculator(false);
+                        // 5. CORRECCIÓN: Usamos la función que SÍ existe
+                        if (typeof hideCalculator === 'function') {
+                            hideCalculator();
+                        } else {
+                            // Fallback de seguridad por si acaso
+                            const overlay = document.getElementById('calculator-overlay');
+                            if(overlay) overlay.classList.remove('modal-overlay--active');
+                        }
+
                         if(btnDone) btnDone.classList.remove('success-pulse');
                         
                         // Enfocar siguiente campo
