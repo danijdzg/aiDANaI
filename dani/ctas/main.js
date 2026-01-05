@@ -4524,7 +4524,7 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
         const color = colorMap[t];
         let style = '';
         if (isActive && color) {
-            style = `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF; box-shadow: 0 0 8px ${color}70;"`;
+            style = `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF; box-shadow: none;"`;
         }
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
