@@ -4854,7 +4854,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="background-color: #000000 !important; style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary);">
+<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary);">
     <div style="margin-bottom: 20px;">
         <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
             PATRIMONIO NETO
