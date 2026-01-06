@@ -1,51 +1,5 @@
 
 import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm';
-const KPI_EXPLANATIONS = {
-    'ingresos': { 
-        title: 'Ingresos del Periodo', 
-        text: 'Dinero nuevo que ha entrado en tus bolsillos durante las fechas seleccionadas (nómina, ventas, regalos...).<br><br>No cuenta los movimientos entre tus propias cuentas (traspasos).' 
-    },
-    'gastos': { 
-        title: 'Gastos del Periodo', 
-        text: 'Dinero que ha salido de tu bolsillo para no volver (compras, facturas, ocio...).' 
-    },
-    'neto': { 
-        title: 'Patrimonio Neto', // ANTES: 'Flujo Neto' o 'Balance Neto'
-        text: 'Es el reflejo de tu salud financiera real. Muestra cómo crece tu riqueza acumulada restando tus gastos a tus ingresos totales. <br><br><strong>Patrimonio positivo = Crecimiento de riqueza.</strong>' 
-    },
-    'tasa_ahorro': { 
-        title: 'Tasa de Ahorro', 
-        text: 'Mide tu velocidad de acumulación de riqueza.<br><br>Si ganaste 1.000€ y te sobraron 200€, tu tasa es del 20%. Un porcentaje alto significa que vives muy por debajo de tus posibilidades (¡eso es bueno!).' 
-    },
-    'patrimonio': { 
-        title: 'Patrimonio (Capital Total)', 
-        text: 'Es la suma de todo tu dinero "contable".<br><br><strong>Fórmula:</strong> Liquidez + Capital Invertido.<br><br>Representa todo el dinero que tienes en el banco más todo el dinero que has enviado a tus cuentas de inversión. No tiene en cuenta si tus inversiones han subido o bajado, solo lo que tú pusiste.' 
-    },
-    'liquidez': { 
-        title: 'Liquidez Disponible', 
-        text: 'Tu oxígeno financiero. Es el dinero que tienes en cuentas corrientes, efectivo o huchas, listo para gastar hoy mismo si fuera necesario.' 
-    },
-    'capital_invertido': { 
-        title: 'Capital Invertido', 
-        text: 'El esfuerzo de tu bolsillo. Es la suma total de dinero que has transferido desde tus cuentas de banco a tus cuentas de inversión.<br><br>Es tu "coste base".' 
-    },
-    'posicion_real': { 
-        title: 'Posición Real de Mercado', 
-        text: 'La verdad actual. Es lo que valen tus inversiones si las vendieras todas hoy mismo.<br><br>Se calcula sumando tu <strong>Capital Invertido</strong> más tus <strong>Ganancias</strong> (o menos tus Pérdidas).' 
-    },
-    'pnl': { 
-        title: 'Ganancia / Pérdida (P&L)', 
-        text: 'Es el "examen de notas" de tus inversiones. Te dice cuánto dinero has ganado o perdido sobre lo que pusiste.<br><br><strong>Ejemplo Didáctico:</strong><br>Pones 100€ en una hucha (Capital). Si el mercado sube y ahora vale 110€, tu P&L es <strong>+10€ (+10%)</strong>.<br><br><strong>Fórmula:</strong> Valor Actual - Capital Invertido.' 
-    },
-    'cobertura': { 
-        title: 'Cobertura (Meses de Libertad)', 
-        text: 'Si hoy dejaras de ingresar dinero, ¿cuánto tiempo podrías sobrevivir con tu liquidez actual manteniendo tu nivel de gastos de los últimos 3 meses?' 
-    },
-    'libertad': { 
-        title: 'Independencia Financiera', 
-        text: 'Tu barra de progreso hacia la jubilación.<br><br>Se considera que eres libre cuando tienes acumulado 25 veces tus gastos anuales (o 300 veces tus gastos mensuales).' 
-    }
-};
 
 const isCryptoType = (tipo) => {
     const t = (tipo || '').toLowerCase();
@@ -4789,45 +4743,41 @@ const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- ESTILOS OPTIMIZADOS PARA ONEPLUS NORD 4 (SIN SCROLL) ---
-    
-    // 1. Números: Grandes (1.5rem) pero ajustados para no cortarse nunca
+    // --- ESTILOS (Optimizados para OnePlus Nord 4) ---
     const bigKpiStyle = 'font-size: 1.5rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible;';
-    
-    // 2. Títulos: Blancos y compactos
     const titleStyle = 'font-size: 0.6rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; opacity: 0.9;';
-    
-    // 3. Tarjetas: Menos relleno (padding) y menos separación
-    const cardStyle = 'padding: 12px 15px; margin-bottom: 8px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);';
+    const cardStyle = 'padding: 10px 15px; margin-bottom: 8px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);';
 
+    // NOTA: Padding-top reducido a 8px exactos como pediste
     container.innerHTML = `
-    <div style="padding: 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
+    <div style="padding: 8px 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
         
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 5px;">
-            <div style="font-size: 0.8rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
-                RESUMEN
-            </div>
-            <div class="report-filters" style="margin: 0;">
-                <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.7rem; padding: 2px 10px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
-                    <option value="mes-actual">Este Mes</option>
-                    <option value="año-actual">Este Año</option>
-                    <option value="custom">Personalizado</option>
-                </select>
-            </div>
-        </div>
-
-        <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px;">
-            <div style="display:flex; flex-direction:column;">
-                 <label style="font-size:0.6rem; color:#FFFFFF;">Desde</label>
-                 <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 4px; background: var(--c-surface); color: white;">
-            </div>
-            <div style="display:flex; flex-direction:column;">
-                 <label style="font-size:0.6rem; color:#FFFFFF;">Hasta</label>
-                 <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 4px; background: var(--c-surface); color: white;">
-            </div>
-        </div>
-
         <div class="hero-card fade-in-up" style="${cardStyle} background: rgba(255,255,255,0.03);">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
+                    RESUMEN
+                </div>
+                <div class="report-filters" style="margin: 0;">
+                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.7rem; padding: 2px 8px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
+                        <option value="mes-actual">Este Mes</option>
+                        <option value="año-actual">Este Año</option>
+                        <option value="custom">Personalizado</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px;">
+                <div style="display:flex; flex-direction:column;">
+                     <label style="font-size:0.6rem; color:#FFFFFF;">Desde</label>
+                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 4px; background: var(--c-surface); color: white;">
+                </div>
+                <div style="display:flex; flex-direction:column;">
+                     <label style="font-size:0.6rem; color:#FFFFFF;">Hasta</label>
+                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 4px; background: var(--c-surface); color: white;">
+                </div>
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; margin-bottom: 8px;">
                 <div>
                     <div style="${titleStyle}">INGRESOS</div>
@@ -4854,14 +4804,14 @@ const renderPanelPage = async () => {
         </div>
 
         <div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="${cardStyle} cursor: pointer; text-align: center; border-color: var(--c-primary); background: rgba(0,0,0,0.2);">
-            <div style="margin-bottom: 10px;">
+            <div style="margin-bottom: 8px;">
                 <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 2px;">
                     PATRIMONIO NETO
                 </div>
-                <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.4rem; line-height: 1.1; margin: 5px 0; white-space: nowrap;">0,00 €</div>
+                <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.4rem; line-height: 1.1; margin: 4px 0; white-space: nowrap;">0,00 €</div>
             </div>
             
-            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 8px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center;">
+            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 6px 8px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center;">
                 <div style="text-align: center;">
                     <div style="${titleStyle}">Liquidez</div>
                     <div id="kpi-liquidez-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
@@ -4888,7 +4838,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div style="text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 5px;">
+            <div style="text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
                 <div style="${titleStyle} color: #FFFFFF;">
                     Valor Real Mercado
                 </div>
@@ -4896,7 +4846,7 @@ const renderPanelPage = async () => {
             </div>
         </div>
 
-        <div class="hero-card fade-in-up" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%);">
+        <div class="hero-card fade-in-up" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); margin-bottom: 0;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div style="text-align: center;">
                     <div style="${titleStyle}"> <span class="material-icons" style="font-size: 10px; vertical-align: middle;">shield</span> COBERTURA</div>
