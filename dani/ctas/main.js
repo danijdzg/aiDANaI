@@ -4789,19 +4789,22 @@ const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // ESTILO COMÚN: El tamaño que te gusta (1.8rem) para igualar al Valor de Mercado
-    const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1; transition: color 0.3s ease;';
+    // ESTILO COMÚN: Tamaño 1.8rem para UNIFICAR todo (menos Patrimonio Neto)
+    const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.2; transition: color 0.3s ease;';
+    
+    // ESTILO TÍTULOS: Blanco puro
+    const titleStyle = 'font-size: 0.65rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; opacity: 0.9;';
 
     container.innerHTML = `
     <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
         
         <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div style="font-size: 0.8rem; font-weight: 700; color: var(--c-on-surface); text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
                     Flujo de Caja
                 </div>
                 <div class="report-filters" style="margin: 0;">
-                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 4px 24px 4px 10px; height: auto; width: auto; background-color: rgba(255,255,255,0.05); border: 1px solid var(--c-outline); border-radius: 8px; color: var(--c-on-surface); cursor: pointer;">
+                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 4px 24px 4px 10px; height: auto; width: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 8px; color: #FFFFFF; cursor: pointer;">
                         <option value="mes-actual">Este Mes</option>
                         <option value="año-actual">Este Año</option>
                         <option value="custom">Personalizado</option>
@@ -4811,25 +4814,25 @@ const renderPanelPage = async () => {
 
             <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
                 <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Desde</label>
-                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                     <label style="font-size:0.6rem; color:#FFFFFF; margin-bottom:4px;">Desde</label>
+                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto; color: white;">
                 </div>
                 <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Hasta</label>
-                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                     <label style="font-size:0.6rem; color:#FFFFFF; margin-bottom:4px;">Hasta</label>
+                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto; color: white;">
                 </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
                 <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: rgba(0, 179, 77, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(0, 179, 77, 0.2);">
-                    <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-success); text-transform: uppercase; margin-bottom: 2px;">
+                    <div style="${titleStyle}">
                         INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos">?</button>
                     </div>
                     <div id="kpi-ingresos-value" class="skeleton" data-current-value="0" style="${bigKpiStyle}">+0,00 €</div>
                 </div>
 
                 <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="background: rgba(255, 59, 48, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 59, 48, 0.2);">
-                    <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-danger); text-transform: uppercase; margin-bottom: 2px;">
+                    <div style="${titleStyle}">
                         GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos">?</button>
                     </div>
                     <div id="kpi-gastos-value" class="skeleton" data-current-value="0" style="${bigKpiStyle}">-0,00 €</div>
@@ -4840,13 +4843,13 @@ const renderPanelPage = async () => {
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
                 <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="saldoNeto">
-                    <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                    <div style="${titleStyle}">
                         NETO <button class="help-btn" data-action="show-kpi-help" data-kpi="neto">?</button>
                     </div>
                     <div id="kpi-saldo-neto-value" class="skeleton" data-current-value="0" style="${bigKpiStyle}">0,00 €</div>
                 </div>
                 <div>
-                    <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                    <div style="${titleStyle}">
                         AHORRO <button class="help-btn" data-action="show-kpi-help" data-kpi="tasa_ahorro">?</button>
                     </div>
                     <div id="kpi-tasa-ahorro-value" class="skeleton" data-current-value="0" style="${bigKpiStyle}">0.00%</div>
@@ -4856,7 +4859,7 @@ const renderPanelPage = async () => {
 
         <div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary);">
             <div style="margin-bottom: 20px;">
-                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 2px; margin-bottom: 8px;">
                     PATRIMONIO NETO <button class="help-btn" onclick="event.stopPropagation(); showKPIHelp('neto')">?</button>
                 </div>
                 <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
@@ -4864,15 +4867,15 @@ const renderPanelPage = async () => {
             
             <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
                 <div style="text-align: center;">
-                    <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
-                        <span class="material-icons" style="font-size: 12px;">account_balance_wallet</span> Liquidez <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez">?</button>
+                    <div style="${titleStyle} display:flex; justify-content:center; gap:4px; align-items:center;">
+                        <span class="material-icons" style="font-size: 12px; color: #FFFFFF;">account_balance_wallet</span> Liquidez
                     </div>
                     <div id="kpi-liquidez-value" class="skeleton" data-current-value="0" style="${bigKpiStyle}">0,00 €</div>
                 </div>
                 <div style="height: 30px; background-color: var(--c-outline);"></div>
                 <div style="text-align: center;">
-                    <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
-                        <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv. <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+                    <div style="${titleStyle} display:flex; justify-content:center; gap:4px; align-items:center;">
+                        <span class="material-icons" style="font-size: 12px; color: #FFFFFF;">savings</span> Capital Inv.
                     </div>
                     <div id="kpi-capital-invertido-total" class="skeleton" data-current-value="0" style="${bigKpiStyle}">0,00 €</div>
                 </div>
@@ -4880,24 +4883,26 @@ const renderPanelPage = async () => {
         </div>
 
         <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
-            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
-                <div style="text-align: left;">
-                    <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">Capital Invertido</div>
-                    <div id="new-card-capital" style="font-weight:700;">0,00 €</div>
+            
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+                <div style="text-align: left; min-width: 120px;">
+                    <div style="${titleStyle}">Capital Invertido</div>
+                    <div id="new-card-capital" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
                 </div>
-                <div style="text-align: center; font-weight:800; color:var(--c-on-surface-secondary);"> +/- </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">
+                
+                <div style="text-align: right; min-width: 120px;">
+                    <div style="${titleStyle}">
                         P&L <button class="help-btn" data-action="show-kpi-help" data-kpi="pnl" style="width:14px; height:14px; font-size:9px;">?</button>
                     </div>
-                    <div id="new-card-pnl" style="font-weight:700;">0,00 €</div>
+                    <div id="new-card-pnl" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
                 </div>
             </div>
-            <div style="margin-top: 15px; text-align: center;">
-                <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--c-on-surface-tertiary); margin-bottom: 5px;">
+
+            <div style="text-align: center;">
+                <div style="${titleStyle} color: #FFFFFF; margin-bottom: 5px;">
                     = Valor Real de Mercado <button class="help-btn" data-action="show-kpi-help" data-kpi="posicion_real">?</button>
                 </div>
-                <div id="new-card-market-value" class="skeleton" style="font-size: 1.8rem; font-weight: 800; line-height: 1;">0,00 €</div>
+                <div id="new-card-market-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
             </div>
         </div>
 
@@ -4906,16 +4911,14 @@ const renderPanelPage = async () => {
                 <div style="text-align: center;">
                      <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
                         <span class="material-icons" style="color: #FFD60A; font-size: 18px;">shield</span>
-                        <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">COBERTURA</span>
-                        <button class="help-btn" data-action="show-kpi-help" data-kpi="cobertura" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        <span style="${titleStyle}">COBERTURA</span>
                     </div>
                     <div id="health-runway-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #FFD60A;">0.0 Meses</div>
                 </div>
                 <div style="text-align: center; border-left: 1px solid var(--c-outline);">
                     <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
                         <span class="material-icons" style="color: #39FF14; font-size: 18px;">flag</span>
-                        <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">LIBERTAD</span>
-                        <button class="help-btn" data-action="show-kpi-help" data-kpi="libertad" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        <span style="${titleStyle}">LIBERTAD</span>
                     </div>
                     <div id="health-fi-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #39FF14;">0.00%</div>
                 </div>
@@ -4930,8 +4933,6 @@ const renderPanelPage = async () => {
     
     populateAllDropdowns();
     await Promise.all([loadPresupuestos(), loadInversiones()]);
-    
-    // Importante: Llamamos a la actualización
     scheduleDashboardUpdate();
 };
 
@@ -6540,20 +6541,18 @@ const scheduleDashboardUpdate = () => {
             const efData = calculateEmergencyFund(saldos, db.cuentas, recentMovementsCache);
             const fiData = calculateFinancialIndependence(patrimonioRealParaCalculos, efData.gastoMensualPromedio);
 
-            // --- ACTUALIZACIÓN UI MEJORADA ---
+            // --- ACTUALIZACIÓN UI COMPLETA (v3) ---
 
             // A. FLUJO (Ingresos, Gastos, Neto, Ahorro)
             const elIng = select('kpi-ingresos-value');
             if (elIng) {
-                // Quitamos el efecto de carga
                 [elIng, select('kpi-gastos-value'), select('kpi-saldo-neto-value'), select('kpi-tasa-ahorro-value')]
                     .forEach(el => el?.classList.remove('skeleton'));
                 
-                // AQUI USAMOS LA MAGIA: Colores automáticos
-                updateKpiVisual('kpi-ingresos-value', ingresos);          // Ingresos
-                updateKpiVisual('kpi-gastos-value', gastos);              // Gastos
-                updateKpiVisual('kpi-saldo-neto-value', saldoNeto);       // Neto
-                updateKpiVisual('kpi-tasa-ahorro-value', tasaAhorro * 100, true); // Ahorro (con %)
+                updateKpiVisual('kpi-ingresos-value', ingresos);          
+                updateKpiVisual('kpi-gastos-value', gastos);              
+                updateKpiVisual('kpi-saldo-neto-value', saldoNeto);       
+                updateKpiVisual('kpi-tasa-ahorro-value', tasaAhorro * 100, true); 
             }
 
             // B. PATRIMONIO (Liquidez, Invertido y Total)
@@ -6562,31 +6561,24 @@ const scheduleDashboardUpdate = () => {
                 [elPatrimonio, select('kpi-liquidez-value'), select('kpi-capital-invertido-total')]
                     .forEach(el => el?.classList.remove('skeleton'));
 
-                // 1. Patrimonio Neto: SE QUEDA AZUL Y GIGANTE (Sin cambios de color rojo/verde)
+                // Patrimonio Neto: Mantiene estilo Gigante y Azul
                 animateCountUp(elPatrimonio, patrimonioContable);
 
-                // 2. Liquidez y Capital Invertido: AHORA TIENEN COLORES DINÁMICOS
+                // Liquidez y Capital en la tarjeta azul: Colores dinámicos
                 updateKpiVisual('kpi-liquidez-value', liquidezTotal);
                 updateKpiVisual('kpi-capital-invertido-total', totalCapitalInvertido);
             }
 
-            // C. NUEVA TARJETA (Inversiones Realidad) - AQUÍ ESTÁ EL CAMBIO CLAVE
-            const elNewMarketVal = select('new-card-market-value');
-            if (elNewMarketVal) {
-                elNewMarketVal.classList.remove('skeleton');
-                
-                // Capital
-                select('new-card-capital').textContent = formatCurrency(totalCapitalInvertido);
-                
-                // P&L con Porcentaje
-                const elPnl = select('new-card-pnl');
-                const sign = pnlTotal >= 0 ? '+' : '';
-                // Usamos innerHTML para formatear el porcentaje más pequeño
-                elPnl.innerHTML = `${sign}${formatCurrency(pnlTotal)} <small style="font-size:0.8em; opacity:0.9;">(${sign}${pnlPct.toFixed(2)}%)</small>`;
-                elPnl.className = pnlTotal >= 0 ? 'text-positive' : 'text-negative';
-                
-                // Resultado Total
-                animateCountUp(elNewMarketVal, valorMercadoTotal);
+            // C. INVERSIONES (NUEVO: Tarjeta Valor de Mercado)
+            // Aquí conectamos los nuevos IDs para que tengan color y tamaño
+            const elMarket = select('new-card-market-value');
+            if (elMarket) {
+                 [elMarket, select('new-card-capital'), select('new-card-pnl')]
+                    .forEach(el => el?.classList.remove('skeleton'));
+
+                 updateKpiVisual('new-card-capital', totalCapitalInvertido); // Capital
+                 updateKpiVisual('new-card-pnl', pnlTotal);                 // P&L
+                 updateKpiVisual('new-card-market-value', valorMercadoTotal); // Valor Real
             }
 
             // D. METAS
