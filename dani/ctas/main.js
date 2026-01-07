@@ -4807,7 +4807,7 @@ const renderPanelPage = async () => {
             </div>
         </div>
 
-        <div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="${cardStyle} cursor: pointer; text-align: center; border-color: var(--c-primary); background: rgba(0,0,0,0.2);">
+        <div class="hero-card fade-in-up border-ingreso" onclick="goToPatrimonioChart()" style="${cardStyle} cursor: pointer; text-align: center; background: rgba(0,0,0,0.2);">
             <div style="margin-bottom: 6px;">
                 <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 2px;">
                     PATRIMONIO NETO
@@ -4828,7 +4828,7 @@ const renderPanelPage = async () => {
             </div>
         </div>
 
-        <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="${cardStyle} cursor: pointer; background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0) 100%); border-color: var(--c-info);">
+        <div class="hero-card fade-in-up border-ingreso" onclick="goToInversionesChart()" style="${cardStyle} cursor: pointer; background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0) 100%);">
             
             <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
                 <div style="text-align: left;">
@@ -4850,7 +4850,7 @@ const renderPanelPage = async () => {
             </div>
         </div>
 
-        <div class="hero-card fade-in-up" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); margin-bottom: 0;">
+        <div class="hero-card fade-in-up border-warning" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); margin-bottom: 0;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <div style="text-align: center;">
                     <div style="${titleStyle}"> <span class="material-icons" style="font-size: 10px; vertical-align: middle;">shield</span> COBERTURA</div>
@@ -11725,6 +11725,7 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
+
 // ===============================================================
 // === NUEVA HERRAMIENTA: ABRIR HISTORIAL DE INVERSIÓN ===
 // ===============================================================
@@ -11743,53 +11744,54 @@ window.openInvestmentHistory = (cuentaId) => {
 
     // 2. Generamos el HTML de la lista
     let listHtml = `<div style="display: flex; flex-direction: column; gap: 10px;">`;
-    
+
     if (movs.length === 0) {
         listHtml += `<p style="opacity: 0.6; text-align: center; padding: 20px;">No hay movimientos registrados.</p>`;
     } else {
         listHtml += movs.map(m => {
             const date = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-            // Calculamos si suma o resta para esta cuenta
-            let cantidad = m.cantidad;
-            let color = 'var(--c-on-surface)';
+            
+            // === LÓGICA HOMOGÉNEA DE COLORES ===
+            // Aquí ya no decidimos colores, decidimos "Clases" basadas en el rol.
+            
+            let claseColor = ''; 
             let signo = '';
 
-            // Lógica para saber si es verde o rojo en ESTA cuenta específica
             if (m.tipo === 'gasto') {
-                color = 'var(--c-on-surface)'; // Gasto normal en blanco
+                claseColor = 'text-gasto'; // Usamos la clase maestra (Rojo por defecto)
                 signo = '-';
             } else if (m.tipo === 'ingreso') {
-                color = 'var(--c-success)';
+                claseColor = 'text-ingreso'; // Usamos la clase maestra (Verde por defecto)
                 signo = '+';
             } else if (m.tipo === 'traspaso') {
+                claseColor = 'text-traspaso'; // Usamos la clase maestra (Azul por defecto)
+                // En traspasos, el signo depende de si sale o entra de ESTA cuenta
                 if (m.cuentaOrigenId === cuentaId) {
-                    color = 'var(--c-on-surface)'; // Sale dinero
-                    signo = '-';
+                    signo = '-'; // Sale dinero
                 } else {
-                    color = 'var(--c-success)'; // Entra dinero
-                    signo = '+';
+                    signo = '+'; // Entra dinero
                 }
             }
 
             const conceptoObj = db.conceptos.find(c => c.id === m.conceptoId);
             const titulo = m.tipo === 'traspaso' ? 'Traspaso' : (conceptoObj?.nombre || 'Movimiento');
 
-            // Reutilizamos tu sistema de clic para editar (data-action)
             return `
             <div class="card" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
                 <div>
                     <div style="font-weight: 600; font-size: 0.95rem;">${titulo}</div>
                     <div style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-top: 2px;">${date} • ${m.descripcion || ''}</div>
                 </div>
-                <div style="font-weight: 700; color: ${color};">
+                <div style="font-weight: 700;" class="${claseColor}">
                     ${signo}${formatCurrency(m.cantidad)}
                 </div>
             </div>`;
         }).join('');
     }
+
     listHtml += `</div>`;
 
-    // 3. Mostramos el Modal usando tu sistema existente
+    // 3. Mostramos el Modal
     showGenericModal(`Historial: ${cuenta.nombre}`, listHtml);
 };
 // ===============================================================
