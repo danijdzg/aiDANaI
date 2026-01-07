@@ -4741,154 +4741,163 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
-/* ========================================================= */
-/* === PANTALLA INICIO: GRID FIJO NORD 4 (SIN SCROLL) === */
-/* ========================================================= */
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // 1. LIMPIEZA
-    container.innerHTML = '';
-
-    // 2. ESTILOS DE LA REJILLA (GRID)
-    // height: calc(100vh - 90px) -> Alto de pantalla MENOS la barra de navegación de abajo
-    const containerStyle = `
-        height: calc(100vh - 90px);
-        padding: 10px 15px;
-        display: grid;
-        grid-template-rows: auto 1fr 1fr 1.3fr; /* Cabecera, Fila1, Fila2, Patrimonio(Más grande) */
-        gap: 10px;
-        overflow: hidden; /* PROHIBIDO EL SCROLL */
-    `;
-
-    // Estilo base de las tarjetas
-    const cardBase = `
-        background: rgba(20,20,20, 0.7);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 16px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        position: relative;
-    `;
-
-    // Estilo Títulos (BLANCOS como pediste)
-    const titleStyle = `
-        font-size: 0.75rem; 
-        color: #FFFFFF !important; 
-        text-transform: uppercase; 
-        font-weight: 600; 
-        opacity: 0.9;
-        margin-bottom: 2px;
-        letter-spacing: 0.5px;
-    `;
-
-    // Estilo Valores (Ajuste automático)
-    const valStyle = `
-        font-size: clamp(1.2rem, 5vw, 1.6rem);
-        font-weight: 700;
-        line-height: 1;
-    `;
-
-    // 3. ESTRUCTURA HTML (Diseño Bloque a Bloque)
     container.innerHTML = `
-        <div style="${containerStyle}">
+        <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
             
-            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 5px;">
-                <div style="font-size: 0.9rem; font-weight: 800; color: #fff;">RESUMEN</div>
-                <div class="report-filters">
-                    <select id="filter-periodo" style="background: rgba(255,255,255,0.1); color: white; border: none; padding: 4px 12px; border-radius: 8px; font-size: 0.8rem;">
-                        <option value="mes-actual">Este Mes</option>
-                        <option value="año-actual">Este Año</option>
-                        <option value="custom">Personalizado</option>
-                    </select>
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--c-on-surface); text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">
+                        Flujo de Caja
+                    </div>
+                    
+                    <div class="report-filters" style="margin: 0;">
+                        <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 4px 24px 4px 10px; height: auto; width: auto; background-color: rgba(255,255,255,0.05); border: 1px solid var(--c-outline); border-radius: 8px; color: var(--c-on-surface); cursor: pointer;">
+                            <option value="mes-actual">Este Mes</option>
+                            <option value="año-actual">Este Año</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Desde</label>
+                        <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                    </div>
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Hasta</label>
+                        <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: rgba(0, 179, 77, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(0, 179, 77, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-success); text-transform: uppercase; margin-bottom: 2px;">
+                            INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos">?</button>
+                        </div>
+                        <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-success);">+0,00 €</div>
+                    </div>
+
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="background: rgba(255, 59, 48, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 59, 48, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-danger); text-transform: uppercase; margin-bottom: 2px;">
+                            GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos">?</button>
+                        </div>
+                        <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-danger);">-0,00 €</div>
+                    </div>
+                </div>
+
+                <div style="height: 1px; background-color: var(--c-outline); margin: 15px 0; opacity: 0.5;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="saldoNeto">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            NETO <button class="help-btn" data-action="show-kpi-help" data-kpi="neto">?</button>
+                        </div>
+                        <div id="kpi-saldo-neto-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0,00 €</div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            AHORRO <button class="help-btn" data-action="show-kpi-help" data-kpi="tasa_ahorro">?</button>
+                        </div>
+                        <div id="kpi-tasa-ahorro-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0.00%</div>
+                    </div>
                 </div>
             </div>
 
-            <div id="custom-date-filters" class="hidden" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 5px;">
-                <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size:0.8rem; padding:4px;">
-                <input type="date" id="filter-fecha-fin" class="form-input" style="font-size:0.8rem; padding:4px;">
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" 
-                     style="${cardBase} border-top: 3px solid #00E676;">
-                    <div style="${titleStyle}">Ingresos</div>
-                    <div id="kpi-ingresos-value" class="skeleton" style="${valStyle} color: #00E676 !important;">--</div>
-                </div>
-                <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" 
-                     style="${cardBase} border-top: 3px solid #FF3D00;">
-                    <div style="${titleStyle}">Gastos</div>
-                    <div id="kpi-gastos-value" class="skeleton" style="${valStyle} color: #FF3D00 !important;">--</div>
-                </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div style="${cardBase} border-top: 3px solid #FFFFFF;">
-                    <div style="${titleStyle}">Liquidez</div>
-                    <div id="kpi-liquidez-value" class="skeleton" style="${valStyle} color: #FFFFFF !important;">--</div>
-                </div>
-                <div style="${cardBase} border-top: 3px solid #FFD600;">
-                    <div style="${titleStyle}">Inversiones</div>
-                    <div id="kpi-inversion-total" class="skeleton" style="${valStyle} color: #FFD600 !important;">--</div>
-                </div>
-            </div>
-
-            <div style="${cardBase} border-top: 4px solid #2979FF;">
-                <div style="${titleStyle} font-size: 0.9rem;">Patrimonio Neto Total</div>
-                <div id="kpi-patrimonio-neto-value" class="skeleton" 
-                     style="font-size: clamp(2.5rem, 8vw, 3.5rem); font-weight: 800; color: #2979FF !important; line-height: 1.1;">
-                     --
-                </div>
-                <div style="margin-top: 8px; font-size: 0.75rem; color: #888;">
-                    Ahorro del periodo: <span id="kpi-saldo-neto-value" style="color: #fff; font-weight:bold;">--</span>
-                </div>
-            </div>
-
+<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+    <div style="margin-bottom: 20px;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+            PATRIMONIO NETO
+            <button class="help-btn" onclick="event.stopPropagation(); showKPIHelp('neto')">?</button>
         </div>
+        <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
+    </div>
+
+                <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
+                    
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">account_balance_wallet</span> Liquidez
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez">?</button>
+                        </div>
+                        <div id="kpi-liquidez-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
+                    <div style="height: 30px; background-color: var(--c-outline);"></div>
+
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+                        </div>
+                        <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
+                </div>
+            </div>
+
+           <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
+                    <div style="text-align: left;">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">Capital Invertido</div>
+                        <div id="new-card-capital" style="font-weight:700;">0,00 €</div>
+                    </div>
+                    <div style="text-align: center; font-weight:800; color:var(--c-on-surface-secondary);">
+                        +/-
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">
+                            P&L <button class="help-btn" data-action="show-kpi-help" data-kpi="pnl" style="width:14px; height:14px; font-size:9px;">?</button>
+                        </div>
+                        <div id="new-card-pnl" style="font-weight:700;">0,00 €</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; text-align: center;">
+                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--c-on-surface-tertiary); margin-bottom: 5px;">
+                        = Valor Real de Mercado <button class="help-btn" data-action="show-kpi-help" data-kpi="posicion_real">?</button>
+                    </div>
+                    <div id="new-card-market-value" class="skeleton" style="font-size: 1.8rem; font-weight: 800; line-height: 1;">0,00 €</div>
+                </div>
+            </div>
+
+            <div class="hero-card fade-in-up" style="padding: 15px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-outline);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="text-align: center;">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #FFD60A; font-size: 18px;">shield</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">COBERTURA</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="cobertura" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-runway-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #FFD60A;">0.0 Meses</div>
+                    </div>
+                    <div style="text-align: center; border-left: 1px solid var(--c-outline);">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #39FF14; font-size: 18px;">flag</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">LIBERTAD</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="libertad" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-fi-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #39FF14;">0.00%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="concepto-totals-list" style="display:none;"></div>
+        <canvas id="conceptos-chart" style="display:none;"></canvas>
+        <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
     `;
-
-    // 4. LÓGICA DE FILTROS (Esencial para que funcionen los botones)
-    const filterPeriodo = select('filter-periodo');
-    const customFiltersDiv = select('custom-date-filters');
-
-    if (filterPeriodo) {
-        // Recuperar memoria del usuario
-        const savedPeriod = localStorage.getItem('dashboard_period_filter');
-        if (savedPeriod) {
-            filterPeriodo.value = savedPeriod;
-            if (savedPeriod === 'custom' && customFiltersDiv) {
-                customFiltersDiv.classList.remove('hidden');
-            }
-        }
-
-        // Detectar cambios en el selector
-        filterPeriodo.addEventListener('change', (e) => {
-            const val = e.target.value;
-            localStorage.setItem('dashboard_period_filter', val);
-            
-            if (val === 'custom') {
-                customFiltersDiv.classList.remove('hidden');
-            } else {
-                customFiltersDiv.classList.add('hidden');
-                scheduleDashboardUpdate(); // Actualizar datos
-            }
-        });
-    }
-
-    const dStart = select('filter-fecha-inicio');
-    const dEnd = select('filter-fecha-fin');
-    if (dStart && dEnd) {
-        const checkDates = () => { if (dStart.value && dEnd.value) scheduleDashboardUpdate(); };
-        dStart.addEventListener('change', checkDates);
-        dEnd.addEventListener('change', checkDates);
-    }
-
-    // 5. LLAMADA INICIAL DE DATOS
-    scheduleDashboardUpdate();
+    
+    populateAllDropdowns();
+    await Promise.all([loadPresupuestos(), loadInversiones()]);
+    scheduleDashboardUpdate(); 
 };
  const showEstrategiaTab = (tabName) => {
     // 1. Gestionar el estado activo de los botones de las pestañas
