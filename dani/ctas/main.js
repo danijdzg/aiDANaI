@@ -4740,34 +4740,59 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
+/* ================================================= */
+/* === PANTALLA INICIO: DISEÑO NORD 4 (COMPACTO) === */
+/* ================================================= */
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // CONFIGURACIÓN COMPACTA
-    const gap = '6px'; // Espacio mínimo
+    // 1. DEFINICIÓN DE VARIABLES (Para evitar errores de 'undefined')
+    const gap = '8px'; // Espacio entre tarjetas
     
-    // Estilos inline para máximo rendimiento en renderizado
-    // Usamos flex-grow para que los elementos ocupen el espacio disponible equitativamente
+    // Estilo común para las tarjetas (Efecto cristal oscuro)
     const cardStyle = `
-        padding: 8px 10px; 
-        margin-bottom: ${gap}; 
-        border-radius: 12px; 
-        border: 1px solid rgba(255, 255, 255, 0.1); 
-        background: rgba(255,255,255,0.03);
+        padding: 10px 12px; 
+        border-radius: 16px; 
+        border: 1px solid rgba(255, 255, 255, 0.08); 
+        background: rgba(20, 20, 20, 0.6);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     `;
 
-    // ESTRUCTURA HTML OPTIMIZADA (Sin espacios muertos)
+    // Estilo para los títulos pequeños (arriba del número)
+    const labelStyle = `
+        font-size: 0.7rem; 
+        font-weight: 600; 
+        color: #9aa0a6; 
+        text-transform: uppercase; 
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+    `;
+
+    // Estilo para los NÚMEROS (Usa 'clamp' para adaptarse al ancho del móvil sin cortarse)
+    const valueStyle = `
+        font-size: clamp(1.2rem, 5vw, 1.6rem); 
+        font-weight: 800; 
+        color: #ffffff; 
+        line-height: 1.1;
+        white-space: nowrap;
+    `;
+
+    // 2. CONSTRUCCIÓN DEL HTML (Estructura visual)
     container.innerHTML = `
-        <div style="padding: 6px 10px; height: 100%; display: flex; flex-direction: column; gap: ${gap};">
+        <div style="padding: 10px 16px; height: 100%; display: flex; flex-direction: column; gap: ${gap};">
             
-            <div class="hero-card fade-in-up" style="${cardStyle} display: flex; justify-content: space-between; align-items: center; min-height: 40px;">
-                <div style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">
-                    PANEL DE CONTROL
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; margin-bottom: 4px;">
+                <div style="font-size: 0.85rem; font-weight: 700; color: #fff; letter-spacing: 1px;">
+                    RESUMEN FINANCIERO
                 </div>
                 <div class="report-filters" style="margin: 0;">
-                    <select id="filter-periodo" class="form-select report-period-selector" 
-                        style="font-size: 0.75rem; padding: 2px 20px 2px 8px; height: 28px; background-color: rgba(255,255,255,0.1); border: none;">
+                    <select id="filter-periodo" class="form-select" 
+                        style="font-size: 0.8rem; padding: 6px 24px 6px 10px; background-color: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
                         <option value="mes-actual">Este Mes</option>
                         <option value="año-actual">Este Año</option>
                         <option value="custom">Personalizado</option>
@@ -4775,61 +4800,104 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px; background: rgba(0,0,0,0.3); border-radius: 8px;">
-                <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 4px;">
-                <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 4px;">
+            <div id="custom-date-filters" class="hidden" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 12px; margin-bottom: 4px;">
+                <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 6px;">
+                <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px;">
             </div>
 
-            <div class="kpi-grid">
-                <div class="kpi-item clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos">
-                    <div class="kpi-label">INGRESOS</div>
-                    <div id="kpi-ingresos-value" class="kpi-value text-positive skeleton">--</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: ${gap};">
+                
+                <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" 
+                     style="${cardStyle} border-top: 3px solid #00E676;">
+                    <div style="${labelStyle}">Ingresos</div>
+                    <div id="kpi-ingresos-value" class="skeleton" style="${valueStyle}">--</div>
                 </div>
                 
-                <div class="kpi-item clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos">
-                    <div class="kpi-label">GASTOS</div>
-                    <div id="kpi-gastos-value" class="kpi-value text-negative skeleton">--</div>
+                <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" 
+                     style="${cardStyle} border-top: 3px solid #FF3D00;">
+                    <div style="${labelStyle}">Gastos</div>
+                    <div id="kpi-gastos-value" class="skeleton" style="${valueStyle}">--</div>
                 </div>
             </div>
 
-            <div style="${cardStyle} text-align: center; padding: 4px;">
-                <span style="font-size: 0.7rem; color: #888; margin-right: 8px;">RESULTADO NETO:</span>
-                <span id="kpi-saldo-neto-value" class="skeleton" style="font-size: 1.1rem; font-weight: 800;">--</span>
+            <div style="${cardStyle} flex-direction: row; justify-content: space-between; align-items: center; padding: 8px 16px; min-height: 50px; background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);">
+                <span style="font-size: 0.8rem; color: #ccc;">Ahorro Neto</span>
+                <span id="kpi-saldo-neto-value" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #fff;">--</span>
             </div>
 
-            <div class="kpi-grid">
-                <div class="kpi-item" style="border-top-color: #00B0FF !important;">
-                    <div class="kpi-label">LIQUIDEZ</div>
-                    <div id="kpi-liquidez-value" class="kpi-value skeleton" style="color: #00B0FF;">--</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: ${gap};">
+                
+                <div style="${cardStyle} border-top: 3px solid #00B0FF;">
+                    <div style="${labelStyle}">Liquidez (Cash)</div>
+                    <div id="kpi-liquidez-value" class="skeleton" style="${valueStyle}; color: #00B0FF;">--</div>
                 </div>
 
-                <div class="kpi-item" style="border-top-color: #FFD600 !important;">
-                    <div class="kpi-label">INVERSIONES</div>
-                    <div id="kpi-inversion-total" class="kpi-value skeleton" style="color: #FFD600;">--</div>
+                <div style="${cardStyle} border-top: 3px solid #FFD600;">
+                    <div style="${labelStyle}">Inversiones</div>
+                    <div id="kpi-inversion-total" class="skeleton" style="${valueStyle}; color: #FFD600;">--</div>
                 </div>
             </div>
 
-            <div class="kpi-item" style="width: 100%; border-top: 4px solid #D500F9 !important; min-height: 85px;">
-                <div class="kpi-label" style="font-size: 0.8rem !important; color: #D500F9;">PATRIMONIO NETO TOTAL</div>
-                <div id="kpi-patrimonio-neto-value" class="kpi-value skeleton" style="font-size: 2rem !important;">--</div>
+            <div style="${cardStyle} border-top: 3px solid #D500F9; margin-top: auto; margin-bottom: 20px; min-height: 90px; text-align: center; align-items: center;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: #D500F9; text-transform: uppercase; margin-bottom: 4px;">
+                    Patrimonio Neto Total
+                </div>
+                <div id="kpi-patrimonio-neto-value" class="skeleton" style="font-size: 2.2rem; font-weight: 900; color: #fff; letter-spacing: -1px;">--</div>
             </div>
 
         </div>
     `;
 
-    // Iniciamos los escuchadores de eventos para los filtros (igual que antes)
+    // 3. REACTIVACIÓN DE LA LÓGICA (Filtros y actualizaciones)
     const filterPeriodo = select('filter-periodo');
+    const customFiltersDiv = select('custom-date-filters');
+
     if (filterPeriodo) {
+        // Restaurar valor previo si existe
+        const savedPeriod = localStorage.getItem('dashboard_period_filter');
+        if (savedPeriod) {
+            filterPeriodo.value = savedPeriod;
+            if (savedPeriod === 'custom' && customFiltersDiv) {
+                customFiltersDiv.classList.remove('hidden');
+                customFiltersDiv.style.display = 'grid'; // Asegurar que se ve bien al restaurar
+            }
+        }
+
+        // Escuchar cambios
         filterPeriodo.addEventListener('change', (e) => {
             const isCustom = e.target.value === 'custom';
-            select('custom-date-filters')?.classList.toggle('hidden', !isCustom);
-            if (!isCustom) scheduleDashboardUpdate();
+            localStorage.setItem('dashboard_period_filter', e.target.value);
+            
+            if (customFiltersDiv) {
+                if (isCustom) {
+                    customFiltersDiv.classList.remove('hidden');
+                    customFiltersDiv.style.display = 'grid';
+                } else {
+                    customFiltersDiv.classList.add('hidden');
+                    customFiltersDiv.style.display = 'none';
+                    // Si no es custom, actualizamos ya. Si es custom, esperamos a las fechas.
+                    scheduleDashboardUpdate();
+                }
+            }
         });
     }
-  
-    populateAllDropdowns();
-    await Promise.all([loadPresupuestos(), loadInversiones()]);
-    scheduleDashboardUpdate(); 
+
+    // Escuchadores para fechas personalizadas
+    const dateStart = select('filter-fecha-inicio');
+    const dateEnd = select('filter-fecha-fin');
+    
+    if (dateStart && dateEnd) {
+        const handleDateChange = () => {
+            if (dateStart.value && dateEnd.value) {
+                scheduleDashboardUpdate();
+            }
+        };
+        dateStart.addEventListener('change', handleDateChange);
+        dateEnd.addEventListener('change', handleDateChange);
+    }
+
+    // 4. LLAMADA FINAL: ¡Trae los datos!
+    scheduleDashboardUpdate();
 };
  const showEstrategiaTab = (tabName) => {
     // 1. Gestionar el estado activo de los botones de las pestañas
