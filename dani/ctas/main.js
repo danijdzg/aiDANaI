@@ -4478,7 +4478,7 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
         const color = colorMap[t];
         let style = '';
         if (isActive && color) {
-            style = `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF; box-shadow: none;"`;
+            style = `style="background-color: ${color}; border-color: ${color}; color: #FFFFFF; box-shadow: 0 0 8px ${color}70;"`;
         }
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-account-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('') || `<p style="font-size:var(--fs-xs); color:var(--c-on-surface-secondary)">No hay cuentas en esta vista.</p>`;
@@ -4532,21 +4532,22 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
             const accountsInType = accountsByType[tipo];
             const typeBalance = accountsInType.reduce((sum, acc) => sum + (saldos[acc.id] || 0), 0);
             const porcentajeGlobal = totalFiltrado > 0 ? (typeBalance / totalFiltrado) * 100 : 0;
-            const accountsHtml = accountsInType
-                .filter(c => (saldos[c.id] || 0) !== 0) // <--- ESTO ES LO QUE AÑADIMOS (Oculta si es 0)
-                .sort((a,b) => a.nombre.localeCompare(b.nombre))
-                .map(c => 
-                    `<div class="modal__list-item" data-action="view-account-details" data-id="${c.id}" ${c.esInversion ? 'data-is-investment="true"' : ''} style="cursor: pointer; padding: var(--sp-2) 0;">
-                        <div>
-                            <span style="display: block;">${c.nombre}</span>
-                            <small style="color: var(--c-on-surface-secondary);">${(saldos[c.id] || 0) / typeBalance * 100 > 0 ? ((saldos[c.id] || 0) / typeBalance * 100).toFixed(1) + '% de ' + tipo : ''}</small>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: var(--sp-2);">
-                             ${formatCurrencyHTML(saldos[c.id] || 0)}
-                             <span class="material-icons" style="font-size: 18px;">chevron_right</span>
-                        </div>
-                    </div>`
-                ).join('');
+            const accountsHtml = accountsInType.sort((a,b) => a.nombre.localeCompare(b.nombre)).map(c => 
+                `<div class="modal__list-item" 
+                     data-action="view-account-details" 
+                     data-id="${c.id}" 
+                     ${c.esInversion ? 'data-is-investment="true"' : ''}
+                     style="cursor: pointer; padding: var(--sp-2) 0;">
+                    <div>
+                        <span style="display: block;">${c.nombre}</span>
+                        <small style="color: var(--c-on-surface-secondary);">${(saldos[c.id] || 0) / typeBalance * 100 > 0 ? ((saldos[c.id] || 0) / typeBalance * 100).toFixed(1) + '% de ' + tipo : ''}</small>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: var(--sp-2);">
+                        ${formatCurrencyHTML(saldos[c.id] || 0)}
+                        <span class="material-icons" style="font-size: 18px;">chevron_right</span>
+                    </div>
+                </div>`
+            ).join('');
 
             if (!accountsHtml) return '';
 
@@ -4743,135 +4744,158 @@ const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- ESTILOS ULTRA-COMPACTOS (OnePlus Nord 4) ---
-    const gap = '5px'; // Espacio mínimo unificado
-    
-    const bigKpiStyle = 'font-size: 1.5rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible;';
-    const titleStyle = 'font-size: 0.6rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; opacity: 0.9;';
-    
-    // Tarjetas: Clicables (cursor pointer)
-    const cardStyle = `padding: 8px 12px; margin-bottom: ${gap}; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);`;
-
     container.innerHTML = `
-    <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
-        
-        <div class="hero-card fade-in-up" onclick="changePage('report')" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
+        <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
             
+            <div class="hero-card fade-in-up" onclick="goToFlujoCajaChart()" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
-                <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
-                    RESUMEN
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
+                        RESUMEN
+                    </div>
+                    
+                    <div class="report-filters" style="margin: 0;">
+                        <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 4px 24px 4px 10px; height: auto; width: auto; background-color: rgba(255,255,255,0.05); border: 1px solid var(--c-outline); border-radius: 8px; color: var(--c-on-surface); cursor: pointer;">
+                            <option value="mes-actual">Este Mes</option>
+                            <option value="año-actual">Este Año</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Desde</label>
+                        <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                    </div>
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Hasta</label>
+                        <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
+                    </div>
                 </div>
                 
-                <div class="report-filters" style="margin: 0;" onclick="event.stopPropagation()">
-                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.7rem; padding: 1px 8px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
-                        <option value="mes-actual">Este Mes</option>
-                        <option value="año-actual">Este Año</option>
-                        <option value="custom">Personalizado</option>
-                    </select>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: rgba(0, 179, 77, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(0, 179, 77, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-success); text-transform: uppercase; margin-bottom: 2px;">
+                            INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos">?</button>
+                        </div>
+                        <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-success);">+0,00 €</div>
+                    </div>
+
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="background: rgba(255, 59, 48, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 59, 48, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-danger); text-transform: uppercase; margin-bottom: 2px;">
+                            GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos">?</button>
+                        </div>
+                        <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-danger);">-0,00 €</div>
+                    </div>
+                </div>
+
+                <div style="height: 1px; background-color: var(--c-outline); margin: 15px 0; opacity: 0.5;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="saldoNeto">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            NETO <button class="help-btn" data-action="show-kpi-help" data-kpi="neto">?</button>
+                        </div>
+                        <div id="kpi-saldo-neto-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0,00 €</div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            AHORRO <button class="help-btn" data-action="show-kpi-help" data-kpi="tasa_ahorro">?</button>
+                        </div>
+                        <div id="kpi-tasa-ahorro-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0.00%</div>
+                    </div>
                 </div>
             </div>
 
-            <div id="custom-date-filters" class="form-grid hidden" onclick="event.stopPropagation()" style="grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 8px;">
-                <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.6rem; color:#FFFFFF;">Desde</label>
-                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 2px; background: var(--c-surface); color: white;">
-                </div>
-                <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.6rem; color:#FFFFFF;">Hasta</label>
-                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 2px; background: var(--c-surface); color: white;">
-                </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center; margin-bottom: 6px;">
-                <div>
-                    <div style="${titleStyle}">INGRESOS</div>
-                    <div id="kpi-ingresos-value" class="skeleton" style="${bigKpiStyle}">+0,00 €</div>
-                </div>
-                <div>
-                    <div style="${titleStyle}">GASTOS</div>
-                    <div id="kpi-gastos-value" class="skeleton" style="${bigKpiStyle}">-0,00 €</div>
-                </div>
-            </div>
-
-            <div style="height: 1px; background-color: var(--c-outline); margin: 2px 0 6px 0; opacity: 0.3;"></div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center;">
-                <div>
-                    <div style="${titleStyle}">NETO</div>
-                    <div id="kpi-saldo-neto-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
-                </div>
-                <div>
-                    <div style="${titleStyle}">AHORRO</div>
-                    <div id="kpi-tasa-ahorro-value" class="skeleton" style="${bigKpiStyle}">0.00%</div>
-                </div>
-            </div>
+<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+    <div style="margin-bottom: 20px;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+            PATRIMONIO NETO
+            <button class="help-btn" onclick="event.stopPropagation(); showKPIHelp('neto')">?</button>
         </div>
-
-        <div class="hero-card fade-in-up border-ingreso" onclick="goToPatrimonioChart()" style="${cardStyle} cursor: pointer; text-align: center; background: rgba(0,0,0,0.2);">
-            <div style="margin-bottom: 6px;">
-                <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 2px;">
-                    PATRIMONIO NETO
-                </div>
-                <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.4rem; line-height: 1.1; margin: 2px 0; white-space: nowrap;">0,00 €</div>
-            </div>
-            
-            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 5px 8px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center;">
-                <div style="text-align: center;">
-                    <div style="${titleStyle}">Liquidez</div>
-                    <div id="kpi-liquidez-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
-                </div>
-                <div style="height: 20px; background-color: var(--c-outline); opacity: 0.5;"></div>
-                <div style="text-align: center;">
-                    <div style="${titleStyle}">Capital Inv.</div>
-                    <div id="kpi-capital-invertido-total" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="hero-card fade-in-up border-ingreso" onclick="goToInversionesChart()" style="${cardStyle} cursor: pointer; background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0) 100%);">
-            
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
-                <div style="text-align: left;">
-                    <div style="${titleStyle}">Capital Inv.</div>
-                    <div id="new-card-capital" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
-                </div>
-                
-                <div style="text-align: right;">
-                    <div style="${titleStyle}">P&L</div>
-                    <div id="new-card-pnl" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
-                </div>
-            </div>
-
-            <div style="text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
-                <div style="${titleStyle} color: #FFFFFF;">
-                    Valor Real Mercado
-                </div>
-                <div id="new-card-market-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
-            </div>
-        </div>
-
-        <div class="hero-card fade-in-up border-warning" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); margin-bottom: 0;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <div style="text-align: center;">
-                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 10px; vertical-align: middle;">shield</span> COBERTURA</div>
-                    <div id="health-runway-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #FFD60A; white-space: nowrap;">0.0 Meses</div>
-                </div>
-                <div style="text-align: center; border-left: 1px solid var(--c-outline);">
-                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 10px; vertical-align: middle;">flag</span> LIBERTAD</div>
-                    <div id="health-fi-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #39FF14; white-space: nowrap;">0.00%</div>
-                </div>
-            </div>
-        </div>
-
+        <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
     </div>
-    <div id="concepto-totals-list" style="display:none;"></div>
-    <canvas id="conceptos-chart" style="display:none;"></canvas>
-    <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
+
+                <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
+                    
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">account_balance_wallet</span> Liquidez
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez">?</button>
+                        </div>
+                        <div id="kpi-liquidez-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
+                    <div style="height: 30px; background-color: var(--c-outline);"></div>
+
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+                        </div>
+                        <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
+                    </div>
+
+                </div>
+            </div>
+
+           <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
+                    <div style="text-align: left;">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">Capital Invertido</div>
+                        <div id="new-card-capital" style="font-weight:700;">0,00 €</div>
+                    </div>
+                    <div style="text-align: center; font-weight:800; color:var(--c-on-surface-secondary);">
+                        +/-
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">
+                            P&L <button class="help-btn" data-action="show-kpi-help" data-kpi="pnl" style="width:14px; height:14px; font-size:9px;">?</button>
+                        </div>
+                        <div id="new-card-pnl" style="font-weight:700;">0,00 €</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; text-align: center;">
+                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--c-on-surface-tertiary); margin-bottom: 5px;">
+                        = Valor Real de Mercado <button class="help-btn" data-action="show-kpi-help" data-kpi="posicion_real">?</button>
+                    </div>
+                    <div id="new-card-market-value" class="skeleton" style="font-size: 1.8rem; font-weight: 800; line-height: 1;">0,00 €</div>
+                </div>
+            </div>
+
+            <div class="hero-card fade-in-up" style="padding: 15px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-outline);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="text-align: center;">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #FFD60A; font-size: 18px;">shield</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">COBERTURA</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="cobertura" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-runway-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #FFD60A;">0.0 Meses</div>
+                    </div>
+                    <div style="text-align: center; border-left: 1px solid var(--c-outline);">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #39FF14; font-size: 18px;">flag</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">LIBERTAD</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="libertad" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-fi-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #39FF14;">0.00%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="concepto-totals-list" style="display:none;"></div>
+        <canvas id="conceptos-chart" style="display:none;"></canvas>
+        <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
     `;
     
     populateAllDropdowns();
     await Promise.all([loadPresupuestos(), loadInversiones()]);
-    scheduleDashboardUpdate();
+    scheduleDashboardUpdate(); 
 };
  const showEstrategiaTab = (tabName) => {
     // 1. Gestionar el estado activo de los botones de las pestañas
@@ -6478,44 +6502,54 @@ const scheduleDashboardUpdate = () => {
             const efData = calculateEmergencyFund(saldos, db.cuentas, recentMovementsCache);
             const fiData = calculateFinancialIndependence(patrimonioRealParaCalculos, efData.gastoMensualPromedio);
 
-            // --- ACTUALIZACIÓN UI COMPLETA (v3) ---
+            // --- ACTUALIZACIÓN UI ---
 
-            // A. FLUJO (Ingresos, Gastos, Neto, Ahorro)
+            // A. FLUJO
             const elIng = select('kpi-ingresos-value');
             if (elIng) {
                 [elIng, select('kpi-gastos-value'), select('kpi-saldo-neto-value'), select('kpi-tasa-ahorro-value')]
                     .forEach(el => el?.classList.remove('skeleton'));
                 
-                updateKpiVisual('kpi-ingresos-value', ingresos);          
-                updateKpiVisual('kpi-gastos-value', gastos);              
-                updateKpiVisual('kpi-saldo-neto-value', saldoNeto);       
-                updateKpiVisual('kpi-tasa-ahorro-value', tasaAhorro * 100, true); 
+                animateCountUp(elIng, ingresos, 700, true, '+');
+                animateCountUp(select('kpi-gastos-value'), gastos, 700, true, '');
+                
+                const elNeto = select('kpi-saldo-neto-value');
+                animateCountUp(elNeto, saldoNeto, 700, true, saldoNeto >= 0 ? '+' : '');
+                elNeto.className = saldoNeto >= 0 ? 'text-positive' : 'text-negative';
+
+                const elAhorro = select('kpi-tasa-ahorro-value');
+                animateCountUp(elAhorro, tasaAhorro * 100, 700, false, '', '%');
+                elAhorro.className = tasaAhorro >= 0 ? 'text-positive' : 'text-warning';
             }
 
-            // B. PATRIMONIO (Liquidez, Invertido y Total)
+            // B. PATRIMONIO
             const elPatrimonio = select('kpi-patrimonio-neto-value');
             if (elPatrimonio) {
                 [elPatrimonio, select('kpi-liquidez-value'), select('kpi-capital-invertido-total')]
                     .forEach(el => el?.classList.remove('skeleton'));
 
-                // Patrimonio Neto: Mantiene estilo Gigante y Azul
                 animateCountUp(elPatrimonio, patrimonioContable);
-
-                // Liquidez y Capital en la tarjeta azul: Colores dinámicos
-                updateKpiVisual('kpi-liquidez-value', liquidezTotal);
-                updateKpiVisual('kpi-capital-invertido-total', totalCapitalInvertido);
+                animateCountUp(select('kpi-liquidez-value'), liquidezTotal);
+                animateCountUp(select('kpi-capital-invertido-total'), totalCapitalInvertido);
             }
 
-            // C. INVERSIONES (NUEVO: Tarjeta Valor de Mercado)
-            // Aquí conectamos los nuevos IDs para que tengan color y tamaño
-            const elMarket = select('new-card-market-value');
-            if (elMarket) {
-                 [elMarket, select('new-card-capital'), select('new-card-pnl')]
-                    .forEach(el => el?.classList.remove('skeleton'));
-
-                 updateKpiVisual('new-card-capital', totalCapitalInvertido); // Capital
-                 updateKpiVisual('new-card-pnl', pnlTotal);                 // P&L
-                 updateKpiVisual('new-card-market-value', valorMercadoTotal); // Valor Real
+            // C. NUEVA TARJETA (Inversiones Realidad) - AQUÍ ESTÁ EL CAMBIO CLAVE
+            const elNewMarketVal = select('new-card-market-value');
+            if (elNewMarketVal) {
+                elNewMarketVal.classList.remove('skeleton');
+                
+                // Capital
+                select('new-card-capital').textContent = formatCurrency(totalCapitalInvertido);
+                
+                // P&L con Porcentaje
+                const elPnl = select('new-card-pnl');
+                const sign = pnlTotal >= 0 ? '+' : '';
+                // Usamos innerHTML para formatear el porcentaje más pequeño
+                elPnl.innerHTML = `${sign}${formatCurrency(pnlTotal)} <small style="font-size:0.8em; opacity:0.9;">(${sign}${pnlPct.toFixed(2)}%)</small>`;
+                elPnl.className = pnlTotal >= 0 ? 'text-positive' : 'text-negative';
+                
+                // Resultado Total
+                animateCountUp(elNewMarketVal, valorMercadoTotal);
             }
 
             // D. METAS
@@ -11725,7 +11759,6 @@ window.toggleDiarioView = function(btnElement) {
         console.warn("AVISO: No encontré la función 'renderDiario'. Asegúrate de que tu función de pintar lista lea la variable window.currentDiarioView");
     }
 };
-
 // ===============================================================
 // === NUEVA HERRAMIENTA: ABRIR HISTORIAL DE INVERSIÓN ===
 // ===============================================================
@@ -11744,54 +11777,53 @@ window.openInvestmentHistory = (cuentaId) => {
 
     // 2. Generamos el HTML de la lista
     let listHtml = `<div style="display: flex; flex-direction: column; gap: 10px;">`;
-
+    
     if (movs.length === 0) {
         listHtml += `<p style="opacity: 0.6; text-align: center; padding: 20px;">No hay movimientos registrados.</p>`;
     } else {
         listHtml += movs.map(m => {
             const date = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-            
-            // === LÓGICA HOMOGÉNEA DE COLORES ===
-            // Aquí ya no decidimos colores, decidimos "Clases" basadas en el rol.
-            
-            let claseColor = ''; 
+            // Calculamos si suma o resta para esta cuenta
+            let cantidad = m.cantidad;
+            let color = 'var(--c-on-surface)';
             let signo = '';
 
+            // Lógica para saber si es verde o rojo en ESTA cuenta específica
             if (m.tipo === 'gasto') {
-                claseColor = 'text-gasto'; // Usamos la clase maestra (Rojo por defecto)
+                color = 'var(--c-on-surface)'; // Gasto normal en blanco
                 signo = '-';
             } else if (m.tipo === 'ingreso') {
-                claseColor = 'text-ingreso'; // Usamos la clase maestra (Verde por defecto)
+                color = 'var(--c-success)';
                 signo = '+';
             } else if (m.tipo === 'traspaso') {
-                claseColor = 'text-traspaso'; // Usamos la clase maestra (Azul por defecto)
-                // En traspasos, el signo depende de si sale o entra de ESTA cuenta
                 if (m.cuentaOrigenId === cuentaId) {
-                    signo = '-'; // Sale dinero
+                    color = 'var(--c-on-surface)'; // Sale dinero
+                    signo = '-';
                 } else {
-                    signo = '+'; // Entra dinero
+                    color = 'var(--c-success)'; // Entra dinero
+                    signo = '+';
                 }
             }
 
             const conceptoObj = db.conceptos.find(c => c.id === m.conceptoId);
             const titulo = m.tipo === 'traspaso' ? 'Traspaso' : (conceptoObj?.nombre || 'Movimiento');
 
+            // Reutilizamos tu sistema de clic para editar (data-action)
             return `
             <div class="card" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
                 <div>
                     <div style="font-weight: 600; font-size: 0.95rem;">${titulo}</div>
                     <div style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-top: 2px;">${date} • ${m.descripcion || ''}</div>
                 </div>
-                <div style="font-weight: 700;" class="${claseColor}">
+                <div style="font-weight: 700; color: ${color};">
                     ${signo}${formatCurrency(m.cantidad)}
                 </div>
             </div>`;
         }).join('');
     }
-
     listHtml += `</div>`;
 
-    // 3. Mostramos el Modal
+    // 3. Mostramos el Modal usando tu sistema existente
     showGenericModal(`Historial: ${cuenta.nombre}`, listHtml);
 };
 // ===============================================================
@@ -12168,6 +12200,21 @@ window.goToInversionesChart = function() {
     openAccordionWhenReady('acordeon-portafolio', null);
 };
 
+// --- FUNCIÓN 3: IR A FLUJO DE CAJA (NUEVA) ---
+window.goToFlujoCajaChart = function() {
+    console.log("🚀 Viajando al gráfico de Flujo de Caja...");
+    // 1. Vibración para confirmar el toque
+    if (typeof hapticFeedback === 'function') hapticFeedback('medium');
+    
+    // 2. Navegar a la pestaña 'Planificar' (que es donde está el Análisis)
+    const tabBtn = document.querySelector('button[data-page="planificar-page"]');
+    if (tabBtn) tabBtn.click();
+
+    // 3. Buscar el acordeón de "Flujo de Caja" y abrirlo automáticamente
+    // 'acordeon-flujo_caja' es el ID que tiene esa sección en la página de Análisis
+    openAccordionWhenReady('acordeon-flujo_caja', null);
+};
+
 /* ================================================================
    FUNCIÓN DE ANIMACIÓN (Pegar al final de main.js)
    ================================================================ */
@@ -12210,27 +12257,3 @@ function animateTransfer(valor) {
         setTimeout(() => target.style.backgroundColor = '', 300);
     };
 }
-
-// --- HERRAMIENTA DE COLORES DINÁMICOS ---
-const updateKpiVisual = (elementId, value, isPercentage = false) => {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-
-    // 1. Decidir el color (Verde = Positivo, Rojo = Negativo)
-    // Nota: Si es 0, se quedará verde (positive)
-    let colorClass = 'text-positive';
-    if (value < 0) colorClass = 'text-negative';
-    
-    // 2. Limpiar colores antiguos y poner el nuevo
-    el.classList.remove('text-positive', 'text-negative', 'text-warning');
-    el.classList.add(colorClass);
-
-    // 3. Animar el número
-    if (isPercentage) {
-        // Para porcentajes (%)
-        animateCountUp(el, value, 1000, false, '', '%');
-    } else {
-        // Para dinero (€)
-        animateCountUp(el, value, 1000, true);
-    }
-};
