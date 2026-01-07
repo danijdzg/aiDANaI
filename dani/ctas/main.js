@@ -1,5 +1,51 @@
 
 import { addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'https://cdn.jsdelivr.net/npm/date-fns@2.29.3/+esm';
+const KPI_EXPLANATIONS = {
+    'ingresos': { 
+        title: 'Ingresos del Periodo', 
+        text: 'Dinero nuevo que ha entrado en tus bolsillos durante las fechas seleccionadas (nómina, ventas, regalos...).<br><br>No cuenta los movimientos entre tus propias cuentas (traspasos).' 
+    },
+    'gastos': { 
+        title: 'Gastos del Periodo', 
+        text: 'Dinero que ha salido de tu bolsillo para no volver (compras, facturas, ocio...).' 
+    },
+    'neto': { 
+        title: 'Flujo Neto (Ahorro del Periodo)', 
+        text: 'Es la resta simple: <strong>Lo que entró - Lo que salió</strong>.<br><br>Si es positivo (Verde), has gastado menos de lo que ganaste. Si es negativo (Rojo), has tenido que tirar de ahorros anteriores.' 
+    },
+    'tasa_ahorro': { 
+        title: 'Tasa de Ahorro', 
+        text: 'Mide tu velocidad de acumulación de riqueza.<br><br>Si ganaste 1.000€ y te sobraron 200€, tu tasa es del 20%. Un porcentaje alto significa que vives muy por debajo de tus posibilidades (¡eso es bueno!).' 
+    },
+    'patrimonio': { 
+        title: 'Patrimonio (Capital Total)', 
+        text: 'Es la suma de todo tu dinero "contable".<br><br><strong>Fórmula:</strong> Liquidez + Capital Invertido.<br><br>Representa todo el dinero que tienes en el banco más todo el dinero que has enviado a tus cuentas de inversión. No tiene en cuenta si tus inversiones han subido o bajado, solo lo que tú pusiste.' 
+    },
+    'liquidez': { 
+        title: 'Liquidez Disponible', 
+        text: 'Tu oxígeno financiero. Es el dinero que tienes en cuentas corrientes, efectivo o huchas, listo para gastar hoy mismo si fuera necesario.' 
+    },
+    'capital_invertido': { 
+        title: 'Capital Invertido', 
+        text: 'El esfuerzo de tu bolsillo. Es la suma total de dinero que has transferido desde tus cuentas de banco a tus cuentas de inversión.<br><br>Es tu "coste base".' 
+    },
+    'posicion_real': { 
+        title: 'Posición Real de Mercado', 
+        text: 'La verdad actual. Es lo que valen tus inversiones si las vendieras todas hoy mismo.<br><br>Se calcula sumando tu <strong>Capital Invertido</strong> más tus <strong>Ganancias</strong> (o menos tus Pérdidas).' 
+    },
+    'pnl': { 
+        title: 'Ganancia / Pérdida (P&L)', 
+        text: 'Es el "examen de notas" de tus inversiones. Te dice cuánto dinero has ganado o perdido sobre lo que pusiste.<br><br><strong>Ejemplo Didáctico:</strong><br>Pones 100€ en una hucha (Capital). Si el mercado sube y ahora vale 110€, tu P&L es <strong>+10€ (+10%)</strong>.<br><br><strong>Fórmula:</strong> Valor Actual - Capital Invertido.' 
+    },
+    'cobertura': { 
+        title: 'Cobertura (Meses de Libertad)', 
+        text: 'Si hoy dejaras de ingresar dinero, ¿cuánto tiempo podrías sobrevivir con tu liquidez actual manteniendo tu nivel de gastos de los últimos 3 meses?' 
+    },
+    'libertad': { 
+        title: 'Independencia Financiera', 
+        text: 'Tu barra de progreso hacia la jubilación.<br><br>Se considera que eres libre cuando tienes acumulado 25 veces tus gastos anuales (o 300 veces tus gastos mensuales).' 
+    }
+};
 
 const isCryptoType = (tipo) => {
     const t = (tipo || '').toLowerCase();
@@ -1071,7 +1117,6 @@ const fetchBtcPrice = async () => {
     }
     return btcPriceData.price || 0; // Retorna 0 o el último precio conocido si falla
 };
-let lastOkTapTime = 0; // Variable para controlar el doble click
 const handleCalculatorInput = (key) => {
     hapticFeedback('light');
     let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
@@ -1099,61 +1144,32 @@ const handleCalculatorInput = (key) => {
     } else {
         switch(key) {
             case 'done':
-                // A. Siempre calculamos primero
+                hapticFeedback('medium');
+                // Calcular final si hay pendiente
                 if (operand1 !== null && operator !== null && !waitingForNewValue) {
                     calculate();
+                    displayValue = calculatorState.displayValue;
                 }
                 
-                // B. Lógica de Doble Click
-                const now = new Date().getTime();
-                const timeDiff = now - lastOkTapTime;
+                // Actualizar input final
+                updateTargetInput(displayValue);
                 
-                if (timeDiff < 300 && timeDiff > 0) {
-                    console.log("🚀 DOBLE CLICK: Iniciando transferencia...");
-                    
-                    // 1. Usamos la variable correcta
-                    const valorFinal = calculatorState.displayValue; 
-                    
-                    // 2. Feedback visual
-                    const btnDone = document.querySelector('.calculator-btn[data-key="done"]');
-                    if(btnDone) btnDone.classList.add('success-pulse');
+                historyValue = '';
+                hideCalculator(); 
 
-                    // 3. Iniciar animación
-                    if (typeof animateTransfer === 'function') {
-                        animateTransfer(valorFinal);
+                // --- AVANCE AUTOMÁTICO AL SIGUIENTE CAMPO ---
+                // Al dar OK, pasamos al concepto automáticamente
+                setTimeout(() => {
+                    const conceptoSelect = document.getElementById('movimiento-concepto');
+                    // Buscamos el trigger del custom select
+                    const wrapper = conceptoSelect?.closest('.custom-select-wrapper');
+                    const trigger = wrapper?.querySelector('.custom-select__trigger');
+                    
+                    if (trigger) {
+                        trigger.focus(); // Enfocar para navegación teclado
+                        trigger.click(); // Abrir el menú
                     }
-                    
-                    // 4. Esperar y pegar
-                    setTimeout(() => {
-                        const inputCantidad = document.getElementById('movimiento-cantidad');
-                        if (inputCantidad) {
-                            inputCantidad.value = valorFinal;
-                            inputCantidad.dispatchEvent(new Event('input'));
-                        }
-                        
-                        // 5. CORRECCIÓN: Usamos la función que SÍ existe
-                        if (typeof hideCalculator === 'function') {
-                            hideCalculator();
-                        } else {
-                            // Fallback de seguridad por si acaso
-                            const overlay = document.getElementById('calculator-overlay');
-                            if(overlay) overlay.classList.remove('modal-overlay--active');
-                        }
-
-                        if(btnDone) btnDone.classList.remove('success-pulse');
-                        
-                        // Enfocar siguiente campo
-                        const concepto = document.getElementById('movimiento-concepto');
-                        if(concepto) concepto.focus();
-                        
-                    }, 500);
-                    
-                    lastOkTapTime = 0;
-                } else {
-                    // Un solo click
-                    hapticFeedback('light');
-                    lastOkTapTime = now;
-                }
+                }, 100); 
                 return;
 
             case 'comma':
@@ -1274,27 +1290,39 @@ const calculate = () => {
     updateCalculatorDisplay();
 };
 
+// Mejora visual: Escala dinámica de fuente en el display
+/* Reemplaza updateCalculatorDisplay por esta versión */
 const updateCalculatorDisplay = () => {
-    // 1. Buscamos la pantalla
-    const display = document.getElementById('calculator-display');
-    const displayInner = document.querySelector('.calc-current');
-
-    if (!display && !displayInner) return;
-
-    // 2. CORRECCIÓN: Usamos la variable correcta del estado
-    const valor = calculatorState.displayValue; 
-
-    // 3. Actualizamos la pantalla
-    if (display) display.textContent = valor;
-    if (displayInner) displayInner.textContent = valor;
-
-    // 4. Ajuste de tamaño de texto
-    if (display) {
-        if (valor.length > 9) display.style.fontSize = '2.5rem';
-        else display.style.fontSize = '4rem';
+    const display = select('calculator-display');
+    if (!display) return;
+    
+    const value = calculatorState.displayValue; // Es un string tipo "125,5"
+    
+    // Lógica de formateo manual para respetar lo que el usuario está escribiendo (incluyendo comas a medias)
+    let html = '';
+    
+    if (value === 'Error') {
+        html = 'Error';
+    } else {
+        const parts = value.split(',');
+        const integerPart = parts[0];
+        // Formateamos la parte entera con puntos de miles si es necesario
+        const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        
+        const decimalPart = parts.length > 1 ? ',' + parts[1] : '';
+        
+        // Aplicamos las clases CSS de estilo
+        html = `<span class="currency-major">${formattedInteger}</span><small class="currency-minor">${decimalPart}</small>`;
     }
-};
 
+    display.innerHTML = html; // Usamos innerHTML en lugar de textContent
+    
+    // Ajuste de tamaño dinámico
+    const length = value.length;
+    if (length > 9) display.style.fontSize = '2rem';
+    else if (length > 7) display.style.fontSize = '2.5rem';
+    else display.style.fontSize = '3rem';
+};
 // --- FIN: BLOQUE CALCULADORA ---
                     
 
@@ -3326,24 +3354,19 @@ const handleToggleInvestmentTypeFilter = (type) => {
     renderPortfolioEvolutionChart('portfolio-evolution-container');
 };
 
-/* ================================================================= */
-/* === FUNCIÓN MAESTRA PORTAFOLIO: GRÁFICOS + LISTA + FECHAS === */
-/* ================================================================= */
 const renderPortfolioMainContent = async (targetContainerId) => {
-    const container = document.getElementById(targetContainerId);
+    const container = select(targetContainerId);
     if (!container) return;
 
-    // 1. Filtrar cuentas de inversión
     const investmentAccounts = getVisibleAccounts().filter((c) => c.esInversion);
     const CHART_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
 
-    // CASO VACÍO: Si no hay cuentas
     if (investmentAccounts.length === 0) {
         container.innerHTML = `<div id="empty-investments" class="empty-state" style="margin-top: 0; border: none; background: transparent;"><span class="material-icons">rocket_launch</span><h3>Tu Portafolio empieza aquí</h3><p>Ve a 'Ajustes' > 'Cuentas' y marca una cuenta como 'de inversión'.</p></div>`;
         return;
     }
 
-    // 2. Calcular Rendimiento de cada cuenta
+    // 1. Obtener Datos
     const performanceData = await Promise.all(
         investmentAccounts.map(async (cuenta) => {
             const performance = await calculatePortfolioPerformance(cuenta.id);
@@ -3351,29 +3374,28 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         })
     );
 
-    // Aplicar filtros (si has desmarcado alguno)
     const displayAssetsData = performanceData.filter(asset => !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T')));
 
-    // 3. Calcular Totales Generales
+    // 2. Cálculos Totales (SIEMPRE EN EUROS para mantener coherencia del Resumen Global)
     let portfolioTotalInvertido = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.capitalInvertido, 0);
     let portfolioTotalValorado = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.valorActual, 0);
     let rentabilidadTotalAbsoluta = portfolioTotalValorado - portfolioTotalInvertido;
     let rentabilidadTotalPorcentual = portfolioTotalInvertido !== 0 ? (rentabilidadTotalAbsoluta / portfolioTotalInvertido) * 100 : 0;
     
-    // Formatos de texto para la cabecera
     let displayTotalInvertido = formatCurrencyHTML(portfolioTotalInvertido);
     let displayRentabilidadAbsoluta = formatCurrencyHTML(rentabilidadTotalAbsoluta);
     let displayTotalValorado = formatCurrencyHTML(portfolioTotalValorado);
     let displayPorcentajeTotal = rentabilidadTotalPorcentual.toFixed(2) + '%';
+
     const rentabilidadClass = rentabilidadTotalAbsoluta >= 0 ? 'text-positive' : 'text-negative';
     const signo = rentabilidadTotalAbsoluta >= 0 ? '+' : '';
 
-    // Preparar colores y etiquetas para filtros
+    // 3. Renderizado HTML
+    // Filtros (Pills)
     const allInvestmentTypes = [...new Set(performanceData.map(asset => toSentenceCase(asset.tipo || 'S/T')))].sort();
     const colorMap = {};
     allInvestmentTypes.forEach((label, index) => { colorMap[label] = CHART_COLORS[index % CHART_COLORS.length]; });
     
-    // HTML de los filtros (botones de colores)
     const pillsHTML = allInvestmentTypes.map(t => {
         const isActive = !deselectedInvestmentTypesFilter.has(t);
         const color = colorMap[t];
@@ -3381,19 +3403,18 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         return `<button class="filter-pill ${isActive ? 'filter-pill--active' : ''}" data-action="toggle-investment-type-filter" data-type="${t}" ${style}>${t}</button>`;
     }).join('');
 
-    // Aviso si estás viendo en BTC
+    // Información de Tasa de Cambio (Solo si el modo BTC está activo)
     let btcInfoHTML = '';
-    if (typeof portfolioViewMode !== 'undefined' && portfolioViewMode === 'BTC' && btcPriceData.price > 0) {
+    if (portfolioViewMode === 'BTC' && btcPriceData.price > 0) {
         btcInfoHTML = `<div style="text-align:center; font-size:0.7rem; color:var(--c-warning); margin-top:-10px; margin-bottom:10px;">
             <span class="material-icons" style="font-size:10px; vertical-align:middle;">info</span> 
             Mostrando Criptos en BTC (1 BTC = ${formatCurrency(Math.round(btcPriceData.price * 100))})
         </div>`;
     }
 
-    // --- RENDERIZADO DEL HTML PRINCIPAL ---
     container.innerHTML = `
         ${btcInfoHTML}
-        <div class="card" style="margin-bottom: var(--sp-3);">
+        <div class="card" style="margin-bottom: var(--sp-4);">
             <div class="card__content" style="padding: var(--sp-3);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid var(--c-outline); padding-bottom:10px;">
                     <h3 style="margin:0; font-size:1rem;">Resumen del Portafolio (Total €)</h3>
@@ -3401,6 +3422,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                         <span class="material-icons" style="font-size:14px;">update</span> Actualizar
                     </button>
                 </div>
+
                 <div style="display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; text-align: center; gap: 4px;">
                     <div style="display:flex; flex-direction:column; align-items:center;">
                         <h4 class="kpi-item__label" style="font-size:0.65rem;">Invertido</h4>
@@ -3408,8 +3430,9 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                     </div>
                     <div style="font-weight:700; color:var(--c-on-surface-tertiary); font-size:0.8rem;">+/-</div>
                     <div style="display:flex; flex-direction:column; align-items:center;">
-                        <h4 class="kpi-item__label" style="font-size:0.65rem;">G/P</h4>
+                        <h4 class="kpi-item__label" style="font-size:0.65rem;">Ganancia/Pérdida</h4>
                         <strong class="kpi-item__value ${rentabilidadClass}" style="font-size: 0.9rem;">${signo}${displayRentabilidadAbsoluta}</strong>
+                        <small class="${rentabilidadClass}" style="font-size:0.7rem; font-weight:700;">(${signo}${displayPorcentajeTotal})</small>
                     </div>
                     <div style="font-weight:700; color:var(--c-on-surface-tertiary); font-size:0.8rem;">=</div>
                     <div style="display:flex; flex-direction:column; align-items:center;">
@@ -3419,50 +3442,51 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                 </div>
             </div>
         </div>
-
-        <div class="card" style="margin-bottom: var(--sp-3); padding: 15px;">
-            <h4 style="margin: 0 0 10px 0; font-size: 0.85rem; color: var(--c-on-surface-secondary); text-align:center;">Rendimiento: Invertido vs Real</h4>
-            <div style="position: relative; height: 200px; width: 100%;">
-                <canvas id="investedVsValueChart"></canvas>
-            </div>
-        </div>
         
         <div class="filter-pills" style="margin-bottom: var(--sp-3); overflow-x:auto;">${pillsHTML}</div>
         <div id="investment-assets-list"></div>`;
 
-    // 4. Generar la lista de tarjetas (Assets)
-    const listContainer = document.getElementById('investment-assets-list');
+    // 4. Renderizado Lista de Activos (LÓGICA HÍBRIDA)
+    const listContainer = select('investment-assets-list');
     if (listContainer) {
         const listHtml = displayAssetsData
             .sort((a, b) => b.valorActual - a.valorActual)
             .map(cuenta => {
-                const showInBTC = typeof portfolioViewMode !== 'undefined' && portfolioViewMode === 'BTC' && isCryptoType(cuenta.tipo) && btcPriceData.price > 0;
+                // Comprobamos si esta cuenta específica es cripto y si el modo BTC está activo
+                const showInBTC = portfolioViewMode === 'BTC' && isCryptoType(cuenta.tipo) && btcPriceData.price > 0;
+
                 let cInvertido, cPnl, cReal;
+                let unitLabel = '€'; // Etiqueta de unidad por defecto
 
                 if (showInBTC) {
+                    // CONVERSIÓN A BTC PARA ESTA TARJETA
+                    unitLabel = '₿';
                     cInvertido = formatBTC((cuenta.capitalInvertido / 100) / btcPriceData.price);
                     cReal = formatBTC((cuenta.valorActual / 100) / btcPriceData.price);
-                    cPnl = formatBTC((cuenta.pnlAbsoluto / 100) / btcPriceData.price);
+                    
+                    const pnlVal = (cuenta.pnlAbsoluto / 100) / btcPriceData.price;
+                    cPnl = formatBTC(pnlVal);
                 } else {
+                    // MODO NORMAL (EUROS)
                     cInvertido = formatCurrencyHTML(cuenta.capitalInvertido);
-                    cReal = formatCurrencyHTML(cuenta.valorActual);
-                    cPnl = formatCurrencyHTML(cuenta.pnlAbsoluto);
+					cReal = formatCurrencyHTML(cuenta.valorActual);
+					cPnl = formatCurrencyHTML(cuenta.pnlAbsoluto);
                 }
                 
                 const cPorcentaje = cuenta.pnlPorcentual.toFixed(2) + '%';
                 const pnlClass = cuenta.pnlAbsoluto >= 0 ? 'text-positive' : 'text-negative';
                 const pnlSign = cuenta.pnlAbsoluto >= 0 ? '+' : '';
+                
+                // Barra de peso (siempre basada en valoración EUR para ser relativa al total)
                 const peso = portfolioTotalValorado > 0 ? (cuenta.valorActual / portfolioTotalValorado) * 100 : 0;
                 const barColor = colorMap[toSentenceCase(cuenta.tipo || 'S/T')] || 'var(--c-primary)';
-                const cardStyle = showInBTC ? 'border-left: 3px solid #F7931A;' : '';
                 
-                // Fecha formateada
-                const lastUpdateStr = cuenta.lastUpdate 
-                    ? new Date(cuenta.lastUpdate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
-                    : '-';
+                // Estilo especial para tarjetas en modo BTC
+                const cardStyle = showInBTC ? 'border-left: 3px solid #F7931A;' : '';
 
                 return `
                 <div class="portfolio-asset-card" data-action="view-account-details" data-id="${cuenta.id}" data-is-investment="true" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; ${cardStyle}">
+                    
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div class="asset-card__name" style="font-size:1rem;">
                             ${escapeHTML(cuenta.nombre)} 
@@ -3473,11 +3497,14 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                     <div style="width: 100%; height: 3px; background: var(--c-surface-variant); border-radius: 2px; overflow: hidden; margin-top:-4px;">
                         <div style="width: ${peso}%; height: 100%; background-color: ${barColor};"></div>
                     </div>
+
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; background: var(--c-surface-variant); padding: 8px; border-radius: 8px;">
+                        
                         <div style="display:flex; flex-direction:column;">
                             <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Invertido</span>
                             <span style="font-size:0.85rem; font-weight:600; color:var(--c-on-surface);">${cInvertido}</span>
                         </div>
+
                         <div style="display:flex; flex-direction:column; text-align:center;">
                             <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">P&L</span>
                             <div style="display:flex; flex-direction:column;">
@@ -3485,14 +3512,14 @@ const renderPortfolioMainContent = async (targetContainerId) => {
                                 <span style="font-size:0.7rem; opacity:0.9;" class="${pnlClass}">(${pnlSign}${cPorcentaje})</span>
                             </div>
                         </div>
+
                         <div style="display:flex; flex-direction:column; text-align:right;">
                             <span style="font-size:0.6rem; color:var(--c-on-surface-secondary); text-transform:uppercase;">Valor Real</span>
                             <span style="font-size:0.9rem; font-weight:800; color:var(--c-on-surface);">${cReal}</span>
-                            <span style="font-size:0.65rem; color:var(--c-on-surface-tertiary); margin-top:2px; font-weight:500;">
-                                <span class="material-icons" style="font-size:10px; vertical-align:middle;">history</span> ${lastUpdateStr}
-                            </span>
                         </div>
+
                     </div>
+
                     <div style="display:flex; justify-content:flex-end;">
                          <button class="asset-card__valoracion-btn" data-action="update-asset-value" data-id="${cuenta.id}" style="padding: 4px 10px; font-size: 0.7rem;">
                             <span class="material-icons" style="font-size: 14px;">edit</span> Actualizar Valor
@@ -3504,88 +3531,6 @@ const renderPortfolioMainContent = async (targetContainerId) => {
         listContainer.innerHTML = listHtml ? `<div class="card fade-in-up"><div class="card__content" style="padding: 0;">${listHtml}</div></div>` : '';
         applyInvestmentItemInteractions(listContainer);
     }
-
-    // 5. RENDERIZAR EL GRÁFICO (Chart.js)
-    setTimeout(() => {
-        const ctx = document.getElementById('investedVsValueChart');
-        if (ctx && typeof Chart !== 'undefined') {
-            // Agrupar datos por TIPO
-            const groups = {};
-            displayAssetsData.forEach(asset => {
-                const tipo = toSentenceCase(asset.tipo || 'Otros');
-                if (!groups[tipo]) groups[tipo] = { invertido: 0, valor: 0 };
-                groups[tipo].invertido += asset.capitalInvertido;
-                groups[tipo].valor += asset.valorActual;
-            });
-
-            const labels = Object.keys(groups);
-            // Convertimos a euros (desde céntimos)
-            const dataInvertido = labels.map(l => groups[l].invertido / 100);
-            const dataValor = labels.map(l => groups[l].valor / 100);
-
-            // Colores: Verde si ganamos, Rojo si perdemos
-            const valorColors = labels.map(l => {
-                return groups[l].valor >= groups[l].invertido 
-                    ? 'rgba(48, 209, 88, 0.8)'  // Verde
-                    : 'rgba(255, 69, 58, 0.8)'; // Rojo
-            });
-
-            if (window.myInvestmentChart) window.myInvestmentChart.destroy();
-
-            window.myInvestmentChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Invertido (€)',
-                            data: dataInvertido,
-                            backgroundColor: 'rgba(142, 142, 147, 0.5)',
-                            borderRadius: 4,
-                            barPercentage: 0.6
-                        },
-                        {
-                            label: 'Valor Actual (€)',
-                            data: dataValor,
-                            backgroundColor: valorColors,
-                            borderRadius: 4,
-                            barPercentage: 0.6
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }, // Ocultamos leyenda para limpiar
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) label += ': ';
-                                    if (context.parsed.y !== null) {
-                                        label += new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#888', font: { size: 10 } }
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: { color: '#AAA', font: { size: 10 } }
-                        }
-                    }
-                }
-            });
-        }
-    }, 150);
 };
 
 
@@ -4743,24 +4688,16 @@ async function calculateHistoricalIrrForGroup(accountIds) {
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
-// --- AQUÍ ESTÁ LA SOLUCIÓN AL ERROR 'gap is not defined' ---
-    // Definimos las variables de estilo ANTES de usarlas
-    const gap = '5px'; 
-    const bigKpiStyle = 'font-size: 1.5rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible;';
-    const titleStyle = 'font-size: 0.6rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; opacity: 0.9;';
-    
-    // Estilo base de las tarjetas
-    const cardStyle = `padding: 8px 12px; margin-bottom: ${gap}; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);`;
 
     container.innerHTML = `
-    <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
-        
-        <div class="hero-card fade-in-up" onclick="goToFlujoCajaChart()" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
+        <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
             
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
-                <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
-                    RESUMEN
-                </div>
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-3); border-color: rgba(255, 255, 255, 0.1);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--c-on-surface); text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">
+                        Flujo de Caja
+                    </div>
                     
                     <div class="report-filters" style="margin: 0;">
                         <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 4px 24px 4px 10px; height: auto; width: auto; background-color: rgba(255,255,255,0.05); border: 1px solid var(--c-outline); border-radius: 8px; color: var(--c-on-surface); cursor: pointer;">
@@ -4817,14 +4754,14 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
-    <div style="margin-bottom: 20px;">
-        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
-            PATRIMONIO NETO
-            <button class="help-btn" onclick="event.stopPropagation(); showKPIHelp('neto')">?</button>
-        </div>
-        <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
-    </div>
+            <div class="hero-card fade-in-up" style="padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+                
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+                        PATRIMONIO (CAPITAL TOTAL) <button class="help-btn" data-action="show-kpi-help" data-kpi="patrimonio">?</button>
+                    </div>
+                    <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
+                </div>
 
                 <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
                     
@@ -4849,7 +4786,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-           <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+            <div class="hero-card fade-in-up" style="padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
                     <div style="text-align: left;">
@@ -5837,7 +5774,7 @@ const renderPlanificacionPage = () => {
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
-                    <h3 class="widget-title">Patrimonio Neto</h3>
+                    <h3 class="widget-title">Balance Neto</h3>
                     <p class="widget-subtitle">Tus activos menos tus deudas</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
@@ -7097,6 +7034,7 @@ function handleModalDragEnd(e) {
     modalDragState.targetModal = null;
 }
 
+// En main.js
 
 const showModal = (id) => {
     const m = select(id);
@@ -7612,20 +7550,13 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
     
     // Gestión de botones
     const deleteBtn = select('delete-movimiento-btn');
-    const duplicateBtn = select('duplicate-movimiento-btn');
-
+    const duplicateBtn = select('duplicate-movimiento-btn'); 
     if (deleteBtn) {
-        // Muestra el botón solo si estamos editando (hay ID)
         deleteBtn.classList.toggle('hidden', !id || !data);
-        
-        // ESTA ES LA LÍNEA CLAVE QUE NECESITAS:
-        // Le dice al botón si lo que vamos a borrar es un recurrente o normal
-        deleteBtn.dataset.isRecurrent = String(isRecurrent); 
+        deleteBtn.dataset.isRecurrent = String(isRecurrent);
     }
-
     if (duplicateBtn) {
-        // El botón duplicar se ve si estamos editando un movimiento normal O recurrente
-        duplicateBtn.classList.toggle('hidden', !id || !data);
+        duplicateBtn.classList.toggle('hidden', !(mode === 'edit-single' && data));
     }
 
     showModal('movimiento-modal');
@@ -8802,78 +8733,9 @@ const renderInversionesPage = async (containerId) => {
     await renderPlanificacionPage(); 
 };
 
-/* --- FUNCIÓN DE DUPLICADO (Soporte Recurrentes) --- */
-const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
-    if (!originalMovement) return;
 
-    hideModal('movimiento-modal');
-
-    setTimeout(() => {
-        // Abrimos formulario NUEVO indicando si es recurrente o no
-        startMovementForm(null, isRecurrent, originalMovement.tipo);
-
-        setTimeout(() => {
-            // 1. Título
-            const titleEl = document.getElementById('form-movimiento-title');
-            if (titleEl) titleEl.textContent = isRecurrent ? 'Duplicar Recurrente' : 'Duplicar Movimiento';
-
-            // 2. Cantidad e Input Visual
-            const cantidadInput = document.getElementById('movimiento-cantidad');
-            if (cantidadInput) {
-                // Formateamos el número para que la calculadora visual lo entienda
-                const valorFormateado = (Math.abs(originalMovement.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false });
-                cantidadInput.value = valorFormateado;
-                if (typeof updateInputMirror === 'function') updateInputMirror(cantidadInput);
-            }
-
-            // 3. Resto de datos
-            const descInput = document.getElementById('movimiento-descripcion');
-            if (descInput) descInput.value = `${originalMovement.descripcion} (Copia)`;
-
-            const conceptoSelect = document.getElementById('movimiento-concepto');
-            if (conceptoSelect) {
-                conceptoSelect.value = originalMovement.conceptoId;
-                conceptoSelect.dispatchEvent(new Event('change')); 
-            }
-
-            // 4. Si es recurrente, copiamos la frecuencia
-            if (isRecurrent) {
-                const frecuenciaSelect = document.getElementById('recurrent-frequency'); // Ojo al ID
-                if (frecuenciaSelect && originalMovement.frequency) {
-                    frecuenciaSelect.value = originalMovement.frequency;
-                }
-                
-                // Copiar días de la semana si es semanal
-                if (originalMovement.frequency === 'weekly' && originalMovement.weekDays) {
-                    const selectorDiv = document.getElementById('weekly-day-selector');
-                    if (selectorDiv) selectorDiv.classList.remove('hidden');
-                    
-                    originalMovement.weekDays.forEach(day => {
-                        const btn = document.querySelector(`.day-selector-btn[data-day="${day}"]`);
-                        if (btn) btn.classList.add('active');
-                    });
-                }
-            }
-
-            // 5. Cuentas
-            if (originalMovement.tipo === 'traspaso') {
-                const origen = document.getElementById('movimiento-cuenta-origen');
-                const destino = document.getElementById('movimiento-cuenta-destino');
-                if (origen) { origen.value = originalMovement.cuentaOrigenId; origen.dispatchEvent(new Event('change')); }
-                if (destino) { destino.value = originalMovement.cuentaDestinoId; destino.dispatchEvent(new Event('change')); }
-            } else {
-                const cuenta = document.getElementById('movimiento-cuenta');
-                if (cuenta) { cuenta.value = originalMovement.cuentaId; cuenta.dispatchEvent(new Event('change')); }
-            }
-            
-            showToast('Datos copiados. Revisa y guarda.');
-
-        }, 300); 
-    }, 350); 
-};
-
+// ▼▼▼ REEMPLAZA TU FUNCIÓN attachEventListeners CON ESTA VERSIÓN LIMPIA ▼▼▼
 const attachEventListeners = () => {
-	
 	// --- GESTOR GLOBAL DE CLICS (El cerebro de los botones) ---
     document.addEventListener('click', async (e) => {
         
@@ -9273,11 +9135,7 @@ const handleStart = (e) => {
 },
             'edit-movement-from-modal': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; hideModal('generic-modal'); startMovementForm(movementId, false); },
             'edit-movement-from-list': (e) => { const movementId = e.target.closest('[data-id]').dataset.id; startMovementForm(movementId, false); },
-            'edit-recurrente': () => {
-    hideModal('generic-modal');
-    // Usamos actionTarget.dataset.id para obtener el ID correcto
-    startMovementForm(actionTarget.dataset.id, true); 
-},
+            'edit-recurrente': () => { hideModal('generic-modal'); startMovementForm(id, true); },
             'view-account-details': (e) => { const accountId = e.target.closest('[data-id]').dataset.id; showAccountMovementsModal(accountId); },
             'show-concept-drilldown': () => {
                 const conceptId = actionTarget.dataset.conceptId;
@@ -9413,34 +9271,7 @@ const handleStart = (e) => {
             'global-search': () => { showGlobalSearchModal(); hapticFeedback('medium'); },
             'edit-concepto': () => showConceptoEditForm(id), 'cancel-edit-concepto': renderConceptosModalList, 'save-edited-concepto': () => handleSaveEditedConcept(id, btn),
             'edit-cuenta': () => showAccountEditForm(id), 'cancel-edit-cuenta': renderCuentasModalList, 'save-edited-cuenta': () => handleSaveEditedAccount(id, btn),
-            'duplicate-movement': () => {
-        const id = document.getElementById('movimiento-id').value;
-        
-        // 1. Buscamos primero en movimientos normales
-        let movement = db.movimientos.find(m => m.id === id);
-        let isRecurrent = false;
-
-        // 2. Si no está, buscamos en recurrentes (programados)
-        if (!movement && db.recurrentes) { 
-            movement = db.recurrentes.find(m => m.id === id);
-            isRecurrent = true;
-        }
-
-        if (movement) {
-            handleDuplicateMovement(movement, isRecurrent);
-        } else {
-            showToast("Error: No se pudo localizar el movimiento original.", "danger");
-        }
-    },
-
-// Asegúrate también de que esta otra acción use la misma lógica:
-'duplicate-movement-from-modal': () => {
-    const id = select('movimiento-id').value;
-    const movement = db.movimientos.find(m => m.id === id);
-    if (movement) {
-        handleDuplicateMovement(movement);
-    }
-},
+            'duplicate-movement': () => { /* Lógica duplicar */ },
             'save-and-new-movement': () => handleSaveMovement(document.getElementById('form-movimiento'), btn), 'set-movimiento-type': () => setMovimientoFormType(type),
             'recalculate-balances': () => { showConfirmationModal('Se recalcularán todos los saldos. ¿Continuar?', () => auditAndFixAllBalances(btn), 'Confirmar Auditoría'); },
             'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
@@ -10169,217 +10000,291 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
             if (cuenta) cuenta.saldo += newData.cantidad; // Solo opera si la cuenta existe
         }
     }
+    // --- ⭐ FIN DE LA CORRECCIÓN ⭐ ---
+};
+const handleSaveMovement = async (form, btn) => {
+    // 1. Validaciones iniciales
+    clearAllErrors(form.id);
+    if (!validateMovementForm()) {
+        hapticFeedback('error');
+        showToast('Revisa los campos marcados.', 'warning');
+        return false;
+    }
+
+    const saveBtn = select('save-movimiento-btn');
+    const saveNewBtn = select('save-and-new-movimiento-btn');
+    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
+
+    if (saveBtn) setButtonLoading(saveBtn, true);
+    if (saveNewBtn && isSaveAndNew) setButtonLoading(saveNewBtn, true);
+
+    const releaseButtons = () => {
+    // Forzamos a false y restauramos texto manualmente por seguridad
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false);
+        saveBtn.innerHTML = 'Guardar'; 
+        saveBtn.disabled = false;
+    }
+    if (saveNewBtn) {
+        setButtonLoading(saveNewBtn, false);
+        saveNewBtn.innerHTML = '+ Otro';
+        saveNewBtn.disabled = false;
+    }
 };
 
-const handleSaveMovement = async (event) => {
-    // Si viene de un evento (click), evitamos que recargue la página
-    if (event && event.preventDefault) event.preventDefault();
-
-    console.log("🟢 Iniciando proceso de guardado...");
-
-    // 1. Localización segura de elementos
-    const form = document.getElementById('movimiento-form');
-    const saveBtn = document.getElementById('save-movimiento-btn');
-    const saveNewBtn = document.getElementById('save-and-new-movimiento-btn');
-    
-    // Detectar botón activo con seguridad
-    const isSaveAndNew = event && event.target && event.target.id === 'save-and-new-movimiento-btn';
-    const btnActivo = isSaveAndNew ? saveNewBtn : saveBtn;
-
-    // 🔍 SEGURIDAD: Si el formulario no existe, usamos un ID falso para evitar el crash
-    const formId = form ? form.id : 'temp-form-id'; 
-
-    // 2. Validaciones Visuales (Solo si las funciones existen)
-    // Usamos el 'formId' seguro que acabamos de crear
-    if (typeof clearAllErrors === 'function') clearAllErrors(formId);
-    
-    // Si validateMovementForm requiere el form y no existe, saltamos la validación estricta del form
-    // pero validamos los campos manualmente abajo.
-    if (form && typeof validateMovementForm === 'function' && !validateMovementForm()) {
-        showToast('Faltan datos obligatorios', 'warning');
-        return;
-    }
-
-    // Efecto de carga visual
-    if (btnActivo) {
-        // Guardamos texto original por si acaso
-        if (!btnActivo.dataset.originalText) btnActivo.dataset.originalText = btnActivo.innerHTML;
-        btnActivo.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
-        btnActivo.disabled = true;
-    }
-
     try {
-        // 3. Recolección de Datos (Helpers internos a prueba de fallos)
+        // 2. Obtener datos del formulario
         const getVal = (id) => {
-            const el = document.getElementById(id);
-            // Si el elemento no existe, devolvemos cadena vacía para no romper nada
+            const el = select(id);
             return el ? el.value : '';
         };
 
-        // ID del movimiento
-        const id = getVal('movimiento-id') || (typeof generateId === 'function' ? generateId() : Date.now().toString());
-        const mode = getVal('movimiento-mode'); // 'new', 'edit-single', 'edit-recurrent'
+        const mode = getVal('movimiento-mode');
+        const id = getVal('movimiento-id') || generateId();
         
-        // Tipo de movimiento (Gasto/Ingreso/Traspaso)
         const typePill = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active');
         const tipoMovimiento = typePill ? typePill.dataset.type : 'gasto';
-
-        // Cantidad: Limpieza agresiva para evitar NaN
-        let rawCantidad = getVal('movimiento-cantidad');
-        let cantidadValor = 0;
-        if (typeof parseCurrencyString === 'function') {
-            cantidadValor = parseCurrencyString(rawCantidad);
-        } else {
-            // Fallback manual: quitar todo lo que no sea número, punto o coma
-            cantidadValor = parseFloat(rawCantidad.replace(/[^0-9,.-]/g, '').replace(',', '.')) || 0;
-        }
         
-        // Validación crítica manual: Si la cantidad es 0, paramos aquí
-        if (cantidadValor === 0) {
-            throw new Error("La cantidad no puede ser 0.");
-        }
-
-        const cantidadEnCentimos = Math.round(cantidadValor * 100);
-
-        // ¿Es recurrente?
-        const recurrenteCheck = document.getElementById('movimiento-recurrente');
+        const cantidadPositiva = parseCurrencyString(getVal('movimiento-cantidad'));
+        const cantidadEnCentimos = Math.round(cantidadPositiva * 100);
+        
+        const recurrenteCheck = select('movimiento-recurrente');
         const isRecurrent = recurrenteCheck ? recurrenteCheck.checked : false;
 
-        // --- OBJETO BASE ---
+        // Objeto Base
         const baseData = {
-            descripcion: getVal('movimiento-descripcion').trim() || 'Sin descripción',
+            descripcion: getVal('movimiento-descripcion').trim(),
             cantidad: tipoMovimiento === 'gasto' ? -Math.abs(cantidadEnCentimos) : Math.abs(cantidadEnCentimos),
             tipo: tipoMovimiento,
             conceptoId: getVal('movimiento-concepto'),
-            updatedAt: new Date().toISOString()
         };
 
+        // Lógica de Traspasos vs Normal
         if (tipoMovimiento === 'traspaso') {
-            baseData.tipo = 'traspaso'; 
-            baseData.cantidad = Math.abs(cantidadEnCentimos); 
+            baseData.tipo = 'traspaso';
+            baseData.cantidad = Math.abs(cantidadEnCentimos);
             baseData.cuentaOrigenId = getVal('movimiento-cuenta-origen');
             baseData.cuentaDestinoId = getVal('movimiento-cuenta-destino');
-            
-            if (!baseData.cuentaOrigenId || !baseData.cuentaDestinoId) throw new Error("Selecciona ambas cuentas para el traspaso.");
-            if (baseData.cuentaOrigenId === baseData.cuentaDestinoId) throw new Error("Las cuentas de origen y destino deben ser distintas.");
+            baseData.cuentaId = null;
         } else {
+            baseData.tipo = 'movimiento';
             baseData.cuentaId = getVal('movimiento-cuenta');
-            if (!baseData.cuentaId) throw new Error("Debes seleccionar una cuenta.");
+            baseData.cuentaOrigenId = null;
+            baseData.cuentaDestinoId = null;
         }
 
-        // =========================================================
-        // 🔹 CAMINO A: GUARDAR COMO RECURRENTE (REGLA)
-        // =========================================================
+        // --- 3. GUARDADO DE RECURRENTE (Lógica separada) ---
         if (isRecurrent) {
-            console.log("🔄 Guardando como Recurrente...");
             const frequency = getVal('recurrent-frequency') || 'monthly';
             let rawNextDate = getVal('recurrent-next-date');
+            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha');
             
-            // Si no hay fecha próxima, usamos la del movimiento o HOY
-            if (!rawNextDate) rawNextDate = getVal('movimiento-fecha') || new Date().toISOString().split('T')[0];
-
-            // Días de la semana (solo si es semanal)
-            const weekDays = [];
+            let weekDays = [];
             if (frequency === 'weekly') {
-                document.querySelectorAll('.day-selector-btn.active').forEach(b => weekDays.push(parseInt(b.dataset.day)));
+                weekDays = Array.from(document.querySelectorAll('.day-selector-btn.active')).map(b => b.dataset.day);
+                if (weekDays.length === 0) throw new Error("Selecciona al menos un día.");
             }
 
             const recurrentData = {
                 id: id,
                 ...baseData,
-                frequency,
-                nextDate: rawNextDate,
+                frequency: frequency,
+                nextDate: rawNextDate, 
                 endDate: getVal('recurrent-end-date') || null,
-                weekDays,
+                weekDays: weekDays,
                 active: true
             };
 
-            // Guardar en Firestore: colección 'recurrentes'
-            await fbDb.collection('users').doc(currentUser.uid).collection('recurrentes').doc(id).set(recurrentData);
+            await saveDoc('recurrentes', id, recurrentData);
 
-            // LIMPIEZA CRUZADA: Si venía de ser movimiento normal, borrarlo del historial
-            if (mode === 'edit-single') {
-                await fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(id).delete();
-                // Opcional: Revertir saldo aquí si fuera necesario
-            }
+            // Actualizar memoria local
+            const idx = db.recurrentes.findIndex(r => r.id === id);
+            if (idx > -1) db.recurrentes[idx] = recurrentData;
+            else db.recurrentes.push(recurrentData);
+            db.recurrentes.sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
 
             hapticFeedback('success');
-            showToast('Programación recurrente guardada.');
-            hideModal('movimiento-modal'); 
-            return; // FIN EXITO RECURRENTE
+            showToast('Recurrente guardado.');
+            
+            const activePage = document.querySelector('.view--active');
+            if (activePage && activePage.id === PAGE_IDS.PLANIFICAR) renderPlanificacionPage();
+
+        } 
+        // --- 4. GUARDADO DE MOVIMIENTO NORMAL ---
+        else {
+            let oldData = null;
+            if (mode.startsWith('edit')) {
+                const original = db.movimientos.find(m => m.id === id);
+                if (original) oldData = { ...original };
+            }
+
+            // CORRECCIÓN DE FECHA: Forzamos mediodía UTC
+            const rawDate = getVal('movimiento-fecha');
+            const safeDateISO = rawDate ? new Date(rawDate + 'T12:00:00Z').toISOString() : new Date().toISOString();
+
+            const dataToSave = {
+                id: id,
+                fecha: safeDateISO,
+                ...baseData
+            };
+
+            // 4.1. Actualizar Memoria Local (Optimista)
+            if (oldData) {
+                const index = db.movimientos.findIndex(m => m.id === id);
+                if (index > -1) db.movimientos[index] = dataToSave;
+            } else {
+                db.movimientos.unshift(dataToSave);
+            }
+
+            // 4.2. Actualizar Saldos (Optimista)
+            applyOptimisticBalanceUpdate(dataToSave, oldData);
+
+            // 4.3. Feedback Visual en Botón (Mejora UX)
+            if (btn) {
+                btn.classList.remove('btn--loading');
+                btn.classList.add('btn--success-state');
+                btn.innerHTML = `
+                    <div class="btn-content-visible" style="display:flex; align-items:center; gap:8px; justify-content:center;">
+                        <span class="material-icons" style="font-size: 20px;">check_circle</span>
+                        <span>¡Guardado!</span>
+                    </div>`;
+                hapticFeedback('success');
+                // Pequeña espera para ver el éxito
+                await new Promise(r => setTimeout(r, 650));
+            }
+
+            // 4.4. Batch Write a Firebase (Persistencia)
+            const batch = fbDb.batch();
+            const userRef = fbDb.collection('users').doc(currentUser.uid);
+
+            // Revertir saldo viejo
+            if (oldData) {
+                if (oldData.tipo === 'traspaso') {
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldData.cantidad) });
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
+                } else {
+                    batch.update(userRef.collection('cuentas').doc(oldData.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldData.cantidad) });
+                }
+            }
+
+            // Guardar nuevo
+            batch.set(userRef.collection('movimientos').doc(id), dataToSave);
+
+            // Aplicar saldo nuevo
+            if (dataToSave.tipo === 'traspaso') {
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataToSave.cantidad) });
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
+            } else {
+                batch.update(userRef.collection('cuentas').doc(dataToSave.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataToSave.cantidad) });
+            }
+            
+            // Actualizar AppStore
+			if (oldData) {
+				AppStore.update(dataToSave);
+			} else {
+				AppStore.add(dataToSave);
+			}
+            
+            await batch.commit();
+            
+            // 4.5. Efecto Confeti (Solo ingresos)
+			if (dataToSave.cantidad > 0 && dataToSave.tipo !== 'traspaso') {
+				confetti({
+    				particleCount: 100,
+    				spread: 70,
+    				origin: { y: 0.7 },
+    				colors: ['#39FF14', '#00B34D', '#FFD60A'],
+    			    disableForReducedMotion: true
+			    });
+		    }
+
+            // 4.6. NAVEGACIÓN Y RESALTADO (Nuevo Flujo)
+            if (!isSaveAndNew) {
+                hideModal('movimiento-modal');
+                // Llamamos a la función mágica para ir al diario y resaltar
+                navigateToAndHighlight(id); 
+                
+                // Restaurar botón después
+                setTimeout(() => {
+                    if(btn) {
+                        btn.classList.remove('btn--success-state');
+                        btn.innerHTML = 'Guardar';
+                        btn.removeAttribute('disabled');
+                    }
+                }, 500);
+            } else {
+                startMovementForm();
+                // Restaurar botón inmediatamente
+                if(btn) {
+                    btn.classList.remove('btn--success-state');
+                    btn.innerHTML = '+ Otro';
+                    btn.removeAttribute('disabled');
+                }
+            }
+            
+            // Refrescar UI global
+            setTimeout(() => updateLocalDataAndRefreshUI(), 50);
         }
 
-        // =========================================================
-        // 🔹 CAMINO B: GUARDAR COMO MOVIMIENTO NORMAL
-        // =========================================================
-        console.log("💾 Guardando movimiento normal...");
-        
-        const fechaInput = getVal('movimiento-fecha');
-        const now = new Date();
-        // Si la fecha es hoy, ponemos la hora actual. Si no, mediodía para evitar cambios de zona horaria.
-        const fechaFinal = fechaInput ? 
-            (fechaInput === now.toISOString().split('T')[0] ? now.toISOString() : `${fechaInput}T12:00:00.000Z`) 
-            : now.toISOString();
-
-        const dataToSave = {
-            id: id,
-            ...baseData,
-            fecha: fechaFinal
-        };
-
-        const batch = fbDb.batch();
-        const userRef = fbDb.collection('users').doc(currentUser.uid);
-
-        // 1. Limpieza cruzada: Si venía de ser recurrente, borrar la regla
-        if (mode === 'edit-recurrent') {
-            batch.delete(userRef.collection('recurrentes').doc(id));
+    } catch (error) { // <--- AQUÍ ESTABA EL PROBLEMA (Faltaba la llave de cierre arriba)
+        console.error("Error al guardar:", error);
+        showToast(error.message || "Error al guardar.", "danger");
+        // Restaurar botón en caso de error
+        if(btn) {
+             btn.classList.remove('btn--success-state');
+             btn.innerHTML = 'Guardar';
         }
-
-        // 2. Guardar el movimiento en historial
-        batch.set(userRef.collection('movimientos').doc(id), dataToSave);
-
-        // 3. Actualizar saldo de cuentas
-        if (tipoMovimiento === 'traspaso') {
-            batch.update(userRef.collection('cuentas').doc(baseData.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-baseData.cantidad) });
-            batch.update(userRef.collection('cuentas').doc(baseData.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(baseData.cantidad) });
-        } else {
-            batch.update(userRef.collection('cuentas').doc(baseData.cuentaId), { saldo: firebase.firestore.FieldValue.increment(baseData.cantidad) });
-        }
-
-        await batch.commit();
-
-        // Actualizar UI local (AppStore)
-        if (typeof AppStore !== 'undefined' && AppStore.movimientos) {
-            const existingIndex = AppStore.movimientos.findIndex(m => m.id === id);
-            if (existingIndex >= 0) AppStore.movimientos[existingIndex] = dataToSave;
-            else AppStore.movimientos.push(dataToSave);
-        }
-
-        hapticFeedback('success');
-        showToast('Movimiento guardado');
-        
-        if (isSaveAndNew) {
-            if (typeof startMovementForm === 'function') startMovementForm();
-        } else {
-            hideModal('movimiento-modal');
-            if (typeof navigateToAndHighlight === 'function') navigateToAndHighlight(id);
-        }
-        
-        // Refrescar totales y lista
-        if (typeof updateLocalDataAndRefreshUI === 'function') setTimeout(updateLocalDataAndRefreshUI, 100);
-
-    } catch (error) {
-        console.error("❌ Error controlado al guardar:", error);
-        hapticFeedback('error');
-        showToast(error.message || "Error al guardar", "danger");
     } finally {
-        // Restaurar botón
-        if (btnActivo) {
-            btnActivo.innerHTML = btnActivo.dataset.originalText || (isSaveAndNew ? 'Guardar y Nuevo' : 'Guardar');
-            btnActivo.disabled = false;
-        }
+    // RESTAURAR BOTÓN SIEMPRE
+    const saveBtn = document.getElementById('btn-save-transaction'); 
+    if (saveBtn) {
+        setButtonLoading(saveBtn, false, 'Guardar'); // O el texto que tuviera antes
+        saveBtn.disabled = false;
     }
+}
 };
+
+/**
+
+Prepara el formulario para duplicar un movimiento existente.
+
+@param {object} movementToDuplicate - El objeto del movimiento que se va a copiar.
+*/
+const handleDuplicateMovement = (movementToDuplicate) => {
+if (!movementToDuplicate) return;
+
+hapticFeedback('medium');
+
+// 1. Abrimos el formulario de edición con los datos del movimiento original.
+// Esto rellena todos los campos por nosotros (cantidad, descripción, etc.).
+startMovementForm(movementToDuplicate.id, false);
+
+// 2. Usamos un pequeño retardo para asegurarnos de que el formulario ya está visible
+// antes de modificarlo para que actúe como "Nuevo" en lugar de "Editar".
+setTimeout(() => {
+ select('form-movimiento-title').textContent = 'Duplicar Movimiento';	
+// 3. Modificamos el estado del formulario para que sepa que vamos a crear
+// un movimiento NUEVO, no a actualizar el antiguo.
+select('movimiento-mode').value = 'new';
+select('movimiento-id').value = ''; // Borramos el ID antiguo, ¡muy importante!
+select('form-movimiento-title').textContent = 'Duplicar Movimiento';
+
+
+// 4. Ocultamos los botones que no tienen sentido aquí (borrar y duplicar de nuevo).
+ select('delete-movimiento-btn').classList.add('hidden');
+ select('duplicate-movimiento-btn').classList.add('hidden');
+ 
+ // 5. Ponemos la fecha de hoy por defecto, que es lo más común al duplicar.
+ const today = new Date();
+ const fechaInput = select('movimiento-fecha');
+ fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+ updateDateDisplay(fechaInput); // Actualizamos el texto "Hoy"
+
+ showToast('Datos duplicados. Ajusta y guarda.', 'info');
+
+}, 50); // 50 milisegundos es suficiente.
+};
+
 
 const handleAddConcept = async (btn) => { 
     const nombreInput = select('new-concepto-nombre');
@@ -11349,75 +11254,28 @@ const validateField = (id, silent = false) => {
     return isValid;
 };
 
-/* --- VERSIÓN CORREGIDA DE VALIDACIÓN --- */
 const validateMovementForm = () => {
-    // 1. Obtener elementos con seguridad
-    const cantidadInput = document.getElementById('movimiento-cantidad');
-    const conceptoSelect = document.getElementById('movimiento-concepto');
-    const cuentaSelect = document.getElementById('movimiento-cuenta');
-    
-    // Para traspasos
-    const cuentaOrigen = document.getElementById('movimiento-cuenta-origen');
-    const cuentaDestino = document.getElementById('movimiento-cuenta-destino');
-    
-    // Tipo de movimiento (leemos del botón activo o del input oculto)
-    const typeSelector = document.querySelector('.type-selector .type-btn.active');
-    const tipo = typeSelector ? typeSelector.dataset.type : 'gasto';
-
     let isValid = true;
-    let errors = [];
+    
+    // Obtenemos el tipo de formulario a partir del botón activo
+    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
 
-    // 2. Validar Cantidad
-    if (!cantidadInput || !cantidadInput.value || parseFloat(cantidadInput.value) <= 0) {
-        isValid = false;
-        errors.push("Introduce una cantidad válida.");
-        if(cantidadInput) cantidadInput.classList.add('input-error');
-    } else {
-        if(cantidadInput) cantidadInput.classList.remove('input-error');
+    // Validamos los campos comunes
+    if (!validateField('movimiento-cantidad')) isValid = false;
+    if (!validateField('movimiento-fecha')) isValid = false;
+
+    // Validamos los campos específicos según el tipo
+    if (selectedType === 'traspaso') {
+        if (!validateField('movimiento-cuenta-origen')) isValid = false;
+        if (!validateField('movimiento-cuenta-destino')) isValid = false;
+    } else { // para 'gasto' e 'ingreso'
+        if (!validateField('movimiento-descripcion')) isValid = false;
+        if (!validateField('movimiento-concepto')) isValid = false;
+        if (!validateField('movimiento-cuenta')) isValid = false;
     }
-
-    // 3. Validar Concepto (Solo si no es traspaso)
-    if (tipo !== 'traspaso') {
-        if (!conceptoSelect || !conceptoSelect.value) {
-            isValid = false;
-            errors.push("Selecciona una categoría.");
-            // Intentamos marcar el selector visual si existe
-            const trigger = document.getElementById('concepto-trigger');
-            if (trigger) trigger.style.borderColor = 'var(--c-error)';
-        } else {
-             const trigger = document.getElementById('concepto-trigger');
-             if (trigger) trigger.style.borderColor = '';
-        }
+    if (!isValid) { // <-- AÑADE ESTE BLOQUE IF AL FINAL
+        hapticFeedback('error'); 
     }
-
-    // 4. Validar Cuentas
-    if (tipo === 'traspaso') {
-        if (!cuentaOrigen || !cuentaOrigen.value) {
-            isValid = false;
-            errors.push("Falta cuenta origen.");
-        }
-        if (!cuentaDestino || !cuentaDestino.value) {
-            isValid = false;
-            errors.push("Falta cuenta destino.");
-        }
-        if (cuentaOrigen && cuentaDestino && cuentaOrigen.value === cuentaDestino.value) {
-            isValid = false;
-            errors.push("Las cuentas deben ser diferentes.");
-        }
-    } else {
-        // Ingreso o Gasto
-        if (!cuentaSelect || !cuentaSelect.value) {
-            isValid = false;
-            errors.push("Selecciona una cuenta.");
-        }
-    }
-
-    // 5. Mostrar errores si los hay
-    if (!isValid) {
-        showToast(errors[0], 'error');
-        hapticFeedback('error');
-    }
-
     return isValid;
 };
  
@@ -12116,153 +11974,3 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("✅ Botón de borrar reparado y vinculado.");
     }
 });
-
-// --- PARCHE DE SEGURIDAD PARA MODALES ---
-// Esto mueve el modal de confirmación al final del <body> para que nada lo tape
-document.addEventListener('DOMContentLoaded', () => {
-    const confirmModal = document.getElementById('confirmation-modal');
-    if (confirmModal) {
-        document.body.appendChild(confirmModal);
-        console.log("🛡️ Modal de confirmación movido al body para evitar bloqueos.");
-    }
-});
-
-
-/* ================================================================
-   SISTEMA DE NAVEGACIÓN INTELIGENTE (Versión Acordeones)
-   Sustituye las funciones anteriores por estas
-   ================================================================ */
-
-// Función auxiliar: Busca el acordeón, lo abre y viaja hasta él
-function openAccordionWhenReady(targetId, containerId) {
-    let attempts = 0;
-    const maxAttempts = 20; // Intentará durante 2 segundos
-    
-    const interval = setInterval(() => {
-        attempts++;
-        
-        // 1. Buscamos el elemento objetivo
-        // Puede ser el <details> directo (targetId) o un div dentro de él (containerId)
-        let targetElement = null;
-        if (targetId) targetElement = document.getElementById(targetId);
-        else if (containerId) {
-            const inner = document.getElementById(containerId);
-            if (inner) targetElement = inner.closest('details');
-        }
-
-        // 2. Si lo encuentra, ¡MAGIA!
-        if (targetElement) {
-            clearInterval(interval);
-            
-            // A. Abrir el acordeón si está cerrado
-            if (!targetElement.open) {
-                targetElement.open = true;
-                
-                // Disparamos evento 'toggle' manualmente por si hay gráficas que cargan al abrir
-                targetElement.dispatchEvent(new Event('toggle'));
-            }
-
-            // B. Viajar hasta él (Scroll suave)
-            setTimeout(() => {
-                targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                
-                // C. Efecto visual (Flash) para que sepas qué estás mirando
-                targetElement.style.transition = 'all 0.5s ease';
-                targetElement.style.boxShadow = '0 0 0 2px var(--c-primary)';
-                setTimeout(() => targetElement.style.boxShadow = 'none', 1000);
-                
-                console.log("✅ Sección abierta y enfocada.");
-            }, 100); // Pequeña pausa para que el navegador renderice la apertura
-        } 
-        
-        // 3. Si se agota el tiempo, paramos
-        if (attempts >= maxAttempts) clearInterval(interval);
-        
-    }, 100); // Revisa cada 100ms
-}
-
-// --- FUNCIÓN 1: IR A PATRIMONIO ---
-window.goToPatrimonioChart = function() {
-    console.log("🚀 Viajando al gráfico de Patrimonio...");
-    if (typeof hapticFeedback === 'function') hapticFeedback('medium');
-
-    // 1. Navegar a la pestaña 'Planificar' (Análisis)
-    const tabBtn = document.querySelector('button[data-page="planificar-page"]');
-    if (tabBtn) tabBtn.click();
-
-    // 2. Buscar el contenedor del gráfico de patrimonio y abrir su acordeón padre
-    // En tu código, el gráfico de patrimonio está dentro de id="patrimonio-overview-container"
-    openAccordionWhenReady(null, 'patrimonio-overview-container');
-};
-
-// --- FUNCIÓN 2: IR A INVERSIONES ---
-window.goToInversionesChart = function() {
-    console.log("🚀 Viajando al gráfico de Inversiones...");
-    if (typeof hapticFeedback === 'function') hapticFeedback('medium');
-
-    // 1. Navegar a la pestaña 'Planificar'
-    const tabBtn = document.querySelector('button[data-page="planificar-page"]');
-    if (tabBtn) tabBtn.click();
-
-    // 2. Buscar el acordeón de portafolio directamente
-    // En tu código, este acordeón tiene id="acordeon-portafolio"
-    openAccordionWhenReady('acordeon-portafolio', null);
-};
-
-// --- FUNCIÓN 3: IR A FLUJO DE CAJA (NUEVA) ---
-window.goToFlujoCajaChart = function() {
-    console.log("🚀 Viajando al gráfico de Flujo de Caja...");
-    // 1. Vibración para confirmar el toque
-    if (typeof hapticFeedback === 'function') hapticFeedback('medium');
-    
-    // 2. Navegar a la pestaña 'Planificar' (que es donde está el Análisis)
-    const tabBtn = document.querySelector('button[data-page="planificar-page"]');
-    if (tabBtn) tabBtn.click();
-
-    // 3. Buscar el acordeón de "Flujo de Caja" y abrirlo automáticamente
-    // 'acordeon-flujo_caja' es el ID que tiene esa sección en la página de Análisis
-    openAccordionWhenReady('acordeon-flujo_caja', null);
-};
-
-/* ================================================================
-   FUNCIÓN DE ANIMACIÓN (Pegar al final de main.js)
-   ================================================================ */
-function animateTransfer(valor) {
-    // 1. Origen (Pantalla Calculadora) y Destino (Input Cantidad)
-    const source = document.getElementById('calculator-display') || document.querySelector('.calc-current');
-    const target = document.getElementById('movimiento-cantidad');
-    
-    if (!source || !target) return;
-
-    // 2. Crear el clon que vuela
-    const flyer = document.createElement('div');
-    flyer.textContent = valor;
-    flyer.className = 'flying-number'; // Importante: Clase definida en CSS
-    document.body.appendChild(flyer);
-
-    // 3. Calcular posiciones
-    const sRect = source.getBoundingClientRect();
-    const tRect = target.getBoundingClientRect();
-    
-    // Posición inicial (Centro de la pantalla negra)
-    flyer.style.top = (sRect.top + sRect.height/2 - 20) + 'px';
-    flyer.style.left = (sRect.left + sRect.width/2 - 40) + 'px';
-
-    // 4. Animar
-    const anim = flyer.animate([
-        { transform: 'translate(0,0) scale(1)', opacity: 1 },
-        { transform: `translate(${tRect.left - sRect.left}px, ${tRect.top - sRect.top}px) scale(0.5)`, opacity: 0.5 }
-    ], {
-        duration: 500,
-        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)'
-    });
-
-    // 5. Limpieza al terminar
-    anim.onfinish = () => {
-        flyer.remove();
-        // Flash verde en el destino
-        target.style.transition = 'background 0.3s';
-        target.style.backgroundColor = 'rgba(45, 204, 205, 0.3)';
-        setTimeout(() => target.style.backgroundColor = '', 300);
-    };
-}
