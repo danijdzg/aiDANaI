@@ -4744,7 +4744,15 @@ async function calculateHistoricalIrrForGroup(accountIds) {
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
-
+	// --- VARIABLES DE ESTILO UNIFICADAS ---
+    const gap = '5px'; // Un poco más de espacio para el móvil
+    // Título blanco puro para máximo contraste en OLED
+    const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 1;'; 
+    // Tamaño unificado para importes secundarios (Ingresos, Gastos, Neto...)
+    // 1.3rem es grande y legible en el OnePlus Nord 4
+    const amountStyle = 'font-size: 1.3rem; font-weight: 800; line-height: 1.2;'; 
+    
+    const cardStyle = `padding: 12px 16px; margin-bottom: ${gap}; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255,255,255,0.03);`;
     container.innerHTML = `
         <div style="padding: var(--sp-3) var(--sp-2) var(--sp-4);">
             
