@@ -4879,7 +4879,6 @@ const renderPanelPage = async () => {
             </div>
 
         </div>`;
-};
     
     populateAllDropdowns();
     await Promise.all([loadPresupuestos(), loadInversiones()]);
