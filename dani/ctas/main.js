@@ -4743,37 +4743,27 @@ async function calculateHistoricalIrrForGroup(accountIds) {
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
-// 1. Ajuste al contenedor principal para quitar aire
-    container.classList.add('dashboard-compact');
-
-    // 2. Estilos inline dinámicos para fuentes (Adaptación al ancho del móvil)
-    // clamp(minimo, ideal, maximo) -> Esto hace que el número nunca sea gigante ni ilegible
-    const amountStyle = `
-        font-size: clamp(0.9rem, 5vw, 1.25rem); 
-        font-weight: 800; 
-        line-height: 1.1;
-        letter-spacing: -0.5px;
-    `;
+// --- AQUÍ ESTÁ LA SOLUCIÓN AL ERROR 'gap is not defined' ---
+    // Definimos las variables de estilo ANTES de usarlas
+    const gap = '5px'; 
+    const bigKpiStyle = 'font-size: 1.5rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible;';
+    const titleStyle = 'font-size: 0.6rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    const labelStyle = `
-        font-size: 0.6rem; 
-        font-weight: 700; 
-        text-transform: uppercase; 
-        color: var(--c-on-surface-secondary); 
-        margin-bottom: 2px;
-    `;
+    // Estilo base de las tarjetas
+    const cardStyle = `padding: 8px 12px; margin-bottom: ${gap}; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);`;
 
-    // 3. HTML Estructura Ultra-Compacta
     container.innerHTML = `
-        <div style="height: 100%; display: flex; flex-direction: column; gap: 6px;">
+    <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
+        
+        <div class="hero-card fade-in-up" onclick="goToFlujoCajaChart()" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
             
-            <div class="card card-compact fade-in-up" onclick="goToFlujoCajaChart()" style="cursor: pointer;">
-                
-                <div class="section-title-compact">
-                    <span>RESUMEN</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
+                    RESUMEN
+                </div>
+                    
                     <div class="report-filters" style="margin: 0;">
-                        <select id="filter-periodo" class="form-select report-period-selector" 
-                                style="font-size: 0.7rem; padding: 2px 8px; height: 24px; background: rgba(255,255,255,0.05); border: none;">
+                        <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 4px 24px 4px 10px; height: auto; width: auto; background-color: rgba(255,255,255,0.05); border: 1px solid var(--c-outline); border-radius: 8px; color: var(--c-on-surface); cursor: pointer;">
                             <option value="mes-actual">Este Mes</option>
                             <option value="año-actual">Este Año</option>
                             <option value="custom">Personalizado</option>
@@ -4781,104 +4771,136 @@ const renderPanelPage = async () => {
                     </div>
                 </div>
 
-                <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 8px;">
-                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size:0.8rem; padding:4px;">
-                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size:0.8rem; padding:4px;">
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; row-gap: 12px;">
-                    
-                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos">
-                        <div style="${labelStyle}">Ingresos</div>
-                        <div id="kpi-ingresos-value" class="skeleton nowrap-value" data-current-value="0" 
-                             style="${amountStyle}; color: var(--c-success);">+0,00 €</div>
+                <div id="custom-date-filters" class="form-grid hidden" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Desde</label>
+                        <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
                     </div>
-
-                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="text-align: right;">
-                        <div style="${labelStyle}">Gastos</div>
-                        <div id="kpi-gastos-value" class="skeleton nowrap-value" data-current-value="0" 
-                             style="${amountStyle}; color: var(--c-danger);">-0,00 €</div>
-                    </div>
-
-                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="saldoNeto">
-                        <div style="${labelStyle}">Neto (P&L)</div>
-                        <div id="kpi-saldo-neto-value" class="skeleton nowrap-value" data-current-value="0" 
-                             style="${amountStyle}">0,00 €</div>
-                    </div>
-
-                    <div style="text-align: right;">
-                        <div style="${labelStyle}">Tasa Ahorro</div>
-                        <div id="kpi-tasa-ahorro-value" class="skeleton nowrap-value" data-current-value="0" 
-                             style="${amountStyle}">0%</div>
+                    <div style="display:flex; flex-direction:column;">
+                        <label style="font-size:0.6rem; color:var(--c-on-surface-secondary); margin-bottom:4px;">Hasta</label>
+                        <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 6px; background: var(--c-surface); border: 1px solid var(--c-outline); height:auto;">
                     </div>
                 </div>
-            </div>
-
-            <div class="card card-compact fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer;">
-                <div class="section-title-compact"><span>ESTADO FINANCIERO</span></div>
                 
-                <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: end;">
-                    
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="ingresos" style="background: rgba(0, 179, 77, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(0, 179, 77, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-success); text-transform: uppercase; margin-bottom: 2px;">
+                            INGRESOS <button class="help-btn" data-action="show-kpi-help" data-kpi="ingresos">?</button>
+                        </div>
+                        <div id="kpi-ingresos-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-success);">+0,00 €</div>
+                    </div>
+
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="gastos" style="background: rgba(255, 59, 48, 0.1); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 59, 48, 0.2);">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-danger); text-transform: uppercase; margin-bottom: 2px;">
+                            GASTOS <button class="help-btn" data-action="show-kpi-help" data-kpi="gastos">?</button>
+                        </div>
+                        <div id="kpi-gastos-value" class="text-negative skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 800; color: var(--c-danger);">-0,00 €</div>
+                    </div>
+                </div>
+
+                <div style="height: 1px; background-color: var(--c-outline); margin: 15px 0; opacity: 0.5;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div class="clickable-kpi" data-action="show-kpi-drilldown" data-type="saldoNeto">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            NETO <button class="help-btn" data-action="show-kpi-help" data-kpi="neto">?</button>
+                        </div>
+                        <div id="kpi-saldo-neto-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0,00 €</div>
+                    </div>
+
                     <div>
-                        <div style="${labelStyle}">Patrimonio</div>
-                        <div id="kpi-patrimonio-neto-value" class="skeleton nowrap-value" data-current-value="0" 
-                             style="font-size: clamp(1rem, 5.5vw, 1.4rem); font-weight: 800; color: #fff;">0 €</div>
-                    </div>
-
-                    <div style="text-align: right;">
-                        <div style="${labelStyle}">Liquidez</div>
-                        <div id="kpi-liquidez-value" class="skeleton nowrap-value" data-current-value="0" 
-                             style="font-size: 0.9rem; font-weight: 700; color: var(--c-info);">0 €</div>
-                    </div>
-
-                    <div style="text-align: right;">
-                        <div style="${labelStyle}">Inversión</div>
-                        <div id="kpi-inversion-total" class="skeleton nowrap-value" data-current-value="0" 
-                             style="font-size: 0.9rem; font-weight: 700; color: var(--c-warning);">0 €</div>
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase; margin-bottom: 2px;">
+                            AHORRO <button class="help-btn" data-action="show-kpi-help" data-kpi="tasa_ahorro">?</button>
+                        </div>
+                        <div id="kpi-tasa-ahorro-value" class="skeleton" data-current-value="0" style="font-size: 1.3rem; font-weight: 800;">0.00%</div>
                     </div>
                 </div>
             </div>
 
-            <div class="card card-compact fade-in-up">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+<div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="cursor: pointer; padding: 25px 20px; text-align: center; margin-bottom: var(--sp-3); border-color: var(--c-primary); box-shadow: 0 8px 32px rgba(0, 179, 77, 0.15);">
+    <div style="margin-bottom: 20px;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--c-on-surface-secondary); letter-spacing: 2px; margin-bottom: 8px;">
+            PATRIMONIO NETO
+            <button class="help-btn" onclick="event.stopPropagation(); showKPIHelp('neto')">?</button>
+        </div>
+        <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" data-current-value="0" style="font-size: 2.8rem; line-height: 1; text-shadow: 0 0 20px rgba(0, 179, 77, 0.3);">0,00 €</div>
+    </div>
+
+                <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
                     
-                    <div data-widget-type="emergency-fund" id="emergency-fund-widget" style="display: flex; align-items: center; gap: 8px;">
-                        <div style="background: rgba(255, 59, 48, 0.15); padding: 6px; border-radius: 8px;">
-                             <span class="material-icons" style="font-size: 18px; color: var(--c-danger);">umbrella</span>
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">account_balance_wallet</span> Liquidez
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez">?</button>
                         </div>
-                        <div>
-                            <div style="${labelStyle}">Cobertura</div>
-                            <div id="health-runway-val" class="skeleton nowrap-value" style="font-size: 0.95rem; font-weight: 700;">0 Meses</div>
-                        </div>
+                        <div id="kpi-liquidez-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
                     </div>
 
-                    <div data-widget-type="fi-progress" id="fi-progress-widget" style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
-                        <div style="text-align: right;">
-                            <div style="${labelStyle}">Libertad Fin.</div>
-                            <div id="health-fi-val" class="skeleton nowrap-value" style="font-size: 0.95rem; font-weight: 700; color: var(--c-success);">0%</div>
+                    <div style="height: 30px; background-color: var(--c-outline);"></div>
+
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
                         </div>
-                        <div style="background: rgba(48, 209, 88, 0.15); padding: 6px; border-radius: 8px;">
-                             <span class="material-icons" style="font-size: 18px; color: var(--c-success);">flight_takeoff</span>
-                        </div>
+                        <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
                     </div>
 
                 </div>
             </div>
 
-            <div class="card card-compact fade-in-up" id="new-card-market-updates" onclick="navigateTo('planificar-page')" style="cursor: pointer; background: linear-gradient(135deg, rgba(30,30,30,0.9), rgba(10,10,10,0.95)) !important;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display: flex; flex-direction: column;">
-                        <span style="${labelStyle}">Rentabilidad Total</span>
-                        <div id="kpi-inversion-pnl" class="skeleton nowrap-value" style="font-size: 1rem; font-weight: 700;">0 €</div>
+           <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="cursor: pointer; padding: 20px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-info);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px;">
+                    <div style="text-align: left;">
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">Capital Invertido</div>
+                        <div id="new-card-capital" style="font-weight:700;">0,00 €</div>
+                    </div>
+                    <div style="text-align: center; font-weight:800; color:var(--c-on-surface-secondary);">
+                        +/-
                     </div>
                     <div style="text-align: right;">
-                        <span style="${labelStyle}">Retorno</span>
-                        <div id="kpi-inversion-pct" class="skeleton nowrap-value" style="font-size: 1rem; font-weight: 700;">0%</div>
+                        <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); margin-bottom:4px;">
+                            P&L <button class="help-btn" data-action="show-kpi-help" data-kpi="pnl" style="width:14px; height:14px; font-size:9px;">?</button>
+                        </div>
+                        <div id="new-card-pnl" style="font-weight:700;">0,00 €</div>
                     </div>
+                </div>
+
+                <div style="margin-top: 15px; text-align: center;">
+                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--c-on-surface-tertiary); margin-bottom: 5px;">
+                        = Valor Real de Mercado <button class="help-btn" data-action="show-kpi-help" data-kpi="posicion_real">?</button>
+                    </div>
+                    <div id="new-card-market-value" class="skeleton" style="font-size: 1.8rem; font-weight: 800; line-height: 1;">0,00 €</div>
                 </div>
             </div>
 
-        </div>`;
+            <div class="hero-card fade-in-up" style="padding: 15px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-outline);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="text-align: center;">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #FFD60A; font-size: 18px;">shield</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">COBERTURA</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="cobertura" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-runway-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #FFD60A;">0.0 Meses</div>
+                    </div>
+                    <div style="text-align: center; border-left: 1px solid var(--c-outline);">
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                            <span class="material-icons" style="color: #39FF14; font-size: 18px;">flag</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">LIBERTAD</span>
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="libertad" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                        </div>
+                        <div id="health-fi-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #39FF14;">0.00%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="concepto-totals-list" style="display:none;"></div>
+        <canvas id="conceptos-chart" style="display:none;"></canvas>
+        <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
+    `;
     
     populateAllDropdowns();
     await Promise.all([loadPresupuestos(), loadInversiones()]);
