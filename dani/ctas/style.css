@@ -882,66 +882,76 @@ border-top: 1px solid rgba(255, 255, 255, 0.15); /* Borde 'hairline' nítido */ 
 .chart-container { position: relative; height: 220px; width: 100%; margin-bottom: var(--sp-4); }
 
 /* ========================================= */
-/* === TARJETAS AMOLED PRO (NÚMEROS XXL) === */
+/* === TARJETAS AMOLED COMPACTAS (OnePlus Nord 4) === */
 /* ========================================= */
 
 .kpi-grid {
-    /* Aseguramos que la cuadrícula tenga espacio pero no demasiado */
     display: grid;
-    grid-template-columns: 1fr 1fr; /* 2 columnas */
-    gap: 8px; /* Espacio entre tarjetas */
-    margin-bottom: 5px;
+    grid-template-columns: 1fr 1fr; /* 2 columnas iguales */
+    gap: 6px; /* MENOS espacio entre tarjetas (antes 8px) */
+    margin-bottom: 4px;
 }
 
 .kpi-item {
-    /* 1. FONDO NEGRO PURO (AMOLED) */
-    /* El !important asegura que nada lo pise */
-    background: #000000 !important; 
-    
-    /* 2. Borde sutil gris oscuro alrededor */
+    background: #000000 !important;
     border: 1px solid #1a1a1a !important;
+    border-radius: 12px; /* Bordes un poco menos redondos para ganar espacio interno */
     
-    /* 3. Estructura interna */
-    border-radius: 16px; /* Bordes redondeados modernos */
-    padding: 10px 4px;   /* Quitamos relleno lateral para que quepa el número */
+    /* CAMBIO CLAVE: Altura reducida */
+    padding: 6px 2px; 
+    min-height: 48px; /* Antes 100px. Recuperamos 28px por fila */
     
     display: flex;
-    flex-direction: column; /* Uno encima de otro */
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
-    
-    /* Altura fija para uniformidad */
-    min-height: 100px; 
     position: relative;
-    overflow: visible; /* Permitimos que el brillo salga un poco */
 }
 
-/* --- ESTILO DE LOS TEXTOS DENTRO DE LA TARJETA --- */
-
-/* Título pequeño (Ej: "Gastos") */
+/* Títulos (Gastos, Ingresos...) */
 .kpi-item .kpi-label, 
 .kpi-item h3 { 
-    font-size: 11px !important; /* Texto pequeño y elegante */
-    text-transform: uppercase;  /* Mayúsculas estilo financiero */
-    letter-spacing: 1px;        /* Letras separadas para leer mejor */
-    color: #888888;             /* Gris suave para no distraer */
-    margin-bottom: 4px;         /* Separación mínima con el número */
-    font-weight: 500;
+    font-size: 0.65rem !important; /* Letra más pequeña y fina (aprox 10px) */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888888;
+    margin-bottom: 2px; /* Pegadito al número */
+    font-weight: 600;
 }
 
-/* EL NÚMERO GIGANTE (Ej: "1.250€") */
+/* EL NÚMERO (Valor) */
 .kpi-item .kpi-value, 
 .kpi-item span {
-    font-size: 24px !important; /* ¡AQUÍ ESTÁ EL TAMAÑO! */
-    font-weight: 800 !important; /* Letra muy gorda */
-    line-height: 1.1;            /* Interlineado apretado */
-    color: #ffffff;              /* Blanco puro para contraste máximo */
-    letter-spacing: -0.5px;      /* Números juntitos estilo reloj digital */
-    width: 100%;                 /* Ocupa todo el ancho */
-    white-space: nowrap;         /* Evita que el número salte de línea */
-    overflow: hidden;            /* Si es muy largo, se corta (seguridad) */
-    text-overflow: ellipsis;     /* Pone "..." si no cabe */
+    /* MAGIA: clamp(mínimo, ideal, máximo) 
+       Esto hace que el número se adapte al ancho del móvil sin cortarse */
+    font-size: clamp(1.1rem, 5vw, 1.5rem) !important; 
+    
+    font-weight: 800 !important;
+    line-height: 1; /* Altura de línea compacta */
+    color: #ffffff;
+    letter-spacing: -0.5px; /* Números juntos */
+    width: 100%;
+    
+    /* Seguridad para que no rompa la maqueta */
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+
+/* Ajustes de Colores (Mantenemos tu código de neón, pero ajustado) */
+.kpi-item:nth-child(1) { border-top: 3px solid #00E676 !important; } /* Borde más fino */
+.kpi-item:nth-child(2) { border-top: 3px solid #00B0FF !important; }
+.kpi-item:nth-child(3) { border-top: 3px solid #FFD600 !important; }
+.kpi-item:nth-child(4) { border-top: 3px solid #D500F9 !important; }
+
+/* REGLA ESPECIAL PARA PANTALLAS ALTAS (Como tu Nord 4) */
+/* Si la pantalla es alta, estiramos un pelín para que no quede ridículo */
+@media (min-height: 800px) {
+    .kpi-item {
+        min-height: 50px;
+        padding: 8px 4px;
+    }
 }
 
 /* ========================================= */
@@ -7013,3 +7023,43 @@ html, body {
 .text-negative, .text-debit, .text-danger { color: var(--color-gasto) !important; }
 .text-info { color: var(--color-traspaso) !important; }
 🚀 Paso 2: Unificar la Lógic
+
+/* --- INICIO: MODIFICACIÓN COMPACTA (OnePlus Nord 4) --- */
+
+/* 1. Forzar que los textos de dinero NUNCA salten de línea */
+.nowrap-value {
+    white-space: nowrap !important;       /* Prohibido saltar de línea */
+    overflow: hidden !important;          /* Si sobra, se recorta (seguridad) */
+    text-overflow: ellipsis !important;   /* Pone "..." si no cabe (aunque lo evitaremos) */
+    font-variant-numeric: tabular-nums;   /* Números alineados */
+}
+
+/* 2. Clase para reducir padding global en el panel */
+.dashboard-compact {
+    padding-top: 5px !important;    /* Menos espacio arriba */
+    padding-bottom: 80px !important; /* Espacio justo para el menú de abajo */
+}
+
+/* 3. Tarjeta Ultra-Compacta */
+.card-compact {
+    padding: 10px 8px !important;    /* Relleno mínimo */
+    margin-bottom: 6px !important;   /* Separación mínima entre tarjetas */
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: rgba(20, 20, 20, 0.95) !important; /* Fondo casi negro */
+    border-radius: 16px !important;
+}
+
+/* 4. Títulos de sección minúsculos pero legibles */
+.section-title-compact {
+    font-size: 0.65rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 1px !important;
+    color: var(--c-on-surface-secondary);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* --- FIN: MODIFICACIÓN COMPACTA --- */
