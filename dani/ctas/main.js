@@ -1238,12 +1238,15 @@ const updateSyncStatusIcon = () => {
         const fbAuth = firebase.auth();
         fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         const fbDb = firebase.firestore();
-        
-        fbDb.enablePersistence({synchronizeTabs: true}).catch(err => {
-            if (err.code == 'failed-precondition') showToast('Modo offline no disponible (múltiples pestañas).', 'warning');
-            else if (err.code == 'unimplemented') showToast('Navegador no soporta modo offline.', 'warning');
-        });
-        
+        try {
+			fbDb.enablePersistence({ synchronizeTabs: true })
+				.catch(function(err) {
+					console.log("Persistencia ya activa o no soportada (Ignorar error)");
+				});
+		} catch (e) {
+			// Si falla, no hacemos nada. El coche ya está en marcha.
+		}
+                
 async function saveDoc(collectionName, docId, data, btn = null) {
     if (!currentUser) { showToast("Error: No hay usuario.", "danger"); return; }
     if (btn) setButtonLoading(btn, true);
