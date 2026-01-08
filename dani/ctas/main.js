@@ -1244,7 +1244,7 @@ const updateSyncStatusIcon = () => {
 					console.log("Persistencia ya activa o no soportada (Ignorar error)");
 				});
 		} catch (e) {
-			// Si falla, no hacemos nada. El coche ya está en marcha.
+			console.log("Firebase ya estaba iniciado.");
 		}
                 
 async function saveDoc(collectionName, docId, data, btn = null) {
