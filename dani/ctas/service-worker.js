@@ -1,7 +1,7 @@
 // service-worker.js
 // Versión: 3.2 (Sin caché de Firestore)
 
-const CACHE_NAME = 'DaniCtas-v4';
+const CACHE_NAME = 'DaniCtas-v5';
 const URLS_TO_CACHE = [
   '.',
   'index.html',
