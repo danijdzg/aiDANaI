@@ -1033,6 +1033,8 @@ let calcState = {
 // --- 1. FUNCIÓN PARA ABRIR LA CALCULADORA ---
 // Se llamará automáticamente cuando toques un campo de cantidad
 function openCalculator(targetElement) {
+	alert("¡Intentando abrir calculadora!"); // <--- AÑADE ESTO TEMPORALMENTE
+    console.log("Abriendo calculadora para:", targetElement);
     calcState.targetInput = targetElement;
     
     // Si el campo ya tiene valor, lo cargamos en la calculadora
