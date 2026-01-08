@@ -3628,10 +3628,9 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes
+    // 1. Header de Pendientes (Sin cambios)
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 16px;">
@@ -3639,19 +3638,16 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente
+    // 2. Tarjeta de Pendiente (Sin cambios)
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
-        
-        // CORRECCIÓN COLOR: Usamos formatCurrencyHTML directamente
         return `
         <div class="transaction-card" id="pending-recurrente-${r.id}" style="margin:0 16px; border-bottom:1px solid var(--c-outline); background-color: rgba(255, 214, 10, 0.05);">
             <div class="transaction-card__content">
                 <div class="transaction-card__details">
                     <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
                     <div class="transaction-card__row-2" style="color: var(--c-warning); font-weight: 600;">Programado: ${date}</div>
-                    
                     <div class="acciones-recurrentes-corregidas" style="margin-top: 8px;">
                         <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Omitir</button>
                         <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Añadir</button>
@@ -3666,24 +3662,19 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (ESTILO INTEGRADO CON COLOR SEMÁNTICO)
+    // 3. Header de Fecha (Sin cambios)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
-        
         const today = new Date(); 
         const yesterday = new Date(); 
         today.setHours(0,0,0,0);
         yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
         
         const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
-        
-        let dayName = '';
-        let fullDate = '';
-        let isTodayClass = '';
+        let dayName = '', fullDate = '', isTodayClass = '';
 
         if (itemDate.getTime() === today.getTime()) {
-            dayName = "HOY";
-            isTodayClass = 'is-today'; 
+            dayName = "HOY"; isTodayClass = 'is-today'; 
             fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
         } else if (itemDate.getTime() === yesterday.getTime()) {
             dayName = "AYER";
@@ -3693,15 +3684,9 @@ const renderVirtualListItem = (item) => {
             fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
         }
 
-        // Lógica de colores según el importe:
-        // > 0: Verde (is-positive)
-        // < 0: Rojo (is-negative)
-        // === 0: Morado (is-neutral)
         let totalClass = 'is-neutral'; 
         if (item.total > 0) totalClass = 'is-positive';
         else if (item.total < 0) totalClass = 'is-negative';
-
-        const totalFormatted = formatCurrencyHTML(item.total); 
 
         return `
             <div class="sticky-date-header">
@@ -3709,85 +3694,66 @@ const renderVirtualListItem = (item) => {
                     <span class="sticky-day-pill ${isTodayClass}">${dayName}</span>
                     <span class="sticky-date-text">${fullDate}</span>
                 </div>
-                <span class="sticky-date-total ${totalClass}">${totalFormatted}</span>
+                <span class="sticky-date-total ${totalClass}">${formatCurrencyHTML(item.total)}</span>
             </div>
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (DISEÑO VISUAL MEJORADO: BURBUJAS)
+    // 4. MOVIMIENTOS REALES (AQUÍ ESTÁ EL CAMBIO DE LA BARRA)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
-        // Animación si es nuevo
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
-        
-        // Formato fecha
         const dateObj = new Date(m.fecha);
         const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 
-        // VARIABLES PARA EL NUEVO DISEÑO
+        // VARIABLES
         let line1, line2, amountClass, amountSign;
-        let iconName, bubbleClass; // <--- Nuevas variables para el icono
+        let barClass; // <--- Variable para decidir el color de la barra
 
         if (m.tipo === 'traspaso') {
-        // --- ESTILO TRASPASO ---
-        bubbleClass = 't-bubble--transfer';
-        iconName = 'swap_horiz';
+            // --- ES UN TRASPASO ---
+            barClass = 'is-traspaso'; // Barra Azul
 
-        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-        
-        // 1. RECUPERAMOS LOS SALDOS HISTÓRICOS (Ya calculados previamente)
-        // Usamos formateo de moneda, o cadena vacía si por alguna razón no existe el dato
-        const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
-        const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
+            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+            const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
+            const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
 
-        // 2. CONSTRUIMOS EL TEXTO CON EL SALDO ENTRE PARÉNTESIS
-        // Mantenemos el color morado (--c-info) para todo el texto
-        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
-        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
-        
-        amountClass = 'text-info'; 
-        amountSign = '';
-		} else {
-        // --- ESTILO GASTO / INGRESO ---
-        const isGasto = m.cantidad < 0;
-        
-        // CORRECCIÓN: Usamos las variables EXACTAS de tu style.css
-        // isGasto -> Rojo (--c-danger)
-        // No Gasto -> Verde (--c-success)
-        const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+            line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
+            line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
+            
+            amountClass = 'text-info'; 
+            amountSign = '';
+        } else {
+            // --- ES UN GASTO O INGRESO ---
+            const isGasto = m.cantidad < 0;
+            barClass = isGasto ? 'is-gasto' : 'is-ingreso'; // Rojo o Verde
 
-        bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
-        iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
+            // Usamos colores para el texto de la cuenta también
+            const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
 
-        const concepto = conceptos.find(c => c.id === m.conceptoId);
-        const conceptoNombre = concepto ? concepto.nombre : 'Varios';
-        const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
-        const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-        
-        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
-        
-        const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
-        const separator = desc ? ' • ' : '';
-        
-        // APLICAMOS EL COLOR:
-        // style="color: ${accountColor}" -> Pinta el texto
-        // style="border-color: ${accountColor}" -> Pinta el borde (si la clase t-account-badge tiene borde)
-        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
-        
-        // El importe usa las clases de texto que ya tienes configuradas
-        amountClass = isGasto ? 'text-negative' : 'text-positive';
-        amountSign = isGasto ? '' : '+';
-    }
+            const concepto = conceptos.find(c => c.id === m.conceptoId);
+            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
+            
+            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+            
+            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
+            const separator = desc ? ' • ' : '';
+            
+            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+            
+            amountClass = isGasto ? 'text-negative' : 'text-positive';
+            amountSign = isGasto ? '' : '+';
+        }
 
-        // HTML FINAL: Sustituimos la barra por la burbuja de icono
+        // --- EL HTML FINAL (CON LA BARRA EN VEZ DEL ICONO) ---
         return `
         <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
             
-            <div class="t-icon-bubble ${bubbleClass}">
-                <span class="material-icons">${iconName}</span>
-            </div>
+            <div class="t-bar ${barClass}"></div>
             
             <div class="t-content">
                 <div class="t-row-primary">
