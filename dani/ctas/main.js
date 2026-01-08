@@ -5570,6 +5570,23 @@ const mostrarDetalleMes = async (mesIndex, anio, tipoFiltro) => {
     overlay.classList.add('active');
     document.getElementById('detalleSheet').classList.add('active');
 };
+/* --- PEGAR ESTO JUSTO DEBAJO DE LA FUNCIÓN mostrarDetalleMes --- */
+
+// Función GLOBAL para cerrar el panel (necesaria para el onclick del HTML)
+window.cerrarDetalleMes = () => {
+    const overlay = document.querySelector('.bottom-sheet-overlay');
+    const sheet = document.getElementById('detalleSheet');
+
+    // Quitamos la clase 'active' para que se anime hacia abajo y desaparezca
+    if (overlay) overlay.classList.remove('active');
+    if (sheet) sheet.classList.remove('active');
+    
+    // Opcional: Esperar a la animación y eliminar del HTML para limpiar memoria
+    setTimeout(() => {
+        if (overlay) overlay.remove();
+        if (sheet) sheet.remove();
+    }, 300); // Esperamos 300ms que dura la transición CSS
+};
 async function renderInformeDetallado(informeId) {
     const container = select(`informe-content-${informeId}`);
     if (!container) return;
