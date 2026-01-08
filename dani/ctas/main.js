@@ -5505,9 +5505,16 @@ async function renderInformeAsignacionActivos(container) {
     container.innerHTML = tableHtml;
 }
 
-// --- FUNCIÓN PARA MOSTRAR DETALLES (BOTTOM SHEET) ---
-const mostrarDetalleMes = (mesIndex, anio, tipoFiltro) => {
-    // 1. Crear el HTML del panel si no existe
+// --- FUNCIÓN PARA MOSTRAR DETALLES (CORREGIDA) ---
+const mostrarDetalleMes = async (mesIndex, anio, tipoFiltro) => {
+    // 1. Mostrar carga visual
+    showToast('Cargando detalles...', 'info');
+
+    // 2. Obtener los datos REALES del almacén de la app
+    // Usamos AppStore.getAll() para asegurar que tenemos todo el historial disponible
+    const todosLosMovimientos = await AppStore.getAll();
+
+    // 3. Crear el HTML del panel si no existe (Panel deslizante)
     let overlay = document.querySelector('.bottom-sheet-overlay');
     if (!overlay) {
         document.body.insertAdjacentHTML('beforeend', `
@@ -5523,47 +5530,46 @@ const mostrarDetalleMes = (mesIndex, anio, tipoFiltro) => {
         overlay = document.querySelector('.bottom-sheet-overlay');
     }
 
-    // 2. Filtrar los movimientos (Asumimos que 'movimientos' es tu variable global)
-    // Nota: Ajustamos el mes porque en JS Enero es 0, pero en datos suele ser 0 o 1 según tu lógica.
-    // Aquí asumo que chart.js devuelve index 0 para Enero.
-    const movimientosFiltrados = movimientos.filter(m => {
+    // 4. Filtrar los movimientos exactos de ese mes y año
+    const movimientosFiltrados = todosLosMovimientos.filter(m => {
         const fecha = new Date(m.fecha);
+        // Ajustamos filtro: mes, año y tipo (ingreso/gasto)
+        // Nota: Filtramos 'traspaso' para que no ensucie el listado si solo queremos ver flujo real
         return fecha.getMonth() === mesIndex && 
                fecha.getFullYear() === anio &&
+               m.tipo !== 'traspaso' && 
                (tipoFiltro === 'todos' || m.tipo === tipoFiltro);
     });
 
-    // 3. Generar la lista HTML
+    // Ordenar por fecha (más reciente primero)
+    movimientosFiltrados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    // 5. Generar la lista HTML
     const listaHTML = movimientosFiltrados.length > 0 
         ? movimientosFiltrados.map(m => `
             <div class="sheet-item">
                 <div>
-                    <div style="font-weight:600; color:#fff;">${m.concepto || 'Sin concepto'}</div>
+                    <div style="font-weight:600; color:#fff;">${m.descripcion || 'Sin concepto'}</div>
                     <div style="font-size:0.8rem; color:rgba(255,255,255,0.6);">${new Date(m.fecha).toLocaleDateString()}</div>
                 </div>
-                <div style="font-weight:bold; color: ${m.tipo === 'ingreso' ? '#4caf50' : '#f44336'};">
-                    ${m.tipo === 'ingreso' ? '+' : '-'} ${parseFloat(m.cantidad).toFixed(2)}€
+                <div style="font-weight:bold; color: ${m.cantidad >= 0 ? '#4caf50' : '#f44336'};">
+                    ${m.cantidad >= 0 ? '+' : ''} ${(m.cantidad / 100).toFixed(2)}€
                 </div>
             </div>
         `).join('')
         : '<div style="padding:20px; text-align:center; color:rgba(255,255,255,0.5);">No hay movimientos este mes</div>';
 
-    // 4. Actualizar título y mostrar
+    // 6. Actualizar título y mostrar
     const nombreMes = new Date(anio, mesIndex).toLocaleString('es-ES', { month: 'long' });
-    document.getElementById('sheet-title').innerText = `${nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)} ${anio}`;
+    const tituloCapitalizado = nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1);
+    
+    document.getElementById('sheet-title').innerText = `${tituloCapitalizado} ${anio}`;
     document.getElementById('sheet-list').innerHTML = listaHTML;
 
-    // 5. Activar animación
+    // 7. Activar animación
     overlay.classList.add('active');
     document.getElementById('detalleSheet').classList.add('active');
 };
-
-// Función para cerrar
-window.cerrarDetalleMes = () => {
-    document.querySelector('.bottom-sheet-overlay')?.classList.remove('active');
-    document.getElementById('detalleSheet')?.classList.remove('active');
-};
-
 async function renderInformeDetallado(informeId) {
     const container = select(`informe-content-${informeId}`);
     if (!container) return;
