@@ -11968,21 +11968,26 @@ function cerrarCalculadoraFusion() {
 window.addEventListener('message', function(event) {
     // Verificamos que el mensaje sea el correcto
     if (event.data && event.data.type === 'CALCULATOR_RESULT') {
-        const resultado = event.data.value;
+        let resultado = event.data.value; // Viene con punto (ej: 89.23)
         
-        console.log("💰 Resultado recibido de Fusion:", resultado);
+        console.log("💰 Resultado original:", resultado);
 
         if (inputDestinoCalculadora) {
-            // 1. Escribimos el valor en el campo
-            // Reemplazamos punto por coma si tu app usa comas, o lo dejamos tal cual
-            // Asumiremos formato estándar con punto para JS, visualmente puede cambiar
+            // TRUCO DE MAGIA: Cambiamos el punto por coma
+            // Esto es vital para que tu formulario español lo entienda bien
+            resultado = resultado.toString().replace('.', ',');
+            
+            console.log("🇪🇸 Resultado traducido:", resultado);
+
+            // 1. Escribimos el valor con COMA en el campo
             inputDestinoCalculadora.value = resultado;
             
-            // 2. Avisamos a la app que el valor ha cambiado (importante para que guarde)
+            // 2. Avisamos a la app que el valor ha cambiado
             inputDestinoCalculadora.dispatchEvent(new Event('input', { bubbles: true }));
             inputDestinoCalculadora.dispatchEvent(new Event('change', { bubbles: true }));
             
-            // 3. Efecto visual (opcional)
+            // 3. Efecto visual de confirmación (Flash verde suave)
+            inputDestinoCalculadora.style.transition = 'background-color 0.3s';
             inputDestinoCalculadora.style.backgroundColor = 'rgba(0, 255, 157, 0.2)';
             setTimeout(() => inputDestinoCalculadora.style.backgroundColor = '', 300);
         }
@@ -11993,27 +11998,54 @@ window.addEventListener('message', function(event) {
 });
 
 // ==========================================
-// 🕵️ EL VIGILANTE DE LA CALCULADORA
+// 🕵️ EL SUPER VIGILANTE (Versión Automática)
 // ==========================================
 
-// Escuchamos clics en TODA la aplicación
-document.addEventListener('click', function(e) {
-    // Verificamos si lo que has tocado tiene el ID 'movimiento-cantidad'
-    if (e.target && e.target.id === 'movimiento-cantidad') {
-        console.log("👆 Click detectado en CANTIDAD - Abriendo Fusion Calc...");
-        
-        e.preventDefault(); // IMPORTANTE: Frenamos el teclado del móvil
-        e.target.blur();    // Quitamos el foco para asegurar que no salga el teclado nativo
-        
-        // Llamamos a la función que abre el portal
-        abrirCalculadoraFusion(e.target);
-    }
-}, true); // El 'true' (fase de captura) ayuda a que detecte el click antes que nadie
+// Escuchamos 'focusin' (entrar) y 'click' (tocar) para que no se escape nada
+['focusin', 'click'].forEach(tipoEvento => {
+    document.addEventListener(tipoEvento, function(e) {
+        // Verificamos si el objetivo es nuestro campo de cantidad
+        if (e.target && e.target.id === 'movimiento-cantidad') {
+            
+            // Evitamos que se dispare múltiples veces seguidas si ya está abierta
+            if (document.getElementById('fusion-calc-container').style.transform === 'translateY(0px)') {
+                return;
+            }
 
-// Añadimos también soporte para 'touchstart' por si el móvil es muy rápido
-document.addEventListener('touchstart', function(e) {
-    if (e.target && e.target.id === 'movimiento-cantidad') {
-        // Opcional: Pre-cargar o preparar algo si fuera necesario
-        // Pero dejamos que el evento 'click' maneje la apertura para no abrirlo doble
-    }
-}, { passive: false });
+            console.log(`⚡ Evento ${tipoEvento} detectado en CANTIDAD - Abriendo...`);
+            
+            // 1. SEGURIDAD ANTI-TECLADO NATIVO
+            // Le ponemos el atributo readonly al vuelo. Esto mata el teclado del móvil.
+            e.target.setAttribute('readonly', 'true'); 
+            
+            // Además, le quitamos el foco inmediatamente por si acaso
+            e.target.blur(); 
+            
+            // 2. Abrimos la Calculadora Fusion
+            abrirCalculadoraFusion(e.target);
+        }
+    }, true); // UseCapture: true para interceptarlo antes que nadie
+});
+💡 Un pequeño extra de Flujo (Opcional pero Recomendado)
+Ya que estamos haciendo esto automático, te sugiero una pequeña mejora en el bloque de recepción del resultado (más arriba en main.js, donde corregimos lo de la coma).
+
+Cuando la calculadora se cierra, lo ideal es que el cursor salte automáticamente al siguiente campo (Concepto), para que puedas seguir escribiendo sin volver a tocar la pantalla.
+
+Si quieres esto, modifica la parte final del window.addEventListener('message'...) así:
+
+JavaScript
+
+        // ... (código anterior de poner el valor) ...
+
+        // 4. Cerramos la calculadora
+        cerrarCalculadoraFusion();
+
+        // 5. ¡SALTO AUTOMÁTICO! Enfocamos el siguiente campo (Concepto)
+        setTimeout(() => {
+            const campoConcepto = document.getElementById('movimiento-concepto');
+            if (campoConcepto) {
+                campoConcepto.focus();
+                // Si es un desplegable custom, intentamos abrirlo (opcional)
+                // campoConcepto.click(); 
+            }
+        }, 300); // Pequeña pausa para dar tiempo a la animación de cierre
