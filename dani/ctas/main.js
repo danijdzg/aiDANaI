@@ -3436,10 +3436,11 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (DISEÑO VISUAL MEJORADO: BURBUJAS)
+    // 4. MOVIMIENTOS REALES (DISEÑO CLEAN: BARRAS DE COLOR)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
+        
         // Animación si es nuevo
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
@@ -3447,69 +3448,58 @@ const renderVirtualListItem = (item) => {
         const dateObj = new Date(m.fecha);
         const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 
-        // VARIABLES PARA EL NUEVO DISEÑO
+        // VARIABLES VISUALES
         let line1, line2, amountClass, amountSign;
-        let iconName, bubbleClass; // <--- Nuevas variables para el icono
+        let barClass; // <--- Variable para el color de la barra
 
         if (m.tipo === 'traspaso') {
-        // --- ESTILO TRASPASO ---
-        bubbleClass = 't-bubble--transfer';
-        iconName = 'swap_horiz';
+            // --- TRASPASO (AZUL) ---
+            barClass = 'is-traspaso'; 
 
-        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-        
-        // 1. RECUPERAMOS LOS SALDOS HISTÓRICOS (Ya calculados previamente)
-        // Usamos formateo de moneda, o cadena vacía si por alguna razón no existe el dato
-        const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
-        const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
+            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+            
+            const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
+            const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
 
-        // 2. CONSTRUIMOS EL TEXTO CON EL SALDO ENTRE PARÉNTESIS
-        // Mantenemos el color morado (--c-info) para todo el texto
-        line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
-        line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
-        
-        amountClass = 'text-info'; 
-        amountSign = '';
-		} else {
-        // --- ESTILO GASTO / INGRESO ---
-        const isGasto = m.cantidad < 0;
-        
-        // CORRECCIÓN: Usamos las variables EXACTAS de tu style.css
-        // isGasto -> Rojo (--c-danger)
-        // No Gasto -> Verde (--c-success)
-        const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+            // Texto descriptivo
+            line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
+            line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
+            
+            amountClass = 'text-info'; 
+            amountSign = '';
 
-        bubbleClass = isGasto ? 't-bubble--expense' : 't-bubble--income';
-        iconName = isGasto ? 'arrow_downward' : 'arrow_upward';
+        } else {
+            // --- INGRESO (VERDE) O GASTO (ROJO) ---
+            const isGasto = m.cantidad < 0;
+            
+            // Asignamos la clase de color para la barra
+            barClass = isGasto ? 'is-gasto' : 'is-ingreso';
 
-        const concepto = conceptos.find(c => c.id === m.conceptoId);
-        const conceptoNombre = concepto ? concepto.nombre : 'Varios';
-        const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
-        const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-        
-        line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
-        
-        const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
-        const separator = desc ? ' • ' : '';
-        
-        // APLICAMOS EL COLOR:
-        // style="color: ${accountColor}" -> Pinta el texto
-        // style="border-color: ${accountColor}" -> Pinta el borde (si la clase t-account-badge tiene borde)
-        line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
-        
-        // El importe usa las clases de texto que ya tienes configuradas
-        amountClass = isGasto ? 'text-negative' : 'text-positive';
-        amountSign = isGasto ? '' : '+';
-    }
+            // Colores para el texto de la cuenta (para mantener coherencia)
+            const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
 
-        // HTML FINAL: Sustituimos la barra por la burbuja de icono
+            const concepto = conceptos.find(c => c.id === m.conceptoId);
+            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
+            
+            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+            
+            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
+            const separator = desc ? ' • ' : '';
+            
+            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+            
+            amountClass = isGasto ? 'text-negative' : 'text-positive';
+            amountSign = isGasto ? '' : '+';
+        }
+
+        // HTML FINAL: Aquí usamos la 't-bar' en lugar de 't-icon-bubble'
         return `
         <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
             
-            <div class="t-icon-bubble ${bubbleClass}">
-                <span class="material-icons">${iconName}</span>
-            </div>
+            <div class="t-bar ${barClass}"></div>
             
             <div class="t-content">
                 <div class="t-row-primary">
