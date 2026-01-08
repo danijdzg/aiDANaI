@@ -1018,285 +1018,166 @@ const clearDiarioFilters = async () => {
 			renderBuffer: 10, lastRenderedRange: { start: -1, end: -1 }, isScrolling: null
 		};
         
- // ▼▼▼ COPIA Y PEGA ESTE BLOQUE ÚNICO EN LUGAR DEL CÓDIGO DE LA CALCULADORA QUE TENGAS ▼▼▼
+ /* =========================================================== */
+/* === LÓGICA CALCULADORA NEÓN (INTEGRACIÓN OnePlus Nord) === */
+/* =========================================================== */
 
-let calculatorState = {
-    displayValue: '0',
-    operand1: null,
-    operator: null,
-    waitingForNewValue: true,
-    targetInput: null,
-    isVisible: false, 
-    isResultDisplayed: false,
-    historyValue: '', // Guarda la operación en curso
+let calcState = {
+    current: '0',
+    previous: '',
+    operation: undefined,
+    targetInput: null, // Aquí guardaremos qué campo estamos rellenando
+    lastEqualClick: 0  // Para medir el doble clic
 };
 
-// Actualiza el display del historial
-const updateCalculatorHistoryDisplay = () => {
-    const historyDisplay = select('calculator-history-display');
-    if (historyDisplay) historyDisplay.textContent = calculatorState.historyValue;
-};
-
-// Mapea las claves a los símbolos visuales
-const getOperatorSymbol = (key) => ({
-    'add': '+', 'subtract': '−', 'multiply': '×', 'divide': '÷'
-}[key] || '');
-
-// Gestiona qué botón de operador se ve activo
-const updateActiveOperatorButton = () => {
-    selectAll('.calculator-btn.btn-operator').forEach(btn => btn.classList.remove('btn-operator--active'));
-    if (calculatorState.operator) {
-        const activeBtn = document.querySelector(`.calculator-btn[data-key="${calculatorState.operator}"]`);
-        if (activeBtn) activeBtn.classList.add('btn-operator--active');
-    }
-};      
-const fetchBtcPrice = async () => {
-    // Evitar llamadas excesivas (cache de 60 segundos)
-    const now = Date.now();
-    if (btcPriceData.lastUpdated && (now - btcPriceData.lastUpdated < 60000)) {
-        return btcPriceData.price;
-    }
-
-    try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur');
-        const data = await response.json();
-        if (data && data.bitcoin && data.bitcoin.eur) {
-            btcPriceData.price = data.bitcoin.eur;
-            btcPriceData.lastUpdated = now;
-            return data.bitcoin.eur;
-        }
-    } catch (error) {
-        console.error("Error al obtener precio BTC:", error);
-        showToast("No se pudo actualizar el precio de BTC", "warning");
-    }
-    return btcPriceData.price || 0; // Retorna 0 o el último precio conocido si falla
-};
-let lastOkTapTime = 0; // Variable para controlar el doble click
-const handleCalculatorInput = (key) => {
-    hapticFeedback('light');
-    let { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue } = calculatorState;
+// --- 1. FUNCIÓN PARA ABRIR LA CALCULADORA ---
+// Se llamará automáticamente cuando toques un campo de cantidad
+function openCalculator(targetElement) {
+    calcState.targetInput = targetElement;
     
-    // Reset si venimos de un resultado y se escribe número
-    if (isResultDisplayed && !['add', 'subtract', 'multiply', 'divide', 'sign'].includes(key)) {
-        displayValue = '0';
-        isResultDisplayed = false;
-        historyValue = ''; 
-    }
+    // Si el campo ya tiene valor, lo cargamos en la calculadora
+    // Quitamos el símbolo € y espacios para que sea un número limpio
+    let initialVal = targetElement.value.replace(/[^\d.,]/g, ''); 
+    calcState.current = initialVal || '0';
+    calcState.previous = '';
+    calcState.operation = undefined;
+    
+    updateCalcDisplay();
+    
+    // Mostramos el overlay
+    document.getElementById('calculator-overlay').classList.add('active');
+    
+    // Evitamos que salga el teclado nativo del móvil
+    targetElement.blur(); 
+}
 
-    const isOperator = ['add', 'subtract', 'multiply', 'divide'].includes(key);
+// --- 2. FUNCIÓN PARA CERRAR ---
+function closeCalculator() {
+    document.getElementById('calculator-overlay').classList.remove('active');
+}
 
-    if (isOperator) {
-        if (operand1 !== null && operator !== null && !waitingForNewValue) {
-            calculate();
-            displayValue = calculatorState.displayValue; 
-        }
-        operand1 = parseFloat(displayValue.replace(',', '.'));
-        operator = key;
-        // Mostramos la operación en la barrita pequeña de historial
-        historyValue = `${displayValue} ${getOperatorSymbol(operator)}`;
-        waitingForNewValue = true;
-        isResultDisplayed = false;
+// --- 3. LÓGICA DE TECLAS ---
+function calcInput(val) {
+    // Vibración háptica para sensación premium
+    if (navigator.vibrate) navigator.vibrate(5); 
+
+    if (val === 'C') {
+        calcState.current = '0';
+        calcState.previous = '';
+        calcState.operation = undefined;
+    } else if (val === '⌫') {
+        calcState.current = calcState.current.toString().slice(0, -1);
+        if (calcState.current === '') calcState.current = '0';
+    } else if (['+', '-', '*', '/', '%'].includes(val)) {
+        if (calcState.current === '') return;
+        if (calcState.previous !== '') calculate();
+        calcState.operation = val;
+        calcState.previous = calcState.current;
+        calcState.current = '';
     } else {
-        switch(key) {
-            case 'done':
-                // A. Siempre calculamos primero
-                if (operand1 !== null && operator !== null && !waitingForNewValue) {
-                    calculate();
-                }
-                
-                // B. Lógica de Doble Click
-                const now = new Date().getTime();
-                const timeDiff = now - lastOkTapTime;
-                
-                if (timeDiff < 300 && timeDiff > 0) {
-                    console.log("🚀 DOBLE CLICK: Iniciando transferencia...");
-                    
-                    // 1. Usamos la variable correcta
-                    const valorFinal = calculatorState.displayValue; 
-                    
-                    // 2. Feedback visual
-                    const btnDone = document.querySelector('.calculator-btn[data-key="done"]');
-                    if(btnDone) btnDone.classList.add('success-pulse');
-
-                    // 3. Iniciar animación
-                    if (typeof animateTransfer === 'function') {
-                        animateTransfer(valorFinal);
-                    }
-                    
-                    // 4. Esperar y pegar
-                    setTimeout(() => {
-                        const inputCantidad = document.getElementById('movimiento-cantidad');
-                        if (inputCantidad) {
-                            inputCantidad.value = valorFinal;
-                            inputCantidad.dispatchEvent(new Event('input'));
-                        }
-                        
-                        // 5. CORRECCIÓN: Usamos la función que SÍ existe
-                        if (typeof hideCalculator === 'function') {
-                            hideCalculator();
-                        } else {
-                            // Fallback de seguridad por si acaso
-                            const overlay = document.getElementById('calculator-overlay');
-                            if(overlay) overlay.classList.remove('modal-overlay--active');
-                        }
-
-                        if(btnDone) btnDone.classList.remove('success-pulse');
-                        
-                        // Enfocar siguiente campo
-                        const concepto = document.getElementById('movimiento-concepto');
-                        if(concepto) concepto.focus();
-                        
-                    }, 500);
-                    
-                    lastOkTapTime = 0;
-                } else {
-                    // Un solo click
-                    hapticFeedback('light');
-                    lastOkTapTime = now;
-                }
-                return;
-
-            case 'comma':
-                if (waitingForNewValue) { displayValue = '0,'; waitingForNewValue = false; } 
-                else if (!displayValue.includes(',')) displayValue += ',';
-                break;
-
-            case 'clear': 
-                displayValue = '0'; waitingForNewValue = true; operand1 = null; operator = null; isResultDisplayed = false; historyValue = '';
-                break;
-
-            case 'backspace': 
-                displayValue = displayValue.length > 1 ? displayValue.slice(0, -1) : '0';
-                if (displayValue === '0') waitingForNewValue = true;
-                break;
-
-            case 'sign': 
-                if (displayValue !== '0') displayValue = displayValue.startsWith('-') ? displayValue.slice(1) : `-${displayValue}`; 
-                break;
-
-            default: // Dígitos (0-9)
-                if (waitingForNewValue || displayValue === '0') {
-                    displayValue = key;
-                    waitingForNewValue = false;
-                } else if (displayValue.length < 12) { 
-                    displayValue += key;
-                }
-                break;
+        // Números y punto
+        if (val === '.' && calcState.current.includes('.')) return;
+        if (calcState.current === '0' && val !== '.') {
+            calcState.current = val;
+        } else {
+            calcState.current = calcState.current.toString() + val;
         }
     }
-    
-    // Guardamos estado
-    Object.assign(calculatorState, { displayValue, waitingForNewValue, operand1, operator, isResultDisplayed, historyValue });
-    
-    // Actualizamos UI interna
-    updateCalculatorDisplay();
-    updateCalculatorHistoryDisplay();
-    updateActiveOperatorButton();
+    updateCalcDisplay();
+}
 
-    // === MEJORA 1: ACTUALIZACIÓN EN TIEMPO REAL ===
-    // Actualizamos el input objetivo SIEMPRE, no solo al dar OK.
-    // Excepto si estamos a mitad de una operación (ej. escribiendo el segundo número de una suma)
-    if (!operand1 || isResultDisplayed) {
-        updateTargetInput(displayValue);
+// --- 4. CÁLCULO MATEMÁTICO ---
+function calculate() {
+    let computation;
+    const prev = parseFloat(calcState.previous);
+    const current = parseFloat(calcState.current);
+    if (isNaN(prev) || isNaN(current)) return;
+
+    switch (calcState.operation) {
+        case '+': computation = prev + current; break;
+        case '-': computation = prev - current; break;
+        case '*': computation = prev * current; break;
+        case '/': computation = prev / current; break;
+        case '%': computation = prev % current; break; // Módulo o porcentaje simple
+        default: return;
     }
-};
 
-// Función auxiliar para escribir en el input real
-const updateTargetInput = (val) => {
-    if (calculatorState.targetInput) {
-        // 1. Preparamos el número
-        const num = parseFloat(val.replace(',', '.')) || 0;
+    calcState.current = computation;
+    calcState.operation = undefined;
+    calcState.previous = '';
+}
+
+// --- 5. EL TRUCO DEL DOBLE CLIC (=) ---
+function handleEqualButton() {
+    const now = new Date().getTime();
+    const timeDiff = now - calcState.lastEqualClick;
+    
+    // Primero, siempre calculamos el resultado
+    calculate();
+    updateCalcDisplay();
+
+    // Si ha pasado menos de 300ms desde el último clic... ¡ES DOBLE CLIC!
+    if (timeDiff < 300 && timeDiff > 0) {
+        // 1. Efecto visual de éxito (vibración fuerte)
+        if (navigator.vibrate) navigator.vibrate([10, 50, 10]);
         
-        // 2. Escribimos en el input REAL (el invisible)
-        calculatorState.targetInput.value = num.toLocaleString('es-ES', { 
-            useGrouping: false, // Importante: Sin puntos para que sea fácil de procesar luego
-            minimumFractionDigits: 0, 
-            maximumFractionDigits: 2 
+        // 2. Copiamos el resultado al formulario
+        if (calcState.targetInput) {
+            // Formateamos bonito con 2 decimales para euros
+            let finalVal = parseFloat(calcState.current).toFixed(2);
+            // Reemplazamos punto por coma si tu app usa formato español
+            finalVal = finalVal.replace('.', ','); 
+            
+            calcState.targetInput.value = finalVal;
+            
+            // Avisamos a la app de que el valor cambió (para validaciones)
+            calcState.targetInput.dispatchEvent(new Event('input'));
+            calcState.targetInput.dispatchEvent(new Event('change'));
+        }
+        
+        // 3. Cerramos la calculadora
+        closeCalculator();
+        
+        calcState.lastEqualClick = 0; // Reset
+    } else {
+        // Clic simple: solo vibración suave
+        if (navigator.vibrate) navigator.vibrate(10);
+        calcState.lastEqualClick = now;
+    }
+}
+
+// --- 6. ACTUALIZAR PANTALLA ---
+function updateCalcDisplay() {
+    document.getElementById('calc-display').innerText = calcState.current;
+    if (calcState.operation != null) {
+        document.getElementById('calc-history').innerText = 
+            `${calcState.previous} ${calcState.operation}`;
+    } else {
+        document.getElementById('calc-history').innerText = '';
+    }
+}
+
+// --- 7. AUTO-ACTIVACIÓN AL INICIAR ---
+// Busca todos los campos de cantidad y les pone el "disparador"
+document.addEventListener('DOMContentLoaded', () => {
+    // Esperamos un poco para asegurar que el HTML se ha cargado
+    setTimeout(() => {
+        const inputsCantidad = document.querySelectorAll('#movimiento-cantidad, .input-cantidad');
+        inputsCantidad.forEach(input => {
+            // Cuando toques el input...
+            input.addEventListener('click', (e) => {
+                e.preventDefault(); // No abras el teclado normal
+                openCalculator(e.target); // Abre nuestra calculadora
+            });
+            // Por si acaso (focus también)
+            input.addEventListener('focus', (e) => {
+                e.preventDefault();
+                e.target.blur(); // Quita foco para esconder teclado móvil
+                openCalculator(e.target);
+            });
         });
-        
-        // 3. Disparamos el evento para que otros scripts sepan que cambió
-        calculatorState.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        
-        // 4. ¡LA CLAVE! Forzamos la actualización visual manualmente
-        updateInputMirror(calculatorState.targetInput);
-    }
-};
-
-// --- INICIO: BLOQUE CALCULADORA REPARADO Y BLINDADO ---
-
-// Función auxiliar segura: Convierte cualquier entrada a CÉNTIMOS (entero)
-const parseCalculatorValue = (val) => {
-    if (val === null || val === undefined || val === '') return NaN;
-    // Convierte a string, cambia coma por punto y multiplica por 100
-    const num = parseFloat(val.toString().replace(',', '.'));
-    return Math.round(num * 100);
-};
-
-const calculate = () => {
-    // 1. Convertimos todo a enteros (céntimos)
-    const val1 = parseCalculatorValue(calculatorState.operand1);
-    const val2 = parseCalculatorValue(calculatorState.displayValue);
-    
-    // 2. Seguridad
-    if (isNaN(val1) || isNaN(val2) || !calculatorState.operator) return;
-
-    let resultInCents = 0;
-    
-    // 3. Operamos en enteros para precisión perfecta
-    switch (calculatorState.operator) {
-        case 'add': resultInCents = val1 + val2; break;
-        case 'subtract': resultInCents = val1 - val2; break;
-        case 'multiply': resultInCents = Math.round((val1 * val2) / 100); break; 
-        case 'divide':
-            if (val2 === 0) { 
-                showToast("No se puede dividir por cero.", "danger"); 
-                calculatorState.displayValue = 'Error';
-                return; 
-            }
-            resultInCents = Math.round((val1 * 100) / val2); 
-            break;
-    }
-
-    // 4. Formateamos bonito para el usuario
-    const result = resultInCents / 100;
-    calculatorState.displayValue = result.toLocaleString('es-ES', { 
-        minimumFractionDigits: 0, 
-        maximumFractionDigits: 2,
-        useGrouping: false 
-    }); 
-    
-    // 5. Reset de estado
-    calculatorState.operand1 = null;
-    calculatorState.operator = null;
-    calculatorState.waitingForNewValue = true;
-    calculatorState.isResultDisplayed = true;
-    
-    updateCalculatorDisplay();
-};
-
-const updateCalculatorDisplay = () => {
-    // 1. Buscamos la pantalla
-    const display = document.getElementById('calculator-display');
-    const displayInner = document.querySelector('.calc-current');
-
-    if (!display && !displayInner) return;
-
-    // 2. CORRECCIÓN: Usamos la variable correcta del estado
-    const valor = calculatorState.displayValue; 
-
-    // 3. Actualizamos la pantalla
-    if (display) display.textContent = valor;
-    if (displayInner) displayInner.textContent = valor;
-
-    // 4. Ajuste de tamaño de texto
-    if (display) {
-        if (valor.length > 9) display.style.fontSize = '2.5rem';
-        else display.style.fontSize = '4rem';
-    }
-};
-
-// --- FIN: BLOQUE CALCULADORA ---
-                    
+    }, 1000);
+});                   
 
 		let isDashboardRendering = false;
 		let isDiarioPageRendering = false; // <-- AÑADE ESTA LÍNEA
