@@ -4753,20 +4753,23 @@ const renderPanelPage = async () => {
     const cardStyle = `padding: 8px 12px; margin-bottom: ${gap}; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);`;
 
     container.innerHTML = `
-        <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
+    <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
+        
+        <div class="hero-card fade-in-up" onclick="changePage('report')" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
             
-            <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
-                        RESUMEN (FLUJO DE CAJA)
-                    </div>
-                    <div class="report-filters" style="margin: 0;" onclick="event.stopPropagation()">
-                        <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.7rem; padding: 1px 8px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
-                            <option value="mes-actual">Este Mes</option>
-                            <option value="año-actual">Este Año</option>
-                        </select>
-                    </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
+                    RESUMEN
                 </div>
+                
+                <div class="report-filters" style="margin: 0;" onclick="event.stopPropagation()">
+                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.7rem; padding: 1px 8px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
+                        <option value="mes-actual">Este Mes</option>
+                        <option value="año-actual">Este Año</option>
+                        <option value="custom">Personalizado</option>
+                    </select>
+                </div>
+            </div>
 
             <div id="custom-date-filters" class="form-grid hidden" onclick="event.stopPropagation()" style="grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 8px;">
                 <div style="display:flex; flex-direction:column;">
@@ -5795,21 +5798,21 @@ const renderPlanificacionPage = () => {
             </p>
         </header>
 
-        <div class="analysis-section-label" style="margin-top: 20px;">ACTIVIDAD</div>
-        <details id="acordeon-flujo-caja" class="dashboard-widget">
+        <div class="analysis-section-label">MI PATRIMONIO</div>
+
+        <details class="dashboard-widget">
             <summary class="widget-header">
-                <div class="icon-box icon-box--ingreso"><span class="material-icons">query_stats</span></div>
+                <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
-                    <h3 class="widget-title">Flujo de Caja</h3>
-                    <p class="widget-subtitle">Ingresos vs Gastos</p>
+                    <h3 class="widget-title">Patrimonio Neto</h3>
+                    <p class="widget-subtitle">Tus activos menos tus deudas</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content">
-                <div id="informe-content-flujo_caja" style="min-height: 250px;"></div>
+            <div class="widget-content" id="patrimonio-overview-container">
+                <div class="skeleton" style="height: 400px; border-radius: 12px; margin-top: 16px;"></div>
             </div>
         </details>
-        <div class="analysis-section-label">MI PATRIMONIO</div>
 
         <details id="acordeon-portafolio" class="dashboard-widget">
             <summary class="widget-header">
@@ -11614,39 +11617,42 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- ZONA 2: NAVEGACIÓN INTELIGENTE (Patrimonio, Inversiones y AHORA Flujo de Caja) ---
+        // --- ZONA 2: NAVEGACIÓN INTELIGENTE (Patrimonio e Inversiones) ---
+        // Buscamos si es un botón de navegación
+        const navBtn = event.target.closest('[data-action="ver-balance-neto"], [data-action="ver-inversiones"]');
         
-        // 1. Añadimos 'ver-flujo-caja' al selector
-        const navBtn = event.target.closest('[data-action="ver-balance-neto"], [data-action="ver-inversiones"], [data-action="ver-flujo-caja"]');
-
+        // ¡ESCUDO DEFENSIVO 2!
         if (navBtn) {
-            const action = navBtn.dataset.action;
-
+            const action = navBtn.dataset.action; // Aquí ya es seguro leerlo
+            
             // Navegar a Planificar
             if (typeof navigateTo === 'function') navigateTo('planificar-page');
+            else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
             
-            // 2. Configurar destino según el botón (AÑADIMOS LA LÓGICA DE FLUJO DE CAJA)
-            let targetID = '';
-            if (action === 'ver-balance-neto') targetID = 'patrimonio-overview-container'; // O el ID del details padre
-            else if (action === 'ver-inversiones') targetID = 'acordeon-portafolio';
-            else if (action === 'ver-flujo-caja') targetID = 'acordeon-flujo-caja'; // ¡Nuestro nuevo ID!
+            // Configurar destino según el botón
+            let targetID = (action === 'ver-balance-neto') ? 'seccion-balance-neto' : 'seccion-inversiones';
+            let keyWords = (action === 'ver-balance-neto') ? ['Patrimonio', 'Balance'] : ['Inversiones', 'Rentabilidad'];
+
             // Esperar y buscar el gráfico
             setTimeout(() => {
                 let destino = document.getElementById(targetID);
-                // Si apuntamos al contenido interior, intentamos buscar el padre <details> para abrirlo
-                if (destino && !destino.tagName === 'DETAILS') {
-                     destino = destino.closest('details');
-                }
                 
-                if (destino) {
-                    if (destino.tagName === 'DETAILS') {
-                        destino.open = true; // Abrir el acordeón
-                        // IMPORTANTE: Disparar el renderizado del gráfico si es necesario
-                        if (action === 'ver-flujo-caja' && typeof renderInformeDetallado === 'function') {
-                             renderInformeDetallado('flujo_caja');
+                // Plan B: Buscar por texto si falla el ID
+                if (!destino) {
+                    const titulos = document.querySelectorAll('h3, .card__title, .widget-title');
+                    for (const t of titulos) {
+                        const txt = (t.textContent || "").toLowerCase();
+                        if (keyWords.some(w => txt.includes(w.toLowerCase()))) {
+                            destino = t.closest('.card, .dashboard-widget');
+                            break;
                         }
                     }
+                }
+
+                if (destino) {
+                    if (destino.tagName === 'DETAILS') destino.open = true;
                     destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
                     // Efecto visual
                     destino.style.transition = 'transform 0.2s';
                     destino.style.transform = 'scale(1.02)';
