@@ -4159,77 +4159,99 @@ const loadMoreMovements = async (isInitial = false) => {
 };
 
 
-// ▼▼▼ FUNCIÓN ACTUALIZADA PARA USAR EL DISEÑO TIMELINE PRO ▼▼▼
+
 const renderDiarioPage = async () => {
-    // 1. Evitar conflictos de renderizado doble
-    if (isDiarioPageRendering) return;
+    if (isDiarioPageRendering) {
+        console.log("BLOQUEADO: Intento de re-renderizar el Diario mientras ya estaba en proceso.");
+        return;
+    }
     isDiarioPageRendering = true;
 
     try {
-        const container = document.getElementById('diario-page');
+        const container = select('diario-page');
+        if (!container.querySelector('#diario-view-container')) {
+            container.innerHTML = '<div id="diario-view-container"></div>';
+        }
         
-        // 2. Preparar el contenedor (limpiar lo viejo)
-        // Creamos una estructura limpia para el nuevo diseño
-        container.innerHTML = `
-            <div id="diario-view-container" style="padding-bottom: 80px;">
-                <div id="diario-filter-indicator" class="hidden" style="padding: 10px; background: var(--c-surface-variant); margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 0.85rem;">Filtros activos</span>
-                    <button onclick="clearDiarioFilters()" class="btn btn--small btn--text" style="color: var(--c-danger);">Borrar</button>
+        const viewContainer = select('diario-view-container');
+        if (!viewContainer) return;
+
+        if (diarioViewMode === 'calendar') {
+            if (movementsObserver) movementsObserver.disconnect();
+            await renderDiarioCalendar();
+            return; // Salimos aquí si estamos en vista de calendario
+        }
+
+        viewContainer.innerHTML = `
+            <div id="diario-filter-active-indicator" class="hidden">
+			<button data-action="clear-diario-filters" class="icon-btn" style="width: 24px; height: 24px;">
+        <span class="material-icons" style="font-size: 16px;">close</span>
+    </button>
+                <p>Mostrando resultados filtrados.</p>
+                <div>
+                    <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;"><span class="material-icons" style="font-size: 14px;">download</span>Exportar</button>
+                    <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
                 </div>
-                
-                <div id="timeline-list-container"></div>
-                
-                <div id="timeline-load-more" style="text-align: center; padding: 20px; display: none;">
-                    <button id="btn-load-more-timeline" class="btn btn--secondary">Cargar más movimientos</button>
-                </div>
+            </div>
+            <div id="movimientos-list-container">
+                <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
+            </div>
+            <div id="infinite-scroll-trigger" style="height: 50px;"></div> 
+            <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
+                <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
             </div>`;
 
-        // 3. Obtener los datos
-        let movimientosParaMostrar = [];
+        vList.scrollerEl = selectOne('.app-layout__main');
+        vList.sizerEl = select('virtual-list-sizer');
+        vList.contentEl = select('virtual-list-content');
+        
+        const scrollTrigger = select('infinite-scroll-trigger');
 
         if (diarioActiveFilters) {
-            // A) MODO FILTROS: Ya tenemos la lógica de filtrado, la reusamos
-            document.getElementById('diario-filter-indicator').classList.remove('hidden');
-            const allMovements = await AppStore.getAll();
+            if (scrollTrigger) scrollTrigger.classList.add('hidden');
+            if (movementsObserver) movementsObserver.disconnect();
+
+            select('diario-filter-active-indicator').classList.remove('hidden');
             
-            // Aplicamos los filtros (usando tu lógica existente)
-            const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
-            movimientosParaMostrar = allMovements.filter(m => {
+            const allMovements = await AppStore.getAll();
+
+			const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
+			db.movimientos = allMovements.filter(m => {
                 if (startDate && m.fecha < startDate) return false;
                 if (endDate && m.fecha > endDate) return false;
                 if (description && !m.descripcion.toLowerCase().includes(description)) return false;
-                // ... resto de filtros ...
+                const cantidadEuros = m.cantidad / 100;
+                if (minAmount && cantidadEuros < parseFloat(minAmount)) return false;
+                if (maxAmount && cantidadEuros > parseFloat(maxAmount)) return false;
+                if (cuentas.length > 0) {
+                    if (m.tipo === 'traspaso' && !cuentas.includes(m.cuentaOrigenId) && !cuentas.includes(m.cuentaDestinoId)) return false;
+                    if (m.tipo === 'movimiento' && !cuentas.includes(m.cuentaId)) return false;
+                }
+                if (conceptos.length > 0 && m.tipo === 'movimiento' && !conceptos.includes(m.conceptoId)) return false;
                 return true;
             });
-        } else {
-            // B) MODO NORMAL: Usamos la base de datos cargada actualmente
-            // Si está vacía, intentamos cargar la primera página
-            if (!db.movimientos || db.movimientos.length === 0) {
-                await loadMoreMovements(true); // Carga inicial
-            }
-            movimientosParaMostrar = db.movimientos;
             
-            // Mostrar botón "Cargar más" si estamos en modo normal
-            const btnLoadMore = document.getElementById('timeline-load-more');
-            if(btnLoadMore) {
-                btnLoadMore.style.display = 'block';
-                document.getElementById('btn-load-more-timeline').onclick = async () => {
-                    const btn = document.getElementById('btn-load-more-timeline');
-                    btn.textContent = "Cargando...";
-                    await loadMoreMovements(); // Carga el siguiente bloque en db.movimientos
-                    renderListadoDiarioOptimizado('timeline-list-container', db.movimientos); // Re-pinta todo
-                    btn.textContent = "Cargar más movimientos";
-                };
-            }
+            await processMovementsForRunningBalance(db.movimientos, true);
+            updateVirtualListUI();
+
+        } else {
+            if (scrollTrigger) scrollTrigger.classList.remove('hidden');
+            select('diario-filter-active-indicator').classList.add('hidden');
+            
+            db.movimientos = [];
+            lastVisibleMovementDoc = null;
+            allMovementsLoaded = false;
+            isLoadingMoreMovements = false; 
+            
+            await loadMoreMovements(true);
+            initMovementsObserver();
         }
 
-        // 4. ¡AQUÍ ESTÁ LA INTEGRACIÓN! Llamamos a tu nueva función
-        // Le decimos: "Pinta estos movimientos dentro del div 'timeline-list-container'"
-        renderListadoDiarioOptimizado('timeline-list-container', movimientosParaMostrar);
-
     } catch (error) {
-        console.error("Error en renderDiarioPage:", error);
+        console.error("Error crítico renderizando la página del diario:", error);
+        // Si hay un error, es crucial liberar la guarda para poder intentarlo de nuevo.
     } finally {
+       
         isDiarioPageRendering = false;
     }
 };
@@ -12295,39 +12317,22 @@ const updateKpiVisual = (elementId, value, isPercentage = false) => {
     }
 };
 
-/* =============================================================== */
-/* === NUEVA FUNCIÓN MAESTRA: TIMELINE PRO (DIARIO) === */
-/* =============================================================== */
+// --- NUEVO RENDERIZADOR OPTIMIZADO PARA DIARIO (TIMELINE PRO) ---
 const renderListadoDiarioOptimizado = (containerID, listaMovimientos) => {
     const container = document.getElementById(containerID);
     if (!container) return;
-    
-    // Si no hay movimientos, mostrar mensaje limpio
-    if (!listaMovimientos || listaMovimientos.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state" style="padding: 40px 20px; text-align: center; opacity: 0.6;">
-                <span class="material-icons" style="font-size: 48px; margin-bottom: 10px;">event_note</span>
-                <p>No hay movimientos para mostrar.</p>
-            </div>`;
-        return;
-    }
+    container.innerHTML = ''; // Limpiar
 
     // 1. Agrupar por días y calcular totales
     const grupos = {};
     listaMovimientos.forEach(m => {
-        // Asegurar fecha válida
-        if (!m.fecha) return;
         const fechaKey = m.fecha.split('T')[0]; // YYYY-MM-DD
         if (!grupos[fechaKey]) {
             grupos[fechaKey] = { fecha: m.fecha, items: [], ingreso: 0, gasto: 0 };
         }
         grupos[fechaKey].items.push(m);
-        
-        // Sumar importes para el resumen del día
-        const cantidad = m.cantidad || 0;
-        if (m.tipo === 'ingreso' || (m.tipo === 'traspaso' && cantidad > 0)) grupos[fechaKey].ingreso += Math.abs(cantidad);
-        if (m.tipo === 'gasto' || (m.tipo === 'traspaso' && cantidad < 0)) grupos[fechaKey].gasto += Math.abs(cantidad);
-        // Nota: Ajusta la lógica de suma según cómo guardes tus traspasos si es necesario
+        if (m.tipo === 'ingreso') grupos[fechaKey].ingreso += parseFloat(m.cantidad);
+        if (m.tipo === 'gasto') grupos[fechaKey].gasto += parseFloat(m.cantidad);
     });
 
     // 2. Ordenar fechas (más reciente primero)
@@ -12340,10 +12345,10 @@ const renderListadoDiarioOptimizado = (containerID, listaMovimientos) => {
         const dia = grupos[fechaKey];
         const fechaObj = new Date(dia.fecha);
         
-        // Formatos de fecha en Español
-        const diaSemana = fechaObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+        // Formatos de fecha
+        const diaSemana = fechaObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase();
         const diaNum = fechaObj.getDate();
-        const mes = fechaObj.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase().replace('.', '');
+        const mes = fechaObj.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
         
         // Balance del día (Ingresos - Gastos)
         const balanceDia = dia.ingreso - dia.gasto;
@@ -12361,58 +12366,38 @@ const renderListadoDiarioOptimizado = (containerID, listaMovimientos) => {
                     </div>
                 </div>
                 <div class="day-summary">
-                    ${dia.ingreso > 0 ? `<span class="mini-tag inc">+${(dia.ingreso / 100).toFixed(2)}</span>` : ''}
-                    ${dia.gasto > 0 ? `<span class="mini-tag exp">-${(dia.gasto / 100).toFixed(2)}</span>` : ''}
+                    ${dia.ingreso > 0 ? `<span class="mini-tag inc">+${dia.ingreso.toFixed(2)}</span>` : ''}
+                    ${dia.gasto > 0 ? `<span class="mini-tag exp">-${dia.gasto.toFixed(2)}</span>` : ''}
+                    <span class="day-total" style="color: ${colorBalance}">${signo}${balanceDia.toFixed(2)}€</span>
                 </div>
             </div>
             <div class="day-group">
         `;
 
         // --- MOVIMIENTOS DEL DÍA ---
-        // Ordenar movimientos dentro del día (más nuevo arriba)
-        dia.items.sort((a, b) => b.id.localeCompare(a.id));
-
         dia.items.forEach(m => {
-            const cantidad = m.cantidad / 100;
-            const esGasto = m.tipo === 'gasto' || cantidad < 0;
+            const esGasto = m.tipo === 'gasto';
+            const colorImporte = esGasto ? 'var(--c-danger)' : (m.tipo === 'ingreso' ? 'var(--c-success)' : 'var(--c-info)');
+            const signoMov = m.tipo === 'ingreso' ? '+' : (m.tipo === 'gasto' ? '-' : '');
             
-            // Colores e Iconos
-            let colorImporte = 'var(--c-on-surface)';
+            // Icono basado en el tipo (puedes personalizar esto más si tienes iconos por categoría)
             let icon = 'paid';
-            let itemClass = '';
-
-            if (m.tipo === 'traspaso') {
-                icon = 'swap_horiz';
-                colorImporte = 'var(--c-info)'; // Azul
-                itemClass = 't-icon-mini traspaso';
-            } else if (esGasto) {
-                icon = 'shopping_bag';
-                colorImporte = 'var(--c-danger)'; // Rojo
-                itemClass = 't-icon-mini gasto';
-            } else {
-                icon = 'trending_up';
-                colorImporte = 'var(--c-success)'; // Verde
-                itemClass = 't-icon-mini ingreso';
-            }
-
-            const signoMov = cantidad > 0 ? '+' : '';
-            // Nombres de cuentas y conceptos (Buscamos en la base de datos global 'db')
-            const nombreCuenta = db.cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
-            const nombreConcepto = db.conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
+            if(m.tipo === 'gasto') icon = 'shopping_bag';
+            if(m.tipo === 'traspaso') icon = 'swap_horiz';
 
             html += `
-                <div class="t-row" onclick="startMovementForm('${m.id}', false)">
-                    <div class="${itemClass}">
+                <div class="t-row" onclick="openMovimientoModal('${m.id}')"> <div class="t-time">${new Date(m.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                    <div class="t-icon-mini ${m.tipo}">
                         <span class="material-icons">${icon}</span>
                     </div>
                     <div class="t-data">
                         <div class="t-top">
-                            <span class="t-concept">${m.descripcion || nombreConcepto}</span>
-                            <span class="t-amount" style="color: ${colorImporte}">${signoMov}${cantidad.toFixed(2)}€</span>
+                            <span class="t-concept">${m.concepto || m.descripcion}</span>
+                            <span class="t-amount" style="color: ${colorImporte}">${signoMov}${parseFloat(m.cantidad).toFixed(2)}</span>
                         </div>
                         <div class="t-bot">
-                            <span class="t-account">${nombreCuenta}</span>
-                            ${m.descripcion && m.descripcion !== nombreConcepto ? '<span class="t-dot">•</span>' : ''}
+                            <span class="t-account">${m.cuenta || 'General'}</span>
+                             ${m.descripcion && m.descripcion.length > 20 ? '<span class="t-dot">•</span>' : ''}
                         </div>
                     </div>
                 </div>
