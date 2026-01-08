@@ -5505,10 +5505,65 @@ async function renderInformeAsignacionActivos(container) {
     container.innerHTML = tableHtml;
 }
 
-/**
- * Función "router" que llama al renderizador de informe correcto cuando se abre un acordeón.
- * @param {string} informeId - El ID del informe a mostrar.
- */
+// --- FUNCIÓN PARA MOSTRAR DETALLES (BOTTOM SHEET) ---
+const mostrarDetalleMes = (mesIndex, anio, tipoFiltro) => {
+    // 1. Crear el HTML del panel si no existe
+    let overlay = document.querySelector('.bottom-sheet-overlay');
+    if (!overlay) {
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="bottom-sheet-overlay" onclick="cerrarDetalleMes()"></div>
+            <div class="bottom-sheet" id="detalleSheet">
+                <div class="sheet-header">
+                    <h3 id="sheet-title" style="margin:0; color:#fff;">Detalle</h3>
+                    <button class="sheet-close" onclick="cerrarDetalleMes()">&times;</button>
+                </div>
+                <div class="sheet-content" id="sheet-list"></div>
+            </div>
+        `);
+        overlay = document.querySelector('.bottom-sheet-overlay');
+    }
+
+    // 2. Filtrar los movimientos (Asumimos que 'movimientos' es tu variable global)
+    // Nota: Ajustamos el mes porque en JS Enero es 0, pero en datos suele ser 0 o 1 según tu lógica.
+    // Aquí asumo que chart.js devuelve index 0 para Enero.
+    const movimientosFiltrados = movimientos.filter(m => {
+        const fecha = new Date(m.fecha);
+        return fecha.getMonth() === mesIndex && 
+               fecha.getFullYear() === anio &&
+               (tipoFiltro === 'todos' || m.tipo === tipoFiltro);
+    });
+
+    // 3. Generar la lista HTML
+    const listaHTML = movimientosFiltrados.length > 0 
+        ? movimientosFiltrados.map(m => `
+            <div class="sheet-item">
+                <div>
+                    <div style="font-weight:600; color:#fff;">${m.concepto || 'Sin concepto'}</div>
+                    <div style="font-size:0.8rem; color:rgba(255,255,255,0.6);">${new Date(m.fecha).toLocaleDateString()}</div>
+                </div>
+                <div style="font-weight:bold; color: ${m.tipo === 'ingreso' ? '#4caf50' : '#f44336'};">
+                    ${m.tipo === 'ingreso' ? '+' : '-'} ${parseFloat(m.cantidad).toFixed(2)}€
+                </div>
+            </div>
+        `).join('')
+        : '<div style="padding:20px; text-align:center; color:rgba(255,255,255,0.5);">No hay movimientos este mes</div>';
+
+    // 4. Actualizar título y mostrar
+    const nombreMes = new Date(anio, mesIndex).toLocaleString('es-ES', { month: 'long' });
+    document.getElementById('sheet-title').innerText = `${nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)} ${anio}`;
+    document.getElementById('sheet-list').innerHTML = listaHTML;
+
+    // 5. Activar animación
+    overlay.classList.add('active');
+    document.getElementById('detalleSheet').classList.add('active');
+};
+
+// Función para cerrar
+window.cerrarDetalleMes = () => {
+    document.querySelector('.bottom-sheet-overlay')?.classList.remove('active');
+    document.getElementById('detalleSheet')?.classList.remove('active');
+};
+
 async function renderInformeDetallado(informeId) {
     const container = select(`informe-content-${informeId}`);
     if (!container) return;
@@ -6094,7 +6149,24 @@ async function renderInformeFlujoCaja(container) {
                 { label: 'Gastos', data: gastosData, backgroundColor: getComputedStyle(document.body).getPropertyValue('--c-danger').trim() }
             ]
         },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' }, datalabels: { display: false } } }
+        options: {
+			onClick: (evt, elements) => {
+            if (elements.length > 0) {
+                const index = elements[0].index;
+                // Si tienes un selector de año, úsalo aquí. Si no, usa el actual:
+                const yearSelector = document.getElementById('filter-periodo'); 
+                const currentYear = new Date().getFullYear(); 
+                
+                // Llamamos a la función que abre el panel
+                if (typeof mostrarDetalleMes === 'function') {
+                    mostrarDetalleMes(index, currentYear, 'todos');
+                }
+            }
+        },
+			responsive: true,
+			maintainAspectRatio: false,
+			scales: { y: { beginAtZero: true } },
+			plugins: { legend: { position: 'top' }, datalabels: { display: false } } }
     });
 }
 
