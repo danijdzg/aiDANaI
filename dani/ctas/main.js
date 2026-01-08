@@ -1667,17 +1667,17 @@ const calculatePreviousDueDate = (currentDueDate, frequency, weekDays = []) => {
 			return chunks;
 		};
 		const measureListItemHeights = () => {
-    // Ya no medimos nada. Usamos valores fijos basados en el CSS.
-    // Es un "contrato" entre nuestro estilo y nuestro código.
+    // CALIBRACIÓN PARA MODO DENSO (OnePlus Nord 4)
+    // Definimos las alturas exactas que hemos puesto en el CSS
     vList.heights = {
-        transaction: 64, // Coincide con el min-height que pusimos en el CSS
-        transfer: 76,    // Valor estimado para traspasos, puedes ajustarlo
-        header: 40,      // Valor estimado para cabeceras
-        pendingHeader: 40, // Valor estimado
-        pendingItem: 72    // Valor estimado
+        transaction: 50, // ¡CAMBIO CRÍTICO! De 64px bajamos a 50px
+        transfer: 62,    // Traspasos un poco más altos (antes 76px)
+        header: 36,      // Cabeceras de fecha (antes 40px+)
+        pendingHeader: 36, 
+        pendingItem: 60  
     };
     
-    console.log('Alturas de elementos definidas (Robusto):', vList.heights);
+    console.log('⚡ Motor de lista calibrado para Alta Densidad:', vList.heights);
 };
     //
 const hapticFeedback = (type = 'light') => {
