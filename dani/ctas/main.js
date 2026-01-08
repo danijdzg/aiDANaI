@@ -8642,7 +8642,7 @@ const initAmountInput = () => {
             // Actualizar visual por si acaso
             updateInputMirror(newInput);
             hapticFeedback('light');
-            showCalculator(newInput);
+            openCalculator(document.getElementById('movimiento-cantidad'));
         });
 
         // Listener para cambios manuales (por si acaso)
@@ -8657,7 +8657,7 @@ const handleInputFocus = (e) => {
     // pero guardamos la referencia para saber dónde escribir.
     e.target.blur(); 
     hapticFeedback('light');
-    showCalculator(e.target);
+    openCalculator(document.getElementById('movimiento-cantidad'));
 };
 const renderInversionesView = async () => {
     // Redirigimos a la nueva pestaña unificada
