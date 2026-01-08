@@ -8498,15 +8498,6 @@ const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
             // 2. Cantidad e Input Visual
             const inputCantidad = document.getElementById('movimiento-cantidad');
 
-if (inputCantidad) {
-    // Evitamos que salga el teclado del móvil
-    inputCantidad.setAttribute('readonly', 'true'); 
-    
-    inputCantidad.addEventListener('click', function(e) {
-        e.preventDefault(); // Evita comportamiento por defecto
-        abrirCalculadoraFusion(this); // Abre nuestra calculadora
-    });
-}
 
             // 3. Resto de datos
             const descInput = document.getElementById('movimiento-descripcion');
@@ -12000,3 +11991,29 @@ window.addEventListener('message', function(event) {
         cerrarCalculadoraFusion();
     }
 });
+
+// ==========================================
+// 🕵️ EL VIGILANTE DE LA CALCULADORA
+// ==========================================
+
+// Escuchamos clics en TODA la aplicación
+document.addEventListener('click', function(e) {
+    // Verificamos si lo que has tocado tiene el ID 'movimiento-cantidad'
+    if (e.target && e.target.id === 'movimiento-cantidad') {
+        console.log("👆 Click detectado en CANTIDAD - Abriendo Fusion Calc...");
+        
+        e.preventDefault(); // IMPORTANTE: Frenamos el teclado del móvil
+        e.target.blur();    // Quitamos el foco para asegurar que no salga el teclado nativo
+        
+        // Llamamos a la función que abre el portal
+        abrirCalculadoraFusion(e.target);
+    }
+}, true); // El 'true' (fase de captura) ayuda a que detecte el click antes que nadie
+
+// Añadimos también soporte para 'touchstart' por si el móvil es muy rápido
+document.addEventListener('touchstart', function(e) {
+    if (e.target && e.target.id === 'movimiento-cantidad') {
+        // Opcional: Pre-cargar o preparar algo si fuera necesario
+        // Pero dejamos que el evento 'click' maneje la apertura para no abrirlo doble
+    }
+}, { passive: false });
