@@ -5579,15 +5579,7 @@ const renderPlanificacionPage = () => {
 
     // --- NUEVO HTML CON DISEÑO PREMIUM ---
     container.innerHTML = `
-        <header style="padding: 24px 16px 8px 16px;">
-            <h1 style="font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; margin: 0;">
-                Análisis <span style="color: var(--c-primary);">Global</span>
-            </h1>
-            <p style="color: var(--c-on-surface-secondary); margin-top: 4px; font-size: 0.95rem;">
-                Tu salud financiera en tiempo real
-            </p>
-        </header>
-
+        
         <div class="analysis-section-label">MI PATRIMONIO</div>
 
         <details class="dashboard-widget">
