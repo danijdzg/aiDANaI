@@ -1222,73 +1222,7 @@ async function loadCoreData(uid) {
         startMainApp();
 };
 
- // =========================================================
-// === NUEVA INTEGRACIÓN CON CALC.HTML (v5.0) ===
-// =========================================================
-
-let currentCalculatorTarget = null; // Guardamos qué input pidió la calculadora
-
-// 1. Función para ABRIR la calculadora (calc.html)
-const showCalculator = (targetInput) => {
-    // Guardamos referencia al input donde pondremos el dinero
-    currentCalculatorTarget = targetInput;
     
-    const modal = document.getElementById('external-calc-modal');
-    const iframe = document.getElementById('calc-frame');
-    
-    if (modal && iframe) {
-        // Hacemos que aparezca deslizándose hacia arriba
-        modal.style.transform = 'translateY(0)';
-        
-        // Opcional: Reiniciar la calculadora al abrir (recargar el iframe)
-        // Esto asegura que empiece limpia cada vez.
-        // iframe.src = iframe.src; 
-    }
-};
-
-// 2. Función para CERRAR la calculadora
-const hideCalculator = () => {
-    const modal = document.getElementById('external-calc-modal');
-    if (modal) {
-        // La escondemos hacia abajo
-        modal.style.transform = 'translateY(100%)';
-    }
-    // Devolvemos el foco al campo de concepto para seguir escribiendo rápido
-    setTimeout(() => {
-        const conceptoInput = document.getElementById('movimiento-concepto');
-        // Si usamos selectores custom, buscamos el trigger
-        const trigger = conceptoInput?.closest('.custom-select-wrapper')?.querySelector('.custom-select__trigger');
-        if (trigger) trigger.focus();
-    }, 300);
-};
-
-// 3. EL ESCUCHADOR (La Oreja)
-// Este código está siempre atento a mensajes que vengan de calc.html
-window.addEventListener('message', (event) => {
-    // Verificamos que el mensaje sea el correcto
-    if (event.data && event.data.type === 'CALCULATOR_RESULT') {
-        const resultado = event.data.value; // El número que mandó calc.html
-        
-        console.log("Recibido de calculadora:", resultado);
-        
-        if (currentCalculatorTarget) {
-            // Escribimos el resultado en el input de la App
-            // Nota: calc.html envía punto decimal (ej: 12.50), la app lo maneja bien
-            currentCalculatorTarget.value = resultado.replace('.', ','); 
-            
-            // Disparamos evento 'input' para que la App sepa que el valor cambió
-            currentCalculatorTarget.dispatchEvent(new Event('input', { bubbles: true }));
-            
-            // Efecto visual de éxito
-            hapticFeedback('success');
-        }
-        
-        // Cerramos inmediatamente
-        hideCalculator();
-    }
-});  
-
-   
         async function loadPresupuestos() {
     if (dataLoaded.presupuestos || !currentUser) return Promise.resolve();
     
@@ -8562,13 +8496,17 @@ const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
             if (titleEl) titleEl.textContent = isRecurrent ? 'Duplicar Recurrente' : 'Duplicar Movimiento';
 
             // 2. Cantidad e Input Visual
-            const cantidadInput = document.getElementById('movimiento-cantidad');
-            if (cantidadInput) {
-                // Formateamos el número para que la calculadora visual lo entienda
-                const valorFormateado = (Math.abs(originalMovement.cantidad) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false });
-                cantidadInput.value = valorFormateado;
-                if (typeof updateInputMirror === 'function') updateInputMirror(cantidadInput);
-            }
+            const inputCantidad = document.getElementById('movimiento-cantidad');
+
+if (inputCantidad) {
+    // Evitamos que salga el teclado del móvil
+    inputCantidad.setAttribute('readonly', 'true'); 
+    
+    inputCantidad.addEventListener('click', function(e) {
+        e.preventDefault(); // Evita comportamiento por defecto
+        abrirCalculadoraFusion(this); // Abre nuestra calculadora
+    });
+}
 
             // 3. Resto de datos
             const descInput = document.getElementById('movimiento-descripcion');
@@ -12008,3 +11946,57 @@ const updateKpiVisual = (elementId, value, isPercentage = false) => {
         animateCountUp(el, value, 1000, true);
     }
 };
+
+// ==========================================
+// 🚀 INTEGRACIÓN CALCULADORA FUSION (v1.0)
+// ==========================================
+
+let inputDestinoCalculadora = null; // Aquí guardaremos qué campo pidió el número
+
+// Función para abrir el portal
+function abrirCalculadoraFusion(inputElement) {
+    inputDestinoCalculadora = inputElement;
+    const portal = document.getElementById('fusion-calc-container');
+    
+    if (portal) {
+        // Mostramos la calculadora deslizando hacia arriba
+        portal.style.transform = 'translateY(0)';
+    }
+}
+
+// Función para cerrar el portal
+function cerrarCalculadoraFusion() {
+    const portal = document.getElementById('fusion-calc-container');
+    if (portal) {
+        // Ocultamos deslizando hacia abajo
+        portal.style.transform = 'translateY(100%)';
+    }
+}
+
+// ESCUCHADOR DE MENSAJES (El puente entre calc.html y index.html)
+window.addEventListener('message', function(event) {
+    // Verificamos que el mensaje sea el correcto
+    if (event.data && event.data.type === 'CALCULATOR_RESULT') {
+        const resultado = event.data.value;
+        
+        console.log("💰 Resultado recibido de Fusion:", resultado);
+
+        if (inputDestinoCalculadora) {
+            // 1. Escribimos el valor en el campo
+            // Reemplazamos punto por coma si tu app usa comas, o lo dejamos tal cual
+            // Asumiremos formato estándar con punto para JS, visualmente puede cambiar
+            inputDestinoCalculadora.value = resultado;
+            
+            // 2. Avisamos a la app que el valor ha cambiado (importante para que guarde)
+            inputDestinoCalculadora.dispatchEvent(new Event('input', { bubbles: true }));
+            inputDestinoCalculadora.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            // 3. Efecto visual (opcional)
+            inputDestinoCalculadora.style.backgroundColor = 'rgba(0, 255, 157, 0.2)';
+            setTimeout(() => inputDestinoCalculadora.style.backgroundColor = '', 300);
+        }
+        
+        // 4. Cerramos la calculadora automáticamente
+        cerrarCalculadoraFusion();
+    }
+});
