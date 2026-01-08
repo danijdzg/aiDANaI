@@ -4158,31 +4158,100 @@ const loadMoreMovements = async (isInitial = false) => {
     movementsObserver.observe(trigger);
 };
 
+// ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
 
-// SUSTITUYE TU 'renderDiarioPage' ANTIGUA POR ESTA:
 const renderDiarioPage = async () => {
-    if (isDiarioPageRendering) return;
+    if (isDiarioPageRendering) {
+        console.log("BLOQUEADO: Intento de re-renderizar el Diario mientras ya estaba en proceso.");
+        return;
+    }
     isDiarioPageRendering = true;
 
     try {
-        const container = document.getElementById('diario-page');
-        // Preparamos el contenedor limpio
-        container.innerHTML = `<div id="ledger-view-root"></div>`;
+        const container = select('diario-page');
+        if (!container.querySelector('#diario-view-container')) {
+            container.innerHTML = '<div id="diario-view-container"></div>';
+        }
         
-        // 1. Cargamos datos (usando tu AppStore)
-        let movimientos = await AppStore.getAll();
-        
-        // (Opcional) Aquí irían tus filtros si los usas
-        if (diarioActiveFilters) {
-            // ... lógica de filtros existente ...
+        const viewContainer = select('diario-view-container');
+        if (!viewContainer) return;
+
+        if (diarioViewMode === 'calendar') {
+            if (movementsObserver) movementsObserver.disconnect();
+            await renderDiarioCalendar();
+            return; // Salimos aquí si estamos en vista de calendario
         }
 
-        // 2. LLAMADA MÁGICA: Usamos el nuevo diseño
-        renderLedgerView('ledger-view-root', movimientos);
+        viewContainer.innerHTML = `
+            <div id="diario-filter-active-indicator" class="hidden">
+			<button data-action="clear-diario-filters" class="icon-btn" style="width: 24px; height: 24px;">
+        <span class="material-icons" style="font-size: 16px;">close</span>
+    </button>
+                <p>Mostrando resultados filtrados.</p>
+                <div>
+                    <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;"><span class="material-icons" style="font-size: 14px;">download</span>Exportar</button>
+                    <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
+                </div>
+            </div>
+            <div id="movimientos-list-container">
+                <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
+            </div>
+            <div id="infinite-scroll-trigger" style="height: 50px;"></div> 
+            <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
+                <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
+            </div>`;
+
+        vList.scrollerEl = selectOne('.app-layout__main');
+        vList.sizerEl = select('virtual-list-sizer');
+        vList.contentEl = select('virtual-list-content');
+        
+        const scrollTrigger = select('infinite-scroll-trigger');
+
+        if (diarioActiveFilters) {
+            if (scrollTrigger) scrollTrigger.classList.add('hidden');
+            if (movementsObserver) movementsObserver.disconnect();
+
+            select('diario-filter-active-indicator').classList.remove('hidden');
+            
+            const allMovements = await AppStore.getAll();
+
+			const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
+			db.movimientos = allMovements.filter(m => {
+                if (startDate && m.fecha < startDate) return false;
+                if (endDate && m.fecha > endDate) return false;
+                if (description && !m.descripcion.toLowerCase().includes(description)) return false;
+                const cantidadEuros = m.cantidad / 100;
+                if (minAmount && cantidadEuros < parseFloat(minAmount)) return false;
+                if (maxAmount && cantidadEuros > parseFloat(maxAmount)) return false;
+                if (cuentas.length > 0) {
+                    if (m.tipo === 'traspaso' && !cuentas.includes(m.cuentaOrigenId) && !cuentas.includes(m.cuentaDestinoId)) return false;
+                    if (m.tipo === 'movimiento' && !cuentas.includes(m.cuentaId)) return false;
+                }
+                if (conceptos.length > 0 && m.tipo === 'movimiento' && !conceptos.includes(m.conceptoId)) return false;
+                return true;
+            });
+            
+            await processMovementsForRunningBalance(db.movimientos, true);
+            updateVirtualListUI();
+
+        } else {
+            if (scrollTrigger) scrollTrigger.classList.remove('hidden');
+            select('diario-filter-active-indicator').classList.add('hidden');
+            
+            db.movimientos = [];
+            lastVisibleMovementDoc = null;
+            allMovementsLoaded = false;
+            isLoadingMoreMovements = false; 
+            
+            await loadMoreMovements(true);
+            initMovementsObserver();
+        }
 
     } catch (error) {
-        console.error("Error renderizando diario:", error);
+        console.error("Error crítico renderizando la página del diario:", error);
+        // Si hay un error, es crucial liberar la guarda para poder intentarlo de nuevo.
     } finally {
+       
         isDiarioPageRendering = false;
     }
 };
@@ -12246,195 +12315,4 @@ const updateKpiVisual = (elementId, value, isPercentage = false) => {
         // Para dinero (€)
         animateCountUp(el, value, 1000, true);
     }
-};
-
-// --- NUEVO RENDERIZADOR OPTIMIZADO PARA DIARIO (TIMELINE PRO) ---
-const renderListadoDiarioOptimizado = (containerID, listaMovimientos) => {
-    const container = document.getElementById(containerID);
-    if (!container) return;
-    container.innerHTML = ''; // Limpiar
-
-    // 1. Agrupar por días y calcular totales
-    const grupos = {};
-    listaMovimientos.forEach(m => {
-        const fechaKey = m.fecha.split('T')[0]; // YYYY-MM-DD
-        if (!grupos[fechaKey]) {
-            grupos[fechaKey] = { fecha: m.fecha, items: [], ingreso: 0, gasto: 0 };
-        }
-        grupos[fechaKey].items.push(m);
-        if (m.tipo === 'ingreso') grupos[fechaKey].ingreso += parseFloat(m.cantidad);
-        if (m.tipo === 'gasto') grupos[fechaKey].gasto += parseFloat(m.cantidad);
-    });
-
-    // 2. Ordenar fechas (más reciente primero)
-    const fechasOrdenadas = Object.keys(grupos).sort((a, b) => new Date(b) - new Date(a));
-
-    // 3. Generar HTML
-    let html = '<div class="timeline-container">';
-    
-    fechasOrdenadas.forEach(fechaKey => {
-        const dia = grupos[fechaKey];
-        const fechaObj = new Date(dia.fecha);
-        
-        // Formatos de fecha
-        const diaSemana = fechaObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase();
-        const diaNum = fechaObj.getDate();
-        const mes = fechaObj.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
-        
-        // Balance del día (Ingresos - Gastos)
-        const balanceDia = dia.ingreso - dia.gasto;
-        const colorBalance = balanceDia >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-        const signo = balanceDia > 0 ? '+' : '';
-
-        // --- CABECERA DE DÍA (STICKY) ---
-        html += `
-            <div class="day-header sticky-header">
-                <div class="day-date-box">
-                    <span class="day-num">${diaNum}</span>
-                    <div class="day-meta">
-                        <span class="day-week">${diaSemana}</span>
-                        <span class="day-month">${mes}</span>
-                    </div>
-                </div>
-                <div class="day-summary">
-                    ${dia.ingreso > 0 ? `<span class="mini-tag inc">+${dia.ingreso.toFixed(2)}</span>` : ''}
-                    ${dia.gasto > 0 ? `<span class="mini-tag exp">-${dia.gasto.toFixed(2)}</span>` : ''}
-                    <span class="day-total" style="color: ${colorBalance}">${signo}${balanceDia.toFixed(2)}€</span>
-                </div>
-            </div>
-            <div class="day-group">
-        `;
-
-        // --- MOVIMIENTOS DEL DÍA ---
-        dia.items.forEach(m => {
-            const esGasto = m.tipo === 'gasto';
-            const colorImporte = esGasto ? 'var(--c-danger)' : (m.tipo === 'ingreso' ? 'var(--c-success)' : 'var(--c-info)');
-            const signoMov = m.tipo === 'ingreso' ? '+' : (m.tipo === 'gasto' ? '-' : '');
-            
-            // Icono basado en el tipo (puedes personalizar esto más si tienes iconos por categoría)
-            let icon = 'paid';
-            if(m.tipo === 'gasto') icon = 'shopping_bag';
-            if(m.tipo === 'traspaso') icon = 'swap_horiz';
-
-            html += `
-                <div class="t-row" onclick="openMovimientoModal('${m.id}')"> <div class="t-time">${new Date(m.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                    <div class="t-icon-mini ${m.tipo}">
-                        <span class="material-icons">${icon}</span>
-                    </div>
-                    <div class="t-data">
-                        <div class="t-top">
-                            <span class="t-concept">${m.concepto || m.descripcion}</span>
-                            <span class="t-amount" style="color: ${colorImporte}">${signoMov}${parseFloat(m.cantidad).toFixed(2)}</span>
-                        </div>
-                        <div class="t-bot">
-                            <span class="t-account">${m.cuenta || 'General'}</span>
-                             ${m.descripcion && m.descripcion.length > 20 ? '<span class="t-dot">•</span>' : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        html += `</div>`; // Cierre day-group
-    });
-
-    html += '</div>';
-    container.innerHTML = html;
-};
-
-// --- NUEVO RENDERIZADOR: DISEÑO LEDGER CONDENSADO ---
-const renderLedgerView = (containerID, listaMovimientos) => {
-    const container = document.getElementById(containerID);
-    if (!container) return;
-
-    // Si no hay datos
-    if (!listaMovimientos || listaMovimientos.length === 0) {
-        container.innerHTML = `<div style="padding:40px; text-align:center; opacity:0.5;">Sin movimientos</div>`;
-        return;
-    }
-
-    // 1. Agrupar movimientos por FECHA
-    const grupos = {};
-    listaMovimientos.forEach(m => {
-        const fechaKey = m.fecha.split('T')[0]; // YYYY-MM-DD
-        if (!grupos[fechaKey]) grupos[fechaKey] = { items: [], total: 0 };
-        grupos[fechaKey].items.push(m);
-        // Calculamos el impacto en el bolsillo (Ingreso suma, Gasto resta)
-        const cantidad = parseFloat(m.cantidad); // Asumiendo que guardas el signo en la cantidad
-        // Si guardas gastos como positivo y tipo='gasto', ajusta aquí:
-        let valorReal = cantidad;
-        if (m.tipo === 'gasto' && cantidad > 0) valorReal = -cantidad;
-        if (m.tipo === 'ingreso') valorReal = Math.abs(cantidad);
-        
-        grupos[fechaKey].total += valorReal;
-    });
-
-    // 2. Ordenar fechas (de más reciente a más antigua)
-    const fechas = Object.keys(grupos).sort((a, b) => new Date(b) - new Date(a));
-
-    // 3. Generar HTML
-    let html = '<div class="ledger-container">';
-
-    fechas.forEach(fecha => {
-        const grupo = grupos[fecha];
-        const dateObj = new Date(fecha);
-        
-        // Formato fecha amigable: "LUN 24 OCT"
-        const opciones = { weekday: 'short', day: 'numeric', month: 'short' };
-        const fechaTexto = dateObj.toLocaleDateString('es-ES', opciones).replace('.', '').toUpperCase();
-        
-        // Color del total del día
-        const totalDia = grupo.total;
-        const colorTotal = totalDia >= 0 ? 'inc' : 'exp';
-        const signoTotal = totalDia > 0 ? '+' : '';
-
-        // --- CABECERA DE DÍA ---
-        html += `
-            <div class="ledger-header">
-                <div class="ledger-date">${fechaTexto}</div>
-                <div class="ledger-day-total">
-                    <span class="${colorTotal}">${signoTotal}${totalDia.toFixed(2)}€</span>
-                </div>
-            </div>
-        `;
-
-        // --- FILAS DE MOVIMIENTOS ---
-        // Ordenamos por ID (asumiendo que ID más alto es más reciente)
-        grupo.items.sort((a, b) => b.id.localeCompare(a.id));
-
-        grupo.items.forEach(m => {
-            const esGasto = m.tipo === 'gasto';
-            const colorMonto = esGasto ? 'var(--c-danger)' : 'var(--c-success)';
-            const signo = esGasto ? '-' : '+';
-            
-            // Icono simple
-            let icono = 'paid'; 
-            if (m.tipo === 'gasto') icono = 'remove_circle_outline';
-            if (m.tipo === 'ingreso') icono = 'add_circle_outline';
-            if (m.tipo === 'traspaso') icono = 'sync_alt';
-
-            // Buscar nombre cuenta (si tienes la variable global 'db')
-            let nombreCuenta = m.cuenta || 'General';
-            // Intento de buscar nombre real si usas IDs
-            if (typeof db !== 'undefined' && db.cuentas) {
-                 const c = db.cuentas.find(x => x.id === m.cuenta);
-                 if(c) nombreCuenta = c.nombre;
-            }
-
-            html += `
-                <div class="ledger-row" onclick="startMovementForm('${m.id}', false)">
-                    <span class="material-icons l-icon ${m.tipo}">${icono}</span>
-                    <div class="l-data">
-                        <span class="l-concept">${m.descripcion || 'Varios'}</span>
-                        <span class="l-account">${nombreCuenta}</span>
-                    </div>
-                    <div class="l-amount" style="color: ${colorMonto}">
-                        ${signo}${Math.abs(m.cantidad).toFixed(2)}
-                    </div>
-                </div>
-            `;
-        });
-    });
-
-    html += '</div>';
-    container.innerHTML = html;
 };
