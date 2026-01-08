@@ -4755,7 +4755,7 @@ const renderPanelPage = async () => {
     container.innerHTML = `
     <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
         
-        <div class="hero-card fade-in-up" onclick="changePage('report')" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
+        <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
                 <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
@@ -5864,7 +5864,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-flujo_caja" class="dashboard-widget informe-acordeon">
+        <details id="acordeon-flujo-caja" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
                 <div class="widget-info">
@@ -11617,48 +11617,35 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- ZONA 2: NAVEGACIÓN INTELIGENTE (Patrimonio e Inversiones) ---
-        // Buscamos si es un botón de navegación
-        const navBtn = event.target.closest('[data-action="ver-balance-neto"], [data-action="ver-inversiones"]');
-        
-        // ¡ESCUDO DEFENSIVO 2!
-        if (navBtn) {
-            const action = navBtn.dataset.action; // Aquí ya es seguro leerlo
-            
-            // Navegar a Planificar
-            if (typeof navigateTo === 'function') navigateTo('planificar-page');
-            else if (typeof handleNavigation === 'function') handleNavigation('planificar-page');
-            
-            // Configurar destino según el botón
-            let targetID = (action === 'ver-balance-neto') ? 'seccion-balance-neto' : 'seccion-inversiones';
-            let keyWords = (action === 'ver-balance-neto') ? ['Patrimonio', 'Balance'] : ['Inversiones', 'Rentabilidad'];
+        // --- ZONA 2: NAVEGACIÓN INTELIGENTE ---
+        const navBtn = event.target.closest('[data-action="ver-balance-neto"], [data-action="ver-inversiones"], [data-action="ver-flujo-caja"]');
 
-            // Esperar y buscar el gráfico
+        if (navBtn) {
+            const action = navBtn.dataset.action;
+
+            // 1. Ir a la pestaña Planificar
+            if (typeof navigateTo === 'function') navigateTo('planificar-page');
+            
+            // 2. Configurar destino
+            let targetID = '';
+            if (action === 'ver-flujo-caja') targetID = 'acordeon-flujo-caja';
+            else if (action === 'ver-balance-neto') targetID = 'patrimonio-overview-container';
+            else if (action === 'ver-inversiones') targetID = 'acordeon-portafolio';
+
+            // 3. Buscar, Abrir y Dibujar
             setTimeout(() => {
-                let destino = document.getElementById(targetID);
-                
-                // Plan B: Buscar por texto si falla el ID
-                if (!destino) {
-                    const titulos = document.querySelectorAll('h3, .card__title, .widget-title');
-                    for (const t of titulos) {
-                        const txt = (t.textContent || "").toLowerCase();
-                        if (keyWords.some(w => txt.includes(w.toLowerCase()))) {
-                            destino = t.closest('.card, .dashboard-widget');
-                            break;
+                const destino = document.getElementById(targetID);
+                if (destino) {
+                    if (destino.tagName === 'DETAILS') {
+                        destino.open = true; // Abrir acordeón
+                        // Dibuja el gráfico si es necesario
+                        if (action === 'ver-flujo-caja' && typeof renderInformeDetallado === 'function') {
+                            renderInformeDetallado('flujo_caja');
                         }
                     }
-                }
-
-                if (destino) {
-                    if (destino.tagName === 'DETAILS') destino.open = true;
                     destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
-                    // Efecto visual
-                    destino.style.transition = 'transform 0.2s';
-                    destino.style.transform = 'scale(1.02)';
-                    setTimeout(() => destino.style.transform = 'scale(1)', 300);
                 }
-            }, 300);
+            }, 100);
             return;
         }
 
