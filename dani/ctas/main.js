@@ -11994,6 +11994,15 @@ window.addEventListener('message', function(event) {
         
         // 4. Cerramos la calculadora automáticamente
         cerrarCalculadoraFusion();
+		 // 5. ¡SALTO AUTOMÁTICO! Enfocamos el siguiente campo (Concepto)
+        setTimeout(() => {
+            const campoConcepto = document.getElementById('movimiento-concepto');
+            if (campoConcepto) {
+                campoConcepto.focus();
+                // Si es un desplegable custom, intentamos abrirlo (opcional)
+                // campoConcepto.click(); 
+            }
+        }, 300); // Pequeña pausa para dar tiempo a la animación de cierre
     }
 });
 
@@ -12026,26 +12035,3 @@ window.addEventListener('message', function(event) {
         }
     }, true); // UseCapture: true para interceptarlo antes que nadie
 });
-💡 Un pequeño extra de Flujo (Opcional pero Recomendado)
-Ya que estamos haciendo esto automático, te sugiero una pequeña mejora en el bloque de recepción del resultado (más arriba en main.js, donde corregimos lo de la coma).
-
-Cuando la calculadora se cierra, lo ideal es que el cursor salte automáticamente al siguiente campo (Concepto), para que puedas seguir escribiendo sin volver a tocar la pantalla.
-
-Si quieres esto, modifica la parte final del window.addEventListener('message'...) así:
-
-JavaScript
-
-        // ... (código anterior de poner el valor) ...
-
-        // 4. Cerramos la calculadora
-        cerrarCalculadoraFusion();
-
-        // 5. ¡SALTO AUTOMÁTICO! Enfocamos el siguiente campo (Concepto)
-        setTimeout(() => {
-            const campoConcepto = document.getElementById('movimiento-concepto');
-            if (campoConcepto) {
-                campoConcepto.focus();
-                // Si es un desplegable custom, intentamos abrirlo (opcional)
-                // campoConcepto.click(); 
-            }
-        }, 300); // Pequeña pausa para dar tiempo a la animación de cierre
