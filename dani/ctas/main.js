@@ -5695,7 +5695,6 @@ const renderPlanificacionPage = () => {
                 </div>
             </div>
         </details>
-
        
         <details class="dashboard-widget">
             <summary class="widget-header">
