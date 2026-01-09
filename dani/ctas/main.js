@@ -5577,21 +5577,47 @@ const renderPlanificacionPage = () => {
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
    
-    // --- NUEVO CÓDIGO HTML BLINDADO PARA ONEPLUS ---
+  
+    // --- CÓDIGO CORREGIDO PARA ONEPLUS NORD 4 ---
     container.innerHTML = `
         <style>
-            #planificar-content .dashboard-widget {
-                margin: 0 2% 5px 2% !important; /* 2% lados, 5px abajo */
-                width: 96% !important;          /* Ocupa el 96% de la pantalla */
+            /* 1. ROMPEMOS LOS LÍMITES DEL PADRE */
+            #planificar-page {
+                padding-left: 0 !important;   /* Eliminamos el borde blanco izquierdo */
+                padding-right: 0 !important;  /* Eliminamos el borde blanco derecho */
+                gap: 0 !important;            /* Eliminamos huecos automáticos */
+                display: block !important;    /* Forzamos bloque para controlar nosotros el espacio */
             }
-            #planificar-content .analysis-section-label {
+
+            /* 2. ESTILOS DE LOS BOTONES (WIDGETS) */
+            #planificar-content .dashboard-widget, 
+            .dashboard-widget {
+                /* Ancho: 96% de la pantalla REAL */
+                width: 96% !important;
+                
+                /* Márgenes: 2% a cada lado para centrarlo (2% izq + 96% ancho + 2% der = 100%) */
+                margin-left: 2% !important;
+                margin-right: 2% !important;
+                
+                /* Espacio vertical: solo 5px entre botones */
+                margin-bottom: 5px !important;
+                margin-top: 0 !important;
+                
+                /* Estética */
+                border-radius: 16px !important;
+                box-sizing: border-box !important; /* Asegura que el borde no sume anchura extra */
+            }
+
+            /* Título de la sección alineado con los botones */
+            .analysis-section-label {
                 margin: 20px 2% 10px 2% !important;
+                padding-left: 5px;
             }
         </style>
 
         <div class="analysis-section-label">MI PATRIMONIO</div>
         
-        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
+        <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
@@ -5605,7 +5631,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-portafolio" class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
+        <details id="acordeon-portafolio" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
                 <div class="widget-info">
@@ -5624,7 +5650,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
+        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon">
             <summary id="summary-extracto-trigger" class="widget-header">
                 <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
                 <div class="widget-info">
@@ -5655,7 +5681,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-flujo-caja" class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
+        <details id="acordeon-flujo-caja" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
                 <div class="widget-info">
@@ -5674,7 +5700,7 @@ const renderPlanificacionPage = () => {
 
         <div class="analysis-section-label">FUTURO Y METAS</div>
 
-        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
+        <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--reloj"><span class="material-icons">update</span></div>
                 <div class="widget-info">
@@ -5690,7 +5716,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
+        <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--presu"><span class="material-icons">savings</span></div>
                 <div class="widget-info">
@@ -5729,7 +5755,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
+        <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--informe"><span class="material-icons">auto_graph</span></div>
                 <div class="widget-info">
