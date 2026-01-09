@@ -5577,33 +5577,71 @@ const renderPlanificacionPage = () => {
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
 
-   // --- NUEVO HTML OPTIMIZADO PARA NORD 4 (DENSIDAD ALTA) ---
+    // --- NUEVO HTML CON DISEÑO PREMIUM ---
     container.innerHTML = `
-        <div class="analysis-section-label">RESUMEN GLOBAL</div>
         
-        <details class="dashboard-widget" open>
+        <div class="analysis-section-label">MI PATRIMONIO</div>
+
+        <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
-                <div class="widget-info"><h3 class="widget-title">Patrimonio Neto</h3></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Patrimonio Neto</h3>
+                    <p class="widget-subtitle">Tus activos menos tus deudas</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content" id="patrimonio-overview-container">
-                <div class="skeleton chart-box-dense" style="border-radius: 12px; margin-top: 8px;"></div>
+                <div class="skeleton" style="height: 400px; border-radius: 12px; margin-top: 16px;"></div>
             </div>
         </details>
 
         <details id="acordeon-portafolio" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
-                <div class="widget-info"><h3 class="widget-title">Inversiones</h3></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Inversiones</h3>
+                    <p class="widget-subtitle">Evolución de tu portafolio</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
-                <div id="portfolio-evolution-container" style="margin-top: 8px;">
-                    <div class="chart-container chart-box-dense skeleton" style="border-radius: 12px;"></div>
+                <div id="portfolio-evolution-container" style="margin-top: 16px;">
+                    <div class="chart-container skeleton" style="height: 220px; border-radius: 12px;"></div>
                 </div>
-                <div id="portfolio-main-content" style="margin-top: 12px;">
-                    <div class="skeleton chart-box-dense" style="border-radius: 12px;"></div>
+                <div id="portfolio-main-content" style="margin-top: 20px;">
+                    <div class="skeleton" style="height: 300px; border-radius: 12px;"></div>
+                </div>
+            </div>
+        </details>
+
+        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon">
+            <summary id="summary-extracto-trigger" class="widget-header">
+                <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Extracto de Cuenta</h3>
+                    <p class="widget-subtitle">Movimientos detallados por cuenta</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content">
+                <div id="informe-content-extracto_cuenta" style="padding-top: 16px;">
+                    <div id="informe-cuenta-wrapper">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="informe-cuenta-select" class="form-label">Cuenta a consultar:</label>
+                            <div style="display: flex; gap: 8px; width: 100%;">
+                                <div class="input-wrapper" style="flex-grow: 1;">
+                                    <select id="informe-cuenta-select" class="form-select"></select>
+                                </div>
+                                <button id="btn-extracto-todo" class="btn btn--secondary" style="font-weight: 700;">TODO</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="informe-resultado-container" style="margin-top: 16px;">
+                        <div class="empty-state" style="background:transparent; padding:10px; border:none;">
+                            <p style="font-size:0.85rem;">Selecciona una cuenta.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </details>
@@ -5611,75 +5649,103 @@ const renderPlanificacionPage = () => {
         <details id="acordeon-flujo-caja" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
-                <div class="widget-info"><h3 class="widget-title">Flujo de Caja</h3></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Flujo de Caja</h3>
+                    <p class="widget-subtitle">Entradas vs. Salidas mensuales</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content" style="padding-top: 8px;">
+            <div class="widget-content" style="padding-top: 16px;">
                 ${filterControlsHTML}
-                <div id="informe-content-flujo_caja" style="margin-top: 8px;">
-                    <div class="skeleton chart-box-dense" style="border-radius: 12px;"></div>
+                <div id="informe-content-flujo_caja" style="min-height: 250px; margin-top: 10px;">
+                     <div class="skeleton" style="height: 250px; border-radius: 12px;"></div>
                 </div>
             </div>
         </details>
-        
-        <div class="analysis-section-label">GESTIÓN</div>
 
-        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon">
-            <summary id="summary-extracto-trigger" class="widget-header">
-                <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
-                <div class="widget-info"><h3 class="widget-title">Extracto</h3></div>
+
+        <div class="analysis-section-label">FUTURO Y METAS</div>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--reloj"><span class="material-icons">update</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Recurrentes</h3>
+                    <p class="widget-subtitle">Suscripciones y pagos fijos</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content">
-                <div id="informe-content-extracto_cuenta" style="padding-top: 8px;">
-                    <div id="informe-cuenta-wrapper">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <div style="display: flex; gap: 8px; width: 100%;">
-                                <div class="input-wrapper" style="flex-grow: 1;">
-                                    <select id="informe-cuenta-select" class="form-select" style="padding: 8px;"></select>
-                                </div>
-                                <button id="btn-extracto-todo" class="btn btn--secondary" style="font-weight: 700; padding: 0 12px;">TODO</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="informe-resultado-container" style="margin-top: 8px;">
-                        <div class="empty-state" style="background:transparent; padding:5px; border:none;">
-                            <p style="font-size:0.75rem;">Selecciona cuenta.</p>
-                        </div>
-                    </div>
-                </div>
+            <div class="widget-content" style="padding-top: 10px;">
+                <div id="pending-recurrents-container"></div>
+                <p class="form-label" style="margin-bottom: 6px;">Toca para editar:</p>
+                <div id="recurrentes-list-container"></div>
             </div>
         </details>
 
         <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--presu"><span class="material-icons">savings</span></div>
-                <div class="widget-info"><h3 class="widget-title">Presupuestos</h3></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Presupuestos</h3>
+                    <p class="widget-subtitle">Control de gasto anual</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content" style="padding-top: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div class="widget-content" style="padding-top: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div class="form-group" style="flex-grow: 1; margin: 0;">
-                        <select id="budget-year-selector" class="form-select" style="padding: 6px;"></select>
+                        <label for="budget-year-selector" class="form-label">Año Fiscal</label>
+                        <select id="budget-year-selector" class="form-select"></select>
                     </div>
-                    <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: 8px; padding: 6px 12px;">
-                        <span class="material-icons" style="font-size: 16px;">edit</span>
+                    <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: 12px;">
+                        <span class="material-icons" style="font-size: 16px;">edit</span> Gestionar
                     </button>
                 </div>
+                
                 <div id="annual-budget-dashboard">
                     <div id="budget-kpi-container" class="kpi-grid"></div>
-                    <div class="card" style="margin-top: 8px; box-shadow: none; border: 1px solid var(--c-outline); padding: 8px;">
-                        <h3 class="card__title" style="font-size: 0.8rem; margin-bottom: 4px; padding: 0;">Tendencia</h3>
-                        <div class="card__content" style="padding: 0;">
-                            <div class="chart-container chart-box-dense"><canvas id="budget-trend-chart"></canvas></div>
+                    <div class="card" style="margin-top: 10px; box-shadow: none; border: 1px solid var(--c-outline);">
+                        <h3 class="card__title" style="font-size: 0.9rem;">Tendencia</h3>
+                        <div class="card__content">
+                            <div class="chart-container" style="height: 200px;"><canvas id="budget-trend-chart"></canvas></div>
                         </div>
                     </div>
-                    <div id="budget-details-list" style="margin-top: 8px;"></div>
+                    <div id="budget-details-list" style="margin-top: 10px;"></div>
+                </div>
+
+                <div id="budget-init-placeholder" class="empty-state hidden">
+                    <span class="material-icons" style="font-size: 48px; color: var(--c-outline);">savings</span>
+                    <h3 style="margin-top: 10px;">Sin Presupuesto</h3>
+                    <button data-action="update-budgets" class="btn btn--primary" style="margin-top: 16px;">
+                        Crear Plan
+                    </button>
+                </div>
+            </div>
+        </details>
+
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--informe"><span class="material-icons">auto_graph</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Informe Custom</h3>
+                    <p class="widget-subtitle">Tus métricas favoritas</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding-top: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h4 id="informe-widget-title" style="margin: 0; font-size: 0.9rem; font-weight: 700;">Mi Informe</h4>
+                    <button class="btn btn--secondary" data-action="show-informe-builder" style="padding: 4px 10px; font-size: 0.75rem;">
+                        <span class="material-icons" style="font-size: 14px;">settings</span>
+                    </button>
+                </div>
+                <div id="informe-widget-content">
+                    <div class="skeleton" style="height: 200px; border-radius: 12px;"></div>
                 </div>
             </div>
         </details>
         
-        <div style="height: 40px;"></div> 
+        <div style="height: 40px;"></div>
     `;
 
     // --- LÓGICA JAVASCRIPT (IGUAL QUE ANTES) ---
