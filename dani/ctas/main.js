@@ -5579,9 +5579,22 @@ const renderPlanificacionPage = () => {
 
     // --- NUEVO HTML CON DISEÑO PREMIUM ---
     container.innerHTML = `
-        
-        <div class="analysis-section-label">MI PATRIMONIO</div>
+        <style>
+            .dashboard-widget {
+                /* Márgenes: Arriba=0, Derecha=2%, Abajo=5px, Izquierda=2% */
+                margin: 0 2% 5px 2% !important; 
+                /* Ancho automático (ocupará el 96% restante) */
+                width: auto !important; 
+                border-radius: 16px !important; /* Un poco menos redondeado para encajar mejor */
+            }
+            .analysis-section-label {
+                /* Alineamos los títulos igual que los botones */
+                margin: 20px 2% 10px 2% !important; 
+            }
+        </style>
 
+        <div class="analysis-section-label">MI PATRIMONIO</div>
+        
         <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
@@ -5592,7 +5605,7 @@ const renderPlanificacionPage = () => {
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content" id="patrimonio-overview-container">
-                <div class="skeleton" style="height: 400px; border-radius: 12px; margin-top: 16px;"></div>
+               <div class="skeleton" style="height: 400px; border-radius: 12px; margin-top: 16px;"></div>
             </div>
         </details>
 
@@ -5658,11 +5671,10 @@ const renderPlanificacionPage = () => {
             <div class="widget-content" style="padding-top: 16px;">
                 ${filterControlsHTML}
                 <div id="informe-content-flujo_caja" style="min-height: 250px; margin-top: 10px;">
-                     <div class="skeleton" style="height: 250px; border-radius: 12px;"></div>
+                    <div class="skeleton" style="height: 250px; border-radius: 12px;"></div>
                 </div>
             </div>
         </details>
-
 
         <div class="analysis-section-label">FUTURO Y METAS</div>
 
@@ -5701,7 +5713,6 @@ const renderPlanificacionPage = () => {
                         <span class="material-icons" style="font-size: 16px;">edit</span> Gestionar
                     </button>
                 </div>
-                
                 <div id="annual-budget-dashboard">
                     <div id="budget-kpi-container" class="kpi-grid"></div>
                     <div class="card" style="margin-top: 16px; box-shadow: none; border: 1px solid var(--c-outline);">
@@ -5712,7 +5723,6 @@ const renderPlanificacionPage = () => {
                     </div>
                     <div id="budget-details-list" style="margin-top: 16px;"></div>
                 </div>
-
                 <div id="budget-init-placeholder" class="empty-state hidden">
                     <span class="material-icons" style="font-size: 48px; color: var(--c-outline);">savings</span>
                     <h3 style="margin-top: 10px;">Sin Presupuesto</h3>
