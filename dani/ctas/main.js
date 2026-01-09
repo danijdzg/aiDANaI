@@ -5614,8 +5614,7 @@ const renderPlanificacionPage = () => {
             }
         </style>
 
-        <div class="analysis-section-label">MI PATRIMONIO</div>
-        
+                
         <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
@@ -5697,8 +5696,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <div class="analysis-section-label">FUTURO Y METAS</div>
-
+       
         <details class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--reloj"><span class="material-icons">update</span></div>
