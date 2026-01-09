@@ -5576,26 +5576,22 @@ const renderPlanificacionPage = () => {
     const filterControlsHTML = typeof generateReportFilterControls === 'function' 
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
-
-    // --- NUEVO HTML CON DISEÑO PREMIUM ---
+   
+    // --- NUEVO CÓDIGO HTML BLINDADO PARA ONEPLUS ---
     container.innerHTML = `
         <style>
-            .dashboard-widget {
-                /* Márgenes: Arriba=0, Derecha=2%, Abajo=5px, Izquierda=2% */
-                margin: 0 2% 5px 2% !important; 
-                /* Ancho automático (ocupará el 96% restante) */
-                width: auto !important; 
-                border-radius: 16px !important; /* Un poco menos redondeado para encajar mejor */
+            #planificar-content .dashboard-widget {
+                margin: 0 2% 5px 2% !important; /* 2% lados, 5px abajo */
+                width: 96% !important;          /* Ocupa el 96% de la pantalla */
             }
-            .analysis-section-label {
-                /* Alineamos los títulos igual que los botones */
-                margin: 20px 2% 10px 2% !important; 
+            #planificar-content .analysis-section-label {
+                margin: 20px 2% 10px 2% !important;
             }
         </style>
 
         <div class="analysis-section-label">MI PATRIMONIO</div>
         
-        <details class="dashboard-widget">
+        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
@@ -5609,7 +5605,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-portafolio" class="dashboard-widget">
+        <details id="acordeon-portafolio" class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
                 <div class="widget-info">
@@ -5628,7 +5624,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon">
+        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
             <summary id="summary-extracto-trigger" class="widget-header">
                 <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
                 <div class="widget-info">
@@ -5659,7 +5655,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-flujo-caja" class="dashboard-widget">
+        <details id="acordeon-flujo-caja" class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
                 <div class="widget-info">
@@ -5678,7 +5674,7 @@ const renderPlanificacionPage = () => {
 
         <div class="analysis-section-label">FUTURO Y METAS</div>
 
-        <details class="dashboard-widget">
+        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--reloj"><span class="material-icons">update</span></div>
                 <div class="widget-info">
@@ -5694,7 +5690,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details class="dashboard-widget">
+        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--presu"><span class="material-icons">savings</span></div>
                 <div class="widget-info">
@@ -5733,7 +5729,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details class="dashboard-widget">
+        <details class="dashboard-widget" style="margin: 0 2% 5px 2% !important; width: 96% !important;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--informe"><span class="material-icons">auto_graph</span></div>
                 <div class="widget-info">
