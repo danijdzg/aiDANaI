@@ -5577,16 +5577,16 @@ const renderPlanificacionPage = () => {
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
    
-  
-    // --- CÓDIGO CORREGIDO PARA ONEPLUS NORD 4 ---
+ 
+    // --- CÓDIGO CORREGIDO (V3) - SIN EL ERROR DE SOLAPAMIENTO ---
     container.innerHTML = `
         <style>
-            /* 1. ROMPEMOS LOS LÍMITES DEL PADRE */
+            /* 1. ARREGLO DE MÁRGENES (Sin bloquear la navegación) */
             #planificar-page {
-                padding-left: 0 !important;   /* Eliminamos el borde blanco izquierdo */
-                padding-right: 0 !important;  /* Eliminamos el borde blanco derecho */
-                gap: 0 !important;            /* Eliminamos huecos automáticos */
-                display: block !important;    /* Forzamos bloque para controlar nosotros el espacio */
+                padding-left: 0 !important;   /* Fuera bordes blancos */
+                padding-right: 0 !important;  /* Fuera bordes blancos */
+                gap: 0 !important;            
+                /* HE BORRADO LA LÍNEA 'display: block' QUE ROMPÍA LA APP */
             }
 
             /* 2. ESTILOS DE LOS BOTONES (WIDGETS) */
@@ -5595,20 +5595,19 @@ const renderPlanificacionPage = () => {
                 /* Ancho: 96% de la pantalla REAL */
                 width: 96% !important;
                 
-                /* Márgenes: 2% a cada lado para centrarlo (2% izq + 96% ancho + 2% der = 100%) */
+                /* Centrado perfecto: 2% a cada lado */
                 margin-left: 2% !important;
                 margin-right: 2% !important;
                 
-                /* Espacio vertical: solo 5px entre botones */
+                /* Separación vertical: 5px */
                 margin-bottom: 5px !important;
                 margin-top: 0 !important;
                 
-                /* Estética */
                 border-radius: 16px !important;
-                box-sizing: border-box !important; /* Asegura que el borde no sume anchura extra */
+                box-sizing: border-box !important;
             }
 
-            /* Título de la sección alineado con los botones */
+            /* Título alineado */
             .analysis-section-label {
                 margin: 20px 2% 10px 2% !important;
                 padding-left: 5px;
