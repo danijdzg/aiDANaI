@@ -3115,8 +3115,8 @@ const renderPortfolioMainContent = async (targetContainerId) => {
     // --- RENDERIZADO DEL HTML PRINCIPAL ---
     container.innerHTML = `
         ${btcInfoHTML}
-        <div class="card" style="margin-bottom: var(--sp-3);">
-            <div class="card__content" style="padding: var(--sp-3);">
+        <div class="card" style="margin-bottom: 5px;">
+			<div class="card__content" style="padding: 10px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid var(--c-outline); padding-bottom:10px;">
                     <h3 style="margin:0; font-size:1rem;">Resumen del Portafolio (Total €)</h3>
                     <button class="btn btn--secondary" onclick="showBulkUpdateModal()" style="padding:4px 10px; font-size:0.75rem; height:auto;">
@@ -3142,15 +3142,15 @@ const renderPortfolioMainContent = async (targetContainerId) => {
             </div>
         </div>
 
-        <div class="card" style="margin-bottom: var(--sp-3); padding: 15px;">
-            <h4 style="margin: 0 0 10px 0; font-size: 0.85rem; color: var(--c-on-surface-secondary); text-align:center;">Rendimiento: Invertido vs Real</h4>
+        <div class="card" style="margin-bottom: 5px; padding: 10px;">
+            <h4 style="margin: 0 0 5px 0; font-size: 0.85rem; color: var(--c-on-surface-secondary); text-align:center;">Rendimiento: Invertido vs Real</h4>
             <div style="position: relative; height: 200px; width: 100%;">
                 <canvas id="investedVsValueChart"></canvas>
             </div>
         </div>
         
-        <div class="filter-pills" style="margin-bottom: var(--sp-3); overflow-x:auto;">${pillsHTML}</div>
-        <div id="investment-assets-list"></div>`;
+        <div class="filter-pills" style="margin-bottom: 5px; overflow-x:auto;">${pillsHTML}</div>
+    <div id="investment-assets-list"></div>`;
 
     // 4. Generar la lista de tarjetas (Assets)
     const listContainer = document.getElementById('investment-assets-list');
@@ -5582,7 +5582,7 @@ const renderPlanificacionPage = () => {
         
         <div class="analysis-section-label">MI PATRIMONIO</div>
 
-        <details class="dashboard-widget">
+        <details class="dashboard-widget" style="margin-bottom: 5px;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
@@ -5596,7 +5596,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <details id="acordeon-portafolio" class="dashboard-widget">
+        <details id="acordeon-portafolio" class="dashboard-widget" style="margin-bottom: 5px;">
             <summary class="widget-header">
                 <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
                 <div class="widget-info">
@@ -5675,9 +5675,9 @@ const renderPlanificacionPage = () => {
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content" style="padding-top: 10px;">
+            <div class="widget-content" style="padding-top: 16px;">
                 <div id="pending-recurrents-container"></div>
-                <p class="form-label" style="margin-bottom: 6px;">Toca para editar:</p>
+                <p class="form-label" style="margin-bottom: 12px;">Toca para editar:</p>
                 <div id="recurrentes-list-container"></div>
             </div>
         </details>
@@ -5691,7 +5691,7 @@ const renderPlanificacionPage = () => {
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content" style="padding-top: 10px;">
+            <div class="widget-content" style="padding-top: 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div class="form-group" style="flex-grow: 1; margin: 0;">
                         <label for="budget-year-selector" class="form-label">Año Fiscal</label>
@@ -5704,13 +5704,13 @@ const renderPlanificacionPage = () => {
                 
                 <div id="annual-budget-dashboard">
                     <div id="budget-kpi-container" class="kpi-grid"></div>
-                    <div class="card" style="margin-top: 10px; box-shadow: none; border: 1px solid var(--c-outline);">
+                    <div class="card" style="margin-top: 16px; box-shadow: none; border: 1px solid var(--c-outline);">
                         <h3 class="card__title" style="font-size: 0.9rem;">Tendencia</h3>
                         <div class="card__content">
                             <div class="chart-container" style="height: 200px;"><canvas id="budget-trend-chart"></canvas></div>
                         </div>
                     </div>
-                    <div id="budget-details-list" style="margin-top: 10px;"></div>
+                    <div id="budget-details-list" style="margin-top: 16px;"></div>
                 </div>
 
                 <div id="budget-init-placeholder" class="empty-state hidden">
@@ -5732,7 +5732,7 @@ const renderPlanificacionPage = () => {
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content" style="padding-top: 10px;">
+            <div class="widget-content" style="padding-top: 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <h4 id="informe-widget-title" style="margin: 0; font-size: 0.9rem; font-weight: 700;">Mi Informe</h4>
                     <button class="btn btn--secondary" data-action="show-informe-builder" style="padding: 4px 10px; font-size: 0.75rem;">
@@ -5745,7 +5745,7 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
         
-        <div style="height: 40px;"></div>
+        <div style="height: 80px;"></div>
     `;
 
     // --- LÓGICA JAVASCRIPT (IGUAL QUE ANTES) ---
@@ -11602,7 +11602,7 @@ const renderBudgetTracking = () => {
 
     // PINTAMOS TODO EL HTML
     container.innerHTML = `
-        <div class="card fade-in-up" style="margin-bottom: 20px; padding: 20px;">
+        <div class="card fade-in-up" style="margin-bottom: 5px; padding: 10px;">
             <h3>Presupuesto</h3>
             <div style="display:flex; justify-content:space-between; margin:10px 0;">
                 <span>Gastado: ${formatCurrency(totalGasto)}</span>
@@ -11611,17 +11611,17 @@ const renderBudgetTracking = () => {
             <div style="width:100%; height:10px; background:#333;"><div style="width:${pct}%; height:100%; background:${color};"></div></div>
         </div>
 
-        <div class="card fade-in-up" style="margin-bottom: 20px;">
+        <div class="card fade-in-up" style="margin-bottom: 5px;">
             <h3>Gastos por Categoría</h3>
             <div class="chart-container" style="height: 200px;"><canvas id="gastosPorCategoriaChart"></canvas></div>
         </div>
 
-        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: 20px;">
+        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: 5px;">
             <h3>Patrimonio Neto</h3>
             <div class="chart-container" style="height: 200px;"><canvas id="balanceNetoChart"></canvas></div>
         </div>
 
-        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: 20px; border: 1px solid #00B34D;">
+        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: 5px; border: 1px solid #00B34D;">
             <h3 style="color:#00B34D;">💰 Mis Inversiones</h3>
             <p style="color:#aaa; font-size:0.8rem;">Usa el lápiz para poner Fecha y Valor.</p>
             
