@@ -1,10 +1,4 @@
 
-/* --- Mejora 1: Bottom Sheet de Acciones Rápidas --- */
-#main-add-sheet-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-2); /* Espacio entre los botones */
-}
 .add-sheet-button {
     display: flex;
     align-items: center;
@@ -7532,63 +7526,74 @@ html, body {
 }
 
 /* =============================================================== */
-/* === SOLUCIÓN DEFINITIVA: OSCURECER FONDO AL PULSAR (+) === */
+/* === SOLUCIÓN FINAL: FONDO OSCURO (MODO NUCLEAR) === */
 /* =============================================================== */
 
-/* 1. El contenedor "invisible" ahora lo forzamos a ocupar TODO */
+/* 1. EL CONTENEDOR PRINCIPAL (LA CAPA QUE OSCURECE) */
 #main-add-sheet {
-    /* POSICIÓN Y TAMAÑO OBLIGATORIO */
+    /* POSICIÓN: Lo sacamos del flujo normal y lo pegamos a la pantalla */
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
-    width: 100vw !important; /* 100% del ancho */
-    height: 100vh !important; /* 100% del alto (TODA la pantalla) */
-    z-index: 9999 !important; /* Encima de todo */
+    right: 0 !important;
+    bottom: 0 !important;
     
-    /* EL COLOR OSCURO */
-    /* Usamos un negro al 80% para asegurar contraste fuerte */
-    background-color: rgba(0, 0, 0, 0.8) !important; 
+    /* TAMAÑO: Forzamos que ocupe el 100% visible sin excusas */
+    width: 100vw !important;
+    height: 100vh !important;
     
-    /* Efecto desenfoque */
-    backdrop-filter: blur(5px) !important;
-    -webkit-backdrop-filter: blur(5px) !important;
+    /* PROFUNDIDAD: Un número absurdamente alto para estar encima de todo */
+    z-index: 2147483647 !important; /* El valor máximo permitido en CSS */
     
-    /* Centrar el contenido abajo */
+    /* EL COLOR: Negro al 80% (0.8) */
+    background-color: rgba(0, 0, 0, 0.8) !important;
+    
+    /* DISEÑO INTERNO: Para que los botones se vayan abajo */
     display: flex !important;
     flex-direction: column !important;
-    justify-content: flex-end !important; /* Empuja los botones abajo */
-}
-
-/* 2. El bloque de botones (hoja blanca/gris) */
-#main-add-sheet-body {
-    background-color: var(--c-surface) !important; /* Restauramos su color original */
-    width: 100% !important;
-    padding-bottom: 30px !important; /* Espacio para gestos del móvil */
-    border-top-left-radius: 24px !important; /* Bordes redondeados bonitos arriba */
-    border-top-right-radius: 24px !important;
-    box-shadow: 0 -10px 40px rgba(0,0,0,0.5) !important; /* Sombra hacia arriba */
+    justify-content: flex-end !important; /* Empuja el contenido al fondo */
+    align-items: center !important;
     
-    /* Aseguramos que los botones no sean transparentes */
-    position: relative !important;
-    z-index: 10000 !important;
+    /* TRANSICIÓN: Para que aparezca suave (fade-in) */
+    transition: opacity 0.3s ease, visibility 0.3s ease !important;
+    
+    /* ESTADO INICIAL: OCULTO pero ocupando espacio */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none; /* Click traspasa cuando está oculto */
 }
 
-/* 3. Ocultar cuando no está activo (Gestión del estado) */
-/* El Javascript añade la clase 'active' o cambia el display. 
-   Si por defecto sale siempre, añade esto para ocultarlo hasta que pulses: */
-#main-add-sheet:not(.active):not([style*="display: flex"]) {
-    /* Esto asegura que el código CSS no lo muestre siempre, 
-       sino que espere a que el botón (+) lo active */
-    pointer-events: none !important;
-    opacity: 0 !important;
-    background-color: transparent !important; /* Transición suave */
-}
-
-/* Cuando se activa (el JS suele poner display:flex o class active) */
-#main-add-sheet.active, 
+/* 2. ESTADO VISIBLE (CUANDO JS LO ACTIVA) */
+/* Detectamos si tiene la clase "active" O si el estilo inline cambia */
+#main-add-sheet.active,
 #main-add-sheet[style*="display: flex"],
 #main-add-sheet[style*="display: block"] {
     opacity: 1 !important;
-    pointer-events: auto !important;
-    background-color: rgba(0, 0, 0, 0.8) !important; /* Se oscurece al activarse */
+    visibility: visible !important;
+    pointer-events: auto !important; /* Atrapa los clicks */
+    background-color: rgba(0, 0, 0, 0.8) !important; /* Refuerzo del color */
+}
+
+/* 3. EL CONTENIDO (LOS BOTONES BLANCOS) */
+#main-add-sheet-body {
+    width: 100% !important;
+    max-width: 100% !important; /* Asegura que ocupe el ancho en móvil */
+    background-color: var(--c-surface) !important; /* Fondo sólido para botones */
+    border-top-left-radius: 24px !important;
+    border-top-right-radius: 24px !important;
+    padding: 24px !important;
+    padding-bottom: 40px !important; /* Espacio extra abajo */
+    
+    /* Sombra para separarlo del fondo oscuro */
+    box-shadow: 0 -5px 25px rgba(0,0,0,0.5) !important;
+    
+    /* Animación de entrada (deslizar desde abajo) */
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+/* Cuando el contenedor está activo, subimos los botones */
+#main-add-sheet.active #main-add-sheet-body,
+#main-add-sheet[style*="display: flex"] #main-add-sheet-body {
+    transform: translateY(0) !important;
 }
