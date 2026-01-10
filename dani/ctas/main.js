@@ -3332,10 +3332,9 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes (Sin cambios)
+    // 1. Header de Pendientes
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
@@ -3343,7 +3342,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente (Sin cambios)
+    // 2. Tarjeta de Pendiente
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
@@ -3365,14 +3364,11 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (Añadimos etiqueta data-fecha)
+    // 3. Header de Fecha (Con etiqueta para el Radar)
     if (item.type === 'date-header') {
-        // --- CÁLCULO DE FECHAS ---
         const dateObj = new Date(item.date + 'T12:00:00Z');
         const numericDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
         
-        // Devolvemos el HTML con un atributo especial data-fecha
-        // Nota: Dejamos el estilo básico, ya que el "Sticky" real lo hará el Radar.
         return `
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
                 background: var(--c-background); 
@@ -3386,16 +3382,15 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS (Añadimos etiqueta data-fecha CRÍTICA)
+    // 4. MOVIMIENTOS (REPARADO: concepts -> conceptos)
     if (item.type === 'transaction') {
         const m = item.movement;
-        const { cuentas, conceptos } = db;
+        const { cuentas, conceptos } = db; // <--- Aquí definimos 'conceptos'
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
         let line1, line2, amountClass, amountSign;
         let cardTypeClass = ''; 
 
-        // IMPORTANTE: Intentamos obtener la fecha del movimiento para el radar
         const fechaMovimiento = m.fecha || ''; 
 
         if (m.tipo === 'traspaso') {
@@ -3419,7 +3414,10 @@ const renderVirtualListItem = (item) => {
             const isGasto = m.cantidad < 0;
             cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
-            const concepto = concepts.find(c => c.id === m.conceptoId)?.nombre || 'Varios'; // Fix typo conceptos -> concepts si es necesario
+            
+            // --- CORRECCIÓN AQUÍ ---
+            // Antes decía 'concepts', ahora dice 'conceptos'
+            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios'; 
             const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             
             const desc = m.descripcion && m.descripcion !== concepto ? m.descripcion : concepto;
@@ -3428,7 +3426,6 @@ const renderVirtualListItem = (item) => {
             amountClass = isGasto ? 'text-negative' : 'text-positive'; amountSign = isGasto ? '' : '+';
         }
 
-        // AQUÍ EL SECRETO: data-fecha en el div principal
         return `
         <div class="t-card ${highlightClass} ${cardTypeClass}" 
              data-fecha="${fechaMovimiento}" 
