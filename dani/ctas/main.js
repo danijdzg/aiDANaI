@@ -4319,7 +4319,7 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 // ==========================================
-// 🏠 PANTALLA INICIO (PANEL) - ESPACIADO MÍNIMO 3PX
+// 🏠 PANTALLA INICIO (PANEL) - ESPACIADO MÍNIMO 2PX
 // ==========================================
 
 const renderPanelPage = async () => {
@@ -4331,7 +4331,7 @@ const renderPanelPage = async () => {
     container.style.overflowX = 'hidden'; 
 
     // --- AJUSTE DE ESPACIADO ---
-    const gap = '3px'; // AHORA SÓLO 3PX DE SEPARACIÓN
+    const gap = '2px'; // AHORA SÓLO 2PX DE SEPARACIÓN
     
     const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
@@ -4352,8 +4352,8 @@ const renderPanelPage = async () => {
         flex-direction: column; 
         align-items: center; 
         width: 100%; 
-        gap: ${gap};         /* 3px entre tarjetas */
-        padding-top: ${gap}; /* 3px desde el techo */
+        gap: ${gap};         /* 2px entre tarjetas */
+        padding-top: ${gap}; /* 2px desde el techo */
         padding-bottom: 100px;
     ">
         
