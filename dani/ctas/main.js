@@ -2163,7 +2163,7 @@ window.addEventListener('offline', () => {
     const chartInstances = [
         conceptosChart, liquidAssetsChart, detailInvestmentChart, 
         informesChart, assetAllocationChart, budgetTrendChart, 
-        netWorthChart, informeActivoChart, informeChart
+        netWorthChart, informeActivoChart
     ];
 
     // 1. Destruir instancias conocidas
@@ -2184,8 +2184,7 @@ window.addEventListener('offline', () => {
     budgetTrendChart = null;
     netWorthChart = null;
     informeActivoChart = null;
-    informeChart = null;
-
+   
     // 3. (AFINADO EXTRA) Buscar cualquier canvas que Chart.js crea que controla y limpiarlo
     // Esto arregla casos donde la variable se perdió pero el Chart sigue vivo en el DOM.
     Chart.helpers.each(Chart.instances, (instance) => {
