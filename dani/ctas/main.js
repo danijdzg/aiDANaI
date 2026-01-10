@@ -5472,28 +5472,37 @@ const renderPlanificacionPage = () => {
             #planificar-page {
                 padding: 0 !important;
                 background-color: var(--c-background) !important;
+                overflow-x: hidden; /* Evita scroll lateral accidental */
             }
 
-            /* ESTILO UNIFICADO PARA TODAS LAS CAJAS (WIDGETS) */
+            /* ESTILO "FULL WIDTH" (DE BORDE A BORDE) */
             .dashboard-widget {
-                width: 94% !important;
-                margin: 10px auto !important; /* Separación vertical y centrado horizontal */
-                border-radius: 12px !important;
+                width: 100% !important;     /* Ocupa todo el ancho */
+                margin: 0 !important;       /* Sin márgenes externos */
+                border-radius: 0 !important; /* Esquinas cuadradas */
+                border: none !important;    /* Quitamos el borde completo */
+                border-bottom: 1px solid var(--c-outline) !important; /* Solo línea separadora abajo */
                 background-color: var(--c-surface);
-                border: 1px solid var(--c-outline);
                 box-sizing: border-box;
             }
             
+            /* Ajuste visual para cuando se abre el acordeón */
+            .widget-content {
+                border-top: 1px solid var(--c-outline); /* Línea interna */
+                background-color: var(--c-background); /* Un poco más oscuro por dentro para contraste */
+            }
+
             .widget-header {
-                padding: 15px;
+                padding: 18px 15px; /* Más espacio para el dedo */
                 display: flex;
                 align-items: center;
                 cursor: pointer;
             }
-            
-            /* Ajuste para que el contenido de los acordeones respire */
-            .widget-content {
-                border-top: 1px solid var(--c-outline);
+
+            /* Títulos más grandes para aprovechar el espacio */
+            .widget-title {
+                font-size: 1rem;
+                font-weight: 600;
             }
         </style>
 
@@ -5507,8 +5516,8 @@ const renderPlanificacionPage = () => {
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
-                <div id="patrimonio-overview-container" style="padding: 16px;">
-                   <div class="skeleton" style="height: 150px; width: 100%; border-radius: 12px;"></div>
+                <div id="patrimonio-overview-container" style="padding: 20px;">
+                   <div class="skeleton" style="height: 150px; width: 100%; border-radius: 8px;"></div>
                 </div>
             </div>
         </details>
@@ -5524,10 +5533,9 @@ const renderPlanificacionPage = () => {
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content" style="padding: 16px;">
+            <div class="widget-content" style="padding: 20px;">
                 <div id="pending-recurrents-container"></div>
-                
-                <div style="margin-top: 10px;">
+                <div style="margin-top: 15px;">
                     <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 8px;">Suscripciones activas:</p>
                     <div id="recurrentes-list-container"></div>
                 </div>
@@ -5544,10 +5552,10 @@ const renderPlanificacionPage = () => {
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
-                <div id="portfolio-evolution-container" style="margin-top: 16px;">
+                <div id="portfolio-evolution-container" style="margin-top: 16px; padding: 0 10px;">
                     <div class="chart-container skeleton" style="height: 220px;"></div>
                 </div>
-                <div id="portfolio-main-content" style="margin-top: 20px;"></div>
+                <div id="portfolio-main-content" style="margin-top: 20px; padding: 0 10px;"></div>
             </div>
         </details>
 
@@ -5561,7 +5569,7 @@ const renderPlanificacionPage = () => {
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
-                <div id="informe-content-extracto_cuenta" style="padding-top: 16px;">
+                <div id="informe-content-extracto_cuenta" style="padding: 20px;">
                     <div id="informe-cuenta-wrapper">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label for="informe-cuenta-select" class="form-label">Cuenta:</label>
@@ -5591,10 +5599,10 @@ const renderPlanificacionPage = () => {
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            <div class="widget-content" style="padding-top: 16px;">
+            <div class="widget-content" style="padding: 20px;">
                 ${filterControlsHTML}
                 <div id="informe-content-flujo_caja" style="min-height: 250px; margin-top: 10px;">
-                    <div class="skeleton" style="height: 250px; border-radius: 12px;"></div>
+                    <div class="skeleton" style="height: 250px; border-radius: 8px;"></div>
                 </div>
             </div>
         </details>
@@ -5605,7 +5613,7 @@ const renderPlanificacionPage = () => {
     // --- LÓGICA JAVASCRIPT ---
 
     populateAllDropdowns();
-    renderPendingRecurrents(); // Esto rellenará el contenido oculto del acordeón Recurrentes
+    renderPendingRecurrents(); 
     renderRecurrentsListOnPage(); 
     
     setTimeout(async () => {
