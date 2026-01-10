@@ -3364,25 +3364,55 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (Con etiqueta para el Radar)
+    // 3. Header de Fecha (¡REDISEÑO VISTOSO!)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
-        const numericDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
         
+        // Formato: "25" "Ene" "2024"
+        const day = dateObj.getDate();
+        // Mes con primera letra mayúscula (ene -> Ene)
+        let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
+        month = month.charAt(0).toUpperCase() + month.slice(1);
+        const year = dateObj.getFullYear();
+        
+        // Estructura: Texto centrado elegante + Importe a la derecha
         return `
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
-                background: var(--c-background); 
-                padding: 12px 10px; 
+                background: linear-gradient(180deg, var(--c-surface) 0%, var(--c-background) 100%); /* Degradado sutil */
+                padding: 15px 12px; 
+                margin-top: 5px;
+                border-top: 1px solid var(--c-outline);
                 border-bottom: 1px solid var(--c-outline);
-                display: flex; align-items: center; justify-content: center;
+                display: flex; 
+                align-items: center; 
+                justify-content: center;
+                position: relative;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); /* Sombra suave para volumen */
             ">
-                <span style="color: #FFFFFF; font-weight: 900; font-size: 0.9rem;">${numericDate}</span>
-                <span style="position: absolute; right: 15px; color: #FFFFFF; font-family: monospace;">${formatCurrencyHTML(item.total)}</span>
+                <div style="text-align: center; color: var(--c-on-surface);">
+                    <span style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">${day}</span>
+                    <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.8;"> de ${month} de </span>
+                    <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.6;">${year}</span>
+                </div>
+
+                <span style="
+                    position: absolute; 
+                    right: 15px; 
+                    color: #FFFFFF; 
+                    font-weight: 700; 
+                    font-family: monospace; 
+                    font-size: 1rem;
+                    background: rgba(255,255,255,0.1); /* Pastilla translúcida */
+                    padding: 2px 8px;
+                    border-radius: 6px;
+                ">
+                    ${formatCurrencyHTML(item.total)}
+                </span>
             </div>
         `;
     }
 
-    // 4. MOVIMIENTOS (Aquí recuperamos el saldo)
+    // 4. MOVIMIENTOS (Sin cambios funcionales, mantiene tu diseño actual)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db; 
@@ -3401,7 +3431,6 @@ const renderVirtualListItem = (item) => {
             const saldoDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.saldo || 0;
 
             line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
-            // En traspasos, los saldos van integrados en el texto
             line2 = `
                 <div style="line-height: 1.4;">
                     <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
@@ -3412,7 +3441,6 @@ const renderVirtualListItem = (item) => {
                 </div>`;
             amountClass = 'text-info'; amountSign = '';
         } else {
-            // --- INGRESOS Y GASTOS ---
             const isGasto = m.cantidad < 0;
             cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
@@ -3426,8 +3454,6 @@ const renderVirtualListItem = (item) => {
             amountClass = isGasto ? 'text-negative' : 'text-positive'; amountSign = isGasto ? '' : '+';
         }
 
-        // --- RENDERIZADO FINAL ---
-        // Fíjate que en t-row-secondary he añadido el div para el saldo (t-running-balance)
         return `
         <div class="t-card ${highlightClass} ${cardTypeClass}" 
              data-fecha="${fechaMovimiento}" 
@@ -3441,13 +3467,11 @@ const renderVirtualListItem = (item) => {
                 </div>
                 <div class="t-row-secondary" style="display: flex; justify-content: space-between; align-items: center;">
                     <div class="t-line-2">${line2}</div>
-                    
                     ${m.tipo !== 'traspaso' ? `
                         <div class="t-running-balance" style="font-size: 0.75rem; color: var(--c-on-surface-secondary); opacity: 0.7;">
                             ${formatCurrencyHTML(m.runningBalance)}
                         </div>
                     ` : ''}
-                    
                 </div>
             </div>
         </div>`;
@@ -11373,102 +11397,111 @@ window.addEventListener('message', function(event) {
 });
 
 // ===============================================================
-// 📡 RADAR VISUAL DE FECHAS (Solución Definitiva Sticky)
+// 📡 RADAR VISUAL DE FECHAS (Actualizado Diseño Vistoso)
 // ===============================================================
 
 const initStickyRadar = () => {
-    // 1. Buscamos el contenedor de la lista (intentamos varios selectores comunes)
     const listContainer = document.querySelector('.virtual-list-container') || document.getElementById('lista-movimientos') || document.querySelector('#view-movimientos .scroll-container');
-    
-    if (!listContainer) return; // Si no lo encontramos, reintentamos luego con el observer
+    if (!listContainer) return; 
 
-    // 2. Creamos la "Barra Fija" (Overlay) si no existe
     let stickyBar = document.getElementById('sticky-radar-bar');
     if (!stickyBar) {
         stickyBar = document.createElement('div');
         stickyBar.id = 'sticky-radar-bar';
-        // Estilos para que se quede fija arriba
+        // Estilo base: Fondo sólido para tapar lo que pasa por debajo
         stickyBar.style.cssText = `
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 48px;
-            background: var(--c-background);
+            top: 0; left: 0; width: 100%; height: 55px; /* Altura ajustada al nuevo diseño */
+            background: var(--c-surface); /* Fondo base */
             border-bottom: 1px solid var(--c-outline);
             display: flex; align-items: center; justify-content: center;
             z-index: 500;
-            pointer-events: none; /* Dejamos pasar los clics a través de ella */
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            transition: opacity 0.2s;
+            pointer-events: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: opacity 0.15s;
         `;
-        // La insertamos en el padre del contenedor scrollable para que no se mueva
         listContainer.parentElement.style.position = 'relative'; 
         listContainer.parentElement.appendChild(stickyBar);
     }
 
-    // 3. Función del Radar
     const scanList = () => {
-        // Obtenemos las coordenadas del punto de escaneo (un poco más abajo del borde superior)
         const rect = listContainer.getBoundingClientRect();
         const scanX = rect.left + 20; 
-        const scanY = rect.top + 50; // 50px hacia abajo desde el borde superior
+        const scanY = rect.top + 50; 
 
-        // Usamos elementFromPoint para ver qué elemento está ahí físicamente
-        // (Nota: Desactivamos temporalmente pointer-events del overlay para ver a través)
         stickyBar.style.pointerEvents = 'none';
         let element = document.elementFromPoint(scanX, scanY);
         
-        // Subimos por el DOM hasta encontrar la tarjeta o el header con el dato "data-fecha"
         let foundDate = null;
         let foundTotal = null;
 
         while (element && element !== document.body) {
             if (element.hasAttribute('data-fecha')) {
                 foundDate = element.getAttribute('data-fecha');
+                // Intentamos pescar el total si el elemento escaneado es justo la cabecera
                 if(element.hasAttribute('data-total')) foundTotal = element.getAttribute('data-total');
                 break;
             }
             element = element.parentElement;
         }
 
-        // 4. Actualizamos la Barra Fija
         if (foundDate) {
             stickyBar.style.opacity = '1';
             
-            // Formateo de fecha
+            // Replicamos la lógica de formato "Vistosa"
             const dateObj = new Date(foundDate + 'T12:00:00Z');
-            const numericDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            let dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
-            
-            const today = new Date(); today.setHours(0,0,0,0);
-            const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
-            if (itemDate.getTime() === today.getTime()) dayName = "HOY";
+            const day = dateObj.getDate();
+            let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
+            month = month.charAt(0).toUpperCase() + month.slice(1);
+            const year = dateObj.getFullYear();
 
-            // Si tenemos el total (es un header) lo mostramos, si es una tarjeta, solo fecha
-            // (Podríamos buscar el total en el array de datos, pero por simplicidad mostramos fecha limpia)
+            // Si no tenemos el total a mano (porque estamos sobre una tarjeta), 
+            // no mostramos importe en la barra flotante para no confundir, 
+            // O podemos dejarlo vacío. Aquí mostraré solo la fecha vistosa.
             
+            let totalHtml = '';
+            if (foundTotal) {
+                 totalHtml = `
+                <span style="
+                    position: absolute; 
+                    right: 15px; 
+                    color: #FFFFFF; 
+                    font-weight: 700; 
+                    font-family: monospace; 
+                    font-size: 1rem;
+                    background: rgba(255,255,255,0.1);
+                    padding: 2px 8px;
+                    border-radius: 6px;
+                ">
+                    ${formatCurrencyHTML(parseFloat(foundTotal))}
+                </span>`;
+            }
+
+            // HTML IDÉNTICO AL HEADER PARA QUE NO SE NOTE EL CAMBIO
             stickyBar.innerHTML = `
-                <div style="text-align: center; color: #FFFFFF;">
-                    <span style="font-weight: 900; font-size: 0.9rem; margin-right: 6px;">${dayName}</span>
-                    <span style="font-size: 0.9rem; font-family: monospace; opacity: 0.9;">${numericDate}</span>
+                <div style="
+                    width: 100%; height: 100%;
+                    background: linear-gradient(180deg, var(--c-surface) 0%, var(--c-background) 100%);
+                    display: flex; align-items: center; justify-content: center;
+                    position: relative;
+                ">
+                    <div style="text-align: center; color: var(--c-on-surface);">
+                        <span style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">${day}</span>
+                        <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.8;"> de ${month} de </span>
+                        <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.6;">${year}</span>
+                    </div>
+                    ${totalHtml}
                 </div>
             `;
-            // Si quieres añadir el saldo, habría que calcularlo o buscarlo, 
-            // pero para empezar asegurémonos de que la fecha se pega.
         } else {
-            // Si estamos muy arriba (zona de pendientes) o vacío
             stickyBar.style.opacity = '0'; 
         }
     };
 
-    // 5. Encendemos el Radar
     listContainer.removeEventListener('scroll', scanList);
     listContainer.addEventListener('scroll', scanList);
-    scanList(); // Escaneo inicial
+    scanList(); 
 };
 
-// Auto-arranque
-setInterval(() => {
-    // Intentamos iniciar el radar cada poco tiempo por si cambias de vista
-    if(document.querySelector('.virtual-list-container') && !document.getElementById('sticky-radar-bar')){
-        initStickyRadar();
-    }
-}, 1000);
+// Reiniciar el radar
+if(document.querySelector('.virtual-list-container')) initStickyRadar();
