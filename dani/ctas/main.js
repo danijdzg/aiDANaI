@@ -3350,141 +3350,168 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-//* =============================================================== */
-/* === FUNCIÓN DIARIO NORD 4 (VERSIÓN LIMPIA) === */
-/* =============================================================== */
 
 const renderVirtualListItem = (item) => {
     
-    // -- SEGURIDAD: Si la base de datos no ha cargado, evitamos el crash --
-    const safeDb = (typeof db !== 'undefined') ? db : { cuentas: [], conceptos: [] };
-    const { cuentas, conceptos } = safeDb;
-
-    // A. Header Pendientes (Blanco y Naranja)
+    // 1. Header de Pendientes
     if (item.type === 'pending-header') {
         return `
-            <div style="background: #111; border: 1px solid var(--c-warning); color: var(--c-warning); margin: 10px 16px; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold;">
-                <span class="material-icons" style="font-size: 18px; vertical-align: text-bottom;">update</span> 
-                PENDIENTES (${item.count})
-            </div>`;
+        <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 16px;">
+            <span><span class="material-icons" style="font-size: 16px; vertical-align: middle;">update</span> Pendientes (${item.count})</span>
+        </div>`;
     }
 
-    // B. Item Pendiente
+    // 2. Tarjeta de Pendiente
     if (item.type === 'pending-item') {
-        const r = item.recurrent || {}; // Seguridad por si viene vacío
-        const nextDate = r.nextDate ? new Date(r.nextDate) : new Date();
-        const dateStr = nextDate.toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
-        const desc = r.descripcion || 'Sin descripción';
+        const r = item.recurrent;
+        const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
         
+        // CORRECCIÓN COLOR: Usamos formatCurrencyHTML directamente
         return `
-            <div class="t-card" style="border-left: 4px solid var(--c-warning) !important;">
-                <div class="t-content">
-                    <div style="color: #FFFFFF; font-weight: 700; font-size: 1rem;">${escapeHTML(desc)}</div>
-                    <div style="color: #FFFFFF; font-size: 0.9rem;">Programado: ${dateStr}</div>
-                    <div style="margin-top: 10px; display: flex; gap: 15px;">
-                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 6px 16px;">AÑADIR</button>
-                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 6px 16px;">OMITIR</button>
+        <div class="transaction-card" id="pending-recurrente-${r.id}" style="margin:0 16px; border-bottom:1px solid var(--c-outline); background-color: rgba(255, 214, 10, 0.05);">
+            <div class="transaction-card__content">
+                <div class="transaction-card__details">
+                    <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                    <div class="transaction-card__row-2" style="color: var(--c-warning); font-weight: 600;">Programado: ${date}</div>
+                    
+                    <div class="acciones-recurrentes-corregidas" style="margin-top: 8px;">
+                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Omitir</button>
+                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Añadir</button>
                     </div>
                 </div>
-            </div>`;
+                <div class="transaction-card__figures">
+                    <strong class="transaction-card__amount ${r.cantidad >= 0 ? 'text-positive' : 'text-negative'}">
+                        ${formatCurrencyHTML(r.cantidad)}
+                    </strong>
+                </div>
+            </div>
+        </div>`;
     }
 
-    // C. Header Fecha (CON EL AMARILLO VIBRANTE FORZADO POR CSS)
+    // 3. Header de Fecha (ESTILO INTEGRADO CON COLOR SEMÁNTICO)
     if (item.type === 'date-header') {
-        try {
-            const dateObj = new Date(item.date + 'T12:00:00Z');
-            const today = new Date(); today.setHours(0,0,0,0);
-            const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
-            const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
+        const dateObj = new Date(item.date + 'T12:00:00Z');
+        
+        const today = new Date(); 
+        const yesterday = new Date(); 
+        today.setHours(0,0,0,0);
+        yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
+        
+        const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
+        
+        let dayName = '';
+        let fullDate = '';
+        let isTodayClass = '';
 
-            let dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
-            if (itemDate.getTime() === today.getTime()) dayName = "HOY";
-            else if (itemDate.getTime() === yesterday.getTime()) dayName = "AYER";
-
-            const fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
-            
-            // Nota: El color amarillo ahora lo controla el CSS con !important, 
-            // así que aquí podemos dejar las clases estándar sin miedo.
-            let totalClass = 'text-info'; 
-            if (item.total > 0) totalClass = 'text-positive'; 
-            else if (item.total < 0) totalClass = 'text-negative'; 
-
-            return `
-                <div class="sticky-date-header">
-                    <div class="sticky-date-left">
-                        <span class="sticky-day-pill">${dayName}</span>
-                        <span class="sticky-date-text">${fullDate}</span>
-                    </div>
-                    <span class="sticky-date-total ${totalClass}" style="font-weight: 800; font-size: 1.1rem;">
-                        ${formatCurrencyHTML(item.total)}
-                    </span>
-                </div>`;
-        } catch (e) {
-            return ''; 
+        if (itemDate.getTime() === today.getTime()) {
+            dayName = "HOY";
+            isTodayClass = 'is-today'; 
+            fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+        } else if (itemDate.getTime() === yesterday.getTime()) {
+            dayName = "AYER";
+            fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+        } else {
+            dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+            fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
         }
+
+        // Lógica de colores según el importe:
+        // > 0: Verde (is-positive)
+        // < 0: Rojo (is-negative)
+        // === 0: Morado (is-neutral)
+        let totalClass = 'is-neutral'; 
+        if (item.total > 0) totalClass = 'is-positive';
+        else if (item.total < 0) totalClass = 'is-negative';
+
+        const totalFormatted = formatCurrencyHTML(item.total); 
+
+        return `
+            <div class="sticky-date-header">
+                <div class="sticky-date-left">
+                    <span class="sticky-day-pill ${isTodayClass}">${dayName}</span>
+                    <span class="sticky-date-text">${fullDate}</span>
+                </div>
+                <span class="sticky-date-total ${totalClass}">${totalFormatted}</span>
+            </div>
+        `;
     }
 
-    // D. MOVIMIENTOS (DISEÑO CLEAN & COLOR)
+    // 4. MOVIMIENTOS REALES (DISEÑO CLEAN: BARRAS DE COLOR)
     if (item.type === 'transaction') {
-        const m = item.movement || {};
+        const m = item.movement;
+        const { cuentas, conceptos } = db;
         
-        // --- COLORES ---
-        let themeClass, amountSign, barClass;
+        // Animación si es nuevo
+        const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
-        if (m.tipo === 'traspaso') {
-            themeClass = 'text-info';    // Azul
-            barClass   = 'is-traspaso';
-            amountSign = '';
-        } else if (m.cantidad < 0) {
-            themeClass = 'text-negative'; // Rojo
-            barClass   = 'is-gasto';
-            amountSign = '';
-        } else {
-            themeClass = 'text-positive'; // Verde
-            barClass   = 'is-ingreso';
-            amountSign = '+';
-        }
+        // Formato fecha
+        const dateObj = new Date(m.fecha);
+        const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 
-        // --- TEXTOS ---
-        let lineaPrincipal = ""; 
-        let lineaSecundaria = "";
-        
-        const saldoFormatted = formatCurrencyHTML(m.runningBalance || 0);
+        // VARIABLES VISUALES
+        let line1, line2, amountClass, amountSign;
+        let barClass; // <--- Variable para el color de la barra
 
         if (m.tipo === 'traspaso') {
+            // --- TRASPASO (AZUL) ---
+            barClass = 'is-traspaso'; 
+
             const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
             const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
             
-            lineaPrincipal = "TRASPASO";
-            lineaSecundaria = `${origen} ➔ ${destino} (${saldoFormatted})`;
+            const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
+            const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
+
+            // Texto descriptivo
+            line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
+            line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
+            
+            amountClass = 'text-info'; 
+            amountSign = '';
 
         } else {
-            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'General';
-            const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
+            // --- INGRESO (VERDE) O GASTO (ROJO) ---
+            const isGasto = m.cantidad < 0;
             
-            lineaPrincipal = concepto.toUpperCase();
-            if (m.descripcion && m.descripcion !== concepto) {
-                lineaPrincipal += ` - ${m.descripcion}`;
-            }
+            // Asignamos la clase de color para la barra
+            barClass = isGasto ? 'is-gasto' : 'is-ingreso';
 
-            lineaSecundaria = `${cuentaNombre} (${saldoFormatted})`;
+            // Colores para el texto de la cuenta (para mantener coherencia)
+            const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+
+            const concepto = conceptos.find(c => c.id === m.conceptoId);
+            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
+            
+            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+            
+            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
+            const separator = desc ? ' • ' : '';
+            
+            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+            
+            amountClass = isGasto ? 'text-negative' : 'text-positive';
+            amountSign = isGasto ? '' : '+';
         }
 
+        // HTML FINAL: Aquí usamos la 't-bar' en lugar de 't-icon-bubble'
         return `
-            <div class="t-card" data-id="${m.id}" data-action="edit-movement-from-list">
-                <div class="t-bar ${barClass}"></div>
-                <div class="t-content">
-                    <div class="t-row-primary">
-                        <div class="t-line-1">${escapeHTML(lineaPrincipal)}</div>
-                        <div class="t-amount ${themeClass}">${amountSign}${formatCurrencyHTML(m.cantidad || 0)}</div>
-                    </div>
-                    
-                    <div class="t-row-secondary">
-                        <div class="t-line-2 ${themeClass}">${escapeHTML(lineaSecundaria)}</div>
-                        <div></div>
-                    </div>
+        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
+            
+            <div class="t-bar ${barClass}"></div>
+            
+            <div class="t-content">
+                <div class="t-row-primary">
+                    <div class="t-line-1">${line1}</div>
+                    <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
                 </div>
-            </div>`;
+                <div class="t-row-secondary">
+                    <div class="t-line-2">${line2}</div>
+                    ${m.tipo !== 'traspaso' ? `<div class="t-running-balance">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
+                </div>
+            </div>
+        </div>`;
     }
     return '';
 };
