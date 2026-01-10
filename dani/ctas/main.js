@@ -3350,35 +3350,34 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-
 const renderVirtualListItem = (item) => {
-    // 1. Header de Pendientes (Mantenemos simple)
+    // 1. Header Pendientes (Sin cambios, solo blanco puro)
     if (item.type === 'pending-header') {
         return `
-            <div style="background: #000; border: 1px solid var(--c-warning); color: var(--c-warning); margin: 10px 16px; padding: 8px; border-radius: 8px; text-align: center; font-weight: bold;">
-                <span class="material-icons" style="font-size: 16px; vertical-align: middle;">update</span> 
+            <div style="background: #111; border: 1px solid var(--c-warning); color: var(--c-warning); margin: 10px 16px; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; box-shadow: 0 0 5px rgba(255,165,0,0.2);">
+                <span class="material-icons" style="font-size: 18px; vertical-align: text-bottom;">update</span> 
                 PENDIENTES (${item.count})
             </div>`;
     }
 
-    // 2. Tarjeta de Pendiente
+    // 2. Item Pendiente
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
         return `
             <div class="t-card" style="border-left: 4px solid var(--c-warning) !important;">
                 <div class="t-content">
-                    <div style="color: #FFF; font-weight: 700;">${escapeHTML(r.descripcion)}</div>
-                    <div style="color: #FFF; font-size: 0.8rem;">Programado: ${date}</div>
-                    <div style="margin-top: 8px; display: flex; gap: 10px;">
-                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 12px; font-size: 0.8rem;">AÑADIR</button>
-                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 4px 12px; font-size: 0.8rem;">OMITIR</button>
+                    <div style="color: #FFF; font-weight: 700; font-size: 1rem;">${escapeHTML(r.descripcion)}</div>
+                    <div style="color: #FFF; font-size: 0.9rem;">Programado: ${date}</div>
+                    <div style="margin-top: 10px; display: flex; gap: 15px;">
+                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 6px 16px;">AÑADIR</button>
+                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 6px 16px;">OMITIR</button>
                     </div>
                 </div>
             </div>`;
     }
 
-    // 3. Header de Fecha (ESTILO NORD 4 - BLANCO PURO)
+    // 3. Header Fecha (CON EL NUEVO DISEÑO INCRUSTADO)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         const today = new Date(); today.setHours(0,0,0,0);
@@ -3391,10 +3390,10 @@ const renderVirtualListItem = (item) => {
 
         const fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
         
-        // El total del día sí lo coloreamos para que destaque
-        let totalClass = 'text-info'; // Por defecto azul
-        if (item.total > 0) totalClass = 'text-positive'; // Verde
-        else if (item.total < 0) totalClass = 'text-negative'; // Rojo
+        // Total diario en NEÓN
+        let totalClass = 'text-info'; 
+        if (item.total > 0) totalClass = 'text-positive'; 
+        else if (item.total < 0) totalClass = 'text-negative'; 
 
         return `
             <div class="sticky-date-header">
@@ -3402,75 +3401,75 @@ const renderVirtualListItem = (item) => {
                     <span class="sticky-day-pill">${dayName}</span>
                     <span class="sticky-date-text">${fullDate}</span>
                 </div>
-                <span class="sticky-date-total ${totalClass}">${formatCurrencyHTML(item.total)}</span>
+                <span class="sticky-date-total ${totalClass}" style="font-weight: 800; font-size: 1.1rem;">
+                    ${formatCurrencyHTML(item.total)}
+                </span>
             </div>`;
     }
-// 4. MOVIMIENTOS REALES (Ajustado: Cuenta con Color)
+
+    // 4. MOVIMIENTOS (BLANCO PURO Y DATOS COMPLETOS)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
         
-        // Fecha corta para la línea 1
-        const dateObj = new Date(m.fecha);
-        const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-
-        // Determinamos el TIPO para los colores NEÓN
+        // Colores NEÓN para importes y barras
         let barClass, amountClass, amountSign;
-        
         if (m.tipo === 'traspaso') {
             barClass = 'is-traspaso';
-            amountClass = 'text-info'; // Azul
+            amountClass = 'text-info';
             amountSign = '';
         } else if (m.cantidad < 0) {
             barClass = 'is-gasto';
-            amountClass = 'text-negative'; // Rojo
+            amountClass = 'text-negative';
             amountSign = '';
         } else {
             barClass = 'is-ingreso';
-            amountClass = 'text-positive'; // Verde
+            amountClass = 'text-positive';
             amountSign = '+';
         }
 
-        // Construimos los textos
-        let titulo, subtitulo;
-        
-        // Obtenemos los nombres de las cuentas siempre
-        const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
+        // --- LÓGICA DE DATOS ---
+        let lineaPrincipal = "";
+        let lineaSecundaria = "";
         
         if (m.tipo === 'traspaso') {
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || '?';
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '?';
-            titulo = `TRASPASO`; 
-            subtitulo = `${origen} ➔ ${destino}`;
+            // TRASPASO: Queremos ver claro Origen y Destino
+            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen desc.';
+            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino desc.';
+            
+            lineaPrincipal = "TRASPASO ENTRE CUENTAS";
+            // Usamos flecha y nombres completos en blanco puro
+            lineaSecundaria = `${origen} ➔ ${destino}`;
         } else {
-            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
+            // NORMAL: Concepto y Cuenta/Descripción
+            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Sin concepto';
+            const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta desc.';
             
-            // LÍNEA 1: Concepto (Blanco) + Descripción si existe
-            titulo = concepto.toUpperCase();
-            if (m.descripcion && m.descripcion !== concepto) {
-                titulo += ` (${m.descripcion})`; 
-            }
-            
-            // LÍNEA 2: SIEMPRE LA CUENTA (Para poder colorearla como pediste)
-            subtitulo = cuentaNombre;
+            lineaPrincipal = concepto.toUpperCase();
+            // Si hay descripción manual la mostramos, si no, mostramos la cuenta
+            lineaSecundaria = (m.descripcion && m.descripcion !== concepto) 
+                ? `${m.descripcion} (${cuentaNombre})` 
+                : cuentaNombre;
         }
 
-        // HTML FINAL
-        // Fíjate que añadimos ${amountClass} también en la t-line-2
+        // Saldo resultante (Saldo: 1.500 €)
+        // Lo mostramos siempre en blanco puro al final
+        const saldoStr = `Saldo: ${formatCurrencyHTML(m.runningBalance)}`;
+
         return `
             <div class="t-card" data-id="${m.id}" data-action="edit-movement-from-list">
                 <div class="t-bar ${barClass}"></div>
                 <div class="t-content">
                     <div class="t-row-primary">
-                        <div class="t-line-1">
-                            <span style="opacity: 0.5; margin-right: 8px; font-size: 0.8em;">${dateStr}</span>
-                            ${escapeHTML(titulo)}
-                        </div>
+                        <div class="t-line-1">${escapeHTML(lineaPrincipal)}</div>
+                        
                         <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
                     </div>
+                    
                     <div class="t-row-secondary">
-                        <div class="t-line-2 ${amountClass}">${escapeHTML(subtitulo)}</div>
-                        <div class="t-running-balance" style="color: #FFF; opacity: 0.5;">${formatCurrencyHTML(m.runningBalance)}</div>
+                        <div class="t-line-2">${escapeHTML(lineaSecundaria)}</div>
+                        
+                        <div class="t-running-balance">${saldoStr}</div>
                     </div>
                 </div>
             </div>`;
