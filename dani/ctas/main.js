@@ -5758,8 +5758,7 @@ const renderPlanificacionPage = () => {
     renderBudgetTracking();
     renderPendingRecurrents();
     renderRecurrentsListOnPage(); 
-    renderInformeWidgetContent();
-
+    
     // 2. Patrimonio
     setTimeout(async () => {
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
@@ -8816,7 +8815,7 @@ const handleStart = (e) => {
 },
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
-            'show-informe-builder': showInformeBuilderModal, 'save-informe': () => handleSaveInforme(btn),
+            'save-informe': () => handleSaveInforme(btn),
         };
         
         if (actions[action]) actions[action](e);
