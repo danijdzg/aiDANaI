@@ -3351,10 +3351,10 @@ const handleShowPnlBreakdown = async (accountId) => {
 };
 
 const renderVirtualListItem = (item) => {
-    // 1. Header Pendientes (Sin cambios, solo blanco puro)
+    // 1. Header Pendientes (Blanco y Naranja)
     if (item.type === 'pending-header') {
         return `
-            <div style="background: #111; border: 1px solid var(--c-warning); color: var(--c-warning); margin: 10px 16px; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; box-shadow: 0 0 5px rgba(255,165,0,0.2);">
+            <div style="background: #111; border: 1px solid var(--c-warning); color: var(--c-warning); margin: 10px 16px; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold;">
                 <span class="material-icons" style="font-size: 18px; vertical-align: text-bottom;">update</span> 
                 PENDIENTES (${item.count})
             </div>`;
@@ -3367,8 +3367,8 @@ const renderVirtualListItem = (item) => {
         return `
             <div class="t-card" style="border-left: 4px solid var(--c-warning) !important;">
                 <div class="t-content">
-                    <div style="color: #FFF; font-weight: 700; font-size: 1rem;">${escapeHTML(r.descripcion)}</div>
-                    <div style="color: #FFF; font-size: 0.9rem;">Programado: ${date}</div>
+                    <div style="color: #FFFFFF; font-weight: 700; font-size: 1rem;">${escapeHTML(r.descripcion)}</div>
+                    <div style="color: #FFFFFF; font-size: 0.9rem;">Programado: ${date}</div>
                     <div style="margin-top: 10px; display: flex; gap: 15px;">
                         <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 6px 16px;">AÑADIR</button>
                         <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 6px 16px;">OMITIR</button>
@@ -3377,7 +3377,7 @@ const renderVirtualListItem = (item) => {
             </div>`;
     }
 
-    // 3. Header Fecha (CON EL NUEVO DISEÑO INCRUSTADO)
+    // 3. Header Fecha (Incrustado)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         const today = new Date(); today.setHours(0,0,0,0);
@@ -3390,7 +3390,6 @@ const renderVirtualListItem = (item) => {
 
         const fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
         
-        // Total diario en NEÓN
         let totalClass = 'text-info'; 
         if (item.total > 0) totalClass = 'text-positive'; 
         else if (item.total < 0) totalClass = 'text-negative'; 
@@ -3407,54 +3406,60 @@ const renderVirtualListItem = (item) => {
             </div>`;
     }
 
-    // 4. MOVIMIENTOS (BLANCO PURO Y DATOS COMPLETOS)
+    // 4. MOVIMIENTOS (DISEÑO SOLICITADO)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
         
-        // Colores NEÓN para importes y barras
-        let barClass, amountClass, amountSign;
+        // --- COLORES ---
+        // Definimos el color que usaremos tanto para el importe como para la cuenta
+        let themeClass, amountSign, barClass;
+        
         if (m.tipo === 'traspaso') {
-            barClass = 'is-traspaso';
-            amountClass = 'text-info';
+            themeClass = 'text-info';    // Azul
+            barClass   = 'is-traspaso';
             amountSign = '';
         } else if (m.cantidad < 0) {
-            barClass = 'is-gasto';
-            amountClass = 'text-negative';
+            themeClass = 'text-negative'; // Rojo
+            barClass   = 'is-gasto';
             amountSign = '';
         } else {
-            barClass = 'is-ingreso';
-            amountClass = 'text-positive';
+            themeClass = 'text-positive'; // Verde
+            barClass   = 'is-ingreso';
             amountSign = '+';
         }
 
-        // --- LÓGICA DE DATOS ---
-        let lineaPrincipal = "";
-        let lineaSecundaria = "";
+        // --- TEXTOS ---
+        let lineaPrincipal = ""; // Blanco
+        let lineaSecundaria = ""; // Color (Cuenta + Saldo)
         
-        if (m.tipo === 'traspaso') {
-            // TRASPASO: Queremos ver claro Origen y Destino
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen desc.';
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino desc.';
-            
-            lineaPrincipal = "TRASPASO ENTRE CUENTAS";
-            // Usamos flecha y nombres completos en blanco puro
-            lineaSecundaria = `${origen} ➔ ${destino}`;
-        } else {
-            // NORMAL: Concepto y Cuenta/Descripción
-            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Sin concepto';
-            const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta desc.';
-            
-            lineaPrincipal = concepto.toUpperCase();
-            // Si hay descripción manual la mostramos, si no, mostramos la cuenta
-            lineaSecundaria = (m.descripcion && m.descripcion !== concepto) 
-                ? `${m.descripcion} (${cuentaNombre})` 
-                : cuentaNombre;
-        }
+        // Formateamos el saldo para ponerlo entre paréntesis
+        const saldoFormatted = formatCurrencyHTML(m.runningBalance);
 
-        // Saldo resultante (Saldo: 1.500 €)
-        // Lo mostramos siempre en blanco puro al final
-        const saldoStr = `Saldo: ${formatCurrencyHTML(m.runningBalance)}`;
+        if (m.tipo === 'traspaso') {
+            // TRASPASO
+            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+            
+            lineaPrincipal = "TRASPASO";
+            // Formato solicitado: Nombre (Saldo)
+            // Como es traspaso, mostramos la ruta y el saldo resultante
+            lineaSecundaria = `${origen} ➔ ${destino} (${saldoFormatted})`;
+
+        } else {
+            // NORMAL (Ingreso/Gasto)
+            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'General';
+            const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
+            
+            // Línea 1: Concepto en mayúsculas. Si hay descripción, la añadimos.
+            lineaPrincipal = concepto.toUpperCase();
+            if (m.descripcion && m.descripcion !== concepto) {
+                lineaPrincipal += ` - ${m.descripcion}`;
+            }
+
+            // Línea 2: Cuenta (Saldo) -> Todo en color
+            lineaSecundaria = `${cuentaNombre} (${saldoFormatted})`;
+        }
 
         return `
             <div class="t-card" data-id="${m.id}" data-action="edit-movement-from-list">
@@ -3463,13 +3468,13 @@ const renderVirtualListItem = (item) => {
                     <div class="t-row-primary">
                         <div class="t-line-1">${escapeHTML(lineaPrincipal)}</div>
                         
-                        <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+                        <div class="t-amount ${themeClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
                     </div>
                     
                     <div class="t-row-secondary">
-                        <div class="t-line-2">${escapeHTML(lineaSecundaria)}</div>
+                        <div class="t-line-2 ${themeClass}">${escapeHTML(lineaSecundaria)}</div>
                         
-                        <div class="t-running-balance">${saldoStr}</div>
+                        <div></div>
                     </div>
                 </div>
             </div>`;
