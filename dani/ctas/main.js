@@ -3364,47 +3364,42 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (¡REDISEÑO VISTOSO!)
+    // 3. Header de Fecha (DISEÑO PREMIUM REAL)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         
-        // Formato: "25" "Ene" "2024"
-        const day = dateObj.getDate();
-        // Mes con primera letra mayúscula (ene -> Ene)
+        // Formato solicitado: dd/MMM/aaaa (Ej: 25 Ene 2024)
+        const day = dateObj.getDate().toString().padStart(2, '0');
         let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
         month = month.charAt(0).toUpperCase() + month.slice(1);
         const year = dateObj.getFullYear();
         
-        // Estructura: Texto centrado elegante + Importe a la derecha
+        // Lógica de color para el total (Naranja si es negativo, Blanco si es positivo)
+        let totalColor = '#FFFFFF';
+        if (item.total < 0) totalColor = 'var(--c-warning)';
+
         return `
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
-                background: linear-gradient(180deg, var(--c-surface) 0%, var(--c-background) 100%); /* Degradado sutil */
-                padding: 15px 12px; 
-                margin-top: 5px;
-                border-top: 1px solid var(--c-outline);
+                background-color: var(--c-surface); /* Fondo sólido elegante */
+                padding: 14px 16px; /* Espaciado lateral generoso */
+                margin-top: 0;
                 border-bottom: 1px solid var(--c-outline);
                 display: flex; 
                 align-items: center; 
-                justify-content: center;
-                position: relative;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); /* Sombra suave para volumen */
+                justify-content: space-between; /* CLAVE: Uno a cada lado */
             ">
-                <div style="text-align: center; color: var(--c-on-surface);">
-                    <span style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">${day}</span>
-                    <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.8;"> de ${month} de </span>
-                    <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.6;">${year}</span>
+                <div style="display: flex; align-items: baseline; gap: 6px; color: var(--c-on-surface);">
+                    <span style="font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; color: #FFFFFF;">${day}</span>
+                    <span style="font-size: 1rem; font-weight: 500; text-transform: capitalize; opacity: 0.9;">${month}</span>
+                    <span style="font-size: 0.9rem; font-weight: 400; opacity: 0.6;">${year}</span>
                 </div>
 
                 <span style="
-                    position: absolute; 
-                    right: 15px; 
-                    color: #FFFFFF; 
+                    color: ${totalColor}; 
                     font-weight: 700; 
                     font-family: monospace; 
                     font-size: 1rem;
-                    background: rgba(255,255,255,0.1); /* Pastilla translúcida */
-                    padding: 2px 8px;
-                    border-radius: 6px;
+                    letter-spacing: 0.5px;
                 ">
                     ${formatCurrencyHTML(item.total)}
                 </span>
@@ -3412,7 +3407,7 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS (Sin cambios funcionales, mantiene tu diseño actual)
+    // 4. MOVIMIENTOS (Sin cambios)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db; 
@@ -11397,7 +11392,7 @@ window.addEventListener('message', function(event) {
 });
 
 // ===============================================================
-// 📡 RADAR VISUAL DE FECHAS (Actualizado Diseño Vistoso)
+// 📡 RADAR VISUAL DE FECHAS (Edición Premium Justificada)
 // ===============================================================
 
 const initStickyRadar = () => {
@@ -11408,17 +11403,21 @@ const initStickyRadar = () => {
     if (!stickyBar) {
         stickyBar = document.createElement('div');
         stickyBar.id = 'sticky-radar-bar';
-        // Estilo base: Fondo sólido para tapar lo que pasa por debajo
+        // Estilo IDÉNTICO al de la lista para que parezca magia
         stickyBar.style.cssText = `
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 55px; /* Altura ajustada al nuevo diseño */
-            background: var(--c-surface); /* Fondo base */
+            top: 0; left: 0; width: 100%; height: 50px; /* Altura ajustada */
+            background-color: var(--c-surface); /* Mismo fondo */
             border-bottom: 1px solid var(--c-outline);
-            display: flex; align-items: center; justify-content: center;
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; /* Justificado Extremos */
+            padding: 0 16px; /* Mismo padding lateral que la lista */
+            box-sizing: border-box; /* Para que el padding no rompa el ancho */
             z-index: 500;
             pointer-events: none;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            transition: opacity 0.15s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Sombra Premium */
+            transition: opacity 0.1s;
         `;
         listContainer.parentElement.style.position = 'relative'; 
         listContainer.parentElement.appendChild(stickyBar);
@@ -11438,7 +11437,6 @@ const initStickyRadar = () => {
         while (element && element !== document.body) {
             if (element.hasAttribute('data-fecha')) {
                 foundDate = element.getAttribute('data-fecha');
-                // Intentamos pescar el total si el elemento escaneado es justo la cabecera
                 if(element.hasAttribute('data-total')) foundTotal = element.getAttribute('data-total');
                 break;
             }
@@ -11448,50 +11446,43 @@ const initStickyRadar = () => {
         if (foundDate) {
             stickyBar.style.opacity = '1';
             
-            // Replicamos la lógica de formato "Vistosa"
+            // Formato Premium
             const dateObj = new Date(foundDate + 'T12:00:00Z');
-            const day = dateObj.getDate();
+            const day = dateObj.getDate().toString().padStart(2, '0');
             let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
             month = month.charAt(0).toUpperCase() + month.slice(1);
             const year = dateObj.getFullYear();
-
-            // Si no tenemos el total a mano (porque estamos sobre una tarjeta), 
-            // no mostramos importe en la barra flotante para no confundir, 
-            // O podemos dejarlo vacío. Aquí mostraré solo la fecha vistosa.
             
+            // Total con color lógico
             let totalHtml = '';
             if (foundTotal) {
-                 totalHtml = `
+                const totalVal = parseFloat(foundTotal);
+                const totalColor = totalVal < 0 ? 'var(--c-warning)' : '#FFFFFF';
+                totalHtml = `
                 <span style="
-                    position: absolute; 
-                    right: 15px; 
-                    color: #FFFFFF; 
+                    color: ${totalColor}; 
                     font-weight: 700; 
                     font-family: monospace; 
                     font-size: 1rem;
-                    background: rgba(255,255,255,0.1);
-                    padding: 2px 8px;
-                    border-radius: 6px;
+                    letter-spacing: 0.5px;
                 ">
-                    ${formatCurrencyHTML(parseFloat(foundTotal))}
+                    ${formatCurrencyHTML(totalVal)}
                 </span>`;
+            } else {
+                // Si no hay total (porque estamos sobre un item), podemos calcularlo o dejarlo vacío.
+                // Para mantener la estética, mejor dejarlo vacío o mostrar "..."
+                totalHtml = `<span style="opacity:0;">...</span>`; 
             }
 
-            // HTML IDÉNTICO AL HEADER PARA QUE NO SE NOTE EL CAMBIO
+            // HTML Interno
             stickyBar.innerHTML = `
-                <div style="
-                    width: 100%; height: 100%;
-                    background: linear-gradient(180deg, var(--c-surface) 0%, var(--c-background) 100%);
-                    display: flex; align-items: center; justify-content: center;
-                    position: relative;
-                ">
-                    <div style="text-align: center; color: var(--c-on-surface);">
-                        <span style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">${day}</span>
-                        <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.8;"> de ${month} de </span>
-                        <span style="font-size: 0.95rem; font-weight: 400; opacity: 0.6;">${year}</span>
-                    </div>
-                    ${totalHtml}
+                <div style="display: flex; align-items: baseline; gap: 6px; color: var(--c-on-surface);">
+                    <span style="font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; color: #FFFFFF;">${day}</span>
+                    <span style="font-size: 1rem; font-weight: 500; text-transform: capitalize; opacity: 0.9;">${month}</span>
+                    <span style="font-size: 0.9rem; font-weight: 400; opacity: 0.6;">${year}</span>
                 </div>
+
+                ${totalHtml}
             `;
         } else {
             stickyBar.style.opacity = '0'; 
@@ -11503,5 +11494,5 @@ const initStickyRadar = () => {
     scanList(); 
 };
 
-// Reiniciar el radar
+// Reiniciar el radar si ya existe la lista
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
