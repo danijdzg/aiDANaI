@@ -5490,22 +5490,10 @@ const renderPlanificacionPage = () => {
                 align-items: center;
                 cursor: pointer;
             }
-
-            /* LISTA DE RECURRENTES (La mantenemos visible para acceso rápido, 
-               pero si quieres ocultarla también, avísame) */
-            .recurrents-section {
-                padding: 0 4%;
-                margin-top: 20px;
-                margin-bottom: 30px;
-            }
-            .section-header {
-                font-size: 1.1rem;
-                font-weight: 700;
-                color: var(--c-on-surface);
-                margin-bottom: 15px;
-                padding-left: 5px;
-                border-left: 3px solid var(--c-primary);
-                line-height: 1.2;
+            
+            /* Ajuste para que el contenido de los acordeones respire */
+            .widget-content {
+                border-top: 1px solid var(--c-outline);
             }
         </style>
 
@@ -5525,14 +5513,26 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
 
-        <div class="recurrents-section">
-            <div class="section-header">Próximos Pagos</div>
-            <div id="pending-recurrents-container"></div>
-            <div style="margin-top: 10px;">
-                <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 8px;">Suscripciones activas:</p>
-                <div id="recurrentes-list-container"></div>
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--reloj" style="background-color: rgba(156, 39, 176, 0.1); color: #9c27b0;">
+                    <span class="material-icons">update</span>
+                </div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Recurrentes</h3>
+                    <p class="widget-subtitle">Próximos pagos y suscripciones</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content" style="padding: 16px;">
+                <div id="pending-recurrents-container"></div>
+                
+                <div style="margin-top: 10px;">
+                    <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 8px;">Suscripciones activas:</p>
+                    <div id="recurrentes-list-container"></div>
+                </div>
             </div>
-        </div>
+        </details>
 
         <details id="acordeon-portafolio" class="dashboard-widget">
             <summary class="widget-header">
@@ -5605,14 +5605,14 @@ const renderPlanificacionPage = () => {
     // --- LÓGICA JAVASCRIPT ---
 
     populateAllDropdowns();
-    renderPendingRecurrents();
+    renderPendingRecurrents(); // Esto rellenará el contenido oculto del acordeón Recurrentes
     renderRecurrentsListOnPage(); 
     
     setTimeout(async () => {
-        // Renderizamos Patrimonio (se pintará dentro del acordeón, invisible hasta que abras)
+        // Patrimonio
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
         
-        // Botonera Extracto
+        // Extracto
         const btnTodo = select('btn-extracto-todo');
         if (btnTodo) {
             const newBtn = btnTodo.cloneNode(true);
