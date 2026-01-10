@@ -3384,7 +3384,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (ESTILO COSMIC AZUL/NEGRO)
+    // 3. Header de Fecha (ESTILO CURVO MANTENIDO)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         const today = new Date(); today.setHours(0,0,0,0);
@@ -3419,42 +3419,33 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (AQUÍ ESTÁ EL CAMBIO DE LOS TRASPASOS AZULES)
+    // 4. MOVIMIENTOS REALES (AHORA CON CLASES PARA EL BORDE DE COLOR)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
         let line1, line2, amountClass, amountSign;
-        let cardTypeClass = ''; 
+        let cardTypeClass = ''; // Aquí guardaremos si es gasto, ingreso o traspaso para el CSS
 
         if (m.tipo === 'traspaso') {
             // --- TRASPASO (AZUL) ---
-            cardTypeClass = 'type-traspaso'; 
+            cardTypeClass = 'type-traspaso'; // Clase nueva para el borde azul
             
             const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
             const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-            
-            // Título
-            line1 = `<span class="t-concept">Traspaso</span>`;
+            const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
+            const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
 
-            // LÍNEA 2: AHORA USAMOS "t-account-badge" EN AZUL
-            // Usamos var(--c-info) que es el azul para el color del texto y del borde
-            line2 = `
-                <span style="opacity:0.7; font-size:0.8rem;">De:</span> 
-                <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
-                <span style="color: #FFFFFF; margin: 0 4px;">➔</span> 
-                <span style="opacity:0.7; font-size:0.8rem;">A:</span> 
-                <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(destino)}</span>
-            `;
-            
-            amountClass = 'text-info'; // Azul
+            line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
+            line2 = `<span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span> <span style="color: #FFFFFF;">➔</span> <span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
+            amountClass = 'text-info'; 
             amountSign = '';
 
         } else {
-            // --- INGRESO O GASTO ---
+            // --- INGRESO (VERDE) O GASTO (ROJO) ---
             const isGasto = m.cantidad < 0;
-            cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
+            cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso'; // Clases nuevas para bordes rojo/verde
 
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
             const concepto = conceptos.find(c => c.id === m.conceptoId);
@@ -3464,15 +3455,14 @@ const renderVirtualListItem = (item) => {
             
             const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : conceptoNombre;
             line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
-            
             const extraInfo = (m.descripcion && m.descripcion !== conceptoNombre) ? ` • ${escapeHTML(conceptoNombre)}` : '';
             
             line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(nombreCuenta)}</span><span style="color: #FFFFFF;">${extraInfo}</span>`;
-            
             amountClass = isGasto ? 'text-negative' : 'text-positive';
             amountSign = isGasto ? '' : '+';
         }
 
+        // Fíjate que añadimos ${cardTypeClass} al div principal y quitamos el div .t-bar de dentro
         return `
         <div class="t-card ${highlightClass} ${cardTypeClass}" data-id="${m.id}" data-action="edit-movement-from-list">
             <div class="t-content">
