@@ -4318,31 +4318,51 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
+// ==========================================
+// 🏠 PANTALLA INICIO (PANEL) - MODO 98% ANCHO
+// ==========================================
+
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- ESTILOS ULTRA-COMPACTOS (OnePlus Nord 4) ---
-    const gap = '5px'; // Espacio mínimo unificado
+    // --- ESTILOS ULTRA-COMPACTOS & INMERSIVOS (OnePlus Nord 4) ---
+    const gap = '10px'; // Un poco más de aire entre tarjetas
     
-    const bigKpiStyle = 'font-size: 1.5rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible;';
-    const titleStyle = 'font-size: 0.6rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; opacity: 0.9;';
+    // KPI (Números) más grandes para aprovechar la pantalla
+    const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
+    const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    // Tarjetas: Clicables (cursor pointer)
-    const cardStyle = `padding: 8px 12px; margin-bottom: ${gap}; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);`;
+    // Tarjetas al 100% de su contenedor padre (que será del 98%)
+    const cardStyle = `
+        padding: 15px 15px; 
+        margin-bottom: ${gap}; 
+        border-radius: 16px; 
+        border: 1px solid rgba(255, 255, 255, 0.1); 
+        width: 100%; 
+        box-sizing: border-box; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    `;
 
     container.innerHTML = `
-    <div style="padding: ${gap} 10px 10px 10px; height: 100%; display: flex; flex-direction: column; justify-content: flex-start;">
+    <div style="
+        width: 98%; 
+        margin: 0 auto; /* Centrado automático */
+        padding: 10px 0; 
+        display: flex; 
+        flex-direction: column; 
+        justify-content: flex-start;
+    ">
         
         <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
             
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
-                <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
                     RESUMEN
                 </div>
                 
                 <div class="report-filters" style="margin: 0;" onclick="event.stopPropagation()">
-                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.7rem; padding: 1px 8px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
+                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 2px 10px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
                         <option value="mes-actual">Este Mes</option>
                         <option value="año-actual">Este Año</option>
                         <option value="custom">Personalizado</option>
@@ -4350,31 +4370,31 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div id="custom-date-filters" class="form-grid hidden" onclick="event.stopPropagation()" style="grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 8px;">
+            <div id="custom-date-filters" class="form-grid hidden" onclick="event.stopPropagation()" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px;">
                 <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.6rem; color:#FFFFFF;">Desde</label>
-                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.8rem; padding: 2px; background: var(--c-surface); color: white;">
+                     <label style="font-size:0.7rem; color:#FFFFFF;">Desde</label>
+                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.85rem; padding: 4px; background: var(--c-surface); color: white;">
                 </div>
                 <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.6rem; color:#FFFFFF;">Hasta</label>
-                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.8rem; padding: 2px; background: var(--c-surface); color: white;">
+                     <label style="font-size:0.7rem; color:#FFFFFF;">Hasta</label>
+                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.85rem; padding: 4px; background: var(--c-surface); color: white;">
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center; margin-bottom: 6px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; margin-bottom: 10px;">
                 <div>
                     <div style="${titleStyle}">INGRESOS</div>
-                    <div id="kpi-ingresos-value" class="skeleton" style="${bigKpiStyle}">+0,00 €</div>
+                    <div id="kpi-ingresos-value" class="skeleton" style="${bigKpiStyle} color: var(--c-success);">+0,00 €</div>
                 </div>
                 <div>
                     <div style="${titleStyle}">GASTOS</div>
-                    <div id="kpi-gastos-value" class="skeleton" style="${bigKpiStyle}">-0,00 €</div>
+                    <div id="kpi-gastos-value" class="skeleton" style="${bigKpiStyle} color: var(--c-danger);">-0,00 €</div>
                 </div>
             </div>
 
-            <div style="height: 1px; background-color: var(--c-outline); margin: 2px 0 6px 0; opacity: 0.3;"></div>
+            <div style="height: 1px; background-color: var(--c-outline); margin: 6px 0 10px 0; opacity: 0.3;"></div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">
                 <div>
                     <div style="${titleStyle}">NETO</div>
                     <div id="kpi-saldo-neto-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
@@ -4387,62 +4407,63 @@ const renderPanelPage = async () => {
         </div>
 
         <div class="hero-card fade-in-up border-ingreso" onclick="goToPatrimonioChart()" style="${cardStyle} cursor: pointer; text-align: center; background: rgba(0,0,0,0.2);">
-            <div style="margin-bottom: 6px;">
-                <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 2px;">
+            <div style="margin-bottom: 10px;">
+                <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 2px;">
                     PATRIMONIO NETO
                 </div>
-                <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.4rem; line-height: 1.1; margin: 2px 0; white-space: nowrap;">0,00 €</div>
+                <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.8rem; line-height: 1.1; margin: 4px 0; white-space: nowrap;">0,00 €</div>
             </div>
             
-            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 5px 8px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center;">
+            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center;">
                 <div style="text-align: center;">
                     <div style="${titleStyle}">Liquidez</div>
-                    <div id="kpi-liquidez-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
+                    <div id="kpi-liquidez-value" class="skeleton" style="${bigKpiStyle} font-size: 1.4rem;">0,00 €</div>
                 </div>
-                <div style="height: 20px; background-color: var(--c-outline); opacity: 0.5;"></div>
+                <div style="height: 25px; background-color: var(--c-outline); opacity: 0.5;"></div>
                 <div style="text-align: center;">
                     <div style="${titleStyle}">Capital Inv.</div>
-                    <div id="kpi-capital-invertido-total" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
+                    <div id="kpi-capital-invertido-total" class="skeleton" style="${bigKpiStyle} font-size: 1.4rem;">0,00 €</div>
                 </div>
             </div>
         </div>
 
         <div class="hero-card fade-in-up border-ingreso" onclick="goToInversionesChart()" style="${cardStyle} cursor: pointer; background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0) 100%);">
             
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
                 <div style="text-align: left;">
                     <div style="${titleStyle}">Capital Inv.</div>
-                    <div id="new-card-capital" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
+                    <div id="new-card-capital" class="skeleton" style="${bigKpiStyle} font-size: 1.6rem;">0,00 €</div>
                 </div>
                 
                 <div style="text-align: right;">
                     <div style="${titleStyle}">P&L</div>
-                    <div id="new-card-pnl" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
+                    <div id="new-card-pnl" class="skeleton" style="${bigKpiStyle} font-size: 1.6rem;">0,00 €</div>
                 </div>
             </div>
 
-            <div style="text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
-                <div style="${titleStyle} color: #FFFFFF;">
+            <div style="text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                <div style="${titleStyle} color: #FFFFFF; font-size: 0.8rem;">
                     Valor Real Mercado
                 </div>
-                <div id="new-card-market-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
+                <div id="new-card-market-value" class="skeleton" style="${bigKpiStyle} font-size: 2.2rem;">0,00 €</div>
             </div>
         </div>
 
         <div class="hero-card fade-in-up border-warning" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); margin-bottom: 0;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div style="text-align: center;">
-                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 10px; vertical-align: middle;">shield</span> COBERTURA</div>
-                    <div id="health-runway-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #FFD60A; white-space: nowrap;">0.0 Meses</div>
+                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 12px; vertical-align: middle;">shield</span> COBERTURA</div>
+                    <div id="health-runway-val" class="skeleton" style="font-size: 1.5rem; font-weight: 800; color: #FFD60A; white-space: nowrap;">0.0 Meses</div>
                 </div>
                 <div style="text-align: center; border-left: 1px solid var(--c-outline);">
-                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 10px; vertical-align: middle;">flag</span> LIBERTAD</div>
-                    <div id="health-fi-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #39FF14; white-space: nowrap;">0.00%</div>
+                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 12px; vertical-align: middle;">flag</span> LIBERTAD</div>
+                    <div id="health-fi-val" class="skeleton" style="font-size: 1.5rem; font-weight: 800; color: #39FF14; white-space: nowrap;">0.00%</div>
                 </div>
             </div>
         </div>
 
-    </div>
+        <div style="height: 100px;"></div> </div>
+    
     <div id="concepto-totals-list" style="display:none;"></div>
     <canvas id="conceptos-chart" style="display:none;"></canvas>
     <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
@@ -4452,6 +4473,7 @@ const renderPanelPage = async () => {
     await Promise.all([loadPresupuestos(), loadInversiones()]);
     scheduleDashboardUpdate();
 };
+
  const showEstrategiaTab = (tabName) => {
     // 1. Gestionar el estado activo de los botones de las pestañas
     const tabButton = document.querySelector(`.tab-item[data-tab="${tabName}"]`);
