@@ -3350,8 +3350,35 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
+/* =============================================================== */
+/* === KIT DE REPARACIÓN + FUNCIÓN DE DIARIO (NORD 4) === */
+/* =============================================================== */
+
+// 1. HERRAMIENTAS DE AYUDA (Para evitar errores de "no definido")
+// ---------------------------------------------------------------
+const escapeHTML = (str) => {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag]));
+};
+
+const formatCurrencyHTML = (amount) => {
+    const num = parseFloat(amount);
+    if (isNaN(num)) return '0,00 €';
+    // Formato español: 1.000,00 €
+    return num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+};
+
+// 2. FUNCIÓN PRINCIPAL (VISUALIZACIÓN)
+// ---------------------------------------------------------------
 const renderVirtualListItem = (item) => {
-    // 1. Header Pendientes (Blanco y Naranja)
+    
+    // -- SEGURIDAD: Si la base de datos no ha cargado, evitamos el crash --
+    const safeDb = (typeof db !== 'undefined') ? db : { cuentas: [], conceptos: [] };
+    const { cuentas, conceptos } = safeDb;
+
+    // A. Header Pendientes (Blanco y Naranja)
     if (item.type === 'pending-header') {
         return `
             <div style="background: #111; border: 1px solid var(--c-warning); color: var(--c-warning); margin: 10px 16px; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold;">
@@ -3360,15 +3387,18 @@ const renderVirtualListItem = (item) => {
             </div>`;
     }
 
-    // 2. Item Pendiente
+    // B. Item Pendiente
     if (item.type === 'pending-item') {
-        const r = item.recurrent;
-        const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
+        const r = item.recurrent || {}; // Seguridad por si viene vacío
+        const nextDate = r.nextDate ? new Date(r.nextDate) : new Date();
+        const dateStr = nextDate.toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
+        const desc = r.descripcion || 'Sin descripción';
+        
         return `
             <div class="t-card" style="border-left: 4px solid var(--c-warning) !important;">
                 <div class="t-content">
-                    <div style="color: #FFFFFF; font-weight: 700; font-size: 1rem;">${escapeHTML(r.descripcion)}</div>
-                    <div style="color: #FFFFFF; font-size: 0.9rem;">Programado: ${date}</div>
+                    <div style="color: #FFFFFF; font-weight: 700; font-size: 1rem;">${escapeHTML(desc)}</div>
+                    <div style="color: #FFFFFF; font-size: 0.9rem;">Programado: ${dateStr}</div>
                     <div style="margin-top: 10px; display: flex; gap: 15px;">
                         <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 6px 16px;">AÑADIR</button>
                         <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 6px 16px;">OMITIR</button>
@@ -3377,42 +3407,44 @@ const renderVirtualListItem = (item) => {
             </div>`;
     }
 
-    // 3. Header Fecha (Incrustado)
+    // C. Header Fecha (Incrustado y Robusto)
     if (item.type === 'date-header') {
-        const dateObj = new Date(item.date + 'T12:00:00Z');
-        const today = new Date(); today.setHours(0,0,0,0);
-        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
-        const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
+        try {
+            const dateObj = new Date(item.date + 'T12:00:00Z');
+            const today = new Date(); today.setHours(0,0,0,0);
+            const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
+            const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
 
-        let dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
-        if (itemDate.getTime() === today.getTime()) dayName = "HOY";
-        else if (itemDate.getTime() === yesterday.getTime()) dayName = "AYER";
+            let dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+            if (itemDate.getTime() === today.getTime()) dayName = "HOY";
+            else if (itemDate.getTime() === yesterday.getTime()) dayName = "AYER";
 
-        const fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
-        
-        let totalClass = 'text-info'; 
-        if (item.total > 0) totalClass = 'text-positive'; 
-        else if (item.total < 0) totalClass = 'text-negative'; 
+            const fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
+            
+            let totalClass = 'text-info'; 
+            if (item.total > 0) totalClass = 'text-positive'; 
+            else if (item.total < 0) totalClass = 'text-negative'; 
 
-        return `
-            <div class="sticky-date-header">
-                <div class="sticky-date-left">
-                    <span class="sticky-day-pill">${dayName}</span>
-                    <span class="sticky-date-text">${fullDate}</span>
-                </div>
-                <span class="sticky-date-total ${totalClass}" style="font-weight: 800; font-size: 1.1rem;">
-                    ${formatCurrencyHTML(item.total)}
-                </span>
-            </div>`;
+            return `
+                <div class="sticky-date-header">
+                    <div class="sticky-date-left">
+                        <span class="sticky-day-pill">${dayName}</span>
+                        <span class="sticky-date-text">${fullDate}</span>
+                    </div>
+                    <span class="sticky-date-total ${totalClass}" style="font-weight: 800; font-size: 1.1rem;">
+                        ${formatCurrencyHTML(item.total)}
+                    </span>
+                </div>`;
+        } catch (e) {
+            return ''; // Si falla la fecha, no mostramos nada para no romper la app
+        }
     }
 
-    // 4. MOVIMIENTOS (DISEÑO SOLICITADO)
+    // D. MOVIMIENTOS (DISEÑO SOLICITADO - A PRUEBA DE BALAS)
     if (item.type === 'transaction') {
-        const m = item.movement;
-        const { cuentas, conceptos } = db;
+        const m = item.movement || {};
         
         // --- COLORES ---
-        // Definimos el color que usaremos tanto para el importe como para la cuenta
         let themeClass, amountSign, barClass;
         
         if (m.tipo === 'traspaso') {
@@ -3430,34 +3462,27 @@ const renderVirtualListItem = (item) => {
         }
 
         // --- TEXTOS ---
-        let lineaPrincipal = ""; // Blanco
-        let lineaSecundaria = ""; // Color (Cuenta + Saldo)
+        let lineaPrincipal = ""; 
+        let lineaSecundaria = "";
         
-        // Formateamos el saldo para ponerlo entre paréntesis
-        const saldoFormatted = formatCurrencyHTML(m.runningBalance);
+        const saldoFormatted = formatCurrencyHTML(m.runningBalance || 0);
 
         if (m.tipo === 'traspaso') {
-            // TRASPASO
             const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
             const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
             
             lineaPrincipal = "TRASPASO";
-            // Formato solicitado: Nombre (Saldo)
-            // Como es traspaso, mostramos la ruta y el saldo resultante
             lineaSecundaria = `${origen} ➔ ${destino} (${saldoFormatted})`;
 
         } else {
-            // NORMAL (Ingreso/Gasto)
             const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'General';
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             
-            // Línea 1: Concepto en mayúsculas. Si hay descripción, la añadimos.
             lineaPrincipal = concepto.toUpperCase();
             if (m.descripcion && m.descripcion !== concepto) {
                 lineaPrincipal += ` - ${m.descripcion}`;
             }
 
-            // Línea 2: Cuenta (Saldo) -> Todo en color
             lineaSecundaria = `${cuentaNombre} (${saldoFormatted})`;
         }
 
@@ -3467,13 +3492,11 @@ const renderVirtualListItem = (item) => {
                 <div class="t-content">
                     <div class="t-row-primary">
                         <div class="t-line-1">${escapeHTML(lineaPrincipal)}</div>
-                        
-                        <div class="t-amount ${themeClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+                        <div class="t-amount ${themeClass}">${amountSign}${formatCurrencyHTML(m.cantidad || 0)}</div>
                     </div>
                     
                     <div class="t-row-secondary">
                         <div class="t-line-2 ${themeClass}">${escapeHTML(lineaSecundaria)}</div>
-                        
                         <div></div>
                     </div>
                 </div>
