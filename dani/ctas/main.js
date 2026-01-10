@@ -5461,79 +5461,98 @@ const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICAR);
     if (!container) return;
 
-    // Preparamos controles de filtro
+    // Preparamos controles de filtro para el gráfico de flujo (si existe la función)
     const filterControlsHTML = typeof generateReportFilterControls === 'function' 
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
    
- 
-    // --- CÓDIGO CORREGIDO (V3) - SIN EL ERROR DE SOLAPAMIENTO ---
+    // --- DISEÑO PREMIUM PARA ONEPLUS NORD 4 ---
     container.innerHTML = `
         <style>
-            /* 1. ARREGLO DE MÁRGENES (Sin bloquear la navegación) */
+            /* CONFIGURACIÓN GENERAL DE PÁGINA */
             #planificar-page {
-                padding-left: 0 !important;   /* Fuera bordes blancos */
-                padding-right: 0 !important;  /* Fuera bordes blancos */
-                gap: 0 !important;            
-                /* HE BORRADO LA LÍNEA 'display: block' QUE ROMPÍA LA APP */
+                padding: 0 !important;
+                background-color: var(--c-background) !important;
             }
 
-            /* 2. ESTILOS DE LOS BOTONES (WIDGETS) */
-            #planificar-content .dashboard-widget, 
-            .dashboard-widget {
-                /* Ancho: 96% de la pantalla REAL */
-                width: 96% !important;
-                
-                /* Centrado perfecto: 2% a cada lado */
-                margin-left: 2% !important;
-                margin-right: 2% !important;
-                
-                /* Separación vertical: 5px */
-                margin-bottom: 5px !important;
-                margin-top: 0 !important;
-                
-                border-radius: 16px !important;
-                box-sizing: border-box !important;
+            /* TARJETA HERO (PATRIMONIO) - SIEMPRE VISIBLE */
+            .hero-card {
+                background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 100%);
+                border-bottom: 1px solid var(--c-outline);
+                padding: 20px 5%; /* Márgenes laterales del 5% */
+                margin-bottom: 20px;
+                text-align: center;
             }
 
-            /* Título alineado */
-            .analysis-section-label {
-                margin: 20px 2% 10px 2% !important;
+            .hero-title {
+                font-size: 0.9rem;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                color: var(--c-on-surface-secondary);
+                margin-bottom: 10px;
+                font-weight: 600;
+            }
+
+            /* LISTA DE RECURRENTES - SIEMPRE VISIBLE */
+            .recurrents-section {
+                padding: 0 4%;
+                margin-bottom: 30px;
+            }
+            .section-header {
+                font-size: 1.1rem;
+                font-weight: 700;
+                color: var(--c-on-surface);
+                margin-bottom: 15px;
                 padding-left: 5px;
+                border-left: 3px solid var(--c-primary);
+                line-height: 1.2;
+            }
+
+            /* ACORDEONES SECUNDARIOS (Para Inversiones, Extracto, etc.) */
+            .dashboard-widget {
+                width: 94% !important;
+                margin: 0 auto 10px auto !important; /* Centrado */
+                border-radius: 12px !important;
+                background-color: var(--c-surface);
+                border: 1px solid var(--c-outline);
+            }
+            .widget-header {
+                padding: 15px;
             }
         </style>
 
-                
-        <details class="dashboard-widget">
-            <summary class="widget-header">
-                <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
-                <div class="widget-info">
-                    <h3 class="widget-title">Patrimonio Neto</h3>
-                    <p class="widget-subtitle">Tus activos menos tus deudas</p>
-                </div>
-                <span class="material-icons widget-arrow">expand_more</span>
-            </summary>
-            <div class="widget-content" id="patrimonio-overview-container">
-               <div class="skeleton" style="height: 400px; border-radius: 12px; margin-top: 16px;"></div>
+        <div class="hero-card">
+            <div class="hero-title">Patrimonio Total</div>
+            <div id="patrimonio-overview-container">
+               <div class="skeleton" style="height: 150px; width: 100%; border-radius: 12px; opacity: 0.3;"></div>
             </div>
-        </details>
+        </div>
+
+        <div class="recurrents-section">
+            <div class="section-header">Próximos Pagos</div>
+            
+            <div id="pending-recurrents-container"></div>
+            
+            <div style="margin-top: 10px;">
+                <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 8px;">Suscripciones activas:</p>
+                <div id="recurrentes-list-container"></div>
+            </div>
+        </div>
 
         <details id="acordeon-portafolio" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
                 <div class="widget-info">
                     <h3 class="widget-title">Inversiones</h3>
-                    <p class="widget-subtitle">Evolución de tu portafolio</p>
+                    <p class="widget-subtitle">Evolución del portafolio</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
                 <div id="portfolio-evolution-container" style="margin-top: 16px;">
-                    <div class="chart-container skeleton" style="height: 220px; border-radius: 12px;"></div>
+                    <div class="chart-container skeleton" style="height: 220px;"></div>
                 </div>
-                <div id="portfolio-main-content" style="margin-top: 20px;">
-                    <div class="skeleton" style="height: 300px; border-radius: 12px;"></div>
-                </div>
+                <div id="portfolio-main-content" style="margin-top: 20px;"></div>
             </div>
         </details>
 
@@ -5541,8 +5560,8 @@ const renderPlanificacionPage = () => {
             <summary id="summary-extracto-trigger" class="widget-header">
                 <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
                 <div class="widget-info">
-                    <h3 class="widget-title">Extracto de Cuenta</h3>
-                    <p class="widget-subtitle">Movimientos detallados por cuenta</p>
+                    <h3 class="widget-title">Extracto</h3>
+                    <p class="widget-subtitle">Consultar movimientos</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
@@ -5550,7 +5569,7 @@ const renderPlanificacionPage = () => {
                 <div id="informe-content-extracto_cuenta" style="padding-top: 16px;">
                     <div id="informe-cuenta-wrapper">
                         <div class="form-group" style="margin-bottom: 0;">
-                            <label for="informe-cuenta-select" class="form-label">Cuenta a consultar:</label>
+                            <label for="informe-cuenta-select" class="form-label">Cuenta:</label>
                             <div style="display: flex; gap: 8px; width: 100%;">
                                 <div class="input-wrapper" style="flex-grow: 1;">
                                     <select id="informe-cuenta-select" class="form-select"></select>
@@ -5573,7 +5592,7 @@ const renderPlanificacionPage = () => {
                 <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
                 <div class="widget-info">
                     <h3 class="widget-title">Flujo de Caja</h3>
-                    <p class="widget-subtitle">Entradas vs. Salidas mensuales</p>
+                    <p class="widget-subtitle">Entradas vs. Salidas</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
@@ -5584,44 +5603,22 @@ const renderPlanificacionPage = () => {
                 </div>
             </div>
         </details>
-       
-        <details class="dashboard-widget">
-            <summary class="widget-header">
-                <div class="icon-box icon-box--reloj"><span class="material-icons">update</span></div>
-                <div class="widget-info">
-                    <h3 class="widget-title">Recurrentes</h3>
-                    <p class="widget-subtitle">Suscripciones y pagos fijos</p>
-                </div>
-                <span class="material-icons widget-arrow">expand_more</span>
-            </summary>
-            <div class="widget-content" style="padding-top: 16px;">
-                <div id="pending-recurrents-container"></div>
-                <p class="form-label" style="margin-bottom: 12px;">Toca para editar:</p>
-                <div id="recurrentes-list-container"></div>
-            </div>
-        </details>
-                        
-        <div style="height: 80px;"></div>
-    `;
+        
+        <div style="height: 100px;"></div> `;
 
-    // --- LÓGICA JAVASCRIPT (IGUAL QUE ANTES) ---
-    // 1. Planificación
-    const yearSelect = container.querySelector('#budget-year-selector');
-    if (yearSelect) {
-        const currentYear = new Date().getFullYear();
-        const years = new Set([currentYear]);
-        (db.presupuestos || []).forEach(p => years.add(p.ano));
-        yearSelect.innerHTML = [...years].sort((a, b) => b - a).map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('');
-        yearSelect.addEventListener('change', () => { hapticFeedback('light'); });
-    }
+    // --- LÓGICA JAVASCRIPT ---
+    // (Hemos eliminado la parte de presupuestos 'yearSelect' para limpiar código)
+
     populateAllDropdowns();
     renderPendingRecurrents();
     renderRecurrentsListOnPage(); 
     
-    // 2. Patrimonio
+    // Carga diferida de gráficos para fluidez
     setTimeout(async () => {
+        // Renderizamos Patrimonio en su nuevo contenedor fijo
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
         
+        // Lógica de Extracto (Botonera)
         const btnTodo = select('btn-extracto-todo');
         if (btnTodo) {
             const newBtn = btnTodo.cloneNode(true);
@@ -5643,6 +5640,7 @@ const renderPlanificacionPage = () => {
             selectCuenta.addEventListener('change', () => { handleGenerateInformeCuenta(null, null); });
         }
         
+        // Lógica Inversiones
         const acordeonPortafolio = select('acordeon-portafolio');
         if (acordeonPortafolio) {
             const loadPortfolioData = async () => {
@@ -5657,6 +5655,7 @@ const renderPlanificacionPage = () => {
             });
         }
 
+        // Lógica Flujo Caja
         const acordeonFlujo = select('acordeon-flujo_caja');
         if (acordeonFlujo) {
             acordeonFlujo.addEventListener('toggle', () => {
