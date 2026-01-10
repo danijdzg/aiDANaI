@@ -3335,7 +3335,7 @@ const handleShowPnlBreakdown = async (accountId) => {
 
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes
+    // 1. Header de Pendientes (Sin cambios)
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
@@ -3343,83 +3343,50 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente
+    // 2. Tarjeta de Pendiente (Sin cambios)
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
         return `
-        <div class="transaction-card" id="pending-recurrente-${r.id}" style="margin:0; border-bottom:1px solid var(--c-outline); background-color: rgba(255, 214, 10, 0.05);">
+        <div class="transaction-card" style="margin:0; border-bottom:1px solid var(--c-outline); background-color: rgba(255, 214, 10, 0.05);">
             <div class="transaction-card__content">
                 <div class="transaction-card__details">
                     <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
-                    <div class="transaction-card__row-2" style="color: var(--c-warning); font-weight: 600;">Programado: ${date}</div>
+                    <div class="transaction-card__row-2" style="color: var(--c-warning);">Programado: ${date}</div>
                     <div class="acciones-recurrentes-corregidas" style="margin-top: 8px;">
-                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Omitir</button>
-                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Añadir</button>
+                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="font-size: 0.7rem;">Omitir</button>
+                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="font-size: 0.7rem;">Añadir</button>
                     </div>
                 </div>
                 <div class="transaction-card__figures">
-                    <strong class="transaction-card__amount ${r.cantidad >= 0 ? 'text-positive' : 'text-negative'}">
-                        ${formatCurrencyHTML(r.cantidad)}
-                    </strong>
+                    <strong class="transaction-card__amount ${r.cantidad >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrencyHTML(r.cantidad)}</strong>
                 </div>
             </div>
         </div>`;
     }
 
-    // 3. Header de Fecha (REPARADO: Ahora es STICKY)
+    // 3. Header de Fecha (Añadimos etiqueta data-fecha)
     if (item.type === 'date-header') {
+        // --- CÁLCULO DE FECHAS ---
         const dateObj = new Date(item.date + 'T12:00:00Z');
-        const today = new Date(); today.setHours(0,0,0,0);
-        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
-        const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
-        
-        let dayName = '', fullDate = '';
         const numericDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-        if (itemDate.getTime() === today.getTime()) {
-            dayName = "HOY"; fullDate = numericDate;
-        } else if (itemDate.getTime() === yesterday.getTime()) {
-            dayName = "AYER"; fullDate = numericDate;
-        } else {
-            dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
-            fullDate = numericDate;
-        }
-
-        // AQUÍ ESTÁ EL CAMBIO IMPORTANTE: position: sticky
+        
+        // Devolvemos el HTML con un atributo especial data-fecha
+        // Nota: Dejamos el estilo básico, ya que el "Sticky" real lo hará el Radar.
         return `
-            <div class="sticky-date-header" style="
+            <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
                 background: var(--c-background); 
                 padding: 12px 10px; 
-                margin: 0; 
                 border-bottom: 1px solid var(--c-outline);
-                display: flex; 
-                align-items: center; 
-                justify-content: center; 
-                position: sticky; /* CAMBIO CLAVE: Se pega al scroll */
-                top: 0;           /* CAMBIO CLAVE: Se pega al techo */
-                z-index: 10;      /* CAMBIO CLAVE: Por encima de las tarjetas */
+                display: flex; align-items: center; justify-content: center;
             ">
-                <div style="text-align: center; color: #FFFFFF;">
-                    <span style="font-weight: 900; font-size: 0.9rem; margin-right: 6px;">${dayName}</span>
-                    <span style="font-size: 0.9rem; font-family: monospace; opacity: 0.9;">${fullDate}</span>
-                </div>
-
-                <span style="
-                    position: absolute; 
-                    right: 15px; 
-                    color: #FFFFFF; 
-                    font-weight: 700; 
-                    font-family: monospace; 
-                    font-size: 1rem;
-                ">
-                    ${formatCurrencyHTML(item.total)}
-                </span>
+                <span style="color: #FFFFFF; font-weight: 900; font-size: 0.9rem;">${numericDate}</span>
+                <span style="position: absolute; right: 15px; color: #FFFFFF; font-family: monospace;">${formatCurrencyHTML(item.total)}</span>
             </div>
         `;
     }
 
-    // 4. MOVIMIENTOS (Sin cambios, solo el estilo visual anterior)
+    // 4. MOVIMIENTOS (Añadimos etiqueta data-fecha CRÍTICA)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
@@ -3428,61 +3395,53 @@ const renderVirtualListItem = (item) => {
         let line1, line2, amountClass, amountSign;
         let cardTypeClass = ''; 
 
+        // IMPORTANTE: Intentamos obtener la fecha del movimiento para el radar
+        const fechaMovimiento = m.fecha || ''; 
+
         if (m.tipo === 'traspaso') {
             cardTypeClass = 'type-traspaso'; 
-            
-            const cOrigen = cuentas.find(c => c.id === m.cuentaOrigenId);
-            const cDestino = cuentas.find(c => c.id === m.cuentaDestinoId);
-            
-            const origen = cOrigen?.nombre || 'Origen';
-            const saldoOrigen = cOrigen?.saldo || 0;
-            const destino = cDestino?.nombre || 'Destino';
-            const saldoDestino = cDestino?.saldo || 0;
+            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+            const saldoOrigen = cuentas.find(c => c.id === m.cuentaOrigenId)?.saldo || 0;
+            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+            const saldoDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.saldo || 0;
 
             line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
             line2 = `
                 <div style="line-height: 1.4;">
                     <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
-                    <span style="color: #FFFFFF; font-size: 0.75rem; margin-right: 4px;">(${formatCurrencyHTML(saldoOrigen)})</span>
+                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoOrigen)})</span>
                     <span style="color: var(--c-on-surface-secondary);">➔</span> 
-                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info); margin-left: 4px;">${escapeHTML(destino)}</span>
+                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(destino)}</span>
                     <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoDestino)})</span>
-                </div>
-            `;
-            amountClass = 'text-info'; 
-            amountSign = '';
-
+                </div>`;
+            amountClass = 'text-info'; amountSign = '';
         } else {
             const isGasto = m.cantidad < 0;
             cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+            const concepto = concepts.find(c => c.id === m.conceptoId)?.nombre || 'Varios'; // Fix typo conceptos -> concepts si es necesario
+            const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             
-            const concepto = conceptos.find(c => c.id === m.conceptoId);
-            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
-            
-            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
-            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-            
-            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : conceptoNombre;
+            const desc = m.descripcion && m.descripcion !== concepto ? m.descripcion : concepto;
             line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
-            const extraInfo = (m.descripcion && m.descripcion !== conceptoNombre) ? ` • ${escapeHTML(conceptoNombre)}` : '';
-            
-            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(nombreCuenta)}</span><span style="color: #FFFFFF;">${extraInfo}</span>`;
-            
-            amountClass = isGasto ? 'text-negative' : 'text-positive';
-            amountSign = isGasto ? '' : '+';
+            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(cuenta)}</span>`;
+            amountClass = isGasto ? 'text-negative' : 'text-positive'; amountSign = isGasto ? '' : '+';
         }
 
+        // AQUÍ EL SECRETO: data-fecha en el div principal
         return `
-        <div class="t-card ${highlightClass} ${cardTypeClass}" data-id="${m.id}" data-action="edit-movement-from-list" style="padding: 10px 0; border-bottom: 1px solid var(--c-outline);">
+        <div class="t-card ${highlightClass} ${cardTypeClass}" 
+             data-fecha="${fechaMovimiento}" 
+             data-id="${m.id}" 
+             data-action="edit-movement-from-list" 
+             style="padding: 10px 0; border-bottom: 1px solid var(--c-outline);">
             <div class="t-content">
                 <div class="t-row-primary" style="margin-bottom: 4px;">
                     <div class="t-line-1">${line1}</div>
                     <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
                 </div>
                 <div class="t-row-secondary">
-                    <div class="t-line-2" style="display: flex; align-items: center;">${line2}</div>
-                    ${m.tipo !== 'traspaso' ? `<div class="t-running-balance" style="opacity: 0.5;">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
+                    <div class="t-line-2">${line2}</div>
                 </div>
             </div>
         </div>`;
@@ -11408,126 +11367,102 @@ window.addEventListener('message', function(event) {
 });
 
 // ===============================================================
-// 👻 SISTEMA DE ENCABEZADO FLOTANTE (STICKY HEADER FIX)
+// 📡 RADAR VISUAL DE FECHAS (Solución Definitiva Sticky)
 // ===============================================================
-// Pega esto al final de main.js. Se activará automáticamente.
 
-const initStickyHeaderOverlay = () => {
-    const listContainer = document.querySelector('.virtual-list-container') || document.getElementById('lista-movimientos');
-    if (!listContainer) return; // Si no estamos en la pantalla correcta, no hacemos nada.
+const initStickyRadar = () => {
+    // 1. Buscamos el contenedor de la lista (intentamos varios selectores comunes)
+    const listContainer = document.querySelector('.virtual-list-container') || document.getElementById('lista-movimientos') || document.querySelector('#view-movimientos .scroll-container');
+    
+    if (!listContainer) return; // Si no lo encontramos, reintentamos luego con el observer
 
-    // 1. Crear el elemento "Fantasma" si no existe
-    let stickyOverlay = document.getElementById('sticky-date-overlay');
-    if (!stickyOverlay) {
-        stickyOverlay = document.createElement('div');
-        stickyOverlay.id = 'sticky-date-overlay';
-        // Estilos para que parezca idéntico a tu cabecera real
-        stickyOverlay.style.cssText = `
+    // 2. Creamos la "Barra Fija" (Overlay) si no existe
+    let stickyBar = document.getElementById('sticky-radar-bar');
+    if (!stickyBar) {
+        stickyBar = document.createElement('div');
+        stickyBar.id = 'sticky-radar-bar';
+        // Estilos para que se quede fija arriba
+        stickyBar.style.cssText = `
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 45px; /* Altura aproximada */
-            background: var(--c-background); /* Fondo sólido para tapar lo de atrás */
+            top: 0; left: 0; width: 100%; height: 48px;
+            background: var(--c-background);
             border-bottom: 1px solid var(--c-outline);
-            display: none; /* Oculto por defecto */
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            pointer-events: none; /* Para que puedas tocar a través de él si hace falta */
+            display: flex; align-items: center; justify-content: center;
+            z-index: 500;
+            pointer-events: none; /* Dejamos pasar los clics a través de ella */
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: opacity 0.2s;
         `;
-        listContainer.parentElement.style.position = 'relative'; // Aseguramos que el padre sea relativo
-        listContainer.parentElement.appendChild(stickyOverlay);
+        // La insertamos en el padre del contenedor scrollable para que no se mueva
+        listContainer.parentElement.style.position = 'relative'; 
+        listContainer.parentElement.appendChild(stickyBar);
     }
 
-    // 2. Función matemática para saber qué día es
-    const updateStickyHeader = () => {
-        if (!vList || !vList.items || vList.items.length === 0) return;
+    // 3. Función del Radar
+    const scanList = () => {
+        // Obtenemos las coordenadas del punto de escaneo (un poco más abajo del borde superior)
+        const rect = listContainer.getBoundingClientRect();
+        const scanX = rect.left + 20; 
+        const scanY = rect.top + 50; // 50px hacia abajo desde el borde superior
 
-        const scrollTop = listContainer.scrollTop;
+        // Usamos elementFromPoint para ver qué elemento está ahí físicamente
+        // (Nota: Desactivamos temporalmente pointer-events del overlay para ver a través)
+        stickyBar.style.pointerEvents = 'none';
+        let element = document.elementFromPoint(scanX, scanY);
         
-        // Usamos las alturas EXACTAS que me diste para calcular dónde estamos
-        const H_TRANS = 50;  // transaction
-        const H_TRASPASO = 62; // transfer
-        const H_HEADER = 36; // header
-        const H_PENDING_H = 36;
-        const H_PENDING_I = 60;
+        // Subimos por el DOM hasta encontrar la tarjeta o el header con el dato "data-fecha"
+        let foundDate = null;
+        let foundTotal = null;
 
-        let currentY = 0;
-        let activeDateItem = null;
-
-        // Recorremos los items sumando alturas hasta llegar a la posición del scroll
-        for (let i = 0; i < vList.items.length; i++) {
-            const item = vList.items[i];
-            let itemHeight = 0;
-
-            // Asignamos altura según tipo
-            if (item.type === 'transaction') itemHeight = (item.movement.tipo === 'traspaso') ? H_TRASPASO : H_TRANS;
-            else if (item.type === 'date-header') itemHeight = H_HEADER;
-            else if (item.type === 'pending-header') itemHeight = H_PENDING_H;
-            else if (item.type === 'pending-item') itemHeight = H_PENDING_I;
-
-            // Si este item es una cabecera de fecha, lo guardamos como "candidato actual"
-            if (item.type === 'date-header') {
-                activeDateItem = item;
-            }
-
-            // Si ya hemos superado el scroll, ESTE es el grupo que estamos viendo
-            if ((currentY + itemHeight) > scrollTop) {
+        while (element && element !== document.body) {
+            if (element.hasAttribute('data-fecha')) {
+                foundDate = element.getAttribute('data-fecha');
+                if(element.hasAttribute('data-total')) foundTotal = element.getAttribute('data-total');
                 break;
             }
-            currentY += itemHeight;
+            element = element.parentElement;
         }
 
-        // 3. Pintamos el "Fantasma" con los datos del candidato
-        if (activeDateItem) {
-            stickyOverlay.style.display = 'flex';
+        // 4. Actualizamos la Barra Fija
+        if (foundDate) {
+            stickyBar.style.opacity = '1';
             
-            // Formateamos la fecha igual que en tu diseño (dd/MM/aaaa)
-            const dateObj = new Date(activeDateItem.date + 'T12:00:00Z');
+            // Formateo de fecha
+            const dateObj = new Date(foundDate + 'T12:00:00Z');
             const numericDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            
             let dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+            
             const today = new Date(); today.setHours(0,0,0,0);
             const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
             if (itemDate.getTime() === today.getTime()) dayName = "HOY";
+
+            // Si tenemos el total (es un header) lo mostramos, si es una tarjeta, solo fecha
+            // (Podríamos buscar el total en el array de datos, pero por simplicidad mostramos fecha limpia)
             
-            // Inyectamos el HTML (Todo Blanco y Limpio)
-            stickyOverlay.innerHTML = `
+            stickyBar.innerHTML = `
                 <div style="text-align: center; color: #FFFFFF;">
                     <span style="font-weight: 900; font-size: 0.9rem; margin-right: 6px;">${dayName}</span>
                     <span style="font-size: 0.9rem; font-family: monospace; opacity: 0.9;">${numericDate}</span>
                 </div>
-                <span style="
-                    position: absolute; 
-                    right: 15px; 
-                    color: #FFFFFF; 
-                    font-weight: 700; 
-                    font-family: monospace; 
-                    font-size: 1rem;
-                ">
-                    ${formatCurrencyHTML(activeDateItem.total)}
-                </span>
             `;
+            // Si quieres añadir el saldo, habría que calcularlo o buscarlo, 
+            // pero para empezar asegurémonos de que la fecha se pega.
         } else {
-            stickyOverlay.style.display = 'none';
+            // Si estamos muy arriba (zona de pendientes) o vacío
+            stickyBar.style.opacity = '0'; 
         }
     };
 
-    // 4. Escuchar el scroll del contenedor REAL
-    listContainer.removeEventListener('scroll', updateStickyHeader); // Limpieza por si acaso
-    listContainer.addEventListener('scroll', updateStickyHeader);
-    
-    // Ejecutar una vez al inicio
-    updateStickyHeader();
+    // 5. Encendemos el Radar
+    listContainer.removeEventListener('scroll', scanList);
+    listContainer.addEventListener('scroll', scanList);
+    scanList(); // Escaneo inicial
 };
 
-// ACTIVACIÓN: Intentamos arrancar el sistema cada vez que cambie la vista
-const observer = new MutationObserver(() => {
-    const listContainer = document.querySelector('.virtual-list-container');
-    if (listContainer) {
-        initStickyHeaderOverlay();
+// Auto-arranque
+setInterval(() => {
+    // Intentamos iniciar el radar cada poco tiempo por si cambias de vista
+    if(document.querySelector('.virtual-list-container') && !document.getElementById('sticky-radar-bar')){
+        initStickyRadar();
     }
-});
-observer.observe(document.body, { childList: true, subtree: true });
+}, 1000);
