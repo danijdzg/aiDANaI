@@ -4319,25 +4319,24 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 // ==========================================
-// 🏠 PANTALLA INICIO (PANEL) - CORRECCIÓN DE NAVEGACIÓN Y ESPACIADO 5PX
+// 🏠 PANTALLA INICIO (PANEL) - ESPACIADO MÍNIMO 3PX
 // ==========================================
 
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- 1. RESET SEGURO (Sin romper la navegación) ---
-    // Solo quitamos el padding nativo, pero NO tocamos el 'display'
+    // --- RESET SEGURO ---
     container.style.padding = '0';
     container.style.overflowX = 'hidden'; 
 
-    // --- ESTILOS ---
-    const gap = '5px'; // TU REQUISITO: Exactamente 5px
+    // --- AJUSTE DE ESPACIADO ---
+    const gap = '3px'; // AHORA SÓLO 3PX DE SEPARACIÓN
     
     const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    // Estilo de tarjeta: 98% de ancho, sin margin-bottom (el gap se encarga de eso)
+    // Estilo de tarjeta (98% ancho)
     const cardStyle = `
         width: 98%; 
         padding: 12px 15px; 
@@ -4351,10 +4350,10 @@ const renderPanelPage = async () => {
     <div style="
         display: flex; 
         flex-direction: column; 
-        align-items: center; /* Esto centra las tarjetas al 98% */
+        align-items: center; 
         width: 100%; 
-        gap: ${gap};         /* Separación exacta de 5px entre elementos */
-        padding-top: ${gap}; /* Separación superior exacta de 5px */
+        gap: ${gap};         /* 3px entre tarjetas */
+        padding-top: ${gap}; /* 3px desde el techo */
         padding-bottom: 100px;
     ">
         
