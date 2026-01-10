@@ -3366,7 +3366,6 @@ const renderVirtualListItem = (item) => {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
         
-        // CORRECCIÓN COLOR: Usamos formatCurrencyHTML directamente
         return `
         <div class="transaction-card" id="pending-recurrente-${r.id}" style="margin:0 16px; border-bottom:1px solid var(--c-outline); background-color: rgba(255, 214, 10, 0.05);">
             <div class="transaction-card__content">
@@ -3415,10 +3414,6 @@ const renderVirtualListItem = (item) => {
             fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
         }
 
-        // Lógica de colores según el importe:
-        // > 0: Verde (is-positive)
-        // < 0: Rojo (is-negative)
-        // === 0: Morado (is-neutral)
         let totalClass = 'is-neutral'; 
         if (item.total > 0) totalClass = 'is-positive';
         else if (item.total < 0) totalClass = 'is-negative';
@@ -3436,21 +3431,16 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (DISEÑO CLEAN: BARRAS DE COLOR)
+    // 4. MOVIMIENTOS REALES (LIMPIEZA TOTAL: Sin fecha en fila)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
         
-        // Animación si es nuevo
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
-        // Formato fecha
-        const dateObj = new Date(m.fecha);
-        const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-
         // VARIABLES VISUALES
         let line1, line2, amountClass, amountSign;
-        let barClass; // <--- Variable para el color de la barra
+        let barClass; 
 
         if (m.tipo === 'traspaso') {
             // --- TRASPASO (AZUL) ---
@@ -3462,9 +3452,10 @@ const renderVirtualListItem = (item) => {
             const saldoOrigen = m._saldoOrigenSnapshot !== undefined ? `(${formatCurrency(m._saldoOrigenSnapshot)})` : '';
             const saldoDestino = m._saldoDestinoSnapshot !== undefined ? `(${formatCurrency(m._saldoDestinoSnapshot)})` : '';
 
-            // Texto descriptivo
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span>`;
-            line2 = `<span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
+            // Texto descriptivo (SIN FECHA)
+            // Usamos colores sólidos para los textos
+            line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
+            line2 = `<span style="color: var(--c-info); font-weight: 500;">De: ${escapeHTML(origen)} ${saldoOrigen}</span> <span style="color: #FFFFFF;">➔</span> <span style="color: var(--c-info); font-weight: 500;">A: ${escapeHTML(destino)} ${saldoDestino}</span>`;
             
             amountClass = 'text-info'; 
             amountSign = '';
@@ -3473,10 +3464,7 @@ const renderVirtualListItem = (item) => {
             // --- INGRESO (VERDE) O GASTO (ROJO) ---
             const isGasto = m.cantidad < 0;
             
-            // Asignamos la clase de color para la barra
             barClass = isGasto ? 'is-gasto' : 'is-ingreso';
-
-            // Colores para el texto de la cuenta (para mantener coherencia)
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
 
             const concepto = conceptos.find(c => c.id === m.conceptoId);
@@ -3484,18 +3472,20 @@ const renderVirtualListItem = (item) => {
             const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
             const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
             
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
+            // LÍNEA 1: Solo el concepto/descripción (SIN FECHA)
+            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : conceptoNombre;
+            line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
             
-            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
-            const separator = desc ? ' • ' : '';
+            // LÍNEA 2: Cuenta coloreada + Concepto si es diferente (pero todo visible)
+            // Si la descripción era personalizada, ponemos el concepto original abajo
+            const extraInfo = (m.descripcion && m.descripcion !== conceptoNombre) ? ` • ${escapeHTML(conceptoNombre)}` : '';
             
-            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor}; font-weight: 600;">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
+            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(nombreCuenta)}</span><span style="color: #FFFFFF;">${extraInfo}</span>`;
             
             amountClass = isGasto ? 'text-negative' : 'text-positive';
             amountSign = isGasto ? '' : '+';
         }
 
-        // HTML FINAL: Aquí usamos la 't-bar' en lugar de 't-icon-bubble'
         return `
         <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
             
