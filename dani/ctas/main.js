@@ -5461,41 +5461,41 @@ const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICAR);
     if (!container) return;
 
-    // Preparamos controles de filtro para el gráfico de flujo (si existe la función)
+    // Filtros para gráficos (si existen)
     const filterControlsHTML = typeof generateReportFilterControls === 'function' 
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
    
-    // --- DISEÑO PREMIUM PARA ONEPLUS NORD 4 ---
     container.innerHTML = `
         <style>
-            /* CONFIGURACIÓN GENERAL DE PÁGINA */
+            /* CONFIGURACIÓN GENERAL */
             #planificar-page {
                 padding: 0 !important;
                 background-color: var(--c-background) !important;
             }
 
-            /* TARJETA HERO (PATRIMONIO) - SIEMPRE VISIBLE */
-            .hero-card {
-                background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 100%);
-                border-bottom: 1px solid var(--c-outline);
-                padding: 20px 5%; /* Márgenes laterales del 5% */
-                margin-bottom: 20px;
-                text-align: center;
+            /* ESTILO UNIFICADO PARA TODAS LAS CAJAS (WIDGETS) */
+            .dashboard-widget {
+                width: 94% !important;
+                margin: 10px auto !important; /* Separación vertical y centrado horizontal */
+                border-radius: 12px !important;
+                background-color: var(--c-surface);
+                border: 1px solid var(--c-outline);
+                box-sizing: border-box;
+            }
+            
+            .widget-header {
+                padding: 15px;
+                display: flex;
+                align-items: center;
+                cursor: pointer;
             }
 
-            .hero-title {
-                font-size: 0.9rem;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                color: var(--c-on-surface-secondary);
-                margin-bottom: 10px;
-                font-weight: 600;
-            }
-
-            /* LISTA DE RECURRENTES - SIEMPRE VISIBLE */
+            /* LISTA DE RECURRENTES (La mantenemos visible para acceso rápido, 
+               pero si quieres ocultarla también, avísame) */
             .recurrents-section {
                 padding: 0 4%;
+                margin-top: 20px;
                 margin-bottom: 30px;
             }
             .section-header {
@@ -5507,32 +5507,27 @@ const renderPlanificacionPage = () => {
                 border-left: 3px solid var(--c-primary);
                 line-height: 1.2;
             }
-
-            /* ACORDEONES SECUNDARIOS (Para Inversiones, Extracto, etc.) */
-            .dashboard-widget {
-                width: 94% !important;
-                margin: 0 auto 10px auto !important; /* Centrado */
-                border-radius: 12px !important;
-                background-color: var(--c-surface);
-                border: 1px solid var(--c-outline);
-            }
-            .widget-header {
-                padding: 15px;
-            }
         </style>
 
-        <div class="hero-card">
-            <div class="hero-title">Patrimonio Total</div>
-            <div id="patrimonio-overview-container">
-               <div class="skeleton" style="height: 150px; width: 100%; border-radius: 12px; opacity: 0.3;"></div>
+        <details class="dashboard-widget">
+            <summary class="widget-header">
+                <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Patrimonio</h3>
+                    <p class="widget-subtitle">Tus activos menos tus deudas</p>
+                </div>
+                <span class="material-icons widget-arrow">expand_more</span>
+            </summary>
+            <div class="widget-content">
+                <div id="patrimonio-overview-container" style="padding: 16px;">
+                   <div class="skeleton" style="height: 150px; width: 100%; border-radius: 12px;"></div>
+                </div>
             </div>
-        </div>
+        </details>
 
         <div class="recurrents-section">
             <div class="section-header">Próximos Pagos</div>
-            
             <div id="pending-recurrents-container"></div>
-            
             <div style="margin-top: 10px;">
                 <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 8px;">Suscripciones activas:</p>
                 <div id="recurrentes-list-container"></div>
@@ -5604,21 +5599,20 @@ const renderPlanificacionPage = () => {
             </div>
         </details>
         
-        <div style="height: 100px;"></div> `;
+        <div style="height: 100px;"></div>
+    `;
 
     // --- LÓGICA JAVASCRIPT ---
-    // (Hemos eliminado la parte de presupuestos 'yearSelect' para limpiar código)
 
     populateAllDropdowns();
     renderPendingRecurrents();
     renderRecurrentsListOnPage(); 
     
-    // Carga diferida de gráficos para fluidez
     setTimeout(async () => {
-        // Renderizamos Patrimonio en su nuevo contenedor fijo
+        // Renderizamos Patrimonio (se pintará dentro del acordeón, invisible hasta que abras)
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
         
-        // Lógica de Extracto (Botonera)
+        // Botonera Extracto
         const btnTodo = select('btn-extracto-todo');
         if (btnTodo) {
             const newBtn = btnTodo.cloneNode(true);
@@ -5640,7 +5634,7 @@ const renderPlanificacionPage = () => {
             selectCuenta.addEventListener('change', () => { handleGenerateInformeCuenta(null, null); });
         }
         
-        // Lógica Inversiones
+        // Inversiones
         const acordeonPortafolio = select('acordeon-portafolio');
         if (acordeonPortafolio) {
             const loadPortfolioData = async () => {
@@ -5655,7 +5649,7 @@ const renderPlanificacionPage = () => {
             });
         }
 
-        // Lógica Flujo Caja
+        // Flujo Caja
         const acordeonFlujo = select('acordeon-flujo_caja');
         if (acordeonFlujo) {
             acordeonFlujo.addEventListener('toggle', () => {
