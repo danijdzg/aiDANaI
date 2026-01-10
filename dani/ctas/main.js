@@ -4319,7 +4319,7 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 // ==========================================
-// 🏠 PANTALLA INICIO (PANEL) - AJUSTE SUPERIOR EXACTO 3PX
+// 🏠 PANTALLA INICIO (PANEL) - AJUSTE SUPERIOR EXACTO 5PX
 // ==========================================
 
 const renderPanelPage = async () => {
@@ -4333,7 +4333,7 @@ const renderPanelPage = async () => {
     container.style.overflowX = 'hidden';
 
     // --- VARIABLES ---
-    const gap = '3px'; // TU OBJETIVO: 3px
+    const gap = '5px'; // TU OBJETIVO: 5px
     
     const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
@@ -4358,7 +4358,7 @@ const renderPanelPage = async () => {
         width: 100%; 
         
         /* AQUÍ ESTÁ LA CLAVE DEL TECHO: */
-        padding-top: ${gap} !important;  /* Exactamente 3px desde arriba */
+        padding-top: ${gap} !important;  /* Exactamente 5px desde arriba */
         margin-top: 0 !important;        /* Nada de márgenes extra */
         
         gap: ${gap} !important;          /* 3px entre tarjetas */
