@@ -3364,28 +3364,27 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (¡DEGRADADO VIBRANTE FORZADO!)
+    // 3. Header de Fecha (AMARILLO BRILLANTE)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         
-        // Formato dd MMM aaaa
         const day = dateObj.getDate().toString().padStart(2, '0');
         let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
         month = month.charAt(0).toUpperCase() + month.slice(1);
         const year = dateObj.getFullYear();
         
-        let totalColor = '#FFFFFF';
+        // Color: Amarillo (#FFD700) por defecto. Si es negativo, Naranja (Warning).
+        let totalColor = '#FFD700'; 
         if (item.total < 0) totalColor = 'var(--c-warning)';
 
         return `
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
-                /* DEGRADADO VISIBLE: Azul Medianoche intenso a Azul Oscuro */
                 background-image: linear-gradient(135deg, #000428 0%, #004e92 100%) !important;
-                background-color: #000428 !important; /* Fallback por si acaso */
+                background-color: #000428 !important;
                 
                 padding: 12px 16px; 
                 margin-top: 0;
-                border-top: 1px solid rgba(255,255,255,0.15); /* Borde brillante arriba */
+                border-top: 1px solid rgba(255,255,255,0.15);
                 border-bottom: 1px solid rgba(0,0,0,0.5);
                 display: flex; 
                 align-items: center; 
@@ -3395,9 +3394,9 @@ const renderVirtualListItem = (item) => {
                 z-index: 1;
             ">
                 <div style="display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 2px rgba(0,0,0,0.8);">
-                    <span style="font-size: 1.2rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">${day}</span>
-                    <span style="font-size: 1rem; font-weight: 600; text-transform: capitalize; color: #E0E0E0;">${month}</span>
-                    <span style="font-size: 0.9rem; font-weight: 400; color: #B0BEC5;">${year}</span>
+                    <span style="font-size: 1.2rem; font-weight: 800; color: #FFD700; letter-spacing: -0.5px;">${day}</span>
+                    <span style="font-size: 1rem; font-weight: 600; text-transform: capitalize; color: #FFD700; opacity: 0.9;">${month}</span>
+                    <span style="font-size: 0.9rem; font-weight: 400; color: #FFD700; opacity: 0.7;">${year}</span>
                 </div>
 
                 <span style="
@@ -11398,7 +11397,7 @@ window.addEventListener('message', function(event) {
 });
 
 // ===============================================================
-// 📡 RADAR VISUAL DE FECHAS (Edición Degradado Eléctrico)
+// 📡 RADAR VISUAL DE FECHAS (Edición Amarillo Brillante)
 // ===============================================================
 
 const initStickyRadar = () => {
@@ -11410,12 +11409,11 @@ const initStickyRadar = () => {
         stickyBar = document.createElement('div');
         stickyBar.id = 'sticky-radar-bar';
         
-        // COPIA EXACTA DEL CSS DEL HEADER (Con !important para asegurar)
+        // CSS IDÉNTICO AL HEADER (Degradado Azul)
         stickyBar.style.cssText = `
             position: absolute;
             top: 0; left: 0; width: 100%; height: 52px; 
             
-            /* DEGRADADO AZUL ELÉCTRICO */
             background-image: linear-gradient(135deg, #000428 0%, #004e92 100%) !important;
             background-color: #000428 !important;
 
@@ -11468,7 +11466,8 @@ const initStickyRadar = () => {
             let totalHtml = '';
             if (foundTotal) {
                 const totalVal = parseFloat(foundTotal);
-                const totalColor = totalVal < 0 ? 'var(--c-warning)' : '#FFFFFF';
+                // Amarillo si positivo, Naranja si negativo
+                const totalColor = totalVal < 0 ? 'var(--c-warning)' : '#FFD700';
                 totalHtml = `
                 <span style="
                     color: ${totalColor}; 
@@ -11485,9 +11484,9 @@ const initStickyRadar = () => {
 
             stickyBar.innerHTML = `
                 <div style="display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 2px rgba(0,0,0,0.8);">
-                    <span style="font-size: 1.2rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">${day}</span>
-                    <span style="font-size: 1rem; font-weight: 600; text-transform: capitalize; color: #E0E0E0;">${month}</span>
-                    <span style="font-size: 0.9rem; font-weight: 400; color: #B0BEC5;">${year}</span>
+                    <span style="font-size: 1.2rem; font-weight: 800; color: #FFD700; letter-spacing: -0.5px;">${day}</span>
+                    <span style="font-size: 1rem; font-weight: 600; text-transform: capitalize; color: #FFD700; opacity: 0.9;">${month}</span>
+                    <span style="font-size: 0.9rem; font-weight: 400; color: #FFD700; opacity: 0.7;">${year}</span>
                 </div>
 
                 ${totalHtml}
