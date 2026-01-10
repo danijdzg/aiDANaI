@@ -3338,7 +3338,7 @@ const handleShowPnlBreakdown = async (accountId) => {
 
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes (Se mantiene igual)
+    // 1. Header de Pendientes
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
@@ -3346,7 +3346,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente (Se mantiene igual)
+    // 2. Tarjeta de Pendiente
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
@@ -3370,7 +3370,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (CAMBIOS: Todo Blanco, Fecha Centrada)
+    // 3. Header de Fecha (REPARADO: Ahora es STICKY)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         const today = new Date(); today.setHours(0,0,0,0);
@@ -3389,7 +3389,7 @@ const renderVirtualListItem = (item) => {
             fullDate = numericDate;
         }
 
-        // DISEÑO: Flexbox con posición relativa para centrar la fecha perfectamente
+        // AQUÍ ESTÁ EL CAMBIO IMPORTANTE: position: sticky
         return `
             <div class="sticky-date-header" style="
                 background: var(--c-background); 
@@ -3398,8 +3398,10 @@ const renderVirtualListItem = (item) => {
                 border-bottom: 1px solid var(--c-outline);
                 display: flex; 
                 align-items: center; 
-                justify-content: center; /* Centra el contenido principal */
-                position: relative; /* Clave para poner el total a la derecha sin mover el centro */
+                justify-content: center; 
+                position: sticky; /* CAMBIO CLAVE: Se pega al scroll */
+                top: 0;           /* CAMBIO CLAVE: Se pega al techo */
+                z-index: 10;      /* CAMBIO CLAVE: Por encima de las tarjetas */
             ">
                 <div style="text-align: center; color: #FFFFFF;">
                     <span style="font-weight: 900; font-size: 0.9rem; margin-right: 6px;">${dayName}</span>
@@ -3420,7 +3422,7 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS (CAMBIOS: Saldos en Traspasos)
+    // 4. MOVIMIENTOS (Sin cambios, solo el estilo visual anterior)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
@@ -3430,40 +3432,30 @@ const renderVirtualListItem = (item) => {
         let cardTypeClass = ''; 
 
         if (m.tipo === 'traspaso') {
-            // --- TRASPASO (AZUL + SALDOS) ---
             cardTypeClass = 'type-traspaso'; 
             
-            // Buscamos las cuentas y sus saldos actuales
             const cOrigen = cuentas.find(c => c.id === m.cuentaOrigenId);
             const cDestino = cuentas.find(c => c.id === m.cuentaDestinoId);
             
             const origen = cOrigen?.nombre || 'Origen';
-            const saldoOrigen = cOrigen?.saldo || 0; // Asumimos que 'saldo' es la propiedad
-            
+            const saldoOrigen = cOrigen?.saldo || 0;
             const destino = cDestino?.nombre || 'Destino';
             const saldoDestino = cDestino?.saldo || 0;
 
             line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
-            
-            // Construimos la línea 2 con los saldos en blanco entre paréntesis
-            // Usamos un tamaño de fuente un poco menor para el saldo para que quepa bien en el móvil
             line2 = `
                 <div style="line-height: 1.4;">
                     <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
                     <span style="color: #FFFFFF; font-size: 0.75rem; margin-right: 4px;">(${formatCurrencyHTML(saldoOrigen)})</span>
-                    
                     <span style="color: var(--c-on-surface-secondary);">➔</span> 
-                    
                     <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info); margin-left: 4px;">${escapeHTML(destino)}</span>
                     <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoDestino)})</span>
                 </div>
             `;
-            
             amountClass = 'text-info'; 
             amountSign = '';
 
         } else {
-            // --- INGRESO O GASTO ---
             const isGasto = m.cantidad < 0;
             cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
