@@ -7498,7 +7498,6 @@ const renderCuentasModalList = () => {
         offBalance: ledgerSelected === 'B' 
     }, btn);
             hapticFeedback('success');
-            showToast('Cuenta actualizada.');
             renderCuentasModalList();
         };
 
@@ -8035,9 +8034,7 @@ const handleDuplicateMovement = (originalMovement, isRecurrent = false) => {
                 const cuenta = document.getElementById('movimiento-cuenta');
                 if (cuenta) { cuenta.value = originalMovement.cuentaId; cuenta.dispatchEvent(new Event('change')); }
             }
-            
-            showToast('Datos copiados. Revisa y guarda.');
-
+                        
         }, 300); 
     }, 350); 
 };
@@ -8330,7 +8327,6 @@ const handleStart = (e) => {
     const btnIcon = select('currency-toggle-icon');
     
     if (portfolioViewMode === 'EUR') {
-        showToast('Calculando equivalencia en Bitcoin...', 'info');
         const price = await fetchBtcPrice();
         if (price > 0) {
             portfolioViewMode = 'BTC';
@@ -8547,9 +8543,6 @@ const handleStart = (e) => {
     if (movement) {
         // Usamos la función que ya tienes creada
         handleDuplicateMovement(movement);
-    } else {
-        // Por si acaso es un recurrente o hay un error
-        showToast("No se pudo cargar el movimiento original para duplicar.", "warning");
     }
 },
             'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
@@ -8598,9 +8591,7 @@ const handleStart = (e) => {
 
         if (movement) {
             handleDuplicateMovement(movement, isRecurrent);
-        } else {
-            showToast("Error: No se pudo localizar el movimiento original.", "danger");
-        }
+        } 
     },
 
 // Asegúrate también de que esta otra acción use la misma lógica:
@@ -9526,7 +9517,6 @@ const handleSaveMovement = async (event) => {
         }
 
         hapticFeedback('success');
-        showToast('Movimiento guardado');
         
         if (isSaveAndNew) {
             if (typeof startMovementForm === 'function') startMovementForm();
@@ -9621,8 +9611,7 @@ const handleAddAccount = async (btn) => {
      localStorage.setItem('skipIntro', String(newConfig.skipIntro));
      setButtonLoading(btn, false);
      hapticFeedback('success'); 
-     showToast('Configuración guardada.'); 
-};
+     };
  
 
           const handleExportData = async (btn) => {
