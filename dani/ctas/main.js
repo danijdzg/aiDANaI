@@ -4319,21 +4319,26 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 // ==========================================
-// 🏠 PANTALLA INICIO (PANEL) - MODO 98% ANCHO
+// 🏠 PANTALLA INICIO (PANEL) - AJUSTE PERFECTO 98%
 // ==========================================
 
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- ESTILOS ULTRA-COMPACTOS & INMERSIVOS (OnePlus Nord 4) ---
-    const gap = '10px'; // Un poco más de aire entre tarjetas
+    // --- CORRECCIÓN CRÍTICA DE MÁRGENES ---
+    // Reseteamos el contenedor padre para eliminar el hueco extra a la izquierda
+    container.style.padding = '0px'; 
+    container.style.margin = '0px';
+    container.style.width = '100%';
+    container.style.maxWidth = '100%';
     
-    // KPI (Números) más grandes para aprovechar la pantalla
+    // --- ESTILOS ---
+    const gap = '10px'; 
     const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    // Tarjetas al 100% de su contenedor padre (que será del 98%)
+    // Tarjetas al 100% de su contenedor (que definiremos abajo al 98%)
     const cardStyle = `
         padding: 15px 15px; 
         margin-bottom: ${gap}; 
@@ -4346,12 +4351,14 @@ const renderPanelPage = async () => {
 
     container.innerHTML = `
     <div style="
-        width: 98%; 
-        margin: 0 auto; /* Centrado automático */
-        padding: 10px 0; 
+        width: 98% !important; 
+        margin-left: 1% !important;  /* 1% a la izq + 98% ancho + 1% restante = 100% Pantalla */
+        margin-right: 1% !important;
+        padding-top: 10px; 
         display: flex; 
         flex-direction: column; 
         justify-content: flex-start;
+        box-sizing: border-box;
     ">
         
         <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
@@ -4462,7 +4469,8 @@ const renderPanelPage = async () => {
             </div>
         </div>
 
-        <div style="height: 100px;"></div> </div>
+        <div style="height: 100px;"></div>
+    </div>
     
     <div id="concepto-totals-list" style="display:none;"></div>
     <canvas id="conceptos-chart" style="display:none;"></canvas>
