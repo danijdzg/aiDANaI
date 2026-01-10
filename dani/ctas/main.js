@@ -4319,24 +4319,25 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 // ==========================================
-// 🏠 PANTALLA INICIO (PANEL) - ESPACIADO MÍNIMO 2PX
+// 🏠 PANTALLA INICIO (PANEL) - ESPACIADO 3PX FORZADO
 // ==========================================
 
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- RESET SEGURO ---
+    // --- RESET PARA EVITAR INTERFERENCIAS ---
     container.style.padding = '0';
     container.style.overflowX = 'hidden'; 
 
-    // --- AJUSTE DE ESPACIADO ---
-    const gap = '2px'; // AHORA SÓLO 2PX DE SEPARACIÓN
+    // --- VARIABLES DE ESTILO ---
+    const gap = '3px'; // ESPACIADO EXACTO
     
     const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    // Estilo de tarjeta (98% ancho)
+    // ESTILO DE TARJETA:
+    // Importante: margin-bottom: 0 !important para que NO se sume al gap del padre.
     const cardStyle = `
         width: 98%; 
         padding: 12px 15px; 
@@ -4344,6 +4345,7 @@ const renderPanelPage = async () => {
         border: 1px solid rgba(255, 255, 255, 0.1); 
         box-sizing: border-box; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 0 !important; /* ELIMINAMOS MÁRGENES INDIVIDUALES */
     `;
 
     container.innerHTML = `
@@ -4352,8 +4354,8 @@ const renderPanelPage = async () => {
         flex-direction: column; 
         align-items: center; 
         width: 100%; 
-        gap: ${gap};         /* 2px entre tarjetas */
-        padding-top: ${gap}; /* 2px desde el techo */
+        gap: ${gap} !important;         /* 3px entre tarjetas FORZADO */
+        padding-top: ${gap} !important; /* 3px desde el techo FORZADO */
         padding-bottom: 100px;
     ">
         
@@ -4373,7 +4375,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div id="custom-date-filters" class="form-grid hidden" onclick="event.stopPropagation()" style="grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 8px;">
+            <div id="custom-date-filters" class="form-grid hidden" onclick="event.stopPropagation()" style="grid-template-columns: 1fr 1fr; gap: 3px; margin-bottom: 8px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 8px;">
                 <div style="display:flex; flex-direction:column;">
                      <label style="font-size:0.7rem; color:#FFFFFF;">Desde</label>
                      <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.85rem; padding: 2px; background: var(--c-surface); color: white;">
@@ -4384,7 +4386,7 @@ const renderPanelPage = async () => {
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; text-align: center; margin-bottom: 6px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px; text-align: center; margin-bottom: 6px;">
                 <div>
                     <div style="${titleStyle}">INGRESOS</div>
                     <div id="kpi-ingresos-value" class="skeleton" style="${bigKpiStyle} color: var(--c-success);">+0,00 €</div>
@@ -4397,7 +4399,7 @@ const renderPanelPage = async () => {
 
             <div style="height: 1px; background-color: var(--c-outline); margin: 4px 0 6px 0; opacity: 0.3;"></div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; text-align: center;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px; text-align: center;">
                 <div>
                     <div style="${titleStyle}">NETO</div>
                     <div id="kpi-saldo-neto-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
@@ -4417,7 +4419,7 @@ const renderPanelPage = async () => {
                 <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.8rem; line-height: 1.1; margin: 2px 0; white-space: nowrap;">0,00 €</div>
             </div>
             
-            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 5px 10px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center;">
+            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 5px 10px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; gap: 3px;">
                 <div style="text-align: center;">
                     <div style="${titleStyle}">Liquidez</div>
                     <div id="kpi-liquidez-value" class="skeleton" style="${bigKpiStyle} font-size: 1.4rem;">0,00 €</div>
@@ -4453,7 +4455,7 @@ const renderPanelPage = async () => {
         </div>
 
         <div class="hero-card fade-in-up border-warning" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%);">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px;">
                 <div style="text-align: center;">
                     <div style="${titleStyle}"> <span class="material-icons" style="font-size: 12px; vertical-align: middle;">shield</span> COBERTURA</div>
                     <div id="health-runway-val" class="skeleton" style="font-size: 1.5rem; font-weight: 800; color: #FFD60A; white-space: nowrap;">0.0 Meses</div>
