@@ -1388,7 +1388,7 @@ const calculatePreviousDueDate = (currentDueDate, frequency, weekDays = []) => {
     
     console.log('⚡ Motor de lista calibrado para Alta Densidad:', vList.heights);
 };
-    //
+
 const hapticFeedback = (type = 'light') => {
     if (!userHasInteracted || !('vibrate' in navigator)) return;
     
@@ -1436,10 +1436,7 @@ const hapticFeedback = (type = 'light') => {
         </div>`;
 };
 
-/**
- * Configura la navegación secuencial inteligente.
- * Orden: Cantidad -> Concepto -> Detalle (Auto-relleno) -> Cuenta -> Guardar
- */
+
 const setupFormNavigation = () => {
     // Referencias
     const cantidadInput = select('movimiento-cantidad');
@@ -11409,3 +11406,128 @@ window.addEventListener('message', function(event) {
         }
     }, true); // UseCapture: true para interceptarlo antes que nadie
 });
+
+// ===============================================================
+// 👻 SISTEMA DE ENCABEZADO FLOTANTE (STICKY HEADER FIX)
+// ===============================================================
+// Pega esto al final de main.js. Se activará automáticamente.
+
+const initStickyHeaderOverlay = () => {
+    const listContainer = document.querySelector('.virtual-list-container') || document.getElementById('lista-movimientos');
+    if (!listContainer) return; // Si no estamos en la pantalla correcta, no hacemos nada.
+
+    // 1. Crear el elemento "Fantasma" si no existe
+    let stickyOverlay = document.getElementById('sticky-date-overlay');
+    if (!stickyOverlay) {
+        stickyOverlay = document.createElement('div');
+        stickyOverlay.id = 'sticky-date-overlay';
+        // Estilos para que parezca idéntico a tu cabecera real
+        stickyOverlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 45px; /* Altura aproximada */
+            background: var(--c-background); /* Fondo sólido para tapar lo de atrás */
+            border-bottom: 1px solid var(--c-outline);
+            display: none; /* Oculto por defecto */
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            pointer-events: none; /* Para que puedas tocar a través de él si hace falta */
+        `;
+        listContainer.parentElement.style.position = 'relative'; // Aseguramos que el padre sea relativo
+        listContainer.parentElement.appendChild(stickyOverlay);
+    }
+
+    // 2. Función matemática para saber qué día es
+    const updateStickyHeader = () => {
+        if (!vList || !vList.items || vList.items.length === 0) return;
+
+        const scrollTop = listContainer.scrollTop;
+        
+        // Usamos las alturas EXACTAS que me diste para calcular dónde estamos
+        const H_TRANS = 50;  // transaction
+        const H_TRASPASO = 62; // transfer
+        const H_HEADER = 36; // header
+        const H_PENDING_H = 36;
+        const H_PENDING_I = 60;
+
+        let currentY = 0;
+        let activeDateItem = null;
+
+        // Recorremos los items sumando alturas hasta llegar a la posición del scroll
+        for (let i = 0; i < vList.items.length; i++) {
+            const item = vList.items[i];
+            let itemHeight = 0;
+
+            // Asignamos altura según tipo
+            if (item.type === 'transaction') itemHeight = (item.movement.tipo === 'traspaso') ? H_TRASPASO : H_TRANS;
+            else if (item.type === 'date-header') itemHeight = H_HEADER;
+            else if (item.type === 'pending-header') itemHeight = H_PENDING_H;
+            else if (item.type === 'pending-item') itemHeight = H_PENDING_I;
+
+            // Si este item es una cabecera de fecha, lo guardamos como "candidato actual"
+            if (item.type === 'date-header') {
+                activeDateItem = item;
+            }
+
+            // Si ya hemos superado el scroll, ESTE es el grupo que estamos viendo
+            if ((currentY + itemHeight) > scrollTop) {
+                break;
+            }
+            currentY += itemHeight;
+        }
+
+        // 3. Pintamos el "Fantasma" con los datos del candidato
+        if (activeDateItem) {
+            stickyOverlay.style.display = 'flex';
+            
+            // Formateamos la fecha igual que en tu diseño (dd/MM/aaaa)
+            const dateObj = new Date(activeDateItem.date + 'T12:00:00Z');
+            const numericDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            let dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+            const today = new Date(); today.setHours(0,0,0,0);
+            const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
+            if (itemDate.getTime() === today.getTime()) dayName = "HOY";
+            
+            // Inyectamos el HTML (Todo Blanco y Limpio)
+            stickyOverlay.innerHTML = `
+                <div style="text-align: center; color: #FFFFFF;">
+                    <span style="font-weight: 900; font-size: 0.9rem; margin-right: 6px;">${dayName}</span>
+                    <span style="font-size: 0.9rem; font-family: monospace; opacity: 0.9;">${numericDate}</span>
+                </div>
+                <span style="
+                    position: absolute; 
+                    right: 15px; 
+                    color: #FFFFFF; 
+                    font-weight: 700; 
+                    font-family: monospace; 
+                    font-size: 1rem;
+                ">
+                    ${formatCurrencyHTML(activeDateItem.total)}
+                </span>
+            `;
+        } else {
+            stickyOverlay.style.display = 'none';
+        }
+    };
+
+    // 4. Escuchar el scroll del contenedor REAL
+    listContainer.removeEventListener('scroll', updateStickyHeader); // Limpieza por si acaso
+    listContainer.addEventListener('scroll', updateStickyHeader);
+    
+    // Ejecutar una vez al inicio
+    updateStickyHeader();
+};
+
+// ACTIVACIÓN: Intentamos arrancar el sistema cada vez que cambie la vista
+const observer = new MutationObserver(() => {
+    const listContainer = document.querySelector('.virtual-list-container');
+    if (listContainer) {
+        initStickyHeaderOverlay();
+    }
+});
+observer.observe(document.body, { childList: true, subtree: true });
