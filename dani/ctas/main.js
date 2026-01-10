@@ -3352,7 +3352,7 @@ const handleShowPnlBreakdown = async (accountId) => {
 
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes (Sin cambios significativos, solo limpieza)
+    // 1. Header de Pendientes (Se mantiene igual)
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
@@ -3360,7 +3360,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente (Sin cambios)
+    // 2. Tarjeta de Pendiente (Se mantiene igual)
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
@@ -3384,7 +3384,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (CAMBIOS: Sin recuadros, Fecha dd/MM/aaaa, Colores Naranja/Blanco)
+    // 3. Header de Fecha (CAMBIOS: Todo Blanco, Fecha Centrada)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         const today = new Date(); today.setHours(0,0,0,0);
@@ -3392,43 +3392,49 @@ const renderVirtualListItem = (item) => {
         const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
         
         let dayName = '', fullDate = '';
-
-        // Formateo de Fecha solicitado: dd/MM/aaaa
-        // Usamos '2-digit' para día y mes, y 'numeric' para año completo.
         const numericDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
         if (itemDate.getTime() === today.getTime()) {
-            dayName = "HOY"; 
-            fullDate = numericDate;
+            dayName = "HOY"; fullDate = numericDate;
         } else if (itemDate.getTime() === yesterday.getTime()) {
-            dayName = "AYER";
-            fullDate = numericDate;
+            dayName = "AYER"; fullDate = numericDate;
         } else {
-            // Día de la semana en mayúsculas (LUN, MAR...)
             dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
             fullDate = numericDate;
         }
 
-        // Lógica de colores solicitada:
-        // Negativo -> Naranja (#FF9500 / var(--c-warning))
-        // Positivo -> Blanco (#FFFFFF)
-        let totalStyle = 'color: #FFFFFF;'; 
-        if (item.total < 0) totalStyle = 'color: var(--c-warning);'; // Naranja
-
-        // Quitamos las clases "sticky-day-pill" y "sticky-date-total" que daban estilo de caja
-        // y aplicamos estilos limpios (transparentes) directamente.
+        // DISEÑO: Flexbox con posición relativa para centrar la fecha perfectamente
         return `
-            <div class="sticky-date-header" style="background: var(--c-surface); border-bottom: 1px solid var(--c-outline); border-top: none; border-left: none; border-right: none; border-radius: 0; padding: 12px 0; margin: 0;">
-                <div class="sticky-date-left" style="display: flex; align-items: baseline; gap: 8px;">
-                    <span style="font-weight: 900; font-size: 0.9rem; color: var(--c-primary);">${dayName}</span>
-                    <span style="font-size: 0.8rem; color: var(--c-on-surface-secondary); font-family: monospace;">${fullDate}</span>
+            <div class="sticky-date-header" style="
+                background: var(--c-background); 
+                padding: 12px 10px; 
+                margin: 0; 
+                border-bottom: 1px solid var(--c-outline);
+                display: flex; 
+                align-items: center; 
+                justify-content: center; /* Centra el contenido principal */
+                position: relative; /* Clave para poner el total a la derecha sin mover el centro */
+            ">
+                <div style="text-align: center; color: #FFFFFF;">
+                    <span style="font-weight: 900; font-size: 0.9rem; margin-right: 6px;">${dayName}</span>
+                    <span style="font-size: 0.9rem; font-family: monospace; opacity: 0.9;">${fullDate}</span>
                 </div>
-                <span style="font-weight: 700; font-family: monospace; font-size: 1rem; ${totalStyle}">${formatCurrencyHTML(item.total)}</span>
+
+                <span style="
+                    position: absolute; 
+                    right: 15px; 
+                    color: #FFFFFF; 
+                    font-weight: 700; 
+                    font-family: monospace; 
+                    font-size: 1rem;
+                ">
+                    ${formatCurrencyHTML(item.total)}
+                </span>
             </div>
         `;
     }
 
-    // 4. MOVIMIENTOS (CAMBIOS: Traspasos con cuentas en azul y encuadradas)
+    // 4. MOVIMIENTOS (CAMBIOS: Saldos en Traspasos)
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db;
@@ -3438,33 +3444,47 @@ const renderVirtualListItem = (item) => {
         let cardTypeClass = ''; 
 
         if (m.tipo === 'traspaso') {
-            // --- TRASPASO (AZUL) ---
+            // --- TRASPASO (AZUL + SALDOS) ---
             cardTypeClass = 'type-traspaso'; 
             
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+            // Buscamos las cuentas y sus saldos actuales
+            const cOrigen = cuentas.find(c => c.id === m.cuentaOrigenId);
+            const cDestino = cuentas.find(c => c.id === m.cuentaDestinoId);
             
+            const origen = cOrigen?.nombre || 'Origen';
+            const saldoOrigen = cOrigen?.saldo || 0; // Asumimos que 'saldo' es la propiedad
+            
+            const destino = cDestino?.nombre || 'Destino';
+            const saldoDestino = cDestino?.saldo || 0;
+
             line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
             
-            // AQUÍ EL CAMBIO: Usamos "t-account-badge" con borde y color AZUL explícito
-            // para que se vea igual que las cuentas de ingresos/gastos.
+            // Construimos la línea 2 con los saldos en blanco entre paréntesis
+            // Usamos un tamaño de fuente un poco menor para el saldo para que quepa bien en el móvil
             line2 = `
-                <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
-                <span style="color: var(--c-on-surface-secondary); margin: 0 4px;">➔</span> 
-                <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(destino)}</span>
+                <div style="line-height: 1.4;">
+                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
+                    <span style="color: #FFFFFF; font-size: 0.75rem; margin-right: 4px;">(${formatCurrencyHTML(saldoOrigen)})</span>
+                    
+                    <span style="color: var(--c-on-surface-secondary);">➔</span> 
+                    
+                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info); margin-left: 4px;">${escapeHTML(destino)}</span>
+                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoDestino)})</span>
+                </div>
             `;
             
             amountClass = 'text-info'; 
             amountSign = '';
 
         } else {
-            // --- INGRESO (VERDE) O GASTO (ROJO) ---
+            // --- INGRESO O GASTO ---
             const isGasto = m.cantidad < 0;
             cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
-
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+            
             const concepto = conceptos.find(c => c.id === m.conceptoId);
             const conceptoNombre = concepto ? concepto.nombre : 'Varios';
+            
             const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
             const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
             
@@ -3474,8 +3494,6 @@ const renderVirtualListItem = (item) => {
             
             line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(nombreCuenta)}</span><span style="color: #FFFFFF;">${extraInfo}</span>`;
             
-            // Lógica de color para importes individuales (si también quieres aplicar lo de naranja/blanco aquí, avísame, 
-            // pero por defecto mantengo rojo/verde para distinguir gasto/ingreso individualmente).
             amountClass = isGasto ? 'text-negative' : 'text-positive';
             amountSign = isGasto ? '' : '+';
         }
@@ -4048,102 +4066,6 @@ const renderAjustesPage = () => {
     // Esta función, que ya tienes, se encarga de mostrar tu email en la lista.
     loadConfig();
 };
-
-const renderBudgetTrendChart = (monthlyIncomeData, monthlyExpenseData, averageBudgetedExpense) => {
-    const canvasId = 'budget-trend-chart';
-    const canvas = select(canvasId);
-    const ctx = canvas ? canvas.getContext('2d') : null;
-    if (!ctx) return;
-
-    if (budgetTrendChart) {
-        budgetTrendChart.destroy();
-    }
-
-    const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const incomeData = labels.map((_, i) => (monthlyIncomeData[i] || 0) / 100);
-    const expenseData = labels.map((_, i) => (monthlyExpenseData[i] || 0) / 100);
-    
-    const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-success').trim();
-    const colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim();
-    const colorWarning = getComputedStyle(document.body).getPropertyValue('--c-warning').trim();
-
-    budgetTrendChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Ingresos Mensuales',
-                    data: incomeData,
-                    backgroundColor: colorSuccess, 
-                    borderRadius: 4,
-                    order: 2
-                },
-                {
-                    label: 'Gastos Mensuales',
-                    data: expenseData,
-                    backgroundColor: colorDanger, 
-                    borderRadius: 4,
-                    order: 3
-                },
-                {
-                    type: 'line',
-                    label: 'Promedio Gasto Presupuestado',
-                    data: Array(12).fill(averageBudgetedExpense / 100),
-                    borderColor: colorWarning,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    fill: false,
-                    order: 1,
-                    borderDash: [5, 5]
-                }
-            ]
-        },
-        options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-        y: { beginAtZero: true, ticks: { callback: value => `€${value}` } },
-        x: { grid: { display: false } }
-    },
-    plugins: {
-        legend: { position: 'top' },
-        tooltip: { mode: 'index', intersect: false },
-        datalabels: { display: false }
-    },
-    // === ¡APLICAMOS EL MISMO PATRÓN DE DRILL-DOWN! ===
-    onClick: async (event, elements) => {
-        if (elements.length === 0) return;
-        
-        const monthIndex = elements[0].index;
-        const monthName = labels[monthIndex];
-        const year = parseInt(select('budget-year-selector').value, 10);
-        
-        // Obtener todos los movimientos del año seleccionado para poder filtrarlos
-        const startDate = new Date(year, 0, 1);
-        const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-        const visibleAccountIds = getVisibleAccounts().map(c => c.id);
-        const baseQuery = fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-                                .where('fecha', '>=', startDate.toISOString())
-                                .where('fecha', '<=', endDate.toISOString())
-                                .where('tipo', '==', 'movimiento');
-        const movementsOfYear = await fetchMovementsInChunks(baseQuery, 'cuentaId', visibleAccountIds);
-
-        // Filtrar los movimientos solo para el mes que se ha clicado
-        const movementsOfMonth = movementsOfYear.filter(m => new Date(m.fecha).getMonth() === monthIndex);
-        
-        hapticFeedback('light');
-        
-         showDrillDownModal(`Movimientos de ${monthName} ${year}`, movementsOfMonth);
-		},
-    onHover: (event, chartElement) => {
-        event.native.target.style.cursor = chartElement ? 'pointer' : 'default';
-    }
-    // ====================================================
-}
-    });
-};
-
 
 // =============================================================
 // === INICIO: FUNCIÓN RESTAURADA PARA EL WIDGET DE PATRIMONIO ===
@@ -5692,47 +5614,7 @@ const renderPlanificacionPage = () => {
                 <div id="recurrentes-list-container"></div>
             </div>
         </details>
-
-        <details class="dashboard-widget">
-            <summary class="widget-header">
-                <div class="icon-box icon-box--presu"><span class="material-icons">savings</span></div>
-                <div class="widget-info">
-                    <h3 class="widget-title">Presupuestos</h3>
-                    <p class="widget-subtitle">Control de gasto anual</p>
-                </div>
-                <span class="material-icons widget-arrow">expand_more</span>
-            </summary>
-            <div class="widget-content" style="padding-top: 16px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <div class="form-group" style="flex-grow: 1; margin: 0;">
-                        <label for="budget-year-selector" class="form-label">Año Fiscal</label>
-                        <select id="budget-year-selector" class="form-select"></select>
-                    </div>
-                    <button data-action="update-budgets" class="btn btn--secondary" style="margin-left: 12px;">
-                        <span class="material-icons" style="font-size: 16px;">edit</span> Gestionar
-                    </button>
-                </div>
-                <div id="annual-budget-dashboard">
-                    <div id="budget-kpi-container" class="kpi-grid"></div>
-                    <div class="card" style="margin-top: 16px; box-shadow: none; border: 1px solid var(--c-outline);">
-                        <h3 class="card__title" style="font-size: 0.9rem;">Tendencia</h3>
-                        <div class="card__content">
-                            <div class="chart-container" style="height: 200px;"><canvas id="budget-trend-chart"></canvas></div>
-                        </div>
-                    </div>
-                    <div id="budget-details-list" style="margin-top: 16px;"></div>
-                </div>
-                <div id="budget-init-placeholder" class="empty-state hidden">
-                    <span class="material-icons" style="font-size: 48px; color: var(--c-outline);">savings</span>
-                    <h3 style="margin-top: 10px;">Sin Presupuesto</h3>
-                    <button data-action="update-budgets" class="btn btn--primary" style="margin-top: 16px;">
-                        Crear Plan
-                    </button>
-                </div>
-            </div>
-        </details>
-
-                
+                        
         <div style="height: 80px;"></div>
     `;
 
@@ -11178,115 +11060,6 @@ window.actualizarValorInversion = async (cuentaId, event) => {
         console.error(e);
         alert("Error al guardar en la nube.");
     }
-};
-// ===============================================================
-// === 2. PANTALLA ANÁLISIS (VISUALIZACIÓN CON FECHA) ===
-// ===============================================================
-const renderBudgetTracking = () => {
-    const container = document.getElementById('planificar-content');
-    if (!container) return;
-    container.innerHTML = '';
-
-    // --- CÁLCULOS ESTÁNDAR (No tocamos esto) ---
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const totalGasto = db.movimientos.filter(m => {
-        const d = new Date(m.fecha);
-        return m.tipo === 'gasto' && d >= startOfMonth && d <= endOfMonth;
-    }).reduce((sum, m) => sum + m.cantidad, 0);
-    const presupuesto = 2000; 
-    const pct = Math.min((totalGasto / presupuesto) * 100, 100);
-    const color = pct > 80 ? 'var(--c-warning)' : 'var(--c-primary)';
-
-    // --- AQUÍ ESTÁ EL CAMBIO: INVERSIONES ---
-    // Filtramos las cuentas
-    const invs = db.cuentas.filter(c => 
-        c.type === 'inversion' || c.tipo === 'inversion' || 
-        (c.nombre && c.nombre.toLowerCase().match(/inver|fondo|acciones|btc|crypto|ahorro/))
-    );
-
-    let htmlInversiones = '';
-    
-    if (invs.length > 0) {
-        // Creamos la lista
-        htmlInversiones = `<div style="margin-top: 20px;">`;
-        
-        invs.forEach(c => {
-            // LEEMOS LA FECHA DIRECTAMENTE DE LA MEMORIA
-            // Si no existe, ponemos "Sin fecha"
-            const fecha = c.fechaValoracion ? c.fechaValoracion : "Sin fecha";
-            
-            htmlInversiones += `
-                <div style="
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center; 
-                    padding: 15px 10px; 
-                    border-bottom: 1px solid rgba(255,255,255,0.1);
-                    background: rgba(255,255,255,0.02);
-                    margin-bottom: 5px;
-                    border-radius: 8px;">
-                    
-                    <div onclick="openInvestmentHistory('${c.id}')" style="flex:1; cursor:pointer;">
-                        <div style="font-weight:bold; font-size:1rem; color:#fff;">${c.nombre}</div>
-                    </div>
-
-                    <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; margin-right:10px;">
-                        
-                        <span style="color: #FFFF00; font-size: 0.85rem; font-family: monospace; letter-spacing:1px;">
-                            📅 ${fecha}
-                        </span>
-
-                        <span style="color: #fff; font-weight: bold; font-size: 1.1rem;">
-                            ${formatCurrency(c.saldo)}
-                        </span>
-                    </div>
-
-                    <button onclick="actualizarValorInversion('${c.id}', event)" 
-                            style="background:none; border:1px solid #666; border-radius:50%; width:35px; height:35px; color:#0f0; cursor:pointer;">
-                        ✏️
-                    </button>
-                </div>
-            `;
-        });
-        htmlInversiones += `</div>`;
-    } else {
-        htmlInversiones = `<p style="padding:20px; text-align:center;">No hay inversiones</p>`;
-    }
-
-    // PINTAMOS TODO EL HTML
-    container.innerHTML = `
-        <div class="card fade-in-up" style="margin-bottom: 20px; padding: 20px;">
-            <h3>Presupuesto</h3>
-            <div style="display:flex; justify-content:space-between; margin:10px 0;">
-                <span>Gastado: ${formatCurrency(totalGasto)}</span>
-                <span>Límite: ${formatCurrency(presupuesto)}</span>
-            </div>
-            <div style="width:100%; height:10px; background:#333;"><div style="width:${pct}%; height:100%; background:${color};"></div></div>
-        </div>
-
-        <div class="card fade-in-up" style="margin-bottom: 20px;">
-            <h3>Gastos por Categoría</h3>
-            <div class="chart-container" style="height: 200px;"><canvas id="gastosPorCategoriaChart"></canvas></div>
-        </div>
-
-        <div id="seccion-balance-neto" class="card fade-in-up" style="margin-bottom: 20px;">
-            <h3>Patrimonio Neto</h3>
-            <div class="chart-container" style="height: 200px;"><canvas id="balanceNetoChart"></canvas></div>
-        </div>
-
-        <div id="seccion-inversiones" class="card fade-in-up" style="margin-bottom: 20px; border: 1px solid #00B34D;">
-            <h3 style="color:#00B34D;">💰 Mis Inversiones</h3>
-            <p style="color:#aaa; font-size:0.8rem;">Usa el lápiz para poner Fecha y Valor.</p>
-            
-            ${htmlInversiones}
-            
-            <div class="chart-container" style="height: 200px; margin-top:20px;"><canvas id="inversionesChart"></canvas></div>
-        </div>
-    `;
-
-    if (typeof renderCharts === 'function') setTimeout(() => renderCharts(startOfMonth, endOfMonth), 100);
 };
 
 // ==========================================
