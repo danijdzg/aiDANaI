@@ -3350,28 +3350,10 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
+//* =============================================================== */
+/* === FUNCIÓN DIARIO NORD 4 (VERSIÓN LIMPIA) === */
 /* =============================================================== */
-/* === KIT DE REPARACIÓN + FUNCIÓN DE DIARIO (NORD 4) === */
-/* =============================================================== */
 
-// 1. HERRAMIENTAS DE AYUDA (Para evitar errores de "no definido")
-// ---------------------------------------------------------------
-const escapeHTML = (str) => {
-    if (!str) return '';
-    return str.replace(/[&<>'"]/g, tag => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    }[tag]));
-};
-
-const formatCurrencyHTML = (amount) => {
-    const num = parseFloat(amount);
-    if (isNaN(num)) return '0,00 €';
-    // Formato español: 1.000,00 €
-    return num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-};
-
-// 2. FUNCIÓN PRINCIPAL (VISUALIZACIÓN)
-// ---------------------------------------------------------------
 const renderVirtualListItem = (item) => {
     
     // -- SEGURIDAD: Si la base de datos no ha cargado, evitamos el crash --
@@ -3407,7 +3389,7 @@ const renderVirtualListItem = (item) => {
             </div>`;
     }
 
-    // C. Header Fecha (Incrustado y Robusto)
+    // C. Header Fecha (CON EL AMARILLO VIBRANTE FORZADO POR CSS)
     if (item.type === 'date-header') {
         try {
             const dateObj = new Date(item.date + 'T12:00:00Z');
@@ -3421,6 +3403,8 @@ const renderVirtualListItem = (item) => {
 
             const fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
             
+            // Nota: El color amarillo ahora lo controla el CSS con !important, 
+            // así que aquí podemos dejar las clases estándar sin miedo.
             let totalClass = 'text-info'; 
             if (item.total > 0) totalClass = 'text-positive'; 
             else if (item.total < 0) totalClass = 'text-negative'; 
@@ -3436,11 +3420,11 @@ const renderVirtualListItem = (item) => {
                     </span>
                 </div>`;
         } catch (e) {
-            return ''; // Si falla la fecha, no mostramos nada para no romper la app
+            return ''; 
         }
     }
 
-    // D. MOVIMIENTOS (DISEÑO SOLICITADO - A PRUEBA DE BALAS)
+    // D. MOVIMIENTOS (DISEÑO CLEAN & COLOR)
     if (item.type === 'transaction') {
         const m = item.movement || {};
         
