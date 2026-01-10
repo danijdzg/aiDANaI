@@ -1224,30 +1224,17 @@ async function loadCoreData(uid) {
 
     
         async function loadPresupuestos() {
-    if (dataLoaded.presupuestos || !currentUser) return Promise.resolve();
+    // 👻 Función Fantasma:
+    // La mantenemos viva solo para que la app no se queje al iniciar.
     
-    return new Promise((resolve, reject) => {
-              
-        let firstLoad = true;
-        const unsub = fbDb.collection('users').doc(currentUser.uid).collection('presupuestos').onSnapshot(snapshot => {
-            db.presupuestos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            if (firstLoad) {
-                dataLoaded.presupuestos = true;
-                firstLoad = false;
-                resolve(); // ¡Promesa cumplida! La ejecución puede continuar.
-            }
-
-            const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
-                renderBudgetTracking();
-            }
-        }, err => {
-            console.error("Error al cargar presupuestos:", err);
-            reject(err); // Si hay un error, rompemos la promesa.
-        });
-        unsubscribeListeners.push(unsub);
-    });
+    console.log("Presupuestos desactivados para OnePlus Nord 4");
+    
+    // Le decimos a la base de datos que está vacía
+    db.presupuestos = [];
+    dataLoaded.presupuestos = true;
+    
+    // Devolvemos "OK" inmediatamente
+    return Promise.resolve();
 }
 
         async function loadInversiones() {
@@ -2920,8 +2907,7 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
                 hideModal('generic-modal');
                 hapticFeedback('success');
                 showToast(`Presupuestos de ${year} actualizados.`);
-                
-                renderBudgetTracking(); 
+                              
             });
         }
     };
@@ -5626,10 +5612,9 @@ const renderPlanificacionPage = () => {
         const years = new Set([currentYear]);
         (db.presupuestos || []).forEach(p => years.add(p.ano));
         yearSelect.innerHTML = [...years].sort((a, b) => b - a).map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('');
-        yearSelect.addEventListener('change', () => { hapticFeedback('light'); renderBudgetTracking(); });
+        yearSelect.addEventListener('change', () => { hapticFeedback('light'); });
     }
     populateAllDropdowns();
-    renderBudgetTracking();
     renderPendingRecurrents();
     renderRecurrentsListOnPage(); 
     
@@ -11053,10 +11038,7 @@ window.actualizarValorInversion = async (cuentaId, event) => {
         // Feedback visual inmediato
         alert(`✅ Guardado: ${nuevoValor}€ con fecha ${nuevaFecha}`);
         
-        // Forzamos el repintado
-        renderBudgetTracking();
-
-    } catch (e) {
+        } catch (e) {
         console.error(e);
         alert("Error al guardar en la nube.");
     }
