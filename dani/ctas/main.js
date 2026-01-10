@@ -3334,7 +3334,7 @@ const handleShowPnlBreakdown = async (accountId) => {
 
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes
+    // 1. Header de Pendientes (Sin cambios)
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
@@ -3342,7 +3342,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente
+    // 2. Tarjeta de Pendiente (Sin cambios)
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
@@ -3382,10 +3382,10 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS (REPARADO: concepts -> conceptos)
+    // 4. MOVIMIENTOS (Aquí recuperamos el saldo)
     if (item.type === 'transaction') {
         const m = item.movement;
-        const { cuentas, conceptos } = db; // <--- Aquí definimos 'conceptos'
+        const { cuentas, conceptos } = db; 
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
         let line1, line2, amountClass, amountSign;
@@ -3401,6 +3401,7 @@ const renderVirtualListItem = (item) => {
             const saldoDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.saldo || 0;
 
             line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
+            // En traspasos, los saldos van integrados en el texto
             line2 = `
                 <div style="line-height: 1.4;">
                     <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
@@ -3411,12 +3412,11 @@ const renderVirtualListItem = (item) => {
                 </div>`;
             amountClass = 'text-info'; amountSign = '';
         } else {
+            // --- INGRESOS Y GASTOS ---
             const isGasto = m.cantidad < 0;
             cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
             
-            // --- CORRECCIÓN AQUÍ ---
-            // Antes decía 'concepts', ahora dice 'conceptos'
             const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios'; 
             const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             
@@ -3426,6 +3426,8 @@ const renderVirtualListItem = (item) => {
             amountClass = isGasto ? 'text-negative' : 'text-positive'; amountSign = isGasto ? '' : '+';
         }
 
+        // --- RENDERIZADO FINAL ---
+        // Fíjate que en t-row-secondary he añadido el div para el saldo (t-running-balance)
         return `
         <div class="t-card ${highlightClass} ${cardTypeClass}" 
              data-fecha="${fechaMovimiento}" 
@@ -3437,8 +3439,15 @@ const renderVirtualListItem = (item) => {
                     <div class="t-line-1">${line1}</div>
                     <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
                 </div>
-                <div class="t-row-secondary">
+                <div class="t-row-secondary" style="display: flex; justify-content: space-between; align-items: center;">
                     <div class="t-line-2">${line2}</div>
+                    
+                    ${m.tipo !== 'traspaso' ? `
+                        <div class="t-running-balance" style="font-size: 0.75rem; color: var(--c-on-surface-secondary); opacity: 0.7;">
+                            ${formatCurrencyHTML(m.runningBalance)}
+                        </div>
+                    ` : ''}
+                    
                 </div>
             </div>
         </div>`;
