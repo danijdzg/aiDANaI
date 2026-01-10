@@ -3334,7 +3334,7 @@ const handleShowPnlBreakdown = async (accountId) => {
 
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes (Sin cambios)
+    // 1. Header de Pendientes
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
@@ -3342,7 +3342,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente (Sin cambios)
+    // 2. Tarjeta de Pendiente
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
@@ -3364,34 +3364,39 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (DISEÑO PREMIUM REAL)
+    // 3. Header de Fecha (¡FONDO DEGRADADO ESPECTACULAR!)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
         
-        // Formato solicitado: dd/MMM/aaaa (Ej: 25 Ene 2024)
+        // Formato dd MMM aaaa
         const day = dateObj.getDate().toString().padStart(2, '0');
         let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
         month = month.charAt(0).toUpperCase() + month.slice(1);
         const year = dateObj.getFullYear();
         
-        // Lógica de color para el total (Naranja si es negativo, Blanco si es positivo)
         let totalColor = '#FFFFFF';
         if (item.total < 0) totalColor = 'var(--c-warning)';
 
         return `
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
-                background-color: var(--c-surface); /* Fondo sólido elegante */
-                padding: 14px 16px; /* Espaciado lateral generoso */
+                /* AQUÍ ESTÁ LA MAGIA DEL DEGRADADO */
+                background: linear-gradient(90deg, #243B55 0%, #141E30 100%); 
+                
+                padding: 12px 16px; 
                 margin-top: 0;
-                border-bottom: 1px solid var(--c-outline);
+                border-top: 1px solid rgba(255,255,255,0.1); /* Brillo superior */
+                border-bottom: 1px solid rgba(0,0,0,0.5);   /* Sombra inferior */
                 display: flex; 
                 align-items: center; 
-                justify-content: space-between; /* CLAVE: Uno a cada lado */
+                justify-content: space-between;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.3); /* Sombra 3D */
+                position: relative;
+                z-index: 1;
             ">
-                <div style="display: flex; align-items: baseline; gap: 6px; color: var(--c-on-surface);">
-                    <span style="font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; color: #FFFFFF;">${day}</span>
-                    <span style="font-size: 1rem; font-weight: 500; text-transform: capitalize; opacity: 0.9;">${month}</span>
-                    <span style="font-size: 0.9rem; font-weight: 400; opacity: 0.6;">${year}</span>
+                <div style="display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+                    <span style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">${day}</span>
+                    <span style="font-size: 1rem; font-weight: 500; text-transform: capitalize; color: #e0e0e0;">${month}</span>
+                    <span style="font-size: 0.9rem; font-weight: 400; color: #aab4be;">${year}</span>
                 </div>
 
                 <span style="
@@ -3399,7 +3404,7 @@ const renderVirtualListItem = (item) => {
                     font-weight: 700; 
                     font-family: monospace; 
                     font-size: 1rem;
-                    letter-spacing: 0.5px;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
                 ">
                     ${formatCurrencyHTML(item.total)}
                 </span>
@@ -11392,7 +11397,7 @@ window.addEventListener('message', function(event) {
 });
 
 // ===============================================================
-// 📡 RADAR VISUAL DE FECHAS (Edición Premium Justificada)
+// 📡 RADAR VISUAL DE FECHAS (Edición Degradado Espectacular)
 // ===============================================================
 
 const initStickyRadar = () => {
@@ -11403,20 +11408,26 @@ const initStickyRadar = () => {
     if (!stickyBar) {
         stickyBar = document.createElement('div');
         stickyBar.id = 'sticky-radar-bar';
-        // Estilo IDÉNTICO al de la lista para que parezca magia
+        
+        // CSS IDÉNTICO AL HEADER PARA CONTINUIDAD VISUAL
         stickyBar.style.cssText = `
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 50px; /* Altura ajustada */
-            background-color: var(--c-surface); /* Mismo fondo */
-            border-bottom: 1px solid var(--c-outline);
+            top: 0; left: 0; width: 100%; height: 52px; /* Altura ajustada */
+            
+            /* DEGRADADO MIDNIGHT BLUE */
+            background: linear-gradient(90deg, #243B55 0%, #141E30 100%);
+            
+            border-bottom: 1px solid rgba(0,0,0,0.5);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            
             display: flex; 
             align-items: center; 
             justify-content: space-between; /* Justificado Extremos */
-            padding: 0 16px; /* Mismo padding lateral que la lista */
-            box-sizing: border-box; /* Para que el padding no rompa el ancho */
+            padding: 0 16px; 
+            box-sizing: border-box;
             z-index: 500;
             pointer-events: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Sombra Premium */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); /* Sombra fuerte */
             transition: opacity 0.1s;
         `;
         listContainer.parentElement.style.position = 'relative'; 
@@ -11446,14 +11457,12 @@ const initStickyRadar = () => {
         if (foundDate) {
             stickyBar.style.opacity = '1';
             
-            // Formato Premium
             const dateObj = new Date(foundDate + 'T12:00:00Z');
             const day = dateObj.getDate().toString().padStart(2, '0');
             let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
             month = month.charAt(0).toUpperCase() + month.slice(1);
             const year = dateObj.getFullYear();
             
-            // Total con color lógico
             let totalHtml = '';
             if (foundTotal) {
                 const totalVal = parseFloat(foundTotal);
@@ -11464,22 +11473,19 @@ const initStickyRadar = () => {
                     font-weight: 700; 
                     font-family: monospace; 
                     font-size: 1rem;
-                    letter-spacing: 0.5px;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
                 ">
                     ${formatCurrencyHTML(totalVal)}
                 </span>`;
             } else {
-                // Si no hay total (porque estamos sobre un item), podemos calcularlo o dejarlo vacío.
-                // Para mantener la estética, mejor dejarlo vacío o mostrar "..."
-                totalHtml = `<span style="opacity:0;">...</span>`; 
+                 totalHtml = `<span style="opacity:0;">...</span>`; 
             }
 
-            // HTML Interno
             stickyBar.innerHTML = `
-                <div style="display: flex; align-items: baseline; gap: 6px; color: var(--c-on-surface);">
-                    <span style="font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; color: #FFFFFF;">${day}</span>
-                    <span style="font-size: 1rem; font-weight: 500; text-transform: capitalize; opacity: 0.9;">${month}</span>
-                    <span style="font-size: 0.9rem; font-weight: 400; opacity: 0.6;">${year}</span>
+                <div style="display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+                    <span style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">${day}</span>
+                    <span style="font-size: 1rem; font-weight: 500; text-transform: capitalize; color: #e0e0e0;">${month}</span>
+                    <span style="font-size: 0.9rem; font-weight: 400; color: #aab4be;">${year}</span>
                 </div>
 
                 ${totalHtml}
@@ -11494,5 +11500,5 @@ const initStickyRadar = () => {
     scanList(); 
 };
 
-// Reiniciar el radar si ya existe la lista
+// Auto-arranque
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
