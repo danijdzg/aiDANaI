@@ -4319,25 +4319,27 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 // ==========================================
-// 🏠 PANTALLA INICIO (PANEL) - ESPACIADO 3PX FORZADO
+// 🏠 PANTALLA INICIO (PANEL) - AJUSTE SUPERIOR EXACTO 3PX
 // ==========================================
 
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- RESET PARA EVITAR INTERFERENCIAS ---
-    container.style.padding = '0';
-    container.style.overflowX = 'hidden'; 
+    // --- 1. LIMPIEZA TOTAL DEL CONTENEDOR PADRE ---
+    // Forzamos a que el contenedor de la página no tenga relleno ni margen
+    container.style.setProperty('padding', '0', 'important');
+    container.style.setProperty('margin', '0', 'important');
+    container.style.overflowX = 'hidden';
 
-    // --- VARIABLES DE ESTILO ---
-    const gap = '3px'; // ESPACIADO EXACTO
+    // --- VARIABLES ---
+    const gap = '3px'; // TU OBJETIVO: 3px
     
     const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    // ESTILO DE TARJETA:
-    // Importante: margin-bottom: 0 !important para que NO se sume al gap del padre.
+    // ESTILO BASE DE TARJETA
+    // Importante: margin: 0 para que no empuje nada por fuera.
     const cardStyle = `
         width: 98%; 
         padding: 12px 15px; 
@@ -4345,7 +4347,7 @@ const renderPanelPage = async () => {
         border: 1px solid rgba(255, 255, 255, 0.1); 
         box-sizing: border-box; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 0 !important; /* ELIMINAMOS MÁRGENES INDIVIDUALES */
+        margin: 0 !important; /* CERO MARGENES EXTERNOS */
     `;
 
     container.innerHTML = `
@@ -4354,12 +4356,16 @@ const renderPanelPage = async () => {
         flex-direction: column; 
         align-items: center; 
         width: 100%; 
-        gap: ${gap} !important;         /* 3px entre tarjetas FORZADO */
-        padding-top: ${gap} !important; /* 3px desde el techo FORZADO */
+        
+        /* AQUÍ ESTÁ LA CLAVE DEL TECHO: */
+        padding-top: ${gap} !important;  /* Exactamente 3px desde arriba */
+        margin-top: 0 !important;        /* Nada de márgenes extra */
+        
+        gap: ${gap} !important;          /* 3px entre tarjetas */
         padding-bottom: 100px;
     ">
         
-        <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer;">
+        <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer; margin-top: 0 !important;">
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
                 <div style="font-size: 0.85rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
