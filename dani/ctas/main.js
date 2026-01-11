@@ -4333,138 +4333,113 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 // ==========================================
-// 🏠 PANTALLA INICIO - VERSIÓN COMPACTA (70%) Y NAVEGABLE
+// 🏠 PANTALLA INICIO - MODO COMPACTO ESTRICTO (70% REAL)
 // ==========================================
 const renderPanelPage = async () => {
-    // Usamos document.getElementById para asegurar que encontramos el elemento
     const container = document.getElementById('panel-page');
     if (!container) return;
 
-    // --- 1. CONFIGURACIÓN DEL CONTENEDOR (Regla del 70%) ---
-    // IMPORTANTE: Hemos quitado los '!important' que bloqueaban la navegación.
-    container.style.padding = '5px';
-    container.style.margin = '0';
-    container.style.height = '70vh';        // Ocupa solo el 70% de la altura
-    container.style.display = 'flex';       // Flexbox para ordenar
-    container.style.flexDirection = 'column';
-    container.style.gap = '6px';            // Espacio entre tarjetas
-    container.style.overflow = 'hidden';    // Sin scroll
-    container.style.boxSizing = 'border-box';
-    container.style.width = '100%';
-
-    // --- ESTILOS CONDENSADOS (Letras más pequeñas) ---
-    // Títulos pequeñitos (Ingresos, Gastos...)
-    const titleStyle = 'font-size: 0.6rem; font-weight: 700; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 0px; letter-spacing: 0.5px;';
-    
-    // Números principales (Balance, Totales...) - Reducidos a 1.4rem
-    const bigKpiStyle = 'font-size: 1.4rem; font-weight: 800; line-height: 1; font-family: "Roboto Condensed", sans-serif;';
-    
-    // Tarjetas compactas
-    const elasticCardStyle = `
-        flex: 1;                 /* Se reparten el 70% del espacio */
-        display: flex;           
-        flex-direction: column;
-        justify-content: center; 
-        width: 100%;             
-        padding: 4px 10px;       /* Relleno mínimo */
-        border-radius: 12px;     /* Bordes redondeados */
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-sizing: border-box;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    // --- 1. CONTENEDOR MAESTRO (JAULA) ---
+    // Forzamos al contenedor a ser una "jaula" del 70% de altura.
+    // Nada puede salir de aquí.
+    container.style.cssText = `
+        display: flex !important;
+        flex-direction: column !important;
+        height: 70vh !important;       /* LA CLAVE: 70% de la altura del móvil */
+        width: 100% !important;
+        padding: 5px !important;
+        gap: 5px !important;           /* Hueco entre tarjetas */
+        overflow: hidden !important;   /* Cortar lo que sobre */
+        box-sizing: border-box !important;
+        margin: 0 !important;
     `;
 
+    // --- 2. ESTILOS DE TARJETA (FLEXIBLES PERO OBEDIENTES) ---
+    // 'min-height: 0' es vital: impide que el texto obligue a la tarjeta a crecer.
+    const cardStyle = `
+        flex: 1 1 0 !important;        /* Repartir espacio equitativamente */
+        min-height: 0 !important;      /* TRUCO MAESTRO: Permite encoger la tarjeta */
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        padding: 4px 8px !important;   /* Padding mínimo */
+        border-radius: 12px !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+        width: 100% !important;
+        margin: 0 !important;
+    `;
+
+    // Títulos y textos muy compactos
+    const titleStyle = 'font-size: 0.6rem; font-weight: 700; opacity: 0.6; text-transform: uppercase; margin-bottom: 0; line-height: 1.2;';
+    const bigNumStyle = 'font-size: 1.3rem; font-weight: 800; font-family: "Roboto Condensed", sans-serif; line-height: 1;';
+    
+    // Iconos pequeños
+    const iconStyle = 'font-size: 1rem; opacity: 0.5; margin-right: 4px;';
+
     container.innerHTML = `
-        <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${elasticCardStyle} background: linear-gradient(145deg, #1a1a1a, #0d0d0d);">
+        <div class="hero-card" data-action="ver-flujo-caja" style="${cardStyle} background: linear-gradient(145deg, #1e1e1e, #121212);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                <div style="${titleStyle} color:#fff;">RESUMEN</div>
+                <select id="filter-periodo" style="background:rgba(255,255,255,0.1); color:#fff; border:none; border-radius:4px; font-size:0.6rem; padding:0 4px;" onclick="event.stopPropagation()">
+                    <option value="mes-actual">Mes</option>
+                    <option value="año-actual">Año</option>
+                </select>
+            </div>
             
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 2px;">
-                <div style="font-size: 0.7rem; font-weight: 700; color: #fff; letter-spacing: 1px;">RESUMEN</div>
-                <div class="report-filters" onclick="event.stopPropagation()">
-                    <select id="filter-periodo" class="report-period-selector" style="background: rgba(255,255,255,0.1); color: #fff; border: none; border-radius: 4px; padding: 0px 4px; font-size: 0.65rem;">
-                        <option value="mes-actual">Este Mes</option>
-                        <option value="año-actual">Este Año</option>
-                        <option value="custom">Personalizado</option>
-                    </select>
-                </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; text-align:center;">
+                <div><div style="${titleStyle}">INGRESOS</div><div id="kpi-ingresos-value" style="${bigNumStyle} color:#00E676;">--</div></div>
+                <div><div style="${titleStyle}">GASTOS</div><div id="kpi-gastos-value" style="${bigNumStyle} color:#FF5252;">--</div></div>
             </div>
-
-            <div id="custom-date-filters" class="hidden" onclick="event.stopPropagation()" style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 100%; margin-bottom: 2px;">
-                 <input type="date" id="filter-fecha-inicio" style="width:100%; background:#333; color:#fff; border:none; font-size: 0.6rem;">
-                 <input type="date" id="filter-fecha-fin" style="width:100%; background:#333; color:#fff; border:none; font-size: 0.6rem;">
+            
+            <div style="height:1px; background:rgba(255,255,255,0.1); margin:2px 0;"></div>
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; text-align:center;">
+                <div><div style="${titleStyle}">NETO</div><div id="kpi-saldo-neto-value" style="${bigNumStyle} color:#fff;">--</div></div>
+                <div><div style="${titleStyle}">AHORRO</div><div id="kpi-tasa-ahorro-value" style="${bigNumStyle} color:#2979FF;">--%</div></div>
             </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; text-align: center; width: 100%;">
-                <div>
-                    <div style="${titleStyle}">INGRESOS</div>
-                    <div id="kpi-ingresos-value" class="skeleton" style="${bigKpiStyle} color: #00E676; font-size: 1.2rem;">+0,00 €</div>
-                </div>
-                <div>
-                    <div style="${titleStyle}">GASTOS</div>
-                    <div id="kpi-gastos-value" class="skeleton" style="${bigKpiStyle} color: #FF5252; font-size: 1.2rem;">-0,00 €</div>
-                </div>
-            </div>
-
-            <div style="width: 100%; height: 1px; background: rgba(255,255,255,0.05); margin: 2px 0;"></div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; text-align: center; width: 100%;">
-                <div>
-                    <div style="${titleStyle}">NETO</div>
-                    <div id="kpi-saldo-neto-value" class="skeleton" style="${bigKpiStyle} color: #fff; font-size: 1.2rem;">0,00 €</div>
-                </div>
-                <div>
-                    <div style="${titleStyle}">AHORRO</div>
-                    <div id="kpi-tasa-ahorro-value" class="skeleton" style="${bigKpiStyle} color: #2979FF; font-size: 1.2rem;">0.00%</div>
-                </div>
-            </div>
+            
+            <div id="custom-date-filters" class="hidden" style="display:none;"><input type="date" id="filter-fecha-inicio"><input type="date" id="filter-fecha-fin"></div>
         </div>
 
-        <div class="hero-card fade-in-up" onclick="goToPatrimonioChart()" style="${elasticCardStyle} cursor: pointer; background: linear-gradient(145deg, #10153b, #050714);">
-            <div style="text-align: center; width: 100%;">
-                <div style="font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.7); letter-spacing: 1px;">PATRIMONIO NETO</div>
-                <div id="kpi-patrimonio-neto-value" class="skeleton" style="font-size: 2.0rem; font-weight: 800; color: #fff; line-height: 1.1;">0,00 €</div>
+        <div class="hero-card" onclick="goToPatrimonioChart()" style="${cardStyle} background: linear-gradient(145deg, #1a237e, #0d1245);">
+            <div style="text-align:center;">
+                <div style="${titleStyle} color:#fff;">PATRIMONIO NETO</div>
+                <div id="kpi-patrimonio-neto-value" style="font-size:1.8rem; font-weight:800; color:#fff; line-height:1;">--</div>
             </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1px 1fr; gap: 5px; width: 100%; align-items: center; margin-top: 4px;">
-                <div style="text-align: center;">
+            <div style="display:grid; grid-template-columns:1fr 1px 1fr; gap:4px; margin-top:2px; align-items:center;">
+                <div style="text-align:center;">
                     <div style="${titleStyle}">LIQUIDEZ</div>
-                    <div id="kpi-liquidez-value" class="skeleton" style="font-size: 0.9rem; font-weight: 700; color: #fff;">0,00 €</div>
+                    <div id="kpi-liquidez-value" style="font-size:0.9rem; font-weight:700; color:#fff;">--</div>
                 </div>
-                <div style="height: 12px; background: rgba(255,255,255,0.1);"></div>
-                <div style="text-align: center;">
+                <div style="background:rgba(255,255,255,0.2); height:10px;"></div>
+                <div style="text-align:center;">
                     <div style="${titleStyle}">INVERTIDO</div>
-                    <div id="kpi-capital-invertido-total" class="skeleton" style="font-size: 0.9rem; font-weight: 700; color: #fff;">0,00 €</div>
+                    <div id="kpi-capital-invertido-total" style="font-size:0.9rem; font-weight:700; color:#fff;">--</div>
                 </div>
             </div>
         </div>
 
-        <div class="hero-card fade-in-up" onclick="goToInversionesChart()" style="${elasticCardStyle} cursor: pointer; background: linear-gradient(145deg, #221266, #0e052e);">
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
-                <div>
-                    <div style="${titleStyle}">CAPITAL INV.</div>
-                    <div id="new-card-capital" class="skeleton" style="font-size: 1.0rem; font-weight: 700; color:#fff;">0,00 €</div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="${titleStyle}">P&L</div>
-                    <div id="new-card-pnl" class="skeleton" style="font-size: 1.0rem; font-weight: 700; color:#00E676;">0,00 €</div>
-                </div>
+        <div class="hero-card" onclick="goToInversionesChart()" style="${cardStyle} background: linear-gradient(145deg, #311b92, #180d4a);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div><div style="${titleStyle}">CAPITAL</div><div id="new-card-capital" style="font-size:0.9rem; font-weight:700; color:#fff;">--</div></div>
+                <div style="text-align:right;"><div style="${titleStyle}">P&L</div><div id="new-card-pnl" style="font-size:0.9rem; font-weight:700; color:#00E676;">--</div></div>
             </div>
-            
-            <div style="width: 100%; height: 1px; background: rgba(255,255,255,0.05); margin: 3px 0;"></div>
-
-            <div style="text-align: center; width: 100%;">
-                <div style="${titleStyle}">VALOR MERCADO</div>
-                <div id="new-card-market-value" class="skeleton" style="font-size: 1.6rem; font-weight: 800; color: #fff;">0,00 €</div>
+            <div style="text-align:center; margin-top:2px; border-top:1px solid rgba(255,255,255,0.1); padding-top:2px;">
+                <div style="${titleStyle} color:#fff;">VALOR MERCADO</div>
+                <div id="new-card-market-value" style="${bigNumStyle} color:#fff;">--</div>
             </div>
         </div>
 
-        <div class="hero-card fade-in-up" style="${elasticCardStyle} background: linear-gradient(145deg, #1c262b, #0b0f10);">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; text-align: center;">
+        <div class="hero-card" style="${cardStyle} background: linear-gradient(145deg, #263238, #101619);">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; text-align:center;">
                 <div>
-                    <div style="${titleStyle}">COBERTURA</div>
-                    <div id="health-runway-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #FFD60A;">0.0 M</div>
+                    <div style="${titleStyle}"><span class="material-icons" style="${iconStyle}">shield</span>COBERTURA</div>
+                    <div id="health-runway-val" style="${bigNumStyle} color:#FFD60A;">--</div>
                 </div>
-                <div style="border-left: 1px solid rgba(255,255,255,0.1);">
-                    <div style="${titleStyle}">LIBERTAD</div>
-                    <div id="health-fi-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #00E676;">0.00%</div>
+                <div style="border-left:1px solid rgba(255,255,255,0.1);">
+                    <div style="${titleStyle}"><span class="material-icons" style="${iconStyle}">flag</span>LIBERTAD</div>
+                    <div id="health-fi-val" style="${bigNumStyle} color:#00E676;">--</div>
                 </div>
             </div>
         </div>
@@ -4473,8 +4448,8 @@ const renderPanelPage = async () => {
         <canvas id="conceptos-chart" style="display:none;"></canvas>
         <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
     `;
-    
-    // Reactivamos lógica
+
+    // Reactivar lógica
     if(typeof populateAllDropdowns === 'function') populateAllDropdowns();
     await Promise.all([
         typeof loadPresupuestos === 'function' ? loadPresupuestos() : Promise.resolve(), 
