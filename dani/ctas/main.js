@@ -1638,15 +1638,15 @@ document.body.addEventListener('change', e => {
 const createChartGradient = (ctx, colorHex) => {
     const gradient = ctx.createLinearGradient(0, 0, 0, 300); // De arriba a abajo
     
-    // Detectamos si es el color verde principal o azul
-    if (colorHex && (colorHex.includes('0, 179, 77') || colorHex.includes('#00B34D'))) { 
-        // Verde (Ingresos / Patrimonio positivo)
-        gradient.addColorStop(0, 'rgba(0, 179, 77, 0.4)'); 
-        gradient.addColorStop(1, 'rgba(0, 179, 77, 0.0)');
+    // DETECCIÓN INTELIGENTE: Si el color es nuestro nuevo Verde Neón (#39FF14)
+    if (colorHex && (colorHex.toUpperCase() === '#39FF14' || colorHex.includes('57, 255, 20'))) { 
+        // Gradiente Verde Neón
+        gradient.addColorStop(0, 'rgba(57, 255, 20, 0.4)'); 
+        gradient.addColorStop(1, 'rgba(57, 255, 20, 0.0)');
     } else { 
-        // Azul (Por defecto / Otros)
-        gradient.addColorStop(0, 'rgba(0, 122, 255, 0.4)'); 
-        gradient.addColorStop(1, 'rgba(0, 122, 255, 0.0)');
+        // Azul por defecto (Usamos el nuevo Azul Eléctrico)
+        gradient.addColorStop(0, 'rgba(41, 121, 255, 0.4)'); 
+        gradient.addColorStop(1, 'rgba(41, 121, 255, 0.0)');
     }
     return gradient;
 };
@@ -1684,9 +1684,9 @@ const updateLedgerButtonUI = () => {
     
     // 2. Definimos los colores (A=Azul, B=Rojo, C=Verde)
     const colors = {
-        'A': '#007bff', 
-        'B': '#dc3545', 
-        'C': '#28a745'
+        'A': '#2979FF', // Nuevo Azul
+        'B': '#FF1744', // Nuevo Rojo
+        'C': '#39FF14'  // Nuevo Verde
     };
     
     // 3. Obtenemos el color actual
@@ -4056,7 +4056,16 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
 
     const visibleAccounts = getVisibleAccounts();
     const saldos = await getSaldos();
-    const BASE_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
+    const BASE_COLORS = [
+    '#2979FF', // Azul Eléctrico (Principal)
+    '#39FF14', // Verde Neón
+    '#FFD600', // Amarillo Oro
+    '#FF1744', // Rojo Intenso
+    '#D500F9', // Violeta (Mantiene el estilo Cyberpunk)
+    '#00E5FF', // Cyan
+    '#FF4081', // Rosa
+    '#76FF03'  // Verde Lima
+];
 
     const allAccountTypes = [...new Set(visibleAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
     const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
