@@ -2120,7 +2120,7 @@ window.addEventListener('offline', () => {
             if (!email) { displayError('login-email', 'El correo es obligatorio.'); v = false; }
             if (!password) { displayError('login-password', 'La contraseña es obligatoria.'); v = false; }
             if (!v) return; setButtonLoading(btn, true, 'Iniciando...');
-            fbAuth.signInWithEmailAndPassword(email, password).then(() => showToast(`¡Bienvenido/a de nuevo!`)).catch((err) => { setButtonLoading(btn, false); if (['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential'].includes(err.code)) (errEl).textContent = 'Error: Credenciales incorrectas.'; else if (err.code === 'auth/invalid-email') displayError('login-email', 'Formato de correo no válido.'); else (errEl).textContent = 'Error al iniciar sesión.'; });
+            fbAuth.signInWithEmailAndPassword(email, password).then(() => showToast(`¡Bienvenido/a de nuevo!`)).catch((err) => { setButtonLoading(btn, false); if (['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential'].includes(err.code)) (errEl).textContent = 'Error: Credenciales incorrectas.'; else (errEl).textContent = `Error: ${err.code} - ${err.message}`; });
         };
         const handleRegister = (btn) => {
             const email = (select('login-email')).value.trim(), password = (select('login-password')).value, errEl = select('login-error'); clearAllErrors('login-form'); if(errEl) errEl.textContent = ''; let v = true;
