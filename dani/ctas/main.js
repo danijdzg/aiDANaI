@@ -566,7 +566,14 @@ const handleExportFilteredCsv = (btn) => {
     }
 };
 
-const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
+const firebaseConfig = {
+  apiKey: "AIzaSyCjwL2nIuxFkZZnU9O7Zr0uRkxzd1NW53I",
+  authDomain: "aidanai-ctas.firebaseapp.com",
+  projectId: "aidanai-ctas",
+  storageBucket: "aidanai-ctas.firebasestorage.app",
+  messagingSenderId: "678423604278",
+  appId: "1:678423604278:web:e7b7d140d323194dbabc97"
+};
 const PAGE_IDS = {
     PANEL: 'panel-page',
     DIARIO: 'diario-page',
