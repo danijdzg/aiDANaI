@@ -11559,123 +11559,133 @@ const initStickyRadar = () => {
 
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
 
-// =========================================================
-// ===  IMPORTADOR MAESTRO CSV v2.0 (Blindado + Auto-Creación) ===
-// =========================================================
+// ===============================================================
+// ===  IMPORTADOR MAESTRO CSV v3.0 (Cargas Pesadas + Lotes)   ===
+// ===============================================================
 
 const handleImportCSV = async (file) => {
     if (!file) return;
 
-    showGenericModal('Importando...', '<div style="text-align:center; padding:40px;"><span class="spinner"></span><p>Analizando y aprendiendo...</p></div>');
+    // Función auxiliar para actualizar el modal sin parpadeos
+    const updateStatus = (msg) => {
+        const el = document.getElementById('import-status-text');
+        if (el) el.innerText = msg;
+    };
+
+    showGenericModal('Importando...', 
+        '<div style="text-align:center; padding:30px;">' +
+        '<span class="spinner"></span>' +
+        '<p id="import-status-text" style="margin-top:15px; font-weight:bold;">Leyendo archivo...</p>' +
+        '</div>'
+    );
 
     const reader = new FileReader();
-    
-    // MEJORA 1: Forzamos codificación 'ISO-8859-1' para leer bien tildes y Ñ de Excel
+    // Mantenemos la codificación para las tildes
     reader.readAsText(file, 'ISO-8859-1');
 
     reader.onload = async (e) => {
         const text = e.target.result;
         const rows = text.split('\n').filter(r => r.trim().length > 0);
+        const totalRows = rows.length - 1; // Quitamos cabecera
+
+        // 1. Fase de Preparación
+        updateStatus(`Analizando ${totalRows} filas...`);
         
-        // Mapas para búsqueda rápida
-        // Nota: Normalizamos a minúsculas para que "Ing" y "ING" sean lo mismo
+        // Mapas de memoria
         const cuentasMap = new Map(db.cuentas.map(c => [c.nombre.toLowerCase(), c])); 
         const conceptosMap = new Map(db.conceptos.map(c => [c.nombre.toLowerCase(), c.id]));
         
-        let importedCount = 0;
-        let createdAccounts = 0;
-        const batch = fbDb.batch();
+        let batch = fbDb.batch();
+        let batchCount = 0;
+        let totalImported = 0;
+        let opsInBatch = 0; // Contador de operaciones en el lote actual
 
+        // 2. Procesamiento por Lotes (Chunking)
         for (let i = 1; i < rows.length; i++) {
-            // Regex mágica para separar por comas ignorando las que están entre comillas
+            
+            // Regex para separar columnas respetando comillas
             const cols = rows[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
             if (!cols || cols.length < 5) continue;
 
-            // 1. FECHA
+            // --- Lógica de Datos ---
+            
+            // A. Fecha
             const [day, month, year] = cols[0].replace(/"/g, '').split('/');
             const isoDate = `${year}-${month}-${day}T12:00:00.000Z`;
 
-            // 2. CUENTA (Gestión Inteligente)
-            let cuentaNombreRaw = cols[1].replace(/"/g, '').trim(); // Ej: "D-Myinvestorpensión"
+            // B. Cuenta (Auto-Creación)
+            let cuentaNombreRaw = cols[1].replace(/"/g, '').trim();
             let cuentaObj = cuentasMap.get(cuentaNombreRaw.toLowerCase());
             let cuentaId = cuentaObj ? cuentaObj.id : null;
 
-            // MEJORA 2: Si la cuenta no existe, ¡LA CREAMOS!
             if (!cuentaId) {
-                console.log(`✨ Aprendiendo nueva cuenta: ${cuentaNombreRaw}`);
-                
-                const newCtaId = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc().id; // Generar ID
-                
-                // Intentamos adivinar el propietario por la letra inicial (D- o N-)
+                // Crear cuenta nueva al vuelo
+                const newCtaId = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc().id;
                 const propietario = cuentaNombreRaw.toUpperCase().startsWith('N') ? 'N' : 'D';
-                
                 const nuevaCuenta = {
-                    id: newCtaId,
-                    nombre: cuentaNombreRaw,
-                    tipo: 'banco', // Tipo por defecto
-                    saldo: 0,
-                    moneda: 'EUR',
-                    propietario: propietario,
-                    orden: 99
+                    id: newCtaId, nombre: cuentaNombreRaw, tipo: 'banco', saldo: 0, moneda: 'EUR', propietario: propietario, orden: 99
                 };
-
-                // 1. Añadir al lote de guardado
+                
+                // Añadir operación al batch
                 const ctaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(newCtaId);
                 batch.set(ctaRef, nuevaCuenta);
+                opsInBatch++;
 
-                // 2. Actualizar memoria local para que las siguientes filas la encuentren
+                // Actualizar memoria
                 db.cuentas.push(nuevaCuenta);
                 cuentasMap.set(cuentaNombreRaw.toLowerCase(), nuevaCuenta);
                 cuentaId = newCtaId;
-                createdAccounts++;
             }
 
-            // 3. CONCEPTO
+            // C. Concepto e Importe
             const conceptoNombre = cols[2].replace(/"/g, '').trim();
-            let conceptoId = conceptosMap.get(conceptoNombre.toLowerCase());
-            if (!conceptoId) conceptoId = db.conceptos[0]?.id || 'varios';
-
-            // 4. IMPORTE
+            let conceptoId = conceptosMap.get(conceptoNombre.toLowerCase()) || (db.conceptos[0]?.id || 'varios');
+            
             let importeRaw = cols[3].replace(/"/g, '').replace(/\./g, '').replace(',', '.');
-            const cantidad = Math.round(parseFloat(importeRaw) * 100); 
-
-            // 5. DESCRIPCIÓN
+            const cantidad = Math.round(parseFloat(importeRaw) * 100);
             const descripcion = cols[4].replace(/"/g, '').trim();
 
-            // Guardar Movimiento
+            // D. Guardar Movimiento
             const newMovId = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc().id;
             const docRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovId);
             
             batch.set(docRef, {
-                id: newMovId,
-                fecha: isoDate,
-                cuentaId: cuentaId,
-                conceptoId: conceptoId,
-                cantidad: cantidad,
-                descripcion: descripcion,
-                tipo: 'movimiento',
-                esRecurrente: false,
-                validado: true
+                id: newMovId, fecha: isoDate, cuentaId: cuentaId, conceptoId: conceptoId,
+                cantidad: cantidad, descripcion: descripcion, tipo: 'movimiento', esRecurrente: false, validado: true
             });
-            
-            // Actualizar saldo cuenta (incremental)
+            opsInBatch++;
+
+            // E. Actualizar Saldo
             const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId);
             batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(cantidad) });
+            opsInBatch++;
 
-            importedCount++;
+            totalImported++;
+
+            // --- CONTROL DE FLUJO (LA CLAVE) ---
+            // Si llevamos 400 operaciones (o 150 filas aprox), guardamos y respiramos
+            if (opsInBatch >= 400) {
+                updateStatus(`Guardando bloque ${batchCount + 1}... (${totalImported}/${totalRows})`);
+                await batch.commit(); // ¡Enviar a la nube!
+                batch = fbDb.batch(); // Lote nuevo limpio
+                opsInBatch = 0;       // Reiniciar contador
+                batchCount++;
+                
+                // Pequeña pausa para que el navegador respire y no se cuelgue
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
         }
 
-        try {
+        // 3. Guardar el resto final
+        if (opsInBatch > 0) {
+            updateStatus('Finalizando último bloque...');
             await batch.commit();
-            hapticFeedback('success');
-            showToast(`Importado: ${importedCount} movs. Cuentas creadas: ${createdAccounts}`, 'success');
-            hideModal('generic-modal');
-            
-            // Recarga crítica para ver las nuevas cuentas
-            setTimeout(() => window.location.reload(), 1500); 
-        } catch (error) {
-            console.error("Error importando:", error);
-            showToast('Error: Demasiados datos. Intenta partir el CSV.', 'danger');
         }
+
+        hideModal('generic-modal');
+        showToast(`¡Éxito! ${totalImported} movimientos importados.`, 'success');
+        
+        // Recargar para ver los datos frescos
+        setTimeout(() => window.location.reload(), 1000);
     };
 };
