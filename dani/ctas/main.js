@@ -8535,7 +8535,7 @@ const handleStart = (e) => {
             'forgot-password': (e) => { e.preventDefault(); const email = prompt("Email para recuperar contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => showToast('Correo enviado.', 'info')).catch(() => showToast('Error al enviar correo.', 'danger')); } },
             'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
             'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
-            'import-csv': showCsvImportWizard,
+            'import-csv': () => { const i = document.createElement('input'); i.type='file'; i.accept='.csv'; i.onchange=e=>handleImportCSV(e.target.files[0]); i.click(); },
             'toggle-ledger': async () => {
     hapticFeedback('medium');
     
@@ -11558,3 +11558,109 @@ const initStickyRadar = () => {
 };
 
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
+
+// ==========================================
+// ===  IMPORTADOR MAESTRO CSV (aiDANaI)  ===
+// ==========================================
+// Pega esto al final de main.js, antes de los listeners de eventos.
+
+const handleImportCSV = async (file) => {
+    if (!file) return;
+
+    // 1. Feedback visual inmediato
+    showGenericModal('Importando...', '<div style="text-align:center; padding:40px;"><span class="spinner"></span><p>Analizando archivo...</p></div>');
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        // Dividimos por líneas y quitamos cabeceras vacías
+        const rows = text.split('\n').filter(r => r.trim().length > 0);
+        
+        // Mapa para buscar IDs rápidamente por nombre (para no duplicar)
+        const cuentasMap = new Map(db.cuentas.map(c => [c.nombre.toLowerCase(), c.id]));
+        const conceptosMap = new Map(db.conceptos.map(c => [c.nombre.toLowerCase(), c.id]));
+        
+        let importedCount = 0;
+        const batch = fbDb.batch(); // Usamos batch para guardar todo de golpe (más rápido)
+
+        // Empezamos en i=1 para saltar la cabecera (Fecha, Cuenta, Concepto...)
+        for (let i = 1; i < rows.length; i++) {
+            // --- AQUÍ ESTÁ LA MAGIA (REGEX) ---
+            // Esta expresión regular separa por comas PERO ignora las comas que están dentro de comillas "".
+            // Es el bisturí para tu formato de número "1.000,00".
+            const cols = rows[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+            
+            if (!cols || cols.length < 5) continue; // Si la línea está rota, la saltamos
+
+            // Limpieza de datos
+            // cols[0] = Fecha, cols[1] = Cuenta, cols[2] = Concepto, cols[3] = Importe, cols[4] = Descripción
+
+            // 1. FECHA: Convertir 01/01/2025 a formato ISO 2025-01-01
+            const [day, month, year] = cols[0].replace(/"/g, '').split('/');
+            const isoDate = `${year}-${month}-${day}T12:00:00.000Z`;
+
+            // 2. CUENTA: Buscar ID o usar una por defecto
+            const cuentaNombre = cols[1].replace(/"/g, '').trim();
+            let cuentaId = cuentasMap.get(cuentaNombre.toLowerCase());
+            
+            // Si la cuenta del Excel no existe en la App, la creamos al vuelo en memoria para no fallar
+            if (!cuentaId) {
+                // Opción segura: Asignar a una cuenta "Pendiente" o crearla
+                // Por ahora, saltamos para no corromper datos, o podrías crearla aquí.
+                // Dani, asegúrate que los nombres en el CSV coincidan con los de la App.
+                console.warn(`Cuenta desconocida: ${cuentaNombre}`);
+                continue; 
+            }
+
+            // 3. CONCEPTO
+            const conceptoNombre = cols[2].replace(/"/g, '').trim();
+            let conceptoId = conceptosMap.get(conceptoNombre.toLowerCase());
+            // Si no existe el concepto, usamos el ID del primero que pillemos o "VARIOS"
+            if (!conceptoId) conceptoId = db.conceptos[0]?.id;
+
+            // 4. IMPORTE: La parte difícil. "13.500,00" -> 1350000 (céntimos)
+            let importeRaw = cols[3].replace(/"/g, ''); // Quitar comillas
+            importeRaw = importeRaw.replace(/\./g, '');  // Quitar puntos de miles (13.500 -> 13500)
+            importeRaw = importeRaw.replace(',', '.');   // Cambiar coma decimal por punto (13500,00 -> 13500.00)
+            const cantidad = Math.round(parseFloat(importeRaw) * 100); // A céntimos
+
+            // 5. DESCRIPCIÓN
+            const descripcion = cols[4].replace(/"/g, '').trim();
+
+            // CREAR EL OBJETO MOVIMIENTO
+            const newId = generateId(); // Generamos ID único de Firebase
+            const docRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newId);
+            
+            batch.set(docRef, {
+                id: newId,
+                fecha: isoDate,
+                cuentaId: cuentaId,
+                conceptoId: conceptoId,
+                cantidad: cantidad, // Guardamos siempre positivo o negativo según venga del CSV
+                descripcion: descripcion,
+                tipo: 'movimiento', // Asumimos movimiento estándar
+                esRecurrente: false,
+                validado: true
+            });
+            
+            // Actualizar saldo de la cuenta (incremental)
+            const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId);
+            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(cantidad) });
+
+            importedCount++;
+        }
+
+        try {
+            await batch.commit(); // ¡Guardar todo!
+            hapticFeedback('success');
+            showToast(`¡Éxito! ${importedCount} movimientos importados.`, 'success');
+            hideModal('generic-modal');
+            // Recargar datos para ver los cambios
+            loadCoreData(currentUser.uid);
+        } catch (error) {
+            console.error(error);
+            showToast('Error guardando datos en la nube.', 'danger');
+        }
+    };
+    reader.readAsText(file);
+};
