@@ -11559,91 +11559,106 @@ const initStickyRadar = () => {
 
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
 
-// ==========================================
-// ===  IMPORTADOR MAESTRO CSV (aiDANaI)  ===
-// ==========================================
-// Pega esto al final de main.js, antes de los listeners de eventos.
+// =========================================================
+// ===  IMPORTADOR MAESTRO CSV v2.0 (Blindado + Auto-Creación) ===
+// =========================================================
 
 const handleImportCSV = async (file) => {
     if (!file) return;
 
-    // 1. Feedback visual inmediato
-    showGenericModal('Importando...', '<div style="text-align:center; padding:40px;"><span class="spinner"></span><p>Analizando archivo...</p></div>');
+    showGenericModal('Importando...', '<div style="text-align:center; padding:40px;"><span class="spinner"></span><p>Analizando y aprendiendo...</p></div>');
 
     const reader = new FileReader();
+    
+    // MEJORA 1: Forzamos codificación 'ISO-8859-1' para leer bien tildes y Ñ de Excel
+    reader.readAsText(file, 'ISO-8859-1');
+
     reader.onload = async (e) => {
         const text = e.target.result;
-        // Dividimos por líneas y quitamos cabeceras vacías
         const rows = text.split('\n').filter(r => r.trim().length > 0);
         
-        // Mapa para buscar IDs rápidamente por nombre (para no duplicar)
-        const cuentasMap = new Map(db.cuentas.map(c => [c.nombre.toLowerCase(), c.id]));
+        // Mapas para búsqueda rápida
+        // Nota: Normalizamos a minúsculas para que "Ing" y "ING" sean lo mismo
+        const cuentasMap = new Map(db.cuentas.map(c => [c.nombre.toLowerCase(), c])); 
         const conceptosMap = new Map(db.conceptos.map(c => [c.nombre.toLowerCase(), c.id]));
         
         let importedCount = 0;
-        const batch = fbDb.batch(); // Usamos batch para guardar todo de golpe (más rápido)
+        let createdAccounts = 0;
+        const batch = fbDb.batch();
 
-        // Empezamos en i=1 para saltar la cabecera (Fecha, Cuenta, Concepto...)
         for (let i = 1; i < rows.length; i++) {
-            // --- AQUÍ ESTÁ LA MAGIA (REGEX) ---
-            // Esta expresión regular separa por comas PERO ignora las comas que están dentro de comillas "".
-            // Es el bisturí para tu formato de número "1.000,00".
+            // Regex mágica para separar por comas ignorando las que están entre comillas
             const cols = rows[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-            
-            if (!cols || cols.length < 5) continue; // Si la línea está rota, la saltamos
+            if (!cols || cols.length < 5) continue;
 
-            // Limpieza de datos
-            // cols[0] = Fecha, cols[1] = Cuenta, cols[2] = Concepto, cols[3] = Importe, cols[4] = Descripción
-
-            // 1. FECHA: Convertir 01/01/2025 a formato ISO 2025-01-01
+            // 1. FECHA
             const [day, month, year] = cols[0].replace(/"/g, '').split('/');
             const isoDate = `${year}-${month}-${day}T12:00:00.000Z`;
 
-            // 2. CUENTA: Buscar ID o usar una por defecto
-            const cuentaNombre = cols[1].replace(/"/g, '').trim();
-            let cuentaId = cuentasMap.get(cuentaNombre.toLowerCase());
-            
-            // Si la cuenta del Excel no existe en la App, la creamos al vuelo en memoria para no fallar
+            // 2. CUENTA (Gestión Inteligente)
+            let cuentaNombreRaw = cols[1].replace(/"/g, '').trim(); // Ej: "D-Myinvestorpensión"
+            let cuentaObj = cuentasMap.get(cuentaNombreRaw.toLowerCase());
+            let cuentaId = cuentaObj ? cuentaObj.id : null;
+
+            // MEJORA 2: Si la cuenta no existe, ¡LA CREAMOS!
             if (!cuentaId) {
-                // Opción segura: Asignar a una cuenta "Pendiente" o crearla
-                // Por ahora, saltamos para no corromper datos, o podrías crearla aquí.
-                // Dani, asegúrate que los nombres en el CSV coincidan con los de la App.
-                console.warn(`Cuenta desconocida: ${cuentaNombre}`);
-                continue; 
+                console.log(`✨ Aprendiendo nueva cuenta: ${cuentaNombreRaw}`);
+                
+                const newCtaId = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc().id; // Generar ID
+                
+                // Intentamos adivinar el propietario por la letra inicial (D- o N-)
+                const propietario = cuentaNombreRaw.toUpperCase().startsWith('N') ? 'N' : 'D';
+                
+                const nuevaCuenta = {
+                    id: newCtaId,
+                    nombre: cuentaNombreRaw,
+                    tipo: 'banco', // Tipo por defecto
+                    saldo: 0,
+                    moneda: 'EUR',
+                    propietario: propietario,
+                    orden: 99
+                };
+
+                // 1. Añadir al lote de guardado
+                const ctaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(newCtaId);
+                batch.set(ctaRef, nuevaCuenta);
+
+                // 2. Actualizar memoria local para que las siguientes filas la encuentren
+                db.cuentas.push(nuevaCuenta);
+                cuentasMap.set(cuentaNombreRaw.toLowerCase(), nuevaCuenta);
+                cuentaId = newCtaId;
+                createdAccounts++;
             }
 
             // 3. CONCEPTO
             const conceptoNombre = cols[2].replace(/"/g, '').trim();
             let conceptoId = conceptosMap.get(conceptoNombre.toLowerCase());
-            // Si no existe el concepto, usamos el ID del primero que pillemos o "VARIOS"
-            if (!conceptoId) conceptoId = db.conceptos[0]?.id;
+            if (!conceptoId) conceptoId = db.conceptos[0]?.id || 'varios';
 
-            // 4. IMPORTE: La parte difícil. "13.500,00" -> 1350000 (céntimos)
-            let importeRaw = cols[3].replace(/"/g, ''); // Quitar comillas
-            importeRaw = importeRaw.replace(/\./g, '');  // Quitar puntos de miles (13.500 -> 13500)
-            importeRaw = importeRaw.replace(',', '.');   // Cambiar coma decimal por punto (13500,00 -> 13500.00)
-            const cantidad = Math.round(parseFloat(importeRaw) * 100); // A céntimos
+            // 4. IMPORTE
+            let importeRaw = cols[3].replace(/"/g, '').replace(/\./g, '').replace(',', '.');
+            const cantidad = Math.round(parseFloat(importeRaw) * 100); 
 
             // 5. DESCRIPCIÓN
             const descripcion = cols[4].replace(/"/g, '').trim();
 
-            // CREAR EL OBJETO MOVIMIENTO
-            const newId = generateId(); // Generamos ID único de Firebase
-            const docRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newId);
+            // Guardar Movimiento
+            const newMovId = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc().id;
+            const docRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovId);
             
             batch.set(docRef, {
-                id: newId,
+                id: newMovId,
                 fecha: isoDate,
                 cuentaId: cuentaId,
                 conceptoId: conceptoId,
-                cantidad: cantidad, // Guardamos siempre positivo o negativo según venga del CSV
+                cantidad: cantidad,
                 descripcion: descripcion,
-                tipo: 'movimiento', // Asumimos movimiento estándar
+                tipo: 'movimiento',
                 esRecurrente: false,
                 validado: true
             });
             
-            // Actualizar saldo de la cuenta (incremental)
+            // Actualizar saldo cuenta (incremental)
             const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId);
             batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(cantidad) });
 
@@ -11651,16 +11666,16 @@ const handleImportCSV = async (file) => {
         }
 
         try {
-            await batch.commit(); // ¡Guardar todo!
+            await batch.commit();
             hapticFeedback('success');
-            showToast(`¡Éxito! ${importedCount} movimientos importados.`, 'success');
+            showToast(`Importado: ${importedCount} movs. Cuentas creadas: ${createdAccounts}`, 'success');
             hideModal('generic-modal');
-            // Recargar datos para ver los cambios
-            loadCoreData(currentUser.uid);
+            
+            // Recarga crítica para ver las nuevas cuentas
+            setTimeout(() => window.location.reload(), 1500); 
         } catch (error) {
-            console.error(error);
-            showToast('Error guardando datos en la nube.', 'danger');
+            console.error("Error importando:", error);
+            showToast('Error: Demasiados datos. Intenta partir el CSV.', 'danger');
         }
     };
-    reader.readAsText(file);
 };
