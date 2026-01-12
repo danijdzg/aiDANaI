@@ -11558,3 +11558,189 @@ const initStickyRadar = () => {
 };
 
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
+
+/* =============================================================== */
+/* === ONEPLUS NORD 4 COCKPIT SYSTEM: LÓGICA UNIFICADA v3.0 === */
+/* =============================================================== */
+
+// --- 1. GESTIÓN DE LA CALCULADORA (VENTANA MÁGICA) ---
+
+// Abrir la calculadora (se llama desde el HTML onclick="openCalculator()")
+window.openCalculator = function() {
+    const calcOverlay = document.getElementById('calculator-overlay');
+    if (calcOverlay) {
+        calcOverlay.classList.add('active');
+        // Forzamos el foco para escribir inmediatamente
+        calcOverlay.contentWindow.focus();
+    }
+};
+
+// Escuchar el mensaje de la calculadora (Doble tap en =)
+window.addEventListener('message', function(event) {
+    // Verificamos que sea el mensaje correcto
+    if (event.data.type === 'CALCULATOR_RESULT') {
+        const importe = event.data.value;
+        
+        // 1. Poner el importe en el input del formulario
+        const inputCantidad = document.getElementById('movimiento-cantidad');
+        if (inputCantidad) {
+            inputCantidad.value = importe;
+            
+            // Efecto visual (Flash Verde de confirmación)
+            inputCantidad.style.color = '#00ff9d';
+            inputCantidad.style.transition = 'color 0.3s';
+            setTimeout(() => {
+                inputCantidad.style.color = '#ffffff';
+            }, 500);
+        }
+        
+        // 2. Cerrar la calculadora suavemente
+        const calcOverlay = document.getElementById('calculator-overlay');
+        if (calcOverlay) calcOverlay.classList.remove('active');
+    }
+});
+
+
+// --- 2. GESTIÓN DE TIPO (GASTO / INGRESO / TRASPASO) ---
+
+window.appSetType = function(type) {
+    // 1. Actualizar el valor real en el input oculto
+    const inputTipo = document.getElementById('movimiento-tipo');
+    if (inputTipo) inputTipo.value = type;
+    
+    // 2. Actualizar las pestañas visuales
+    document.querySelectorAll('.type-segment').forEach(seg => {
+        seg.classList.remove('active');
+        // El atributo data-type debe coincidir
+        if(seg.dataset.type === type) seg.classList.add('active');
+    });
+
+    // 3. Lógica específica por tipo
+    const catBlock = document.getElementById('bloque-categoria');
+    if (catBlock) {
+        // En "Traspaso" ocultamos la categoría para limpiar la pantalla
+        if (type === 'traspaso') {
+            catBlock.style.display = 'none';
+        } else {
+            catBlock.style.display = 'block';
+        }
+    }
+};
+
+
+// --- 3. GESTIÓN DE CHIPS (BOTONES TÁCTILES PARA CUENTA/CATEGORÍA) ---
+
+// Esta función convierte los <select> feos en botones bonitos
+window.updateChips = function() {
+    createChipsFromSelect('movimiento-cuenta', 'chips-cuenta');
+    createChipsFromSelect('movimiento-categoria', 'chips-categoria');
+};
+
+function createChipsFromSelect(selectId, containerId) {
+    const select = document.getElementById(selectId);
+    const container = document.getElementById(containerId);
+    
+    // Seguridad: Si no existen los elementos, no hacemos nada
+    if(!select || !container) return;
+
+    container.innerHTML = ''; // Limpiar lo que hubiera antes
+
+    // Recorremos las opciones del select original
+    Array.from(select.options).forEach(opt => {
+        // Ignorar opciones vacías o deshabilitadas
+        if(opt.value === "" || opt.disabled) return;
+
+        // Crear el botón
+        const btn = document.createElement('button');
+        btn.className = 'chip-btn';
+        
+        // Si el select ya tiene este valor, marcamos el botón como seleccionado
+        if(select.value === opt.value) btn.classList.add('selected');
+        
+        btn.textContent = opt.text; // El texto del botón es el texto de la opción
+        
+        // Al hacer click en el botón...
+        btn.onclick = function() {
+            // A) Actualizamos el select original (oculto)
+            select.value = opt.value;
+            
+            // B) Disparamos evento 'change' por si Firebase está escuchando
+            select.dispatchEvent(new Event('change'));
+            
+            // C) Actualizamos visualmente los botones (solo uno activo)
+            container.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        };
+        
+        container.appendChild(btn);
+    });
+}
+
+
+// --- 4. GESTIÓN DE RECURRENCIA (GASTOS FIJOS) ---
+
+window.toggleRecurrence = function() {
+    const check = document.getElementById('movimiento-es-recurrente');
+    const options = document.getElementById('recurrence-options');
+    const switchBg = document.getElementById('recurrence-switch');
+    const knob = document.getElementById('recurrence-knob');
+    
+    if (!check) return;
+
+    // Cambiar el estado del checkbox oculto
+    check.checked = !check.checked;
+    
+    // Animaciones y visualización
+    if(check.checked) {
+        // ACTIVADO
+        if(options) options.style.display = 'block';
+        if(switchBg) switchBg.style.backgroundColor = 'var(--c-primary)'; // Verde
+        if(knob) knob.style.transform = 'translateX(20px)'; // Mover bolita
+    } else {
+        // DESACTIVADO
+        if(options) options.style.display = 'none';
+        if(switchBg) switchBg.style.backgroundColor = '#444'; // Gris
+        if(knob) knob.style.transform = 'translateX(0)'; // Volver bolita
+    }
+};
+
+window.setRecurrence = function(val, btnElement) {
+    // 1. Marcar el select oculto
+    const select = document.getElementById('movimiento-periodo');
+    if(select) select.value = val;
+    
+    // 2. Pintar el botón seleccionado
+    const container = document.getElementById('recurrence-chips');
+    if(container) {
+        container.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('selected'));
+        if(btnElement) btnElement.classList.add('selected');
+    }
+};
+
+
+// --- 5. INICIALIZACIÓN (EL DISPARADOR) ---
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Buscamos tu botón flotante de "+" (clase .fab-add o similar)
+    // Nota: Si tu botón tiene otro ID o clase, ajústalo aquí.
+    const addBtn = document.querySelector('.fab-add'); 
+    
+    if(addBtn) {
+        addBtn.addEventListener('click', () => {
+             // 1. Esperamos un poquito (100ms) para que Firebase cargue las cuentas/categorías
+             setTimeout(() => {
+                 window.updateChips(); 
+                 
+                 // 2. Aseguramos que la recurrencia empiece apagada visualmente
+                 const options = document.getElementById('recurrence-options');
+                 if(options) options.style.display = 'none';
+             }, 100);
+             
+             // 3. Poner la fecha de hoy por defecto
+             const dateInput = document.getElementById('movimiento-fecha');
+             if(dateInput && !dateInput.value) {
+                 dateInput.valueAsDate = new Date();
+             }
+        });
+    }
+});
