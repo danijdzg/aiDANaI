@@ -11559,159 +11559,199 @@ const initStickyRadar = () => {
 
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
 
-// ===============================================================
-// ===  IMPORTADOR MAESTRO CSV v4.0 (Full Auto-Creación)       ===
-// ===============================================================
+// ====================================================================
+// ===  IMPORTADOR MAESTRO CSV V5.0 (Protocolo Nuclear + Traspasos) ===
+// ====================================================================
 
 const handleImportCSV = async (file) => {
     if (!file) return;
 
-    // Actualizador de estado visual
+    // --- 1. ZONA DE SEGURIDAD (DOBLE CONFIRMACIÓN) ---
+    const confirm1 = confirm("⚠️ ¡ATENCIÓN DANI! ⚠️\n\nEsta acción BORRARÁ TODOS los datos actuales de la aplicación (Movimientos, Cuentas y Categorías) para empezar de cero con este archivo.\n\n¿Estás seguro de que quieres continuar?");
+    if (!confirm1) return;
+
+    const confirm2 = confirm("🚨 ÚLTIMO AVISO 🚨\n\nUna vez borrados, los datos antiguos NO se pueden recuperar.\n\n¿Confirmas el BORRADO TOTAL y la importación?");
+    if (!confirm2) return;
+
+    // --- 2. PREPARACIÓN VISUAL ---
     const updateStatus = (msg) => {
         const el = document.getElementById('import-status-text');
         if (el) el.innerText = msg;
     };
 
-    showGenericModal('Importando Inteligente...', 
+    showGenericModal('Reiniciando Sistema...', 
         '<div style="text-align:center; padding:30px;">' +
         '<span class="spinner"></span>' +
-        '<p id="import-status-text" style="margin-top:15px; font-weight:bold;">Leyendo cerebro de datos...</p>' +
+        '<p id="import-status-text" style="margin-top:15px; font-weight:bold; color: var(--c-danger);">Iniciando protocolo de limpieza...</p>' +
         '</div>'
     );
 
+    // --- 3. EL BORRADO (THE PURGE) ---
+    const deleteCollection = async (collectionName) => {
+        const ref = fbDb.collection('users').doc(currentUser.uid).collection(collectionName);
+        const snapshot = await ref.get();
+        if (snapshot.size === 0) return;
+
+        const batchSize = 400;
+        let batch = fbDb.batch();
+        let count = 0;
+
+        for (const doc of snapshot.docs) {
+            batch.delete(doc.ref);
+            count++;
+            if (count >= batchSize) {
+                await batch.commit();
+                batch = fbDb.batch();
+                count = 0;
+            }
+        }
+        if (count > 0) await batch.commit();
+    };
+
+    try {
+        updateStatus("🗑️ Eliminando Movimientos antiguos...");
+        await deleteCollection('movimientos');
+        
+        updateStatus("🗑️ Eliminando Cuentas antiguas...");
+        await deleteCollection('cuentas');
+        
+        updateStatus("🗑️ Eliminando Conceptos antiguos...");
+        await deleteCollection('conceptos');
+
+        // Limpiar memoria local para evitar fantasmas
+        db.cuentas = [];
+        db.conceptos = [];
+        db.movimientos = [];
+
+    } catch (error) {
+        console.error("Error borrando:", error);
+        alert("Error al borrar datos antiguos. Revisa tu conexión.");
+        hideModal('generic-modal');
+        return;
+    }
+
+    // --- 4. LA IMPORTACIÓN (COMO LA V4.0 PERO MÁS LISTA) ---
     const reader = new FileReader();
-    reader.readAsText(file, 'ISO-8859-1'); // Mantenemos lectura de tildes/ñ
+    reader.readAsText(file, 'ISO-8859-1');
 
     reader.onload = async (e) => {
         const text = e.target.result;
-        // Dividir por líneas y limpiar vacíos
         const rows = text.split('\n').filter(r => r.trim().length > 0);
         const totalRows = rows.length - 1; 
 
-        updateStatus(`Analizando ${totalRows} filas...`);
+        updateStatus(`🧠 Analizando ${totalRows} filas nuevas...`);
         
-        // --- MAPAS DE MEMORIA (Para búsqueda rápida) ---
-        const cuentasMap = new Map(db.cuentas.map(c => [c.nombre.toLowerCase(), c])); 
-        // Mapa de conceptos: guardamos el NOMBRE como clave y el ID como valor
-        const conceptosMap = new Map(db.conceptos.map(c => [c.nombre.toLowerCase(), c.id]));
+        // Mapas vacíos (hemos borrado todo)
+        const cuentasMap = new Map(); 
+        const conceptosMap = new Map();
         
         let batch = fbDb.batch();
         let batchCount = 0;
         let totalImported = 0;
-        let createdAccounts = 0;
-        let createdConcepts = 0;
-        let opsInBatch = 0; // Semáforo para no saturar Firebase (máx 500)
+        let opsInBatch = 0;
 
-        // Bucle principal (saltando cabecera)
         for (let i = 1; i < rows.length; i++) {
-            
-            // Regex "Bisturí" para CSV
             const cols = rows[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
             if (!cols || cols.length < 5) continue;
 
-            // 1. FECHA
+            // A. FECHA
             const [day, month, year] = cols[0].replace(/"/g, '').split('/');
             const isoDate = `${year}-${month}-${day}T12:00:00.000Z`;
 
-            // 2. CUENTA (Lógica de Auto-Creación)
+            // B. CUENTA
             let cuentaNombreRaw = cols[1].replace(/"/g, '').trim();
             let cuentaObj = cuentasMap.get(cuentaNombreRaw.toLowerCase());
             let cuentaId = cuentaObj ? cuentaObj.id : null;
 
             if (!cuentaId) {
-                // Crear Cuenta Nueva
                 const newCtaId = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc().id;
                 const propietario = cuentaNombreRaw.toUpperCase().startsWith('N') ? 'N' : 'D';
                 const nuevaCuenta = {
                     id: newCtaId, nombre: cuentaNombreRaw, tipo: 'banco', saldo: 0, moneda: 'EUR', propietario: propietario, orden: 99
                 };
-                
-                const ctaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(newCtaId);
-                batch.set(ctaRef, nuevaCuenta);
+                batch.set(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(newCtaId), nuevaCuenta);
                 opsInBatch++;
-
-                // Actualizar memoria local para futuras filas
+                // Guardar en memoria temporal
                 db.cuentas.push(nuevaCuenta);
                 cuentasMap.set(cuentaNombreRaw.toLowerCase(), nuevaCuenta);
                 cuentaId = newCtaId;
-                createdAccounts++;
             }
 
-            // 3. CONCEPTO (¡NUEVA LÓGICA DE AUTO-CREACIÓN!)
-            const conceptoNombreRaw = cols[2].replace(/"/g, '').trim(); // Ej: "Supermercado"
+            // C. CONCEPTO (DETECTAR TRASPASO)
+            const conceptoNombreRaw = cols[2].replace(/"/g, '').trim();
             let conceptoId = conceptosMap.get(conceptoNombreRaw.toLowerCase());
 
             if (!conceptoId) {
-                // Crear Concepto Nuevo
                 const newConceptId = fbDb.collection('users').doc(currentUser.uid).collection('conceptos').doc().id;
+                
+                // --- LÓGICA ESPECIAL TRASPASOS ---
+                const esTraspaso = conceptoNombreRaw.toLowerCase().includes('traspaso');
                 
                 const nuevoConcepto = {
                     id: newConceptId,
-                    nombre: conceptoNombreRaw, // El nombre tal cual viene del CSV
-                    icono: 'local_offer',      // Icono genérico (etiqueta)
-                    color: '#808080',          // Color gris neutro
-                    tipo: 'gasto'              // Asumimos gasto por defecto (es lo más seguro)
+                    nombre: conceptoNombreRaw,
+                    // Si es traspaso icono flechas, si no etiqueta
+                    icono: esTraspaso ? 'swap_horiz' : 'local_offer', 
+                    // Si es traspaso gris oscuro, si no gris medio
+                    color: esTraspaso ? '#4a4a4a' : '#808080',
+                    // Si es traspaso tipo 'neutro' (para que no salga en gastos)
+                    tipo: esTraspaso ? 'neutro' : 'gasto' 
                 };
 
-                const conceptRef = fbDb.collection('users').doc(currentUser.uid).collection('conceptos').doc(newConceptId);
-                batch.set(conceptRef, nuevoConcepto);
+                batch.set(fbDb.collection('users').doc(currentUser.uid).collection('conceptos').doc(newConceptId), nuevoConcepto);
                 opsInBatch++;
-
-                // Actualizar memoria local
+                
                 db.conceptos.push(nuevoConcepto);
                 conceptosMap.set(conceptoNombreRaw.toLowerCase(), newConceptId);
                 conceptoId = newConceptId;
-                createdConcepts++;
             }
 
-            // 4. IMPORTE
+            // D. IMPORTE
             let importeRaw = cols[3].replace(/"/g, '').replace(/\./g, '').replace(',', '.');
             const cantidad = Math.round(parseFloat(importeRaw) * 100); 
-
-            // 5. DESCRIPCIÓN
             const descripcion = cols[4].replace(/"/g, '').trim();
 
-            // 6. GUARDAR MOVIMIENTO
+            // E. MOVIMIENTO
             const newMovId = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc().id;
             const docRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovId);
             
+            // Si es traspaso, nos aseguramos que el tipo sea 'traspaso' a nivel de movimiento también
+            const tipoMovimiento = conceptoNombreRaw.toLowerCase().includes('traspaso') ? 'traspaso' : 'movimiento';
+
             batch.set(docRef, {
                 id: newMovId, fecha: isoDate, cuentaId: cuentaId, conceptoId: conceptoId,
-                cantidad: cantidad, descripcion: descripcion, tipo: 'movimiento', esRecurrente: false, validado: true
+                cantidad: cantidad, descripcion: descripcion, 
+                tipo: tipoMovimiento, // 'traspaso' o 'movimiento'
+                esRecurrente: false, validado: true
             });
             opsInBatch++;
 
-            // 7. ACTUALIZAR SALDO
+            // F. SALDO
             const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId);
             batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(cantidad) });
             opsInBatch++;
 
             totalImported++;
 
-            // --- CONTROL DE TRÁFICO (Pit Stop) ---
-            // Si llevamos muchas operaciones, guardamos y limpiamos memoria
             if (opsInBatch >= 400) {
                 updateStatus(`Guardando bloque ${batchCount + 1}... (${totalImported}/${totalRows})`);
                 await batch.commit(); 
                 batch = fbDb.batch(); 
                 opsInBatch = 0;       
                 batchCount++;
-                // Respirar 50ms para no bloquear la UI del móvil
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
 
-        // Guardar el último bloque si quedó algo pendiente
         if (opsInBatch > 0) {
             updateStatus('Finalizando último bloque...');
             await batch.commit();
         }
 
         hideModal('generic-modal');
-        // Mensaje de victoria detallado
-        showToast(`Importado: ${totalImported}. Nuevas Cuentas: ${createdAccounts}. Nuevos Conceptos: ${createdConcepts}`, 'success');
+        showToast('¡Sistema Reiniciado e Importado!', 'success');
         
-        // Recargar la app para ver todo lo nuevo
-        setTimeout(() => window.location.reload(), 1500);
+        // Recarga un poco más lenta para asegurar que Firebase digiera el borrado masivo
+        setTimeout(() => window.location.reload(), 2000);
     };
 };
