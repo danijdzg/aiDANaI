@@ -3339,163 +3339,124 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-const renderVirtualListItem = (item) => {
-    
-    // 1. Header de Pendientes
-    if (item.type === 'pending-header') {
-        return `
-        <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 16px;">
-            <span><span class="material-icons" style="font-size: 16px; vertical-align: middle;">update</span> Pendientes (${item.count})</span>
-        </div>`;
+    const renderVirtualListItem = (item) => {
+			if (item.type === 'month-header') {
+    const monthName = item.date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return `
+        <div class="movimiento-month-header">
+            <h3 class="movimiento-month-header__title">${monthName}</h3>
+            <div class="movimiento-month-header__summary">
+                <p class="text-positive">${formatCurrency(item.income)}</p>
+                <p class="text-negative">${formatCurrency(item.expense)}</p>
+                <p class="${item.net >= 0 ? 'text-positive' : 'text-negative'}" style="border-top: 1px solid var(--c-outline); margin-top: 2px; padding-top: 2px;">
+                    ${formatCurrency(item.net)}
+                </p>
+            </div>
+        </div>
+    `;
     }
+            if (item.type === 'pending-header') {
+                return `
+                    <div class="movimiento-date-header" style="background-color: var(--c-warning); color: var(--c-black); font-weight: 800; letter-spacing: 0.5px;">
+                        <span>
+                            <span class="material-icons" style="font-size: 16px; vertical-align: bottom; margin-right: 4px;">update</span>
+                            RECURRENTES PENDIENTES (${item.count})
+                        </span>
+                    </div>`;
+            }
 
-    // 2. Tarjeta de Pendiente
-    if (item.type === 'pending-item') {
-        const r = item.recurrent;
-        const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
-        
-        // CORRECCIÓN COLOR: Usamos formatCurrencyHTML directamente
-        return `
-        <div class="transaction-card" id="pending-recurrente-${r.id}" style="margin:0 16px; border-bottom:1px solid var(--c-outline); background-color: rgba(255, 214, 10, 0.05);">
-            <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
-                    <div class="transaction-card__row-2" style="color: var(--c-warning); font-weight: 600;">Programado: ${date}</div>
-                    
-                    <div class="acciones-recurrentes-corregidas" style="margin-top: 8px;">
-                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Omitir</button>
-                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="padding: 4px 8px; font-size: 0.7rem;">Añadir</button>
+            if (item.type === 'pending-item') {
+				const r = item.recurrent;
+				const nextDate = new Date(r.nextDate + 'T12:00:00Z');
+				const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+				const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+
+    return `
+    <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
+        <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
+        <div class="transaction-card__content">
+            <div class="transaction-card__details">
+                <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">Pendiente desde: ${formattedDate}</div>
+                
+                <!-- NUEVO: Ahora las acciones están mejor organizadas y con el botón Editar -->
+                <div class="acciones-recurrentes-corregidas">
+                    <button class="btn btn--secondary" data-action="edit-recurrente-from-pending" data-id="${r.id}" title="Editar antes de añadir" style="padding: 4px 8px; font-size: 0.7rem;">
+                        <span class="material-icons" style="font-size: 14px;">edit</span>
+                        <span>Editar</span>
+                    </button>
+                    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
+                        <span class="material-icons" style="font-size: 14px;">skip_next</span>
+                        <span>No añadir</span>
+                    </button>
+                    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
+                        <span class="material-icons" style="font-size: 14px;">check</span>
+                        <span>Añadir Ahora</span>
+                    </button>
+                </div>
+            </div>
+            <div class="transaction-card__figures">
+                <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+            </div>
+        </div>
+    </div>`;
+}
+            if (item.type === 'date-header') {
+                const dateObj = new Date(item.date + 'T12:00:00Z');
+                const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+                const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+                return `
+                    <div class="movimiento-date-header">
+                        <span>${day} ${dateStr}</span>
+                        <span>${formatCurrency(item.total)}</span>
                     </div>
-                </div>
-                <div class="transaction-card__figures">
-                    <strong class="transaction-card__amount ${r.cantidad >= 0 ? 'text-positive' : 'text-negative'}">
-                        ${formatCurrencyHTML(r.cantidad)}
-                    </strong>
-                </div>
-            </div>
-        </div>`;
-    }
-
-    // 3. Header de Fecha (ESTILO INTEGRADO CON COLOR SEMÁNTICO)
-    if (item.type === 'date-header') {
-        const dateObj = new Date(item.date + 'T12:00:00Z');
+                `;
+            }
+			if (item.type === 'transaction') {
+        return TransactionCardComponent(item.movement, { cuentas: db.cuentas, conceptos: db.conceptos });
+		}
         
-        const today = new Date(); 
-        const yesterday = new Date(); 
-        today.setHours(0,0,0,0);
-        yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
+        };
         
-        const itemDate = new Date(dateObj); itemDate.setHours(0,0,0,0);
-        
-        let dayName = '';
-        let fullDate = '';
-        let isTodayClass = '';
-
-        if (itemDate.getTime() === today.getTime()) {
-            dayName = "HOY";
-            isTodayClass = 'is-today'; 
-            fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
-        } else if (itemDate.getTime() === yesterday.getTime()) {
-            dayName = "AYER";
-            fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
-        } else {
-            dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
-            fullDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
-        }
-
-        // Lógica de colores según el importe:
-        // > 0: Verde (is-positive)
-        // < 0: Rojo (is-negative)
-        // === 0: Morado (is-neutral)
-        let totalClass = 'is-neutral'; 
-        if (item.total > 0) totalClass = 'is-positive';
-        else if (item.total < 0) totalClass = 'is-negative';
-
-        const totalFormatted = formatCurrencyHTML(item.total); 
-
-        return `
-            <div class="sticky-date-header">
-                <div class="sticky-date-left">
-                    <span class="sticky-day-pill ${isTodayClass}">${dayName}</span>
-                    <span class="sticky-date-text">${fullDate}</span>
-                </div>
-                <span class="sticky-date-total ${totalClass}">${totalFormatted}</span>
-            </div>
-        `;
-    }
-
-    // 4. MOVIMIENTOS REALES (DIARIO)
-    if (item.type === 'transaction') {
-        const m = item.movement;
-        const { cuentas, conceptos } = db;
-        const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
-        
-        // Formatear fecha corta
-        const dateObj = new Date(m.fecha);
-        const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-
-        let iconHtml, line1, line2, amountClass, amountSign;
-
-        if (m.tipo === 'traspaso') {
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+        const renderVisibleItems = () => {
+            if (!vList.scrollerEl || !vList.contentEl) return; 
+            const scrollTop = vList.scrollerEl.scrollTop;
+            const containerHeight = vList.scrollerEl.clientHeight;
+            let startIndex = -1, endIndex = -1;
             
-            // Formateamos los saldos resultantes que calculamos en updateVirtualListUI
-            const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined 
-                ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` 
-                : '';
-            const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined 
-                ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` 
-                : '';
-
-            iconHtml = `<div class="t-icon t-icon--transfer"><span class="material-icons">sync_alt</span></div>`;
+            for (let i = 0; i < vList.itemMap.length; i++) {
+                const item = vList.itemMap[i];
+                if (startIndex === -1 && item.offset + item.height > scrollTop) {
+                    startIndex = Math.max(0, i - vList.renderBuffer);
+                }
+                if (endIndex === -1 && item.offset + item.height > scrollTop + containerHeight) {
+                    endIndex = Math.min(vList.itemMap.length - 1, i + vList.renderBuffer);
+                    break;
+                }
+            }
+            if (startIndex === -1 && vList.items.length > 0) startIndex = 0;
+            if (endIndex === -1) endIndex = vList.itemMap.length - 1;
             
-            // Añadimos el saldo a cada línea
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part"><span class="material-icons text-negative" style="font-size:14px; margin-right:2px;">arrow_upward</span>${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
-            line2 = `<span class="t-transfer-part"><span class="material-icons text-positive" style="font-size:14px; margin-right:2px;">arrow_downward</span>${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
+            if (startIndex === vList.lastRenderedRange.start && endIndex === vList.lastRenderedRange.end) return;
             
-            amountClass = 'text-info';
-            amountSign = '';
-            
-        } else {
-            const concepto = conceptos.find(c => c.id === m.conceptoId);
-            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
-            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
-            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-            
-            const emojiMatch = conceptoNombre.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
-            const avatarContent = emojiMatch ? emojiMatch[0] : conceptoNombre.charAt(0).toUpperCase();
-            
-            const isGasto = m.cantidad < 0;
-            iconHtml = `<div class="t-icon ${isGasto ? 't-icon--expense' : 't-icon--income'}">${avatarContent}</div>`;
-            
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
-            
-            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
-            const separator = desc ? ' • ' : '';
-            line2 = `<span class="t-account-badge">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
-            
-            amountClass = isGasto ? 'text-negative' : 'text-positive';
-            amountSign = isGasto ? '' : '+';
-        }
-
-        return `
-        <div class="t-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
-            ${iconHtml}
-            <div class="t-content">
-                <div class="t-row-primary">
-                    <div class="t-line-1">${line1}</div>
-                    <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
-                </div>
-                <div class="t-row-secondary">
-                    <div class="t-line-2">${line2}</div>
-                    ${m.tipo !== 'traspaso' ? `<div class="t-running-balance">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
-                </div>
-            </div>
-        </div>`;
-    }
-    return '';
-};
+            let visibleHtml = ''; 
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (vList.items[i]) visibleHtml += renderVirtualListItem(vList.items[i]);
+            }
+            vList.contentEl.innerHTML = visibleHtml; 
+			const renderedItems = vList.contentEl.querySelectorAll('.list-item-animate');
+renderedItems.forEach((item, index) => {
+    // Aplicamos la clase que dispara la animación con un pequeño retraso
+    // para cada elemento, creando el efecto cascada.
+    setTimeout(() => {
+        item.classList.add('item-enter-active');
+    }, index * 40); // 40 milisegundos de retraso entre cada item
+});
+            const offsetY = vList.itemMap[startIndex] ? vList.itemMap[startIndex].offset : 0; 
+            vList.contentEl.style.transform = `translateY(${offsetY}px)`; 
+            vList.lastRenderedRange = { start: startIndex, end: endIndex };
+        };
         
         const renderVisibleItems = () => {
             if (!vList.scrollerEl || !vList.contentEl) return; 
