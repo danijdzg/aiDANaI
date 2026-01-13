@@ -3339,87 +3339,159 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-    const renderVirtualListItem = (item) => {
-			if (item.type === 'month-header') {
-    const monthName = item.date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    return `
-        <div class="movimiento-month-header">
-            <h3 class="movimiento-month-header__title">${monthName}</h3>
-            <div class="movimiento-month-header__summary">
-                <p class="text-positive">${formatCurrency(item.income)}</p>
-                <p class="text-negative">${formatCurrency(item.expense)}</p>
-                <p class="${item.net >= 0 ? 'text-positive' : 'text-negative'}" style="border-top: 1px solid var(--c-outline); margin-top: 2px; padding-top: 2px;">
-                    ${formatCurrency(item.net)}
-                </p>
-            </div>
-        </div>
-    `;
+const renderVirtualListItem = (item) => {
+    
+    // 1. Header de Pendientes
+    if (item.type === 'pending-header') {
+        return `
+        <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
+            <span><span class="material-icons" style="font-size: 16px; vertical-align: middle;">update</span> Pendientes (${item.count})</span>
+        </div>`;
     }
-            if (item.type === 'pending-header') {
-                return `
-                    <div class="movimiento-date-header" style="background-color: var(--c-warning); color: var(--c-black); font-weight: 800; letter-spacing: 0.5px;">
-                        <span>
-                            <span class="material-icons" style="font-size: 16px; vertical-align: bottom; margin-right: 4px;">update</span>
-                            RECURRENTES PENDIENTES (${item.count})
-                        </span>
-                    </div>`;
-            }
 
-            if (item.type === 'pending-item') {
-				const r = item.recurrent;
-				const nextDate = new Date(r.nextDate + 'T12:00:00Z');
-				const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-				const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
-
-    return `
-    <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
-        <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
-        <div class="transaction-card__content">
-            <div class="transaction-card__details">
-                <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
-                <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">Pendiente desde: ${formattedDate}</div>
-                
-                <!-- NUEVO: Ahora las acciones están mejor organizadas y con el botón Editar -->
-                <div class="acciones-recurrentes-corregidas">
-                    <button class="btn btn--secondary" data-action="edit-recurrente-from-pending" data-id="${r.id}" title="Editar antes de añadir" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">edit</span>
-                        <span>Editar</span>
-                    </button>
-                    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">skip_next</span>
-                        <span>No añadir</span>
-                    </button>
-                    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">check</span>
-                        <span>Añadir Ahora</span>
-                    </button>
+    // 2. Tarjeta de Pendiente
+    if (item.type === 'pending-item') {
+        const r = item.recurrent;
+        const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
+        return `
+        <div class="transaction-card" style="margin:0; border-bottom:1px solid var(--c-outline); background-color: rgba(255, 214, 10, 0.05);">
+            <div class="transaction-card__content">
+                <div class="transaction-card__details">
+                    <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
+                    <div class="transaction-card__row-2" style="color: var(--c-warning);">Programado: ${date}</div>
+                    <div class="acciones-recurrentes-corregidas" style="margin-top: 8px;">
+                        <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" style="font-size: 0.7rem;">Omitir</button>
+                        <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" style="font-size: 0.7rem;">Añadir</button>
+                    </div>
+                </div>
+                <div class="transaction-card__figures">
+                    <strong class="transaction-card__amount ${r.cantidad >= 0 ? 'text-positive' : 'text-negative'}">${formatCurrencyHTML(r.cantidad)}</strong>
                 </div>
             </div>
-            <div class="transaction-card__figures">
-                <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
+        </div>`;
+    }
+
+    // 3. Header de Fecha (AMARILLO BRILLANTE)
+    if (item.type === 'date-header') {
+        const dateObj = new Date(item.date + 'T12:00:00Z');
+        
+        const day = dateObj.getDate().toString().padStart(2, '0');
+        let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
+        month = month.charAt(0).toUpperCase() + month.slice(1);
+        const year = dateObj.getFullYear();
+        
+        // Color: Amarillo (#FFD700) por defecto. Si es negativo, Naranja (Warning).
+        let totalColor = '#FFD700'; 
+        if (item.total < 0) totalColor = 'var(--c-warning)';
+
+        return `
+            <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
+                background-image: linear-gradient(135deg, #000428 0%, #004e92 100%) !important;
+                background-color: #000428 !important;
+                
+                padding: 12px 16px; 
+                margin-top: 0;
+                border-top: 1px solid rgba(255,255,255,0.15);
+                border-bottom: 1px solid rgba(0,0,0,0.5);
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.4); 
+                position: relative;
+                z-index: 1;
+            ">
+                <div style="display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 2px rgba(0,0,0,0.8);">
+                    <span style="font-size: 1.2rem; font-weight: 800; color: #FFD700; letter-spacing: -0.5px;">${day}</span>
+                    <span style="font-size: 1rem; font-weight: 600; text-transform: capitalize; color: #FFD700; opacity: 0.9;">${month}</span>
+                    <span style="font-size: 0.9rem; font-weight: 400; color: #FFD700; opacity: 0.7;">${year}</span>
+                </div>
+
+                <span style="
+                    color: ${totalColor}; 
+                    font-weight: 700; 
+                    font-family: monospace; 
+                    font-size: 1rem;
+                    text-shadow: 0 2px 2px rgba(0,0,0,0.8);
+                ">
+                    ${formatCurrencyHTML(item.total)}
+                </span>
             </div>
-        </div>
-    </div>`;
-}
-            if (item.type === 'date-header') {
-                const dateObj = new Date(item.date + 'T12:00:00Z');
-                const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
-                const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        `;
+    }
 
-                return `
-                    <div class="movimiento-date-header">
-                        <span>${day} ${dateStr}</span>
-                        <span>${formatCurrency(item.total)}</span>
-                    </div>
-                `;
-            }
-			if (item.type === 'transaction') {
-        return TransactionCardComponent(item.movement, { cuentas: db.cuentas, conceptos: db.conceptos });
-		}
+    // 4. MOVIMIENTOS
+    if (item.type === 'transaction') {
+        const m = item.movement;
+        const { cuentas, conceptos } = db; 
+        const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
         
-        };
-        
+        let line1, line2, amountClass, amountSign;
+        let cardTypeClass = ''; 
 
+        const fechaMovimiento = m.fecha || ''; 
+
+        if (m.tipo === 'traspaso') {
+            cardTypeClass = 'type-traspaso'; 
+            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+            const saldoOrigen = cuentas.find(c => c.id === m.cuentaOrigenId)?.saldo || 0;
+            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+            const saldoDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.saldo || 0;
+
+            line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
+            line2 = `
+                <div style="line-height: 1.4;">
+                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
+                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoOrigen)})</span>
+                    <span style="color: var(--c-on-surface-secondary);">➔</span> 
+                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(destino)}</span>
+                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoDestino)})</span>
+                </div>`;
+            amountClass = 'text-info'; amountSign = '';
+        } else {
+            const isGasto = m.cantidad < 0;
+            cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
+            const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+            
+            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios'; 
+            const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
+            
+            const desc = m.descripcion && m.descripcion !== concepto ? m.descripcion : concepto;
+            line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
+            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(cuenta)}</span>`;
+            amountClass = isGasto ? 'text-negative' : 'text-positive'; amountSign = isGasto ? '' : '+';
+        }
+
+        return `
+        <div class="t-card ${highlightClass} ${cardTypeClass}" 
+             data-fecha="${fechaMovimiento}" 
+             data-id="${m.id}" 
+             data-action="edit-movement-from-list" 
+             style="
+                        padding: 10px;                  /* Más espacio interno para que respire */
+                        margin-bottom: 5px;             /* LA SEPARACIÓN DE 5PX QUE PEDISTE */
+                        border-radius: 2px;            /* Esquinas redondeadas estilo Nord 4 */
+                        background-color: var(--c-surface); /* Fondo gris oscuro para diferenciar del negro */
+                        border: 1px solid var(--c-outline); /* Borde sutil alrededor */
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* Sombra suave para dar volumen */
+                     ">
+            <div class="t-content">
+                <div class="t-row-primary" style="margin-bottom: 4px;">
+                    <div class="t-line-1">${line1}</div>
+                    <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+                </div>
+                <div class="t-row-secondary" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="t-line-2">${line2}</div>
+                    ${m.tipo !== 'traspaso' ? `
+                        <div class="t-running-balance" style="font-size: 0.75rem; color: var(--c-on-surface-secondary); opacity: 0.7;">
+                            ${formatCurrencyHTML(m.runningBalance)}
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>`;
+    }
+    return '';
+};
         
         const renderVisibleItems = () => {
             if (!vList.scrollerEl || !vList.contentEl) return; 
