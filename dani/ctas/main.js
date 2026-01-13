@@ -7530,14 +7530,17 @@ const renderCuentasModalList = () => {
             const tipoInput = select(`edit-cuenta-tipo-${id}`);
             const nombre = nombreInput.value.trim();
             const tipo = toSentenceCase(tipoInput.value.trim());
-        
+			const esInversion = select('new-cuenta-inversion').checked;
             if (!nombre || !tipo) { showToast('El nombre y el tipo no pueden estar vacíos.', 'warning'); if (!nombre) nombreInput.classList.add('form-input--invalid'); if (!tipo) tipoInput.classList.add('form-input--invalid'); return; }
             const ledgerSelected = document.querySelector(`input[name="edit-ledger-${id}"]:checked`).value;
-            await saveDoc('cuentas', id, { 
+            await saveDoc('cuentas', newId, { 
+        id: newId, 
         nombre, 
         tipo, 
-        ledger: ledgerSelected,
-        offBalance: ledgerSelected === 'B' 
+        ledger,
+        esInversion: esInversion, // <--- ¡AQUÍ ESTÁ LA CLAVE! Guardamos tu decisión explícita
+        icon: 'account_balance_wallet', 
+        saldo: 0 
     }, btn);
             hapticFeedback('success');
             renderCuentasModalList();
@@ -9640,6 +9643,7 @@ const handleAddAccount = async (btn) => {
     
     // Limpiar formulario y recargar lista
     nombreInput.value = '';
+	select('new-cuenta-inversion').checked = false;
     tipoInput.value = '';
     nombreInput.focus();
     renderCuentasModalList();
