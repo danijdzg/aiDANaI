@@ -3419,44 +3419,7 @@ const handleShowPnlBreakdown = async (accountId) => {
         
         };
         
-        const renderVisibleItems = () => {
-            if (!vList.scrollerEl || !vList.contentEl) return; 
-            const scrollTop = vList.scrollerEl.scrollTop;
-            const containerHeight = vList.scrollerEl.clientHeight;
-            let startIndex = -1, endIndex = -1;
-            
-            for (let i = 0; i < vList.itemMap.length; i++) {
-                const item = vList.itemMap[i];
-                if (startIndex === -1 && item.offset + item.height > scrollTop) {
-                    startIndex = Math.max(0, i - vList.renderBuffer);
-                }
-                if (endIndex === -1 && item.offset + item.height > scrollTop + containerHeight) {
-                    endIndex = Math.min(vList.itemMap.length - 1, i + vList.renderBuffer);
-                    break;
-                }
-            }
-            if (startIndex === -1 && vList.items.length > 0) startIndex = 0;
-            if (endIndex === -1) endIndex = vList.itemMap.length - 1;
-            
-            if (startIndex === vList.lastRenderedRange.start && endIndex === vList.lastRenderedRange.end) return;
-            
-            let visibleHtml = ''; 
-            for (let i = startIndex; i <= endIndex; i++) {
-                if (vList.items[i]) visibleHtml += renderVirtualListItem(vList.items[i]);
-            }
-            vList.contentEl.innerHTML = visibleHtml; 
-			const renderedItems = vList.contentEl.querySelectorAll('.list-item-animate');
-renderedItems.forEach((item, index) => {
-    // Aplicamos la clase que dispara la animación con un pequeño retraso
-    // para cada elemento, creando el efecto cascada.
-    setTimeout(() => {
-        item.classList.add('item-enter-active');
-    }, index * 40); // 40 milisegundos de retraso entre cada item
-});
-            const offsetY = vList.itemMap[startIndex] ? vList.itemMap[startIndex].offset : 0; 
-            vList.contentEl.style.transform = `translateY(${offsetY}px)`; 
-            vList.lastRenderedRange = { start: startIndex, end: endIndex };
-        };
+
         
         const renderVisibleItems = () => {
             if (!vList.scrollerEl || !vList.contentEl) return; 
