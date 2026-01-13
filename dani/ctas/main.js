@@ -11827,37 +11827,50 @@ window.addEventListener('resize', fixViewportHeight);
 // Ejecutamos una vez al inicio por si acaso
 fixViewportHeight();
 
-/* ========================================== */
-/* === GESTIÓN DE CONCEPTOS BLINDADA v2.0 === */
-/* ========================================== */
+/* ============================================== */
+/* === GESTIÓN DE CONCEPTOS (Versión Blindada) === */
+/* ============================================== */
 const showManageConceptosModal = () => {
-    // 1. REPARACIÓN AUTOMÁTICA: Si no existe la ventana, la creamos al vuelo
-    if (!document.getElementById('generic-modal')) {
-        console.log('🔧 Reparando estructura HTML faltante...');
+    // 1. Buscamos las piezas clave
+    let modal = document.getElementById('generic-modal');
+    let content = document.getElementById('generic-modal-content');
+    let title = document.getElementById('generic-modal-title');
+
+    // 2. DIAGNÓSTICO: Si falta CUALQUIER pieza interna, reconstruimos todo
+    if (!modal || !content || !title) {
+        console.log('🔧 Estructura rota detectada. Reconstruyendo ventana...');
+        
+        // Si la carcasa vieja existe pero está vacía, la borramos para no duplicar
+        if (modal) modal.remove();
+
+        // 3. CONSTRUCCIÓN DESDE CERO
         const modalHTML = `
-        <div id="generic-modal" class="modal-overlay">
-            <div class="modal-content" style="background: var(--c-surface); padding: 20px; border-radius: 20px; width: 90%; max-width: 400px; max-height: 80vh; display: flex; flex-direction: column; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 id="generic-modal-title" style="margin:0; font-size: 1.2rem;">Título</h3>
-                    <button class="icon-btn" onclick="document.getElementById('generic-modal').classList.remove('modal-overlay--active')">
+        <div id="generic-modal" class="modal-overlay" style="z-index: 10000; display: flex; align-items: center; justify-content: center;">
+            <div class="modal-content" style="background: var(--c-surface); padding: 20px; border-radius: 20px; width: 90%; max-width: 400px; max-height: 80vh; display: flex; flex-direction: column; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--c-outline);">
+                    <h3 id="generic-modal-title" style="margin:0; font-size: 1.2rem; color: var(--c-on-surface);">Título</h3>
+                    <button class="icon-btn" onclick="document.getElementById('generic-modal').classList.remove('modal-overlay--active')" style="color: var(--c-on-surface);">
                         <span class="material-icons">close</span>
                     </button>
                 </div>
-                <div id="generic-modal-content" style="overflow-y: auto;"></div>
+
+                <div id="generic-modal-content" style="overflow-y: auto; flex: 1;"></div>
             </div>
         </div>`;
+        
         document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        // Re-asignamos las variables a los elementos nuevos
+        modal = document.getElementById('generic-modal');
+        content = document.getElementById('generic-modal-content');
+        title = document.getElementById('generic-modal-title');
     }
 
-    // 2. Ahora sí, seleccionamos los elementos seguros
-    const modal = document.getElementById('generic-modal');
-    const content = document.getElementById('generic-modal-content');
-    const title = document.getElementById('generic-modal-title');
-    
-    // 3. Configuramos el Título
+    // 4. AHORA ES SEGURO: Configuramos el contenido
     title.textContent = 'Conceptos Rápidos';
     
-    // 4. Inyectamos el Formulario LIMPIO (Sin iconos)
+    // Formulario LIMPIO (Sin iconos)
     content.innerHTML = `
         <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
             <input type="text" id="new-concepto-nombre" class="form-input" placeholder="Nuevo (ej: Gasolina)..." autocomplete="off" style="flex:1;">
@@ -11866,11 +11879,11 @@ const showManageConceptosModal = () => {
             </button>
         </div>
         
-        <div id="conceptos-list" class="scroll-container" style="flex: 1; overflow-y: auto; padding-right: 5px;">
+        <div id="conceptos-list" class="scroll-container" style="max-height: 400px; overflow-y: auto; padding-right: 5px;">
             </div>
     `;
 
-    // 5. Función interna para borrar
+    // 5. Función de borrado segura
     window.handleDeleteConcept = async (id) => {
         if(confirm('¿Borrar concepto?')) {
             await deleteDoc('conceptos', id);
@@ -11879,31 +11892,34 @@ const showManageConceptosModal = () => {
     };
 
     // 6. Conectar botón de añadir
-    document.getElementById('btn-add-concepto').onclick = async () => {
-        const input = document.getElementById('new-concepto-nombre');
-        const nombre = input.value.trim();
-        if (!nombre) return;
-        
-        // Generar ID único (usando timestamp si generateId no está disponible por alcance)
-        const newId = (Date.now().toString(36) + Math.random().toString(36).substr(2)).toUpperCase();
-        
-        await saveDoc('conceptos', newId, { 
-            id: newId, 
-            nombre: nombre.charAt(0).toUpperCase() + nombre.slice(1),
-            icon: 'label' 
-        });
-        
-        input.value = '';
-        renderConceptosModalList();
-        input.focus();
-    };
+    const btnAdd = document.getElementById('btn-add-concepto');
+    if (btnAdd) {
+        btnAdd.onclick = async () => {
+            const input = document.getElementById('new-concepto-nombre');
+            const nombre = input.value.trim();
+            if (!nombre) return;
+            
+            // Generador de ID simple y robusto
+            const newId = 'CON-' + Date.now();
+            
+            await saveDoc('conceptos', newId, { 
+                id: newId, 
+                nombre: nombre.charAt(0).toUpperCase() + nombre.slice(1),
+                icon: 'label' 
+            });
+            
+            input.value = '';
+            renderConceptosModalList();
+            input.focus();
+        };
+    }
 
-    // 7. Renderizar lista y Mostrar
+    // 7. Mostrar todo
     renderConceptosModalList();
-    
-    // Mostrar el modal (usamos la clase estándar)
     modal.classList.add('modal-overlay--active');
     
-    // Foco automático
-    setTimeout(() => document.getElementById('new-concepto-nombre').focus(), 100);
+    setTimeout(() => {
+        const input = document.getElementById('new-concepto-nombre');
+        if(input) input.focus();
+    }, 100);
 };
