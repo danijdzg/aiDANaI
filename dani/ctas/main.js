@@ -3339,12 +3339,9 @@ const handleShowPnlBreakdown = async (accountId) => {
     showGenericModal(`Desglose P&L: ${cuenta.nombre}`, modalHtml);
 };
 
-// ===============================================================
-// === RENDERIZADOR VIRTUAL (CON DETECTIVE DE TRASPASOS AZUL) ===
-// ===============================================================
 const renderVirtualListItem = (item) => {
     
-    // 1. Header de Pendientes (Sin cambios)
+    // 1. Header de Pendientes
     if (item.type === 'pending-header') {
         return `
         <div class="movimiento-date-header" style="background-color: var(--c-warning); color: #000; margin: 10px 0; border-radius: 8px;">
@@ -3352,7 +3349,7 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 2. Tarjeta de Pendiente (Sin cambios)
+    // 2. Tarjeta de Pendiente
     if (item.type === 'pending-item') {
         const r = item.recurrent;
         const date = new Date(r.nextDate).toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
@@ -3374,13 +3371,16 @@ const renderVirtualListItem = (item) => {
         </div>`;
     }
 
-    // 3. Header de Fecha (Sin cambios)
+    // 3. Header de Fecha (AMARILLO BRILLANTE)
     if (item.type === 'date-header') {
         const dateObj = new Date(item.date + 'T12:00:00Z');
+        
         const day = dateObj.getDate().toString().padStart(2, '0');
         let month = dateObj.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
         month = month.charAt(0).toUpperCase() + month.slice(1);
         const year = dateObj.getFullYear();
+        
+        // Color: Amarillo (#FFD700) por defecto. Si es negativo, Naranja (Warning).
         let totalColor = '#FFD700'; 
         if (item.total < 0) totalColor = 'var(--c-warning)';
 
@@ -3388,135 +3388,104 @@ const renderVirtualListItem = (item) => {
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
                 background-image: linear-gradient(135deg, #000428 0%, #004e92 100%) !important;
                 background-color: #000428 !important;
-                padding: 12px 16px; margin-top: 0; border-top: 1px solid rgba(255,255,255,0.15); border-bottom: 1px solid rgba(0,0,0,0.5);
-                display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.4); position: relative; z-index: 1;
+                
+                padding: 12px 16px; 
+                margin-top: 0;
+                border-top: 1px solid rgba(255,255,255,0.15);
+                border-bottom: 1px solid rgba(0,0,0,0.5);
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.4); 
+                position: relative;
+                z-index: 1;
             ">
                 <div style="display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 2px rgba(0,0,0,0.8);">
                     <span style="font-size: 1.2rem; font-weight: 800; color: #FFD700; letter-spacing: -0.5px;">${day}</span>
                     <span style="font-size: 1rem; font-weight: 600; text-transform: capitalize; color: #FFD700; opacity: 0.9;">${month}</span>
                     <span style="font-size: 0.9rem; font-weight: 400; color: #FFD700; opacity: 0.7;">${year}</span>
                 </div>
-                <span style="color: ${totalColor}; font-weight: 700; font-family: monospace; font-size: 1rem; text-shadow: 0 2px 2px rgba(0,0,0,0.8);">
+
+                <span style="
+                    color: ${totalColor}; 
+                    font-weight: 700; 
+                    font-family: monospace; 
+                    font-size: 1rem;
+                    text-shadow: 0 2px 2px rgba(0,0,0,0.8);
+                ">
                     ${formatCurrencyHTML(item.total)}
                 </span>
-            </div>`;
+            </div>
+        `;
     }
 
-    // 4. MOVIMIENTOS (AQUÍ ESTÁ LA MAGIA DEL DETECTIVE 🕵️‍♂️)
+    // 4. MOVIMIENTOS
     if (item.type === 'transaction') {
         const m = item.movement;
         const { cuentas, conceptos } = db; 
         const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
-        const fechaMovimiento = m.fecha || '';
-
-        // --- DETECTIVE DE TRASPASOS ---
-        const conceptoObj = conceptos.find(c => c.id === m.conceptoId);
-        const conceptoNombre = conceptoObj ? conceptoObj.nombre : 'Varios';
         
-        // ¿Es un traspaso? (Miramos el tipo o si el nombre lo dice)
-        const esTraspaso = m.tipo === 'traspaso' || conceptoNombre.toLowerCase().includes('traspaso') || m.descripcion.toLowerCase().includes('traspaso');
+        let line1, line2, amountClass, amountSign;
+        let cardTypeClass = ''; 
 
-        let line1, line2, amountClass, amountSign, cardStyle, iconHTML;
+        const fechaMovimiento = m.fecha || ''; 
 
-        if (esTraspaso) {
-            // === MODO TRASPASO AZUL ===
-            
-            // 1. BUSCAR GEMELO (Detective)
-            // Buscamos otro movimiento el mismo día, mismo importe, signo contrario
-            const fechaBase = m.fecha.split('T')[0]; 
-            const gemelo = db.movimientos.find(otro => 
-                otro.id !== m.id &&
-                otro.fecha.startsWith(fechaBase) && 
-                Math.abs(otro.cantidad) === Math.abs(m.cantidad) &&
-                ((m.cantidad < 0 && otro.cantidad > 0) || (m.cantidad > 0 && otro.cantidad < 0))
-            );
+        if (m.tipo === 'traspaso') {
+            cardTypeClass = 'type-traspaso'; 
+            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+            const saldoOrigen = cuentas.find(c => c.id === m.cuentaOrigenId)?.saldo || 0;
+            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+            const saldoDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.saldo || 0;
 
-            const miCuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || '???';
-            let textoCuentas = '';
-
-            if (gemelo) {
-                const otraCuenta = cuentas.find(c => c.id === gemelo.cuentaId)?.nombre || '???';
-                // Si sale dinero (-) voy hacia la otra. Si entra (+), viene de la otra.
-                if (m.cantidad < 0) textoCuentas = `${miCuenta} ➔ ${otraCuenta}`;
-                else textoCuentas = `${otraCuenta} ➔ ${miCuenta}`;
-            } else {
-                // Si está huérfano, hacemos lo que podemos
-                if (m.cantidad < 0) textoCuentas = `${miCuenta} ➔ ...`;
-                else textoCuentas = `... ➔ ${miCuenta}`;
-            }
-
-            // 2. ESTILOS AZULES (OnePlus Nord 4)
-            cardStyle = `
-                border-left: 3px solid #00B0FF; 
-                background: linear-gradient(90deg, rgba(0, 176, 255, 0.08), rgba(30, 30, 30, 1));
-            `;
-            
-            iconHTML = `<span class="material-icons" style="color: #00B0FF;">swap_horiz</span>`;
-            
-            line1 = `<span class="t-concept" style="color: #FFFFFF; font-weight: 600;">Traspaso</span>`;
-            
-            // Cuentas en AZUL CLARO (#80D8FF)
-            line2 = `<span style="color: #80D8FF; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHTML(textoCuentas)}</span>`;
-            
-            // Importe en BLANCO PURO (con brillo azulado)
-            amountClass = 'transfer-amount'; 
-            amountSign = ''; 
-
+            line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
+            line2 = `
+                <div style="line-height: 1.4;">
+                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
+                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoOrigen)})</span>
+                    <span style="color: var(--c-on-surface-secondary);">➔</span> 
+                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(destino)}</span>
+                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoDestino)})</span>
+                </div>`;
+            amountClass = 'text-info'; amountSign = '';
         } else {
-            // === MODO NORMAL (Ingreso/Gasto) ===
             const isGasto = m.cantidad < 0;
+            cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
             const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+            
+            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios'; 
             const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
-            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : conceptoNombre;
-            const iconName = conceptoObj?.icono || (isGasto ? 'arrow_downward' : 'arrow_upward');
-            const iconColor = conceptoObj?.color || '#888';
-
-            cardStyle = `border-left: 3px solid ${isGasto ? 'var(--c-danger)' : 'var(--c-success)'}; background-color: var(--c-surface);`;
             
-            iconHTML = `<span class="material-icons" style="color: ${iconColor};">${iconName}</span>`;
-            
+            const desc = m.descripcion && m.descripcion !== concepto ? m.descripcion : concepto;
             line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
             line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(cuenta)}</span>`;
-            
-            amountClass = isGasto ? 'text-negative' : 'text-positive'; 
-            amountSign = isGasto ? '' : '+';
+            amountClass = isGasto ? 'text-negative' : 'text-positive'; amountSign = isGasto ? '' : '+';
         }
 
-        // HTML COMÚN DE LA TARJETA
-        // Nota: El style del importe traspaso lo forzamos inline aquí para asegurar el BLANCO
-        const amountStyle = esTraspaso ? 'color: #FFFFFF !important; text-shadow: 0 0 8px rgba(0, 176, 255, 0.6);' : '';
-
         return `
-        <div class="t-card ${highlightClass}" 
+        <div class="t-card ${highlightClass} ${cardTypeClass}" 
              data-fecha="${fechaMovimiento}" 
              data-id="${m.id}" 
              data-action="edit-movement-from-list" 
              style="
-                padding: 12px 16px; 
-                margin-bottom: 5px; 
-                border-radius: 4px; 
-                box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
-                display: flex; 
-                align-items: center;
-                cursor: pointer;
-                ${cardStyle}
-             ">
-            
-            <div style="margin-right: 15px; display: flex; align-items: center; justify-content: center; width: 40px;">
-                ${iconHTML}
-            </div>
-
-            <div style="flex-grow: 1; min-width: 0;">
-                <div style="margin-bottom: 4px;">${line1}</div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>${line2}</div>
-                    ${!esTraspaso ? `<div style="font-size: 0.7rem; opacity: 0.6;">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
+                        padding: 10px;                  /* Más espacio interno para que respire */
+                        margin-bottom: 5px;             /* LA SEPARACIÓN DE 5PX QUE PEDISTE */
+                        border-radius: 2px;            /* Esquinas redondeadas estilo Nord 4 */
+                        background-color: var(--c-surface); /* Fondo gris oscuro para diferenciar del negro */
+                        border: 1px solid var(--c-outline); /* Borde sutil alrededor */
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* Sombra suave para dar volumen */
+                     ">
+            <div class="t-content">
+                <div class="t-row-primary" style="margin-bottom: 4px;">
+                    <div class="t-line-1">${line1}</div>
+                    <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
                 </div>
-            </div>
-
-            <div style="margin-left: 10px; text-align: right;">
-                <div class="${amountClass}" style="font-size: 1rem; font-weight: 700; ${amountStyle}">
-                    ${amountSign}${formatCurrencyHTML(m.cantidad)}
+                <div class="t-row-secondary" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="t-line-2">${line2}</div>
+                    ${m.tipo !== 'traspaso' ? `
+                        <div class="t-running-balance" style="font-size: 0.75rem; color: var(--c-on-surface-secondary); opacity: 0.7;">
+                            ${formatCurrencyHTML(m.runningBalance)}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         </div>`;
