@@ -566,7 +566,14 @@ const handleExportFilteredCsv = (btn) => {
     }
 };
 
-const firebaseConfig = { apiKey: "AIzaSyAp-t-2qmbvSX-QEBW9B1aAJHBESqnXy9M", authDomain: "cuentas-aidanai.firebaseapp.com", projectId: "cuentas-aidanai", storageBucket: "cuentas-aidanai.appspot.com", messagingSenderId: "58244686591", appId: "1:58244686591:web:85c87256c2287d350322ca" };
+const firebaseConfig = {
+  apiKey: "AIzaSyCjwL2nIuxFkZZnU9O7Zr0uRkxzd1NW53I",
+  authDomain: "aidanai-ctas.firebaseapp.com",
+  projectId: "aidanai-ctas",
+  storageBucket: "aidanai-ctas.firebasestorage.app",
+  messagingSenderId: "678423604278",
+  appId: "1:678423604278:web:e7b7d140d323194dbabc97"
+};
 const PAGE_IDS = {
     PANEL: 'panel-page',
     DIARIO: 'diario-page',
@@ -4049,7 +4056,16 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
 
     const visibleAccounts = getVisibleAccounts();
     const saldos = await getSaldos();
-    const BASE_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
+    const BASE_COLORS = [
+    '#2979FF', // Azul Eléctrico (Principal)
+    '#39FF14', // Verde Neón
+    '#FFD600', // Amarillo Oro
+    '#FF1744', // Rojo Intenso
+    '#D500F9', // Violeta (Mantiene el estilo Cyberpunk)
+    '#00E5FF', // Cyan
+    '#FF4081', // Rosa
+    '#76FF03'  // Verde Lima
+];
 
     const allAccountTypes = [...new Set(visibleAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
     const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
@@ -8519,7 +8535,7 @@ const handleStart = (e) => {
             'forgot-password': (e) => { e.preventDefault(); const email = prompt("Email para recuperar contraseña:"); if (email) { firebase.auth().sendPasswordResetEmail(email).then(() => showToast('Correo enviado.', 'info')).catch(() => showToast('Error al enviar correo.', 'danger')); } },
             'show-register': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="login"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'login') { title.textContent = 'Crear una Cuenta Nueva'; mainButton.dataset.action = 'register'; mainButton.textContent = 'Registrarse'; secondaryAction.innerHTML = `<span>¿Ya tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-login">Inicia sesión</a>`; } else { handleRegister(mainButton); } },
             'show-login': (e) => { e.preventDefault(); const title = select('login-title'); const mainButton = document.querySelector('#login-form button[data-action="register"]'); const secondaryAction = document.querySelector('.login-view__secondary-action'); if (mainButton.dataset.action === 'register') { mainButton.dataset.action = 'login'; mainButton.textContent = 'Iniciar Sesión'; secondaryAction.innerHTML = `<span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>`; } },
-            'import-csv': showCsvImportWizard,
+            'import-csv': () => { const i = document.createElement('input'); i.type='file'; i.accept='.csv'; i.onchange=e=>handleImportCSV(e.target.files[0]); i.click(); },
             'toggle-ledger': async () => {
     hapticFeedback('medium');
     
@@ -11542,3 +11558,160 @@ const initStickyRadar = () => {
 };
 
 if(document.querySelector('.virtual-list-container')) initStickyRadar();
+
+// ===============================================================
+// ===  IMPORTADOR MAESTRO CSV v4.0 (Full Auto-Creación)       ===
+// ===============================================================
+
+const handleImportCSV = async (file) => {
+    if (!file) return;
+
+    // Actualizador de estado visual
+    const updateStatus = (msg) => {
+        const el = document.getElementById('import-status-text');
+        if (el) el.innerText = msg;
+    };
+
+    showGenericModal('Importando Inteligente...', 
+        '<div style="text-align:center; padding:30px;">' +
+        '<span class="spinner"></span>' +
+        '<p id="import-status-text" style="margin-top:15px; font-weight:bold;">Leyendo cerebro de datos...</p>' +
+        '</div>'
+    );
+
+    const reader = new FileReader();
+    reader.readAsText(file, 'ISO-8859-1'); // Mantenemos lectura de tildes/ñ
+
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        // Dividir por líneas y limpiar vacíos
+        const rows = text.split('\n').filter(r => r.trim().length > 0);
+        const totalRows = rows.length - 1; 
+
+        updateStatus(`Analizando ${totalRows} filas...`);
+        
+        // --- MAPAS DE MEMORIA (Para búsqueda rápida) ---
+        const cuentasMap = new Map(db.cuentas.map(c => [c.nombre.toLowerCase(), c])); 
+        // Mapa de conceptos: guardamos el NOMBRE como clave y el ID como valor
+        const conceptosMap = new Map(db.conceptos.map(c => [c.nombre.toLowerCase(), c.id]));
+        
+        let batch = fbDb.batch();
+        let batchCount = 0;
+        let totalImported = 0;
+        let createdAccounts = 0;
+        let createdConcepts = 0;
+        let opsInBatch = 0; // Semáforo para no saturar Firebase (máx 500)
+
+        // Bucle principal (saltando cabecera)
+        for (let i = 1; i < rows.length; i++) {
+            
+            // Regex "Bisturí" para CSV
+            const cols = rows[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+            if (!cols || cols.length < 5) continue;
+
+            // 1. FECHA
+            const [day, month, year] = cols[0].replace(/"/g, '').split('/');
+            const isoDate = `${year}-${month}-${day}T12:00:00.000Z`;
+
+            // 2. CUENTA (Lógica de Auto-Creación)
+            let cuentaNombreRaw = cols[1].replace(/"/g, '').trim();
+            let cuentaObj = cuentasMap.get(cuentaNombreRaw.toLowerCase());
+            let cuentaId = cuentaObj ? cuentaObj.id : null;
+
+            if (!cuentaId) {
+                // Crear Cuenta Nueva
+                const newCtaId = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc().id;
+                const propietario = cuentaNombreRaw.toUpperCase().startsWith('N') ? 'N' : 'D';
+                const nuevaCuenta = {
+                    id: newCtaId, nombre: cuentaNombreRaw, tipo: 'banco', saldo: 0, moneda: 'EUR', propietario: propietario, orden: 99
+                };
+                
+                const ctaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(newCtaId);
+                batch.set(ctaRef, nuevaCuenta);
+                opsInBatch++;
+
+                // Actualizar memoria local para futuras filas
+                db.cuentas.push(nuevaCuenta);
+                cuentasMap.set(cuentaNombreRaw.toLowerCase(), nuevaCuenta);
+                cuentaId = newCtaId;
+                createdAccounts++;
+            }
+
+            // 3. CONCEPTO (¡NUEVA LÓGICA DE AUTO-CREACIÓN!)
+            const conceptoNombreRaw = cols[2].replace(/"/g, '').trim(); // Ej: "Supermercado"
+            let conceptoId = conceptosMap.get(conceptoNombreRaw.toLowerCase());
+
+            if (!conceptoId) {
+                // Crear Concepto Nuevo
+                const newConceptId = fbDb.collection('users').doc(currentUser.uid).collection('conceptos').doc().id;
+                
+                const nuevoConcepto = {
+                    id: newConceptId,
+                    nombre: conceptoNombreRaw, // El nombre tal cual viene del CSV
+                    icono: 'local_offer',      // Icono genérico (etiqueta)
+                    color: '#808080',          // Color gris neutro
+                    tipo: 'gasto'              // Asumimos gasto por defecto (es lo más seguro)
+                };
+
+                const conceptRef = fbDb.collection('users').doc(currentUser.uid).collection('conceptos').doc(newConceptId);
+                batch.set(conceptRef, nuevoConcepto);
+                opsInBatch++;
+
+                // Actualizar memoria local
+                db.conceptos.push(nuevoConcepto);
+                conceptosMap.set(conceptoNombreRaw.toLowerCase(), newConceptId);
+                conceptoId = newConceptId;
+                createdConcepts++;
+            }
+
+            // 4. IMPORTE
+            let importeRaw = cols[3].replace(/"/g, '').replace(/\./g, '').replace(',', '.');
+            const cantidad = Math.round(parseFloat(importeRaw) * 100); 
+
+            // 5. DESCRIPCIÓN
+            const descripcion = cols[4].replace(/"/g, '').trim();
+
+            // 6. GUARDAR MOVIMIENTO
+            const newMovId = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc().id;
+            const docRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(newMovId);
+            
+            batch.set(docRef, {
+                id: newMovId, fecha: isoDate, cuentaId: cuentaId, conceptoId: conceptoId,
+                cantidad: cantidad, descripcion: descripcion, tipo: 'movimiento', esRecurrente: false, validado: true
+            });
+            opsInBatch++;
+
+            // 7. ACTUALIZAR SALDO
+            const cuentaRef = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(cuentaId);
+            batch.update(cuentaRef, { saldo: firebase.firestore.FieldValue.increment(cantidad) });
+            opsInBatch++;
+
+            totalImported++;
+
+            // --- CONTROL DE TRÁFICO (Pit Stop) ---
+            // Si llevamos muchas operaciones, guardamos y limpiamos memoria
+            if (opsInBatch >= 400) {
+                updateStatus(`Guardando bloque ${batchCount + 1}... (${totalImported}/${totalRows})`);
+                await batch.commit(); 
+                batch = fbDb.batch(); 
+                opsInBatch = 0;       
+                batchCount++;
+                // Respirar 50ms para no bloquear la UI del móvil
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        }
+
+        // Guardar el último bloque si quedó algo pendiente
+        if (opsInBatch > 0) {
+            updateStatus('Finalizando último bloque...');
+            await batch.commit();
+        }
+
+        hideModal('generic-modal');
+        // Mensaje de victoria detallado
+        showToast(`Importado: ${totalImported}. Nuevas Cuentas: ${createdAccounts}. Nuevos Conceptos: ${createdConcepts}`, 'success');
+        
+        // Recargar la app para ver todo lo nuevo
+        setTimeout(() => window.location.reload(), 1500);
+    };
+};
