@@ -915,37 +915,50 @@ border-top: 1px solid rgba(255, 255, 255, 0.15); /* Borde 'hairline' nítido */ 
 .modal { 
     background: var(--c-surface); 
     border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; 
-    /* Reducimos un poco el padding lateral para ganar espacio en móviles estrechos */
-    padding: var(--sp-4) var(--sp-5); 
     width: 100%; 
     max-width: 420px; 
     
-    /* CAMBIO CRÍTICO: Usamos dvh (altura dinámica) para adaptarse al teclado */
-    max-height: 95dvh; 
-    /* Aseguramos que nunca sea más alta que el espacio disponible */
+    /* CAMBIO CLAVE: Usamos % en lugar de vh. 
+       Esto obliga al modal a respetar el tamaño del overlay cuando sale el teclado */
+    max-height: calc(100% - 10px); 
     height: auto;
     
+    /* Configuración Flex para que el interior se comporte bien */
     display: flex; 
     flex-direction: column; 
+    
+    /* Sombra y animación */
     box-shadow: 0 0 30px rgba(0,0,0,0.5); 
     transform: translateY(100%); 
-    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+    transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1); 
     
-    /* SEGURIDAD: Añadimos espacio extra abajo para la barra de gestos del móvil */
-    padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+    /* Importante: asegura que el modal esté siempre pegado abajo */
+    position: absolute;
+    bottom: 0;
 }
 .modal-overlay--active .modal { transform: translateY(0); }
 .modal__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-3); flex-shrink: 0;}
 .modal__title { font-size: var(--fs-xl); font-weight: 800; }
-.modal__body { 
-    overflow-y: auto; 
-    flex-grow: 1; 
-    /* Inercia suave en iOS/Android */
-    -webkit-overflow-scrolling: touch; 
-    padding-right: var(--sp-2); 
-    margin-right: calc(-1 * var(--sp-2)); 
-    /* Evita que el scroll se atasque */
+.modal__body {
+    flex: 1 1 auto; /* Permite crecer y ENCOGERSE */
+    overflow-y: auto; /* Activa la barra de scroll vertical */
+    overflow-x: hidden;
+    padding: var(--sp-4) var(--sp-5);
+    
+    /* Truco para que el scroll vaya suave en móvil */
+    -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    
+    /* Corrección de bug flexbox: permite que el contenido se aplaste sin romperse */
+    min-height: 0; 
+}
+.modal__footer {
+    flex: 0 0 auto; /* No permitas que esto se encoja */
+    padding: var(--sp-4) var(--sp-5);
+    padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom)); /* Protege contra la barra de gestos */
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-outline);
+    z-index: 10; /* Asegura que esté por encima del contenido al hacer scroll */
 }
 .modal__list-item { display:flex; justify-content:space-between; align-items:center; padding: var(--sp-3) 0; border-bottom:1px solid var(--c-outline); gap: var(--sp-2); }
 .modal__list-item:last-child { border-bottom: none; }
