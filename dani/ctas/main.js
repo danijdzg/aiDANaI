@@ -7349,21 +7349,30 @@ const calculateFinancialIndependence = (patrimonioNeto, gastoMensualPromedio) =>
             renderConceptosModalList(); 
         };
         
-        const renderConceptosModalList = () => { 
-            const list = select('conceptos-modal-list'); 
-            if (!list) return;
-			 const searchQuery = select('concepto-search-input')?.value.toLowerCase() || '';
-    const conceptosFiltrados = (db.conceptos || []).filter(c => 
-        c.nombre.toLowerCase().includes(searchQuery)
-    );
-            list.innerHTML = conceptosFiltrados.length === 0 
-                ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay conceptos.</p>` 
-                : conceptosFiltrados.sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
-                    const icon = (c && c.icon) || 'label';
-                    const nombre = (c && c.nombre) || '';
-                    return `<div id="concepto-item-${c.id}" class="modal__list-item"><div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;"><span class="material-icons" style="color: var(--c-primary);">${icon}</span><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(nombre)}</span></div><div style="display: flex; align-items: center; gap: var(--sp-1); flex-shrink: 0;"><button class="icon-btn" data-action="edit-concepto" data-id="${c.id}" title="Editar Concepto"><span class="material-icons">edit_note</span></button><button class="icon-btn" data-action="delete-concepto" data-id="${c.id}" title="Eliminar Concepto"><span class="material-icons">delete_outline</span></button></div></div>`;
-                }).join(''); 
-        };
+        const renderConceptosModalList = () => {
+    const list = select('conceptos-list');
+    if (!list) return;
+
+    list.innerHTML = '';
+
+    // Ordenamos alfabéticamente para que sea más fácil buscar
+    const sorted = [...db.conceptos].sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    sorted.forEach(c => {
+        const div = document.createElement('div');
+        // aiDANaI: Diseño minimalista sin iconos, solo texto y botón de borrar
+        div.className = 'list-item';
+        div.innerHTML = `
+            <div class="list-item__content" onclick="handleConceptoClick('${c.id}')" style="padding-left: 10px;">
+                <span class="list-item__title" style="font-size: 1rem;">${escapeHTML(c.nombre)}</span>
+            </div>
+            <button class="icon-btn" onclick="handleDeleteConcept('${c.id}')" style="color: var(--c-error);">
+                <span class="material-icons">delete</span>
+            </button>
+        `;
+        list.appendChild(div);
+    });
+};
         
         const showConceptoEditForm = (id) => {
             const itemContainer = select(`concepto-item-${id}`);
@@ -8642,7 +8651,8 @@ const handleStart = (e) => {
 
                 if (effectiveModalId) hideModal(effectiveModalId); 
             },
-            'manage-conceptos': showConceptosModal, 'manage-cuentas': showCuentasModal,
+            'manage-conceptos': showManageConceptosModal,
+			'manage-cuentas': showCuentasModal,
             'save-config': () => handleSaveConfig(btn),
             'export-data': () => handleExportData(btn), 'export-csv': () => handleExportCsv(btn), 'import-data': () => showImportJSONWizard(),
             'clear-data': () => { showConfirmationModal('¿Borrar TODOS tus datos?', async () => { /* Lógica */ }, 'Confirmar'); },
@@ -11816,3 +11826,59 @@ window.addEventListener('resize', fixViewportHeight);
 
 // Ejecutamos una vez al inicio por si acaso
 fixViewportHeight();
+
+/* ========================================== */
+/* === NUEVA GESTIÓN DE CONCEPTOS (aiDANaI) === */
+/* ========================================== */
+const showManageConceptosModal = () => {
+    const content = select('generic-modal-content');
+    const title = select('generic-modal-title');
+    
+    // 1. Título
+    title.textContent = 'Gestión de Conceptos';
+    
+    // 2. Formulario SÚPER SIMPLE (Solo texto)
+    content.innerHTML = `
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
+            <input type="text" id="new-concepto-nombre" class="form-input" placeholder="Nuevo concepto..." autocomplete="off" style="flex:1;">
+            <button class="btn btn--primary" id="btn-add-concepto" style="width: 50px; justify-content: center;">
+                <span class="material-icons">add</span>
+            </button>
+        </div>
+        
+        <div id="conceptos-list" class="scroll-container" style="max-height: 50vh;">
+            </div>
+    `;
+
+    // 3. Función interna para borrar (Para no depender de otras externas)
+    window.handleDeleteConcept = async (id) => {
+        if(confirm('¿Borrar este concepto?')) {
+            await deleteDoc('conceptos', id);
+            renderConceptosModalList(); // Recargar lista
+        }
+    };
+
+    // 4. Conectar el botón de añadir
+    select('btn-add-concepto').onclick = async () => {
+        const input = select('new-concepto-nombre');
+        const nombre = input.value.trim();
+        if (!nombre) return;
+        
+        const newId = generateId(); // Usamos tu generador de IDs
+        await saveDoc('conceptos', newId, { 
+            id: newId, 
+            nombre: nombre.charAt(0).toUpperCase() + nombre.slice(1), // Primera mayúscula
+            icon: 'label' // Icono interno invisible
+        });
+        
+        input.value = '';
+        renderConceptosModalList(); // Actualizar lista
+    };
+
+    // 5. Cargar la lista inicial
+    renderConceptosModalList();
+    showModal('generic-modal');
+    
+    // 6. Foco en el campo
+    setTimeout(() => select('new-concepto-nombre').focus(), 100);
+};
