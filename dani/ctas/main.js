@@ -7490,61 +7490,91 @@ const renderCuentasModalList = () => {
     }).join('');
 };
     
-        const showAccountEditForm = (id) => {
+   // BUSCA: const showAccountEditForm = (id) => { ... }
+// SUSTITUYE POR ESTO:
+
+const showAccountEditForm = (id) => {
     const itemContainer = select(`cuenta-item-${id}`);
     const cuenta = db.cuentas.find(c => c.id === id);
     if (!itemContainer || !cuenta) return;
     
     const currentAccountLedger = cuenta.ledger || (cuenta.offBalance ? 'B' : 'A');
-
+    
+    // aiDANaI: Formulario rediseñado con interruptor de Inversión
     itemContainer.innerHTML = `
-        <form class="inline-edit-form" data-id="${id}" novalidate>
-            <div class="form-grid">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" for="edit-cuenta-nombre-${id}">Nombre</label>
-                    <input type="text" id="edit-cuenta-nombre-${id}" class="form-input" value="${escapeHTML(cuenta.nombre)}" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" for="edit-cuenta-tipo-${id}">Tipo</label>
-                    <input type="text" id="edit-cuenta-tipo-${id}" class="form-input" list="tipos-cuenta-list" value="${escapeHTML(cuenta.tipo)}" required>
-                </div>
+    <form class="inline-edit-form" data-id="${id}" novalidate>
+        <div class="form-grid">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="edit-cuenta-nombre-${id}">Nombre</label>
+                <input type="text" id="edit-cuenta-nombre-${id}" class="form-input" value="${escapeHTML(cuenta.nombre)}" required>
             </div>
-            <div class="form-group" style="margin-top: 10px;">
-                <label class="form-label">Pertenece a Caja:</label>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="edit-cuenta-tipo-${id}">Tipo</label>
+                <input type="text" id="edit-cuenta-tipo-${id}" class="form-input" list="tipos-cuenta-list" value="${escapeHTML(cuenta.tipo)}" required>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 15px; margin-top: 15px; align-items: center; background: var(--c-surface-variant); padding: 10px; border-radius: 8px;">
+            
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" style="margin-bottom: 5px;">Pertenece a Caja:</label>
                 <div style="display:flex; gap:10px;">
-                    <label><input type="radio" name="edit-ledger-${id}" value="A" ${currentAccountLedger === 'A' ? 'checked' : ''}> A (Azul)</label>
-                    <label><input type="radio" name="edit-ledger-${id}" value="B" ${currentAccountLedger === 'B' ? 'checked' : ''}> B (Rojo)</label>
-                    <label><input type="radio" name="edit-ledger-${id}" value="C" ${currentAccountLedger === 'C' ? 'checked' : ''}> C (Verde)</label>
+                    <label><input type="radio" name="edit-ledger-${id}" value="A" ${currentAccountLedger === 'A' ? 'checked' : ''}> <span style="color:#007bff; font-weight:bold;">A</span></label>
+                    <label><input type="radio" name="edit-ledger-${id}" value="B" ${currentAccountLedger === 'B' ? 'checked' : ''}> <span style="color:#dc3545; font-weight:bold;">B</span></label>
+                    <label><input type="radio" name="edit-ledger-${id}" value="C" ${currentAccountLedger === 'C' ? 'checked' : ''}> <span style="color:#28a745; font-weight:bold;">C</span></label>
                 </div>
             </div>
-            <div style="display:flex; justify-content: flex-end; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2);">
-                <button type="button" class="btn btn--secondary" data-action="cancel-edit-cuenta">Cancelar</button>
-                <button type="button" class="btn btn--primary" data-action="save-edited-cuenta" data-id="${id}">Guardar</button>
+
+            <div class="form-group" style="margin-bottom: 0; text-align: center;">
+                <label class="form-label" style="margin-bottom: 5px;">¿Inversión?</label>
+                <label class="form-switch">
+                    <input type="checkbox" id="edit-cuenta-inversion-${id}" ${cuenta.esInversion ? 'checked' : ''}>
+                    <span class="slider"></span>
+                </label>
             </div>
-        </form>`;
-    select(`edit-cuenta-nombre-${id}`).focus();
+        </div>
+
+        <div style="display:flex; justify-content: flex-end; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2);">
+            <button type="button" class="btn btn--secondary" data-action="cancel-edit-cuenta">Cancelar</button>
+            <button type="button" class="btn btn--primary" data-action="save-edited-cuenta" data-id="${id}">Guardar</button>
+        </div>
+    </form>`;
+    
+    setTimeout(() => select(`edit-cuenta-nombre-${id}`)?.focus(), 50);
 };
     
         const handleSaveEditedAccount = async (id, btn) => {
-            const nombreInput = select(`edit-cuenta-nombre-${id}`);
-            const tipoInput = select(`edit-cuenta-tipo-${id}`);
-            const nombre = nombreInput.value.trim();
-            const tipo = toSentenceCase(tipoInput.value.trim());
-			const esInversion = select('new-cuenta-inversion').checked;
-            if (!nombre || !tipo) { showToast('El nombre y el tipo no pueden estar vacíos.', 'warning'); if (!nombre) nombreInput.classList.add('form-input--invalid'); if (!tipo) tipoInput.classList.add('form-input--invalid'); return; }
-            const ledgerSelected = document.querySelector(`input[name="edit-ledger-${id}"]:checked`).value;
-            await saveDoc('cuentas', newId, { 
-        id: newId, 
+    const nombreInput = select(`edit-cuenta-nombre-${id}`);
+    const tipoInput = select(`edit-cuenta-tipo-${id}`);
+    
+    // aiDANaI: Leemos el interruptor específico de esta cuenta
+    const esInversionInput = select(`edit-cuenta-inversion-${id}`); 
+    
+    const nombre = nombreInput.value.trim();
+    const tipo = toSentenceCase(tipoInput.value.trim());
+    const esInversion = esInversionInput ? esInversionInput.checked : false;
+
+    if (!nombre || !tipo) {
+        showToast('El nombre y el tipo no pueden estar vacíos.', 'warning');
+        return;
+    }
+
+    const ledgerSelected = document.querySelector(`input[name="edit-ledger-${id}"]:checked`).value;
+
+    // aiDANaI: Guardamos la cuenta con todos los datos actualizados
+    await saveDoc('cuentas', id, { 
+        id: id, 
         nombre, 
         tipo, 
-        ledger,
-        esInversion: esInversion, // <--- ¡AQUÍ ESTÁ LA CLAVE! Guardamos tu decisión explícita
-        icon: 'account_balance_wallet', 
-        saldo: 0 
+        ledger: ledgerSelected,
+        esInversion: esInversion, // <--- Guardamos tu selección
+        offBalance: ledgerSelected === 'B' // Mantenemos compatibilidad interna
     }, btn);
-            hapticFeedback('success');
-            renderCuentasModalList();
-        };
+
+    hapticFeedback('success');
+    showToast('Cuenta actualizada correctamente.');
+    renderCuentasModalList();
+};
 
         const showRecurrentesModal = () => {
             let html = `<p class="form-label" style="margin-bottom: var(--sp-3);">Aquí puedes ver y gestionar tus operaciones programadas. Se crearán automáticamente en su fecha de ejecución.</p><div id="recurrentes-modal-list"></div>`;
