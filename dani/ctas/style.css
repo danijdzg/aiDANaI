@@ -900,8 +900,32 @@ body {
 
 
 /* --- Modales --- */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(20px) saturate(180%);
--webkit-backdrop-filter: blur(20px) saturate(180%);
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    
+    /* AQUÍ ESTÁ EL TRUCO: Usamos la altura que calculamos en JS */
+    height: 100%; 
+    height: var(--kb-height, 100%); 
+    
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1050;
+    
+    /* Usamos Flexbox para pegar el contenido al suelo */
+    display: flex;
+    align-items: flex-end; 
+    justify-content: center;
+    
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+    pointer-events: none;
+    
+    /* Aseguramos que no se salga de la pantalla */
+    overflow: hidden;
+}
 background-color: rgba(28, 42, 58, 0.75); /* Un poco más de opacidad */
 border-top: 1px solid rgba(255, 255, 255, 0.15); /* Borde 'hairline' nítido */ display: flex; align-items: flex-end; justify-content: center; z-index: 1050; opacity: 0; transition: opacity 0.3s ease-out; pointer-events: none; }
 .app-layout--transformed-by-modal {
@@ -910,55 +934,68 @@ border-top: 1px solid rgba(255, 255, 255, 0.15); /* Borde 'hairline' nítido */ 
     opacity: 0.8;
     transition: all 0.4s cubic-bezier(0.32, 0.72, 0, 1); /* Física iOS */
 }
-.modal-overlay--active { opacity: 1; pointer-events: auto; }
-/* --- Modales OPTIMIZADOS aiDANaI --- */
-.modal { 
-    background: var(--c-surface); 
-    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; 
-    width: 100%; 
-    max-width: 420px; 
-    
-    /* CAMBIO CLAVE: Usamos % en lugar de vh. 
-       Esto obliga al modal a respetar el tamaño del overlay cuando sale el teclado */
-    max-height: calc(100% - 10px); 
-    height: auto;
-    
-    /* Configuración Flex para que el interior se comporte bien */
-    display: flex; 
-    flex-direction: column; 
-    
-    /* Sombra y animación */
-    box-shadow: 0 0 30px rgba(0,0,0,0.5); 
-    transform: translateY(100%); 
-    transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1); 
-    
-    /* Importante: asegura que el modal esté siempre pegado abajo */
-    position: absolute;
-    bottom: 0;
+.modal-overlay--active {
+    opacity: 1;
+    pointer-events: auto;
 }
-.modal-overlay--active .modal { transform: translateY(0); }
-.modal__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-3); flex-shrink: 0;}
-.modal__title { font-size: var(--fs-xl); font-weight: 800; }
-.modal__body {
-    flex: 1 1 auto; /* Permite crecer y ENCOGERSE */
-    overflow-y: auto; /* Activa la barra de scroll vertical */
-    overflow-x: hidden;
-    padding: var(--sp-4) var(--sp-5);
+.modal {
+    background: var(--c-surface);
+    width: 100%;
+    max-width: 420px;
     
-    /* Truco para que el scroll vaya suave en móvil */
+    /* Altura flexible: Se adapta al contenido pero NUNCA supera la pantalla */
+    height: auto;
+    max-height: 100%; 
+    
+    border-radius: 24px 24px 0 0;
+    
+    /* Configuración interna para scroll */
+    display: flex;
+    flex-direction: column;
+    
+    /* IMPORTANTE: Quitamos 'position: absolute' para evitar conflictos */
+    position: relative;
+    
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.modal-overlay--active .modal {
+    transform: translateY(0);
+}
+
+/* CABECERA (Fija) */
+.modal__header {
+    flex-shrink: 0; /* No se encoge */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 20px 10px 20px;
+}
+
+/* CUERPO (Flexible con Scroll) */
+.modal__body {
+    flex: 1 1 auto; /* Ocupa todo el espacio disponible */
+    overflow-y: auto; /* Activa el scroll si el contenido es grande */
+    min-height: 0; /* Permite que se encoja correctamente en Flexbox */
+    padding: 10px 20px;
+    
+    /* Scroll suave en móvil */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    
-    /* Corrección de bug flexbox: permite que el contenido se aplaste sin romperse */
-    min-height: 0; 
 }
+
+/* PIE DE PÁGINA / BOTONES (Fijo abajo) */
 .modal__footer {
-    flex: 0 0 auto; /* No permitas que esto se encoja */
-    padding: var(--sp-4) var(--sp-5);
-    padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom)); /* Protege contra la barra de gestos */
+    flex-shrink: 0; /* No permitimos que el botón se aplaste o desaparezca */
+    padding: 16px 20px;
     background: var(--c-surface);
     border-top: 1px solid var(--c-outline);
-    z-index: 10; /* Asegura que esté por encima del contenido al hacer scroll */
+    
+    /* Protección extra para la barra de gestos inferior de Android */
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    z-index: 10;
 }
 .modal__list-item { display:flex; justify-content:space-between; align-items:center; padding: var(--sp-3) 0; border-bottom:1px solid var(--c-outline); gap: var(--sp-2); }
 .modal__list-item:last-child { border-bottom: none; }

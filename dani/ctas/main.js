@@ -11755,3 +11755,30 @@ const handleImportCSV = async (file) => {
         setTimeout(() => window.location.reload(), 2000);
     };
 };
+
+// ===============================================================
+// === FIX DEFINITIVO: DETECTOR DE ALTURA DE TECLADO (OnePlus) ===
+// ===============================================================
+const fixViewportHeight = () => {
+    // 1. Preguntamos al navegador la altura REAL visible (sin teclado)
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    
+    // 2. Guardamos ese valor en una variable CSS llamada '--kb-height'
+    document.documentElement.style.setProperty('--kb-height', `${vh}px`);
+    
+    // 3. Forzamos un repintado suave para asegurar que se ajuste
+    const modalActive = document.querySelector('.modal-overlay--active');
+    if (modalActive) {
+        modalActive.style.height = `${vh}px`;
+    }
+};
+
+// Escuchamos activamente los cambios de tamaño (cuando sale el teclado)
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fixViewportHeight);
+    window.visualViewport.addEventListener('scroll', fixViewportHeight);
+}
+window.addEventListener('resize', fixViewportHeight);
+
+// Ejecutamos una vez al inicio por si acaso
+fixViewportHeight();
