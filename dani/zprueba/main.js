@@ -3452,7 +3452,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
     if (!container) return;
 
     const investmentAccounts = getVisibleAccounts().filter((c) => c.esInversion);
-    const CHART_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
+    const CHART_COLORS = ['#00FF94', '#FF2E4D', '#FFD600', '#00B8FF', '#BF5AF2', '#FF9F0A'];
 
     if (investmentAccounts.length === 0) {
         container.innerHTML = `<div id="empty-investments" class="empty-state" style="margin-top: 0; border: none; background: transparent;"><span class="material-icons">rocket_launch</span><h3>Tu Portafolio empieza aquí</h3><p>Ve a 'Ajustes' > 'Cuentas' y marca una cuenta como 'de inversión'.</p></div>`;
@@ -4480,7 +4480,7 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
 
     const visibleAccounts = getVisibleAccounts();
     const saldos = await getSaldos();
-    const BASE_COLORS = ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#C084FC', '#4ECDC4', '#EF626C', '#A8D58A'];
+    const BASE_COLORS = ['#00FF94', '#FF2E4D', '#FFD600', '#00B8FF', '#BF5AF2', '#FF9F0A'];
 
     const allAccountTypes = [...new Set(visibleAccounts.map((c) => toSentenceCase(c.tipo || 'S/T')))].sort();
     const filteredAccountTypes = new Set(allAccountTypes.filter(t => !deselectedAccountTypesFilter.has(t)));
@@ -4673,13 +4673,13 @@ const handleShowIrrHistory = async (options) => {
         data: {
             labels: historyData.map(d => new Date(d.date)),
             datasets: [{
-                label: 'TIR Anualizada',
-                data: historyData.map(d => d.irr * 100),
-                borderColor: 'var(--c-info)',
-                backgroundColor: 'rgba(191, 90, 242, 0.2)',
-                fill: true,
-                tension: 0.1
-            }]
+				label: 'TIR Anualizada',
+				data: historyData.map(d => d.irr * 100),
+				borderColor: '#00B8FF', // NUEVO AZUL (Antes era var(--c-info) o morado)
+				backgroundColor: 'rgba(0, 184, 255, 0.2)', // Relleno Azul suave
+				fill: true,
+				tension: 0.1
+			}]
         },
         options: {
             responsive: true,
@@ -5200,7 +5200,7 @@ async function renderPortfolioEvolutionChart(targetContainerId) {
                 {
                     label: 'Valor de Mercado',
                     data: totalValueData,
-                    borderColor: '#00B34D', 
+                    borderColor: '#00FF94', // CAMBIAR A NUEVO VERDE (#00FF94) 
                     borderWidth: 2,
                     pointRadius: 0,
                     pointHoverRadius: 4,
@@ -5208,10 +5208,10 @@ async function renderPortfolioEvolutionChart(targetContainerId) {
                     order: 0,
                     // El relleno verde/rojo que muestra la ganancia/pérdida
                     fill: {
-                        target: '1', 
-                        above: 'rgba(0, 179, 77, 0.25)',   
-                        below: 'rgba(255, 59, 48, 0.25)'   
-                    }
+						target: '1',
+						above: 'rgba(0, 255, 148, 0.25)', // Relleno verde nuevo
+						below: 'rgba(255, 46, 77, 0.25)'   // Relleno rojo nuevo (Pérdidas)
+					}
                 },
                 {
                     label: 'Capital Aportado',
@@ -5504,7 +5504,14 @@ async function renderInformeAsignacionActivos(container) {
             labels, 
             datasets: [{ 
                 data, 
-                backgroundColor: ['#007AFF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#5E5CE6', '#FF9F0A', '#45B6E9', '#D158A7'] 
+                backgroundColor: [
+					'#00FF94', // Verde
+					'#FF2E4D', // Rojo
+					'#00B8FF', // Azul
+					'#FFD600', // Amarillo
+					'#BF5AF2', // Morado (Secundario)
+					'#FF9F0A'  // Naranja (Secundario)
+				]
             }] 
         },
         options: { 
@@ -6425,8 +6432,8 @@ const updateNetWorthChart = async (saldos) => {
     
     // Gradiente sutil
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, 'rgba(0, 179, 77, 0.25)'); // Verde suave arriba
-    gradient.addColorStop(1, 'rgba(0, 179, 77, 0.0)'); // Transparente abajo
+	gradient.addColorStop(0, 'rgba(0, 255, 148, 0.25)'); // Nuevo Verde (transparente)
+	gradient.addColorStop(1, 'rgba(0, 255, 148, 0.0)');
 
     netWorthChart = new Chart(ctx, {
         type: 'line',
@@ -6434,7 +6441,7 @@ const updateNetWorthChart = async (saldos) => {
             datasets: [{
                 label: 'Patrimonio',
                 data: dataPoints,
-                borderColor: '#00B34D', // Verde principal
+                borderColor: '#00FF94', // TU NUEVO VERDE NEÓN
                 borderWidth: 2,
                 backgroundColor: gradient,
                 fill: true,
