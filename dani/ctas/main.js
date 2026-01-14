@@ -3994,13 +3994,13 @@ const renderAjustesPage = () => {
                     <span class="settings-item__label">Importar desde CSV</span>
                     <span class="material-icons">chevron_right</span>
                 </button>
-				<button class="settings-option-btn" id="btn-fix-traspasos" onclick="detectarYCorregirTraspasos()" style="margin-top: 10px; background: rgba(0, 255, 255, 0.1); border-color: var(--c-cyan);">
-					<span class="material-icons" style="color: var(--c-cyan);">autorenew</span>
-					<div class="text-col">
-					<span class="option-title">Unificar Traspasos</span>
-					<span class="option-desc">Corregir historial antiguo</span>
-					</div>
-<				/button>
+				<button class="settings-option-btn" onclick="detectarYCorregirTraspasos()" style="margin-top: 10px; border: 1px solid var(--c-primary);">
+    <span class="material-icons" style="color: var(--c-primary);">sync_alt</span>
+    <div class="text-col">
+        <span class="option-title">Transformar movimientos traspasos</span>
+        <span class="option-desc">Fusionar ingresos y gastos idénticos</span>
+    </div>
+</button>
 
                 <!-- ===== INICIO DE LA MODIFICACIÓN ===== -->
                 <!-- Este es el nuevo botón que hemos añadido -->
@@ -11934,126 +11934,142 @@ const showManageConceptosModal = () => {
 /* ==========================================
    HERRAMIENTA: DETECTIVE DE TRASPASOS
    ========================================== */
-
 window.detectarYCorregirTraspasos = async () => {
-    // 1. PREGUNTAR AL USUARIO ANTES DE HACER NADA
-    if (!confirm("⚠️ MODO DETECTIVE ⚠️\n\nVoy a buscar en tu historial parejas de movimientos (Gasto + Ingreso) que tengan la misma fecha, el mismo importe y la palabra 'Traspaso'.\n\nSi las encuentro, las fusionaré en un único movimiento.\n\n¿Empezamos?")) {
+    // 1. Mensaje de seguridad
+    if (!confirm("⚠️ MODO TRANSFORMACIÓN V2 ⚠️\n\nVoy a buscar parejas de movimientos (Ingreso + Gasto) que cumplan:\n1. Misma fecha exacta.\n2. Mismo importe exacto.\n3. Concepto/Descripción contiene 'Traspaso'.\n\nSi las encuentro, las fusionaré en un único movimiento de 'Traspaso' y borraré los antiguos.\n\n¿Proceder?")) {
         return;
     }
 
-    showToast('Analizando historial...', 'info');
+    showToast('Analizando base de datos...', 'info');
 
-    // 2. LEER TODO EL HISTORIAL
-    const todos = [...db.movimientos]; // Copia de seguridad temporal
+    // 2. Obtener datos
+    const todos = [...db.movimientos];
+    
+    // Palabras clave (todo en minúsculas)
     const keywords = ['traspaso', 'transferencia', 'transf'];
 
-    // Buscar candidatos: Movimientos que digan "traspaso" y NO estén ya arreglados
+    // FILTRO DE CANDIDATOS:
+    // Buscamos cualquier Gasto o Ingreso que tenga la palabra clave en su descripción
     let candidatos = todos.filter(m => {
-        if (m.tipo === 'traspaso') return false; // Estos ya están bien
-        const texto = (m.descripcion || '').toLowerCase();
-        return keywords.some(k => texto.includes(k)); // Que contenga la palabra clave
+        if (m.tipo === 'traspaso') return false; // Ignorar los ya corregidos
+        if (!m.descripcion) return false;
+
+        const textoNormalizado = m.descripcion.toLowerCase().trim();
+        return keywords.some(k => textoNormalizado.includes(k));
     });
 
-    let parejas = 0;
-    let sueltos = 0;
-    const acciones = []; // Lista de tareas a realizar
-    const procesados = new Set(); // Para no repetir
+    console.log(`Encontrados ${candidatos.length} candidatos potenciales con la palabra 'traspaso'.`);
 
-    // 3. BUSCAR PAREJAS (EL MATCHMAKER)
+    let parejas = 0;
+    const acciones = [];
+    const procesados = new Set(); 
+
+    // 3. BUSCAR PAREJAS (Lógica mejorada de fechas)
     for (let i = 0; i < candidatos.length; i++) {
         const movA = candidatos[i];
         if (procesados.has(movA.id)) continue;
 
-        let novio = null;
+        let mejorPareja = null;
 
-        // Buscarle pareja en el resto de la lista
         for (let j = i + 1; j < candidatos.length; j++) {
             const movB = candidatos[j];
             if (procesados.has(movB.id)) continue;
 
-            // REGLAS DEL EMPAREJAMIENTO:
-            // 1. Uno debe ser Gasto y el otro Ingreso
-            const sonOpuestos = (movA.tipo !== movB.tipo) && 
-                                (['gasto', 'ingreso'].includes(movA.tipo)) && 
-                                (['gasto', 'ingreso'].includes(movB.tipo));
-            
-            // 2. Mismo dinero (50€ y -50€)
-            const mismoDinero = Math.abs(movA.cantidad) === Math.abs(movB.cantidad);
+            // CONDICIÓN A: Tipos opuestos
+            const tiposOpuestos = (movA.tipo !== movB.tipo) && 
+                                  (['gasto', 'ingreso'].includes(movA.tipo)) && 
+                                  (['gasto', 'ingreso'].includes(movB.tipo));
 
-            // 3. Misma fecha (Día exacto)
-            const fechaA = new Date(movA.fecha).toISOString().split('T')[0];
-            const fechaB = new Date(movB.fecha).toISOString().split('T')[0];
-            const mismaFecha = fechaA === fechaB;
+            // CONDICIÓN B: Importe idéntico (tolerancia 0.01 por si acaso hay decimales raros)
+            const diffDinero = Math.abs(Math.abs(movA.cantidad) - Math.abs(movB.cantidad));
+            const mismoDinero = diffDinero < 0.01;
 
-            if (sonOpuestos && mismoDinero && mismaFecha) {
-                novio = movB;
-                break; // ¡Encontrado!
+            // CONDICIÓN C: Comparación de Fechas (STRING PURO)
+            // Tomamos los primeros 10 caracteres (YYYY-MM-DD) directamente del string
+            // Esto evita errores de zonas horarias
+            const fechaStrA = (movA.fecha || '').substring(0, 10);
+            const fechaStrB = (movB.fecha || '').substring(0, 10);
+            const mismaFecha = fechaStrA === fechaStrB;
+
+            if (tiposOpuestos && mismoDinero && mismaFecha) {
+                mejorPareja = movB;
+                break; // Encontramos su mitad
             }
         }
 
-        if (novio) {
-            // ¡BODA CONFIRMADA!
+        if (mejorPareja) {
             parejas++;
             procesados.add(movA.id);
-            procesados.add(novio.id);
+            procesados.add(mejorPareja.id);
+
+            // Identificar quién saca dinero y quién recibe
+            const movSalida = movA.tipo === 'gasto' ? movA : mejorPareja;
+            const movEntrada = movA.tipo === 'ingreso' ? movA : mejorPareja;
 
             acciones.push({
-                origen: movA.tipo === 'gasto' ? movA : novio,
-                destino: movA.tipo === 'ingreso' ? movA : novio
+                origen: movSalida,
+                destino: movEntrada
             });
-        } else {
-            // SOLTERO
-            sueltos++;
         }
     }
 
-    // 4. INFORME DE RESULTADOS
+    // 4. RESULTADOS
     if (acciones.length === 0) {
-        alert(`🕵️ INFORME:\n\nNo he encontrado parejas claras.\nHay ${sueltos} movimientos sueltos que no me atrevo a tocar.`);
+        alert(`RESULTADO:\n\nHe analizado ${candidatos.length} movimientos con la palabra "Traspaso", pero NO he encontrado parejas que coincidan exactamente en fecha e importe.\n\nRevisa si las fechas son idénticas o si los importes varían.`);
         return;
     }
 
-    const mensaje = `🕵️ INFORME DEL DETECTIVE:\n\n` +
-        `✅ He encontrado ${parejas} PAREJAS perfectas.\n` +
-        `⚠️ Hay ${sueltos} movimientos sueltos que dejaré igual.\n\n` +
-        `Si pulsas ACEPTAR, fusionaré esas ${parejas} parejas en Traspasos reales.`;
+    const confirmar = confirm(`✅ ÉXITO:\n\nHe detectado ${parejas} operaciones completas (parejas).\n\nSe van a ELIMINAR ${parejas * 2} movimientos antiguos (Ingresos/Gastos) y se crearán ${parejas} nuevos Traspasos unificados.\n\n¿Damos el paso final?`);
 
-    if (!confirm(mensaje)) return;
+    if (!confirmar) return;
 
-    // 5. EJECUTAR FUSIÓN (LA CIRUGÍA)
+    // 5. EJECUCIÓN (Crear Traspaso, Borrar Antiguos)
     try {
-        showToast('Fusionando datos...', 'warning');
+        showToast('Aplicando correcciones...', 'warning');
         
         const promesas = acciones.map(async (accion) => {
             const { origen, destino } = accion;
             
-            // Crear el nuevo movimiento UNIFICADO
-            const nuevoId = 'TRASP-' + origen.id;
+            // Nuevo ID
+            const nuevoId = 'TRASP-AUTO-' + Date.now() + Math.floor(Math.random() * 1000);
+            
+            // Objeto Traspaso Correcto
             const nuevoMovimiento = {
                 id: nuevoId,
-                fecha: origen.fecha,
-                tipo: 'traspaso',
-                cantidad: Math.abs(origen.cantidad),
-                descripcion: origen.descripcion || 'Traspaso unificado',
-                cuentaOrigenId: origen.cuentaId,
-                cuentaDestinoId: destino.cuentaId,
+                fecha: origen.fecha, // Usamos la fecha original
+                tipo: 'traspaso', // TIPO CLAVE
+                cantidad: Math.abs(origen.cantidad), // Siempre positivo
+                descripcion: origen.descripcion || 'Traspaso Unificado',
+                
+                // ASIGNACIÓN DE CUENTAS
+                cuentaOrigenId: origen.cuentaId, // El dinero sale de la cuenta del Gasto
+                cuentaDestinoId: destino.cuentaId, // El dinero entra en la cuenta del Ingreso
+                
+                // Limpieza de campos no usados en traspasos
+                cuentaId: null, 
+                conceptoId: null,
+                
                 validado: true,
                 updatedAt: new Date().toISOString()
             };
 
-            // Guardar el nuevo y borrar los dos viejos
+            // 1. Guardar Traspaso
             await saveDoc('movimientos', nuevoId, nuevoMovimiento);
+            
+            // 2. Borrar Gasto antiguo
             await deleteDoc('movimientos', origen.id);
+            
+            // 3. Borrar Ingreso antiguo
             await deleteDoc('movimientos', destino.id);
         });
 
         await Promise.all(promesas);
 
-        alert(`✅ ¡LISTO!\n\nSe han corregido ${parejas} traspasos.\nLa aplicación se reiniciará ahora.`);
+        alert('¡Transformación completada! La aplicación se recargará.');
         location.reload();
 
     } catch (error) {
-        console.error(error);
-        alert('Hubo un error técnico. Revisa la consola.');
+        console.error("Error en transformación:", error);
+        alert('Hubo un error al guardar los datos. Revisa la consola.');
     }
 };
