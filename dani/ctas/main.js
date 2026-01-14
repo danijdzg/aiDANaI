@@ -2278,7 +2278,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     };
 
     if (pageRenderers[pageId]) {
-        // Actualizar el Título (Limpiamos si es Panel o Diario)
+        // Actualizar el Título
         const titleEl = document.getElementById('page-title-display');
         if (titleEl) {
             const rawTitle = pageRenderers[pageId].title;
@@ -2287,6 +2287,25 @@ const navigateTo = async (pageId, isInitial = false) => {
         
         // Renderizar la página
         await pageRenderers[pageId].render();
+
+        /* ======================================================== */
+        /* === FIX ONEPLUS NORD 4: FORZAR MÁRGENES (10px) === */
+        /* ======================================================== */
+        if (pageId === PAGE_IDS.PANEL) {
+            const panel = document.getElementById(PAGE_IDS.PANEL);
+            if (panel) {
+                // Inyectamos estilo en línea con Prioridad Militar (!important)
+                panel.style.cssText = `
+                    padding-left: 10px !important;
+                    padding-right: 10px !important;
+                    box-sizing: border-box !important;
+                    width: 100% !important;
+                    max-width: 100vw !important;
+                    overflow-x: hidden !important;
+                `;
+            }
+        }
+        /* ======================================================== */
     }
     
     // Animaciones y Clases
