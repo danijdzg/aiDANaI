@@ -1,10 +1,9 @@
-// service-worker.js
-// Versión: 3.2 (Sin caché de Firestore)
 
-const CACHE_NAME = 'DaniCtas-v5';
+const CACHE_NAME = 'aiDANaI-ctas 3.1';
 const URLS_TO_CACHE = [
   '.',
   'index.html',
+  'calculadora.html',
   'style.css',
   'main.js',
   'manifest.json',
