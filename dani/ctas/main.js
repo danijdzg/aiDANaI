@@ -3994,12 +3994,11 @@ const renderAjustesPage = () => {
                     <span class="settings-item__label">Importar desde CSV</span>
                     <span class="material-icons">chevron_right</span>
                 </button>
-				<button class="settings-option-btn" onclick="detectarYCorregirTraspasos()">
-    <span class="material-icons" style="color: #2196F3;">sync_alt</span>
-    <div class="text-col">
-        <span class="option-title" style="color: #2196F3;">Transformar movimientos en traspasos</span>
-    </div>
-</button>
+				<button class="settings-item" onclick="detectarYCorregirTraspasos()">
+					<span class="material-icons" style="color: #2196F3;">sync_alt</span>
+					<span class="settings-item__label">Transformar movimientos en traspasos</span>
+					<span class="material-icons">chevron_right</span>
+				</button>
 
                 <!-- ===== INICIO DE LA MODIFICACIÓN ===== -->
                 <!-- Este es el nuevo botón que hemos añadido -->
