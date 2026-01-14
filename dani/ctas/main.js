@@ -11932,142 +11932,127 @@ const showManageConceptosModal = () => {
 /* ===CONVIERTE MOVIMIENTOS TRASPASO EN TRASPASOS REALES=== */
 
 window.detectarYCorregirTraspasos = async () => {
-    // 1. OBTENCIÓN DE DATOS SEGURA
-    const movs = db.movimientos || [];
-    const conceptos = db.conceptos || [];
-    
-    // Debug: Comprobación de seguridad
-    if (movs.length === 0) { alert("Error: La base de datos de movimientos parece vacía."); return; }
-    if (conceptos.length === 0) { alert("Error: La base de datos de conceptos parece vacía."); return; }
+    // BLOQUE DE SEGURIDAD TOTAL: Si algo falla, te saldrá un aviso rojo.
+    try {
+        // 1. Verificaciones básicas de que la App está viva
+        if (typeof db === 'undefined') throw new Error("La variable 'db' no existe. El código no ve los datos.");
+        if (!db.movimientos) throw new Error("No encuentro la lista de movimientos (db.movimientos).");
+        if (!db.conceptos) throw new Error("No encuentro la lista de conceptos (db.conceptos).");
 
-    // 2. ENCONTRAR EL ID DE LA CATEGORÍA 'TRASPASO' (Flexible)
-    // Buscamos cualquier concepto que contenga "traspaso" o "transferencia" en su nombre
-    const categoriaTraspaso = conceptos.find(c => {
-        const nombre = (c.nombre || '').toLowerCase();
-        return nombre.includes('traspaso') || nombre.includes('transferencia');
-    });
+        // 2. Mensaje de inicio
+        const confirmacion = confirm("🛠️ MODO DEBUG 🛠️\n\nSi el código falla, te avisaré.\n\nVoy a leer tus conceptos y buscar 'Traspaso'.\n\n¿Empezamos?");
+        if (!confirmacion) return;
 
-    if (!categoriaTraspaso) {
-        // Si falla, mostramos qué conceptos existen para que veas el error
-        const listaNombres = conceptos.map(c => c.nombre).slice(0, 10).join(", ");
-        alert(`❌ ERROR CRÍTICO:\n\nEl sistema busca una categoría llamada 'Traspaso' o 'Transferencia', pero NO existe.\n\nTus categorías actuales son:\n${listaNombres}...\n\nCrea la categoría 'Traspaso' en Ajustes primero.`);
-        return;
-    }
+        showToast('Analizando datos...', 'info');
 
-    const TRASPASO_ID = String(categoriaTraspaso.id); // Forzamos a texto para evitar errores de tipo
-    
-    // 3. BUSCAR MOVIMIENTOS CON ESE CONCEPTO (Comparación Flexible)
-    let candidatos = movs.filter(m => {
-        if (m.tipo === 'traspaso') return false; // Ignorar si ya está arreglado
-        
-        // Aquí está la magia: Comparamos convirtiendo ambos a String
-        const movConceptoId = String(m.conceptoId || '');
-        return movConceptoId === TRASPASO_ID;
-    });
+        // 3. Crear un mapa de Nombres de Conceptos (ID -> Nombre)
+        // Esto convierte "CON-123" en "Traspaso"
+        const mapaNombres = {};
+        db.conceptos.forEach(c => {
+            mapaNombres[c.id] = c.nombre.toLowerCase(); // Guardamos todo en minúsculas
+        });
 
-    // === PUNTO DE CONTROL PARA TI ===
-    // Esto te dirá la verdad absoluta de lo que ve el código
-    const mensajeDiagnostico = `🔎 DIAGNÓSTICO:\n\n` +
-        `1. Categoría detectada: "${categoriaTraspaso.nombre}" (ID: ${TRASPASO_ID})\n` +
-        `2. Movimientos encontrados con esa categoría: ${candidatos.length}\n\n` +
-        (candidatos.length === 0 ? "⚠️ ALERTA: El buscador ve 'Traspaso' porque probablemente está escrito en la DESCRIPCIÓN, pero la CATEGORÍA interna no es 'Traspaso'." : "✅ ¡Datos localizados! Procediendo a buscar parejas...");
-    
-    if (!confirm(mensajeDiagnostico)) return;
-
-    if (candidatos.length === 0) return; // Si no hay, paramos.
-
-    // 4. BUSCAR PAREJAS (EL MATCHMAKER)
-    let parejas = 0;
-    const acciones = [];
-    const procesados = new Set();
-    const tolerancia = 0.02; // Tolerancia para decimales
-
-    showToast('Buscando parejas compatibles...', 'info');
-
-    for (let i = 0; i < candidatos.length; i++) {
-        const movA = candidatos[i];
-        if (procesados.has(movA.id)) continue;
-
-        let match = null;
-
-        for (let j = i + 1; j < candidatos.length; j++) {
-            const movB = candidatos[j];
-            if (procesados.has(movB.id)) continue;
-
-            // REGLAS DE ORO PARA LA FUSIÓN:
+        // 4. Buscar candidatos mirando el NOMBRE, no el ID
+        const candidatos = db.movimientos.filter(m => {
+            if (m.tipo === 'traspaso') return false; // Ya arreglados no nos interesan
             
-            // A) Signos Opuestos (Uno positivo, otro negativo)
-            // Usamos parseFloat para asegurar que son números
-            const cantA = parseFloat(movA.cantidad);
-            const cantB = parseFloat(movB.cantidad);
-            // Verificamos si uno es mayor que 0 y el otro menor (multiplicados dan negativo)
-            const signosOpuestos = (cantA * cantB) < 0;
+            // Obtenemos el nombre real usando el ID del movimiento
+            const nombreReal = mapaNombres[m.conceptoId] || ""; 
+            
+            // ¿Contiene la palabra mágica?
+            return nombreReal.includes("traspaso") || nombreReal.includes("transferencia");
+        });
 
-            // B) Mismo valor absoluto (ej: 50 y -50)
-            const mismoDinero = Math.abs(Math.abs(cantA) - Math.abs(cantB)) < tolerancia;
+        // === EL CHIVATO: ¿Qué está viendo el código? ===
+        if (candidatos.length === 0) {
+            // Vamos a coger el primer movimiento que tengas para ver qué demonios tiene dentro
+            const primerMov = db.movimientos[0];
+            const nombrePrimerMov = mapaNombres[primerMov.conceptoId] || "Desconocido/Borrado";
+            
+            alert(`❌ RESULTADO: 0 CANDIDATOS.\n\nEl código ha leído ${db.movimientos.length} movimientos y ${db.conceptos.length} conceptos, pero dice que ninguno se llama 'Traspaso'.\n\nPRUEBA DE VISIÓN:\nEl primer movimiento de tu lista es de ${primerMov.cantidad}€ y su concepto se llama: "${nombrePrimerMov}".\n\nSi tú ves 'Traspaso' y aquí pone otra cosa, es que la categoría está mal asignada.`);
+            return;
+        }
 
-            // C) Misma Fecha (Solo comparamos YYYY-MM-DD)
-            const fechaA = (movA.fecha || '').substring(0, 10);
-            const fechaB = (movB.fecha || '').substring(0, 10);
-            const mismaFecha = fechaA === fechaB;
+        // 5. Buscar Parejas (Ingreso + Gasto)
+        let parejas = 0;
+        const acciones = [];
+        const procesados = new Set();
 
-            if (signosOpuestos && mismoDinero && mismaFecha) {
-                match = movB;
-                break; // Pareja encontrada
+        for (let i = 0; i < candidatos.length; i++) {
+            const movA = candidatos[i];
+            if (procesados.has(movA.id)) continue;
+
+            let match = null;
+
+            for (let j = i + 1; j < candidatos.length; j++) {
+                const movB = candidatos[j];
+                if (procesados.has(movB.id)) continue;
+
+                // Signos opuestos
+                const signoA = parseFloat(movA.cantidad) < 0;
+                const signoB = parseFloat(movB.cantidad) < 0;
+                
+                // Mismo dinero (tolerancia 1 céntimo)
+                const mismoDinero = Math.abs(Math.abs(movA.cantidad) - Math.abs(movB.cantidad)) < 0.01;
+
+                // Misma fecha (Texto exacto)
+                const fechaA = (movA.fecha || '').substring(0, 10);
+                const fechaB = (movB.fecha || '').substring(0, 10);
+
+                if ((signoA !== signoB) && mismoDinero && (fechaA === fechaB)) {
+                    match = movB;
+                    break;
+                }
+            }
+
+            if (match) {
+                parejas++;
+                procesados.add(movA.id);
+                procesados.add(match.id);
+                acciones.push({
+                    origen: parseFloat(movA.cantidad) < 0 ? movA : match,
+                    destino: parseFloat(movA.cantidad) > 0 ? movA : match
+                });
             }
         }
 
-        if (match) {
-            parejas++;
-            procesados.add(movA.id);
-            procesados.add(match.id);
-
-            acciones.push({
-                origen: parseFloat(movA.cantidad) < 0 ? movA : match, // El negativo sale
-                destino: parseFloat(movA.cantidad) > 0 ? movA : match // El positivo entra
-            });
+        // 6. Resultado Final
+        if (acciones.length === 0) {
+            alert(`⚠️ He encontrado ${candidatos.length} movimientos con la etiqueta 'Traspaso', pero NO he encontrado parejas.\n\nEsto pasa si las fechas no coinciden exactamente o si solo tienes 'Gastos' sin su 'Ingreso' correspondiente.`);
+            return;
         }
-    }
 
-    // 5. INFORME FINAL Y EJECUCIÓN
-    if (acciones.length === 0) {
-        alert(`⚠️ He encontrado ${candidatos.length} movimientos con categoría 'Traspaso', pero NINGUNO forma una pareja válida (Ingreso+Gasto el mismo día por el mismo importe).\n\nRevisa manualmente las fechas.`);
-        return;
-    }
+        if (!confirm(`🚀 ¡BINGO! Detectadas ${parejas} parejas.\n\nSe van a unificar ahora. ¿Confirmar?`)) return;
 
-    if (!confirm(`🚀 ¡ENCONTRADAS ${parejas} PAREJAS!\n\nSe van a unificar ahora mismo.\n\n¿Confirmar?`)) return;
-
-    try {
+        // 7. Ejecutar Fusión
         const promesas = acciones.map(async (accion) => {
             const { origen, destino } = accion;
-            // ID único para el nuevo traspaso
-            const nuevoId = 'TRASP-' + Date.now() + Math.floor(Math.random() * 10000);
+            const nuevoId = 'TRASP-' + Date.now() + Math.floor(Math.random() * 9999);
 
             const nuevoMov = {
                 id: nuevoId,
-                fecha: origen.fecha, // Fecha original
-                tipo: 'traspaso', // Tipo correcto
-                cantidad: Math.abs(origen.cantidad), // Siempre positivo
-                descripcion: origen.descripcion || 'Traspaso Unificado',
+                fecha: origen.fecha,
+                tipo: 'traspaso',
+                cantidad: Math.abs(origen.cantidad),
+                descripcion: 'Traspaso Automático',
                 cuentaOrigenId: origen.cuentaId,
                 cuentaDestinoId: destino.cuentaId,
                 validado: true,
                 updatedAt: new Date().toISOString()
             };
 
-            // Guardar nuevo
             await saveDoc('movimientos', nuevoId, nuevoMov);
-            // Borrar los viejos
             await deleteDoc('movimientos', origen.id);
             await deleteDoc('movimientos', destino.id);
         });
 
         await Promise.all(promesas);
-        alert('✅ ¡Operación Exitosa! La aplicación se recargará.');
+        alert('✅ ¡Operación completada con éxito!');
         location.reload();
 
-    } catch (e) {
-        console.error(e);
-        alert('Error al guardar: ' + e.message);
+    } catch (error) {
+        // AQUÍ ESTÁ LA SOLUCIÓN AL "SILENCIO"
+        alert("💥 ERROR DEL SISTEMA:\n" + error.message + "\n\n(Dile esto al programador)");
+        console.error(error);
     }
 };
