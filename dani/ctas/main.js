@@ -11939,51 +11939,60 @@ const showManageConceptosModal = () => {
 };
 
 // ===============================================================
-// === DETECTIVE DE TRASPASOS v2.0 (ESPECÍFICO PARA TU BASE DE DATOS) ===
+// === DETECTIVE DE TRASPASOS v3.0 (CORRECCIÓN FECHAS Y TIPOS) ===
 // ===============================================================
 window.detectarYCorregirTraspasos = async () => {
     // 1. Confirmación inicial
-    if (!confirm("🕵️‍♂️ DETECTIVE v2.0\n\nVoy a buscar movimientos marcados con el concepto 'Traspaso' que estén sueltos y los uniré.\n\n¿Procedemos?")) return;
+    if (!confirm("🕵️‍♂️ DETECTIVE v3.0\n\nVoy a buscar movimientos sueltos (incluso si ya se llaman 'Traspaso') y uniré los que coincidan en FECHA (mismo día) e IMPORTE.\n\n¿Procedemos?")) return;
 
     const btn = document.querySelector('button[onclick="detectarYCorregirTraspasos()"]');
     if (btn) setButtonLoading(btn, true, 'Analizando...');
 
     try {
-        // ID específico del concepto 'Traspaso' extraído de tu archivo prueba.json
-        const CONCEPTO_TRASPASO_ID = "3mPq7hhdIn6hbphU09Hm";
-
+        const CONCEPTO_TRASPASO_ID = "3mPq7hhdIn6hbphU09Hm"; // Tu ID de traspaso
         const allMovs = await AppStore.getAll();
         
-        // 2. Filtrar candidatos:
-        // - NO deben ser ya traspasos (tipo !== 'traspaso')
-        // - Deben tener el concepto ID de traspaso O la palabra 'traspaso' en descripción
+        console.log(`📂 Analizando ${allMovs.length} movimientos...`);
+
+        // 2. Filtrar candidatos MEJORADO
         const candidatos = allMovs.filter(m => {
-            if (m.tipo === 'traspaso') return false; // Ya arreglados, ignorar
-            
+            // A. ¿Es un traspaso REAL ya terminado? (Tiene origen Y destino). Si es así, no lo tocamos.
+            if (m.tipo === 'traspaso' && m.cuentaOrigenId && m.cuentaDestinoId) {
+                return false; 
+            }
+
+            // B. Si es tipo 'traspaso' pero está suelto (le falta origen o destino), ¡LO QUEREMOS!
+            const esTraspasoSuelto = m.tipo === 'traspaso';
+
+            // C. Si es movimiento normal, miramos si el concepto o descripción dice "traspaso"
             const esConceptoTraspaso = m.conceptoId === CONCEPTO_TRASPASO_ID;
             const tieneTextoTraspaso = (m.descripcion || '').toLowerCase().includes('traspaso');
             
-            return esConceptoTraspaso || tieneTextoTraspaso;
+            return esTraspasoSuelto || esConceptoTraspaso || tieneTextoTraspaso;
         });
 
-        console.log(`🔍 Encontrados ${candidatos.length} movimientos candidatos sueltos.`);
+        console.log(`🔍 Encontrados ${candidatos.length} candidatos sueltos.`);
 
         if (candidatos.length === 0) {
-            alert("✅ Todo parece estar en orden. No encontré movimientos sueltos que parezcan traspasos.");
+            alert("✅ No encontré movimientos sueltos que parezcan traspasos.");
             if (btn) setButtonLoading(btn, false);
             return;
         }
 
-        // 3. Organizar Salidas (negativos) para buscar sus parejas
-        // Clave de búsqueda: "FECHA_IMPORTE" (Ej: "2025-11-21_200000")
+        // 3. Organizar Salidas (negativos)
         const salidasMap = new Map();
         
         candidatos.forEach(m => {
             if (m.cantidad < 0) {
-                // Usamos solo la parte de la fecha YYYY-MM-DD para ignorar diferencias de hora
-                const fechaKey = m.fecha.split('T')[0]; 
+                // CLAVE: Usamos solo la parte de la fecha (YYYY-MM-DD)
+                // Esto ignora horas diferentes (T12:00 vs T10:00)
+                let fechaCorta = m.fecha;
+                if (m.fecha.includes('T')) {
+                    fechaCorta = m.fecha.split('T')[0];
+                }
+                
                 const importeAbs = Math.abs(m.cantidad);
-                const key = `${fechaKey}_${importeAbs}`;
+                const key = `${fechaCorta}_${importeAbs}`; // Ej: "2025-11-21_180000"
                 
                 if (!salidasMap.has(key)) salidasMap.set(key, []);
                 salidasMap.get(key).push(m);
@@ -11995,17 +12004,21 @@ window.detectarYCorregirTraspasos = async () => {
         // 4. Buscar coincidencias con las Entradas (positivos)
         candidatos.forEach(entrada => {
             if (entrada.cantidad > 0) {
-                const fechaKey = entrada.fecha.split('T')[0];
-                const importeAbs = Math.abs(entrada.cantidad);
-                const key = `${fechaKey}_${importeAbs}`;
+                let fechaCorta = entrada.fecha;
+                if (entrada.fecha.includes('T')) {
+                    fechaCorta = entrada.fecha.split('T')[0];
+                }
 
-                // ¿Existe una salida con misma fecha y mismo importe?
+                const importeAbs = Math.abs(entrada.cantidad);
+                const key = `${fechaCorta}_${importeAbs}`; // Buscamos la misma clave
+
+                // ¿Existe una salida ese día por ese importe?
                 if (salidasMap.has(key)) {
                     const posiblesSalidas = salidasMap.get(key);
                     
                     if (posiblesSalidas.length > 0) {
-                        // ¡Pareja encontrada! Sacamos la salida de la lista
-                        const salidaMatch = posiblesSalidas.shift();
+                        // ¡Pareja encontrada!
+                        const salidaMatch = posiblesSalidas.shift(); // Sacamos uno de la lista
                         
                         parejasEncontradas.push({
                             salida: salidaMatch,
@@ -12017,13 +12030,14 @@ window.detectarYCorregirTraspasos = async () => {
         });
 
         if (parejasEncontradas.length === 0) {
-            alert("🤷‍♂️ Encontré movimientos de tipo 'Traspaso', pero no coinciden las parejas (mismo día y mismo importe).\n\nRevisa manualmente si las fechas o cantidades son idénticas.");
+            alert(`⚠️ Encontré ${candidatos.length} candidatos pero NINGUNA pareja exacta.\n\nRevisa:\n1. Que tengan la MISMA fecha (día).\n2. Que el importe sea idéntico (uno positivo, otro negativo).`);
+            console.log("Candidatos sin pareja:", candidatos);
             if (btn) setButtonLoading(btn, false);
             return;
         }
 
         // 5. Confirmación final
-        if (!confirm(`🚀 ¡ENCONTRADAS ${parejasEncontradas.length} PAREJAS!\n\nSe van a convertir en TRASPASOS REALES y se borrarán los movimientos duplicados.\n\n¿Confirmar fusión?`)) {
+        if (!confirm(`🚀 ¡BINGO! He encontrado ${parejasEncontradas.length} PAREJAS.\n\nEjemplo: ${parejasEncontradas[0].salida.descripcion} (${parejasEncontradas[0].salida.cantidad}) -> ${parejasEncontradas[0].entrada.descripcion}\n\n¿Fusionar ahora?`)) {
             if (btn) setButtonLoading(btn, false);
             return;
         }
@@ -12036,28 +12050,27 @@ window.detectarYCorregirTraspasos = async () => {
             const { salida, entrada } = pareja;
             const newId = generateId(); 
 
-            // Crear el nuevo objeto TRASPASO CORRECTO
+            // Crear el nuevo objeto TRASPASO
             const nuevoTraspaso = {
                 id: newId,
-                fecha: salida.fecha,
-                tipo: 'traspaso', // Ahora sí es tipo traspaso
+                fecha: salida.fecha, // Mantenemos fecha original
+                tipo: 'traspaso',
                 cantidad: Math.abs(salida.cantidad),
                 descripcion: salida.descripcion || 'Traspaso Corregido',
-                conceptoId: CONCEPTO_TRASPASO_ID, // Mantenemos el concepto
-                cuentaOrigenId: salida.cuentaId,   // El dinero salió de aquí
-                cuentaDestinoId: entrada.cuentaId, // Y entró aquí
+                conceptoId: CONCEPTO_TRASPASO_ID,
+                cuentaOrigenId: salida.cuentaId,   // Sale de aquí
+                cuentaDestinoId: entrada.cuentaId, // Entra aquí
                 validado: true,
                 updatedAt: new Date().toISOString()
             };
 
-            // A. Guardar nuevo traspaso
+            // A. Guardar nuevo
             batch.set(userRef.collection('movimientos').doc(newId), nuevoTraspaso);
-            // B. Borrar movimiento de salida (gasto)
+            // B. Borrar viejos
             batch.delete(userRef.collection('movimientos').doc(salida.id));
-            // C. Borrar movimiento de entrada (ingreso)
             batch.delete(userRef.collection('movimientos').doc(entrada.id));
 
-            // Actualizar localmente para ver cambios al instante
+            // Actualizar localmente
             db.movimientos = db.movimientos.filter(m => m.id !== salida.id && m.id !== entrada.id);
             db.movimientos.push(nuevoTraspaso);
         });
@@ -12066,7 +12079,7 @@ window.detectarYCorregirTraspasos = async () => {
 
         // 7. Éxito
         hapticFeedback('success');
-        showToast(`✅ ¡Hecho! ${parejasEncontradas.length} traspasos arreglados.`, 'success');
+        showToast(`✅ ¡Hecho! ${parejasEncontradas.length} traspasos unificados.`, 'success');
         
         setTimeout(() => {
             updateLocalDataAndRefreshUI();
