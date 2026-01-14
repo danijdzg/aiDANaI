@@ -3465,8 +3465,15 @@ const renderVirtualListItem = (item) => {
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
                 
                 line1_Left_Text = `${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
-                line2_Left_Text = `Traspaso`;
+                
+                // === CAMBIO DANI: Mostrar saldos en vez de texto "Traspaso" ===
+                // 1. Buscamos el saldo calculado (usamos _saldo...Snapshot que calcula tu lista)
+                // Si no existe el snapshot, usamos 'runningBalance' como plan B
+                const saldoSalida = m._saldoOrigenSnapshot !== undefined ? m._saldoOrigenSnapshot : (m.runningBalanceOrigen || 0);
+                const saldoEntrada = m._saldoDestinoSnapshot !== undefined ? m._saldoDestinoSnapshot : (m.runningBalanceDestino || 0);
 
+                // 2. Formateamos el texto:  "1.500,00 €  --->  500,00 €"
+                line2_Left_Text = `${formatCurrency(saldoSalida)} ➔ ${formatCurrency(saldoEntrada)}`;
             } else {
                 const isGasto = m.cantidad < 0;
                 color = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
