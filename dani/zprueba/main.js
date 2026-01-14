@@ -4890,24 +4890,27 @@ const renderPanelPage = async () => {
             </div>
 
             <div class="hero-card fade-in-up" style="padding: 15px; margin-bottom: var(--sp-4); background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%); border: 1px solid var(--c-outline);">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div style="text-align: center;">
-                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
-                            <span class="material-icons" style="color: #FFD60A; font-size: 18px;">shield</span>
-                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">COBERTURA</span>
-                            <button class="help-btn" data-action="show-kpi-help" data-kpi="cobertura" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+                        
+                        <div style="text-align: center;">
+                            <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                                <span class="material-icons" style="color: var(--c-warning); font-size: 18px;">shield</span>
+                                <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-warning); text-transform: uppercase;">COBERTURA</span>
+                                <button class="help-btn" data-action="show-kpi-help" data-kpi="cobertura" style="font-size: 10px; width: 14px; height: 14px; border-color: var(--c-warning); color: var(--c-warning);">?</button>
+                            </div>
+                            <div id="health-runway-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: var(--c-warning);">0.0 Meses</div>
                         </div>
-                        <div id="health-runway-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #FFD60A;">0.0 Meses</div>
-                    </div>
-                    <div style="text-align: center; border-left: 1px solid var(--c-outline);">
-                        <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
-                            <span class="material-icons" style="color: #39FF14; font-size: 18px;">flag</span>
-                            <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-on-surface-secondary); text-transform: uppercase;">LIBERTAD</span>
-                            <button class="help-btn" data-action="show-kpi-help" data-kpi="libertad" style="font-size: 10px; width: 14px; height: 14px;">?</button>
+
+                        <div style="text-align: center; border-left: 1px solid var(--c-outline);">
+                            <div style="display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 6px;">
+                                <span class="material-icons" style="color: var(--c-warning); font-size: 18px;">flag</span>
+                                <span style="font-size: 0.7rem; font-weight: 700; color: var(--c-warning); text-transform: uppercase;">LIBERTAD</span>
+                                <button class="help-btn" data-action="show-kpi-help" data-kpi="libertad" style="font-size: 10px; width: 14px; height: 14px; border-color: var(--c-warning); color: var(--c-warning);">?</button>
+                            </div>
+                            <div id="health-fi-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: var(--c-warning);">0.0%</div>
                         </div>
-                        <div id="health-fi-val" class="skeleton" style="font-size: 1.3rem; font-weight: 800; color: #39FF14;">0.00%</div>
+
                     </div>
-                </div>
             </div>
         </div>
         
