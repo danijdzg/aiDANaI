@@ -11932,48 +11932,44 @@ const showManageConceptosModal = () => {
 /* ===CONVIERTE MOVIMIENTOS TRASPASO EN TRASPASOS REALES=== */
 
 
+/* === REEMPLAZAR EN MAIN.JS: BUSCADOR EN CAMPO 'TIPO' === */
+
 window.detectarYCorregirTraspasos = async () => {
     try {
-        // 1. Verificaciones de seguridad iniciales
-        if (typeof db === 'undefined') throw new Error("La variable 'db' no existe.");
-        if (!db.movimientos) throw new Error("No hay lista de movimientos.");
-        if (!db.conceptos) throw new Error("No hay lista de conceptos.");
+        // 1. Verificaciones de seguridad
+        if (!db || !db.movimientos) throw new Error("No hay datos cargados.");
 
-        const confirmacion = confirm("🛡️ MODO BLINDADO 🛡️\n\nHe corregido el error de 'undefined'.\nAhora el sistema saltará los registros corruptos o vacíos.\n\n¿Buscamos los Traspasos?");
+        const confirmacion = confirm("🎯 OBJETIVO: CAMPO 'TIPO' 🎯\n\nInstrucción recibida: Buscaré movimientos donde el CAMPO 'TIPO' contenga la palabra 'Traspaso'.\n\nSi encuentro parejas sueltas, las unificaré.\n\n¿Proceder?");
         if (!confirmacion) return;
 
-        showToast('Analizando (saltando errores)...', 'info');
+        showToast('Analizando campo TIPO...', 'info');
 
-        // 2. Mapa de Conceptos (ID -> Nombre)
-        const mapaNombres = {};
-        db.conceptos.forEach(c => {
-            if (c && c.id && c.nombre) { // Protección extra aquí también
-                mapaNombres[c.id] = c.nombre.toLowerCase();
-            }
-        });
-
-        // 3. BUSCAR CANDIDATOS (Con Red de Seguridad)
+        // 2. BUSCAR CANDIDATOS (Mirando exclusivamente el campo TIPO)
         const candidatos = db.movimientos.filter(m => {
-            // --- RED DE SEGURIDAD CRÍTICA ---
-            if (!m) return false; // Si el hueco está vacío, SALTAR.
-            if (!m.conceptoId) return false; // Si no tiene concepto, SALTAR.
-            if (m.tipo === 'traspaso') return false; // Si ya es traspaso, SALTAR.
-            // -------------------------------
+            if (!m) return false;
+
+            // IMPORTANTE: No ignoramos automáticamente los tipo 'traspaso'.
+            // Solo ignoramos los que YA son traspasos PERFECTOS (tienen origen y destino)
+            if (m.tipo === 'traspaso' && m.cuentaOrigenId && m.cuentaDestinoId) {
+                return false; // Este ya está bien, no lo tocamos.
+            }
+
+            // Leemos el campo TIPO
+            const tipoTexto = (m.tipo || '').toLowerCase();
             
-            // Buscar nombre del concepto
-            const nombreReal = mapaNombres[m.conceptoId] || ""; 
-            
-            // ¿Contiene "traspaso"?
-            return nombreReal.includes("traspaso") || nombreReal.includes("transferencia");
+            // ¿Dice la palabra mágica?
+            const esTraspaso = tipoTexto.includes('traspaso') || tipoTexto.includes('transferencia');
+
+            return esTraspaso;
         });
 
         // === DIAGNÓSTICO ===
         if (candidatos.length === 0) {
-            alert(`❌ 0 CANDIDATOS ENCONTRADOS.\n\nEl código ha funcionado sin errores, pero no ha visto la palabra 'Traspaso' en los nombres de los conceptos.\n\nRevisa que tus categorías tengan ese nombre.`);
+            alert("❌ RESULTADO: 0 Movimientos.\n\nHe mirado el campo 'tipo' de todos tus movimientos y ninguno contiene la palabra 'traspaso' (o ya están unificados correctamente).");
             return;
         }
 
-        // 4. Buscar Parejas
+        // 3. BUSCAR PAREJAS (Ingreso + Gasto)
         let parejas = 0;
         const acciones = [];
         const procesados = new Set();
@@ -11987,23 +11983,23 @@ window.detectarYCorregirTraspasos = async () => {
 
             for (let j = i + 1; j < candidatos.length; j++) {
                 const movB = candidatos[j];
-                // Seguridad extra en el bucle interno
-                if (!movB) continue; 
-                if (procesados.has(movB.id)) continue;
+                if (!movB || procesados.has(movB.id)) continue;
 
-                // A) Signos opuestos
+                // REGLAS DE PAREJA:
+                
+                // 1. Signos Opuestos (Uno positivo, otro negativo)
                 const valA = parseFloat(movA.cantidad) || 0;
                 const valB = parseFloat(movB.cantidad) || 0;
-                const signosOpuestos = (valA * valB) < 0; // Positivo * Negativo = Negativo
+                const signosOpuestos = (valA * valB) < 0; 
 
-                // B) Mismo dinero
+                // 2. Mismo Dinero Exacto
                 const mismoDinero = Math.abs(Math.abs(valA) - Math.abs(valB)) < tolerancia;
 
-                // C) Misma fecha (Texto)
-                const fA = (movA.fecha || '').substring(0, 10);
-                const fB = (movB.fecha || '').substring(0, 10);
+                // 3. Misma Fecha (Día exacto)
+                const fechaA = (movA.fecha || '').substring(0, 10);
+                const fechaB = (movB.fecha || '').substring(0, 10);
 
-                if (signosOpuestos && mismoDinero && (fA === fB)) {
+                if (signosOpuestos && mismoDinero && (fechaA === fechaB)) {
                     match = movB;
                     break;
                 }
@@ -12014,21 +12010,21 @@ window.detectarYCorregirTraspasos = async () => {
                 procesados.add(movA.id);
                 procesados.add(match.id);
                 acciones.push({
-                    origen: parseFloat(movA.cantidad) < 0 ? movA : match,
-                    destino: parseFloat(movA.cantidad) > 0 ? movA : match
+                    origen: parseFloat(movA.cantidad) < 0 ? movA : match, // El negativo es la salida
+                    destino: parseFloat(movA.cantidad) > 0 ? movA : match // El positivo es la entrada
                 });
             }
         }
 
-        // 5. Resultado Final
+        // 4. INFORME Y EJECUCIÓN
         if (acciones.length === 0) {
-            alert(`⚠️ He detectado ${candidatos.length} movimientos de tipo 'Traspaso', pero NO he encontrado parejas que coincidan en fecha e importe.`);
+            alert(`⚠️ He encontrado ${candidatos.length} movimientos donde el TIPO es 'Traspaso', pero están 'solteros' (no encuentro su pareja exacta de ingreso/gasto en la misma fecha y por el mismo importe).`);
             return;
         }
 
-        if (!confirm(`🚀 ¡FUNCIONA!\n\nDetectadas ${parejas} parejas válidas.\n\nSe van a unificar. ¿Confirmar?`)) return;
+        if (!confirm(`🚀 ¡LOCALIZADO!\n\nHe encontrado ${parejas} PAREJAS basándome en el campo TIPO.\n\nSe van a transformar en Traspasos Reales ahora mismo.\n\n¿Confirmar?`)) return;
 
-        // 6. Ejecutar
+        // Fusión
         const promesas = acciones.map(async (accion) => {
             const { origen, destino } = accion;
             const nuevoId = 'TRASP-' + Date.now() + Math.floor(Math.random() * 99999);
@@ -12036,26 +12032,26 @@ window.detectarYCorregirTraspasos = async () => {
             const nuevoMov = {
                 id: nuevoId,
                 fecha: origen.fecha,
-                tipo: 'traspaso',
+                tipo: 'traspaso', // Ahora es un traspaso REAL
                 cantidad: Math.abs(origen.cantidad),
-                descripcion: origen.descripcion || 'Traspaso Unificado',
-                cuentaOrigenId: origen.cuentaId,
-                cuentaDestinoId: destino.cuentaId,
+                descripcion: origen.descripcion || 'Traspaso Corregido',
+                cuentaOrigenId: origen.cuentaId,   // Sale de aquí
+                cuentaDestinoId: destino.cuentaId, // Entra aquí
                 validado: true,
                 updatedAt: new Date().toISOString()
             };
 
+            // Guardar el unificado y borrar los dos viejos
             await saveDoc('movimientos', nuevoId, nuevoMov);
             await deleteDoc('movimientos', origen.id);
             await deleteDoc('movimientos', destino.id);
         });
 
         await Promise.all(promesas);
-        alert('✅ ¡Operación completada sin errores!');
+        alert('✅ ¡Arreglado! Recargando aplicación...');
         location.reload();
 
     } catch (error) {
-        alert("💥 ERROR INESPERADO: " + error.message);
-        console.error(error);
+        alert("💥 Error: " + error.message);
     }
 };
