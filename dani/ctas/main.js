@@ -11939,155 +11939,156 @@ const showManageConceptosModal = () => {
 };
 
 // ===============================================================
-// === DETECTIVE DE TRASPASOS v3.0 (CORRECCIÓN FECHAS Y TIPOS) ===
+// === DETECTIVE Y LIMPIADOR DE TRASPASOS v4.0 (FUSIÓN + ANTI-DUPLICADOS) ===
 // ===============================================================
 window.detectarYCorregirTraspasos = async () => {
-    // 1. Confirmación inicial
-    if (!confirm("🕵️‍♂️ DETECTIVE v3.0\n\nVoy a buscar movimientos sueltos (incluso si ya se llaman 'Traspaso') y uniré los que coincidan en FECHA (mismo día) e IMPORTE.\n\n¿Procedemos?")) return;
+    // 1. Confirmación de seguridad
+    if (!confirm("🧹 MODO LIMPIEZA TOTAL\n\n1. Fusionaré movimientos sueltos en traspasos.\n2. ELIMINARÉ los traspasos repetidos/duplicados que se hayan creado por error.\n\n¿Procedemos?")) return;
 
     const btn = document.querySelector('button[onclick="detectarYCorregirTraspasos()"]');
-    if (btn) setButtonLoading(btn, true, 'Analizando...');
+    if (btn) setButtonLoading(btn, true, 'Limpiando...');
 
     try {
-        const CONCEPTO_TRASPASO_ID = "3mPq7hhdIn6hbphU09Hm"; // Tu ID de traspaso
+        const CONCEPTO_TRASPASO_ID = "3mPq7hhdIn6hbphU09Hm";
         const allMovs = await AppStore.getAll();
-        
-        console.log(`📂 Analizando ${allMovs.length} movimientos...`);
+        const batch = fbDb.batch();
+        const userRef = fbDb.collection('users').doc(currentUser.uid);
+        let operacionesBatch = 0; // Contador para no pasarnos del límite de Firebase
 
-        // 2. Filtrar candidatos MEJORADO
+        // =================================================================================
+        // FASE 1: DETECTAR Y FUSIONAR PAREJAS SUELTAS (Igual que antes)
+        // =================================================================================
         const candidatos = allMovs.filter(m => {
-            // A. ¿Es un traspaso REAL ya terminado? (Tiene origen Y destino). Si es así, no lo tocamos.
-            if (m.tipo === 'traspaso' && m.cuentaOrigenId && m.cuentaDestinoId) {
-                return false; 
-            }
+            // Ignoramos los que ya son traspasos COMPLETOS (tienen origen y destino)
+            if (m.tipo === 'traspaso' && m.cuentaOrigenId && m.cuentaDestinoId) return false;
 
-            // B. Si es tipo 'traspaso' pero está suelto (le falta origen o destino), ¡LO QUEREMOS!
             const esTraspasoSuelto = m.tipo === 'traspaso';
-
-            // C. Si es movimiento normal, miramos si el concepto o descripción dice "traspaso"
             const esConceptoTraspaso = m.conceptoId === CONCEPTO_TRASPASO_ID;
             const tieneTextoTraspaso = (m.descripcion || '').toLowerCase().includes('traspaso');
             
             return esTraspasoSuelto || esConceptoTraspaso || tieneTextoTraspaso;
         });
 
-        console.log(`🔍 Encontrados ${candidatos.length} candidatos sueltos.`);
-
-        if (candidatos.length === 0) {
-            alert("✅ No encontré movimientos sueltos que parezcan traspasos.");
-            if (btn) setButtonLoading(btn, false);
-            return;
-        }
-
-        // 3. Organizar Salidas (negativos)
+        // Mapa de salidas
         const salidasMap = new Map();
-        
         candidatos.forEach(m => {
             if (m.cantidad < 0) {
-                // CLAVE: Usamos solo la parte de la fecha (YYYY-MM-DD)
-                // Esto ignora horas diferentes (T12:00 vs T10:00)
-                let fechaCorta = m.fecha;
-                if (m.fecha.includes('T')) {
-                    fechaCorta = m.fecha.split('T')[0];
-                }
-                
-                const importeAbs = Math.abs(m.cantidad);
-                const key = `${fechaCorta}_${importeAbs}`; // Ej: "2025-11-21_180000"
-                
+                let fechaCorta = m.fecha.includes('T') ? m.fecha.split('T')[0] : m.fecha;
+                const key = `${fechaCorta}_${Math.abs(m.cantidad)}`;
                 if (!salidasMap.has(key)) salidasMap.set(key, []);
                 salidasMap.get(key).push(m);
             }
         });
 
-        let parejasEncontradas = [];
+        let parejasNuevas = 0;
 
-        // 4. Buscar coincidencias con las Entradas (positivos)
+        // Buscar parejas
         candidatos.forEach(entrada => {
             if (entrada.cantidad > 0) {
-                let fechaCorta = entrada.fecha;
-                if (entrada.fecha.includes('T')) {
-                    fechaCorta = entrada.fecha.split('T')[0];
-                }
+                let fechaCorta = entrada.fecha.includes('T') ? entrada.fecha.split('T')[0] : entrada.fecha;
+                const key = `${fechaCorta}_${Math.abs(entrada.cantidad)}`;
 
-                const importeAbs = Math.abs(entrada.cantidad);
-                const key = `${fechaCorta}_${importeAbs}`; // Buscamos la misma clave
-
-                // ¿Existe una salida ese día por ese importe?
                 if (salidasMap.has(key)) {
                     const posiblesSalidas = salidasMap.get(key);
-                    
                     if (posiblesSalidas.length > 0) {
-                        // ¡Pareja encontrada!
-                        const salidaMatch = posiblesSalidas.shift(); // Sacamos uno de la lista
+                        const salida = posiblesSalidas.shift();
                         
-                        parejasEncontradas.push({
-                            salida: salidaMatch,
-                            entrada: entrada
-                        });
+                        // CREAR NUEVO TRASPASO
+                        const newId = generateId();
+                        const nuevoTraspaso = {
+                            id: newId,
+                            fecha: salida.fecha,
+                            tipo: 'traspaso',
+                            cantidad: Math.abs(salida.cantidad),
+                            descripcion: salida.descripcion || 'Traspaso Corregido',
+                            conceptoId: CONCEPTO_TRASPASO_ID,
+                            cuentaOrigenId: salida.cuentaId,
+                            cuentaDestinoId: entrada.cuentaId,
+                            validado: true,
+                            updatedAt: new Date().toISOString()
+                        };
+
+                        batch.set(userRef.collection('movimientos').doc(newId), nuevoTraspaso);
+                        batch.delete(userRef.collection('movimientos').doc(salida.id));
+                        batch.delete(userRef.collection('movimientos').doc(entrada.id));
+                        
+                        operacionesBatch += 3;
+                        parejasNuevas++;
+                        
+                        // Lo agregamos a la lista local para que la FASE 2 lo tenga en cuenta
+                        allMovs.push(nuevoTraspaso);
                     }
                 }
             }
         });
 
-        if (parejasEncontradas.length === 0) {
-            alert(`⚠️ Encontré ${candidatos.length} candidatos pero NINGUNA pareja exacta.\n\nRevisa:\n1. Que tengan la MISMA fecha (día).\n2. Que el importe sea idéntico (uno positivo, otro negativo).`);
-            console.log("Candidatos sin pareja:", candidatos);
-            if (btn) setButtonLoading(btn, false);
-            return;
-        }
+        // =================================================================================
+        // FASE 2: ELIMINAR DUPLICADOS (El Exterminador)
+        // =================================================================================
+        
+        // Filtramos SOLO los traspasos reales (completos)
+        const traspasosReales = allMovs.filter(m => 
+            m.tipo === 'traspaso' && m.cuentaOrigenId && m.cuentaDestinoId
+        );
 
-        // 5. Confirmación final
-        if (!confirm(`🚀 ¡BINGO! He encontrado ${parejasEncontradas.length} PAREJAS.\n\nEjemplo: ${parejasEncontradas[0].salida.descripcion} (${parejasEncontradas[0].salida.cantidad}) -> ${parejasEncontradas[0].entrada.descripcion}\n\n¿Fusionar ahora?`)) {
-            if (btn) setButtonLoading(btn, false);
-            return;
-        }
+        // Mapa para detectar clones
+        // Clave única: FECHA + CANTIDAD + ORIGEN + DESTINO
+        const duplicadosMap = new Map();
+        let eliminadosCount = 0;
 
-        // 6. EJECUCIÓN (Batch Write)
-        const batch = fbDb.batch();
-        const userRef = fbDb.collection('users').doc(currentUser.uid);
+        traspasosReales.forEach(t => {
+            let fechaCorta = t.fecha.includes('T') ? t.fecha.split('T')[0] : t.fecha;
+            
+            // Creamos una "huella digital" única para cada traspaso
+            const huella = `${fechaCorta}_${t.cantidad}_${t.cuentaOrigenId}_${t.cuentaDestinoId}`;
 
-        parejasEncontradas.forEach(pareja => {
-            const { salida, entrada } = pareja;
-            const newId = generateId(); 
-
-            // Crear el nuevo objeto TRASPASO
-            const nuevoTraspaso = {
-                id: newId,
-                fecha: salida.fecha, // Mantenemos fecha original
-                tipo: 'traspaso',
-                cantidad: Math.abs(salida.cantidad),
-                descripcion: salida.descripcion || 'Traspaso Corregido',
-                conceptoId: CONCEPTO_TRASPASO_ID,
-                cuentaOrigenId: salida.cuentaId,   // Sale de aquí
-                cuentaDestinoId: entrada.cuentaId, // Entra aquí
-                validado: true,
-                updatedAt: new Date().toISOString()
-            };
-
-            // A. Guardar nuevo
-            batch.set(userRef.collection('movimientos').doc(newId), nuevoTraspaso);
-            // B. Borrar viejos
-            batch.delete(userRef.collection('movimientos').doc(salida.id));
-            batch.delete(userRef.collection('movimientos').doc(entrada.id));
-
-            // Actualizar localmente
-            db.movimientos = db.movimientos.filter(m => m.id !== salida.id && m.id !== entrada.id);
-            db.movimientos.push(nuevoTraspaso);
+            if (duplicadosMap.has(huella)) {
+                // ¡YA EXISTE UNO IGUAL! Este es un clon. A la basura.
+                // (No borramos el que acabamos de crear en la Fase 1, solo los viejos duplicados si los hubiera)
+                
+                console.log(`🗑️ Duplicado detectado para borrar: ${t.descripcion} (${t.cantidad}€)`);
+                batch.delete(userRef.collection('movimientos').doc(t.id));
+                operacionesBatch++;
+                eliminadosCount++;
+            } else {
+                // Es el primero que vemos, lo marcamos como "El Original"
+                duplicadosMap.set(huella, true);
+            }
         });
+
+        // =================================================================================
+        // EJECUCIÓN FINAL
+        // =================================================================================
+
+        if (parejasNuevas === 0 && eliminadosCount === 0) {
+            alert("✅ Todo limpio. No se encontraron nuevas parejas ni duplicados para borrar.");
+            if (btn) setButtonLoading(btn, false);
+            return;
+        }
+
+        const mensaje = `📊 REPORTE DE OPERACIONES:\n\n` +
+                        `🔗 Nuevos traspasos creados: ${parejasNuevas}\n` +
+                        `🗑️ Duplicados eliminados: ${eliminadosCount}\n\n` +
+                        `¿Confirmar cambios en la base de datos?`;
+
+        if (!confirm(mensaje)) {
+            if (btn) setButtonLoading(btn, false);
+            return;
+        }
 
         await batch.commit();
 
-        // 7. Éxito
         hapticFeedback('success');
-        showToast(`✅ ¡Hecho! ${parejasEncontradas.length} traspasos unificados.`, 'success');
+        showToast('✅ Limpieza y fusión completada con éxito', 'success');
         
+        // Recarga forzosa para ver los datos limpios
         setTimeout(() => {
-            updateLocalDataAndRefreshUI();
-        }, 1000);
+            window.location.reload();
+        }, 1500);
 
     } catch (error) {
-        console.error("Error crítico:", error);
-        alert("Hubo un error: " + error.message);
+        console.error("Error limpieza:", error);
+        alert("Error: " + error.message);
     } finally {
         if (btn) setButtonLoading(btn, false);
     }
