@@ -3425,14 +3425,14 @@ const renderVirtualListItem = (item) => {
             const { cuentas, conceptos } = db;
             const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
 
-            // --- 1. Lógica de Colores y Datos ---
-            let color, amountClass, amountSign, line1_Text, line2_Text;
+            // --- 1. Lógica de Colores y Textos ---
+            let color, amountClass, amountSign, line1_Left_Text, line2_Left_Text;
 
-            // Recuperamos nombres
+            // Textos básicos
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // Texto descriptivo (Concepto - Descripción)
+            // Descripción compuesta
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
@@ -3446,9 +3446,9 @@ const renderVirtualListItem = (item) => {
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
                 
-                // Traspaso: Origen > Destino (Color Azul)
-                line1_Text = `<span style="color: ${color}; font-weight: 600;">${escapeHTML(origen)} ➔ ${escapeHTML(destino)}</span>`;
-                line2_Text = `<span style="color: #FFFFFF;">Traspaso</span>`;
+                // Traspaso: Fila 1 Origen>Destino, Fila 2 "Traspaso"
+                line1_Left_Text = `${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
+                line2_Left_Text = `Traspaso`;
 
             } else {
                 const isGasto = m.cantidad < 0;
@@ -3456,50 +3456,49 @@ const renderVirtualListItem = (item) => {
                 amountClass = isGasto ? 'text-negative' : 'text-positive';
                 amountSign = isGasto ? '' : '+';
 
-                // Fila 1: CUENTA (Ahora con el COLOR del importe)
-                line1_Text = `<span style="color: ${color}; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHTML(cuentaNombre)}</span>`;
-                
-                // Fila 2: CONCEPTO (Blanco Puro)
-                line2_Text = `<span style="color: #FFFFFF; font-weight: 400; font-size: 0.95rem;">${escapeHTML(descripcionTexto)}</span>`;
+                // Normal: Fila 1 Cuenta, Fila 2 Concepto
+                line1_Left_Text = escapeHTML(cuentaNombre);
+                line2_Left_Text = escapeHTML(descripcionTexto);
             }
 
-            // --- 2. HTML ULTRA COMPACTO ---
+            // --- 2. HTML: MATRIZ 2x2 (Saldo Grande y Blanco) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    padding: 6px 10px;       /* Relleno reducido a la mitad para que sea estrecho */
-                    margin-bottom: 4px;      /* Menos separación entre tarjetas */
+                    padding: 8px 10px;       /* Compacto pero legible */
+                    margin-bottom: 4px;
                     background-color: var(--c-surface);
                     border: 1px solid var(--c-outline);
-                    border-left: 5px solid ${color} !important; /* Barra de color sólida */
+                    border-left: 5px solid ${color} !important; /* Barra lateral fija */
                     border-radius: 4px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    min-height: 52px;        /* Altura mínima muy compacta */
+                    min-height: 56px;
                  ">
                 
-                <div style="display: flex; justify-content: space-between; align-items: baseline; line-height: 1.1;">
-                    <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 8px; flex: 1;">
-                        ${line1_Text}
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                    <div style="color: ${color}; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px; flex: 1; text-align: left;">
+                        ${line1_Left_Text}
                     </div>
-                    <div class="${amountClass}" style="font-size: 1.2rem; font-weight: 700; white-space: nowrap; letter-spacing: -0.5px;">
+                    <div class="${amountClass}" style="font-size: 1.25rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right;">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px; line-height: 1.1;">
-                    <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 8px; flex: 1;">
-                        ${line2_Text}
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.95rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px; flex: 1; text-align: left;">
+                        ${line2_Left_Text}
                     </div>
+                    
                     ${m.tipo !== 'traspaso' ? `
-                    <div style="font-size: 0.7rem; color: var(--c-on-surface-secondary); opacity: 0.6;">
+                    <div style="color: #FFFFFF; font-size: 1.25rem; font-weight: 400; white-space: nowrap; letter-spacing: -0.5px; text-align: right; opacity: 0.9;">
                         ${formatCurrencyHTML(m.runningBalance)}
                     </div>
-                    ` : ''}
+                    ` : '<div style="flex-shrink:0;"></div>'} 
                 </div>
             </div>`;
         }
