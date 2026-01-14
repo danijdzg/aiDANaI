@@ -3421,75 +3421,89 @@ const renderVirtualListItem = (item) => {
 
     // 4. MOVIMIENTOS
     if (item.type === 'transaction') {
-        const m = item.movement;
-        const { cuentas, conceptos } = db; 
-        const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
-        
-        let line1, line2, amountClass, amountSign;
-        let cardTypeClass = ''; 
-
-        const fechaMovimiento = m.fecha || ''; 
-
-        if (m.tipo === 'traspaso') {
-            cardTypeClass = 'type-traspaso'; 
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-            const saldoOrigen = cuentas.find(c => c.id === m.cuentaOrigenId)?.saldo || 0;
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-            const saldoDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.saldo || 0;
-
-            line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
-            line2 = `
-                <div style="line-height: 1.4;">
-                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span> 
-                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoOrigen)})</span>
-                    <span style="color: var(--c-on-surface-secondary);">➔</span> 
-                    <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(destino)}</span>
-                    <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoDestino)})</span>
-                </div>`;
-            amountClass = 'text-info'; amountSign = '';
-        } else {
-            const isGasto = m.cantidad < 0;
-            cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
-            const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+            const m = item.movement;
+            const { cuentas, conceptos } = db;
+            const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
+            let line1, line2, amountClass, amountSign;
+            let cardTypeClass = '';
             
-            const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios'; 
-            const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
-            
-            const desc = m.descripcion && m.descripcion !== concepto ? m.descripcion : concepto;
-            line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
-            line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(cuenta)}</span>`;
-            amountClass = isGasto ? 'text-negative' : 'text-positive'; amountSign = isGasto ? '' : '+';
-        }
+            // --- Lógica para la Barra Neón ---
+            let pillClass = 'neon-pill--gasto'; // Por defecto rojo
+            if (m.tipo === 'traspaso') pillClass = 'neon-pill--traspaso'; // Azul
+            else if (m.cantidad >= 0) pillClass = 'neon-pill--ingreso'; // Verde
+            // ---------------------------------
 
-        return `
-        <div class="t-card ${highlightClass} ${cardTypeClass}" 
-             data-fecha="${fechaMovimiento}" 
-             data-id="${m.id}" 
-             data-action="edit-movement-from-list" 
-             style="
-                        padding: 10px;                  /* Más espacio interno para que respire */
-                        margin-bottom: 5px;             /* LA SEPARACIÓN DE 5PX QUE PEDISTE */
-                        border-radius: 2px;            /* Esquinas redondeadas estilo Nord 4 */
-                        background-color: var(--c-surface); /* Fondo gris oscuro para diferenciar del negro */
-                        border: 1px solid var(--c-outline); /* Borde sutil alrededor */
-                        box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* Sombra suave para dar volumen */
-                     ">
-            <div class="t-content">
-                <div class="t-row-primary" style="margin-bottom: 4px;">
-                    <div class="t-line-1">${line1}</div>
-                    <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
-                </div>
-                <div class="t-row-secondary" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div class="t-line-2">${line2}</div>
-                    ${m.tipo !== 'traspaso' ? `
+            const fechaMovimiento = m.fecha || '';
+
+            if (m.tipo === 'traspaso') {
+                cardTypeClass = 'type-traspaso';
+                const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+                const saldoOrigen = cuentas.find(c => c.id === m.cuentaOrigenId)?.saldo || 0;
+                const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+                const saldoDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.saldo || 0;
+
+                line1 = `<span class="t-concept" style="color:#FFFFFF;">Traspaso</span>`;
+                line2 = `
+                    <div style="line-height: 1.4;">
+                        <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(origen)}</span>
+                        <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoOrigen)})</span>
+                        <span style="color: var(--c-on-surface-secondary);">➔</span>
+                        <span class="t-account-badge" style="color: var(--c-info); border-color: var(--c-info);">${escapeHTML(destino)}</span>
+                        <span style="color: #FFFFFF; font-size: 0.75rem;">(${formatCurrencyHTML(saldoDestino)})</span>
+                    </div>`;
+                amountClass = 'text-info';
+                amountSign = '';
+            } else {
+                const isGasto = m.cantidad < 0;
+                cardTypeClass = isGasto ? 'type-gasto' : 'type-ingreso';
+                const accountColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+                
+                const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
+                const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
+                const desc = m.descripcion && m.descripcion !== concepto ? m.descripcion : concepto;
+
+                line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
+                line2 = `<span class="t-account-badge" style="color: ${accountColor}; border-color: ${accountColor};">${escapeHTML(cuenta)}</span>`;
+                
+                amountClass = isGasto ? 'text-negative' : 'text-positive';
+                amountSign = isGasto ? '' : '+';
+            }
+
+            // --- HTML ACTUALIZADO CON FLEXBOX Y BARRA NEÓN ---
+            return `
+            <div class="t-card ${highlightClass} ${cardTypeClass}" 
+                 data-fecha="${fechaMovimiento}" 
+                 data-id="${m.id}" 
+                 data-action="edit-movement-from-list" 
+                 style="
+                    display: flex;           /* ACTIVAMOS FLEXBOX */
+                    align-items: center;     /* Centramos verticalmente todo */
+                    padding: 10px 12px;      /* Un poco más de aire lateral */
+                    margin-bottom: 5px;
+                    border-radius: 4px;      /* Borde ligeramente suavizado */
+                    background-color: var(--c-surface);
+                    border: 1px solid var(--c-outline);
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                 ">
+                
+                <div class="neon-pill ${pillClass}"></div>
+
+                <div class="t-content" style="flex-grow: 1;">
+                    <div class="t-row-primary" style="margin-bottom: 4px;">
+                        <div class="t-line-1">${line1}</div>
+                        <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
+                    </div>
+                    <div class="t-row-secondary" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class="t-line-2">${line2}</div>
+                        ${m.tipo !== 'traspaso' ? `
                         <div class="t-running-balance" style="font-size: 0.75rem; color: var(--c-on-surface-secondary); opacity: 0.7;">
                             ${formatCurrencyHTML(m.runningBalance)}
                         </div>
-                    ` : ''}
+                        ` : ''}
+                    </div>
                 </div>
-            </div>
-        </div>`;
-    }
+            </div>`;
+        }
     return '';
 };
         
