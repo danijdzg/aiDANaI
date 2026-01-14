@@ -4843,9 +4843,9 @@ const renderPanelPage = async () => {
                 <div style="background-color: rgba(0,0,0,0.2); border-radius: 16px; padding: 15px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; border: 1px solid var(--c-outline);">
                     
                     <div style="text-align: center;">
-                        <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-info); text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
-                            <span class="material-icons" style="font-size: 12px;">account_balance_wallet</span> Liquidez
-                            <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez">?</button>
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px; color: #FFFFFF;">account_balance_wallet</span> Liquidez
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="liquidez" style="border-color: rgba(255,255,255,0.3); color: #FFFFFF;">?</button>
                         </div>
                         <div id="kpi-liquidez-value" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
                     </div>
@@ -4853,9 +4853,9 @@ const renderPanelPage = async () => {
                     <div style="height: 30px; background-color: var(--c-outline);"></div>
 
                     <div style="text-align: center;">
-                        <div style="font-size: 0.65rem; font-weight: 700; color: #BF5AF2; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
-                            <span class="material-icons" style="font-size: 12px;">savings</span> Capital Inv.
-                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido">?</button>
+                        <div style="font-size: 0.65rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; display:flex; justify-content:center; gap:4px; align-items:center;">
+                            <span class="material-icons" style="font-size: 12px; color: #FFFFFF;">savings</span> Capital Inv.
+                            <button class="help-btn" data-action="show-kpi-help" data-kpi="capital_invertido" style="border-color: rgba(255,255,255,0.3); color: #FFFFFF;">?</button>
                         </div>
                         <div id="kpi-capital-invertido-total" class="text-positive skeleton" data-current-value="0" style="font-size: 1rem; font-weight: 700;">0,00 €</div>
                     </div>
