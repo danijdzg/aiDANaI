@@ -4005,7 +4005,7 @@ const renderAjustesPage = () => {
                 </button>
 				<button class="settings-item" onclick="detectarYCorregirTraspasos()">
 					<span class="material-icons" style="color: #2196F3;">sync_alt</span>
-					<span class="settings-item__label">Transformar movimientos en traspasos</span>
+					<span class="settings-item__label">Movimientos en traspasos</span>
 					<span class="material-icons">chevron_right</span>
 				</button>
 
@@ -11938,9 +11938,6 @@ const showManageConceptosModal = () => {
     }, 100);
 };
 
-// ===============================================================
-// === DETECTIVE DE TRASPASOS (FUSIÓN AUTOMÁTICA) ===
-// ===============================================================
 // ===============================================================
 // === DETECTIVE DE TRASPASOS v2.0 (ESPECÍFICO PARA TU BASE DE DATOS) ===
 // ===============================================================
