@@ -3420,7 +3420,7 @@ const renderVirtualListItem = (item) => {
     }
 
     // 4. MOVIMIENTOS
-    if (item.type === 'transaction') {
+   if (item.type === 'transaction') {
             const m = item.movement;
             const { cuentas, conceptos } = db;
             const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
@@ -3431,7 +3431,7 @@ const renderVirtualListItem = (item) => {
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // Descripción limpia
+            // Descripción
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
@@ -3458,40 +3458,41 @@ const renderVirtualListItem = (item) => {
                 line2_Left_Text = escapeHTML(descripcionTexto);
             }
 
-            // --- 2. HTML ULTRA DENSO (Sin espacios) ---
+            // --- 2. HTML DE MÁXIMA DENSIDAD Y SIMETRÍA ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    padding: 3px 8px;        /* Mínimo relleno posible */
-                    margin-bottom: 2px;      /* Tarjetas casi pegadas */
+                    padding: 1px 4px;        /* 1px vertical, 4px horizontal para que el texto no toque el borde */
+                    margin-bottom: 1px;      /* Separación mínima entre filas */
                     background-color: var(--c-surface);
-                    border-bottom: 1px solid var(--c-outline); /* Solo línea abajo para separar */
-                    border-left: 4px solid ${color} !important; /* Barra lateral más fina */
+                    border-bottom: 1px solid var(--c-outline);
+                    border-left: 5px solid ${color} !important;  /* Barra Izquierda */
+                    border-right: 5px solid ${color} !important; /* Barra Derecha (SIMETRÍA) */
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    min-height: 40px;        /* Altura mínima muy pequeña */
+                    min-height: 44px;        /* Altura mínima ajustada a los números grandes */
                  ">
                 
                 <div style="display: flex; justify-content: space-between; align-items: flex-end; line-height: 1;">
-                    <div style="color: ${color}; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 5px; flex: 1; text-align: left;">
+                    <div style="color: ${color}; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left;">
                         ${line1_Left_Text}
                     </div>
-                    <div class="${amountClass}" style="font-size: 1.1rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right;">
+                    <div class="${amountClass}" style="font-size: 1.2rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right; padding-left: 5px;">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 1px; line-height: 1;">
-                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 5px; flex: 1; text-align: left; opacity: 0.9;">
+                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left; opacity: 0.9;">
                         ${line2_Left_Text}
                     </div>
                     
                     ${m.tipo !== 'traspaso' ? `
-                    <div style="color: #FFFFFF; font-size: 0.8rem; font-weight: 400; white-space: nowrap; text-align: right; opacity: 0.7;">
+                    <div style="color: #FFFFFF; font-size: 1.2rem; font-weight: 400; white-space: nowrap; letter-spacing: -0.5px; text-align: right; opacity: 0.8; padding-left: 5px;">
                         ${formatCurrencyHTML(m.runningBalance)}
                     </div>
                     ` : '<div style="flex-shrink:0;"></div>'} 
