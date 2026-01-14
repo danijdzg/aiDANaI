@@ -3428,74 +3428,70 @@ const renderVirtualListItem = (item) => {
             // --- 1. Lógica de Colores y Textos ---
             let color, amountClass, amountSign, line1_Left_Text, line2_Left_Text;
 
-            // Textos básicos
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // Descripción compuesta
+            // Descripción limpia
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
             }
 
             if (m.tipo === 'traspaso') {
-                color = 'var(--c-info)'; // Azul
+                color = 'var(--c-info)'; 
                 amountClass = 'text-info';
                 amountSign = '';
                 
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
                 
-                // Traspaso: Fila 1 Origen>Destino, Fila 2 "Traspaso"
                 line1_Left_Text = `${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
                 line2_Left_Text = `Traspaso`;
 
             } else {
                 const isGasto = m.cantidad < 0;
-                color = isGasto ? 'var(--c-danger)' : 'var(--c-success)'; // Rojo o Verde
+                color = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
                 amountClass = isGasto ? 'text-negative' : 'text-positive';
                 amountSign = isGasto ? '' : '+';
 
-                // Normal: Fila 1 Cuenta, Fila 2 Concepto
                 line1_Left_Text = escapeHTML(cuentaNombre);
                 line2_Left_Text = escapeHTML(descripcionTexto);
             }
 
-            // --- 2. HTML: MATRIZ 2x2 (Saldo Grande y Blanco) ---
+            // --- 2. HTML ULTRA DENSO (Sin espacios) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    padding: 8px 10px;       /* Compacto pero legible */
-                    margin-bottom: 4px;
+                    padding: 3px 8px;        /* Mínimo relleno posible */
+                    margin-bottom: 2px;      /* Tarjetas casi pegadas */
                     background-color: var(--c-surface);
-                    border: 1px solid var(--c-outline);
-                    border-left: 5px solid ${color} !important; /* Barra lateral fija */
-                    border-radius: 4px;
+                    border-bottom: 1px solid var(--c-outline); /* Solo línea abajo para separar */
+                    border-left: 4px solid ${color} !important; /* Barra lateral más fina */
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    min-height: 56px;
+                    min-height: 40px;        /* Altura mínima muy pequeña */
                  ">
                 
-                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
-                    <div style="color: ${color}; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px; flex: 1; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; line-height: 1;">
+                    <div style="color: ${color}; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 5px; flex: 1; text-align: left;">
                         ${line1_Left_Text}
                     </div>
-                    <div class="${amountClass}" style="font-size: 1.25rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right;">
+                    <div class="${amountClass}" style="font-size: 1.1rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right;">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.95rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px; flex: 1; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 1px; line-height: 1;">
+                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 5px; flex: 1; text-align: left; opacity: 0.9;">
                         ${line2_Left_Text}
                     </div>
                     
                     ${m.tipo !== 'traspaso' ? `
-                    <div style="color: #FFFFFF; font-size: 1.25rem; font-weight: 400; white-space: nowrap; letter-spacing: -0.5px; text-align: right; opacity: 0.9;">
+                    <div style="color: #FFFFFF; font-size: 0.8rem; font-weight: 400; white-space: nowrap; text-align: right; opacity: 0.7;">
                         ${formatCurrencyHTML(m.runningBalance)}
                     </div>
                     ` : '<div style="flex-shrink:0;"></div>'} 
