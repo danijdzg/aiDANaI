@@ -3424,69 +3424,80 @@ const renderVirtualListItem = (item) => {
             const m = item.movement;
             const { cuentas, conceptos } = db;
             const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
+
+            // --- 1. PREPARACIÓN DE DATOS ---
+            let color, amountClass, amountSign, line1_Left, line2_Left;
+
+            // Datos comunes
+            const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
+            const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // --- 1. Definimos los colores y datos ---
-            let borderColor, amountClass, amountSign, line1, line2;
-            
-            // Lógica de colores simple
+            // Construimos la línea de detalle: "Concepto - Descripción"
+            // Si la descripción es igual al concepto, solo ponemos el concepto para no repetir.
+            let detalleTexto = conceptoNombre;
+            if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
+                detalleTexto = `${conceptoNombre} - ${m.descripcion}`;
+            }
+
             if (m.tipo === 'traspaso') {
-                borderColor = 'var(--c-info)'; // Azul
+                color = 'var(--c-info)'; // Azul
                 amountClass = 'text-info';
                 amountSign = '';
                 
-                // Datos del traspaso
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-                line1 = `<span class="t-concept" style="font-weight:600;">Traspaso</span>`;
-                line2 = `<span style="opacity:0.8; font-size:0.85rem;">${escapeHTML(origen)} ➔ ${escapeHTML(destino)}</span>`;
                 
+                // Traspasos: Arriba "Traspaso", Abajo "Origen > Destino"
+                line1_Left = `<span style="font-weight: 500; font-size: 0.9rem; color: var(--c-on-surface-secondary);">Traspaso</span>`;
+                line2_Left = `<span style="color: var(--c-on-surface);">${escapeHTML(origen)} ➔ ${escapeHTML(destino)}</span>`;
+
             } else {
                 const isGasto = m.cantidad < 0;
-                // Rojo para gasto, Verde para ingreso
-                borderColor = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+                color = isGasto ? 'var(--c-danger)' : 'var(--c-success)'; // Rojo o Verde
                 amountClass = isGasto ? 'text-negative' : 'text-positive';
                 amountSign = isGasto ? '' : '+';
+
+                // Fila Superior: CUENTA (Texto limpio, color gris suave)
+                line1_Left = `<span style="font-weight: 500; font-size: 0.9rem; color: var(--c-on-surface-secondary);">${escapeHTML(cuenta)}</span>`;
                 
-                // Datos del movimiento
-                const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
-                const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
-                // Si la descripción es igual al concepto, no la repetimos
-                const desc = (m.descripcion && m.descripcion !== concepto) ? m.descripcion : concepto;
-                
-                line1 = `<span class="t-concept">${escapeHTML(desc)}</span>`;
-                line2 = `<span class="t-account-badge" style="color: ${borderColor}; border: 1px solid ${borderColor}; opacity: 0.9;">${escapeHTML(cuenta)}</span>`;
+                // Fila Inferior: CONCEPTO - DESCRIPCIÓN (Texto blanco/principal)
+                line2_Left = `<span style="color: var(--c-on-surface); font-weight: 400;">${escapeHTML(detalleTexto)}</span>`;
             }
 
-            // --- 2. HTML: Tarjeta limpia con borde izquierdo ---
-            // Usamos border-left para la barra vertical simple
+            // --- 2. HTML: ESTRUCTURA FINAL ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    padding: 12px 14px;
+                    padding: 10px 14px;
                     margin-bottom: 6px;
                     background-color: var(--c-surface);
                     border: 1px solid var(--c-outline);
-                    border-left: 6px solid ${borderColor}; /* AQUÍ ESTÁ LA BARRA VERTICAL */
+                    border-left: 6px solid ${color} !important;  /* ¡AQUÍ ESTÁ LA BARRA OBLIGATORIA! */
                     border-radius: 4px;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    min-height: 70px; /* Altura mínima para que sea fácil de tocar */
                  ">
                 
-                <div class="t-row-primary" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <div class="t-line-1" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px;">
-                        ${line1}
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                    <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px;">
+                        ${line1_Left}
                     </div>
-                    <div class="t-amount ${amountClass}" style="white-space: nowrap;">
+                    <div class="${amountClass}" style="font-size: 1.4rem; font-weight: 700; white-space: nowrap; letter-spacing: -0.5px;">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
-                <div class="t-row-secondary" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div class="t-line-2">${line2}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.95rem; opacity: 0.9; padding-right: 10px;">
+                        ${line2_Left}
+                    </div>
                     ${m.tipo !== 'traspaso' ? `
-                    <div class="t-running-balance" style="font-size: 0.75rem; color: var(--c-on-surface-secondary); opacity: 0.6;">
+                    <div style="font-size: 0.75rem; color: var(--c-on-surface-secondary); opacity: 0.6;">
                         ${formatCurrencyHTML(m.runningBalance)}
                     </div>
                     ` : ''}
