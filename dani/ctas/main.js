@@ -7114,37 +7114,74 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-		// REEMPLAZA tu función showValoracionModal con esta versión
+// ===============================================================
+// === FUNCIÓN CORREGIDA: VENTANA DE ACTUALIZAR INVERSIÓN ===
+// ===============================================================
 const showValoracionModal = (cuentaId) => {
     const cuenta = db.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) return;
 
+    // Fecha de hoy automática para facilitar el trabajo
     const fechaISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-    const ultimaValoracion = (db.inversiones_historial || []).filter(v => v.cuentaId === cuentaId).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+    
+    // Buscamos si ya hay un valor previo para mostrarlo
+    const ultimaValoracion = (db.inversiones_historial || [])
+        .filter(v => v.cuentaId === cuentaId)
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+        
     const valorActualInput = ultimaValoracion ? (ultimaValoracion.valor / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 }) : '';
 
     const formHtml = `
     <form id="form-valoracion" data-id="${cuentaId}" novalidate>
-        <p class="form-label" style="margin-bottom: var(--sp-3);">
-            Introduce el valor de mercado actual para <strong>${escapeHTML(cuenta.nombre)}</strong>.
+        <p class="form-label" style="margin-bottom: var(--sp-3); color: var(--c-on-surface-secondary);">
+            Actualiza el valor de mercado para <strong>${escapeHTML(cuenta.nombre)}</strong>.
         </p>
+        
         <div class="form-group">
-            <label for="valoracion-valor" class="form-label">Nuevo Valor Total</label>
-            <input type="text" id="valoracion-valor" class="form-input input-amount-calculator" inputmode="none" required value="${valorActualInput}" placeholder="0,00" autocomplete="off">
+            <label for="valoracion-valor" class="form-label">Nuevo Valor Total (€)</label>
+            <input type="text" id="valoracion-valor" class="form-input" 
+                   inputmode="decimal" 
+                   pattern="[0-9]*"
+                   required 
+                   value="${valorActualInput}" 
+                   placeholder="0,00" 
+                   autocomplete="off"
+                   style="font-size: 1.5rem; font-weight: 700; color: var(--c-primary); text-align: center;">
         </div>
+
         <div class="form-group">
-            <label for="valoracion-fecha" class="form-label">Fecha de la Valoración</label>
+            <label for="valoracion-fecha" class="form-label">Fecha de Valoración</label>
             <input type="date" id="valoracion-fecha" class="form-input" value="${fechaISO}" required>
         </div>
+
         <div class="modal__actions">
-            <button type="submit" class="btn btn--primary">Guardar Valoración</button>
+            <button type="submit" class="btn btn--primary btn--full">
+                <span class="material-icons">save</span> Guardar Valoración
+            </button>
         </div>
     </form>`;
 
-    showGenericModal(`Actualizar Valor de ${cuenta.nombre}`, formHtml);
-    
-    // IMPORTANTE: Inicializamos el input recién creado para que use la calculadora
-    setTimeout(() => initAmountInput(), 50);
+    showGenericModal(`Actualizar ${cuenta.nombre}`, formHtml);
+
+    // --- LA CONEXIÓN DE CABLES (Esto es lo que faltaba) ---
+    // Esperamos un instante a que el formulario aparezca en pantalla
+    setTimeout(() => {
+        const form = document.getElementById('form-valoracion');
+        const inputValor = document.getElementById('valoracion-valor');
+
+        // Ponemos el foco en el input para que puedas escribir directo
+        if(inputValor) inputValor.focus();
+
+        // Escuchamos cuando pulsas "Guardar"
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault(); // Evitamos que la página se recargue
+                const btn = form.querySelector('button[type="submit"]');
+                // Llamamos a tu función experta de guardado
+                handleSaveValoracion(form, btn); 
+            });
+        }
+    }, 100);
 };
 
 const handleSaveValoracion = async (form, btn) => {
