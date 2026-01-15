@@ -7114,74 +7114,84 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ===============================================================
-// === FUNCIÓN CORREGIDA: VENTANA DE ACTUALIZAR INVERSIÓN ===
-// ===============================================================
+/* =============================================================== */
+/* === FUNCIÓN CORREGIDA: VENTANA DE ACTUALIZAR VALOR (PORTAFOLIO) === */
+/* =============================================================== */
 const showValoracionModal = (cuentaId) => {
+    // 1. Buscamos de qué cuenta estamos hablando
     const cuenta = db.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) return;
 
-    // Fecha de hoy automática para facilitar el trabajo
+    // 2. Preparamos la fecha de hoy para que no tengas que escribirla
+    // El truco del 'timezoneOffset' es para que no te salga la fecha de ayer por el cambio horario
     const fechaISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
     
-    // Buscamos si ya hay un valor previo para mostrarlo
+    // 3. Buscamos el último valor que pusiste para mostrártelo
     const ultimaValoracion = (db.inversiones_historial || [])
         .filter(v => v.cuentaId === cuentaId)
-        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0]; // Ordenamos por fecha y cogemos la primera
         
+    // Si hay valor previo, lo formateamos bonito (ej: 12500.50), si no, lo dejamos vacío
     const valorActualInput = ultimaValoracion ? (ultimaValoracion.valor / 100).toLocaleString('es-ES', { useGrouping: false, minimumFractionDigits: 2 }) : '';
 
+    // 4. Creamos el HTML del formulario (El esqueleto visual)
     const formHtml = `
     <form id="form-valoracion" data-id="${cuentaId}" novalidate>
-        <p class="form-label" style="margin-bottom: var(--sp-3); color: var(--c-on-surface-secondary);">
-            Actualiza el valor de mercado para <strong>${escapeHTML(cuenta.nombre)}</strong>.
+        <p class="form-label" style="margin-bottom: 15px; color: var(--c-on-surface-variant);">
+            Actualiza el valor de mercado actual para: <br>
+            <strong style="color: var(--c-on-surface); font-size: 1.1em;">${escapeHTML(cuenta.nombre)}</strong>
         </p>
         
         <div class="form-group">
             <label for="valoracion-valor" class="form-label">Nuevo Valor Total (€)</label>
-            <input type="text" id="valoracion-valor" class="form-input" 
+            <input type="number" id="valoracion-valor" class="form-input" 
                    inputmode="decimal" 
-                   pattern="[0-9]*"
+                   step="0.01"
                    required 
                    value="${valorActualInput}" 
-                   placeholder="0,00" 
+                   placeholder="0.00" 
                    autocomplete="off"
-                   style="font-size: 1.5rem; font-weight: 700; color: var(--c-primary); text-align: center;">
+                   onclick="this.select()"
+                   style="font-size: 1.8rem; font-weight: 700; color: var(--c-primary); text-align: center; padding: 15px;">
         </div>
 
         <div class="form-group">
-            <label for="valoracion-fecha" class="form-label">Fecha de Valoración</label>
+            <label for="valoracion-fecha" class="form-label">Fecha de la valoración</label>
             <input type="date" id="valoracion-fecha" class="form-input" value="${fechaISO}" required>
         </div>
 
-        <div class="modal__actions">
-            <button type="submit" class="btn btn--primary btn--full">
-                <span class="material-icons">save</span> Guardar Valoración
+        <div class="modal__actions" style="margin-top: 20px;">
+            <button type="submit" class="btn btn--primary btn--full" style="padding: 15px; font-size: 1.1rem;">
+                <span class="material-icons" style="margin-right: 8px;">save</span> Guardar Valoración
             </button>
         </div>
     </form>`;
 
-    showGenericModal(`Actualizar ${cuenta.nombre}`, formHtml);
+    // 5. Mostramos la ventana en pantalla
+    showGenericModal(`Actualizar Inversión`, formHtml);
 
-    // --- LA CONEXIÓN DE CABLES (Esto es lo que faltaba) ---
-    // Esperamos un instante a que el formulario aparezca en pantalla
+    // 6. LA MAGIA: Conectamos los cables una vez la ventana ya existe
+    // Usamos setTimeout para dar tiempo a que el navegador "pint" la ventana
     setTimeout(() => {
         const form = document.getElementById('form-valoracion');
         const inputValor = document.getElementById('valoracion-valor');
 
-        // Ponemos el foco en el input para que puedas escribir directo
-        if(inputValor) inputValor.focus();
+        // Pone el cursor en el campo de precio automáticamente
+        if(inputValor) {
+            inputValor.focus();
+        }
 
-        // Escuchamos cuando pulsas "Guardar"
+        // Cuando pulses "Guardar"...
         if (form) {
             form.addEventListener('submit', (e) => {
-                e.preventDefault(); // Evitamos que la página se recargue
+                e.preventDefault(); // ¡Quieto navegador! No recargues la página.
                 const btn = form.querySelector('button[type="submit"]');
-                // Llamamos a tu función experta de guardado
+                
+                // Llamamos a la función que guarda los datos en Firebase (la base de datos)
                 handleSaveValoracion(form, btn); 
             });
         }
-    }, 100);
+    }, 150); // 150 milisegundos de espera es ideal para asegurar que todo está listo
 };
 
 const handleSaveValoracion = async (form, btn) => {
