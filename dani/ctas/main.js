@@ -3127,9 +3127,6 @@ const renderPortfolioMainContent = async (targetContainerId) => {
             <div class="card__content" style="padding: var(--sp-3);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid var(--c-outline); padding-bottom:10px;">
                     <h3 style="margin:0; font-size:1rem;">Resumen del Portafolio (Total €)</h3>
-                    <button class="btn btn--secondary" onclick="showBulkUpdateModal()" style="padding:4px 10px; font-size:0.75rem; height:auto;">
-                        <span class="material-icons" style="font-size:14px;">update</span> Actualizar
-                    </button>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; text-align: center; gap: 4px;">
                     <div style="display:flex; flex-direction:column; align-items:center;">
