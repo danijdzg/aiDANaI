@@ -2556,77 +2556,6 @@ const getFilteredMovements = async (forComparison = false) => {
     return { current: currentMovs, previous: prevMovs, label: comparisonLabel };
 };
 
-/* =============================================================== */
-/* === LÓGICA CORREGIDA: MOTOR DE CÁLCULO REAL (SIN TRASPASOS) === */
-/* =============================================================== */
-
-/**
- * Calcula EXCLUSIVAMENTE Ingresos y Gastos reales.
- * Ignora los traspasos para evitar duplicidades en el resumen.
- */
-const calculateOperatingTotals = (movs, visibleAccountIds) => {
-    let ingresos = 0;
-    let gastos = 0;
-
-    movs.forEach(m => {
-        // 1. Si la cuenta no es visible en esta Caja (A/B/C), ignoramos el movimiento
-        // (A menos que sea un traspaso entre cajas, pero aquí queremos ignorar traspasos)
-        if (!visibleAccountIds.has(m.cuentaId) && m.tipo !== 'traspaso') return;
-
-        // 2. REGLA DE ORO: Ignoramos 'traspaso' completamente para el Resumen Operativo
-        if (m.tipo === 'traspaso') return;
-
-        // 3. Sumamos solo lo real
-        if (m.tipo === 'ingreso') ingresos += m.cantidad;
-        if (m.tipo === 'gasto') gastos += m.cantidad; // 'cantidad' ya suele ser negativa en gastos, pero aseguraremos
-    });
-
-    return { 
-        ingresos, 
-        gastos, 
-        saldoNeto: ingresos + gastos 
-    };
-};
-
-// Esta función reemplaza o complementa tu 'scheduleDashboardUpdate' para la tarjeta Resumen
-const updateDashboardSummaryCard = async () => {
-    // 1. Obtenemos los movimientos del periodo seleccionado (Mes, Año, etc.)
-    const { current } = await getFilteredMovements(false);
-    
-    // 2. Identificamos qué cuentas estamos viendo (Caja A, B o C)
-    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-
-    // 3. Calculamos usando la NUEVA lógica
-    const totals = calculateOperatingTotals(current, visibleAccountIds);
-
-    // 4. Pintamos los resultados en la pantalla con animación
-    // Usamos 'animateCountUp' que ya existe en tu código para el efecto visual
-    const ingresosEl = document.getElementById('kpi-ingresos-value');
-    const gastosEl = document.getElementById('kpi-gastos-value');
-    const netoEl = document.getElementById('kpi-saldo-neto-value');
-    const ahorroEl = document.getElementById('kpi-tasa-ahorro-value');
-
-    if (ingresosEl) animateCountUp(ingresosEl, totals.ingresos, 1000, true, '+');
-    if (gastosEl) animateCountUp(gastosEl, totals.gastos, 1000, true, ''); // El gasto ya trae el signo menos si está bien guardado
-    if (netoEl) animateCountUp(netoEl, totals.saldoNeto, 1000, true);
-
-    // 5. Calculamos Tasa de Ahorro
-    if (ahorroEl) {
-        let tasaAhorro = 0;
-        if (totals.ingresos > 0) {
-            // (Ingresos - GastosReales) / Ingresos
-            // Nota: totals.gastos es negativo, así que (Ingresos + Gastos) es el neto
-            tasaAhorro = (totals.saldoNeto / totals.ingresos) * 100;
-        }
-        // Pintamos el porcentaje
-        ahorroEl.textContent = tasaAhorro.toFixed(1) + '%';
-        
-        // Color dinámico para la tasa de ahorro
-        ahorroEl.style.color = tasaAhorro >= 20 ? 'var(--c-success)' : (tasaAhorro > 0 ? 'var(--c-warning)' : 'var(--c-danger)');
-    }
-};
-
-/* =============================================================== */
         
         const calculateIRR = (cashflows) => {
             if (cashflows.length < 2) return 0;
@@ -4450,171 +4379,166 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
-// ==========================================
-// 🏠 PANTALLA INICIO (PANEL) - AJUSTE SUPERIOR EXACTO 5PX
-// ==========================================
+/* =============================================================== */
+/* === NUEVO MOTOR DE CÁLCULO (CORRECCIÓN GASTOS DANI) === */
+/* =============================================================== */
 
+const calculateOperatingTotals = (movs, visibleAccountIds) => {
+    let ingresos = 0;
+    let gastos = 0;
+
+    movs.forEach(m => {
+        // 1. Si la cuenta no es visible, ignoramos.
+        if (!visibleAccountIds.has(m.cuentaId) && m.tipo !== 'traspaso') return;
+
+        // 2. REGLA DE ORO: Ignoramos TRASPASOS, AJUSTES y SALDOS INICIALES
+        // Esto evita que mover dinero de un bolsillo a otro cuente como gasto.
+        if (['traspaso', 'ajuste', 'saldo_inicial'].includes(m.tipo)) return;
+
+        // 3. MATEMÁTICA SEGURA (Evita errores de signos)
+        // Sumamos siempre el valor absoluto para asegurarnos.
+        if (m.tipo === 'ingreso') {
+            ingresos += Math.abs(m.cantidad); 
+        }
+        if (m.tipo === 'gasto') {
+            gastos -= Math.abs(m.cantidad); // Forzamos que sea negativo (resta)
+        }
+    });
+
+    return { ingresos, gastos, saldoNeto: ingresos + gastos };
+};
+
+const updateDashboardSummaryCard = async () => {
+    // Obtenemos movimientos y cuentas
+    const { current } = await getFilteredMovements(false);
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+
+    // Usamos el nuevo cálculo
+    const totals = calculateOperatingTotals(current, visibleAccountIds);
+
+    // Pintamos en pantalla con animación
+    const ingresosEl = document.getElementById('kpi-ingresos-value');
+    const gastosEl = document.getElementById('kpi-gastos-value');
+    const netoEl = document.getElementById('kpi-saldo-neto-value');
+    const ahorroEl = document.getElementById('kpi-tasa-ahorro-value');
+
+    if (ingresosEl) animateCountUp(ingresosEl, totals.ingresos, 1000, true, '+');
+    if (gastosEl) animateCountUp(gastosEl, totals.gastos, 1000, true, ''); 
+    if (netoEl) animateCountUp(netoEl, totals.saldoNeto, 1000, true);
+
+    if (ahorroEl && totals.ingresos > 0) {
+        const tasaAhorro = (totals.saldoNeto / totals.ingresos) * 100;
+        ahorroEl.textContent = tasaAhorro.toFixed(1) + '%';
+        ahorroEl.style.color = tasaAhorro >= 20 ? 'var(--c-success)' : (tasaAhorro > 0 ? 'var(--c-warning)' : 'var(--c-danger)');
+    } else if (ahorroEl) {
+        ahorroEl.textContent = '0%';
+    }
+};
+/* =============================================================== */
+/* === DISEÑO COMPACTO ONEPLUS NORD 4 (PANEL DE INICIO) === */
+/* =============================================================== */
 const renderPanelPage = async () => {
     const container = select(PAGE_IDS.PANEL);
     if (!container) return;
 
-    // --- 1. LIMPIEZA TOTAL DEL CONTENEDOR PADRE ---
-    // Forzamos a que el contenedor de la página no tenga relleno ni margen
+    // Ajustes de limpieza
     container.style.setProperty('padding', '0', 'important');
     container.style.setProperty('margin', '0', 'important');
     container.style.overflowX = 'hidden';
 
-    // --- VARIABLES ---
-    const gap = '5px'; // TU OBJETIVO: 5px
+    // --- VARIABLES DE DISEÑO COMPACTO ---
+    const gap = '4px'; // Menos espacio entre tarjetas
+    // Texto más pequeño para que quepa todo (1.5rem en vez de 1.8rem)
+    const bigKpiStyle = 'font-size: 1.5rem; font-weight: 800; line-height: 1.1; white-space: nowrap; font-family: "Roboto Condensed", sans-serif;';
+    const titleStyle = 'font-size: 0.65rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 2px; opacity: 0.8;';
     
-    const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
-    const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
-    
-    // ESTILO BASE DE TARJETA
-    // Importante: margin: 0 para que no empuje nada por fuera.
+    // Tarjetas más finas
     const cardStyle = `
         width: 98%; 
-        padding: 12px 15px; 
-        border-radius: 16px; 
+        padding: 8px 12px; 
+        border-radius: 12px; 
         border: 1px solid rgba(255, 255, 255, 0.1); 
-        box-sizing: border-box; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin: 0 !important; /* CERO MARGENES EXTERNOS */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin: 0 !important;
+        background: rgba(255,255,255,0.03);
     `;
 
     container.innerHTML = `
-    <div style="
-        display: flex; 
-        flex-direction: column; 
-        align-items: center; 
-        width: 100%; 
+    <div style="display: flex; flex-direction: column; align-items: center; width: 100%; padding-top: ${gap} !important; gap: ${gap} !important; padding-bottom: 80px;">
         
-        /* AQUÍ ESTÁ LA CLAVE DEL TECHO: */
-        padding-top: ${gap} !important;  /* Exactamente 5px desde arriba */
-        margin-top: 0 !important;        /* Nada de márgenes extra */
-        
-        gap: ${gap} !important;          /* 3px entre tarjetas */
-        padding-bottom: 100px;
-    ">
-        
-        <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} background: rgba(255,255,255,0.03); cursor: pointer; margin-top: 0 !important;">
-            
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">
-                <div style="font-size: 0.85rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px;">
-                    RESUMEN
-                </div>
-                
+        <div class="hero-card fade-in-up" data-action="ver-flujo-caja" style="${cardStyle} cursor: pointer;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase;">RESUMEN</div>
                 <div class="report-filters" style="margin: 0;" onclick="event.stopPropagation()">
-                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.75rem; padding: 2px 10px; height: auto; background-color: rgba(255,255,255,0.1); border: 1px solid var(--c-outline); border-radius: 6px; color: #FFFFFF;">
+                    <select id="filter-periodo" class="form-select report-period-selector" style="font-size: 0.7rem; padding: 1px 8px; height: auto; background-color: rgba(255,255,255,0.1); border: none; color: #FFFFFF;">
                         <option value="mes-actual">Este Mes</option>
                         <option value="año-actual">Este Año</option>
-                        <option value="custom">Personalizado</option>
                     </select>
                 </div>
             </div>
 
-            <div id="custom-date-filters" class="form-grid hidden" onclick="event.stopPropagation()" style="grid-template-columns: 1fr 1fr; gap: 3px; margin-bottom: 8px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 8px;">
-                <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.7rem; color:#FFFFFF;">Desde</label>
-                     <input type="date" id="filter-fecha-inicio" class="form-input" style="font-size: 0.85rem; padding: 2px; background: var(--c-surface); color: white;">
-                </div>
-                <div style="display:flex; flex-direction:column;">
-                     <label style="font-size:0.7rem; color:#FFFFFF;">Hasta</label>
-                     <input type="date" id="filter-fecha-fin" class="form-input" style="font-size: 0.85rem; padding: 2px; background: var(--c-surface); color: white;">
-                </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px; text-align: center; margin-bottom: 6px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; text-align: center;">
                 <div>
                     <div style="${titleStyle}">INGRESOS</div>
-                    <div id="kpi-ingresos-value" class="skeleton" style="${bigKpiStyle} color: var(--c-success);">+0,00 €</div>
+                    <div id="kpi-ingresos-value" class="skeleton" style="${bigKpiStyle} color: var(--c-success);">+0 €</div>
                 </div>
                 <div>
                     <div style="${titleStyle}">GASTOS</div>
-                    <div id="kpi-gastos-value" class="skeleton" style="${bigKpiStyle} color: var(--c-danger);">-0,00 €</div>
+                    <div id="kpi-gastos-value" class="skeleton" style="${bigKpiStyle} color: var(--c-danger);">-0 €</div>
                 </div>
-            </div>
-
-            <div style="height: 1px; background-color: var(--c-outline); margin: 4px 0 6px 0; opacity: 0.3;"></div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px; text-align: center;">
                 <div>
                     <div style="${titleStyle}">NETO</div>
-                    <div id="kpi-saldo-neto-value" class="skeleton" style="${bigKpiStyle}">0,00 €</div>
+                    <div id="kpi-saldo-neto-value" class="skeleton" style="${bigKpiStyle}">0 €</div>
                 </div>
                 <div>
                     <div style="${titleStyle}">AHORRO</div>
-                    <div id="kpi-tasa-ahorro-value" class="skeleton" style="${bigKpiStyle}">0.00%</div>
+                    <div id="kpi-tasa-ahorro-value" class="skeleton" style="${bigKpiStyle}">0%</div>
                 </div>
             </div>
         </div>
 
         <div class="hero-card fade-in-up border-ingreso" onclick="goToPatrimonioChart()" style="${cardStyle} cursor: pointer; text-align: center; background: rgba(0,0,0,0.2);">
-            <div style="margin-bottom: 6px;">
-                <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 2px;">
-                    PATRIMONIO NETO
-                </div>
-                <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.8rem; line-height: 1.1; margin: 2px 0; white-space: nowrap;">0,00 €</div>
+            <div style="margin-bottom: 4px;">
+                <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #FFFFFF; letter-spacing: 1px;">PATRIMONIO NETO</div>
+                <div id="kpi-patrimonio-neto-value" class="hero-value kpi-resaltado-azul skeleton" style="font-size: 2.2rem; line-height: 1; margin: 0; white-space: nowrap;">0 €</div>
             </div>
-            
-            <div style="background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 5px 10px; display: grid; grid-template-columns: 1fr 1px 1fr; align-items: center; gap: 3px;">
+            <div style="background-color: rgba(255,255,255,0.05); border-radius: 6px; padding: 4px 8px; display: flex; justify-content: space-around; gap: 8px;">
                 <div style="text-align: center;">
                     <div style="${titleStyle}">Liquidez</div>
-                    <div id="kpi-liquidez-value" class="skeleton" style="${bigKpiStyle} font-size: 1.4rem;">0,00 €</div>
+                    <div id="kpi-liquidez-value" class="skeleton" style="font-size: 1.1rem; font-weight: 700;">0 €</div>
                 </div>
-                <div style="height: 20px; background-color: var(--c-outline); opacity: 0.5;"></div>
                 <div style="text-align: center;">
-                    <div style="${titleStyle}">Capital Inv.</div>
-                    <div id="kpi-capital-invertido-total" class="skeleton" style="${bigKpiStyle} font-size: 1.4rem;">0,00 €</div>
+                    <div style="${titleStyle}">Inversión</div>
+                    <div id="kpi-capital-invertido-total" class="skeleton" style="font-size: 1.1rem; font-weight: 700;">0 €</div>
                 </div>
-            </div>
-        </div>
-
-        <div class="hero-card fade-in-up border-ingreso" onclick="goToInversionesChart()" style="${cardStyle} cursor: pointer; background: linear-gradient(180deg, rgba(191, 90, 242, 0.1) 0%, rgba(0,0,0,0) 100%);">
-            
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
-                <div style="text-align: left;">
-                    <div style="${titleStyle}">Capital Inv.</div>
-                    <div id="new-card-capital" class="skeleton" style="${bigKpiStyle} font-size: 1.6rem;">0,00 €</div>
-                </div>
-                
-                <div style="text-align: right;">
-                    <div style="${titleStyle}">P&L</div>
-                    <div id="new-card-pnl" class="skeleton" style="${bigKpiStyle} font-size: 1.6rem;">0,00 €</div>
-                </div>
-            </div>
-
-            <div style="text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
-                <div style="${titleStyle} color: #FFFFFF; font-size: 0.8rem;">
-                    Valor Real Mercado
-                </div>
-                <div id="new-card-market-value" class="skeleton" style="${bigKpiStyle} font-size: 2.2rem;">0,00 €</div>
             </div>
         </div>
 
         <div class="hero-card fade-in-up border-warning" style="${cardStyle} background: linear-gradient(180deg, var(--c-surface) 0%, rgba(0,0,0,0.2) 100%);">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
                 <div style="text-align: center;">
-                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 12px; vertical-align: middle;">shield</span> COBERTURA</div>
-                    <div id="health-runway-val" class="skeleton" style="font-size: 1.5rem; font-weight: 800; color: #FFD60A; white-space: nowrap;">0.0 Meses</div>
+                    <div style="${titleStyle}">COBERTURA</div>
+                    <div id="health-runway-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #FFD60A;">0.0 Meses</div>
                 </div>
                 <div style="text-align: center; border-left: 1px solid var(--c-outline);">
-                    <div style="${titleStyle}"> <span class="material-icons" style="font-size: 12px; vertical-align: middle;">flag</span> LIBERTAD</div>
-                    <div id="health-fi-val" class="skeleton" style="font-size: 1.5rem; font-weight: 800; color: #39FF14; white-space: nowrap;">0.00%</div>
+                    <div style="${titleStyle}">LIBERTAD</div>
+                    <div id="health-fi-val" class="skeleton" style="font-size: 1.2rem; font-weight: 800; color: #39FF14;">0.0%</div>
                 </div>
             </div>
         </div>
-
     </div>
-    
     <div id="concepto-totals-list" style="display:none;"></div>
     <canvas id="conceptos-chart" style="display:none;"></canvas>
     <div id="net-worth-chart-container" style="display:none;"><canvas id="net-worth-chart"></canvas></div>
     `;
     
+    // Carga de datos
     populateAllDropdowns();
     await Promise.all([loadPresupuestos(), loadInversiones()]);
-	updateDashboardSummaryCard();
+    
+    // ¡AQUÍ ESTÁ LA CLAVE! Llamamos a la nueva función corregida
+    updateDashboardSummaryCard(); 
+    
     scheduleDashboardUpdate();
 };
 
