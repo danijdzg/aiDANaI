@@ -2555,6 +2555,78 @@ const getFilteredMovements = async (forComparison = false) => {
     
     return { current: currentMovs, previous: prevMovs, label: comparisonLabel };
 };
+
+/* =============================================================== */
+/* === LÓGICA CORREGIDA: MOTOR DE CÁLCULO REAL (SIN TRASPASOS) === */
+/* =============================================================== */
+
+/**
+ * Calcula EXCLUSIVAMENTE Ingresos y Gastos reales.
+ * Ignora los traspasos para evitar duplicidades en el resumen.
+ */
+const calculateOperatingTotals = (movs, visibleAccountIds) => {
+    let ingresos = 0;
+    let gastos = 0;
+
+    movs.forEach(m => {
+        // 1. Si la cuenta no es visible en esta Caja (A/B/C), ignoramos el movimiento
+        // (A menos que sea un traspaso entre cajas, pero aquí queremos ignorar traspasos)
+        if (!visibleAccountIds.has(m.cuentaId) && m.tipo !== 'traspaso') return;
+
+        // 2. REGLA DE ORO: Ignoramos 'traspaso' completamente para el Resumen Operativo
+        if (m.tipo === 'traspaso') return;
+
+        // 3. Sumamos solo lo real
+        if (m.tipo === 'ingreso') ingresos += m.cantidad;
+        if (m.tipo === 'gasto') gastos += m.cantidad; // 'cantidad' ya suele ser negativa en gastos, pero aseguraremos
+    });
+
+    return { 
+        ingresos, 
+        gastos, 
+        saldoNeto: ingresos + gastos 
+    };
+};
+
+// Esta función reemplaza o complementa tu 'scheduleDashboardUpdate' para la tarjeta Resumen
+const updateDashboardSummaryCard = async () => {
+    // 1. Obtenemos los movimientos del periodo seleccionado (Mes, Año, etc.)
+    const { current } = await getFilteredMovements(false);
+    
+    // 2. Identificamos qué cuentas estamos viendo (Caja A, B o C)
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+
+    // 3. Calculamos usando la NUEVA lógica
+    const totals = calculateOperatingTotals(current, visibleAccountIds);
+
+    // 4. Pintamos los resultados en la pantalla con animación
+    // Usamos 'animateCountUp' que ya existe en tu código para el efecto visual
+    const ingresosEl = document.getElementById('kpi-ingresos-value');
+    const gastosEl = document.getElementById('kpi-gastos-value');
+    const netoEl = document.getElementById('kpi-saldo-neto-value');
+    const ahorroEl = document.getElementById('kpi-tasa-ahorro-value');
+
+    if (ingresosEl) animateCountUp(ingresosEl, totals.ingresos, 1000, true, '+');
+    if (gastosEl) animateCountUp(gastosEl, totals.gastos, 1000, true, ''); // El gasto ya trae el signo menos si está bien guardado
+    if (netoEl) animateCountUp(netoEl, totals.saldoNeto, 1000, true);
+
+    // 5. Calculamos Tasa de Ahorro
+    if (ahorroEl) {
+        let tasaAhorro = 0;
+        if (totals.ingresos > 0) {
+            // (Ingresos - GastosReales) / Ingresos
+            // Nota: totals.gastos es negativo, así que (Ingresos + Gastos) es el neto
+            tasaAhorro = (totals.saldoNeto / totals.ingresos) * 100;
+        }
+        // Pintamos el porcentaje
+        ahorroEl.textContent = tasaAhorro.toFixed(1) + '%';
+        
+        // Color dinámico para la tasa de ahorro
+        ahorroEl.style.color = tasaAhorro >= 20 ? 'var(--c-success)' : (tasaAhorro > 0 ? 'var(--c-warning)' : 'var(--c-danger)');
+    }
+};
+
+/* =============================================================== */
         
         const calculateIRR = (cashflows) => {
             if (cashflows.length < 2) return 0;
@@ -4542,6 +4614,7 @@ const renderPanelPage = async () => {
     
     populateAllDropdowns();
     await Promise.all([loadPresupuestos(), loadInversiones()]);
+	updateDashboardSummaryCard();
     scheduleDashboardUpdate();
 };
 
