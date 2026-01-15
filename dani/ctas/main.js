@@ -4880,107 +4880,153 @@ window.changePortfolioRange = (newRange) => {
     // 2. Recargar solo el gráfico
     renderPortfolioEvolutionChart('portfolio-evolution-container');
 };
-	
-	// Función global para abrir el modal masivo
+// ===============================================================
+// === 1. VISUALIZACIÓN: VENTANA DE ACTUALIZACIÓN MASIVA ===
+// ===============================================================
 window.showBulkUpdateModal = () => {
-    const investmentAccounts = getVisibleAccounts().filter(c => c.esInversion);
-    if (investmentAccounts.length === 0) return showToast("No hay cuentas de inversión.", "warning");
+    // 1. Buscamos las cuentas de inversión directamente en la base de datos
+    // Usamos 'c.tipo === inversion' que es más seguro
+    const investmentAccounts = db.cuentas.filter(c => c.tipo === 'inversion' && !c.archived);
+    
+    if (investmentAccounts.length === 0) {
+        return showToast("No tienes cuentas de inversión activas.", "warning");
+    }
 
-    // Preparamos el HTML con inputs pre-rellenados con el último valor conocido
+    // 2. Preparamos la fecha de hoy
+    const fechaISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+
     let rowsHtml = '';
     
-    // Obtenemos los últimos valores de la caché para pre-rellenar
-    // (Esto usa la lógica que ya tienes en calculatePortfolioPerformance pero simplificada)
+    // 3. Creamos una fila por cada cuenta
     investmentAccounts.forEach(c => {
+        // Buscamos el último valor conocido para ponértelo fácil
         const history = (db.inversiones_historial || []).filter(h => h.cuentaId === c.id);
-        // Ordenar por fecha descendente
-        history.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
-        const lastVal = history.length > 0 ? history[0].valor : 0;
+        history.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)); // Ordenar por fecha
         
-        const valStr = (lastVal / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, useGrouping: false });
+        const lastVal = history.length > 0 ? history[0].valor : 0;
+        // Convertimos céntimos a euros y formateamos (sin separador de miles para que sea fácil editar)
+        const valStr = (lastVal / 100).toFixed(2); 
 
         rowsHtml += `
-        <div class="form-group" style="margin-bottom: 12px; display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: center;">
-            <label style="margin:0; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.nombre}</label>
-            <input type="text" 
-                   class="form-input input-amount-calculator bulk-update-input" 
+        <div class="form-group" style="margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--c-outline); padding-bottom: 10px;">
+            <label style="margin:0; font-size: 1rem; color: var(--c-on-surface); font-weight: 500; flex: 1;">
+                ${c.nombre}
+                <br><span style="font-size: 0.8em; color: var(--c-on-surface-variant);">${c.entidad || 'Inversión'}</span>
+            </label>
+            
+            <input type="number" 
+                   class="form-input bulk-update-input" 
                    data-account-id="${c.id}" 
                    value="${valStr}" 
                    inputmode="decimal" 
-                   style="text-align: right; padding: 8px;">
+                   step="0.01"
+                   placeholder="0.00"
+                   onclick="this.select()"
+                   style="text-align: right; padding: 12px; width: 140px; font-size: 1.2rem; font-weight: bold; color: var(--c-primary); background: var(--c-surface-variant); border: none; border-radius: 8px;">
         </div>`;
     });
 
     const html = `
-        <div style="max-height: 60vh; overflow-y: auto; padding: 5px;">
-            <p class="form-label" style="margin-bottom: 15px;">Actualiza el valor de mercado a día de hoy.</p>
-            <form id="bulk-update-form">
-                ${rowsHtml}
-                <div class="form-group" style="margin-top: 20px;">
-                    <label class="form-label">Fecha de valoración</label>
-                    <input type="date" id="bulk-update-date" class="form-input" value="${new Date().toISOString().slice(0,10)}">
+        <div style="max-height: 70vh; overflow-y: auto; padding: 5px;">
+            <p class="form-label" style="margin-bottom: 20px; text-align: center;">
+                Actualiza el valor de mercado de todas tus cuentas a día de hoy.
+            </p>
+            
+            <form id="bulk-update-form" onsubmit="event.preventDefault();">
+                <div style="margin-bottom: 20px;">
+                     ${rowsHtml}
                 </div>
-                <button type="button" class="btn btn--primary btn--full" onclick="saveBulkUpdate(this)">
-                    Guardar Todo
+                
+                <div class="form-group" style="background: var(--c-surface-variant); padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+                    <label class="form-label">Fecha de la valoración</label>
+                    <input type="date" id="bulk-update-date" class="form-input" value="${fechaISO}" style="text-align: center;">
+                </div>
+
+                <button type="button" class="btn btn--primary btn--full" onclick="window.saveBulkUpdate(this)" style="padding: 15px; font-size: 1.1rem;">
+                    <span class="material-icons" style="margin-right: 8px;">save_all</span> Guardar Todo
                 </button>
             </form>
         </div>
     `;
 
     showGenericModal("Actualizar Portafolio", html);
-    // Reactivar calculadoras en los inputs nuevos
-    setTimeout(initAmountInput, 100);
 };
 
-// Función para guardar
-window.saveBulkUpdate = async (btn) => {
-    setButtonLoading(btn, true, 'Guardando...');
-    
-    const inputs = document.querySelectorAll('.bulk-update-input');
-    const date = document.getElementById('bulk-update-date').value;
-    const batch = fbDb.batch();
-    const collectionRef = fbDb.collection('users').doc(currentUser.uid).collection('inversiones_historial');
+// ===============================================================
+// === 2. LÓGICA: GUARDAR LOS DATOS MASIVOS ===
+// ===============================================================
+window.saveBulkUpdate = async (btnElement) => {
+    // Ponemos el botón en modo "cargando"
+    const originalText = btnElement.innerHTML;
+    btnElement.innerHTML = '<span class="material-icons spin">refresh</span> Guardando...';
+    btnElement.disabled = true;
 
-    let count = 0;
-    
-    // Iteramos sobre cada input
-    for (const input of inputs) {
-        const valRaw = parseCurrencyString(input.value);
-        if (isNaN(valRaw)) continue; // Saltamos vacíos o errores
+    try {
+        const dateInput = document.getElementById('bulk-update-date');
+        const fecha = dateInput.value;
         
-        const valCents = Math.round(valRaw * 100);
-        const accId = input.dataset.accountId;
-        const newId = generateId(); // Tu función auxiliar existente
+        // Recogemos todos los inputs de dinero
+        const inputs = document.querySelectorAll('.bulk-update-input');
+        let cambios = 0;
 
-        // Crear referencia de documento
-        const docRef = collectionRef.doc(newId);
-        
-        batch.set(docRef, {
-            id: newId,
-            cuentaId: accId,
-            valor: valCents,
-            fecha: date
-        });
-        
-        // Actualizar caché local manualmente para reflejo instantáneo
+        // Preparamos la base de datos (historial) si no existe
         if (!db.inversiones_historial) db.inversiones_historial = [];
-        db.inversiones_historial.push({ id: newId, cuentaId: accId, valor: valCents, fecha: date });
-        
-        count++;
-    }
 
-    if (count > 0) {
-        await batch.commit();
-        showToast(`${count} activos actualizados.`, 'success');
-        hideModal('generic-modal');
-        // Recargar vista
-        renderPortfolioMainContent('portfolio-main-content');
-        renderPortfolioEvolutionChart('portfolio-evolution-container');
-    } else {
-        showToast("No hay datos válidos para guardar.", "warning");
+        inputs.forEach(input => {
+            const valorRaw = input.value;
+            // Si está vacío, lo ignoramos
+            if (valorRaw === '' || valorRaw === null) return;
+
+            const cuentaId = input.dataset.accountId;
+            const nuevoValor = parseFloat(valorRaw); // Valor en euros (ej: 1500.50)
+            const nuevoValorCentimos = Math.round(nuevoValor * 100); // Pasamos a céntimos (ej: 150050)
+
+            // 1. Añadimos al historial
+            // Generamos un ID único simple
+            const nuevoId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+            
+            db.inversiones_historial.push({
+                id: nuevoId,
+                cuentaId: cuentaId,
+                fecha: fecha,
+                valor: nuevoValorCentimos,
+                nota: 'Actualización masiva'
+            });
+
+            // 2. Actualizamos el saldo actual de la cuenta para que se vea en el home
+            const cuenta = db.cuentas.find(c => c.id === cuentaId);
+            if (cuenta) {
+                cuenta.balance = nuevoValorCentimos;
+            }
+
+            cambios++;
+        });
+
+        if (cambios > 0) {
+            // AQUÍ GUARDAMOS DE VERDAD EN FIREBASE
+            await saveDb(); 
+            
+            showToast(`✅ Se han actualizado ${cambios} cuentas correctamente.`);
+            closeModal(); // Cerramos la ventana
+            
+            // Recargamos la pantalla para ver los nuevos números
+            if (typeof renderInversiones === 'function') renderInversiones();
+            if (typeof renderHome === 'function') renderHome();
+            
+        } else {
+            showToast("⚠️ No se detectaron cambios para guardar.", "warning");
+        }
+
+    } catch (error) {
+        console.error(error);
+        showToast("❌ Error al guardar: " + error.message, "error");
+    } finally {
+        // Restauramos el botón por si acaso hubo error
+        if(btnElement) {
+            btnElement.innerHTML = originalText;
+            btnElement.disabled = false;
+        }
     }
-    
-    setButtonLoading(btn, false);
 };
 // =================================================================
 // === INICIO: NUEVO MOTOR DE RENDERIZADO DE INFORMES (v2.0) ===
