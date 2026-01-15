@@ -4380,28 +4380,30 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 /* =============================================================== */
-/* === NUEVO MOTOR DE CÁLCULO (CORRECCIÓN GASTOS DANI) === */
+/* === NUEVO MOTOR DE CÁLCULO v2.0 (CORRECCIÓN LÓGICA) === */
 /* =============================================================== */
-
 const calculateOperatingTotals = (movs, visibleAccountIds) => {
     let ingresos = 0;
     let gastos = 0;
 
     movs.forEach(m => {
-        // 1. Si la cuenta no es visible, ignoramos.
-        if (!visibleAccountIds.has(m.cuentaId) && m.tipo !== 'traspaso') return;
+        // 1. FILTRO DE SEGURIDAD:
+        // Si la cuenta no pertenece a la "Caja" que estás mirando (A o B), la ignoramos.
+        if (!visibleAccountIds.has(m.cuentaId)) return;
 
-        // 2. REGLA DE ORO: Ignoramos TRASPASOS, AJUSTES y SALDOS INICIALES
-        // Esto evita que mover dinero de un bolsillo a otro cuente como gasto.
+        // 2. REGLA DE ORO: Ignorar movimientos que no son reales
+        // - Traspaso: Mover dinero de un bolsillo a otro no es gastar.
+        // - Ajuste/Saldo Inicial: Son correcciones técnicas, no flujo de caja.
         if (['traspaso', 'ajuste', 'saldo_inicial'].includes(m.tipo)) return;
 
-        // 3. MATEMÁTICA SEGURA (Evita errores de signos)
-        // Sumamos siempre el valor absoluto para asegurarnos.
-        if (m.tipo === 'ingreso') {
-            ingresos += Math.abs(m.cantidad); 
-        }
-        if (m.tipo === 'gasto') {
-            gastos -= Math.abs(m.cantidad); // Forzamos que sea negativo (resta)
+        // 3. MATEMÁTICA PURA (Corregido para Dani)
+        // En lugar de mirar la etiqueta 'tipo', miramos el signo del dinero.
+        // > 0 (Positivo) = Ingreso
+        // < 0 (Negativo) = Gasto
+        if (m.cantidad >= 0) {
+            ingresos += m.cantidad;
+        } else {
+            gastos += m.cantidad; // Al ser negativo, se restará correctamente
         }
     });
 
