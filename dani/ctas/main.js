@@ -4389,7 +4389,7 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 /* =============================================================== */
-/* === NUEVO MOTOR DE CÁLCULO v2.0 (CORRECCIÓN LÓGICA) === */
+/* === MOTOR DE CÁLCULO CORREGIDO (SOLUCIÓN MATEMÁTICA) === */
 /* =============================================================== */
 const calculateOperatingTotals = (movs, visibleAccountIds) => {
     let ingresos = 0;
@@ -4405,14 +4405,19 @@ const calculateOperatingTotals = (movs, visibleAccountIds) => {
         // - Ajuste/Saldo Inicial: Son correcciones técnicas, no flujo de caja.
         if (['traspaso', 'ajuste', 'saldo_inicial'].includes(m.tipo)) return;
 
-        // 3. MATEMÁTICA PURA (Corregido para Dani)
-        // En lugar de mirar la etiqueta 'tipo', miramos el signo del dinero.
+        // 3. MATEMÁTICA PURA BLINDADA (Aquí estaba el error)
+        // Convertimos el valor a número DECIMAL antes de sumar para evitar que "pegue" textos.
+        const cantidadNum = parseFloat(m.cantidad);
+        
+        // Si por error hay un dato corrupto que no es número, lo saltamos
+        if (isNaN(cantidadNum)) return;
+
         // > 0 (Positivo) = Ingreso
         // < 0 (Negativo) = Gasto
-        if (m.cantidad >= 0) {
-            ingresos += m.cantidad;
+        if (cantidadNum >= 0) {
+            ingresos += cantidadNum;
         } else {
-            gastos += m.cantidad; // Al ser negativo, se restará correctamente
+            gastos += cantidadNum; // Al ser negativo, restará visualmente luego
         }
     });
 
