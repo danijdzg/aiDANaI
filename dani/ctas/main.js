@@ -5514,18 +5514,36 @@ const renderPlanificacionPage = () => {
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             
-            <div class="widget-content">
-                <div id="patrimonio-summary-list" style="padding: 20px 15px;">
-                   <div class="skeleton" style="height: 60px; width: 100%; border-radius: 12px;"></div>
+            <div class="widget-content" style="padding: 0;"> <div id="patrimonio-summary-list" style="padding: 20px 0; width: 100%;">
+                   <div class="skeleton" style="height: 60px; width: 100%;"></div>
                 </div>
 
-                <details style="margin: 0 15px 20px 15px; background-color: var(--c-surface); border-radius: 12px; border: 1px solid var(--c-outline);">
-                    <summary style="padding: 12px; cursor: pointer; font-weight: 500; color: var(--c-primary); list-style: none; display: flex; align-items: center; gap: 8px;">
+                <details style="
+                    margin: 0;                   /* Cero márgenes externos */
+                    width: 100%;                 /* Ocupar todo el ancho */
+                    background-color: var(--c-surface); 
+                    border-top: 1px solid var(--c-outline);
+                    border-bottom: 1px solid var(--c-outline);
+                    border-radius: 0;            /* Esquinas cuadradas porque toca los bordes */
+                ">
+                    <summary style="
+                        padding: 15px;
+                        cursor: pointer;
+                        font-weight: 500;
+                        color: var(--c-primary);
+                        list-style: none;
+                        display: flex;
+                        justify-content: center; /* Centramos el texto del botón */
+                        align-items: center;
+                        gap: 8px;
+                        background-color: var(--c-surface-variant); /* Un fondo sutil para diferenciar el botón */
+                    ">
                         <span class="material-icons" style="font-size: 20px;">show_chart</span>
                         Ver Gráfico de Evolución
                     </summary>
-                    <div id="patrimonio-overview-container" style="padding: 10px; min-height: 250px;">
-                         <div class="skeleton" style="height: 200px; width: 100%; border-radius: 8px;"></div>
+                    
+                    <div id="patrimonio-overview-container" style="padding: 0; min-height: 250px;">
+                         <div class="skeleton" style="height: 200px; width: 100%;"></div>
                     </div>
                 </details>
             </div>
