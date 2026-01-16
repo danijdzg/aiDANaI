@@ -5542,8 +5542,8 @@ const renderPlanificacionPage = () => {
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
-                <div id="patrimonio-overview-container" style="padding: 0;">
-                    <div class="skeleton" style="height: 150px; width: 100%; border-radius: 8px;"></div>
+                <div id="patrimonio-overview-container" style="padding: 20px;">
+                   <div class="skeleton" style="height: 150px; width: 100%; border-radius: 8px;"></div>
                 </div>
             </div>
         </details>
@@ -6941,7 +6941,15 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
     if (mode === 'new') {
         setTimeout(() => {
             const amountInput = select('movimiento-cantidad');
-         }, 300); // Un poco más de tiempo para asegurar que el modal terminó de subir
+            if (amountInput) {
+                // Forzamos el foco para que el móvil sepa que queremos escribir
+                amountInput.focus(); 
+                // Hacemos un clic simulado por si el foco no fuera suficiente
+                amountInput.click(); 
+                // Selección del texto (por si hubiera un 0, para sobrescribirlo directo)
+                amountInput.select();
+            }
+        }, 450); // Subimos a 450ms para esperar a que la animación de la ventana termine
     }
 };
         
