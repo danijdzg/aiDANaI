@@ -5483,67 +5483,93 @@ const renderSavingsRateGauge = (canvasId, percentage) => {
         </div>`;
 };
 
-/* =========================================================== */
-/* ===  RENDER PÁGINA PLANIFICAR (Html Estructural)        === */
-/* =========================================================== */
 const renderPlanificacionPage = () => {
     const container = select(PAGE_IDS.PLANIFICAR);
     if (!container) return;
 
-    // Filtros para gráficos
+    // Filtros para gráficos (si existen)
     const filterControlsHTML = typeof generateReportFilterControls === 'function' 
         ? generateReportFilterControls('flujo_caja') 
         : '<div class="form-group"><p class="text-muted" style="font-size: 0.8rem;">Visualizando últimos 12 meses</p></div>';
-    
+   
     container.innerHTML = `
         <style>
-            #planificar-page { padding: 0 !important; background-color: var(--c-background) !important; overflow-x: hidden; }
-            .dashboard-widget { width: 100% !important; margin: 0 !important; border-radius: 0 !important; border: none !important; border-bottom: 1px solid var(--c-outline) !important; background-color: var(--c-surface); }
-            .widget-content { border-top: 1px solid var(--c-outline); background-color: var(--c-background); }
-            .widget-header { padding: 18px 15px; display: flex; align-items: center; cursor: pointer; }
-            .widget-title { font-size: 1rem; font-weight: 600; }
+            /* CONFIGURACIÓN GENERAL */
+            #planificar-page {
+                padding: 0 !important;
+                background-color: var(--c-background) !important;
+                overflow-x: hidden; /* Evita scroll lateral accidental */
+            }
+
+            /* ESTILO "FULL WIDTH" (DE BORDE A BORDE) */
+            .dashboard-widget {
+                width: 100% !important;     /* Ocupa todo el ancho */
+                margin: 0 !important;       /* Sin márgenes externos */
+                border-radius: 0 !important; /* Esquinas cuadradas */
+                border: none !important;    /* Quitamos el borde completo */
+                border-bottom: 1px solid var(--c-outline) !important; /* Solo línea separadora abajo */
+                background-color: var(--c-surface);
+                box-sizing: border-box;
+            }
+            
+            /* Ajuste visual para cuando se abre el acordeón */
+            .widget-content {
+                border-top: 1px solid var(--c-outline); /* Línea interna */
+                background-color: var(--c-background); /* Un poco más oscuro por dentro para contraste */
+            }
+
+            .widget-header {
+                padding: 18px 15px; /* Más espacio para el dedo */
+                display: flex;
+                align-items: center;
+                cursor: pointer;
+            }
+
+            /* Títulos más grandes para aprovechar el espacio */
+            .widget-title {
+                font-size: 1rem;
+                font-weight: 600;
+            }
         </style>
 
         <details class="dashboard-widget" open>
             <summary class="widget-header">
-                <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
+                <div class="icon-box icon-box--patrimonio">
+                    <span class="material-icons">account_balance</span>
+                </div>
                 <div class="widget-info">
                     <h3 class="widget-title">Patrimonio</h3>
-                    <p class="widget-subtitle">Estado financiero actual</p>
+                    <p class="widget-subtitle">Activos y desglose</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             
-            <div class="widget-content" style="padding: 0;"> <div id="patrimonio-summary-list" style="padding: 20px 0; width: 100%;">
-                   <div class="skeleton" style="height: 60px; width: 100%;"></div>
-                </div>
+            <div class="widget-content">
+                <div id="patrimonio-summary-list" style="padding: 15px; padding-bottom: 5px;">
+                   </div>
 
                 <details style="
-                    margin: 0;                   /* Cero márgenes externos */
-                    width: 100%;                 /* Ocupar todo el ancho */
+                    margin: 0 15px 15px 15px; 
                     background-color: var(--c-surface); 
-                    border-top: 1px solid var(--c-outline);
-                    border-bottom: 1px solid var(--c-outline);
-                    border-radius: 0;            /* Esquinas cuadradas porque toca los bordes */
+                    border-radius: 12px;
+                    border: 1px solid var(--c-outline);
                 ">
                     <summary style="
-                        padding: 15px;
+                        padding: 12px;
                         cursor: pointer;
                         font-weight: 500;
                         color: var(--c-primary);
                         list-style: none;
                         display: flex;
-                        justify-content: center; /* Centramos el texto del botón */
                         align-items: center;
                         gap: 8px;
-                        background-color: var(--c-surface-variant); /* Un fondo sutil para diferenciar el botón */
                     ">
                         <span class="material-icons" style="font-size: 20px;">show_chart</span>
                         Ver Gráfico de Evolución
                     </summary>
                     
-                    <div id="patrimonio-overview-container" style="padding: 0; min-height: 250px;">
-                         <div class="skeleton" style="height: 200px; width: 100%;"></div>
+                    <div id="patrimonio-overview-container" style="padding: 10px; min-height: 250px;">
+                         <div class="skeleton" style="height: 200px; width: 100%; border-radius: 8px;"></div>
                     </div>
                 </details>
             </div>
@@ -5551,14 +5577,19 @@ const renderPlanificacionPage = () => {
 
         <details class="dashboard-widget">
             <summary class="widget-header">
-                <div class="icon-box icon-box--reloj" style="background-color: rgba(156, 39, 176, 0.1); color: #9c27b0;"><span class="material-icons">update</span></div>
-                <div class="widget-info"><h3 class="widget-title">Recurrentes</h3><p class="widget-subtitle">Suscripciones y pagos fijos</p></div>
+                <div class="icon-box icon-box--reloj" style="background-color: rgba(156, 39, 176, 0.1); color: #9c27b0;">
+                    <span class="material-icons">update</span>
+                </div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Recurrentes</h3>
+                    <p class="widget-subtitle">Próximos pagos y suscripciones</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content" style="padding: 20px;">
                 <div id="pending-recurrents-container"></div>
                 <div style="margin-top: 15px;">
-                    <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 8px;">Activos:</p>
+                    <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 8px;">Suscripciones activas:</p>
                     <div id="recurrentes-list-container"></div>
                 </div>
             </div>
@@ -5567,32 +5598,47 @@ const renderPlanificacionPage = () => {
         <details id="acordeon-portafolio" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--inversion"><span class="material-icons">rocket_launch</span></div>
-                <div class="widget-info"><h3 class="widget-title">Inversiones</h3><p class="widget-subtitle">Evolución del portafolio</p></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Inversiones</h3>
+                    <p class="widget-subtitle">Evolución del portafolio</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
-                <div id="portfolio-evolution-container" style="margin-top: 16px; padding: 0 10px;"></div>
+                <div id="portfolio-evolution-container" style="margin-top: 16px; padding: 0 10px;">
+                    <div class="chart-container skeleton" style="height: 220px;"></div>
+                </div>
                 <div id="portfolio-main-content" style="margin-top: 20px; padding: 0 10px;"></div>
             </div>
         </details>
 
-        <details id="acordeon-extracto_cuenta" class="dashboard-widget">
-            <summary class="widget-header">
+        <details id="acordeon-extracto_cuenta" class="dashboard-widget informe-acordeon">
+            <summary id="summary-extracto-trigger" class="widget-header">
                 <div class="icon-box icon-box--banco"><span class="material-icons">wysiwyg</span></div>
-                <div class="widget-info"><h3 class="widget-title">Extracto</h3><p class="widget-subtitle">Consultar movimientos</p></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Extracto</h3>
+                    <p class="widget-subtitle">Consultar movimientos</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
                 <div id="informe-content-extracto_cuenta" style="padding: 20px;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <div style="display: flex; gap: 8px; width: 100%;">
-                            <div class="input-wrapper" style="flex-grow: 1;">
-                                <select id="informe-cuenta-select" class="form-select"></select>
+                    <div id="informe-cuenta-wrapper">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="informe-cuenta-select" class="form-label">Cuenta:</label>
+                            <div style="display: flex; gap: 8px; width: 100%;">
+                                <div class="input-wrapper" style="flex-grow: 1;">
+                                    <select id="informe-cuenta-select" class="form-select"></select>
+                                </div>
+                                <button id="btn-extracto-todo" class="btn btn--secondary" style="font-weight: 700;">TODO</button>
                             </div>
-                            <button id="btn-extracto-todo" class="btn btn--secondary" style="font-weight: 700;">TODO</button>
                         </div>
                     </div>
-                    <div id="informe-resultado-container" style="margin-top: 16px;"></div>
+                    <div id="informe-resultado-container" style="margin-top: 16px;">
+                        <div class="empty-state" style="background:transparent; padding:10px; border:none;">
+                            <p style="font-size:0.85rem;">Selecciona una cuenta.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </details>
@@ -5600,65 +5646,85 @@ const renderPlanificacionPage = () => {
         <details id="acordeon-flujo-caja" class="dashboard-widget">
             <summary class="widget-header">
                 <div class="icon-box icon-box--grafico"><span class="material-icons">bar_chart</span></div>
-                <div class="widget-info"><h3 class="widget-title">Flujo de Caja</h3><p class="widget-subtitle">Entradas vs. Salidas</p></div>
+                <div class="widget-info">
+                    <h3 class="widget-title">Flujo de Caja</h3>
+                    <p class="widget-subtitle">Entradas vs. Salidas</p>
+                </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content" style="padding: 20px;">
                 ${filterControlsHTML}
-                <div id="informe-content-flujo_caja" style="min-height: 250px; margin-top: 10px;"></div>
+                <div id="informe-content-flujo_caja" style="min-height: 250px; margin-top: 10px;">
+                    <div class="skeleton" style="height: 250px; border-radius: 8px;"></div>
+                </div>
             </div>
         </details>
         
         <div style="height: 100px;"></div>
     `;
 
-    // --- EJECUCIÓN ---
+    // --- LÓGICA JAVASCRIPT ---
+
     populateAllDropdowns();
     renderPendingRecurrents(); 
     renderRecurrentsListOnPage(); 
     
     setTimeout(async () => {
-        // AQUÍ LLAMAMOS A LA NUEVA FUNCIÓN QUE GESTIONA LAS DOS COSAS
+        // Patrimonio
         await renderPatrimonioOverviewWidget('patrimonio-overview-container');
         
-        // ... (resto de lógica de extracto, inversiones, etc. se mantiene igual que antes) ...
+        // Extracto
         const btnTodo = select('btn-extracto-todo');
         if (btnTodo) {
-            btnTodo.addEventListener('click', (e) => {
-                e.preventDefault(); 
+            const newBtn = btnTodo.cloneNode(true);
+            btnTodo.parentNode.replaceChild(newBtn, btnTodo);
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation(); e.target.blur();
                 if (typeof handleGenerateGlobalExtract === 'function') handleGenerateGlobalExtract(e.target);
             });
         }
         const selectCuenta = select('informe-cuenta-select');
         if (selectCuenta) {
-            const data = getVisibleAccounts();
-            let opts = '<option value="">Seleccionar cuenta...</option>';
-            [...data].sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach(i => opts += `<option value="${i.id}">${i.nombre}</option>`);
-            selectCuenta.innerHTML = opts;
+            const populate = (el, data) => {
+                let opts = '<option value="">Seleccionar cuenta...</option>';
+                [...data].sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach(i => opts += `<option value="${i.id}">${i.nombre}</option>`);
+                el.innerHTML = opts;
+            };
+            populate(selectCuenta, getVisibleAccounts());
+            createCustomSelect(selectCuenta);
             selectCuenta.addEventListener('change', () => { handleGenerateInformeCuenta(null, null); });
         }
         
-        // Carga diferida de Inversiones y Flujo de caja
+        // Inversiones
         const acordeonPortafolio = select('acordeon-portafolio');
-        if(acordeonPortafolio) {
-             acordeonPortafolio.addEventListener('toggle', async () => {
+        if (acordeonPortafolio) {
+            const loadPortfolioData = async () => {
+                await renderPortfolioEvolutionChart('portfolio-evolution-container');
+                await renderPortfolioMainContent('portfolio-main-content');
+            };
+            acordeonPortafolio.addEventListener('toggle', async () => {
                 if (acordeonPortafolio.open && !acordeonPortafolio.dataset.loaded) {
-                    if(typeof renderPortfolioEvolutionChart === 'function') await renderPortfolioEvolutionChart('portfolio-evolution-container');
-                    if(typeof renderPortfolioMainContent === 'function') await renderPortfolioMainContent('portfolio-main-content');
+                    await loadPortfolioData();
                     acordeonPortafolio.dataset.loaded = "true";
                 }
             });
         }
+
+        // Flujo Caja
         const acordeonFlujo = select('acordeon-flujo_caja');
         if (acordeonFlujo) {
             acordeonFlujo.addEventListener('toggle', () => {
-                if (acordeonFlujo.open && !acordeonFlujo.dataset.loaded && typeof renderInformeFlujoCaja === 'function') {
-                    renderInformeFlujoCaja(select('informe-content-flujo_caja'));
-                    acordeonFlujo.dataset.loaded = "true";
+                if (acordeonFlujo.open && !acordeonFlujo.dataset.loaded) {
+                    const flujoContainer = select('informe-content-flujo_caja');
+                    if (flujoContainer && typeof renderInformeFlujoCaja === 'function') {
+                        renderInformeFlujoCaja(flujoContainer);
+                        acordeonFlujo.dataset.loaded = "true";
+                    } else {
+                         if(flujoContainer) flujoContainer.innerHTML = '<p class="form-error">Error al cargar gráfico.</p>';
+                    }
                 }
             });
         }
-
     }, 50);
 };
 
