@@ -3083,7 +3083,18 @@ const renderPortfolioMainContent = async (targetContainerId) => {
     );
 
     // Aplicar filtros (si has desmarcado alguno)
-    const displayAssetsData = performanceData.filter(asset => !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T')));
+   // [MODIFICACIÓN aiDANaI] Filtrado inteligente para OnePlus Nord 4
+    const displayAssetsData = performanceData.filter(asset => {
+        // 1. Filtro de Categoría (Los botones de colores de arriba)
+        const isCategoryVisible = !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T'));
+        
+        // 2. Filtro de Valor (La regla de oro)
+        // Ocultamos si el valor es EXACTAMENTE 0. 
+        // Nota: Si tienes una deuda (valor negativo) SÍ se mostrará, porque es importante verla.
+        const hasValue = Math.abs(asset.valorActual) > 0; 
+        
+        return isCategoryVisible && hasValue;
+    });
 
     // 3. Calcular Totales Generales
     let portfolioTotalInvertido = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.capitalInvertido, 0);
