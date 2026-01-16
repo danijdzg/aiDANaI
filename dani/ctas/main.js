@@ -12129,3 +12129,29 @@ window.detectarYCorregirTraspasos = async () => {
         if (btn) setButtonLoading(btn, false);
     }
 };
+// ===============================================================
+// === RADAR ONEPLUS: Arreglo automático de visualización ===
+// ===============================================================
+// Este código busca activamente la tarjeta de Patrimonio y la expande
+setInterval(() => {
+    // Solo actuamos si es un móvil (menos de 480px de ancho)
+    if (window.innerWidth > 480) return;
+
+    // Buscamos cualquier título que diga "Patrimonio"
+    const titulos = document.querySelectorAll('.card__title');
+    
+    titulos.forEach(titulo => {
+        // Si encontramos el título "Patrimonio Neto"...
+        if (titulo.textContent.includes('Patrimonio') || titulo.textContent.includes('Evolución')) {
+            // ...buscamos su tarjeta contenedora (el padre)
+            const tarjeta = titulo.closest('.card');
+            
+            // Si la encontramos y no tiene ya el arreglo, se lo ponemos
+            if (tarjeta && !tarjeta.classList.contains('card--full-bleed')) {
+                tarjeta.classList.add('card--full-bleed');
+                console.log('📱 Fix OnePlus aplicado a:', titulo.textContent);
+            }
+        }
+    });
+}, 500); // Revisa cada medio segundo (imperceptible para el usuario)
+// ===============================================================
