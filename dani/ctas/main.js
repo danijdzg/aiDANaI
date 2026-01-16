@@ -1567,39 +1567,66 @@ const getDatesFromReportFilter = (reportId) => {
  * @param {Set<string>} visibleAccountIds - Un Set con los IDs de las cuentas visibles.
  * @returns {number} La cantidad en céntimos del impacto del movimiento.
  */
+/* =============================================================== */
+/* === MOTOR MATEMÁTICO BLINDADO v3.0 (FIX TEXTO A NÚMERO) === */
+/* =============================================================== */
 const calculateMovementAmount = (mov, visibleAccountIds) => {
+    // 1. SANITIZACIÓN: Convertimos CUALQUIER cosa a número entero
+    // Si viene "100", lo convierte a 100. Si viene 100, lo deja en 100.
+    // Si viene basura, lo convierte en 0.
+    let rawAmount = parseFloat(mov.cantidad);
+    if (isNaN(rawAmount)) rawAmount = 0;
+
     let amount = 0;
+
     if (mov.tipo === 'movimiento') {
-        // CORRECCIÓN CLAVE: Solo se suma si la cuenta del movimiento pertenece a la contabilidad visible.
+        // Solo sumamos si la cuenta es visible
         if (visibleAccountIds.has(mov.cuentaId)) {
-            amount = mov.cantidad;
+            amount = rawAmount;
         }
     } else if (mov.tipo === 'traspaso') {
         const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
         const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-        // Si el traspaso es entre contabilidades, solo contamos la parte que entra o sale.
-        if (origenVisible && !destinoVisible) amount = -mov.cantidad; // Sale dinero
-        else if (!origenVisible && destinoVisible) amount = mov.cantidad; // Entra dinero
-        // Si es un traspaso interno (ambas visibles) o externo (ninguna visible), el impacto es 0.
+        
+        // Lógica de Traspasos:
+        // Si sale de mi vista (Origen=Visible, Destino=Oculto) -> Es Gasto (-)
+        if (origenVisible && !destinoVisible) {
+            amount = -Math.abs(rawAmount); 
+        } 
+        // Si entra a mi vista (Origen=Oculto, Destino=Visible) -> Es Ingreso (+)
+        else if (!origenVisible && destinoVisible) {
+            amount = Math.abs(rawAmount);
+        }
+        // Si es interno (Visible->Visible) o externo (Oculto->Oculto) -> Es Neutro (0)
     }
+    
     return amount;
 };
 
-/**
- * REVISADO: Función central para calcular totales de ingresos/gastos/neto.
- * Ahora utiliza la función 'calculateMovementAmount' corregida.
- * @param {Array<object>} movs - Array de movimientos a procesar.
- * @param {Set<string>} visibleAccountIds - Set de IDs de cuentas visibles.
- * @returns {{ingresos: number, gastos: number, saldoNeto: number}}
- */
+/* =============================================================== */
+/* === CALCULADORA DE TOTALES (FORZANDO SUMA NUMÉRICA) === */
+/* =============================================================== */
 const calculateTotals = (movs, visibleAccountIds) => {
-    return movs.reduce((acc, mov) => {
+    // Inicializamos en CERO numérico
+    let ingresos = 0;
+    let gastos = 0;
+    let saldoNeto = 0;
+
+    movs.forEach(mov => {
+        // Llamamos a la función blindada de arriba
+        // Esto NOS GARANTIZA que 'amount' es un NÚMERO, no texto.
         const amount = calculateMovementAmount(mov, visibleAccountIds);
-        if (amount > 0) acc.ingresos += amount;
-        else acc.gastos += amount;
-        acc.saldoNeto += amount;
-        return acc;
-    }, { ingresos: 0, gastos: 0, saldoNeto: 0 });
+        
+        // Suma Segura
+        if (amount > 0) {
+            ingresos += amount;
+        } else {
+            gastos += amount;
+        }
+        saldoNeto += amount;
+    });
+
+    return { ingresos, gastos, saldoNeto };
 };
 document.body.addEventListener('change', e => {
     // 1. Selector de Periodo (Mes/Año/Custom)
@@ -4388,40 +4415,9 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
-/* =============================================================== */
-/* === MOTOR DE CÁLCULO CORREGIDO (SOLUCIÓN MATEMÁTICA) === */
-/* =============================================================== */
 const calculateOperatingTotals = (movs, visibleAccountIds) => {
-    let ingresos = 0;
-    let gastos = 0;
-
-    movs.forEach(m => {
-        // 1. FILTRO DE SEGURIDAD:
-        // Si la cuenta no pertenece a la "Caja" que estás mirando (A o B), la ignoramos.
-        if (!visibleAccountIds.has(m.cuentaId)) return;
-
-        // 2. REGLA DE ORO: Ignorar movimientos que no son reales
-        // - Traspaso: Mover dinero de un bolsillo a otro no es gastar.
-        // - Ajuste/Saldo Inicial: Son correcciones técnicas, no flujo de caja.
-        if (['traspaso', 'ajuste', 'saldo_inicial'].includes(m.tipo)) return;
-
-        // 3. MATEMÁTICA PURA BLINDADA (Aquí estaba el error)
-        // Convertimos el valor a número DECIMAL antes de sumar para evitar que "pegue" textos.
-        const cantidadNum = parseFloat(m.cantidad);
-        
-        // Si por error hay un dato corrupto que no es número, lo saltamos
-        if (isNaN(cantidadNum)) return;
-
-        // > 0 (Positivo) = Ingreso
-        // < 0 (Negativo) = Gasto
-        if (cantidadNum >= 0) {
-            ingresos += cantidadNum;
-        } else {
-            gastos += cantidadNum; // Al ser negativo, restará visualmente luego
-        }
-    });
-
-    return { ingresos, gastos, saldoNeto: ingresos + gastos };
+    // Redirigimos a la nueva lógica robusta para no tener código duplicado
+    return calculateTotals(movs, visibleAccountIds);
 };
 
 const updateDashboardSummaryCard = async () => {
