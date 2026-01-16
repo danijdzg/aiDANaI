@@ -4840,86 +4840,79 @@ async function renderPortfolioEvolutionChart(targetContainerId) {
                 {
                     label: 'Valor de Mercado',
                     data: totalValueData,
-                    borderColor: '#00E396', // Verde brillante tipo OnePlus
+                    borderColor: '#00B34D', 
                     borderWidth: 2,
-                    pointRadius: 0,         // Sin puntos para línea limpia
+                    pointRadius: 0,
                     pointHoverRadius: 4,
-                    tension: 0.4,           // Curva suave
+                    tension: 0.3,
                     order: 0,
+                    // El relleno verde/rojo que muestra la ganancia/pérdida
                     fill: {
-                        target: 'origin',
-                        above: 'rgba(0, 227, 150, 0.15)' // Relleno suave
+                        target: '1', 
+                        above: 'rgba(0, 179, 77, 0.25)',   
+                        below: 'rgba(255, 59, 48, 0.25)'   
                     }
                 },
                 {
                     label: 'Capital Aportado',
                     data: capitalData,
-                    borderColor: 'rgba(255, 255, 255, 0.3)',
-                    borderWidth: 1,
-                    borderDash: [4, 4],
+                    borderColor: 'rgba(255, 255, 255, 0.6)', 
+                    borderWidth: 1.5,
+                    borderDash: [3, 3], // Punteado para diferenciarlo claramente
                     pointRadius: 0,
                     fill: false,
+                    tension: 0.1,
                     order: 1
                 }
             ]
         },
         options: {
-            responsive: true,
+            responsive: true, 
             maintainAspectRatio: false,
-            layout: {
-                padding: {
-                    left: -10,  // TRUCO: Empujamos a la izquierda para matar el margen
-                    right: 0,   // Pegado a la derecha
-                    top: 0,
-                    bottom: 0
-                }
-            },
+            animation: { duration: 300 }, // Animación suave al cambiar de filtro
             scales: {
-                y: {
+                y: { 
                     display: true,
-                    position: 'right', // Números a la derecha para no molestar
-                    grid: {
-                        display: false, // Sin rejilla horizontal = más limpio
-                        drawBorder: false
-                    },
-                    ticks: {
-                        color: 'rgba(255,255,255,0.4)',
-                        font: { size: 10 },
-                        callback: value => (value/1000).toFixed(0) + 'k' // Formato corto (10k, 20k)
+                    position: 'right',
+                    // IMPORTANTE: Dejamos que Chart.js haga zoom automático.
+                    // NO ponemos beginAtZero: true. Así se amplifican las diferencias.
+                    grid: { color: 'rgba(255,255,255,0.05)', borderDash: [5,5] },
+                    ticks: { 
+                        callback: value => (value/1000).toFixed(1) + 'k',
+                        color: 'rgba(255,255,255,0.5)',
+                        font: { size: 9 }
                     }
                 },
-                x: {
-                    display: false, // Ocultamos fechas abajo para ganar altura máxima
-                    grid: { display: false }
+                x: { 
+                    type: 'time', 
+                    time: { unit: 'month', tooltipFormat: 'dd MMM yyyy' }, 
+                    grid: { display: false },
+                    ticks: { maxTicksLimit: 5, color: 'rgba(255,255,255,0.5)', font: { size: 9 } } 
                 }
             },
             plugins: {
-                legend: { display: false },
+                legend: { display: false }, // Ocultamos leyenda para ganar espacio, los colores lo dicen todo
+                datalabels: { display: false },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: 'rgba(0,0,0,0.8)',
-                    titleColor: '#fff',
-                    bodyColor: '#fff',
+                    backgroundColor: 'rgba(20, 20, 30, 0.95)',
                     borderColor: 'rgba(255,255,255,0.1)',
                     borderWidth: 1,
                     callbacks: {
-                        label: (context) => {
-                            let label = context.dataset.label || '';
-                            if (label) label += ': ';
-                            if (context.parsed.y !== null) {
-                                label += new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(context.parsed.y);
-                            }
-                            return label;
+                        label: (context) => `${context.dataset.label}: ${formatCurrency(context.raw * 100)}`,
+                        footer: (tooltipItems) => {
+                            const val = tooltipItems[0].parsed.y;
+                            const cap = tooltipItems[1].parsed.y;
+                            const diff = val - cap;
+                            const pct = cap !== 0 ? (diff / cap) * 100 : 0;
+                            const sign = diff >= 0 ? '+' : '';
+                            return `P&L: ${sign}${formatCurrency(diff * 100)} (${sign}${pct.toFixed(2)}%)`;
                         }
                     }
                 }
             },
-            interaction: {
-                mode: 'nearest',
-                axis: 'x',
-                intersect: false
-            }
+            interaction: { mode: 'index', intersect: false }
         }
     });
 }
