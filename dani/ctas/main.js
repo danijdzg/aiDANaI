@@ -12173,32 +12173,3 @@ const renderPatrimonioPage = async () => {
 
     main.innerHTML = html;
 };
-// [aiDANaI] - PUENTE DE EMERGENCIA
-// Esto busca el botón de Patrimonio/Cuentas y le obliga a cargar nuestra nueva pantalla
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        // Buscamos todos los botones de la barra de abajo
-        const botones = document.querySelectorAll('.bottom-nav__item, button');
-        
-        botones.forEach(btn => {
-            const texto = btn.innerText || '';
-            const icon = btn.querySelector('.material-icons')?.innerText || '';
-            
-            // Si el botón parece ser el de Patrimonio o Cuentas...
-            if (texto.toLowerCase().includes('patrimonio') || 
-                texto.toLowerCase().includes('cuentas') || 
-                icon === 'account_balance' || 
-                icon === 'account_balance_wallet') {
-                
-                // Le añadimos una orden directa
-                btn.addEventListener('click', (e) => {
-                    // Esperamos 50ms para asegurar que la app no nos pise
-                    setTimeout(() => {
-                        console.log("Forzando vista de Patrimonio...");
-                        renderPatrimonioPage();
-                    }, 50);
-                });
-            }
-        });
-    }, 1000); // Esperamos 1 segundo al arrancar para asegurar que los botones existen
-});
