@@ -2484,72 +2484,102 @@ const getValorMercadoInversiones = async () => {
     } catch (error) {
         console.error("Error en forcePanelRecalculation:", error);
     }
-};   
+};  
+ 
 const getFilteredMovements = async (forComparison = false) => {
-    // 1. OBTENER FECHAS DEL FILTRO (esto no cambia)
+    // 1. OBTENER FECHAS DEL FILTRO
     const filterPeriodo = select('filter-periodo');
+    // Si no existe el selector (aún no se pintó), asumimos "mes-actual" por defecto
     const p = filterPeriodo ? filterPeriodo.value : 'mes-actual';
+    
     let sDate, eDate, prevSDate, prevEDate;
     const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    // Normalizamos "ahora" al final del día para no perder movimientos de hoy
+    now.setHours(23, 59, 59, 999);
 
+    // Configuración de rangos de fecha
     switch (p) {
         case 'mes-actual':
+            // Desde el día 1 del mes a las 00:00
             sDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            sDate.setHours(0,0,0,0);
+            // Hasta el último momento del último día del mes
+            eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            eDate.setHours(23,59,59,999);
+            
+            // Periodo anterior (para comparar)
             prevSDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            prevEDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            prevEDate = new Date(now.getFullYear(), now.getMonth(), 0);
             break;
+            
         case 'año-actual':
             sDate = new Date(now.getFullYear(), 0, 1);
-            eDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+            sDate.setHours(0,0,0,0);
+            eDate = new Date(now.getFullYear(), 11, 31);
+            eDate.setHours(23,59,59,999);
+            
             prevSDate = new Date(now.getFullYear() - 1, 0, 1);
-            prevEDate = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+            prevEDate = new Date(now.getFullYear() - 1, 11, 31);
             break;
+            
         case 'custom':
             const filterFechaInicio = select('filter-fecha-inicio');
             const filterFechaFin = select('filter-fecha-fin');
-            sDate = filterFechaInicio?.value ? parseDateStringAsUTC(filterFechaInicio.value) : null;
-            eDate = filterFechaFin?.value ? parseDateStringAsUTC(filterFechaFin.value) : null;
-            if(eDate) eDate.setUTCHours(23, 59, 59, 999);
-            // Para el modo 'custom', no calculamos periodo previo.
+            // Si falta alguna fecha, no devolvemos nada para evitar errores
+            if (!filterFechaInicio?.value || !filterFechaFin?.value) {
+                return { current: [], previous: [], label: '' };
+            }
+            sDate = parseDateStringAsUTC(filterFechaInicio.value);
+            eDate = parseDateStringAsUTC(filterFechaFin.value);
+            if (eDate) eDate.setUTCHours(23, 59, 59, 999);
+            
             prevSDate = null; prevEDate = null; 
             break;
+            
         default:
             return { current: [], previous: [], label: '' };
     }
 
     if (!sDate || !eDate) return { current: [], previous: [], label: '' };
 
-    // 2. ¡LA MAGIA! CONSULTAR A LA BASE DE DATOS DIRECTAMENTE
-    const fetchMovementsForRange = async (start, end) => {
-        if (!start || !end) return [];
+    // 2. [CAMBIO CLAVE] USAR MEMORIA LOCAL (AppStore)
+    // Nos aseguramos de tener los datos cargados
+    const allMovs = await AppStore.getAll();
 
-        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-            .where('fecha', '>=', start.toISOString())
-            .where('fecha', '<=', end.toISOString())
-            .get();
-        return snapshot.docs.map(doc => doc.data());
+    // Función auxiliar para filtrar en memoria
+    const filterInMemory = (movs, start, end) => {
+        return movs.filter(m => {
+            const mDate = new Date(m.fecha);
+            return mDate >= start && mDate <= end;
+        });
     };
 
     // 3. OBTENER Y FILTRAR LOS MOVIMIENTOS
+    // Identificamos las cuentas visibles (Caja A o B)
     const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
     
-    // Función interna para filtrar por contabilidad (A o B)
+    // Filtramos por Caja (Ledger)
     const filterByLedger = (movs) => movs.filter(m => {
         if (m.tipo === 'traspaso') {
+            // En traspasos, nos interesa si el origen O el destino están visibles
             return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
         }
+        // En ingresos/gastos, solo si la cuenta es visible
         return visibleAccountIds.has(m.cuentaId);
     });
 
-    const currentMovsRaw = await fetchMovementsForRange(sDate, eDate);
+    // Filtramos por fecha usando nuestra memoria local (¡Rapidísimo!)
+    const currentMovsRaw = filterInMemory(allMovs, sDate, eDate);
     const currentMovs = filterByLedger(currentMovsRaw);
 
     if (!forComparison) return { current: currentMovs, previous: [], label: '' };
     
-    const prevMovsRaw = await fetchMovementsForRange(prevSDate, prevEDate);
-    const prevMovs = filterByLedger(prevMovsRaw);
+    // Si necesitamos comparar (para las flechitas de tendencia)
+    let prevMovs = [];
+    if (prevSDate && prevEDate) {
+        const prevMovsRaw = filterInMemory(allMovs, prevSDate, prevEDate);
+        prevMovs = filterByLedger(prevMovsRaw);
+    }
 
     const comparisonLabel = p === 'mes-actual' ? 'vs mes ant.' : (p === 'año-actual' ? 'vs año ant.' : '');
     
@@ -4379,31 +4409,26 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
-/* =============================================================== */
-/* === NUEVO MOTOR DE CÁLCULO v2.0 (CORRECCIÓN LÓGICA) === */
-/* =============================================================== */
 const calculateOperatingTotals = (movs, visibleAccountIds) => {
     let ingresos = 0;
     let gastos = 0;
 
     movs.forEach(m => {
-        // 1. FILTRO DE SEGURIDAD:
-        // Si la cuenta no pertenece a la "Caja" que estás mirando (A o B), la ignoramos.
+        // 1. Si es un traspaso, LO IGNORAMOS para el resumen operativo.
+        // (Mover dinero del bolsillo izquierdo al derecho no es ni ganar ni gastar)
+        if (m.tipo === 'traspaso' || m.tipo === 'ajuste' || m.tipo === 'saldo_inicial') return;
+
+        // 2. Verificamos que pertenezca a la contabilidad actual (Caja A, B...)
         if (!visibleAccountIds.has(m.cuentaId)) return;
 
-        // 2. REGLA DE ORO: Ignorar movimientos que no son reales
-        // - Traspaso: Mover dinero de un bolsillo a otro no es gastar.
-        // - Ajuste/Saldo Inicial: Son correcciones técnicas, no flujo de caja.
-        if (['traspaso', 'ajuste', 'saldo_inicial'].includes(m.tipo)) return;
-
-        // 3. MATEMÁTICA PURA (Corregido para Dani)
-        // En lugar de mirar la etiqueta 'tipo', miramos el signo del dinero.
-        // > 0 (Positivo) = Ingreso
-        // < 0 (Negativo) = Gasto
-        if (m.cantidad >= 0) {
-            ingresos += m.cantidad;
-        } else {
-            gastos += m.cantidad; // Al ser negativo, se restará correctamente
+        // 3. Suma matemática simple
+        if (m.tipo === 'ingreso') {
+            // Usamos Math.abs para asegurar que sumamos positivo
+            ingresos += Math.abs(m.cantidad);
+        }
+        if (m.tipo === 'gasto') {
+            // Restamos, asegurando que sea negativo
+            gastos -= Math.abs(m.cantidad);
         }
     });
 
@@ -4447,14 +4472,12 @@ const renderPanelPage = async () => {
     container.style.setProperty('margin', '0', 'important');
     container.style.overflowX = 'hidden';
 
-    // --- VARIABLES ---
-    const gap = '5px'; // TU OBJETIVO: 5px
     
-    const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
+    const gap = '5px'; // TU OBJETIVO: 5px
+    	
+	const bigKpiStyle = 'font-size: clamp(1.4rem, 6vw, 1.8rem); font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    // ESTILO BASE DE TARJETA
-    // Importante: margin: 0 para que no empuje nada por fuera.
     const cardStyle = `
         width: 98%; 
         padding: 12px 15px; 
