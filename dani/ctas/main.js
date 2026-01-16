@@ -4389,60 +4389,37 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 /* =============================================================== */
-/* === MODO AUDITORÍA: CÁLCULO CON REPORTE VISIBLE === */
+/* === MOTOR DE CÁLCULO CORREGIDO (SOLUCIÓN MATEMÁTICA) === */
 /* =============================================================== */
 const calculateOperatingTotals = (movs, visibleAccountIds) => {
     let ingresos = 0;
     let gastos = 0;
-    
-    // Variables para el reporte "chivato"
-    let auditoria = "🕵️ REPORTE DE CÁLCULO:\n";
-    let contador = 0;
 
     movs.forEach(m => {
-        // Filtro de cuenta visible
+        // 1. FILTRO DE SEGURIDAD:
+        // Si la cuenta no pertenece a la "Caja" que estás mirando (A o B), la ignoramos.
         if (!visibleAccountIds.has(m.cuentaId)) return;
 
-        // Ignoramos traspasos (esto es vital)
+        // 2. REGLA DE ORO: Ignorar movimientos que no son reales
+        // - Traspaso: Mover dinero de un bolsillo a otro no es gastar.
+        // - Ajuste/Saldo Inicial: Son correcciones técnicas, no flujo de caja.
         if (['traspaso', 'ajuste', 'saldo_inicial'].includes(m.tipo)) return;
 
-        // EL TESTIGO: Vemos qué es lo que llega realmente
-        const cantidadOriginal = m.cantidad;
-        const cantidadNumerica = parseFloat(m.cantidad);
+        // 3. MATEMÁTICA PURA BLINDADA (Aquí estaba el error)
+        // Convertimos el valor a número DECIMAL antes de sumar para evitar que "pegue" textos.
+        const cantidadNum = parseFloat(m.cantidad);
         
-        // Si no es número, avisamos
-        if (isNaN(cantidadNumerica)) {
-            auditoria += `⚠️ ERROR: "${m.concepto}" tiene cantidad inválida: ${m.cantidad}\n`;
-            return;
-        }
+        // Si por error hay un dato corrupto que no es número, lo saltamos
+        if (isNaN(cantidadNum)) return;
 
-        // Añadimos al reporte (solo los primeros 5 para no saturar la pantalla)
-        if (contador < 5) {
-            auditoria += `🔹 ${m.concepto}: ${cantidadNumerica}€ (Tipo: ${m.tipo})\n`;
-        }
-        contador++;
-
-        // SUMA MATEMÁTICA
-        if (cantidadNumerica >= 0) {
-            ingresos += cantidadNumerica;
+        // > 0 (Positivo) = Ingreso
+        // < 0 (Negativo) = Gasto
+        if (cantidadNum >= 0) {
+            ingresos += cantidadNum;
         } else {
-            gastos += cantidadNumerica; 
+            gastos += cantidadNum; // Al ser negativo, restará visualmente luego
         }
     });
-
-    // Añadimos el resumen final al reporte
-    auditoria += `...\n-------------------\n`;
-    auditoria += `💰 TOTAL INGRESOS: ${ingresos.toFixed(2)}\n`;
-    auditoria += `💸 TOTAL GASTOS: ${gastos.toFixed(2)}\n`;
-    auditoria += `📉 NETO: ${(ingresos + gastos).toFixed(2)}`;
-
-    // ¡¡AQUÍ ESTÁ EL CHIVATO!! 
-    // Esto mostrará una ventana con los datos la primera vez que cargue
-    // Usamos un pequeño truco para que no salga 100 veces, solo una vez por sesión
-    if (!window.haSidoAuditado) {
-        alert(auditoria);
-        window.haSidoAuditado = true; // Marca para que no moleste más
-    }
 
     return { ingresos, gastos, saldoNeto: ingresos + gastos };
 };
