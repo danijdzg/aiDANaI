@@ -5532,46 +5532,19 @@ const renderPlanificacionPage = () => {
             }
         </style>
 
-        <details class="dashboard-widget" open>
+        <details class="dashboard-widget">
             <summary class="widget-header">
-                <div class="icon-box icon-box--patrimonio">
-                    <span class="material-icons">account_balance</span>
-                </div>
+                <div class="icon-box icon-box--patrimonio"><span class="material-icons">account_balance</span></div>
                 <div class="widget-info">
                     <h3 class="widget-title">Patrimonio</h3>
-                    <p class="widget-subtitle">Activos y desglose</p>
+                    <p class="widget-subtitle">Tus activos menos tus deudas</p>
                 </div>
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
-            
             <div class="widget-content">
-                <div id="patrimonio-summary-list" style="padding: 15px; padding-bottom: 5px;">
-                   </div>
-
-                <details style="
-                    margin: 0 15px 15px 15px; 
-                    background-color: var(--c-surface); 
-                    border-radius: 12px;
-                    border: 1px solid var(--c-outline);
-                ">
-                    <summary style="
-                        padding: 12px;
-                        cursor: pointer;
-                        font-weight: 500;
-                        color: var(--c-primary);
-                        list-style: none;
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                    ">
-                        <span class="material-icons" style="font-size: 20px;">show_chart</span>
-                        Ver Gráfico de Evolución
-                    </summary>
-                    
-                    <div id="patrimonio-overview-container" style="padding: 10px; min-height: 250px;">
-                         <div class="skeleton" style="height: 200px; width: 100%; border-radius: 8px;"></div>
-                    </div>
-                </details>
+                <div id="patrimonio-overview-container" style="padding: 20px;">
+                   <div class="skeleton" style="height: 150px; width: 100%; border-radius: 8px;"></div>
+                </div>
             </div>
         </details>
 
