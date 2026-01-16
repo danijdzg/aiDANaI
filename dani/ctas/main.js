@@ -2484,56 +2484,76 @@ const getValorMercadoInversiones = async () => {
     } catch (error) {
         console.error("Error en forcePanelRecalculation:", error);
     }
-};  
- 
+};   
 const getFilteredMovements = async (forComparison = false) => {
-    // 1. Obtener la "Caja de Tickets" completa de la memoria
-    const allMovs = await AppStore.getAll();
-    
-    // 2. Definir las fechas de "HOY" y "AHORA"
-    const now = new Date();
+    // 1. OBTENER FECHAS DEL FILTRO (esto no cambia)
     const filterPeriodo = select('filter-periodo');
-    // Si no hay filtro seleccionado, forzamos 'mes-actual'
-    const periodo = filterPeriodo ? filterPeriodo.value : 'mes-actual';
+    const p = filterPeriodo ? filterPeriodo.value : 'mes-actual';
+    let sDate, eDate, prevSDate, prevEDate;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
-    let sDate, eDate; // Fecha Inicio, Fecha Fin
-
-    // 3. Configurar el Calendario
-    if (periodo === 'mes-actual') {
-        // Primer día del mes a las 00:00:00.000
-        sDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        // Último día del mes a las 23:59:59.999
-        eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    } else if (periodo === 'año-actual') {
-        sDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0); // 1 Enero
-        eDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999); // 31 Diciembre
-    } else if (periodo === 'custom') {
-        // Lógica para fechas personalizadas
-        const fInicio = select('filter-fecha-inicio')?.value;
-        const fFin = select('filter-fecha-fin')?.value;
-        if (!fInicio || !fFin) return { current: [], label: '' }; // Si falta fecha, no devolvemos nada
-        
-        sDate = new Date(fInicio); sDate.setHours(0,0,0,0);
-        eDate = new Date(fFin); eDate.setHours(23,59,59,999);
+    switch (p) {
+        case 'mes-actual':
+            sDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            prevSDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            prevEDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            break;
+        case 'año-actual':
+            sDate = new Date(now.getFullYear(), 0, 1);
+            eDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+            prevSDate = new Date(now.getFullYear() - 1, 0, 1);
+            prevEDate = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+            break;
+        case 'custom':
+            const filterFechaInicio = select('filter-fecha-inicio');
+            const filterFechaFin = select('filter-fecha-fin');
+            sDate = filterFechaInicio?.value ? parseDateStringAsUTC(filterFechaInicio.value) : null;
+            eDate = filterFechaFin?.value ? parseDateStringAsUTC(filterFechaFin.value) : null;
+            if(eDate) eDate.setUTCHours(23, 59, 59, 999);
+            // Para el modo 'custom', no calculamos periodo previo.
+            prevSDate = null; prevEDate = null; 
+            break;
+        default:
+            return { current: [], previous: [], label: '' };
     }
 
-    // 4. Filtrar los Movimientos (El Portero)
-    const currentMovs = allMovs.filter(m => {
-        // a) Validar fecha
-        const mDate = new Date(m.fecha); // Convertir fecha del movimiento
-        if (isNaN(mDate.getTime())) return false; // Si la fecha está rota, ignorar
+    if (!sDate || !eDate) return { current: [], previous: [], label: '' };
 
-        // b) Comprobar si cae dentro del rango exacto
-        return mDate >= sDate && mDate <= eDate;
+    // 2. ¡LA MAGIA! CONSULTAR A LA BASE DE DATOS DIRECTAMENTE
+    const fetchMovementsForRange = async (start, end) => {
+        if (!start || !end) return [];
+
+        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
+            .where('fecha', '>=', start.toISOString())
+            .where('fecha', '<=', end.toISOString())
+            .get();
+        return snapshot.docs.map(doc => doc.data());
+    };
+
+    // 3. OBTENER Y FILTRAR LOS MOVIMIENTOS
+    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
+    
+    // Función interna para filtrar por contabilidad (A o B)
+    const filterByLedger = (movs) => movs.filter(m => {
+        if (m.tipo === 'traspaso') {
+            return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
+        }
+        return visibleAccountIds.has(m.cuentaId);
     });
 
-    console.log(`[aiDANaI] Filtrado ${periodo}: Desde ${sDate.toLocaleString()} hasta ${eDate.toLocaleString()} - Encontrados: ${currentMovs.length}`);
+    const currentMovsRaw = await fetchMovementsForRange(sDate, eDate);
+    const currentMovs = filterByLedger(currentMovsRaw);
 
-    // Si es solo para datos, devolvemos ya
     if (!forComparison) return { current: currentMovs, previous: [], label: '' };
+    
+    const prevMovsRaw = await fetchMovementsForRange(prevSDate, prevEDate);
+    const prevMovs = filterByLedger(prevMovsRaw);
 
-    // (Opcional: aquí iría la lógica de comparación si la necesitas, pero para el resumen principal esto basta)
-    return { current: currentMovs, previous: [], label: '' };
+    const comparisonLabel = p === 'mes-actual' ? 'vs mes ant.' : (p === 'año-actual' ? 'vs año ant.' : '');
+    
+    return { current: currentMovs, previous: prevMovs, label: comparisonLabel };
 };
 
         
@@ -4069,7 +4089,18 @@ const renderAjustesPage = () => {
 const renderPatrimonioOverviewWidget = async (containerId) => {
     const container = select(containerId);
     if (!container) return;
-
+	// === FIX ONEPLUS: Forzar ancho completo ===
+    // Buscamos si el contenedor es una tarjeta, o su padre lo es, y le ponemos la clase.
+    if (window.innerWidth < 480) { // Solo en móviles
+        const card = container.classList.contains('card') ? container : container.closest('.card');
+        if (card) {
+            card.classList.add('card--full-bleed');
+            // Ajuste visual extra para que el título no se pegue al borde
+            card.style.paddingLeft = '16px'; 
+            card.style.paddingRight = '16px';
+        }
+    }
+    // ==========================================
     container.innerHTML = `<div class="skeleton" style="height: 400px; border-radius: var(--border-radius-lg);"></div>`;
 
     const visibleAccounts = getVisibleAccounts();
@@ -4359,38 +4390,35 @@ async function calculateHistoricalIrrForGroup(accountIds) {
             if (userEmailEl && currentUser) userEmailEl.textContent = currentUser.email;  			
         };
 
+/* =============================================================== */
+/* === NUEVO MOTOR DE CÁLCULO v2.0 (CORRECCIÓN LÓGICA) === */
+/* =============================================================== */
 const calculateOperatingTotals = (movs, visibleAccountIds) => {
     let ingresos = 0;
     let gastos = 0;
 
-    // Recorremos cada movimiento uno a uno
     movs.forEach(m => {
-        // PROTECCIÓN 1: Si no tiene cantidad o cuenta, saltamos
-        if (!m || !m.cantidad || !m.cuentaId) return;
-
-        // PROTECCIÓN 2: Si la cuenta no está visible (ej: cuenta oculta), no sumamos
+        // 1. FILTRO DE SEGURIDAD:
+        // Si la cuenta no pertenece a la "Caja" que estás mirando (A o B), la ignoramos.
         if (!visibleAccountIds.has(m.cuentaId)) return;
 
-        // PROTECCIÓN 3: Convertir a Número Real (asegurar que no es texto)
-        const cantidad = Number(m.cantidad);
-        
-        // LÓGICA DE NEGOCIO:
-        // Solo sumamos si es dinero REAL entrando o saliendo.
-        // Los 'traspasos' se ignoran deliberadamente para no inflar los números.
-        if (m.tipo === 'ingreso') {
-            ingresos += Math.abs(cantidad); // Siempre sumamos en positivo
-        } else if (m.tipo === 'gasto') {
-            gastos += Math.abs(cantidad);   // Siempre sumamos en positivo (luego restamos visualmente)
+        // 2. REGLA DE ORO: Ignorar movimientos que no son reales
+        // - Traspaso: Mover dinero de un bolsillo a otro no es gastar.
+        // - Ajuste/Saldo Inicial: Son correcciones técnicas, no flujo de caja.
+        if (['traspaso', 'ajuste', 'saldo_inicial'].includes(m.tipo)) return;
+
+        // 3. MATEMÁTICA PURA (Corregido para Dani)
+        // En lugar de mirar la etiqueta 'tipo', miramos el signo del dinero.
+        // > 0 (Positivo) = Ingreso
+        // < 0 (Negativo) = Gasto
+        if (m.cantidad >= 0) {
+            ingresos += m.cantidad;
+        } else {
+            gastos += m.cantidad; // Al ser negativo, se restará correctamente
         }
-        // Si es 'traspaso', 'ajuste' o 'saldo_inicial', NO HACEMOS NADA.
     });
 
-    // Devolvemos los datos limpios
-    return { 
-        ingresos: ingresos, 
-        gastos: gastos, 
-        saldoNeto: ingresos - gastos // Lo que entra menos lo que sale
-    };
+    return { ingresos, gastos, saldoNeto: ingresos + gastos };
 };
 
 const updateDashboardSummaryCard = async () => {
@@ -4430,12 +4458,14 @@ const renderPanelPage = async () => {
     container.style.setProperty('margin', '0', 'important');
     container.style.overflowX = 'hidden';
 
-    
+    // --- VARIABLES ---
     const gap = '5px'; // TU OBJETIVO: 5px
-    	
-	const bigKpiStyle = 'font-size: clamp(1.4rem, 6vw, 1.8rem); font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
+    
+    const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
+    // ESTILO BASE DE TARJETA
+    // Importante: margin: 0 para que no empuje nada por fuera.
     const cardStyle = `
         width: 98%; 
         padding: 12px 15px; 
@@ -12098,78 +12128,4 @@ window.detectarYCorregirTraspasos = async () => {
     } finally {
         if (btn) setButtonLoading(btn, false);
     }
-};
-// [aiDANaI] - NUEVA Función de Patrimonio Expandido (Full Width)
-// Esta función dibuja la lista de cuentas ocupando todo el ancho de la pantalla
-const renderPatrimonioPage = async () => {
-    const main = select('main');
-    
-    // 1. Calculamos totales frescos
-    const accounts = await AppStore.getAccounts();
-    const totalPatrimonio = accounts.reduce((sum, acc) => sum + (parseFloat(acc.saldo) || 0), 0);
-
-    // 2. Preparamos el HTML con el contenedor "full-bleed" (sin márgenes)
-    let html = `
-        <div class="animate-fade-in" style="padding-bottom: 80px;">
-            
-            <div style="padding: 20px 0; text-align: center; background: transparent;">
-                <div style="font-size: 0.9rem; color: var(--c-on-surface-variant); text-transform: uppercase; letter-spacing: 1px;">Patrimonio Neto</div>
-                <div style="font-size: 2.8rem; font-weight: 800; font-family: 'Roboto Condensed', sans-serif; color: var(--c-primary); margin-top: 5px;">
-                    ${formatCurrency(totalPatrimonio)}
-                </div>
-            </div>
-
-            <div class="full-bleed-container">
-                <div style="display: flex; flex-direction: column;">
-    `;
-
-    // 3. Ordenamos: Primero las que tienen más dinero
-    const sortedAccounts = accounts.sort((a, b) => parseFloat(b.saldo) - parseFloat(a.saldo));
-
-    if (sortedAccounts.length === 0) {
-        html += `<div style="padding: 30px; text-align: center; color: var(--c-on-surface-variant);">No hay cuentas activas</div>`;
-    } else {
-        sortedAccounts.forEach(acc => {
-            const saldo = parseFloat(acc.saldo) || 0;
-            const colorSaldo = saldo >= 0 ? 'var(--c-on-surface)' : '#ff6b6b';
-            
-            // Iconos inteligentes
-            let icon = 'account_balance_wallet';
-            const tipo = (acc.tipo || '').toLowerCase();
-            if (tipo.includes('banco')) icon = 'account_balance';
-            else if (tipo.includes('inver') || tipo.includes('broker')) icon = 'trending_up';
-            else if (tipo.includes('cripto') || tipo.includes('btc')) icon = 'currency_bitcoin';
-            else if (tipo.includes('efectivo') || tipo.includes('cash')) icon = 'payments';
-
-            html += `
-                <div class="asset-row" onclick="startEditAccount('${acc.id}')">
-                    <div style="margin-right: 15px; color: var(--c-primary); display: flex; align-items: center;">
-                        <span class="material-icons" style="font-size: 24px;">${icon}</span>
-                    </div>
-                    <div style="flex-grow: 1;">
-                        <div class="asset-name">${acc.nombre}</div>
-                        <div class="asset-meta">${acc.tipo || 'General'}</div>
-                    </div>
-                    <div class="asset-amount" style="color: ${colorSaldo};">
-                        ${formatCurrency(saldo)}
-                    </div>
-                    <div style="margin-left: 10px; color: var(--c-on-surface-variant);">
-                        <span class="material-icons" style="font-size: 18px;">chevron_right</span>
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    html += `
-                </div> </div> <div style="padding: 20px;">
-                <button class="btn btn--primary" style="width: 100%; padding: 15px; font-size: 1rem;" onclick="openModal('account-modal')">
-                    <span class="material-icons" style="margin-right: 8px;">add_circle</span>
-                    Añadir Nueva Cuenta
-                </button>
-            </div>
-        </div>
-    `;
-
-    main.innerHTML = html;
 };
