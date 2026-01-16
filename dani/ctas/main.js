@@ -2485,43 +2485,70 @@ const getValorMercadoInversiones = async () => {
         console.error("Error en forcePanelRecalculation:", error);
     }
 };   
+/* =============================================================== */
+/* === FIX CÁLCULO FECHAS: INICIO (00:00) A FIN (23:59) REAL === */
+/* =============================================================== */
 const getFilteredMovements = async (forComparison = false) => {
-    // 1. OBTENER FECHAS DEL FILTRO (esto no cambia)
+    // 1. OBTENER FECHAS DEL FILTRO
     const filterPeriodo = select('filter-periodo');
     const p = filterPeriodo ? filterPeriodo.value : 'mes-actual';
     let sDate, eDate, prevSDate, prevEDate;
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    
+    // Usamos la fecha actual local como referencia
+    const now = new Date(); 
+
+    // Helper para crear fechas locales (Año, Mes, Día, Hora, Min, Seg)
+    // Mes en JS va de 0 a 11 (Enero=0)
+    const getLocalStartOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    const getLocalEndOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
     switch (p) {
         case 'mes-actual':
-            sDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            // Desde el día 1 del mes actual a las 00:00
+            sDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+            // Hasta el día 0 del mes siguiente (último día de este mes) a las 23:59
             eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-            prevSDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            
+            // Para comparación (Mes anterior)
+            prevSDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
             prevEDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
             break;
+
         case 'año-actual':
-            sDate = new Date(now.getFullYear(), 0, 1);
+            sDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
             eDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-            prevSDate = new Date(now.getFullYear() - 1, 0, 1);
+            
+            prevSDate = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
             prevEDate = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
             break;
+
         case 'custom':
-            const filterFechaInicio = select('filter-fecha-inicio');
-            const filterFechaFin = select('filter-fecha-fin');
-            sDate = filterFechaInicio?.value ? parseDateStringAsUTC(filterFechaInicio.value) : null;
-            eDate = filterFechaFin?.value ? parseDateStringAsUTC(filterFechaFin.value) : null;
-            if(eDate) eDate.setUTCHours(23, 59, 59, 999);
-            // Para el modo 'custom', no calculamos periodo previo.
-            prevSDate = null; prevEDate = null; 
+            const startInput = select('filter-fecha-inicio');
+            const endInput = select('filter-fecha-fin');
+            
+            // Lógica robusta para Inputs de tipo Date (YYYY-MM-DD)
+            if (startInput && startInput.value) {
+                const [y, m, d] = startInput.value.split('-').map(Number);
+                sDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+            }
+            
+            if (endInput && endInput.value) {
+                const [y, m, d] = endInput.value.split('-').map(Number);
+                eDate = new Date(y, m - 1, d, 23, 59, 59, 999);
+            }
+            
+            // En modo custom no calculamos comparación automática compleja
+            prevSDate = null; 
+            prevEDate = null; 
             break;
+
         default:
             return { current: [], previous: [], label: '' };
     }
 
     if (!sDate || !eDate) return { current: [], previous: [], label: '' };
 
-    // 2. ¡LA MAGIA! CONSULTAR A LA BASE DE DATOS DIRECTAMENTE
+    // 2. CONSULTAR A LA BASE DE DATOS (Usando ISOString para convertir a UTC correctamente)
     const fetchMovementsForRange = async (start, end) => {
         if (!start || !end) return [];
 
@@ -2532,10 +2559,9 @@ const getFilteredMovements = async (forComparison = false) => {
         return snapshot.docs.map(doc => doc.data());
     };
 
-    // 3. OBTENER Y FILTRAR LOS MOVIMIENTOS
+    // 3. OBTENER Y FILTRAR POR CONTABILIDAD (Caja A / B / C)
     const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
     
-    // Función interna para filtrar por contabilidad (A o B)
     const filterByLedger = (movs) => movs.filter(m => {
         if (m.tipo === 'traspaso') {
             return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
@@ -2548,44 +2574,16 @@ const getFilteredMovements = async (forComparison = false) => {
 
     if (!forComparison) return { current: currentMovs, previous: [], label: '' };
     
-    const prevMovsRaw = await fetchMovementsForRange(prevSDate, prevEDate);
-    const prevMovs = filterByLedger(prevMovsRaw);
+    // Solo buscamos previos si es necesario
+    let prevMovs = [];
+    if (prevSDate && prevEDate) {
+        const prevMovsRaw = await fetchMovementsForRange(prevSDate, prevEDate);
+        prevMovs = filterByLedger(prevMovsRaw);
+    }
 
     const comparisonLabel = p === 'mes-actual' ? 'vs mes ant.' : (p === 'año-actual' ? 'vs año ant.' : '');
     
     return { current: currentMovs, previous: prevMovs, label: comparisonLabel };
-};
-
-        
-        const calculateIRR = (cashflows) => {
-            if (cashflows.length < 2) return 0;
-            const sortedCashflows = [...cashflows].sort((a, b) => a.date.getTime() - b.date.getTime());
-            const firstDate = sortedCashflows[0].date;
-            const npv = (rate) => { let total = 0; for (const flow of sortedCashflows) { const years = (flow.date.getTime() - firstDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000); total += flow.amount / Math.pow(1 + rate, years); } return total; };
-            const derivative = (rate) => { let total = 0; for (const flow of sortedCashflows) { const years = (flow.date.getTime() - firstDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000); if (years > 0) { total -= years * flow.amount / Math.pow(1 + rate, years + 1); } } return total; };
-            let guess = 0.1; 
-    const maxIterations = 50; // Reducir a 50 es suficiente y más seguro
-    const tolerance = 1e-6; // Relajamos un poco la tolerancia (1e-7 es excesivo para UI)
-
-    for (let i = 0; i < maxIterations; i++) {
-        const npvValue = npv(guess);
-        const derivativeValue = derivative(guess);
-        
-        // Protección contra división por cero en la derivada
-        if (Math.abs(derivativeValue) < 1e-9) break; 
-
-        const newGuess = guess - npvValue / derivativeValue;
-        
-        if (Math.abs(newGuess - guess) <= tolerance) {
-            return newGuess;
-        }
-        
-        // Protección contra resultados absurdos (TIR > 1000% o < -100%)
-        if (Math.abs(newGuess) > 10) break; 
-        
-        guess = newGuess;
-    }
-    return 0; // Si no converge, devuelve 0 en lugar de colgarse
 };
 		
 const calculatePortfolioPerformance = async (cuentaId = null) => {
