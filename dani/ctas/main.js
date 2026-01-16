@@ -4089,18 +4089,7 @@ const renderAjustesPage = () => {
 const renderPatrimonioOverviewWidget = async (containerId) => {
     const container = select(containerId);
     if (!container) return;
-	// === FIX ONEPLUS: Forzar ancho completo ===
-    // Buscamos si el contenedor es una tarjeta, o su padre lo es, y le ponemos la clase.
-    if (window.innerWidth < 480) { // Solo en móviles
-        const card = container.classList.contains('card') ? container : container.closest('.card');
-        if (card) {
-            card.classList.add('card--full-bleed');
-            // Ajuste visual extra para que el título no se pegue al borde
-            card.style.paddingLeft = '16px'; 
-            card.style.paddingRight = '16px';
-        }
-    }
-    // ==========================================
+
     container.innerHTML = `<div class="skeleton" style="height: 400px; border-radius: var(--border-radius-lg);"></div>`;
 
     const visibleAccounts = getVisibleAccounts();
@@ -4146,7 +4135,7 @@ const renderPatrimonioOverviewWidget = async (containerId) => {
     });
 
     container.innerHTML = `
-        <div class="card__content" id="tarjeta-patrimonio" style="padding-top:0;">
+        <div class="card__content" style="padding-top:0;">
             <div class="patrimonio-header-grid__kpi" style="margin-bottom: var(--sp-4);">
                 <h4 class="kpi-item__label">Patrimonio Neto (Seleccionado)</h4>
                 <strong id="patrimonio-total-balance" class="kpi-item__value" style="font-size: 2rem; line-height: 1.1;">${formatCurrency(totalFiltrado)}</strong>
@@ -5553,8 +5542,8 @@ const renderPlanificacionPage = () => {
                 <span class="material-icons widget-arrow">expand_more</span>
             </summary>
             <div class="widget-content">
-                <div id="patrimonio-overview-container" style="padding: 20px;">
-                   <div class="skeleton" style="height: 150px; width: 100%; border-radius: 8px;"></div>
+                <div id="patrimonio-overview-container" style="padding: 0;">
+                    <div class="skeleton" style="height: 150px; width: 100%; border-radius: 8px;"></div>
                 </div>
             </div>
         </details>
