@@ -12099,3 +12099,106 @@ window.detectarYCorregirTraspasos = async () => {
         if (btn) setButtonLoading(btn, false);
     }
 };
+// [aiDANaI] - NUEVA Función de Patrimonio Expandido (Full Width)
+// Esta función dibuja la lista de cuentas ocupando todo el ancho de la pantalla
+const renderPatrimonioPage = async () => {
+    const main = select('main');
+    
+    // 1. Calculamos totales frescos
+    const accounts = await AppStore.getAccounts();
+    const totalPatrimonio = accounts.reduce((sum, acc) => sum + (parseFloat(acc.saldo) || 0), 0);
+
+    // 2. Preparamos el HTML con el contenedor "full-bleed" (sin márgenes)
+    let html = `
+        <div class="animate-fade-in" style="padding-bottom: 80px;">
+            
+            <div style="padding: 20px 0; text-align: center; background: transparent;">
+                <div style="font-size: 0.9rem; color: var(--c-on-surface-variant); text-transform: uppercase; letter-spacing: 1px;">Patrimonio Neto</div>
+                <div style="font-size: 2.8rem; font-weight: 800; font-family: 'Roboto Condensed', sans-serif; color: var(--c-primary); margin-top: 5px;">
+                    ${formatCurrency(totalPatrimonio)}
+                </div>
+            </div>
+
+            <div class="full-bleed-container">
+                <div style="display: flex; flex-direction: column;">
+    `;
+
+    // 3. Ordenamos: Primero las que tienen más dinero
+    const sortedAccounts = accounts.sort((a, b) => parseFloat(b.saldo) - parseFloat(a.saldo));
+
+    if (sortedAccounts.length === 0) {
+        html += `<div style="padding: 30px; text-align: center; color: var(--c-on-surface-variant);">No hay cuentas activas</div>`;
+    } else {
+        sortedAccounts.forEach(acc => {
+            const saldo = parseFloat(acc.saldo) || 0;
+            const colorSaldo = saldo >= 0 ? 'var(--c-on-surface)' : '#ff6b6b';
+            
+            // Iconos inteligentes
+            let icon = 'account_balance_wallet';
+            const tipo = (acc.tipo || '').toLowerCase();
+            if (tipo.includes('banco')) icon = 'account_balance';
+            else if (tipo.includes('inver') || tipo.includes('broker')) icon = 'trending_up';
+            else if (tipo.includes('cripto') || tipo.includes('btc')) icon = 'currency_bitcoin';
+            else if (tipo.includes('efectivo') || tipo.includes('cash')) icon = 'payments';
+
+            html += `
+                <div class="asset-row" onclick="startEditAccount('${acc.id}')">
+                    <div style="margin-right: 15px; color: var(--c-primary); display: flex; align-items: center;">
+                        <span class="material-icons" style="font-size: 24px;">${icon}</span>
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <div class="asset-name">${acc.nombre}</div>
+                        <div class="asset-meta">${acc.tipo || 'General'}</div>
+                    </div>
+                    <div class="asset-amount" style="color: ${colorSaldo};">
+                        ${formatCurrency(saldo)}
+                    </div>
+                    <div style="margin-left: 10px; color: var(--c-on-surface-variant);">
+                        <span class="material-icons" style="font-size: 18px;">chevron_right</span>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `
+                </div> </div> <div style="padding: 20px;">
+                <button class="btn btn--primary" style="width: 100%; padding: 15px; font-size: 1rem;" onclick="openModal('account-modal')">
+                    <span class="material-icons" style="margin-right: 8px;">add_circle</span>
+                    Añadir Nueva Cuenta
+                </button>
+            </div>
+        </div>
+    `;
+
+    main.innerHTML = html;
+};
+// [aiDANaI] - PUENTE DE EMERGENCIA
+// Esto busca el botón de Patrimonio/Cuentas y le obliga a cargar nuestra nueva pantalla
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        // Buscamos todos los botones de la barra de abajo
+        const botones = document.querySelectorAll('.bottom-nav__item, button');
+        
+        botones.forEach(btn => {
+            const texto = btn.innerText || '';
+            const icon = btn.querySelector('.material-icons')?.innerText || '';
+            
+            // Si el botón parece ser el de Patrimonio o Cuentas...
+            if (texto.toLowerCase().includes('patrimonio') || 
+                texto.toLowerCase().includes('cuentas') || 
+                icon === 'account_balance' || 
+                icon === 'account_balance_wallet') {
+                
+                // Le añadimos una orden directa
+                btn.addEventListener('click', (e) => {
+                    // Esperamos 50ms para asegurar que la app no nos pise
+                    setTimeout(() => {
+                        console.log("Forzando vista de Patrimonio...");
+                        renderPatrimonioPage();
+                    }, 50);
+                });
+            }
+        });
+    }, 1000); // Esperamos 1 segundo al arrancar para asegurar que los botones existen
+});
