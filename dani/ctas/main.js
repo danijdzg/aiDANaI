@@ -10180,321 +10180,217 @@ const handleAddAccount = async (btn) => {
      return { tipo: 'Banco', esInversion: false };
  };
 
- /* ==================================================================== */
-/* === IMPORTADOR MAESTRO CSV/JSON v6.0 (ONEPLUS NORD 4 EDITION) === */
 /* ==================================================================== */
-// Esta función ahora es capaz de leer CSVs con comas o punto y coma,
-// y maneja números españoles e ingleses automáticamente.
+/* === IMPORTADOR BLINDADO v7.0 (SOLUCIÓN DOBLE PARSEO + LIMPIEZA) === */
+/* ==================================================================== */
 
 const csv_processFile = (file) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         
+        // Función auxiliar para poner nombres bonitos (Ej: "TRADE REPUBLIC" -> "Trade Republic")
+        const toTitleCase = (str) => {
+            return str.replace(/\w\S*/g, (txt) => {
+                return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+            });
+        };
+
         reader.onload = (event) => {
             try {
-                // 1. Limpieza inicial del texto
-                let rawData = event.target.result.replace(/^\uFEFF/, ''); // Quitar BOM si existe
+                let rawData = event.target.result.replace(/^\uFEFF/, ''); // Quitar basura invisible
                 let lines = [];
-                
-                // DETECCIÓN INTELIGENTE: ¿Es el JSON raro o un CSV normal?
-                if (file.name.endsWith('.json') || rawData.trim().startsWith('[')) {
+                let isJsonParsed = false;
+
+                // 1. DETECCIÓN Y APERTURA DE "CAJAS FUERTES" (JSON)
+                if (file.name.toLowerCase().endsWith('.json') || rawData.trim().startsWith('"') || rawData.trim().startsWith('[')) {
                     try {
-                        // Si es el JSON especial, lo convertimos a líneas CSV simuladas
-                        const jsonData = JSON.parse(rawData);
-                        // Extraemos las cabeceras del primer elemento (la clave del objeto)
-                        // Ej: { "FECHA;CUENTA...": "..." } -> Cogemos "FECHA;CUENTA..."
-                        if (jsonData.length > 0) {
-                            const firstKey = Object.keys(jsonData[0])[0]; 
+                        let jsonData = JSON.parse(rawData);
+                        
+                        // --- EL TRUCO MAESTRO: LA SEGUNDA CAJA ---
+                        // Si después de abrirlo sigue siendo texto, ¡abrimos otra vez!
+                        if (typeof jsonData === 'string') {
+                            console.log("🕵️ Detectado JSON doblemente codificado. Desencriptando...");
+                            jsonData = JSON.parse(jsonData);
+                        }
+                        
+                        // Ahora sí, extraemos los datos
+                        if (Array.isArray(jsonData) && jsonData.length > 0) {
+                            // Detectamos la cabecera del primer elemento
+                            const firstKey = Object.keys(jsonData[0])[0];
                             lines.push(firstKey); // Añadimos cabecera
                             
-                            // Añadimos los valores (que están separados por punto y coma en el JSON)
+                            // Añadimos los valores
                             jsonData.forEach(obj => {
+                                // Cogemos el valor de la primera propiedad, sea cual sea
                                 lines.push(Object.values(obj)[0]);
                             });
+                            isJsonParsed = true;
                         }
                     } catch (e) {
-                        console.warn("No es un JSON válido, intentando como texto plano...");
-                        lines = rawData.split(/\r?\n/).filter(line => line.trim() !== '');
+                        console.warn("⚠️ No era un JSON estándar, leyendo como texto plano...", e);
                     }
-                } else {
-                    // Es un CSV normal
+                }
+
+                // Si no era JSON, leemos como CSV normal
+                if (!isJsonParsed) {
                     lines = rawData.split(/\r?\n/).filter(line => line.trim() !== '');
                 }
 
                 if (lines.length <= 1) {
-                    showToast("El archivo parece estar vacío.", "warning");
+                    showToast("El archivo parece estar vacío o ilegible.", "warning");
                     return resolve(null);
                 }
 
-                // 2. DETECCIÓN DE SEPARADOR (Autodetect)
+                // 2. DETECTOR DE DIALECTO (¿Coma o Punto y Coma?)
                 const headerLine = lines[0];
-                // Contamos comas y puntos y coma para ver cuál gana
                 const commaCount = (headerLine.match(/,/g) || []).length;
                 const semiCount = (headerLine.match(/;/g) || []).length;
                 const separator = semiCount >= commaCount ? ';' : ',';
                 
-                console.log(`📠 Dialecto detectado: ${separator === ';' ? 'Punto y Coma (;)' : 'Coma (,)'}`);
+                console.log(`📠 Separador detectado: '${separator}'`);
 
-                // Eliminamos la cabecera del array de datos
-                lines.shift(); 
+                lines.shift(); // Quitamos la cabecera
 
-                let rowCount = 0, initialCount = 0;
+                // Variables para el proceso
+                let rowCount = 0;
                 const cuentasMap = new Map();
                 const conceptosMap = new Map();
                 const movimientos = [];
-                const potentialTransfers = [];
-
-                // 3. EXPRESIÓN REGULAR MAESTRA para leer líneas respetando comillas
-                // Esto permite leer: "Trade Republic", "4.500,50", etc.
+                
+                // Regex capaz de leer: "Sabadell", "1.200,50", etc.
                 const regexPattern = new RegExp(`(?:${separator}|^)(?:"([^"]*)"|([^${separator}]*))`, "g");
 
                 for (const line of lines) {
                     if (!line.trim()) continue;
                     rowCount++;
 
-                    // Parseo inteligente de la línea usando la Regex
+                    // Parseo de columnas
                     const columns = [];
                     let match;
                     while (match = regexPattern.exec(line)) {
-                        // match[1] es el contenido si lleva comillas, match[2] si no
                         let val = match[1] !== undefined ? match[1] : match[2];
                         columns.push(val ? val.trim() : '');
                     }
 
-                    // Mapeo de columnas (Asumimos orden estándar del archivo adjunto)
-                    // FECHA | CUENTAS | CONCEPTO | IMPORTE | DESCRIPCION
-                    // Si el split falló o hay menos columnas, intentamos split simple por seguridad
-                    let fechaStr, cuentaStr, conceptoStr, importeStr, descripcion;
-                    
-                    if (columns.length >= 4) {
-                        [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion] = columns;
-                    } else {
-                        // Fallback simple
-                         const simpleCols = line.split(separator).map(c => c.trim().replace(/"/g, ''));
-                         [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion] = simpleCols;
-                    }
-                    
-                    if (!descripcion) descripcion = '';
-
-                    // Validaciones básicas
-                    if (!fechaStr || !cuentaStr || !importeStr) {
-                        console.warn(`Fila #${rowCount} incompleta:`, line);
-                        continue;
+                    // Fallback si la regex falla
+                    let colsFinal = columns;
+                    if (columns.length < 4) {
+                         colsFinal = line.split(separator).map(c => c.trim().replace(/"/g, ''));
                     }
 
-                    // 4. TRATAMIENTO DE DATOS (Sanitización)
+                    // Mapeo (Asumimos orden: FECHA | CUENTA | CONCEPTO | IMPORTE | DESC)
+                    let [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion] = colsFinal;
                     
-                    // Fecha: DD/MM/YYYY
+                    if (!fechaStr || !cuentaStr || !importeStr) continue;
+
+                    // 3. LIMPIEZA DE DATOS
+                    
+                    // Fecha
                     const fechaParts = fechaStr.split('/');
-                    let fecha = null;
-                    if (fechaParts.length === 3) {
-                        // Creamos fecha UTC a las 12:00 para evitar cambios de día por zona horaria
-                        fecha = new Date(Date.UTC(
-                            parseInt(fechaParts[2]), 
-                            parseInt(fechaParts[1]) - 1, 
-                            parseInt(fechaParts[0]), 
-                            12, 0, 0
-                        ));
-                    }
-                    
-                    if (!fecha || isNaN(fecha.getTime())) {
-                        console.warn(`Fecha inválida en fila ${rowCount}: ${fechaStr}`);
-                        continue;
-                    }
+                    if (fechaParts.length !== 3) continue;
+                    const fecha = new Date(Date.UTC(fechaParts[2], fechaParts[1]-1, fechaParts[0], 12,0,0));
 
-                    // Importe: Manejo de "43.591,9" o "55000"
-                    let cleanImporte = importeStr.replace(/[€$£\s]/g, ''); // Quitar moneda
-                    
-                    // Lógica para detectar formato español (Punto miles, Coma decimal) vs Inglés
+                    // Importe (Español a Ordenador)
+                    let cleanImporte = importeStr.replace(/[€$£\s]/g, '');
                     if (cleanImporte.includes(',') && cleanImporte.includes('.')) {
-                         // Tiene ambos: 1.234,56 -> Quitamos punto, cambiamos coma
                          cleanImporte = cleanImporte.replace(/\./g, '').replace(',', '.');
                     } else if (cleanImporte.includes(',')) {
-                         // Solo coma: 12,50 -> 12.50
                          cleanImporte = cleanImporte.replace(',', '.');
                     }
-                    // Si solo tiene punto (1.200), asumimos que es miles si son 3 dígitos, o decimal si es simple.
-                    // Para evitar riesgo en importaciones grandes, si no hay decimales explícitos, lo tomamos tal cual.
-                    
-                    const cantidad = Math.round(parseFloat(cleanImporte) * 100); // A Céntimos
+                    const cantidad = Math.round(parseFloat(cleanImporte) * 100); // A céntimos
                     if (isNaN(cantidad)) continue;
 
-                    // Textos
-                    const conceptoLimpio = conceptoStr.toUpperCase().trim();
-                    const nombreCuentaLimpio = cuentaStr.replace(/^(D-|N-)/, '').trim(); // Quitar prefijos si los hubiera
-                    
-                    // 5. AUTO-CREACIÓN DE CUENTAS
-                    if (!cuentasMap.has(nombreCuentaLimpio)) {
-                        // Inferimos tipo según el nombre (Magia UI)
-                        const upper = nombreCuentaLimpio.toUpperCase();
+                    // Textos Bonitos
+                    const conceptoLimpio = toTitleCase(conceptoStr.replace(/"/g, ''));
+                    // Truco: Quitamos prefijos D- o N- y ponemos mayúscula inicial (Sabadell)
+                    let nombreCuentaRaw = cuentaStr.replace(/^(D-|N-)/, '').replace(/"/g, '').trim();
+                    // Opcional: Si quieres todo mayúsculas como en el CSV original, quita el toTitleCase de abajo.
+                    // Pero toTitleCase ayuda a fusionar "SABADELL" con "Sabadell".
+                    const nombreCuenta = toTitleCase(nombreCuentaRaw); 
+
+                    // 4. CREACIÓN AUTOMÁTICA (La clave para que no falten cuentas)
+                    if (!cuentasMap.has(nombreCuenta)) {
                         let tipo = 'Banco';
                         let esInversion = false;
+                        const upper = nombreCuenta.toUpperCase();
                         
-                        if (upper.includes('TRADE') || upper.includes('BROKER') || upper.includes('DEGIRO') || upper.includes('MYINVESTOR') || upper.includes('INDEXA')) {
-                            tipo = 'Broker'; esInversion = true;
-                        } else if (upper.includes('BITCOIN') || upper.includes('CRYPTO') || upper.includes('BINANCE') || upper.includes('BITVAVO') || upper.includes('KRAKEN') || upper.includes('LEDGER')) {
-                            tipo = 'Cripto'; esInversion = true;
-                        } else if (upper.includes('TARJETA')) {
-                            tipo = 'Tarjeta';
-                        } else if (upper.includes('EFECTIVO') || upper.includes('CAJA')) {
-                            tipo = 'Efectivo';
-                        }
+                        // Detector de Tipos Inteligente
+                        if (upper.includes('TRADE') || upper.includes('DEGIRO') || upper.includes('BROKER') || upper.includes('MYINVESTOR') || upper.includes('INDEXA')) { tipo = 'Broker'; esInversion = true; }
+                        else if (upper.includes('BITCOIN') || upper.includes('CRIPTO') || upper.includes('BINANCE') || upper.includes('BITVAVO') || upper.includes('KRAKEN') || upper.includes('LEDGER')) { tipo = 'Cripto'; esInversion = true; }
+                        else if (upper.includes('TARJETA')) { tipo = 'Tarjeta'; }
+                        else if (upper.includes('EFECTIVO') || upper.includes('CAJA')) { tipo = 'Efectivo'; }
 
-                        cuentasMap.set(nombreCuentaLimpio, {
+                        cuentasMap.set(nombreCuenta, {
                             id: generateId(),
-                            nombre: nombreCuentaLimpio,
+                            nombre: nombreCuenta,
                             tipo: tipo,
                             saldo: 0,
                             esInversion: esInversion,
-                            offBalance: false, // Por defecto a Caja A
                             ledger: 'A',
                             fechaCreacion: new Date().toISOString()
                         });
                     }
 
-                    // 6. AUTO-CREACIÓN DE CONCEPTOS
-                    // Filtramos 'INICIAL' y 'TRASPASO' que son palabras reservadas del sistema
-                    if (conceptoLimpio !== 'INICIAL' && conceptoLimpio !== 'TRASPASO' && !conceptosMap.has(conceptoLimpio)) {
+                    if (!conceptosMap.has(conceptoLimpio) && conceptoLimpio.toUpperCase() !== 'INICIAL') {
                         conceptosMap.set(conceptoLimpio, {
                             id: generateId(),
-                            nombre: toSentenceCase(conceptoLimpio), // Capitalizar bonito
+                            nombre: conceptoLimpio,
                             icon: 'label'
                         });
                     }
 
-                    // 7. LÓGICA DE MOVIMIENTOS
-                    if (conceptoLimpio === 'INICIAL') {
-                        initialCount++;
-                        // Creamos concepto especial Saldo Inicial si no existe
-                        if (!conceptosMap.has('SALDO INICIAL')) {
-                            conceptosMap.set('SALDO INICIAL', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
-                        }
+                    // 5. REGISTRO DEL MOVIMIENTO
+                    if (conceptoLimpio.toUpperCase() === 'INICIAL') {
+                        // Saldo Inicial
+                        if (!conceptosMap.has('Saldo Inicial')) conceptosMap.set('Saldo Inicial', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
                         movimientos.push({
                             id: generateId(),
                             fecha: fecha.toISOString(),
                             cantidad: cantidad,
-                            descripcion: descripcion || 'Saldo Inicial Importado',
+                            descripcion: 'Saldo Inicial Importado',
                             tipo: 'movimiento',
-                            cuentaId: cuentasMap.get(nombreCuentaLimpio).id,
-                            conceptoId: conceptosMap.get('SALDO INICIAL').id
+                            cuentaId: cuentasMap.get(nombreCuenta).id,
+                            conceptoId: conceptosMap.get('Saldo Inicial').id
                         });
-                    } 
-                    else if (conceptoLimpio === 'TRASPASO') {
-                        // Guardamos para emparejar después
-                        potentialTransfers.push({
-                            fecha: fecha,
-                            nombreCuenta: nombreCuentaLimpio,
-                            cantidad: cantidad,
-                            descripcion: descripcion, // Usamos la descripción para afinar el emparejamiento
-                            originalRow: rowCount
-                        });
-                    } 
-                    else {
-                        // Movimiento Normal (Gasto/Ingreso)
+                    } else {
+                        // Movimiento Normal
                         movimientos.push({
                             id: generateId(),
                             fecha: fecha.toISOString(),
                             cantidad: cantidad,
-                            descripcion: descripcion,
+                            descripcion: descripcion || '',
                             tipo: 'movimiento',
-                            cuentaId: cuentasMap.get(nombreCuentaLimpio).id,
+                            cuentaId: cuentasMap.get(nombreCuenta).id,
                             conceptoId: conceptosMap.get(conceptoLimpio) ? conceptosMap.get(conceptoLimpio).id : null
                         });
                     }
-                } // Fin del bucle de líneas
-
-                // 8. EMPAREJAMIENTO DE TRASPASOS (Detectivesco)
-                let matchedTransfersCount = 0;
-                let unmatchedTransfers = [];
-                const transferGroups = new Map();
-
-                // Agrupamos por: Fecha + Importe Absoluto + Descripción
-                // Así nos aseguramos de no mezclar traspasos distintos del mismo día e importe
-                potentialTransfers.forEach(t => {
-                    const key = `${t.fecha.getTime()}_${Math.abs(t.cantidad)}_${t.descripcion.trim()}`;
-                    if (!transferGroups.has(key)) transferGroups.set(key, []);
-                    transferGroups.get(key).push(t);
-                });
-
-                transferGroups.forEach((group) => {
-                    // Separamos salidas (negativos) y entradas (positivos)
-                    const salidas = group.filter(t => t.cantidad < 0);
-                    const entradas = group.filter(t => t.cantidad > 0);
-
-                    // Emparejamos 1 a 1
-                    while (salidas.length > 0 && entradas.length > 0) {
-                        const salida = salidas.pop();
-                        const entrada = entradas.pop();
-
-                        movimientos.push({
-                            id: generateId(),
-                            fecha: salida.fecha.toISOString(),
-                            cantidad: Math.abs(salida.cantidad), // Siempre positivo en BD
-                            descripcion: salida.descripcion || 'Traspaso Importado',
-                            tipo: 'traspaso',
-                            cuentaOrigenId: cuentasMap.get(salida.nombreCuenta).id,
-                            cuentaDestinoId: cuentasMap.get(entrada.nombreCuenta).id
-                        });
-                        matchedTransfersCount++;
-                    }
-                    // Lo que sobra, se queda huérfano (se procesará como Gasto/Ingreso suelto si quieres, o se ignora/alerta)
-                    // Por simplicidad, aquí los convertimos en movimientos normales para no perder el dinero
-                    unmatchedTransfers.push(...salidas, ...entradas);
-                });
-                
-                // Procesar Traspasos Huérfanos (Como Gasto o Ingreso según signo)
-                // Esto es vital para que cuadren los saldos aunque falte la otra pata del traspaso
-                if (unmatchedTransfers.length > 0) {
-                    if (!conceptosMap.has('AJUSTE TRASPASO')) {
-                        conceptosMap.set('AJUSTE TRASPASO', { id: generateId(), nombre: 'Ajuste Traspaso', icon: 'swap_horiz' });
-                    }
-                    unmatchedTransfers.forEach(t => {
-                        movimientos.push({
-                            id: generateId(),
-                            fecha: t.fecha.toISOString(),
-                            cantidad: t.cantidad,
-                            descripcion: (t.descripcion || 'Traspaso sin pareja') + ' (Auto-ajuste)',
-                            tipo: 'movimiento',
-                            cuentaId: cuentasMap.get(t.nombreCuenta).id,
-                            conceptoId: conceptosMap.get('AJUSTE TRASPASO').id
-                        });
-                    });
-                    console.warn(`Se han convertido ${unmatchedTransfers.length} traspasos huérfanos en movimientos normales.`);
                 }
 
-                // 9. PREPARAR PAQUETE FINAL
-                const finalData = {
-                    cuentas: Array.from(cuentasMap.values()),
-                    conceptos: Array.from(conceptosMap.values()),
-                    movimientos: movimientos,
-                    presupuestos: [],
-                    recurrentes: [],
-                    inversiones_historial: [],
-                    inversion_cashflows: [],
-                    config: getInitialDb().config // Mantenemos config limpia
-                };
-
                 resolve({
-                    jsonData: finalData,
+                    jsonData: {
+                        cuentas: Array.from(cuentasMap.values()),
+                        conceptos: Array.from(conceptosMap.values()),
+                        movimientos: movimientos,
+                        presupuestos: [],
+                        recurrentes: [],
+                        inversiones_historial: [],
+                        inversion_cashflows: [],
+                        config: getInitialDb().config
+                    },
                     stats: {
                         rowCount,
                         accounts: cuentasMap.size,
                         concepts: conceptosMap.size,
-                        movements: movimientos.length,
-                        transfers: matchedTransfersCount,
-                        initials: initialCount
+                        movements: movimientos.length
                     }
                 });
 
             } catch (error) {
-                console.error("Error crítico en el procesador CSV/JSON:", error);
+                console.error("☠️ Error fatal en importación:", error);
                 reject(error);
             }
         };
-
-        reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
-        // Leemos como texto, funciona para CSV y para el JSON que es texto plano básicamente
-        reader.readAsText(file, 'UTF-8');
+        reader.readAsText(file);
     });
 };
 
