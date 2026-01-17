@@ -8999,17 +8999,30 @@ if (daySelector) {
         };
 
        
-        /* =============================================================== */
-/* === NUEVO MOTOR DE IMPORTACIÓN INTELIGENTE (JSON + LISTAS) === */
+/* =============================================================== */
+/* === MOTOR DE IMPORTACIÓN (CON FIX DE CLICK) === */
 /* =============================================================== */
 
-const handleJSONFileSelect = (file) => {
-    const errorEl = select('json-file-error');
-    if (!errorEl) return;
-    errorEl.textContent = '';
+const handleJSONFileSelect = (arg) => {
+    // --- FIX: ADAPTADOR UNIVERSAL (EVENTO vs ARCHIVO) ---
+    // Esto es lo que arregla que el botón parezca "muerto"
+    let file = arg;
+    
+    // Si lo que llega es un evento (click) en lugar del archivo directo...
+    if (arg.target && arg.target.files) {
+        file = arg.target.files[0];
+    }
+    
+    // Si el usuario abrió la ventana pero canceló sin elegir nada
+    if (!file) return; 
+    // -----------------------------------------------------
 
-    if (!file.type.includes('json')) {
-        errorEl.textContent = 'Error: El archivo debe ser de tipo .json.';
+    const errorEl = select('json-file-error');
+    if (errorEl) errorEl.textContent = '';
+
+    // Validación básica de tipo (si no es json, error)
+    if (!file.name.toLowerCase().includes('json') && !file.type.includes('json')) {
+        if(errorEl) errorEl.textContent = 'Error: Por favor selecciona un archivo .json';
         return;
     }
 
@@ -9020,24 +9033,23 @@ const handleJSONFileSelect = (file) => {
             let processedData = null;
             let counts = {};
 
-            // 1. DETECCIÓN: ¿Es una Copia de Seguridad Completa?
-            // (Busca la estructura estándar de la app)
+            // 1. DETECCIÓN: Copia de Seguridad Estándar
             if (rawData.meta && rawData.data) {
-                console.log("📂 Detectada Copia de Seguridad Estándar");
+                console.log("📂 Detectada Copia Estándar");
                 jsonWizardState.preview.meta = rawData.meta;
                 processedData = rawData.data;
-                
                 for (const key in processedData) {
                     if (Array.isArray(processedData[key])) counts[key] = processedData[key].length;
                 }
             } 
-            // 2. DETECCIÓN: ¿Es el formato "Lista Plana" (Tu archivo IMPORTAR...json)?
-            // (Busca si es un array y si la clave contiene 'FECHA' e 'IMPORTE')
+            // 2. DETECCIÓN: Lista Plana (Tu archivo del Excel)
             else if (Array.isArray(rawData) && rawData.length > 0) {
-                const firstItemKey = Object.keys(rawData[0])[0];
-                if (firstItemKey && firstItemKey.includes('FECHA') && firstItemKey.includes('IMPORTE')) {
-                    console.log("🕵️ Detectada Lista de Movimientos Plana. Iniciando análisis inteligente...");
-                    // Llamamos a la nueva función mágica que procesa tu archivo
+                // Comprobamos si tiene pinta de ser tu lista
+                const sample = rawData[0];
+                const keys = Object.keys(sample).join('').toUpperCase();
+                
+                if (keys.includes('FECHA') || keys.includes('IMPORTE') || keys.includes('CUENTA')) {
+                    console.log("🕵️ Detectada Lista de Movimientos. Analizando...");
                     const analysisResult = processSpecialJSONImport(rawData);
                     
                     processedData = analysisResult.data;
@@ -9049,21 +9061,9 @@ const handleJSONFileSelect = (file) => {
                 }
             }
 
-            // 3. Validación Final
-            if (!processedData) {
-                 // Intento de fallback para formato antiguo simple
-                if (rawData.cuentas && rawData.movimientos) {
-                    processedData = rawData;
-                     for (const key in processedData) {
-                        if (Array.isArray(processedData[key])) counts[key] = processedData[key].length;
-                    }
-                     jsonWizardState.preview.meta = { appName: 'Copia Simple (Legacy)', exportDate: 'N/A' };
-                } else {
-                    throw new Error("Formato de archivo no reconocido.");
-                }
-            }
+            if (!processedData) throw new Error("Formato no reconocido. Asegúrate que es el archivo correcto.");
 
-            // Guardamos el resultado en el estado del asistente
+            // Guardamos y avanzamos
             jsonWizardState.data = processedData;
             jsonWizardState.preview.counts = counts;
 
@@ -9071,8 +9071,8 @@ const handleJSONFileSelect = (file) => {
             goToJSONStep(2);
 
         } catch (error) {
-            console.error("Error al procesar JSON:", error);
-            errorEl.textContent = `Error: ${error.message}`;
+            console.error(error);
+            if(errorEl) errorEl.textContent = `Error: ${error.message}`;
         }
     };
     reader.readAsText(file);
@@ -12447,3 +12447,42 @@ const renderPatrimonioPage = async () => {
 
     main.innerHTML = html;
 };
+/* =============================================================== */
+/* === FIX EMERGENCIA: RECONEXIÓN DE BOTONES DE IMPORTACIÓN === */
+/* =============================================================== */
+document.addEventListener('DOMContentLoaded', () => {
+    // Intentamos conectar los botones nada más cargar
+    setupImportConnections();
+});
+
+// Función que busca los elementos y los conecta a la fuerza
+function setupImportConnections() {
+    console.log("🔌 Conectando cables de importación...");
+    
+    const fileInput = document.getElementById('json-file-input');
+    const selectBtn = document.getElementById('json-select-file-btn');
+    const dropZone = document.getElementById('json-drop-zone');
+
+    if (fileInput && selectBtn) {
+        // 1. Que el botón visual dispare el input oculto
+        selectBtn.onclick = (e) => {
+            e.preventDefault(); // Evita recargas raras
+            fileInput.click();
+        };
+
+        // 2. Que el input oculto avise a nuestra función cuando elijas archivo
+        fileInput.onchange = (e) => {
+            handleJSONFileSelect(e); // Le pasamos el evento completo (el FIX de arriba lo entenderá)
+        };
+        
+        console.log("✅ Botón de selección conectado correctamente.");
+    }
+}
+
+// Truco: Ejecutamos esto también cada vez que abras un modal, por si acaso
+const observer = new MutationObserver(() => {
+    if (document.getElementById('import-json-modal')?.style.display !== 'none') {
+        setupImportConnections();
+    }
+});
+observer.observe(document.body, { attributes: true, subtree: true });
