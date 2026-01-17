@@ -10181,144 +10181,142 @@ const handleAddAccount = async (btn) => {
  };
 
 /* ==================================================================== */
-/* === IMPORTADOR BLINDADO v7.0 (SOLUCIÓN DOBLE PARSEO + LIMPIEZA) === */
+/* === IMPORTADOR UNIVERSAL v8.0 (RESPETA PALABRAS Y ACENTOS) === */
 /* ==================================================================== */
 
 const csv_processFile = (file) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        
-        // Función auxiliar para poner nombres bonitos (Ej: "TRADE REPUBLIC" -> "Trade Republic")
-        const toTitleCase = (str) => {
-            return str.replace(/\w\S*/g, (txt) => {
-                return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-            });
+
+        // Función suave para poner mayúsculas sin romper acentos
+        // Ej: "GASTOS MAMÁ" -> "Gastos Mamá"
+        const smartCapitalize = (str) => {
+            if (!str) return '';
+            // Normalizamos espacios dobles
+            const safeStr = str.trim().replace(/\s+/g, ' '); 
+            return safeStr.toLowerCase().replace(/(?:^|\s|['"({])\S/g, (char) => char.toUpperCase());
         };
 
         reader.onload = (event) => {
             try {
-                let rawData = event.target.result.replace(/^\uFEFF/, ''); // Quitar basura invisible
+                let rawData = event.target.result.replace(/^\uFEFF/, '');
                 let lines = [];
                 let isJsonParsed = false;
 
-                // 1. DETECCIÓN Y APERTURA DE "CAJAS FUERTES" (JSON)
+                // 1. APERTURA DE ARCHIVOS (Soporte para JSON anidado)
                 if (file.name.toLowerCase().endsWith('.json') || rawData.trim().startsWith('"') || rawData.trim().startsWith('[')) {
                     try {
                         let jsonData = JSON.parse(rawData);
                         
-                        // --- EL TRUCO MAESTRO: LA SEGUNDA CAJA ---
-                        // Si después de abrirlo sigue siendo texto, ¡abrimos otra vez!
+                        // Si es el JSON "muñeca rusa" (string dentro de string), abrimos la segunda capa
                         if (typeof jsonData === 'string') {
-                            console.log("🕵️ Detectado JSON doblemente codificado. Desencriptando...");
+                            console.log("🔓 Desencriptando JSON anidado...");
                             jsonData = JSON.parse(jsonData);
                         }
-                        
-                        // Ahora sí, extraemos los datos
-                        if (Array.isArray(jsonData) && jsonData.length > 0) {
-                            // Detectamos la cabecera del primer elemento
-                            const firstKey = Object.keys(jsonData[0])[0];
-                            lines.push(firstKey); // Añadimos cabecera
-                            
-                            // Añadimos los valores
+
+                        if (Array.isArray(jsonData)) {
+                            // Extraemos valores ignorando las claves raras
                             jsonData.forEach(obj => {
-                                // Cogemos el valor de la primera propiedad, sea cual sea
-                                lines.push(Object.values(obj)[0]);
+                                const val = Object.values(obj)[0]; // Cogemos el valor de la fila
+                                if (val) lines.push(val);
                             });
+                            // Añadimos una cabecera falsa para que el detector de abajo funcione
+                            lines.unshift("FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCION"); 
                             isJsonParsed = true;
                         }
                     } catch (e) {
-                        console.warn("⚠️ No era un JSON estándar, leyendo como texto plano...", e);
+                        console.warn("⚠️ Leyendo como texto plano...");
                     }
                 }
 
-                // Si no era JSON, leemos como CSV normal
                 if (!isJsonParsed) {
                     lines = rawData.split(/\r?\n/).filter(line => line.trim() !== '');
                 }
 
-                if (lines.length <= 1) {
-                    showToast("El archivo parece estar vacío o ilegible.", "warning");
-                    return resolve(null);
+                if (lines.length === 0) return resolve(null);
+
+                // 2. DETECTOR DE SEPARADOR
+                const firstLine = lines[0] || '';
+                const separator = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length ? ';' : ',';
+                console.log(`📠 Separador usado: '${separator}'`);
+
+                // Saltamos cabecera si parece ser una
+                if (firstLine.toUpperCase().includes('FECHA')) {
+                    lines.shift();
                 }
 
-                // 2. DETECTOR DE DIALECTO (¿Coma o Punto y Coma?)
-                const headerLine = lines[0];
-                const commaCount = (headerLine.match(/,/g) || []).length;
-                const semiCount = (headerLine.match(/;/g) || []).length;
-                const separator = semiCount >= commaCount ? ';' : ',';
-                
-                console.log(`📠 Separador detectado: '${separator}'`);
-
-                lines.shift(); // Quitamos la cabecera
-
-                // Variables para el proceso
-                let rowCount = 0;
                 const cuentasMap = new Map();
                 const conceptosMap = new Map();
                 const movimientos = [];
-                
-                // Regex capaz de leer: "Sabadell", "1.200,50", etc.
+                let rowCount = 0;
+
+                // Regex capaz de leer columnas con comillas, espacios y acentos
                 const regexPattern = new RegExp(`(?:${separator}|^)(?:"([^"]*)"|([^${separator}]*))`, "g");
 
                 for (const line of lines) {
                     if (!line.trim()) continue;
                     rowCount++;
 
-                    // Parseo de columnas
+                    // Extracción de columnas
                     const columns = [];
                     let match;
+                    // Reiniciamos el índice de la regex para cada línea
+                    regexPattern.lastIndex = 0; 
+                    
                     while (match = regexPattern.exec(line)) {
                         let val = match[1] !== undefined ? match[1] : match[2];
                         columns.push(val ? val.trim() : '');
                     }
 
-                    // Fallback si la regex falla
-                    let colsFinal = columns;
+                    // Fallback de seguridad si la regex falla
+                    let finalCols = columns;
                     if (columns.length < 4) {
-                         colsFinal = line.split(separator).map(c => c.trim().replace(/"/g, ''));
+                         finalCols = line.split(separator).map(c => c.trim().replace(/"/g, ''));
                     }
 
-                    // Mapeo (Asumimos orden: FECHA | CUENTA | CONCEPTO | IMPORTE | DESC)
-                    let [fechaStr, cuentaStr, conceptoStr, importeStr, descripcion] = colsFinal;
-                    
+                    // 3. MAPEO DE DATOS (Aseguramos que leemos todo)
+                    // Asumimos orden: FECHA | CUENTA | CONCEPTO | IMPORTE | DESCRIPCION (Opcional)
+                    let fechaStr = finalCols[0];
+                    let cuentaStr = finalCols[1];
+                    let conceptoStr = finalCols[2];
+                    let importeStr = finalCols[3];
+                    // Si la descripción tiene comas y se partió, unimos el resto de columnas
+                    let descripcion = finalCols.slice(4).join(' '); 
+
                     if (!fechaStr || !cuentaStr || !importeStr) continue;
 
-                    // 3. LIMPIEZA DE DATOS
+                    // 4. LIMPIEZA Y FORMATEO
                     
                     // Fecha
-                    const fechaParts = fechaStr.split('/');
-                    if (fechaParts.length !== 3) continue;
-                    const fecha = new Date(Date.UTC(fechaParts[2], fechaParts[1]-1, fechaParts[0], 12,0,0));
+                    const fParts = fechaStr.split('/');
+                    if (fParts.length !== 3) continue;
+                    const fecha = new Date(Date.UTC(fParts[2], fParts[1]-1, fParts[0], 12,0,0));
 
-                    // Importe (Español a Ordenador)
+                    // Importe
                     let cleanImporte = importeStr.replace(/[€$£\s]/g, '');
                     if (cleanImporte.includes(',') && cleanImporte.includes('.')) {
-                         cleanImporte = cleanImporte.replace(/\./g, '').replace(',', '.');
+                        cleanImporte = cleanImporte.replace(/\./g, '').replace(',', '.');
                     } else if (cleanImporte.includes(',')) {
-                         cleanImporte = cleanImporte.replace(',', '.');
+                        cleanImporte = cleanImporte.replace(',', '.');
                     }
-                    const cantidad = Math.round(parseFloat(cleanImporte) * 100); // A céntimos
+                    const cantidad = Math.round(parseFloat(cleanImporte) * 100);
                     if (isNaN(cantidad)) continue;
 
-                    // Textos Bonitos
-                    const conceptoLimpio = toTitleCase(conceptoStr.replace(/"/g, ''));
-                    // Truco: Quitamos prefijos D- o N- y ponemos mayúscula inicial (Sabadell)
-                    let nombreCuentaRaw = cuentaStr.replace(/^(D-|N-)/, '').replace(/"/g, '').trim();
-                    // Opcional: Si quieres todo mayúsculas como en el CSV original, quita el toTitleCase de abajo.
-                    // Pero toTitleCase ayuda a fusionar "SABADELL" con "Sabadell".
-                    const nombreCuenta = toTitleCase(nombreCuentaRaw); 
-
-                    // 4. CREACIÓN AUTOMÁTICA (La clave para que no falten cuentas)
+                    // Textos (Aquí estaba el problema, ahora usamos la función smartCapitalize)
+                    const nombreCuenta = smartCapitalize(cuentaStr.replace(/"/g, ''));
+                    const nombreConcepto = smartCapitalize(conceptoStr.replace(/"/g, ''));
+                    
+                    // 5. CREACIÓN DE ELEMENTOS
                     if (!cuentasMap.has(nombreCuenta)) {
+                        // Lógica de tipos simplificada
+                        const upper = nombreCuenta.toUpperCase();
                         let tipo = 'Banco';
                         let esInversion = false;
-                        const upper = nombreCuenta.toUpperCase();
                         
-                        // Detector de Tipos Inteligente
-                        if (upper.includes('TRADE') || upper.includes('DEGIRO') || upper.includes('BROKER') || upper.includes('MYINVESTOR') || upper.includes('INDEXA')) { tipo = 'Broker'; esInversion = true; }
-                        else if (upper.includes('BITCOIN') || upper.includes('CRIPTO') || upper.includes('BINANCE') || upper.includes('BITVAVO') || upper.includes('KRAKEN') || upper.includes('LEDGER')) { tipo = 'Cripto'; esInversion = true; }
-                        else if (upper.includes('TARJETA')) { tipo = 'Tarjeta'; }
-                        else if (upper.includes('EFECTIVO') || upper.includes('CAJA')) { tipo = 'Efectivo'; }
+                        if (upper.match(/TRADE|DEGIRO|BROKER|MYINVESTOR|INDEXA|RENTA|VALORES/)) { tipo = 'Broker'; esInversion = true; }
+                        else if (upper.match(/BITCOIN|CRIPTO|BINANCE|COINBASE|KRAKEN|LEDGER|WALLET/)) { tipo = 'Cripto'; esInversion = true; }
+                        else if (upper.match(/TARJETA|VISA|MASTERCARD/)) { tipo = 'Tarjeta'; }
+                        else if (upper.match(/EFECTIVO|CAJA|MONEDERO/)) { tipo = 'Efectivo'; }
 
                         cuentasMap.set(nombreCuenta, {
                             id: generateId(),
@@ -10331,39 +10329,44 @@ const csv_processFile = (file) => {
                         });
                     }
 
-                    if (!conceptosMap.has(conceptoLimpio) && conceptoLimpio.toUpperCase() !== 'INICIAL') {
-                        conceptosMap.set(conceptoLimpio, {
-                            id: generateId(),
-                            nombre: conceptoLimpio,
-                            icon: 'label'
-                        });
+                    if (nombreConcepto.toUpperCase() !== 'INICIAL' && nombreConcepto.toUpperCase() !== 'TRASPASO') {
+                         if (!conceptosMap.has(nombreConcepto)) {
+                            conceptosMap.set(nombreConcepto, {
+                                id: generateId(),
+                                nombre: nombreConcepto,
+                                icon: 'label' // Icono genérico, luego puedes editarlos
+                            });
+                        }
                     }
 
-                    // 5. REGISTRO DEL MOVIMIENTO
-                    if (conceptoLimpio.toUpperCase() === 'INICIAL') {
-                        // Saldo Inicial
+                    // 6. CREAR MOVIMIENTO
+                    let conceptoId = null;
+                    let tipoMov = 'movimiento';
+                    
+                    if (nombreConcepto.toUpperCase() === 'INICIAL') {
                         if (!conceptosMap.has('Saldo Inicial')) conceptosMap.set('Saldo Inicial', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
-                        movimientos.push({
-                            id: generateId(),
-                            fecha: fecha.toISOString(),
-                            cantidad: cantidad,
-                            descripcion: 'Saldo Inicial Importado',
-                            tipo: 'movimiento',
-                            cuentaId: cuentasMap.get(nombreCuenta).id,
-                            conceptoId: conceptosMap.get('Saldo Inicial').id
-                        });
+                        conceptoId = conceptosMap.get('Saldo Inicial').id;
+                        descripcion = 'Saldo Inicial Importado';
+                    } else if (nombreConcepto.toUpperCase() === 'TRASPASO') {
+                        // Los traspasos requieren lógica compleja de emparejamiento, 
+                        // pero para importar simple los marcamos como gasto/ingreso por ahora para cuadrar caja.
+                        // Si quieres emparejamiento real, avísame, pero es arriesgado sin IDs únicos.
+                        // Aquí los trataremos como movimientos normales para que NO FALTE DINERO.
+                        if (!conceptosMap.has('Traspaso Manual')) conceptosMap.set('Traspaso Manual', { id: generateId(), nombre: 'Traspaso Manual', icon: 'swap_horiz' });
+                        conceptoId = conceptosMap.get('Traspaso Manual').id;
                     } else {
-                        // Movimiento Normal
-                        movimientos.push({
-                            id: generateId(),
-                            fecha: fecha.toISOString(),
-                            cantidad: cantidad,
-                            descripcion: descripcion || '',
-                            tipo: 'movimiento',
-                            cuentaId: cuentasMap.get(nombreCuenta).id,
-                            conceptoId: conceptosMap.get(conceptoLimpio) ? conceptosMap.get(conceptoLimpio).id : null
-                        });
+                        conceptoId = conceptosMap.get(nombreConcepto).id;
                     }
+
+                    movimientos.push({
+                        id: generateId(),
+                        fecha: fecha.toISOString(),
+                        cantidad: cantidad,
+                        descripcion: descripcion || '',
+                        tipo: tipoMov,
+                        cuentaId: cuentasMap.get(nombreCuenta).id,
+                        conceptoId: conceptoId
+                    });
                 }
 
                 resolve({
@@ -10386,7 +10389,7 @@ const csv_processFile = (file) => {
                 });
 
             } catch (error) {
-                console.error("☠️ Error fatal en importación:", error);
+                console.error("☠️ Error en importación:", error);
                 reject(error);
             }
         };
