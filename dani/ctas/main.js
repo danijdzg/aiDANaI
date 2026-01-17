@@ -8998,12 +8998,7 @@ if (daySelector) {
             showModal('json-import-wizard-modal');
         };
 
-        const goToJSONStep = (stepNumber) => {
-            selectAll('.json-wizard-step').forEach(step => step.style.display = 'none');
-            const targetStep = select(`json-wizard-step-${stepNumber}`);
-            if (targetStep) targetStep.style.display = 'flex';
-        };
-
+       
         /* =============================================================== */
 /* === NUEVO MOTOR DE IMPORTACIÓN INTELIGENTE (JSON + LISTAS) === */
 /* =============================================================== */
