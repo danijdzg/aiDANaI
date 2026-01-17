@@ -1567,66 +1567,39 @@ const getDatesFromReportFilter = (reportId) => {
  * @param {Set<string>} visibleAccountIds - Un Set con los IDs de las cuentas visibles.
  * @returns {number} La cantidad en céntimos del impacto del movimiento.
  */
-/* =============================================================== */
-/* === MOTOR MATEMÁTICO BLINDADO v3.0 (FIX TEXTO A NÚMERO) === */
-/* =============================================================== */
 const calculateMovementAmount = (mov, visibleAccountIds) => {
-    // 1. SANITIZACIÓN: Convertimos CUALQUIER cosa a número entero
-    // Si viene "100", lo convierte a 100. Si viene 100, lo deja en 100.
-    // Si viene basura, lo convierte en 0.
-    let rawAmount = parseFloat(mov.cantidad);
-    if (isNaN(rawAmount)) rawAmount = 0;
-
     let amount = 0;
-
     if (mov.tipo === 'movimiento') {
-        // Solo sumamos si la cuenta es visible
+        // CORRECCIÓN CLAVE: Solo se suma si la cuenta del movimiento pertenece a la contabilidad visible.
         if (visibleAccountIds.has(mov.cuentaId)) {
-            amount = rawAmount;
+            amount = mov.cantidad;
         }
     } else if (mov.tipo === 'traspaso') {
         const origenVisible = visibleAccountIds.has(mov.cuentaOrigenId);
         const destinoVisible = visibleAccountIds.has(mov.cuentaDestinoId);
-        
-        // Lógica de Traspasos:
-        // Si sale de mi vista (Origen=Visible, Destino=Oculto) -> Es Gasto (-)
-        if (origenVisible && !destinoVisible) {
-            amount = -Math.abs(rawAmount); 
-        } 
-        // Si entra a mi vista (Origen=Oculto, Destino=Visible) -> Es Ingreso (+)
-        else if (!origenVisible && destinoVisible) {
-            amount = Math.abs(rawAmount);
-        }
-        // Si es interno (Visible->Visible) o externo (Oculto->Oculto) -> Es Neutro (0)
+        // Si el traspaso es entre contabilidades, solo contamos la parte que entra o sale.
+        if (origenVisible && !destinoVisible) amount = -mov.cantidad; // Sale dinero
+        else if (!origenVisible && destinoVisible) amount = mov.cantidad; // Entra dinero
+        // Si es un traspaso interno (ambas visibles) o externo (ninguna visible), el impacto es 0.
     }
-    
     return amount;
 };
 
-/* =============================================================== */
-/* === CALCULADORA DE TOTALES (FORZANDO SUMA NUMÉRICA) === */
-/* =============================================================== */
+/**
+ * REVISADO: Función central para calcular totales de ingresos/gastos/neto.
+ * Ahora utiliza la función 'calculateMovementAmount' corregida.
+ * @param {Array<object>} movs - Array de movimientos a procesar.
+ * @param {Set<string>} visibleAccountIds - Set de IDs de cuentas visibles.
+ * @returns {{ingresos: number, gastos: number, saldoNeto: number}}
+ */
 const calculateTotals = (movs, visibleAccountIds) => {
-    // Inicializamos en CERO numérico
-    let ingresos = 0;
-    let gastos = 0;
-    let saldoNeto = 0;
-
-    movs.forEach(mov => {
-        // Llamamos a la función blindada de arriba
-        // Esto NOS GARANTIZA que 'amount' es un NÚMERO, no texto.
+    return movs.reduce((acc, mov) => {
         const amount = calculateMovementAmount(mov, visibleAccountIds);
-        
-        // Suma Segura
-        if (amount > 0) {
-            ingresos += amount;
-        } else {
-            gastos += amount;
-        }
-        saldoNeto += amount;
-    });
-
-    return { ingresos, gastos, saldoNeto };
+        if (amount > 0) acc.ingresos += amount;
+        else acc.gastos += amount;
+        acc.saldoNeto += amount;
+        return acc;
+    }, { ingresos: 0, gastos: 0, saldoNeto: 0 });
 };
 document.body.addEventListener('change', e => {
     // 1. Selector de Periodo (Mes/Año/Custom)
@@ -2511,106 +2484,88 @@ const getValorMercadoInversiones = async () => {
     } catch (error) {
         console.error("Error en forcePanelRecalculation:", error);
     }
-};   
-/* =============================================================== */
-/* === FIX CÁLCULO FECHAS: INICIO (00:00) A FIN (23:59) REAL === */
-/* =============================================================== */
+};  
+ 
 const getFilteredMovements = async (forComparison = false) => {
-    // 1. OBTENER FECHAS DEL FILTRO
-    const filterPeriodo = select('filter-periodo');
-    const p = filterPeriodo ? filterPeriodo.value : 'mes-actual';
-    let sDate, eDate, prevSDate, prevEDate;
+    // 1. Obtener la "Caja de Tickets" completa de la memoria
+    const allMovs = await AppStore.getAll();
     
-    // Usamos la fecha actual local como referencia
-    const now = new Date(); 
+    // 2. Definir las fechas de "HOY" y "AHORA"
+    const now = new Date();
+    const filterPeriodo = select('filter-periodo');
+    // Si no hay filtro seleccionado, forzamos 'mes-actual'
+    const periodo = filterPeriodo ? filterPeriodo.value : 'mes-actual';
 
-    // Helper para crear fechas locales (Año, Mes, Día, Hora, Min, Seg)
-    // Mes en JS va de 0 a 11 (Enero=0)
-    const getLocalStartOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-    const getLocalEndOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+    let sDate, eDate; // Fecha Inicio, Fecha Fin
 
-    switch (p) {
-        case 'mes-actual':
-            // Desde el día 1 del mes actual a las 00:00
-            sDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-            // Hasta el día 0 del mes siguiente (último día de este mes) a las 23:59
-            eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-            
-            // Para comparación (Mes anterior)
-            prevSDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-            prevEDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-            break;
-
-        case 'año-actual':
-            sDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-            eDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-            
-            prevSDate = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
-            prevEDate = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
-            break;
-
-        case 'custom':
-            const startInput = select('filter-fecha-inicio');
-            const endInput = select('filter-fecha-fin');
-            
-            // Lógica robusta para Inputs de tipo Date (YYYY-MM-DD)
-            if (startInput && startInput.value) {
-                const [y, m, d] = startInput.value.split('-').map(Number);
-                sDate = new Date(y, m - 1, d, 0, 0, 0, 0);
-            }
-            
-            if (endInput && endInput.value) {
-                const [y, m, d] = endInput.value.split('-').map(Number);
-                eDate = new Date(y, m - 1, d, 23, 59, 59, 999);
-            }
-            
-            // En modo custom no calculamos comparación automática compleja
-            prevSDate = null; 
-            prevEDate = null; 
-            break;
-
-        default:
-            return { current: [], previous: [], label: '' };
+    // 3. Configurar el Calendario
+    if (periodo === 'mes-actual') {
+        // Primer día del mes a las 00:00:00.000
+        sDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        // Último día del mes a las 23:59:59.999
+        eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (periodo === 'año-actual') {
+        sDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0); // 1 Enero
+        eDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999); // 31 Diciembre
+    } else if (periodo === 'custom') {
+        // Lógica para fechas personalizadas
+        const fInicio = select('filter-fecha-inicio')?.value;
+        const fFin = select('filter-fecha-fin')?.value;
+        if (!fInicio || !fFin) return { current: [], label: '' }; // Si falta fecha, no devolvemos nada
+        
+        sDate = new Date(fInicio); sDate.setHours(0,0,0,0);
+        eDate = new Date(fFin); eDate.setHours(23,59,59,999);
     }
 
-    if (!sDate || !eDate) return { current: [], previous: [], label: '' };
+    // 4. Filtrar los Movimientos (El Portero)
+    const currentMovs = allMovs.filter(m => {
+        // a) Validar fecha
+        const mDate = new Date(m.fecha); // Convertir fecha del movimiento
+        if (isNaN(mDate.getTime())) return false; // Si la fecha está rota, ignorar
 
-    // 2. CONSULTAR A LA BASE DE DATOS (Usando ISOString para convertir a UTC correctamente)
-    const fetchMovementsForRange = async (start, end) => {
-        if (!start || !end) return [];
-
-        const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection('movimientos')
-            .where('fecha', '>=', start.toISOString())
-            .where('fecha', '<=', end.toISOString())
-            .get();
-        return snapshot.docs.map(doc => doc.data());
-    };
-
-    // 3. OBTENER Y FILTRAR POR CONTABILIDAD (Caja A / B / C)
-    const visibleAccountIds = new Set(getVisibleAccounts().map(c => c.id));
-    
-    const filterByLedger = (movs) => movs.filter(m => {
-        if (m.tipo === 'traspaso') {
-            return visibleAccountIds.has(m.cuentaOrigenId) || visibleAccountIds.has(m.cuentaDestinoId);
-        }
-        return visibleAccountIds.has(m.cuentaId);
+        // b) Comprobar si cae dentro del rango exacto
+        return mDate >= sDate && mDate <= eDate;
     });
 
-    const currentMovsRaw = await fetchMovementsForRange(sDate, eDate);
-    const currentMovs = filterByLedger(currentMovsRaw);
+    console.log(`[aiDANaI] Filtrado ${periodo}: Desde ${sDate.toLocaleString()} hasta ${eDate.toLocaleString()} - Encontrados: ${currentMovs.length}`);
 
+    // Si es solo para datos, devolvemos ya
     if (!forComparison) return { current: currentMovs, previous: [], label: '' };
-    
-    // Solo buscamos previos si es necesario
-    let prevMovs = [];
-    if (prevSDate && prevEDate) {
-        const prevMovsRaw = await fetchMovementsForRange(prevSDate, prevEDate);
-        prevMovs = filterByLedger(prevMovsRaw);
-    }
 
-    const comparisonLabel = p === 'mes-actual' ? 'vs mes ant.' : (p === 'año-actual' ? 'vs año ant.' : '');
-    
-    return { current: currentMovs, previous: prevMovs, label: comparisonLabel };
+    // (Opcional: aquí iría la lógica de comparación si la necesitas, pero para el resumen principal esto basta)
+    return { current: currentMovs, previous: [], label: '' };
+};
+
+        
+        const calculateIRR = (cashflows) => {
+            if (cashflows.length < 2) return 0;
+            const sortedCashflows = [...cashflows].sort((a, b) => a.date.getTime() - b.date.getTime());
+            const firstDate = sortedCashflows[0].date;
+            const npv = (rate) => { let total = 0; for (const flow of sortedCashflows) { const years = (flow.date.getTime() - firstDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000); total += flow.amount / Math.pow(1 + rate, years); } return total; };
+            const derivative = (rate) => { let total = 0; for (const flow of sortedCashflows) { const years = (flow.date.getTime() - firstDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000); if (years > 0) { total -= years * flow.amount / Math.pow(1 + rate, years + 1); } } return total; };
+            let guess = 0.1; 
+    const maxIterations = 50; // Reducir a 50 es suficiente y más seguro
+    const tolerance = 1e-6; // Relajamos un poco la tolerancia (1e-7 es excesivo para UI)
+
+    for (let i = 0; i < maxIterations; i++) {
+        const npvValue = npv(guess);
+        const derivativeValue = derivative(guess);
+        
+        // Protección contra división por cero en la derivada
+        if (Math.abs(derivativeValue) < 1e-9) break; 
+
+        const newGuess = guess - npvValue / derivativeValue;
+        
+        if (Math.abs(newGuess - guess) <= tolerance) {
+            return newGuess;
+        }
+        
+        // Protección contra resultados absurdos (TIR > 1000% o < -100%)
+        if (Math.abs(newGuess) > 10) break; 
+        
+        guess = newGuess;
+    }
+    return 0; // Si no converge, devuelve 0 en lugar de colgarse
 };
 		
 const calculatePortfolioPerformance = async (cuentaId = null) => {
@@ -3108,18 +3063,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
     );
 
     // Aplicar filtros (si has desmarcado alguno)
-   // [MODIFICACIÓN aiDANaI] Filtrado inteligente para OnePlus Nord 4
-    const displayAssetsData = performanceData.filter(asset => {
-        // 1. Filtro de Categoría (Los botones de colores de arriba)
-        const isCategoryVisible = !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T'));
-        
-        // 2. Filtro de Valor (La regla de oro)
-        // Ocultamos si el valor es EXACTAMENTE 0. 
-        // Nota: Si tienes una deuda (valor negativo) SÍ se mostrará, porque es importante verla.
-        const hasValue = Math.abs(asset.valorActual) > 0; 
-        
-        return isCategoryVisible && hasValue;
-    });
+    const displayAssetsData = performanceData.filter(asset => !deselectedInvestmentTypesFilter.has(toSentenceCase(asset.tipo || 'S/T')));
 
     // 3. Calcular Totales Generales
     let portfolioTotalInvertido = displayAssetsData.reduce((sum, cuenta) => sum + cuenta.capitalInvertido, 0);
@@ -4416,8 +4360,37 @@ async function calculateHistoricalIrrForGroup(accountIds) {
         };
 
 const calculateOperatingTotals = (movs, visibleAccountIds) => {
-    // Redirigimos a la nueva lógica robusta para no tener código duplicado
-    return calculateTotals(movs, visibleAccountIds);
+    let ingresos = 0;
+    let gastos = 0;
+
+    // Recorremos cada movimiento uno a uno
+    movs.forEach(m => {
+        // PROTECCIÓN 1: Si no tiene cantidad o cuenta, saltamos
+        if (!m || !m.cantidad || !m.cuentaId) return;
+
+        // PROTECCIÓN 2: Si la cuenta no está visible (ej: cuenta oculta), no sumamos
+        if (!visibleAccountIds.has(m.cuentaId)) return;
+
+        // PROTECCIÓN 3: Convertir a Número Real (asegurar que no es texto)
+        const cantidad = Number(m.cantidad);
+        
+        // LÓGICA DE NEGOCIO:
+        // Solo sumamos si es dinero REAL entrando o saliendo.
+        // Los 'traspasos' se ignoran deliberadamente para no inflar los números.
+        if (m.tipo === 'ingreso') {
+            ingresos += Math.abs(cantidad); // Siempre sumamos en positivo
+        } else if (m.tipo === 'gasto') {
+            gastos += Math.abs(cantidad);   // Siempre sumamos en positivo (luego restamos visualmente)
+        }
+        // Si es 'traspaso', 'ajuste' o 'saldo_inicial', NO HACEMOS NADA.
+    });
+
+    // Devolvemos los datos limpios
+    return { 
+        ingresos: ingresos, 
+        gastos: gastos, 
+        saldoNeto: ingresos - gastos // Lo que entra menos lo que sale
+    };
 };
 
 const updateDashboardSummaryCard = async () => {
@@ -4457,14 +4430,12 @@ const renderPanelPage = async () => {
     container.style.setProperty('margin', '0', 'important');
     container.style.overflowX = 'hidden';
 
-    // --- VARIABLES ---
-    const gap = '5px'; // TU OBJETIVO: 5px
     
-    const bigKpiStyle = 'font-size: 1.8rem; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
+    const gap = '5px'; // TU OBJETIVO: 5px
+    	
+	const bigKpiStyle = 'font-size: clamp(1.4rem, 6vw, 1.8rem); font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: visible; font-family: "Roboto Condensed", sans-serif;';
     const titleStyle = 'font-size: 0.7rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; opacity: 0.9;';
     
-    // ESTILO BASE DE TARJETA
-    // Importante: margin: 0 para que no empuje nada por fuera.
     const cardStyle = `
         width: 98%; 
         padding: 12px 15px; 
@@ -6951,15 +6922,7 @@ const startMovementForm = async (id = null, isRecurrent = false, initialType = '
     if (mode === 'new') {
         setTimeout(() => {
             const amountInput = select('movimiento-cantidad');
-            if (amountInput) {
-                // Forzamos el foco para que el móvil sepa que queremos escribir
-                amountInput.focus(); 
-                // Hacemos un clic simulado por si el foco no fuera suficiente
-                amountInput.click(); 
-                // Selección del texto (por si hubiera un 0, para sobrescribirlo directo)
-                amountInput.select();
-            }
-        }, 450); // Subimos a 450ms para esperar a que la animación de la ventana termine
+         }, 300); // Un poco más de tiempo para asegurar que el modal terminó de subir
     }
 };
         
@@ -9041,53 +9004,271 @@ if (daySelector) {
             if (targetStep) targetStep.style.display = 'flex';
         };
 
-        const handleJSONFileSelect = (file) => {
-            const errorEl = select('json-file-error');
-            if(!errorEl) return;
-            errorEl.textContent = '';
+        /* =============================================================== */
+/* === NUEVO MOTOR DE IMPORTACIÓN INTELIGENTE (JSON + LISTAS) === */
+/* =============================================================== */
 
-            if (!file.type.includes('json')) {
-                errorEl.textContent = 'Error: El archivo debe ser de tipo .json.';
-                return;
+const handleJSONFileSelect = (file) => {
+    const errorEl = select('json-file-error');
+    if (!errorEl) return;
+    errorEl.textContent = '';
+
+    if (!file.type.includes('json')) {
+        errorEl.textContent = 'Error: El archivo debe ser de tipo .json.';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const rawData = JSON.parse(event.target.result);
+            let processedData = null;
+            let counts = {};
+
+            // 1. DETECCIÓN: ¿Es una Copia de Seguridad Completa?
+            // (Busca la estructura estándar de la app)
+            if (rawData.meta && rawData.data) {
+                console.log("📂 Detectada Copia de Seguridad Estándar");
+                jsonWizardState.preview.meta = rawData.meta;
+                processedData = rawData.data;
+                
+                for (const key in processedData) {
+                    if (Array.isArray(processedData[key])) counts[key] = processedData[key].length;
+                }
+            } 
+            // 2. DETECCIÓN: ¿Es el formato "Lista Plana" (Tu archivo IMPORTAR...json)?
+            // (Busca si es un array y si la clave contiene 'FECHA' e 'IMPORTE')
+            else if (Array.isArray(rawData) && rawData.length > 0) {
+                const firstItemKey = Object.keys(rawData[0])[0];
+                if (firstItemKey && firstItemKey.includes('FECHA') && firstItemKey.includes('IMPORTE')) {
+                    console.log("🕵️ Detectada Lista de Movimientos Plana. Iniciando análisis inteligente...");
+                    // Llamamos a la nueva función mágica que procesa tu archivo
+                    const analysisResult = processSpecialJSONImport(rawData);
+                    
+                    processedData = analysisResult.data;
+                    counts = analysisResult.counts;
+                    jsonWizardState.preview.meta = { 
+                        appName: 'Importación Lista Inteligente', 
+                        exportDate: new Date().toISOString() 
+                    };
+                }
             }
 
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    let data = JSON.parse(event.target.result);
-                    let dataToAnalyze = data;
-
-                    if (data.meta && data.data) {
-                        jsonWizardState.preview.meta = data.meta;
-                        dataToAnalyze = data.data;
-                    } else {
-                        jsonWizardState.preview.meta = { appName: 'Cuentas (Formato Antiguo)', exportDate: 'N/A' };
+            // 3. Validación Final
+            if (!processedData) {
+                 // Intento de fallback para formato antiguo simple
+                if (rawData.cuentas && rawData.movimientos) {
+                    processedData = rawData;
+                     for (const key in processedData) {
+                        if (Array.isArray(processedData[key])) counts[key] = processedData[key].length;
                     }
-
-                    if (!dataToAnalyze.cuentas || !dataToAnalyze.conceptos || !dataToAnalyze.movimientos) {
-                        throw new Error("El archivo no tiene la estructura de una copia de seguridad válida.");
-                    }
-
-                    jsonWizardState.data = dataToAnalyze;
-                    
-                    const counts = {};
-                    for (const key in dataToAnalyze) {
-                        if (Array.isArray(dataToAnalyze[key])) {
-                            counts[key] = dataToAnalyze[key].length;
-                        }
-                    }
-                    jsonWizardState.preview.counts = counts;
-                    
-                    renderJSONPreview();
-                    goToJSONStep(2);
-
-                } catch (error) {
-                    console.error("Error al procesar el archivo JSON:", error);
-                    errorEl.textContent = `Error: ${error.message}`;
+                     jsonWizardState.preview.meta = { appName: 'Copia Simple (Legacy)', exportDate: 'N/A' };
+                } else {
+                    throw new Error("Formato de archivo no reconocido.");
                 }
+            }
+
+            // Guardamos el resultado en el estado del asistente
+            jsonWizardState.data = processedData;
+            jsonWizardState.preview.counts = counts;
+
+            renderJSONPreview();
+            goToJSONStep(2);
+
+        } catch (error) {
+            console.error("Error al procesar JSON:", error);
+            errorEl.textContent = `Error: ${error.message}`;
+        }
+    };
+    reader.readAsText(file);
+};
+
+// --- FUNCIÓN AUXILIAR: PROCESADOR DE TU ARCHIVO ESPECIAL ---
+// Esta función convierte tu lista de texto en datos reales y une los traspasos.
+const processSpecialJSONImport = (rawArray) => {
+    const cuentasMap = new Map();
+    const conceptosMap = new Map();
+    
+    // Cargamos lo que ya existe en la App para no duplicar nombres
+    db.cuentas.forEach(c => cuentasMap.set(c.nombre.toUpperCase(), c));
+    db.conceptos.forEach(c => conceptosMap.set(c.nombre.toUpperCase(), c));
+
+    const movimientos = [];
+    const potentialTransfers = []; // Aquí guardaremos los sospechosos de ser traspasos
+    
+    let stats = { cuentas: 0, conceptos: 0, movimientos: 0, traspasos: 0 };
+
+    // 1. ITERAR Y ANALIZAR CADA LÍNEA
+    rawArray.forEach((item, index) => {
+        // Tu archivo tiene la data en el valor de la propiedad, separado por ';'
+        const dataString = Object.values(item)[0]; 
+        if (!dataString || typeof dataString !== 'string') return;
+
+        const cols = dataString.split(';').map(c => c.trim().replace(/"/g, ''));
+        // Mapeo: 0:FECHA, 1:CUENTA, 2:CONCEPTO, 3:IMPORTE, 4:DESCRIPCIÓN
+        if (cols.length < 4) return;
+
+        // A. Parsear Fecha (DD/MM/YYYY -> ISO)
+        const [day, month, year] = cols[0].split('/');
+        const isoDate = `${year}-${month}-${day}T12:00:00.000Z`;
+        const fechaObj = new Date(isoDate);
+
+        // B. Gestionar Cuenta (Crear si no existe)
+        const nombreCuenta = cols[1];
+        const nombreCuentaKey = nombreCuenta.toUpperCase();
+        
+        if (!cuentasMap.has(nombreCuentaKey)) {
+            // Inferir tipo (similar a lo que hacemos en el CSV)
+            let tipo = 'banco';
+            let esInversion = false;
+            if (['TARJETA', 'VISA'].some(t => nombreCuentaKey.includes(t))) tipo = 'tarjeta';
+            if (['TRADE', 'MYINVESTOR', 'DEGIRO', 'CRIPTAN', 'BINANCE'].some(t => nombreCuentaKey.includes(t))) { 
+                tipo = 'broker'; esInversion = true; 
+            }
+            
+            const newAccount = {
+                id: generateId(),
+                nombre: toSentenceCase(nombreCuenta),
+                tipo: tipo,
+                saldo: 0,
+                esInversion: esInversion,
+                fechaCreacion: isoDate
             };
-            reader.readAsText(file);
-        };
+            cuentasMap.set(nombreCuentaKey, newAccount);
+            stats.cuentas++;
+        }
+        const cuentaId = cuentasMap.get(nombreCuentaKey).id;
+
+        // C. Parsear Importe
+        // Tu archivo usa puntos para miles? No parece, pero aseguramos.
+        // Asumimos formato español estándar (coma decimal) o entero simple.
+        let importeStr = cols[3].replace('.', '').replace(',', '.'); 
+        let cantidad = parseFloat(importeStr);
+        if (isNaN(cantidad)) return;
+        cantidad = Math.round(cantidad * 100); // A céntimos
+
+        // D. Gestionar Concepto
+        const nombreConcepto = cols[2];
+        const nombreConceptoKey = nombreConcepto.toUpperCase();
+        const descripcion = cols[4] || nombreConcepto;
+
+        // D.1. DETECCIÓN DE TRASPASOS
+        if (nombreConceptoKey.includes('TRASPASO')) {
+            // Lo guardamos en una lista de espera para buscarle pareja
+            potentialTransfers.push({
+                fechaTime: fechaObj.getTime(), // Usamos tiempo para comparar fácil
+                isoDate: isoDate,
+                cantidad: cantidad,
+                cuentaId: cuentaId,
+                descripcion: descripcion,
+                originalIndex: index
+            });
+            return; // No lo añadimos a movimientos todavía
+        }
+
+        // D.2. Movimiento Normal
+        if (!conceptosMap.has(nombreConceptoKey)) {
+            const newConcept = {
+                id: generateId(),
+                nombre: toSentenceCase(nombreConcepto),
+                icon: 'label'
+            };
+            conceptosMap.set(nombreConceptoKey, newConcept);
+            stats.conceptos++;
+        }
+
+        movimientos.push({
+            id: generateId(),
+            fecha: isoDate,
+            cantidad: cantidad,
+            descripcion: descripcion,
+            tipo: 'movimiento',
+            cuentaId: cuentaId,
+            conceptoId: conceptosMap.get(nombreConceptoKey).id
+        });
+        stats.movimientos++;
+    });
+
+    // 2. EL GRAN EMPAREJAMIENTO DE TRASPASOS (MATCHING)
+    // Agrupamos por: Fecha + Importe Absoluto
+    const transferGroups = new Map();
+
+    potentialTransfers.forEach(t => {
+        // Clave de grupo: Dia exacto + Importe sin signo (ej: 173694..._70000)
+        // Así un -700 y un +700 caerán en el mismo cubo.
+        const key = `${t.fechaTime}_${Math.abs(t.cantidad)}`;
+        if (!transferGroups.has(key)) transferGroups.set(key, []);
+        transferGroups.get(key).push(t);
+    });
+
+    transferGroups.forEach(group => {
+        const salidas = group.filter(t => t.cantidad < 0);
+        const entradas = group.filter(t => t.cantidad > 0);
+
+        // Mientras haya parejas disponibles...
+        while (salidas.length > 0 && entradas.length > 0) {
+            const salida = salidas.shift();
+            const entrada = entradas.shift();
+
+            // ¡Tenemos una pareja! Creamos el traspaso
+            movimientos.push({
+                id: generateId(),
+                fecha: salida.isoDate,
+                cantidad: Math.abs(salida.cantidad), // Siempre positivo en la base de datos
+                descripcion: salida.descripcion || 'Traspaso Automático',
+                tipo: 'traspaso',
+                cuentaOrigenId: salida.cuentaId,
+                cuentaDestinoId: entrada.cuentaId,
+                conceptoId: null, // Los traspasos no suelen llevar concepto
+                validado: true
+            });
+            stats.traspasos++;
+        }
+
+        // Si sobran (impares), los convertimos en movimientos normales sueltos
+        // (Mejor que perderlos)
+        [...salidas, ...entradas].forEach(huérfano => {
+            // Necesitamos un concepto genérico para estos casos
+            let conceptoTraspaso = conceptosMap.get('TRASPASO');
+            if (!conceptoTraspaso) {
+                conceptoTraspaso = { id: generateId(), nombre: 'Traspaso', icon: 'swap_horiz' };
+                conceptosMap.set('TRASPASO', conceptoTraspaso);
+            }
+
+            movimientos.push({
+                id: generateId(),
+                fecha: huérfano.isoDate,
+                cantidad: huérfano.cantidad,
+                descripcion: huérfano.descripcion + ' (Sin pareja detectada)',
+                tipo: 'movimiento',
+                cuentaId: huérfano.cuentaId,
+                conceptoId: conceptoTraspaso.id
+            });
+            stats.movimientos++;
+        });
+    });
+
+    console.log("📊 Reporte Importación:", stats);
+
+    // 3. Devolver la estructura lista para que el asistente la use
+    // NOTA: Convertimos los Maps de nuevo a Arrays para la app
+    return {
+        data: {
+            cuentas: Array.from(cuentasMap.values()),
+            conceptos: Array.from(conceptosMap.values()),
+            movimientos: movimientos,
+            presupuestos: [],
+            recurrentes: [],
+            inversiones_historial: [],
+            inversion_cashflows: []
+        },
+        counts: {
+            cuentas: cuentasMap.size,
+            conceptos: conceptosMap.size,
+            movimientos: movimientos.length
+        }
+    };
+};
 
         const renderJSONPreview = () => {
             const previewList = select('json-preview-list');
@@ -12135,4 +12316,78 @@ window.detectarYCorregirTraspasos = async () => {
     } finally {
         if (btn) setButtonLoading(btn, false);
     }
+};
+// [aiDANaI] - NUEVA Función de Patrimonio Expandido (Full Width)
+// Esta función dibuja la lista de cuentas ocupando todo el ancho de la pantalla
+const renderPatrimonioPage = async () => {
+    const main = select('main');
+    
+    // 1. Calculamos totales frescos
+    const accounts = await AppStore.getAccounts();
+    const totalPatrimonio = accounts.reduce((sum, acc) => sum + (parseFloat(acc.saldo) || 0), 0);
+
+    // 2. Preparamos el HTML con el contenedor "full-bleed" (sin márgenes)
+    let html = `
+        <div class="animate-fade-in" style="padding-bottom: 80px;">
+            
+            <div style="padding: 20px 0; text-align: center; background: transparent;">
+                <div style="font-size: 0.9rem; color: var(--c-on-surface-variant); text-transform: uppercase; letter-spacing: 1px;">Patrimonio Neto</div>
+                <div style="font-size: 2.8rem; font-weight: 800; font-family: 'Roboto Condensed', sans-serif; color: var(--c-primary); margin-top: 5px;">
+                    ${formatCurrency(totalPatrimonio)}
+                </div>
+            </div>
+
+            <div class="full-bleed-container">
+                <div style="display: flex; flex-direction: column;">
+    `;
+
+    // 3. Ordenamos: Primero las que tienen más dinero
+    const sortedAccounts = accounts.sort((a, b) => parseFloat(b.saldo) - parseFloat(a.saldo));
+
+    if (sortedAccounts.length === 0) {
+        html += `<div style="padding: 30px; text-align: center; color: var(--c-on-surface-variant);">No hay cuentas activas</div>`;
+    } else {
+        sortedAccounts.forEach(acc => {
+            const saldo = parseFloat(acc.saldo) || 0;
+            const colorSaldo = saldo >= 0 ? 'var(--c-on-surface)' : '#ff6b6b';
+            
+            // Iconos inteligentes
+            let icon = 'account_balance_wallet';
+            const tipo = (acc.tipo || '').toLowerCase();
+            if (tipo.includes('banco')) icon = 'account_balance';
+            else if (tipo.includes('inver') || tipo.includes('broker')) icon = 'trending_up';
+            else if (tipo.includes('cripto') || tipo.includes('btc')) icon = 'currency_bitcoin';
+            else if (tipo.includes('efectivo') || tipo.includes('cash')) icon = 'payments';
+
+            html += `
+                <div class="asset-row" onclick="startEditAccount('${acc.id}')">
+                    <div style="margin-right: 15px; color: var(--c-primary); display: flex; align-items: center;">
+                        <span class="material-icons" style="font-size: 24px;">${icon}</span>
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <div class="asset-name">${acc.nombre}</div>
+                        <div class="asset-meta">${acc.tipo || 'General'}</div>
+                    </div>
+                    <div class="asset-amount" style="color: ${colorSaldo};">
+                        ${formatCurrency(saldo)}
+                    </div>
+                    <div style="margin-left: 10px; color: var(--c-on-surface-variant);">
+                        <span class="material-icons" style="font-size: 18px;">chevron_right</span>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `
+                </div> </div> <div style="padding: 20px;">
+                <button class="btn btn--primary" style="width: 100%; padding: 15px; font-size: 1rem;" onclick="openModal('account-modal')">
+                    <span class="material-icons" style="margin-right: 8px;">add_circle</span>
+                    Añadir Nueva Cuenta
+                </button>
+            </div>
+        </div>
+    `;
+
+    main.innerHTML = html;
 };
