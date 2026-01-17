@@ -10181,142 +10181,184 @@ const handleAddAccount = async (btn) => {
  };
 
 /* ==================================================================== */
-/* === IMPORTADOR UNIVERSAL v8.0 (RESPETA PALABRAS Y ACENTOS) === */
+/* === IMPORTADOR MANUAL DE ALTA PRECISIÓN (ONEPLUS NORD 4) === */
 /* ==================================================================== */
 
+// ESTA FUNCIÓN ES EL CORAZÓN DE LA SOLUCIÓN:
+// Lee línea por línea respetando comillas y espacios.
+const parseCSVLine = (text, separator) => {
+    const result = [];
+    let cell = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        
+        if (char === '"') {
+            // Si encontramos comillas, cambiamos el estado "enComillas"
+            inQuotes = !inQuotes;
+        } else if (char === separator && !inQuotes) {
+            // Si es un separador y NO estamos dentro de comillas, cortamos aquí
+            result.push(cell);
+            cell = '';
+        } else {
+            // Cualquier otro carácter se añade a la celda actual
+            cell += char;
+        }
+    }
+    // Añadimos la última celda acumulada
+    result.push(cell);
+    return result;
+};
+
+// Función principal de procesado
 const csv_processFile = (file) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
 
-        // Función suave para poner mayúsculas sin romper acentos
-        // Ej: "GASTOS MAMÁ" -> "Gastos Mamá"
+        // Embellecedor de texto que RESPETA palabras compuestas
         const smartCapitalize = (str) => {
             if (!str) return '';
-            // Normalizamos espacios dobles
-            const safeStr = str.trim().replace(/\s+/g, ' '); 
-            return safeStr.toLowerCase().replace(/(?:^|\s|['"({])\S/g, (char) => char.toUpperCase());
+            // 1. Quitamos comillas sobrantes
+            let clean = str.trim().replace(/^"|"$/g, ''); 
+            // 2. Si está vacío, devolvemos vacío
+            if (!clean) return '';
+            // 3. Normalizamos espacios (quita dobles espacios pero deja los simples)
+            clean = clean.replace(/\s+/g, ' '); 
+            // 4. Capitalizamos cada palabra (Gastos Mamá)
+            return clean.toLowerCase().replace(/(?:^|\s|['"({])\S/g, (char) => char.toUpperCase());
         };
 
         reader.onload = (event) => {
             try {
-                let rawData = event.target.result.replace(/^\uFEFF/, '');
+                let rawData = event.target.result.replace(/^\uFEFF/, ''); // Limpieza inicial
                 let lines = [];
                 let isJsonParsed = false;
 
-                // 1. APERTURA DE ARCHIVOS (Soporte para JSON anidado)
-                if (file.name.toLowerCase().endsWith('.json') || rawData.trim().startsWith('"') || rawData.trim().startsWith('[')) {
+                // --- FASE 1: APERTURA DEL ARCHIVO (JSON vs CSV) ---
+                if (file.name.toLowerCase().endsWith('.json') || rawData.trim().startsWith('[')) {
                     try {
                         let jsonData = JSON.parse(rawData);
                         
-                        // Si es el JSON "muñeca rusa" (string dentro de string), abrimos la segunda capa
+                        // Soporte para JSON "Muñeca Rusa" (String dentro de String)
                         if (typeof jsonData === 'string') {
-                            console.log("🔓 Desencriptando JSON anidado...");
                             jsonData = JSON.parse(jsonData);
                         }
 
                         if (Array.isArray(jsonData)) {
-                            // Extraemos valores ignorando las claves raras
+                            // Convertimos el JSON a líneas de texto simulando un CSV
+                            // Formato esperado: { "CABECERA...": "VALOR;VALOR..." }
                             jsonData.forEach(obj => {
-                                const val = Object.values(obj)[0]; // Cogemos el valor de la fila
-                                if (val) lines.push(val);
+                                const val = Object.values(obj)[0]; // Sacamos el valor
+                                if (val && typeof val === 'string') lines.push(val);
                             });
-                            // Añadimos una cabecera falsa para que el detector de abajo funcione
-                            lines.unshift("FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCION"); 
+                            // Añadimos una cabecera falsa al principio para que el detector funcione
+                            lines.unshift("FECHA;CUENTA;CONCEPTO;IMPORTE;DESCRIPCION");
                             isJsonParsed = true;
                         }
                     } catch (e) {
-                        console.warn("⚠️ Leyendo como texto plano...");
+                        console.warn("⚠️ Falló lectura JSON, intentando como texto plano...");
                     }
                 }
 
                 if (!isJsonParsed) {
+                    // Si es CSV normal, dividimos por saltos de línea
                     lines = rawData.split(/\r?\n/).filter(line => line.trim() !== '');
                 }
 
-                if (lines.length === 0) return resolve(null);
+                if (lines.length === 0) {
+                    showToast("El archivo está vacío.", "error");
+                    return resolve(null);
+                }
 
-                // 2. DETECTOR DE SEPARADOR
-                const firstLine = lines[0] || '';
-                const separator = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length ? ';' : ',';
-                console.log(`📠 Separador usado: '${separator}'`);
+                // --- FASE 2: DETECCIÓN DE SEPARADOR ---
+                // Analizamos las primeras 5 líneas para decidir si es coma (,) o punto y coma (;)
+                let commaScore = 0;
+                let semiScore = 0;
+                const sampleLines = lines.slice(0, 5);
+                sampleLines.forEach(l => {
+                    commaScore += (l.match(/,/g) || []).length;
+                    semiScore += (l.match(/;/g) || []).length;
+                });
+                
+                const separator = semiScore >= commaScore ? ';' : ',';
+                console.log(`📠 Separador detectado: '${separator}' (Puntuación ;=${semiScore}, ,=${commaScore})`);
 
-                // Saltamos cabecera si parece ser una
-                if (firstLine.toUpperCase().includes('FECHA')) {
+                // Quitamos la cabecera real si existe (contiene "FECHA")
+                if (lines[0].toUpperCase().includes('FECHA')) {
                     lines.shift();
                 }
 
+                // --- FASE 3: EXTRACCIÓN DE DATOS ---
                 const cuentasMap = new Map();
                 const conceptosMap = new Map();
                 const movimientos = [];
                 let rowCount = 0;
 
-                // Regex capaz de leer columnas con comillas, espacios y acentos
-                const regexPattern = new RegExp(`(?:${separator}|^)(?:"([^"]*)"|([^${separator}]*))`, "g");
-
                 for (const line of lines) {
                     if (!line.trim()) continue;
                     rowCount++;
 
-                    // Extracción de columnas
-                    const columns = [];
-                    let match;
-                    // Reiniciamos el índice de la regex para cada línea
-                    regexPattern.lastIndex = 0; 
-                    
-                    while (match = regexPattern.exec(line)) {
-                        let val = match[1] !== undefined ? match[1] : match[2];
-                        columns.push(val ? val.trim() : '');
+                    // USAMOS EL PARSEADOR MANUAL AQUÍ
+                    const columns = parseCSVLine(line, separator);
+
+                    // Mapeo de columnas por posición (0, 1, 2, 3...)
+                    // CSV Dani: FECHA, CUENTAS, CONCEPTO, IMPORTE, DESCRIPCION
+                    let fechaStr = columns[0];
+                    let cuentaStr = columns[1];
+                    let conceptoStr = columns[2];
+                    let importeStr = columns[3];
+                    let descripcion = columns[4] || ''; // Puede venir vacía
+
+                    // Validación básica
+                    if (!fechaStr || !cuentaStr || !importeStr) {
+                        // console.log(`Fila ${rowCount} incompleta, saltando...`);
+                        continue;
                     }
 
-                    // Fallback de seguridad si la regex falla
-                    let finalCols = columns;
-                    if (columns.length < 4) {
-                         finalCols = line.split(separator).map(c => c.trim().replace(/"/g, ''));
-                    }
+                    // --- FASE 4: LIMPIEZA Y CONVERSIÓN ---
 
-                    // 3. MAPEO DE DATOS (Aseguramos que leemos todo)
-                    // Asumimos orden: FECHA | CUENTA | CONCEPTO | IMPORTE | DESCRIPCION (Opcional)
-                    let fechaStr = finalCols[0];
-                    let cuentaStr = finalCols[1];
-                    let conceptoStr = finalCols[2];
-                    let importeStr = finalCols[3];
-                    // Si la descripción tiene comas y se partió, unimos el resto de columnas
-                    let descripcion = finalCols.slice(4).join(' '); 
-
-                    if (!fechaStr || !cuentaStr || !importeStr) continue;
-
-                    // 4. LIMPIEZA Y FORMATEO
-                    
-                    // Fecha
-                    const fParts = fechaStr.split('/');
+                    // 1. FECHA (DD/MM/YYYY)
+                    const fParts = fechaStr.trim().split('/');
                     if (fParts.length !== 3) continue;
+                    // Creamos fecha UTC mediodía para evitar lios horarios
                     const fecha = new Date(Date.UTC(fParts[2], fParts[1]-1, fParts[0], 12,0,0));
 
-                    // Importe
-                    let cleanImporte = importeStr.replace(/[€$£\s]/g, '');
+                    // 2. IMPORTE (Manejo de "4.500,50" o "1200")
+                    let cleanImporte = importeStr.replace(/[€$£\s"']/g, ''); // Quitar moneda y comillas
+                    
+                    // Algoritmo detector de formato numérico español
                     if (cleanImporte.includes(',') && cleanImporte.includes('.')) {
+                        // Caso: 1.234,56 -> Quitamos punto, cambiamos coma por punto
                         cleanImporte = cleanImporte.replace(/\./g, '').replace(',', '.');
                     } else if (cleanImporte.includes(',')) {
+                        // Caso: 12,50 -> Cambiamos coma por punto
                         cleanImporte = cleanImporte.replace(',', '.');
                     }
+                    // Si solo hay puntos (1.200), JS lo entiende bien si no son miles. 
+                    // Pero para seguridad, si parece miles, lo arreglamos.
+                    
                     const cantidad = Math.round(parseFloat(cleanImporte) * 100);
                     if (isNaN(cantidad)) continue;
 
-                    // Textos (Aquí estaba el problema, ahora usamos la función smartCapitalize)
-                    const nombreCuenta = smartCapitalize(cuentaStr.replace(/"/g, ''));
-                    const nombreConcepto = smartCapitalize(conceptoStr.replace(/"/g, ''));
-                    
-                    // 5. CREACIÓN DE ELEMENTOS
+                    // 3. TEXTOS (Usamos smartCapitalize para respetar nombres largos)
+                    const nombreCuenta = smartCapitalize(cuentaStr);
+                    const nombreConcepto = smartCapitalize(conceptoStr);
+                    const descLimpia = smartCapitalize(descripcion);
+
+                    // --- FASE 5: CREACIÓN DE OBJETOS ---
+
+                    // CUENTAS
                     if (!cuentasMap.has(nombreCuenta)) {
-                        // Lógica de tipos simplificada
+                        // Detección automática de tipo
                         const upper = nombreCuenta.toUpperCase();
                         let tipo = 'Banco';
                         let esInversion = false;
                         
-                        if (upper.match(/TRADE|DEGIRO|BROKER|MYINVESTOR|INDEXA|RENTA|VALORES/)) { tipo = 'Broker'; esInversion = true; }
-                        else if (upper.match(/BITCOIN|CRIPTO|BINANCE|COINBASE|KRAKEN|LEDGER|WALLET/)) { tipo = 'Cripto'; esInversion = true; }
-                        else if (upper.match(/TARJETA|VISA|MASTERCARD/)) { tipo = 'Tarjeta'; }
-                        else if (upper.match(/EFECTIVO|CAJA|MONEDERO/)) { tipo = 'Efectivo'; }
+                        if (upper.match(/TRADE|DEGIRO|BROKER|MYINVESTOR|INDEXA|RENTA|VALORES|FONDO|ACCIONES|ETF/)) { tipo = 'Broker'; esInversion = true; }
+                        else if (upper.match(/BITCOIN|CRIPTO|BINANCE|COINBASE|KRAKEN|LEDGER|WALLET|ETH|BTC/)) { tipo = 'Cripto'; esInversion = true; }
+                        else if (upper.match(/TARJETA|VISA|MASTERCARD|AMEX/)) { tipo = 'Tarjeta'; }
+                        else if (upper.match(/EFECTIVO|CAJA|MONEDERO|CASH/)) { tipo = 'Efectivo'; }
 
                         cuentasMap.set(nombreCuenta, {
                             id: generateId(),
@@ -10329,32 +10371,33 @@ const csv_processFile = (file) => {
                         });
                     }
 
-                    if (nombreConcepto.toUpperCase() !== 'INICIAL' && nombreConcepto.toUpperCase() !== 'TRASPASO') {
+                    // CONCEPTOS
+                    // Ignoramos 'Inicial' y 'Traspasos' para no crear categorías basura
+                    if (!['INICIAL', 'TRASPASOS', 'TRASPASO'].includes(nombreConcepto.toUpperCase())) {
                          if (!conceptosMap.has(nombreConcepto)) {
                             conceptosMap.set(nombreConcepto, {
                                 id: generateId(),
                                 nombre: nombreConcepto,
-                                icon: 'label' // Icono genérico, luego puedes editarlos
+                                icon: 'label'
                             });
                         }
                     }
 
-                    // 6. CREAR MOVIMIENTO
+                    // MOVIMIENTOS
                     let conceptoId = null;
                     let tipoMov = 'movimiento';
                     
                     if (nombreConcepto.toUpperCase() === 'INICIAL') {
+                        // Concepto Especial: Saldo Inicial
                         if (!conceptosMap.has('Saldo Inicial')) conceptosMap.set('Saldo Inicial', { id: generateId(), nombre: 'Saldo Inicial', icon: 'account_balance' });
                         conceptoId = conceptosMap.get('Saldo Inicial').id;
-                        descripcion = 'Saldo Inicial Importado';
-                    } else if (nombreConcepto.toUpperCase() === 'TRASPASO') {
-                        // Los traspasos requieren lógica compleja de emparejamiento, 
-                        // pero para importar simple los marcamos como gasto/ingreso por ahora para cuadrar caja.
-                        // Si quieres emparejamiento real, avísame, pero es arriesgado sin IDs únicos.
-                        // Aquí los trataremos como movimientos normales para que NO FALTE DINERO.
+                    } else if (nombreConcepto.toUpperCase().startsWith('TRASPAS')) {
+                        // Concepto Especial: Traspaso
+                        // Los marcamos como 'movimiento' con categoría 'Traspaso Manual' para asegurar que el saldo cuadre
                         if (!conceptosMap.has('Traspaso Manual')) conceptosMap.set('Traspaso Manual', { id: generateId(), nombre: 'Traspaso Manual', icon: 'swap_horiz' });
                         conceptoId = conceptosMap.get('Traspaso Manual').id;
                     } else {
+                        // Concepto Normal
                         conceptoId = conceptosMap.get(nombreConcepto).id;
                     }
 
@@ -10362,24 +10405,27 @@ const csv_processFile = (file) => {
                         id: generateId(),
                         fecha: fecha.toISOString(),
                         cantidad: cantidad,
-                        descripcion: descripcion || '',
+                        descripcion: descLimpia,
                         tipo: tipoMov,
                         cuentaId: cuentasMap.get(nombreCuenta).id,
                         conceptoId: conceptoId
                     });
                 }
 
+                // --- FASE 6: EMPAQUETADO FINAL ---
+                const finalData = {
+                    cuentas: Array.from(cuentasMap.values()),
+                    conceptos: Array.from(conceptosMap.values()),
+                    movimientos: movimientos,
+                    presupuestos: [],
+                    recurrentes: [],
+                    inversiones_historial: [],
+                    inversion_cashflows: [],
+                    config: getInitialDb().config
+                };
+
                 resolve({
-                    jsonData: {
-                        cuentas: Array.from(cuentasMap.values()),
-                        conceptos: Array.from(conceptosMap.values()),
-                        movimientos: movimientos,
-                        presupuestos: [],
-                        recurrentes: [],
-                        inversiones_historial: [],
-                        inversion_cashflows: [],
-                        config: getInitialDb().config
-                    },
+                    jsonData: finalData,
                     stats: {
                         rowCount,
                         accounts: cuentasMap.size,
@@ -10389,7 +10435,7 @@ const csv_processFile = (file) => {
                 });
 
             } catch (error) {
-                console.error("☠️ Error en importación:", error);
+                console.error("☠️ Error crítico importando:", error);
                 reject(error);
             }
         };
