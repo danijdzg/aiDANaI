@@ -9269,86 +9269,147 @@ const processSpecialJSONImport = (rawArray) => {
         }
     };
 };
+/* =============================================================== */
+/* === FIX: VISUALIZACIÓN Y GUARDADO DE IMPORTACIÓN (WIZARD) === */
+/* =============================================================== */
 
-        const renderJSONPreview = () => {
-            const previewList = select('json-preview-list');
-            if(!previewList) return;
-            const { counts } = jsonWizardState.preview;
-            
-            const friendlyNames = {
-                cuentas: 'Cuentas', conceptos: 'Conceptos', movimientos: 'Movimientos',
-                presupuestos: 'Presupuestos', recurrentes: 'Recurrentes',
-                inversiones_historial: 'Historial de Inversión', inversion_cashflows: 'Flujos de Capital'
-            };
-            
-            let html = '';
-            for(const key in counts) {
-                if(counts[key] > 0) {
-                    html += `<li><span class="material-icons">check_circle</span> <strong>${counts[key]}</strong> ${friendlyNames[key] || key}</li>`;
-                }
+// Función para pintar el resumen en la pantallita flotante
+const renderJSONPreview = () => {
+    // Buscamos las cajas donde poner los números
+    const metaBox = select('json-meta-info');
+    const countsBox = select('json-counts-preview');
+    
+    // Si no existen en el HTML, salimos para no dar error
+    if (!metaBox || !countsBox) return;
+
+    const { meta, counts } = jsonWizardState.preview;
+
+    // 1. Mostrar Fecha y Origen
+    const dateStr = meta.exportDate ? new Date(meta.exportDate).toLocaleDateString() : 'N/A';
+    metaBox.innerHTML = `
+        <div style="margin-bottom: 5px;"><strong>Origen:</strong> ${meta.appName || 'Desconocido'}</div>
+        <div><strong>Fecha archivo:</strong> ${dateStr}</div>
+    `;
+
+    // 2. Mostrar Contadores (Cuentas, Movimientos, etc.)
+    // Usamos iconos para que quede bonito en el Oneplus
+    let html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
+    
+    // Mapeo de nombres para que se entienda mejor
+    const labels = {
+        cuentas: { icon: 'account_balance_wallet', label: 'Cuentas' },
+        movimientos: { icon: 'list', label: 'Movim.' },
+        conceptos: { icon: 'local_offer', label: 'Conceptos' },
+        presupuestos: { icon: 'savings', label: 'Presup.' }
+    };
+
+    for (const [key, count] of Object.entries(counts)) {
+        if (count > 0 && labels[key]) {
+            html += `
+                <div style="background: var(--c-surface-variant); padding: 10px; border-radius: 8px; text-align: center;">
+                    <span class="material-icons" style="font-size: 20px; color: var(--c-primary);">${labels[key].icon}</span>
+                    <div style="font-size: 18px; font-weight: bold;">${count}</div>
+                    <div style="font-size: 12px; opacity: 0.8;">${labels[key].label}</div>
+                </div>
+            `;
+        }
+    }
+    html += '</div>';
+    
+    // Aviso importante si es una mezcla
+    if (meta.appName === 'Importación Lista Inteligente') {
+        html += `
+            <div style="margin-top: 15px; padding: 10px; background: rgba(0, 179, 77, 0.1); border-left: 3px solid var(--c-primary); border-radius: 4px; font-size: 13px;">
+                <strong>✨ Modo Fusión:</strong> Se añadirán estos datos a los que ya tienes. No se borrará nada.
+            </div>
+        `;
+    } else {
+        html += `
+            <div style="margin-top: 15px; padding: 10px; background: rgba(255, 59, 48, 0.1); border-left: 3px solid var(--c-error); border-radius: 4px; font-size: 13px;">
+                <strong>⚠️ Atención:</strong> Esta es una copia completa. Al confirmar, se reemplazarán todos tus datos actuales.
+            </div>
+        `;
+    }
+
+    countsBox.innerHTML = html;
+};
+
+// Función que cambia de pantalla en el Asistente (Paso 1 -> Paso 2)
+const goToJSONStep = (step) => {
+    // Ocultar todos los pasos
+    document.querySelectorAll('.json-step').forEach(el => el.style.display = 'none');
+    
+    // Mostrar el paso actual
+    const currentStepEl = select(`json-step-${step}`);
+    if (currentStepEl) {
+        currentStepEl.style.display = 'block';
+        
+        // Si vamos al paso 2, renderizamos el resumen
+        if (step === 2) {
+            renderJSONPreview();
+        }
+    }
+};
+
+// Función FINAL: Guardar los datos en la Base de Datos
+const finishJSONImport = async () => {
+    try {
+        const newData = jsonWizardState.data;
+        if (!newData) throw new Error("No hay datos para importar");
+
+        // Detectamos si es nuestro modo especial de "Lista Inteligente"
+        const isSmartImport = jsonWizardState.preview.meta.appName === 'Importación Lista Inteligente';
+
+        if (isSmartImport) {
+            // === MODO FUSIÓN (AÑADIR A LO QUE EXISTE) ===
+            console.log("🔄 Iniciando Fusión de Datos...");
+
+            // 1. Fusionar Conceptos (Evitar duplicados por ID)
+            const existingConceptIds = new Set(db.conceptos.map(c => c.id));
+            newData.conceptos.forEach(c => {
+                if (!existingConceptIds.has(c.id)) db.conceptos.push(c);
+            });
+
+            // 2. Fusionar Cuentas
+            const existingAccountIds = new Set(db.cuentas.map(c => c.id));
+            newData.cuentas.forEach(c => {
+                if (!existingAccountIds.has(c.id)) db.cuentas.push(c);
+            });
+
+            // 3. Añadir Movimientos (Asumimos que son nuevos si vienen de importar archivo)
+            // Podríamos chequear duplicados exactos, pero el parser ya hizo limpieza básica
+            if (newData.movimientos) {
+                db.movimientos = [...db.movimientos, ...newData.movimientos];
             }
+
+            showToast(`✅ Se han añadido ${newData.movimientos.length} movimientos nuevos.`, 'success');
+
+        } else {
+            // === MODO RESTAURACIÓN (BORRAR Y REEMPLAZAR) ===
+            console.log("⚠️ Iniciando Restauración Completa...");
             
-            previewList.innerHTML = html || `<li><span class="material-icons">info</span>El archivo parece estar vacío.</li>`;
-        };
+            // Reemplazo total de la base de datos en memoria
+            db = { ...DEFAULT_DB, ...newData }; // Aseguramos estructura base + datos nuevos
+            
+            showToast('✅ Copia de seguridad restaurada correctamente.', 'success');
+        }
 
-        const handleFinalJsonImport = async (btn) => {
-            goToJSONStep(3);
-            setButtonLoading(btn, true, 'Importando...');
-            select('json-import-progress').style.display = 'block';
-            select('json-import-result').style.display = 'none';
+        // GUARDAR Y REINICIAR
+        saveDB(); // Guardamos en LocalStorage
+        await saveToFirebase(); // Intentamos guardar en la nube si hay usuario
+        
+        // Cerrar modal
+        closeModal('import-json-modal');
+        
+        // Recargar para ver los cambios frescos
+        setTimeout(() => window.location.reload(), 1000);
 
-            try {
-                const dataToImport = jsonWizardState.data;
-                const collectionsToClear = ['cuentas', 'conceptos', 'movimientos', 'presupuestos', 'recurrentes', 'inversiones_historial', 'inversion_cashflows'];
-
-                for (const collectionName of collectionsToClear) {
-                    const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
-                    if (snapshot.empty) continue;
-                    let batch = fbDb.batch();
-                    let count = 0;
-                    for (const doc of snapshot.docs) {
-                        batch.delete(doc.ref);
-                        count++;
-                        if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
-                    }
-                    if(count > 0) await batch.commit();
-                }
-                
-                for (const collectionName of Object.keys(dataToImport)) {
-                    const items = dataToImport[collectionName];
-                    if (Array.isArray(items) && items.length > 0) {
-                        let batch = fbDb.batch();
-                        let count = 0;
-                        for (const item of items) {
-                            if (item.id) {
-                                const docRef = fbDb.collection('users').doc(currentUser.uid).collection(collectionName).doc(item.id);
-                                batch.set(docRef, item);
-                                count++;
-                                if (count >= 450) { await batch.commit(); batch = fbDb.batch(); count = 0; }
-                            }
-                        }
-                        if(count > 0) await batch.commit();
-                    } else if (collectionName === 'config') {
-                        await fbDb.collection('users').doc(currentUser.uid).set({ config: items }, { merge: true });
-                    }
-                }
-                
-                select('json-import-progress').style.display = 'none';
-                select('json-import-result').style.display = 'block';
-                select('json-result-message').textContent = `Se han importado los datos correctamente. La aplicación se recargará.`;
-                hapticFeedback('success');
-                
-                setTimeout(() => location.reload(), 4000);
-
-            } catch (error) {
-                console.error("Error durante la importación final:", error);
-                showToast("Error crítico durante la importación.", "danger", 5000);
-                select('json-result-title').textContent = '¡Error en la Importación!';
-                select('json-result-message').textContent = `Ocurrió un error. Por favor, revisa la consola e inténtalo de nuevo.`;
-                select('json-import-result .material-icons').style.color = 'var(--c-danger)';
-                setButtonLoading(btn, false);
-            }
-        };
+    } catch (error) {
+        console.error("Error al finalizar importación:", error);
+        alert("Error al importar: " + error.message);
+    }
+};
+ 
     
 
 const handleConfirmRecurrent = async (id, btn) => {
