@@ -11897,27 +11897,34 @@ const initStickyRadar = () => {
         stickyBar = document.createElement('div');
         stickyBar.id = 'sticky-radar-bar';
         
-        // CSS IDÉNTICO AL HEADER (Degradado Azul)
-        stickyBar.style.cssText = `
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 52px; 
-            
-            background-image: linear-gradient(135deg, #000428 0%, #004e92 100%) !important;
-            background-color: #000428 !important;
-
-            border-bottom: 1px solid rgba(0,0,0,0.5);
-            border-top: 1px solid rgba(255,255,255,0.15);
-            
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between;
-            padding: 0 16px; 
-            box-sizing: border-box;
-            z-index: 500;
-            pointer-events: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            transition: opacity 0.1s;
-        `;
+      
+            stickyBar.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 52px;
+                
+                /* CAMBIO PRO: Fondo negro cristal en lugar de degradado azul */
+                background-color: rgba(10, 10, 10, 0.92) !important;
+                backdrop-filter: blur(12px) !important;
+                -webkit-backdrop-filter: blur(12px) !important;
+                
+                /* Línea sutil abajo para separar */
+                border-bottom: 1px solid var(--c-outline) !important;
+                
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 16px;
+                box-sizing: border-box;
+                z-index: 500;
+                pointer-events: none;
+                
+                /* Sombra suave y elegante en lugar de resplandor */
+                box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                transition: opacity 0.1s;
+            `;
         listContainer.parentElement.style.position = 'relative'; 
         listContainer.parentElement.appendChild(stickyBar);
     }
