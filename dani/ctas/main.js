@@ -3383,16 +3383,14 @@ const renderVirtualListItem = (item) => {
 
         return `
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
-                background-color: #000428 !important;
-                
-                padding: 12px 16px; 
+                background-color: #000000 !important; /* NEGRO PURO */
+                padding: 14px 16px; 
                 margin-top: 0;
-                border-top: 1px solid rgba(255,255,255,0.15);
+                border-top: 1px solid rgba(255,255,255,0.1);
                 border-bottom: 1px solid rgba(0,0,0,0.5);
                 display: flex; 
                 align-items: center; 
                 justify-content: space-between;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.4); 
                 position: relative;
                 z-index: 1;
             ">
@@ -3407,8 +3405,7 @@ const renderVirtualListItem = (item) => {
                     font-weight: 700; 
                     font-family: monospace; 
                     font-size: 1rem;
-                    text-shadow: 0 2px 2px rgba(0,0,0,0.8);
-                ">
+                    ">
                     ${formatCurrencyHTML(item.total)}
                 </span>
             </div>
