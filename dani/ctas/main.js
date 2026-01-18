@@ -4655,7 +4655,7 @@ const TransactionCardComponent = (m) => {
 
     // 3. RETORNAR EL HTML (Con sistema de clic para editar)
     return `
-    <div class="transaction-card list-item-animate" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px 15px; display: flex; align-items: center; border-bottom: 1px solid var(--c-outline); cursor: pointer; transition: background 0.2s;">
+    <div class="transaction-card list-item-animate type-${m.tipo}" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px 15px; display: flex; align-items: center; cursor: pointer; transition: background 0.2s;">
         
         ${avatarHTML}
         
