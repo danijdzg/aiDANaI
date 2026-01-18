@@ -3458,51 +3458,82 @@ const renderVirtualListItem = (item) => {
                 line2_Left_Text = escapeHTML(descripcionTexto);
             }
 
-            // --- 2. HTML DISEÑO ENCUADRADO (Interior Intacto) ---
+            // --- 2. HTML DISEÑO ENCUADRADO (ALINEACIÓN PERFECTA) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    /* --- SOLO ESTO HA CAMBIADO --- */
-                    /* 1. Un poco de margen para que se vea el cuadro separado */
                     margin: 4px 8px;      
-                    
-                    /* 2. Relleno ajustado ligeramente */
-                    padding: 4px 8px;     
-                    
-                    /* 3. Fondo oscuro */
+                    padding: 6px 10px;    /* Un poco más de aire horizontal */
                     background-color: #050505; 
-                    
-                    /* 4. EL ENCUADRE: Borde fino de color en los 4 lados */
                     border: 1px solid ${color} !important; 
-                    border-radius: 8px; /* Un poco redondeado */
-                    
-                    /* Mantenemos tu flexbox original */
+                    border-radius: 8px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    min-height: 44px;
+                    min-height: 48px;     /* Altura consistente */
+                    position: relative;
                  ">
                 
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; line-height: 1;">
-                    <div style="color: ${color}; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    
+                    <div style="
+                        flex: 1;                 /* Ocupa todo el espacio posible */
+                        text-align: left;        /* Fuerza el texto a la izquierda */
+                        color: ${color}; 
+                        font-weight: 700; 
+                        font-size: 0.8rem; 
+                        text-transform: uppercase; 
+                        overflow: hidden; 
+                        white-space: nowrap; 
+                        text-overflow: ellipsis; 
+                        padding-right: 10px;     /* Espacio para no chocar con el precio */
+                    ">
                         ${line1_Left_Text}
                     </div>
-                    <div class="${amountClass}" style="font-size: 1.2rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right; padding-left: 5px;">
+                    
+                    <div class="${amountClass}" style="
+                        text-align: right;       /* Fuerza el número a la derecha */
+                        font-size: 1.15rem; 
+                        font-weight: 800; 
+                        white-space: nowrap; 
+                        letter-spacing: -0.5px;
+                        flex-shrink: 0;          /* El precio no se encoge */
+                    ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 1px; line-height: 1;">
-                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left; opacity: 0.9;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px; width: 100%;">
+                    
+                    <div style="
+                        flex: 1; 
+                        text-align: left;        /* Fuerza texto a la izquierda */
+                        color: #FFFFFF; 
+                        font-weight: 400; 
+                        font-size: 0.8rem; 
+                        overflow: hidden; 
+                        white-space: nowrap; 
+                        text-overflow: ellipsis; 
+                        opacity: 0.8;
+                    ">
                         ${line2_Left_Text}
                     </div>
                     
                     ${m.tipo !== 'traspaso' ? `
-                    <div style="color: #FFFFFF; font-size: 1.2rem; font-weight: 400; white-space: nowrap; letter-spacing: -0.5px; text-align: right; opacity: 0.8; padding-left: 5px;">
-                        ${formatCurrencyHTML(m.runningBalance)}
+                    <div style="
+                        text-align: right;       /* Fuerza saldo a la derecha */
+                        color: #FFFFFF; 
+                        font-size: 0.85rem; 
+                        font-weight: 400; 
+                        white-space: nowrap; 
+                        opacity: 0.6; 
+                        padding-left: 10px;
+                        flex-shrink: 0;
+                    ">
+                        Saldo: ${formatCurrencyHTML(m.runningBalance)}
                     </div>
                     ` : '<div style="flex-shrink:0;"></div>'} 
                 </div>
