@@ -3458,44 +3458,50 @@ const renderVirtualListItem = (item) => {
                 line2_Left_Text = escapeHTML(descripcionTexto);
             }
 
-            // --- 2. HTML DE MÁXIMA DENSIDAD Y SIMETRÍA ---
+            // --- 2. HTML DISEÑO TARJETA (ENCUADRADA) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    padding: 1px 4px;        /* 1px vertical, 4px horizontal para que el texto no toque el borde */
-                    margin-bottom: 1px;      /* Separación mínima entre filas */
-                    background-color: var(--c-surface);
-                    border-bottom: 1px solid var(--c-outline);
-                    border-left: 5px solid ${color} !important;  /* Barra Izquierda */
-                    border-right: 5px solid ${color} !important; /* Barra Derecha (SIMETRÍA) */
+                    /* CAJA FLOTANTE */
+                    margin: 8px 12px; /* Espacio alrededor de la tarjeta */
+                    padding: 12px 14px; /* Espacio interior cómodo */
+                    background-color: #000000; /* Fondo Negro Puro */
+                    
+                    /* EL ENCUADRE DE COLOR */
+                    border: 1px solid ${color}; /* Borde fino del color del movimiento */
+                    border-radius: 12px; /* Esquinas redondeadas */
+                    
+                    /* Sombra para dar profundidad */
+                    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+                    
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    min-height: 44px;        /* Altura mínima ajustada a los números grandes */
+                    min-height: 55px;
                  ">
                 
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; line-height: 1;">
-                    <div style="color: ${color}; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <div style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;">
                         ${line1_Left_Text}
                     </div>
-                    <div class="${amountClass}" style="font-size: 1.2rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right; padding-left: 5px;">
+                    <div class="${amountClass}" style="font-size: 1.1rem; font-weight: 700; white-space: nowrap; letter-spacing: 0.5px;">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 1px; line-height: 1;">
-                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left; opacity: 0.9;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="color: #9CA3AF; font-weight: 400; font-size: 0.8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; padding-right: 10px;">
                         ${line2_Left_Text}
                     </div>
                     
                     ${m.tipo !== 'traspaso' ? `
-                    <div style="color: #FFFFFF; font-size: 1.2rem; font-weight: 400; white-space: nowrap; letter-spacing: -0.5px; text-align: right; opacity: 0.8; padding-left: 5px;">
-                        ${formatCurrencyHTML(m.runningBalance)}
+                    <div style="color: #6B7280; font-size: 0.85rem; font-weight: 500; white-space: nowrap;">
+                        Saldo: ${formatCurrencyHTML(m.runningBalance)}
                     </div>
-                    ` : '<div style="flex-shrink:0;"></div>'} 
+                    ` : ''} 
                 </div>
             </div>`;
         }
