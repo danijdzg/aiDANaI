@@ -3383,7 +3383,6 @@ const renderVirtualListItem = (item) => {
 
         return `
             <div class="date-header-trigger" data-fecha="${item.date}" data-total="${item.total}" style="
-                background-image: linear-gradient(135deg, #000428 0%, #004e92 100%) !important;
                 background-color: #000428 !important;
                 
                 padding: 12px 16px; 
