@@ -3458,55 +3458,55 @@ const renderVirtualListItem = (item) => {
                 line2_Left_Text = escapeHTML(descripcionTexto);
             }
 
-            // DENTRO DE: if (item.type === 'transaction') { ...
-        
-        // --- 2. HTML DISEÑO TARJETA (ENCUADRADA CON COLOR) ---
-        return `
-        <div class="t-card ${highlightClass}" 
-             data-fecha="${m.fecha || ''}" 
-             data-id="${m.id}" 
-             data-action="edit-movement-from-list" 
-             style="
-                /* 1. SEPARACIÓN Y FORMA */
-                margin: 8px 12px;          /* Separamos del borde para que flote */
-                padding: 10px 14px;        /* Espacio interior cómodo */
-                border-radius: 12px;       /* Esquinas redondeadas estilo App moderna */
+            // --- 2. HTML DISEÑO ENCUADRADO (Interior Intacto) ---
+            return `
+            <div class="t-card ${highlightClass}" 
+                 data-fecha="${m.fecha || ''}" 
+                 data-id="${m.id}" 
+                 data-action="edit-movement-from-list" 
+                 style="
+                    /* --- SOLO ESTO HA CAMBIADO --- */
+                    /* 1. Un poco de margen para que se vea el cuadro separado */
+                    margin: 4px 8px;      
+                    
+                    /* 2. Relleno ajustado ligeramente */
+                    padding: 4px 8px;     
+                    
+                    /* 3. Fondo oscuro */
+                    background-color: #050505; 
+                    
+                    /* 4. EL ENCUADRE: Borde fino de color en los 4 lados */
+                    border: 1px solid ${color} !important; 
+                    border-radius: 8px; /* Un poco redondeado */
+                    
+                    /* Mantenemos tu flexbox original */
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    min-height: 44px;
+                 ">
                 
-                /* 2. COLOR Y ENCUADRE (Aquí usamos tu color original) */
-                background-color: #080808; /* Fondo negro suave para que resalte el color */
-                border: 1px solid ${color}; /* ¡AQUÍ ESTÁ! Borde fino de su color correspondiente */
-                
-                /* 3. DETALLES VISUALES */
-                box-shadow: 0 4px 10px rgba(0,0,0,0.3); /* Sombra para dar profundidad */
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                min-height: 52px;
-                position: relative;
-             ">
-            
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <div style="color: #FFFFFF; font-weight: 700; font-size: 0.9rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;">
-                    ${line1_Left_Text}
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; line-height: 1;">
+                    <div style="color: ${color}; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left;">
+                        ${line1_Left_Text}
+                    </div>
+                    <div class="${amountClass}" style="font-size: 1.2rem; font-weight: 800; white-space: nowrap; letter-spacing: -0.5px; text-align: right; padding-left: 5px;">
+                        ${amountSign}${formatCurrencyHTML(m.cantidad)}
+                    </div>
                 </div>
-                
-                <div class="${amountClass}" style="font-size: 1.1rem; font-weight: 700; white-space: nowrap; letter-spacing: 0.5px;">
-                    ${amountSign}${formatCurrencyHTML(m.cantidad)}
-                </div>
-            </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="color: #9CA3AF; font-weight: 400; font-size: 0.8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; padding-right: 10px;">
-                    ${line2_Left_Text}
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 1px; line-height: 1;">
+                    <div style="color: #FFFFFF; font-weight: 400; font-size: 0.85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: left; opacity: 0.9;">
+                        ${line2_Left_Text}
+                    </div>
+                    
+                    ${m.tipo !== 'traspaso' ? `
+                    <div style="color: #FFFFFF; font-size: 1.2rem; font-weight: 400; white-space: nowrap; letter-spacing: -0.5px; text-align: right; opacity: 0.8; padding-left: 5px;">
+                        ${formatCurrencyHTML(m.runningBalance)}
+                    </div>
+                    ` : '<div style="flex-shrink:0;"></div>'} 
                 </div>
-                
-                ${m.tipo !== 'traspaso' ? `
-                <div style="color: #6B7280; font-size: 0.8rem; font-weight: 500; white-space: nowrap;">
-                    Saldo: ${formatCurrencyHTML(m.runningBalance)}
-                </div>
-                ` : ''} 
-            </div>
-        </div>`;
+            </div>`;
         }
     return '';
 };
