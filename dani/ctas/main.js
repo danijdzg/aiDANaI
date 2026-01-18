@@ -4653,26 +4653,36 @@ const TransactionCardComponent = (m) => {
             <span class="material-icons" style="font-size: 20px;">${iconName}</span>
         </div>`;
 
-    // 3. RETORNAR EL HTML (Con sistema de clic para editar)
+    // === CAMBIO AIDANAI INICIO ===
+    // 1. Limpiamos el tipo para que sea siempre minúscula (gasto, ingreso, traspaso)
+    const tipoLimpio = (m.tipo || 'varios').toLowerCase();
+    
+    // 2. Quitamos el border-bottom del style inline para que mande el CSS
+    // 3. Añadimos la clase type-${tipoLimpio}
     return `
-    <div class="transaction-card list-item-animate type-${m.tipo}" data-action="open-movement-form" data-id="${m.id}" style="padding: 12px 15px; display: flex; align-items: center; cursor: pointer; transition: background 0.2s;">
-        
+    <div class="transaction-card list-item-animate type-${tipoLimpio}" 
+         data-action="open-movement-form" 
+         data-id="${m.id}" 
+         style="padding: 12px 15px; display: flex; align-items: center; cursor: pointer; transition: background 0.2s;">
         ${avatarHTML}
-        
-        <div style="flex: 1; min-width: 0; padding-right: 10px;">
-            <div style="font-weight: 600; font-size: 0.95rem; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${conceptoName}
+        <div style="flex-grow: 1; min-width: 0; margin-left: 15px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <span style="font-weight: 600; font-size: 1rem; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${m.concepto || 'Sin concepto'}
+                </span>
+                <span style="font-weight: 700; font-size: 1rem; color: ${amountColor}; margin-left: 10px; white-space: nowrap;">
+                    ${formatCurrency(m.cantidad)}
+                </span>
             </div>
-            <div style="font-size: 0.8rem; color: var(--c-on-surface-secondary); margin-top: 2px;">
-                ${dateStr} • ${m.descripcion || 'Sin nota'}
+            <div style="display:flex; justify-content:space-between; margin-top: 4px;">
+                <span style="font-size: 0.85rem; color: var(--c-on-surface-variant);">${m.cuenta}</span>
+                <span style="font-size: 0.75rem; color: var(--c-on-surface-variant); opacity: 0.8;">${m.categoria || ''}</span>
             </div>
-        </div>
-        
-        <div style="font-weight: 700; font-size: 0.95rem; color: ${amountClass}; white-space: nowrap;">
-            ${signo}${formatCurrency(m.cantidad)}
+            ${ (m.descripcion) ? `<div style="font-size: 0.8rem; color: var(--c-on-surface-variant); margin-top: 4px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${m.descripcion}</div>` : '' }
         </div>
     </div>
     `;
+    // === CAMBIO AIDANAI FIN ===
 };
 
 // Variable para recordar la selección del usuario (por defecto 3 Meses)
