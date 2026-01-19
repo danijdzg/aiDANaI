@@ -3418,7 +3418,7 @@ const renderVirtualListItem = (item) => {
             const { cuentas, conceptos } = db;
             const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
 
-            // --- 1. Lógica de Colores y Textos ---
+            // --- 1. Lógica de Colores y Textos (Igual que antes) ---
             let colorPrincipal, amountClass, amountSign;
             let line1_Left_Text, line1_Left_Color;
             let line2_Left_Text, line2_Left_Color;
@@ -3426,77 +3426,68 @@ const renderVirtualListItem = (item) => {
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // Descripción
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
             }
 
-            // Saldo actual
             const saldoActual = (m.runningBalance !== undefined) ? formatCurrency(m.runningBalance) : '';
 
             if (m.tipo === 'traspaso') {
-                // === TRASPASO ===
-                colorPrincipal = 'var(--c-info)'; // Azul
+                colorPrincipal = 'var(--c-info)'; 
                 amountClass = 'text-info';        
                 amountSign = '';
-                
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
                 
-                // L1: Ruta
                 line1_Left_Text = `${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
                 line1_Left_Color = 'var(--c-info)'; 
                 
-                // L2: Saldos
                 const saldoSalida = m._saldoOrigenSnapshot !== undefined ? m._saldoOrigenSnapshot : (m.runningBalanceOrigen || 0);
                 const saldoEntrada = m._saldoDestinoSnapshot !== undefined ? m._saldoDestinoSnapshot : (m.runningBalanceDestino || 0);
                 line2_Left_Text = `${formatCurrency(saldoSalida)} ➔ ${formatCurrency(saldoEntrada)}`;
                 line2_Left_Color = '#FFFFFF';
 
             } else {
-                // === GASTO / INGRESO ===
                 const isGasto = m.cantidad < 0;
-                colorPrincipal = isGasto ? 'var(--c-danger)' : 'var(--c-success)'; // Rojo o Verde
+                colorPrincipal = isGasto ? 'var(--c-danger)' : 'var(--c-success)'; 
                 amountClass = isGasto ? 'text-negative' : 'text-positive';
                 amountSign = isGasto ? '' : '+';
 
-                // L1: Concepto
                 line1_Left_Text = escapeHTML(descripcionTexto);
                 line1_Left_Color = '#FFFFFF';
-                
-                // L2: Cuenta
                 line2_Left_Text = escapeHTML(cuentaNombre);
                 line2_Left_Color = colorPrincipal;
             }
 
-            // --- 2. HTML ESPACIADO MÍNIMO (GAP 0) ---
+            // --- 2. HTML PEGADO (Márgenes Negativos) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    margin: 1px 4px;          /* Margen externo mínimo */
-                    padding: 3px 8px;         /* Padding interno mínimo */
+                    margin: 1px 4px;          
+                    padding: 4px 8px;         /* Padding ajustado */
                     background-color: #050505; 
                     border: 1px solid ${colorPrincipal} !important; 
                     border-radius: 6px;       
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    gap: 0px;                 /* <--- CERO ESPACIO ENTRE LÍNEAS */
-                    min-height: 40px;         /* Altura total muy reducida */
+                    gap: 0px;                 /* Sin gap */
+                    min-height: auto;         /* Quitamos altura mínima para que encoja */
                     position: relative;
                  ">
                 
                 <div style="
                         display: flex; 
                         justify-content: space-between; 
-                        align-items: flex-end; /* Alineados abajo para pegar con la línea 2 */
+                        align-items: flex-end; 
                         width: 100%; 
-                        line-height: 1;        /* Sin aire vertical */
-                        margin-bottom: -1px;   /* Truco visual para pegar aún más */
+                        line-height: 0.9;      /* Altura de línea compacta */
+                        margin-bottom: -3px;   /* <--- EL TRUCO: MARGEN NEGATIVO */
+                        padding-bottom: 2px;
                     ">
                     
                     <div style="
@@ -3520,7 +3511,7 @@ const renderVirtualListItem = (item) => {
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
                         flex-shrink: 0;
-                        line-height: 0.9;     /* Números compactos */
+                        padding-top: 2px;     /* Pequeño ajuste visual superior */
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
@@ -3529,9 +3520,9 @@ const renderVirtualListItem = (item) => {
                 <div style="
                         display: flex; 
                         justify-content: space-between; 
-                        align-items: flex-start; /* Alineados arriba para pegar con la línea 1 */
+                        align-items: flex-start; 
                         width: 100%; 
-                        line-height: 1;
+                        line-height: 0.9;     /* Altura de línea compacta */
                     ">
                     
                     <div style="
