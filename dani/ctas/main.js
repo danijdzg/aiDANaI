@@ -3489,7 +3489,7 @@ const renderVirtualListItem = (item) => {
                         align-items: flex-end !important; 
                         width: 100% !important; 
                         line-height: 1 !important;    /* Altura de línea mínima */
-                        margin: 1 !important;
+                        margin: 2 !important;
                         padding: 0 !important;
                         padding-bottom: 1px !important; /* Pequeña separación mínima */
                     ">
@@ -3504,7 +3504,7 @@ const renderVirtualListItem = (item) => {
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
                         padding-right: 8px !important;
-                        margin: 1 !important;
+                        margin: 2 !important;
                     ">
                         ${line1_Left_Text}
                     </div>
@@ -3517,7 +3517,7 @@ const renderVirtualListItem = (item) => {
                         letter-spacing: -0.5px;
                         flex-shrink: 0;
                         line-height: 1 !important; /* Números muy compactos */
-                        margin: 1 !important;
+                        margin: 2 !important;
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
@@ -3529,7 +3529,7 @@ const renderVirtualListItem = (item) => {
                         align-items: flex-start !important; 
                         width: 100% !important; 
                         line-height: 1 !important;
-                        margin: 1 !important;
+                        margin: 2 !important;
                         padding: 0 !important;
                     ">
                     
@@ -3544,7 +3544,7 @@ const renderVirtualListItem = (item) => {
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
                         opacity: 1 !important;
-                        margin: 1 !important;
+                        margin: 2 !important;
                     ">
                         ${line2_Left_Text}
                     </div>
@@ -3559,7 +3559,7 @@ const renderVirtualListItem = (item) => {
                         padding-left: 10px !important;
                         flex-shrink: 0;
                         font-family: 'Roboto Condensed', sans-serif !important;
-                        margin: 1 !important;
+                        margin: 2 !important;
                     ">
                         ${saldoActual}
                     </div>
