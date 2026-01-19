@@ -3418,7 +3418,7 @@ const renderVirtualListItem = (item) => {
             const { cuentas, conceptos } = db;
             const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
 
-            // --- 1. Lógica de Colores y Textos (Igual que antes) ---
+            // --- 1. Lógica de Colores y Textos ---
             let colorPrincipal, amountClass, amountSign;
             let line1_Left_Text, line1_Left_Color;
             let line2_Left_Text, line2_Left_Color;
@@ -3426,11 +3426,13 @@ const renderVirtualListItem = (item) => {
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
+            // Descripción
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
             }
 
+            // Saldo actual
             const saldoActual = (m.runningBalance !== undefined) ? formatCurrency(m.runningBalance) : '';
 
             if (m.tipo === 'traspaso') {
@@ -3460,82 +3462,89 @@ const renderVirtualListItem = (item) => {
                 line2_Left_Color = colorPrincipal;
             }
 
-            // --- 2. HTML PEGADO (Márgenes Negativos) ---
+            // --- 2. HTML BLINDADO (Con !important para vencer al CSS) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    margin: 1px 4px;          
-                    padding: 4px 8px;         /* Padding ajustado */
-                    background-color: #050505; 
+                    margin: 2px 4px !important;
+                    padding: 4px 8px !important;  /* ¡IMPORTANT PARA GANAR AL CSS! */
+                    background-color: #050505 !important; 
                     border: 1px solid ${colorPrincipal} !important; 
-                    border-radius: 6px;       
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    gap: 0px;                 /* Sin gap */
-                    min-height: auto;         /* Quitamos altura mínima para que encoja */
-                    position: relative;
+                    border-radius: 8px !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    justify-content: center !important;
+                    gap: 0px !important;          /* CERO ESPACIO REAL */
+                    min-height: unset !important; /* Permite que se encoja todo lo posible */
+                    height: auto !important;
+                    position: relative !important;
                  ">
                 
                 <div style="
-                        display: flex; 
-                        justify-content: space-between; 
-                        align-items: flex-end; 
-                        width: 100%; 
-                        line-height: 0.9;      /* Altura de línea compacta */
-                        margin-bottom: -3px;   /* <--- EL TRUCO: MARGEN NEGATIVO */
-                        padding-bottom: 2px;
+                        display: flex !important; 
+                        justify-content: space-between !important; 
+                        align-items: flex-end !important; 
+                        width: 100% !important; 
+                        line-height: 1 !important;    /* Altura de línea mínima */
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        padding-bottom: 1px !important; /* Pequeña separación mínima */
                     ">
                     
                     <div style="
                         flex: 1;
                         text-align: left;
-                        color: ${line1_Left_Color};
-                        font-weight: 600; 
-                        font-size: 0.8rem;    
+                        color: ${line1_Left_Color} !important;
+                        font-weight: 600 !important; 
+                        font-size: 0.8rem !important;    
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
-                        padding-right: 8px;
+                        padding-right: 8px !important;
+                        margin: 0 !important;
                     ">
                         ${line1_Left_Text}
                     </div>
                     
                     <div class="${amountClass}" style="
                         text-align: right;
-                        font-size: 1.2rem;    
-                        font-weight: 800; 
+                        font-size: 1.2rem !important;    
+                        font-weight: 800 !important; 
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
                         flex-shrink: 0;
-                        padding-top: 2px;     /* Pequeño ajuste visual superior */
+                        line-height: 0.9 !important; /* Números muy compactos */
+                        margin: 0 !important;
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
                 <div style="
-                        display: flex; 
-                        justify-content: space-between; 
-                        align-items: flex-start; 
-                        width: 100%; 
-                        line-height: 0.9;     /* Altura de línea compacta */
+                        display: flex !important; 
+                        justify-content: space-between !important; 
+                        align-items: flex-start !important; 
+                        width: 100% !important; 
+                        line-height: 1 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
                     ">
                     
                     <div style="
                         flex: 1; 
                         text-align: left; 
-                        color: ${line2_Left_Color};
-                        font-weight: 500; 
-                        font-size: 0.8rem;    
+                        color: ${line2_Left_Color} !important;
+                        font-weight: 500 !important; 
+                        font-size: 0.8rem !important;    
                         text-transform: uppercase; 
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
-                        opacity: 1;
+                        opacity: 1 !important;
+                        margin: 0 !important;
                     ">
                         ${line2_Left_Text}
                     </div>
@@ -3543,13 +3552,14 @@ const renderVirtualListItem = (item) => {
                     ${m.tipo !== 'traspaso' ? `
                     <div style="
                         text-align: right;
-                        color: #FFFFFF;
-                        font-size: 0.8rem;    
-                        font-weight: 400; 
+                        color: #FFFFFF !important;
+                        font-size: 0.8rem !important;    
+                        font-weight: 400 !important; 
                         white-space: nowrap; 
-                        padding-left: 10px;
+                        padding-left: 10px !important;
                         flex-shrink: 0;
-                        font-family: 'Roboto Condensed', sans-serif;
+                        font-family: 'Roboto Condensed', sans-serif !important;
+                        margin: 0 !important;
                     ">
                         ${saldoActual}
                     </div>
