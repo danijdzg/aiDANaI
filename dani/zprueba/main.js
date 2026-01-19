@@ -3752,7 +3752,7 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (VERSIÓN FINAL SIMETRÍA PERFECTA)
+    // 4. MOVIMIENTOS REALES (CORRECCIÓN FINAL: BARRAS SIMÉTRICAS EN TODOS LOS TIPOS)
         if (item.type === 'transaction') {
             const m = item.movement;
             const { cuentas, conceptos } = db;
@@ -3762,59 +3762,56 @@ const renderVirtualListItem = (item) => {
             const dateObj = new Date(m.fecha);
             const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 
-            let line1, line2, amountClass, amountSign, typeClass;
-            
-            // 1. VARIABLE MAESTRA DE COLOR (Se rellenará según el tipo)
-            let barColorVar = ''; 
+            let line1, line2, amountClass, amountSign, typeClass, colorVar;
 
+            // --- PASO 1: DECIDIR EL COLOR Y EL TIPO ---
             if (m.tipo === 'traspaso') {
-                // --- CASO A: TRASPASO (AZUL) ---
-                typeClass = 't-type-transfer'; 
-                barColorVar = 'var(--c-info)'; // Color Azul
-                
+                // TRASPASO -> AZUL
+                typeClass = 't-type-transfer';
+                colorVar = 'var(--c-info)'; // Azul
+                amountClass = 'text-info';
+                amountSign = '';
+
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-                
-                const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined 
-                    ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` : '';
-                const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined 
-                    ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
+                const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` : '';
+                const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
 
-                // Textos en azul también
-                line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part" style="color: var(--c-info)">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
-                line2 = `<span class="t-transfer-part" style="color: var(--c-info)">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
-                
-                amountClass = 'text-info'; 
-                amountSign = '';
-                
+                // Usamos el mismo color para el texto
+                line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part" style="color: ${colorVar}">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
+                line2 = `<span class="t-transfer-part" style="color: ${colorVar}">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
+
             } else {
-                // --- CASO B: GASTO O INGRESO ---
+                // GASTO O INGRESO
                 const isGasto = m.cantidad < 0;
-                typeClass = isGasto ? 't-type-expense' : 't-type-income'; 
+                typeClass = isGasto ? 't-type-expense' : 't-type-income';
                 
-                // Aquí definimos el color: Rojo para gasto, Verde para ingreso
-                barColorVar = isGasto ? 'var(--c-negative)' : 'var(--c-positive)';
+                // Rojo si es gasto, Verde si es ingreso
+                colorVar = isGasto ? 'var(--c-negative)' : 'var(--c-positive)'; 
+                amountClass = isGasto ? 'text-negative' : 'text-positive';
+                amountSign = isGasto ? '' : '+';
 
                 const concepto = conceptos.find(c => c.id === m.conceptoId);
                 const conceptoNombre = concepto ? concepto.nombre : 'Varios';
                 const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
                 const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-                
+
                 line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
                 
                 const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
                 const separator = desc ? ' • ' : '';
                 line2 = `<span class="t-account-badge">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
-                
-                amountClass = isGasto ? 'text-negative' : 'text-positive';
-                amountSign = isGasto ? '' : '+';
             }
 
-            // 2. EL TRUCO DE LA SIMETRÍA:
-            // Definimos explícitamente borde izquierdo Y derecho con el mismo grosor (4px) y el color calculado.
-            const cardStyle = `border-left: 4px solid ${barColorVar} !important; border-right: 4px solid ${barColorVar} !important;`;
+            // --- PASO 2: FORZAR LOS BORDES (IZQUIERDA Y DERECHA) ---
+            // Usamos border-style: solid explícitamente y !important para que nada lo sobrescriba.
+            // Esto asegura que la barra derecha aparezca SIEMPRE.
+            const cardStyle = `
+                border-left: 4px solid ${colorVar} !important; 
+                border-right: 4px solid ${colorVar} !important;
+            `;
 
-            // HTML FINAL
+            // --- PASO 3: PINTAR LA TARJETA ---
             return `
             <div class="t-card ${highlightClass} ${typeClass}" style="${cardStyle}" data-id="${m.id}" data-action="edit-movement-from-list">
                 <div class="t-content">
