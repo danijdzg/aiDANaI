@@ -3752,76 +3752,49 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    /// 4. MOVIMIENTOS REALES (VERSIÓN OPTIMIZADA SIN ICONOS)
-    if (item.type === 'transaction') {
-        const m = item.movement;
-        const { cuentas, conceptos } = db;
-        const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
-        
-        // Formatear fecha corta
-        const dateObj = new Date(m.fecha);
-        const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    // 4. MOVIMIENTOS REALES (MODIFICADO POR AIDANAI: BARRA DOBLE)
+        if (item.type === 'transaction') {
+            const m = item.movement;
+            const { cuentas, conceptos } = db;
+            const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
+            
+            // Formatear fecha corta
+            const dateObj = new Date(m.fecha);
+            const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 
-        let line1, line2, amountClass, amountSign, typeClass;
-        let cardStyle = ''; // NUEVO: Para forzar el color de la barra
+            let typeClass;
+            
+            // Lógica de colores (igual que antes)
+            if (m.tipo === 'traspaso') { 
+                typeClass = 'transaction-card__indicator--transfer'; 
+            } else if (m.cantidad >= 0) { 
+                typeClass = 'transaction-card__indicator--income'; 
+            } else { 
+                typeClass = 'transaction-card__indicator--expense'; 
+            }
 
-        if (m.tipo === 'traspaso') {
-            // --- TIPO: TRASPASO (CAMBIADO A AZUL) ---
-            typeClass = 't-type-transfer'; 
-            
-            // FORZAMOS LA BARRA AZUL AQUÍ:
-            cardStyle = 'border-left-color: var(--c-info) !important;';
+            // Aquí está el truco: Añadimos un segundo div con la clase "indicator" al final
+            return `
+            <div class="transaction-card ${highlightClass}" data-id="${m.id}">
+                <div class="transaction-card__indicator ${typeClass}"></div>
+                
+                <div class="transaction-card__content">
+                    <div class="transaction-card__details">
+                        <div class="transaction-card__row-1">${escapeHTML(m.conceptoNombre || 'Varios')}</div> 
+                        <div class="transaction-card__row-2">${escapeHTML(m.descripcion)}</div>
+                    </div>
+                    
+                    <div class="transaction-card__figures">
+                        <strong class="transaction-card__amount ${m.cantidad >= 0 ? 'text-positive' : 'text-negative'}">
+                            ${formatCurrency(m.cantidad)}
+                        </strong>
+                         <span class="transaction-card__balance">${formatCurrency(m.runningBalance)}</span>
+                    </div>
+                </div>
 
-            const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-            const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
-            
-            const saldoOrigenHtml = m._saldoOrigenSnapshot !== undefined 
-                ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoOrigenSnapshot)})</span>` : '';
-            const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined 
-                ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
-
-            // Diseño simplificado: AÑADIMOS COLOR AZUL A LAS CUENTAS (style="color: var(--c-info)")
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part" style="color: var(--c-info)">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
-            line2 = `<span class="t-transfer-part" style="color: var(--c-info)">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
-            
-            amountClass = 'text-info'; // El importe ya usa el color info (azul)
-            amountSign = '';
-            
-        } else {
-            // --- TIPO: GASTO (ROJO) O INGRESO (VERDE) ---
-            const isGasto = m.cantidad < 0;
-            typeClass = isGasto ? 't-type-expense' : 't-type-income'; 
-
-            const concepto = conceptos.find(c => c.id === m.conceptoId);
-            const conceptoNombre = concepto ? concepto.nombre : 'Varios';
-            const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
-            const nombreCuenta = cuentaObj ? cuentaObj.nombre : 'Cuenta';
-            
-            line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-concept">${escapeHTML(conceptoNombre)}</span>`;
-            
-            const desc = m.descripcion && m.descripcion !== conceptoNombre ? m.descripcion : '';
-            const separator = desc ? ' • ' : '';
-            line2 = `<span class="t-account-badge">${escapeHTML(nombreCuenta)}</span>${separator}${escapeHTML(desc)}`;
-            
-            amountClass = isGasto ? 'text-negative' : 'text-positive';
-            amountSign = isGasto ? '' : '+';
+                <div class="transaction-card__indicator ${typeClass}" style="margin-right: 0; margin-left: var(--sp-2);"></div>
+            </div>`;
         }
-
-        // HTML FINAL: Añadimos ${cardStyle} al div principal
-        return `
-        <div class="t-card ${highlightClass} ${typeClass}" style="${cardStyle}" data-id="${m.id}" data-action="edit-movement-from-list">
-            <div class="t-content">
-                <div class="t-row-primary">
-                    <div class="t-line-1">${line1}</div>
-                    <div class="t-amount ${amountClass}">${amountSign}${formatCurrencyHTML(m.cantidad)}</div>
-                </div>
-                <div class="t-row-secondary">
-                    <div class="t-line-2">${line2}</div>
-                    ${m.tipo !== 'traspaso' ? `<div class="t-running-balance">${formatCurrencyHTML(m.runningBalance)}</div>` : ''}
-                </div>
-            </div>
-        </div>`;
-    }
     return '';
 };
         
