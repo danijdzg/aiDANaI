@@ -3470,64 +3470,76 @@ const renderVirtualListItem = (item) => {
                 line2_Left_Color = colorPrincipal;
             }
 
-            // --- 2. HTML COMPACTO (Cantidades grandes, Textos pequeños) ---
+            // --- 2. HTML ESPACIADO MÍNIMO (GAP 0) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    margin: 1px 3px;          /* Márgenes externos reducidos */
-                    padding: 4px 8px;        /* Padding interno más ajustado */
+                    margin: 1px 4px;          /* Margen externo mínimo */
+                    padding: 3px 8px;         /* Padding interno mínimo */
                     background-color: #050505; 
                     border: 1px solid ${colorPrincipal} !important; 
-                    border-radius: 6px;
+                    border-radius: 6px;       
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    gap: 1px;                 /* ESPACIO ENTRE LÍNEAS REDUCIDO A 3PX */
-                    min-height: 44px;         /* Altura mínima ajustada */
+                    gap: 0px;                 /* <--- CERO ESPACIO ENTRE LÍNEAS */
+                    min-height: 40px;         /* Altura total muy reducida */
                     position: relative;
                  ">
                 
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
+                <div style="
+                        display: flex; 
+                        justify-content: space-between; 
+                        align-items: flex-end; /* Alineados abajo para pegar con la línea 2 */
+                        width: 100%; 
+                        line-height: 1;        /* Sin aire vertical */
+                        margin-bottom: -1px;   /* Truco visual para pegar aún más */
+                    ">
                     
                     <div style="
                         flex: 1;
                         text-align: left;
                         color: ${line1_Left_Color};
                         font-weight: 600; 
-                        font-size: 0.8rem;    /* TEXTO PEQUEÑO */
+                        font-size: 0.8rem;    
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
                         padding-right: 8px;
-                        margin-bottom: 2px;   /* Ajuste fino para alinear base */
                     ">
                         ${line1_Left_Text}
                     </div>
                     
                     <div class="${amountClass}" style="
                         text-align: right;
-                        font-size: 1.2rem;    /* CANTIDAD GRANDE (Se mantiene) */
+                        font-size: 1.2rem;    
                         font-weight: 800; 
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
                         flex-shrink: 0;
-                        line-height: 0.9;       /* Evita altura extra innecesaria */
+                        line-height: 0.9;     /* Números compactos */
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="
+                        display: flex; 
+                        justify-content: space-between; 
+                        align-items: flex-start; /* Alineados arriba para pegar con la línea 1 */
+                        width: 100%; 
+                        line-height: 1;
+                    ">
                     
                     <div style="
                         flex: 1; 
                         text-align: left; 
                         color: ${line2_Left_Color};
                         font-weight: 500; 
-                        font-size: 0.8rem;    /* TEXTO PEQUEÑO */
+                        font-size: 0.8rem;    
                         text-transform: uppercase; 
                         overflow: hidden; 
                         white-space: nowrap; 
@@ -3541,7 +3553,7 @@ const renderVirtualListItem = (item) => {
                     <div style="
                         text-align: right;
                         color: #FFFFFF;
-                        font-size: 0.8rem;    /* SALDO PEQUEÑO (Para que quepa y no compita) */
+                        font-size: 0.8rem;    
                         font-weight: 400; 
                         white-space: nowrap; 
                         padding-left: 10px;
