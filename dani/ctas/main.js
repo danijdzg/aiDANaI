@@ -3424,41 +3424,48 @@ const renderVirtualListItem = (item) => {
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // Descripción
+            // Descripción: Si hay detalle lo añadimos, si no, solo el concepto
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
             }
 
+            // Saldo actual (Running Balance) formateado
+            // Nota: Usaremos color BLANCO para esto
+            const saldoActual = (m.runningBalance !== undefined) ? formatCurrency(m.runningBalance) : '';
+
             if (m.tipo === 'traspaso') {
+                // AZUL
                 color = 'var(--c-info)'; 
-                amountClass = 'text-info';
+                amountClass = 'text-info'; 
                 amountSign = '';
                 
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
                 
+                // Línea 1 Izq: Ruta
                 line1_Left_Text = `${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
                 
-                // === CAMBIO DANI: Mostrar saldos en vez de texto "Traspaso" ===
-                // 1. Buscamos el saldo calculado (usamos _saldo...Snapshot que calcula tu lista)
-                // Si no existe el snapshot, usamos 'runningBalance' como plan B
+                // Línea 2 Izq: Saldos del traspaso
                 const saldoSalida = m._saldoOrigenSnapshot !== undefined ? m._saldoOrigenSnapshot : (m.runningBalanceOrigen || 0);
                 const saldoEntrada = m._saldoDestinoSnapshot !== undefined ? m._saldoDestinoSnapshot : (m.runningBalanceDestino || 0);
-
-                // 2. Formateamos el texto:  "1.500,00 €  --->  500,00 €"
                 line2_Left_Text = `${formatCurrency(saldoSalida)} ➔ ${formatCurrency(saldoEntrada)}`;
+
             } else {
                 const isGasto = m.cantidad < 0;
+                // ROJO o VERDE
                 color = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
                 amountClass = isGasto ? 'text-negative' : 'text-positive';
                 amountSign = isGasto ? '' : '+';
 
-                line1_Left_Text = escapeHTML(cuentaNombre);
-                line2_Left_Text = escapeHTML(descripcionTexto);
+                // Línea 1 Izq: Concepto
+                line1_Left_Text = escapeHTML(descripcionTexto);
+                
+                // Línea 2 Izq: Cuenta
+                line2_Left_Text = escapeHTML(cuentaNombre);
             }
 
-            // --- 2. HTML DISEÑO ENCUADRADO (ALINEACIÓN PERFECTA) ---
+            // --- 2. HTML LIMPIO (Solo Blanco, Rojo, Verde, Azul) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
@@ -3466,74 +3473,75 @@ const renderVirtualListItem = (item) => {
                  data-action="edit-movement-from-list" 
                  style="
                     margin: 4px 8px;      
-                    padding: 6px 10px;    /* Un poco más de aire horizontal */
-                    background-color: #050505; 
+                    padding: 8px 12px;
+                    background-color: #050505; /* Fondo Negro Puro */
                     border: 1px solid ${color} !important; 
                     border-radius: 8px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    min-height: 48px;     /* Altura consistente */
+                    gap: 6px;
+                    min-height: 60px;
                     position: relative;
                  ">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                     
                     <div style="
-                        flex: 1;                 /* Ocupa todo el espacio posible */
-                        text-align: left;        /* Fuerza el texto a la izquierda */
-                        color: ${color}; 
-                        font-weight: 700; 
-                        font-size: 0.8rem; 
-                        text-transform: uppercase; 
+                        flex: 1;
+                        text-align: left;
+                        color: #FFFFFF;       /* BLANCO PURO */
+                        font-weight: 600; 
+                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
-                        padding-right: 10px;     /* Espacio para no chocar con el precio */
+                        padding-right: 10px;
                     ">
                         ${line1_Left_Text}
                     </div>
                     
                     <div class="${amountClass}" style="
-                        text-align: right;       /* Fuerza el número a la derecha */
-                        font-size: 1.15rem; 
-                        font-weight: 800; 
+                        text-align: right;    /* ALINEADO DERECHA SIEMPRE */
+                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
+                        font-weight: 800;     /* Extra negrita para destacar */
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
-                        flex-shrink: 0;          /* El precio no se encoge */
+                        flex-shrink: 0;       /* No se encoge nunca */
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px; width: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                     
                     <div style="
                         flex: 1; 
-                        text-align: left;        /* Fuerza texto a la izquierda */
-                        color: #FFFFFF; 
-                        font-weight: 400; 
-                        font-size: 0.8rem; 
+                        text-align: left; 
+                        color: ${color};      /* COLOR PURO (Sin gris) */
+                        font-weight: 500; 
+                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
+                        text-transform: uppercase; 
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
-                        opacity: 1;
+                        opacity: 1;           /* Opacidad 100% (Nada de transparencias) */
                     ">
                         ${line2_Left_Text}
                     </div>
                     
                     ${m.tipo !== 'traspaso' ? `
                     <div style="
-                        text-align: right;       /* Fuerza saldo a la derecha */
-                        color: #FFFFFF; 
-                        font-size: 0.85rem; 
+                        text-align: right;    /* ALINEADO DERECHA SIEMPRE */
+                        color: #FFFFFF;       /* BLANCO PURO (Nada de gris) */
+                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
                         font-weight: 400; 
                         white-space: nowrap; 
-                        opacity: 1; 
                         padding-left: 10px;
                         flex-shrink: 0;
+                        font-family: 'Roboto Condensed', sans-serif;
                     ">
-                        ${formatCurrencyHTML(m.runningBalance)}
+                        ${saldoActual}
                     </div>
                     ` : '<div style="flex-shrink:0;"></div>'} 
                 </div>
