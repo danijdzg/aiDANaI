@@ -3426,29 +3426,29 @@ const renderVirtualListItem = (item) => {
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // Descripción base
+            // Descripción
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
             }
 
-            // Saldo actual (Running Balance) para movimientos normales
+            // Saldo actual
             const saldoActual = (m.runningBalance !== undefined) ? formatCurrency(m.runningBalance) : '';
 
             if (m.tipo === 'traspaso') {
                 // === TRASPASO ===
                 colorPrincipal = 'var(--c-info)'; // Azul
-                amountClass = 'text-info';        // Azul
+                amountClass = 'text-info';        
                 amountSign = '';
                 
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
                 
-                // LÍNEA 1 (ARRIBA): Ruta de cuentas -> AZUL (Color)
+                // L1: Ruta
                 line1_Left_Text = `${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
                 line1_Left_Color = 'var(--c-info)'; 
                 
-                // LÍNEA 2 (ABAJO): Saldos -> BLANCO
+                // L2: Saldos
                 const saldoSalida = m._saldoOrigenSnapshot !== undefined ? m._saldoOrigenSnapshot : (m.runningBalanceOrigen || 0);
                 const saldoEntrada = m._saldoDestinoSnapshot !== undefined ? m._saldoDestinoSnapshot : (m.runningBalanceDestino || 0);
                 line2_Left_Text = `${formatCurrency(saldoSalida)} ➔ ${formatCurrency(saldoEntrada)}`;
@@ -3461,58 +3461,60 @@ const renderVirtualListItem = (item) => {
                 amountClass = isGasto ? 'text-negative' : 'text-positive';
                 amountSign = isGasto ? '' : '+';
 
-                // LÍNEA 1 (ARRIBA): Concepto -> BLANCO
+                // L1: Concepto
                 line1_Left_Text = escapeHTML(descripcionTexto);
                 line1_Left_Color = '#FFFFFF';
                 
-                // LÍNEA 2 (ABAJO): Cuenta -> COLOR (Rojo/Verde)
+                // L2: Cuenta
                 line2_Left_Text = escapeHTML(cuentaNombre);
                 line2_Left_Color = colorPrincipal;
             }
 
-            // --- 2. HTML ESTRUCTURA ---
+            // --- 2. HTML COMPACTO (Cantidades grandes, Textos pequeños) ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    margin: 4px 8px;      
-                    padding: 8px 12px;
+                    margin: 2px 6px;          /* Márgenes externos reducidos */
+                    padding: 6px 10px;        /* Padding interno más ajustado */
                     background-color: #050505; 
                     border: 1px solid ${colorPrincipal} !important; 
                     border-radius: 8px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    gap: 6px;
-                    min-height: 60px;
+                    gap: 3px;                 /* ESPACIO ENTRE LÍNEAS REDUCIDO A 3PX */
+                    min-height: 50px;         /* Altura mínima ajustada */
                     position: relative;
                  ">
                 
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
                     
                     <div style="
                         flex: 1;
                         text-align: left;
-                        color: ${line1_Left_Color};  /* VARIABLE DINÁMICA */
+                        color: ${line1_Left_Color};
                         font-weight: 600; 
-                        font-size: 1.2rem;
+                        font-size: 0.8rem;    /* TEXTO PEQUEÑO */
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
-                        padding-right: 10px;
+                        padding-right: 8px;
+                        margin-bottom: 2px;   /* Ajuste fino para alinear base */
                     ">
                         ${line1_Left_Text}
                     </div>
                     
                     <div class="${amountClass}" style="
                         text-align: right;
-                        font-size: 1.2rem;
+                        font-size: 1.2rem;    /* CANTIDAD GRANDE (Se mantiene) */
                         font-weight: 800; 
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
                         flex-shrink: 0;
+                        line-height: 1;       /* Evita altura extra innecesaria */
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
@@ -3523,9 +3525,9 @@ const renderVirtualListItem = (item) => {
                     <div style="
                         flex: 1; 
                         text-align: left; 
-                        color: ${line2_Left_Color};  /* VARIABLE DINÁMICA */
+                        color: ${line2_Left_Color};
                         font-weight: 500; 
-                        font-size: 1.2rem;
+                        font-size: 0.8rem;    /* TEXTO PEQUEÑO */
                         text-transform: uppercase; 
                         overflow: hidden; 
                         white-space: nowrap; 
@@ -3539,7 +3541,7 @@ const renderVirtualListItem = (item) => {
                     <div style="
                         text-align: right;
                         color: #FFFFFF;
-                        font-size: 1.2rem;
+                        font-size: 0.8rem;    /* SALDO PEQUEÑO (Para que quepa y no compita) */
                         font-weight: 400; 
                         white-space: nowrap; 
                         padding-left: 10px;
