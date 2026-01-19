@@ -1,1 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Data Control - aiDANaI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00B34D;
+            --danger: #FF3B30;
+            --nuclear: #FF0000;
+            --bg: #0a1928;
+            --surface: #132435;
+            --text: #F0F8FF;
+            --border: rgba(0, 255, 255, 0.3);
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; }
+        .container { max-width: 650px; width: 100%; background: var(--surface); padding: 30px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        h1 { color: var(--primary); text-align: center; margin-top: 0; }
+        h2 { border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-top: 30px; font-size: 1.2rem; }
+        
+        input, button, select { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--border); background: #000; color: white; font-size: 1rem; box-sizing: border-box;}
+        
+        button { background-color: var(--primary); cursor: pointer; font-weight: bold; border: none; transition: transform 0.1s; }
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Estilos de Botones Peligrosos */
+        button.btn-danger { background-color: var(--danger); }
+        button.btn-danger:hover { background-color: #D32F2F; }
 
+        /* Estilo Nuclear */
+        .nuclear-zone { border: 2px dashed var(--nuclear); padding: 15px; border-radius: 8px; background: rgba(50,0,0,0.3); margin-top: 40px; }
+        .nuclear-zone h2 { color: var(--nuclear); border-color: var(--nuclear); margin-top: 0; }
+        button.btn-nuclear { background-color: #8B0000; color: #FFaaaa; border: 1px solid var(--nuclear); }
+        button.btn-nuclear:hover { background-color: #FF0000; color: white; box-shadow: 0 0 15px #FF0000; }
+
+        .log-area { background: #000; padding: 15px; height: 250px; overflow-y: auto; border-radius: 8px; font-family: monospace; font-size: 0.85rem; border: 1px solid var(--border); white-space: pre-wrap; margin-top: 20px; }
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 2px; }
+        .success { color: #39FF14; }
+        .info { color: #00FFFF; }
+        .warn { color: #FFD60A; }
+        .error { color: #FF3B30; }
+        .hidden { display: none; }
+        .status-bar { margin-bottom: 10px; font-weight: bold; text-align: center; color: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Centro de Control de Datos</h1>
+    
+    <div id="auth-section">
+        <p style="text-align: center; opacity: 0.8;">Inicia sesión para gestionar la base de datos.</p>
+        <input type="email" id="email" placeholder="Correo electrónico">
+        <input type="password" id="password" placeholder="Contraseña">
+        <button onclick="login()">Iniciar Sesión</button>
+    </div>
+
+    <div id="main-panel" class="hidden">
+        <div class="status-bar" id="user-display"></div>
+
+        <h2>📥 1. Importar CSV</h2>
+        <input type="file" id="csv-file" accept=".csv">
+        <button id="btn-process" onclick="processAndUpload()">Procesar y Subir Datos</button>
+
+        <h2 style="color: var(--danger); border-color: var(--danger);">🗑️ 2. Borrar una Cuenta Específica</h2>
+        <p style="font-size: 0.9rem; opacity: 0.8;">Elimina una cuenta y todos sus movimientos asociados.</p>
+        <select id="account-selector">
+            <option value="">Cargando cuentas...</option>
+        </select>
+        <button id="btn-delete" class="btn-danger" onclick="deleteAccountData()">ELIMINAR ESTA CUENTA</button>
+
+        <div class="nuclear-zone">
+            <h2>☢️ 3. ZONA NUCLEAR: BORRADO TOTAL</h2>
+            <p style="font-size: 0.9rem; opacity: 0.9; color: #ffcccc;">
+                <b>ADVERTENCIA:</b> Esta acción eliminará <u>TODOS</u> los datos de la base de datos (Todas las Cuentas, Todos los Conceptos y Todos los Movimientos). <br><br>
+                La aplicación quedará completamente vacía, como nueva. No se puede deshacer.
+            </p>
+            <button id="btn-nuke" class="btn-nuclear" onclick="nukeDatabase()">⚠️ BORRAR TODA LA BASE DE DATOS ⚠️</button>
+        </div>
+
+        <div class="log-area" id="console-log">Sistema preparado...</div>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
+
+<script>
+    // Configuración Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyCjwL2nIuxFkZZnU9O7Zr0uRkxzd1NW53I",
+        authDomain: "aidanai-ctas.firebaseapp.com",
+        projectId: "aidanai-ctas",
+        storageBucket: "aidanai-ctas.firebasestorage.app",
+        messagingSenderId: "678423604278",
+        appId: "1:678423604278:web:e7b7d140d323194dbabc97"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    let currentUser = null;
+
+    // --- LOGS ---
+    const log = (msg, type = 'info') => {
+        const el = document.getElementById('console-log');
+        el.innerHTML += `<div class="log-entry ${type}">> ${msg}</div>`;
+        el.scrollTop = el.scrollHeight;
+    };
+
+    // --- AUTH ---
+    function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        if(!email || !password) return alert("Introduce credenciales");
+
+        log("Conectando...", "info");
+        auth.signInWithEmailAndPassword(email, password)
+            .then(uc => {
+                currentUser = uc.user;
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('main-panel').classList.remove('hidden');
+                document.getElementById('user-display').innerText = `Usuario: ${currentUser.email}`;
+                log("Conexión establecida.", "success");
+                loadAccounts();
+            })
+            .catch(e => log(`Error login: ${e.message}`, "error"));
+    }
+
+    // --- CARGAR CUENTAS ---
+    async function loadAccounts() {
+        const selector = document.getElementById('account-selector');
+        selector.innerHTML = '<option value="">-- Selecciona una cuenta --</option>';
+        try {
+            const snap = await db.collection('users').doc(currentUser.uid).collection('cuentas').orderBy('nombre').get();
+            snap.forEach(doc => {
+                const opt = document.createElement('option');
+                opt.value = doc.id; opt.text = doc.data().nombre;
+                selector.appendChild(opt);
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    // ======================================================
+    // === LÓGICA NUCLEAR: BORRADO TOTAL DE BASE DE DATOS ===
+    // ======================================================
+    
+    async function nukeDatabase() {
+        // 1. Advertencias de Seguridad
+        if (!confirm("⚠️ ¡PELIGRO! ⚠️\n\nEstás a punto de borrar TODOS los datos de la aplicación:\n- Todos los Movimientos\n- Todas las Cuentas\n- Todos los Conceptos\n\n¿Estás seguro de que quieres continuar?")) return;
+        
+        if (!confirm("CONFIRMACIÓN FINAL\n\nEsta acción es IRREVERSIBLE. La base de datos quedará vacía.\n\nPulsa Aceptar para BORRAR TODO.")) return;
+
+        const btn = document.getElementById('btn-nuke');
+        btn.disabled = true;
+        btn.innerText = "BORRANDO...";
+        
+        log("INICIANDO PROTOCOLO DE LIMPIEZA TOTAL...", "error");
+
+        try {
+            // Borrar las 3 colecciones principales
+            await deleteCollectionBatch('movimientos', "Movimientos");
+            await deleteCollectionBatch('cuentas', "Cuentas");
+            await deleteCollectionBatch('conceptos', "Conceptos");
+
+            log("✅ BASE DE DATOS TOTALMENTE VACÍA.", "success");
+            alert("La base de datos se ha restablecido correctamente.");
+            
+            // Recargar interfaz
+            loadAccounts();
+
+        } catch (err) {
+            log(`❌ ERROR EN BORRADO: ${err.message}`, "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "⚠️ BORRAR TODA LA BASE DE DATOS ⚠️";
+        }
+    }
+
+    // Función auxiliar para borrar una colección entera por lotes
+    async function deleteCollectionBatch(collectionName, displayName) {
+        log(`Eliminando colección: ${displayName}...`, "warn");
+        const ref = db.collection('users').doc(currentUser.uid).collection(collectionName);
+        
+        // Bucle para borrar en lotes de 400 (limite batch Firestore es 500)
+        let totalDeleted = 0;
+        while (true) {
+            const snapshot = await ref.limit(400).get();
+            if (snapshot.size === 0) break; // No quedan documentos
+
+            const batch = db.batch();
+            snapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+
+            await batch.commit();
+            totalDeleted += snapshot.size;
+            log(`... ${totalDeleted} ${displayName} eliminados...`, "info");
+        }
+        log(`✓ Colección ${displayName} eliminada por completo.`, "success");
+    }
+
+
+    // ======================================================
+    // === LÓGICA DE BORRADO DE UNA CUENTA ESPECÍFICA ===
+    // ======================================================
+
+    async function deleteAccountData() {
+        const selector = document.getElementById('account-selector');
+        const accountId = selector.value;
+        if (!accountId) return alert("Selecciona una cuenta.");
+        
+        if (!confirm(`¿Borrar cuenta y todos sus movimientos?`)) return;
+
+        log(`Eliminando cuenta seleccionada...`, "warn");
+        const batch = db.batch();
+        
+        // 1. Borrar movimientos asociados
+        const movsRef = db.collection('users').doc(currentUser.uid).collection('movimientos');
+        const [q1, q2, q3] = await Promise.all([
+            movsRef.where('cuentaId', '==', accountId).get(),
+            movsRef.where('cuentaOrigenId', '==', accountId).get(),
+            movsRef.where('cuentaDestinoId', '==', accountId).get()
+        ]);
+
+        const docsToDelete = new Map();
+        [q1, q2, q3].forEach(q => q.forEach(d => docsToDelete.set(d.id, d.ref)));
+        
+        // Ejecutar borrado de movimientos
+        const batches = [];
+        let currentBatch = db.batch();
+        let counter = 0;
+        
+        docsToDelete.forEach(ref => {
+            currentBatch.delete(ref);
+            counter++;
+            if (counter >= 400) { batches.push(currentBatch); currentBatch = db.batch(); counter = 0; }
+        });
+        if (counter > 0) batches.push(currentBatch);
+
+        for (const b of batches) await b.commit();
+        log(`${docsToDelete.size} movimientos eliminados.`, "success");
+
+        // 2. Borrar la cuenta
+        await db.collection('users').doc(currentUser.uid).collection('cuentas').doc(accountId).delete();
+        log("Cuenta eliminada.", "success");
+        loadAccounts();
+    }
+
+
+    // ======================================================
+    // === LÓGICA DE IMPORTACIÓN CSV ===
+    // ======================================================
+    
+    // Parsers
+    const parseImporte = (str) => {
+        if (!str) return 0;
+        let clean = str.toString().replace(/[€"\s]/g, '').replace(',', '.');
+        return Math.round(parseFloat(clean) * 100);
+    };
+    const parseFecha = (str) => {
+        const parts = str.split('/'); 
+        return new Date(Date.UTC(parts[2], parts[1] - 1, parts[0], 12, 0, 0));
+    };
+    const parseCSVLine = (text) => {
+        const re_value = /(?!\s*$)\s*(?:'([^']*)'|"([^"]*)"|([^,'"\s\\]*(?:\s+[^,'"\s\\]+)*))\s*(?:,|$)/g;
+        const a = [];
+        text.replace(re_value, function(m0, m1, m2, m3) {
+            if (m1 !== undefined) a.push(m1.replace(/\\'/g, "'"));
+            else if (m2 !== undefined) a.push(m2.replace(/\\"/g, '"'));
+            else if (m3 !== undefined) a.push(m3);
+            return '';
+        });
+        if (/,\s*$/.test(text)) a.push('');
+        return a;
+    };
+
+    async function processAndUpload() {
+        const fileInput = document.getElementById('csv-file');
+        const btn = document.getElementById('btn-process');
+        if (!fileInput.files.length) return alert("Selecciona CSV.");
+        
+        btn.disabled = true;
+        log("Iniciando importación...", "info");
+        const reader = new FileReader();
+
+        reader.onload = async (e) => {
+            try {
+                const text = e.target.result;
+                const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                if(lines.length > 0 && lines[0].toLowerCase().includes('fecha')) lines.shift();
+
+                // Cargar datos actuales
+                const [dbCuentasSnap, dbConceptosSnap] = await Promise.all([
+                    db.collection('users').doc(currentUser.uid).collection('cuentas').get(),
+                    db.collection('users').doc(currentUser.uid).collection('conceptos').get()
+                ]);
+                const mapCuentas = new Map();
+                const mapConceptos = new Map();
+                dbCuentasSnap.forEach(doc => mapCuentas.set(doc.data().nombre.toUpperCase(), { id: doc.id, ...doc.data() }));
+                dbConceptosSnap.forEach(doc => mapConceptos.set(doc.data().nombre.toUpperCase(), { id: doc.id, ...doc.data() }));
+
+                const rawMoves = [];
+                const batchWriter = db.batch();
+                let operationsCount = 0;
+
+                for (const line of lines) {
+                    const cols = parseCSVLine(line);
+                    if (cols.length < 4) continue;
+                    const fecha = parseFecha(cols[0]);
+                    const nombreCuenta = cols[1].trim();
+                    const nombreConcepto = cols[2].trim();
+                    const importe = parseImporte(cols[3]);
+                    const descripcion = cols[4] ? cols[4].trim() : nombreConcepto;
+                    if (!fecha) continue;
+
+                    // Cuentas
+                    const nombreCuentaClean = nombreCuenta.replace(/^(D-|N-)/, '');
+                    const cuentaKey = nombreCuentaClean.toUpperCase();
+                    if (!mapCuentas.has(cuentaKey)) {
+                        const newId = db.collection('dummy').doc().id;
+                        const esInversion = ['TRADE', 'DEGIRO', 'MSCI', 'S&P', 'NASDAQ', 'FONDO'].some(k => cuentaKey.includes(k));
+                        const newAccount = { id: newId, nombre: nombreCuentaClean, tipo: esInversion ? 'Inversión' : 'Cuenta Corriente', esInversion: esInversion, offBalance: nombreCuenta.startsWith('N-'), saldo: 0, fechaCreacion: new Date().toISOString() };
+                        batchWriter.set(db.collection('users').doc(currentUser.uid).collection('cuentas').doc(newId), newAccount);
+                        mapCuentas.set(cuentaKey, newAccount);
+                        operationsCount++;
+                    }
+
+                    // Conceptos
+                    let conceptoKey = nombreConcepto.toUpperCase();
+                    if (conceptoKey === 'TRASPASOS') conceptoKey = 'TRASPASO';
+                    if (conceptoKey !== 'TRASPASO' && conceptoKey !== 'INICIAL' && !mapConceptos.has(conceptoKey)) {
+                        const newId = db.collection('dummy').doc().id;
+                        const newConcept = { id: newId, nombre: nombreConcepto.charAt(0).toUpperCase() + nombreConcepto.slice(1).toLowerCase(), icon: 'label' };
+                        batchWriter.set(db.collection('users').doc(currentUser.uid).collection('conceptos').doc(newId), newConcept);
+                        mapConceptos.set(conceptoKey, newConcept);
+                        operationsCount++;
+                    }
+                    rawMoves.push({ fecha, cuentaId: mapCuentas.get(cuentaKey).id, conceptoStr: conceptoKey, importe, descripcion });
+                }
+
+                // Procesar movimientos y traspasos
+                const finalMovements = [];
+                const traspasosPendientes = [];
+                
+                rawMoves.forEach(m => {
+                    if (m.conceptoStr === 'TRASPASO' || m.conceptoStr === 'TRASPASOS') traspasosPendientes.push(m);
+                    else {
+                        let cId = null;
+                        if (m.conceptoStr === 'INICIAL') cId = mapConceptos.has('SALDO INICIAL') ? mapConceptos.get('SALDO INICIAL').id : (mapConceptos.values().next().value?.id || 'err');
+                        else cId = mapConceptos.get(m.conceptoStr).id;
+                        finalMovements.push({ id: db.collection('dummy').doc().id, fecha: m.fecha.toISOString(), cantidad: m.importe, descripcion: m.descripcion, tipo: 'movimiento', cuentaId: m.cuentaId, conceptoId: cId });
+                    }
+                });
+
+                // Unificar traspasos
+                const groups = {};
+                traspasosPendientes.forEach(t => {
+                    const key = `${t.fecha.getTime()}_${Math.abs(t.importe)}`;
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(t);
+                });
+
+                Object.values(groups).forEach(group => {
+                    const salidas = group.filter(t => t.importe < 0);
+                    const entradas = group.filter(t => t.importe > 0);
+                    while (salidas.length > 0 && entradas.length > 0) {
+                        const s = salidas.pop(); const e = entradas.pop();
+                        finalMovements.push({ id: db.collection('dummy').doc().id, fecha: s.fecha.toISOString(), cantidad: Math.abs(s.importe), descripcion: s.descripcion === 'Traspasos' ? 'Traspaso' : s.descripcion, tipo: 'traspaso', cuentaOrigenId: s.cuentaId, cuentaDestinoId: e.cuentaId });
+                    }
+                    [...salidas, ...entradas].forEach(t => {
+                        let manualId = mapConceptos.has('VARIOS') ? mapConceptos.get('VARIOS').id : null;
+                        finalMovements.push({ id: db.collection('dummy').doc().id, fecha: t.fecha.toISOString(), cantidad: t.importe, descripcion: t.descripcion + ' (Traspaso suelto)', tipo: 'movimiento', cuentaId: t.cuentaId, conceptoId: manualId });
+                    });
+                });
+
+                if (operationsCount > 0) await batchWriter.commit();
+
+                // Guardar en lotes
+                const chunks = [];
+                for (let i = 0; i < finalMovements.length; i += 450) chunks.push(finalMovements.slice(i, i + 450));
+                for (const chunk of chunks) {
+                    const batch = db.batch();
+                    chunk.forEach(mov => batch.set(db.collection('users').doc(currentUser.uid).collection('movimientos').doc(mov.id), mov));
+                    await batch.commit();
+                    log(`Guardados ${chunk.length} items...`, "success");
+                }
+
+                log("--- IMPORTACIÓN COMPLETADA ---", "success");
+                alert("Importación finalizada.");
+                loadAccounts();
+                btn.disabled = false;
+
+            } catch (err) {
+                log(`ERROR: ${err.message}`, "error");
+                console.error(err);
+                btn.disabled = false;
+            }
+        };
+        reader.readAsText(fileInput.files[0]);
+    }
+</script>
+
+</body>
+</html>
