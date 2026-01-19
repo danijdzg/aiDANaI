@@ -3529,7 +3529,7 @@ const renderVirtualListItem = (item) => {
                         font-size: 0.85rem; 
                         font-weight: 400; 
                         white-space: nowrap; 
-                        opacity: 0.6; 
+                        opacity: 1; 
                         padding-left: 10px;
                         flex-shrink: 0;
                     ">
