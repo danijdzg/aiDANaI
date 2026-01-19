@@ -3752,7 +3752,7 @@ const renderVirtualListItem = (item) => {
         `;
     }
 
-    // 4. MOVIMIENTOS REALES (MODIFICADO POR AIDANAI: DOBLE BARRA VERTICAL)
+    // 4. MOVIMIENTOS REALES (VERSIÓN FINAL SIMETRÍA PERFECTA)
         if (item.type === 'transaction') {
             const m = item.movement;
             const { cuentas, conceptos } = db;
@@ -3764,11 +3764,11 @@ const renderVirtualListItem = (item) => {
 
             let line1, line2, amountClass, amountSign, typeClass;
             
-            // 1. VARIABLE PARA EL COLOR DE LAS BARRAS (Izquierda y Derecha)
+            // 1. VARIABLE MAESTRA DE COLOR (Se rellenará según el tipo)
             let barColorVar = ''; 
 
             if (m.tipo === 'traspaso') {
-                // --- TIPO: TRASPASO (AZUL) ---
+                // --- CASO A: TRASPASO (AZUL) ---
                 typeClass = 't-type-transfer'; 
                 barColorVar = 'var(--c-info)'; // Color Azul
                 
@@ -3780,6 +3780,7 @@ const renderVirtualListItem = (item) => {
                 const saldoDestinoHtml = m._saldoDestinoSnapshot !== undefined 
                     ? `<span class="t-transfer-balance">(${formatCurrencyHTML(m._saldoDestinoSnapshot)})</span>` : '';
 
+                // Textos en azul también
                 line1 = `<span class="t-date-badge">${dateStr}</span> <span class="t-transfer-part" style="color: var(--c-info)">De: ${escapeHTML(origen)}${saldoOrigenHtml}</span>`;
                 line2 = `<span class="t-transfer-part" style="color: var(--c-info)">A: ${escapeHTML(destino)}${saldoDestinoHtml}</span>`;
                 
@@ -3787,11 +3788,11 @@ const renderVirtualListItem = (item) => {
                 amountSign = '';
                 
             } else {
-                // --- TIPO: GASTO (ROJO) O INGRESO (VERDE) ---
+                // --- CASO B: GASTO O INGRESO ---
                 const isGasto = m.cantidad < 0;
                 typeClass = isGasto ? 't-type-expense' : 't-type-income'; 
                 
-                // Definimos el color según si es gasto o ingreso
+                // Aquí definimos el color: Rojo para gasto, Verde para ingreso
                 barColorVar = isGasto ? 'var(--c-negative)' : 'var(--c-positive)';
 
                 const concepto = conceptos.find(c => c.id === m.conceptoId);
@@ -3809,10 +3810,9 @@ const renderVirtualListItem = (item) => {
                 amountSign = isGasto ? '' : '+';
             }
 
-            // 2. CONSTRUCCIÓN DEL ESTILO FINAL (El Truco)
-            // Forzamos el color a la izquierda (border-left-color)
-            // Y AÑADIMOS la barra a la derecha (border-right) con el mismo color y grosor (4px)
-            const cardStyle = `border-left-color: ${barColorVar} !important; border-right: 4px solid ${barColorVar} !important;`;
+            // 2. EL TRUCO DE LA SIMETRÍA:
+            // Definimos explícitamente borde izquierdo Y derecho con el mismo grosor (4px) y el color calculado.
+            const cardStyle = `border-left: 4px solid ${barColorVar} !important; border-right: 4px solid ${barColorVar} !important;`;
 
             // HTML FINAL
             return `
