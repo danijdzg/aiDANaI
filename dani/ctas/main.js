@@ -3517,7 +3517,7 @@ const renderVirtualListItem = (item) => {
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
-                        opacity: 0.8;
+                        opacity: 1;
                     ">
                         ${line2_Left_Text}
                     </div>
@@ -3533,7 +3533,7 @@ const renderVirtualListItem = (item) => {
                         padding-left: 10px;
                         flex-shrink: 0;
                     ">
-                        Saldo: ${formatCurrencyHTML(m.runningBalance)}
+                        ${formatCurrencyHTML(m.runningBalance)}
                     </div>
                     ` : '<div style="flex-shrink:0;"></div>'} 
                 </div>
