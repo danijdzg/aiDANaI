@@ -3511,12 +3511,12 @@ const renderVirtualListItem = (item) => {
                     
                     <div class="${amountClass}" style="
                         text-align: right;
-                        font-size: 1.2rem !important;    
+                        font-size: 1.4rem !important;    
                         font-weight: 800 !important; 
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
                         flex-shrink: 0;
-                        line-height: 0.9 !important; /* Números muy compactos */
+                        line-height: 1 !important; /* Números muy compactos */
                         margin: 1 !important;
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
