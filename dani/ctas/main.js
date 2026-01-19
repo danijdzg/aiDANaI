@@ -3419,53 +3419,58 @@ const renderVirtualListItem = (item) => {
             const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
 
             // --- 1. Lógica de Colores y Textos ---
-            let color, amountClass, amountSign, line1_Left_Text, line2_Left_Text;
+            let colorPrincipal, amountClass, amountSign;
+            let line1_Left_Text, line1_Left_Color;
+            let line2_Left_Text, line2_Left_Color;
 
             const cuentaNombre = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
             const conceptoNombre = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
             
-            // Descripción: Si hay detalle lo añadimos, si no, solo el concepto
+            // Descripción base
             let descripcionTexto = conceptoNombre;
             if (m.descripcion && m.descripcion.trim() !== '' && m.descripcion !== conceptoNombre) {
                 descripcionTexto = `${conceptoNombre} - ${m.descripcion}`;
             }
 
-            // Saldo actual (Running Balance) formateado
-            // Nota: Usaremos color BLANCO para esto
+            // Saldo actual (Running Balance) para movimientos normales
             const saldoActual = (m.runningBalance !== undefined) ? formatCurrency(m.runningBalance) : '';
 
             if (m.tipo === 'traspaso') {
-                // AZUL
-                color = 'var(--c-info)'; 
-                amountClass = 'text-info'; 
+                // === TRASPASO ===
+                colorPrincipal = 'var(--c-info)'; // Azul
+                amountClass = 'text-info';        // Azul
                 amountSign = '';
                 
                 const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
                 const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
                 
-                // Línea 1 Izq: Ruta
+                // LÍNEA 1 (ARRIBA): Ruta de cuentas -> AZUL (Color)
                 line1_Left_Text = `${escapeHTML(origen)} ➔ ${escapeHTML(destino)}`;
+                line1_Left_Color = 'var(--c-info)'; 
                 
-                // Línea 2 Izq: Saldos del traspaso
+                // LÍNEA 2 (ABAJO): Saldos -> BLANCO
                 const saldoSalida = m._saldoOrigenSnapshot !== undefined ? m._saldoOrigenSnapshot : (m.runningBalanceOrigen || 0);
                 const saldoEntrada = m._saldoDestinoSnapshot !== undefined ? m._saldoDestinoSnapshot : (m.runningBalanceDestino || 0);
                 line2_Left_Text = `${formatCurrency(saldoSalida)} ➔ ${formatCurrency(saldoEntrada)}`;
+                line2_Left_Color = '#FFFFFF';
 
             } else {
+                // === GASTO / INGRESO ===
                 const isGasto = m.cantidad < 0;
-                // ROJO o VERDE
-                color = isGasto ? 'var(--c-danger)' : 'var(--c-success)';
+                colorPrincipal = isGasto ? 'var(--c-danger)' : 'var(--c-success)'; // Rojo o Verde
                 amountClass = isGasto ? 'text-negative' : 'text-positive';
                 amountSign = isGasto ? '' : '+';
 
-                // Línea 1 Izq: Concepto
+                // LÍNEA 1 (ARRIBA): Concepto -> BLANCO
                 line1_Left_Text = escapeHTML(descripcionTexto);
+                line1_Left_Color = '#FFFFFF';
                 
-                // Línea 2 Izq: Cuenta
+                // LÍNEA 2 (ABAJO): Cuenta -> COLOR (Rojo/Verde)
                 line2_Left_Text = escapeHTML(cuentaNombre);
+                line2_Left_Color = colorPrincipal;
             }
 
-            // --- 2. HTML LIMPIO (Solo Blanco, Rojo, Verde, Azul) ---
+            // --- 2. HTML ESTRUCTURA ---
             return `
             <div class="t-card ${highlightClass}" 
                  data-fecha="${m.fecha || ''}" 
@@ -3474,8 +3479,8 @@ const renderVirtualListItem = (item) => {
                  style="
                     margin: 4px 8px;      
                     padding: 8px 12px;
-                    background-color: #050505; /* Fondo Negro Puro */
-                    border: 1px solid ${color} !important; 
+                    background-color: #050505; 
+                    border: 1px solid ${colorPrincipal} !important; 
                     border-radius: 8px;
                     display: flex;
                     flex-direction: column;
@@ -3490,9 +3495,9 @@ const renderVirtualListItem = (item) => {
                     <div style="
                         flex: 1;
                         text-align: left;
-                        color: #FFFFFF;       /* BLANCO PURO */
+                        color: ${line1_Left_Color};  /* VARIABLE DINÁMICA */
                         font-weight: 600; 
-                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
+                        font-size: 1.2rem;
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
@@ -3502,12 +3507,12 @@ const renderVirtualListItem = (item) => {
                     </div>
                     
                     <div class="${amountClass}" style="
-                        text-align: right;    /* ALINEADO DERECHA SIEMPRE */
-                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
-                        font-weight: 800;     /* Extra negrita para destacar */
+                        text-align: right;
+                        font-size: 1.2rem;
+                        font-weight: 800; 
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
-                        flex-shrink: 0;       /* No se encoge nunca */
+                        flex-shrink: 0;
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
@@ -3518,23 +3523,23 @@ const renderVirtualListItem = (item) => {
                     <div style="
                         flex: 1; 
                         text-align: left; 
-                        color: ${color};      /* COLOR PURO (Sin gris) */
+                        color: ${line2_Left_Color};  /* VARIABLE DINÁMICA */
                         font-weight: 500; 
-                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
+                        font-size: 1.2rem;
                         text-transform: uppercase; 
                         overflow: hidden; 
                         white-space: nowrap; 
                         text-overflow: ellipsis; 
-                        opacity: 1;           /* Opacidad 100% (Nada de transparencias) */
+                        opacity: 1;
                     ">
                         ${line2_Left_Text}
                     </div>
                     
                     ${m.tipo !== 'traspaso' ? `
                     <div style="
-                        text-align: right;    /* ALINEADO DERECHA SIEMPRE */
-                        color: #FFFFFF;       /* BLANCO PURO (Nada de gris) */
-                        font-size: 1.2rem;    /* TAMAÑO 1.2rem */
+                        text-align: right;
+                        color: #FFFFFF;
+                        font-size: 1.2rem;
                         font-weight: 400; 
                         white-space: nowrap; 
                         padding-left: 10px;
