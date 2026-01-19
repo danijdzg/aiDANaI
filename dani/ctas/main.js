@@ -3477,16 +3477,16 @@ const renderVirtualListItem = (item) => {
                  data-id="${m.id}" 
                  data-action="edit-movement-from-list" 
                  style="
-                    margin: 2px 6px;          /* Márgenes externos reducidos */
-                    padding: 6px 10px;        /* Padding interno más ajustado */
+                    margin: 1px 3px;          /* Márgenes externos reducidos */
+                    padding: 4px 8px;        /* Padding interno más ajustado */
                     background-color: #050505; 
                     border: 1px solid ${colorPrincipal} !important; 
-                    border-radius: 8px;
+                    border-radius: 6px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
-                    gap: 3px;                 /* ESPACIO ENTRE LÍNEAS REDUCIDO A 3PX */
-                    min-height: 50px;         /* Altura mínima ajustada */
+                    gap: 1px;                 /* ESPACIO ENTRE LÍNEAS REDUCIDO A 3PX */
+                    min-height: 44px;         /* Altura mínima ajustada */
                     position: relative;
                  ">
                 
@@ -3514,7 +3514,7 @@ const renderVirtualListItem = (item) => {
                         white-space: nowrap; 
                         letter-spacing: -0.5px;
                         flex-shrink: 0;
-                        line-height: 1;       /* Evita altura extra innecesaria */
+                        line-height: 0.9;       /* Evita altura extra innecesaria */
                     ">
                         ${amountSign}${formatCurrencyHTML(m.cantidad)}
                     </div>
