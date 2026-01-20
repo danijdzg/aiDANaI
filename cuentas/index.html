@@ -33,6 +33,198 @@
 	<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 	    
     <style>
+/* =========================================================
+   🛡️ CSS DIARIO v2 (ANTI-SUPERPOSICIÓN)
+   ========================================================= */
+
+/* 1. CONTENEDOR VIRTUAL */
+#virtual-scroller-content {
+    display: block !important;
+    will-change: transform;
+}
+
+/* 2. FILA CONTENEDORA (SWIPE) */
+.swipe-container {
+    position: relative;
+    width: 100%;
+    height: 64px; /* Altura estricta para transacciones */
+    overflow: hidden; /* Corta lo que sobresalga */
+    background-color: #ffffff; /* Fondo base de seguridad (Modo Claro) */
+    background-color: var(--c-surface, #ffffff); /* Usa variable si existe */
+    contain: strict;
+    box-sizing: border-box; /* IMPORTANTE: El padding no aumenta el tamaño */
+    margin: 0;
+    padding: 0;
+}
+
+/* === INICIO: DISEÑO TARJETA MINIMALISTA (Bordes Duales) === */
+
+.transaction-card {
+    position: relative;
+    width: 100%;
+    height: 72px; /* Altura ergonómica (antes 64px) */
+    
+    display: flex; 
+    align-items: center;
+    justify-content: space-between;
+    
+    /* BORDES DUALES: La clave del diseño */
+    border-left: 5px solid transparent;  /* Espacio reservado izquierda */
+    border-right: 5px solid transparent; /* Espacio reservado derecha */
+    
+    padding: 0 16px; /* Espaciado interno para el texto */
+    
+    background-color: var(--c-surface);
+    border-bottom: 1px solid var(--c-outline);
+    box-sizing: border-box;
+    transition: background-color 0.2s;
+}
+
+/* Colores de los bordes según el tipo */
+.card-type-income { 
+    border-left-color: var(--c-success); 
+    border-right-color: var(--c-success);
+}
+.card-type-expense { 
+    border-left-color: var(--c-danger); 
+    border-right-color: var(--c-danger);
+}
+.card-type-transfer { 
+    border-left-color: var(--c-info); 
+    border-right-color: var(--c-info);
+}
+
+/* === AJUSTES DE TEXTO PARA NUEVA ESTRUCTURA === */
+
+.transaction-card__details {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly; /* Distribución perfecta */
+    flex-grow: 1;
+    min-width: 0;
+    margin-right: 12px;
+}
+
+/* Fila 1 y Fila 2: Gemelas */
+.transaction-card__row-1,
+.transaction-card__row-2 {
+    display: flex; 
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    
+    /* PROPIEDADES UNIFICADAS */
+    font-size: 1rem;      /* 16px base para todo */
+    font-weight: 600;     /* Negrita media para todo */
+    color: #FFFFFF;       /* Blanco puro base */
+    line-height: 1.4;
+}
+
+/* Importe: Gemelo de las filas */
+.transaction-card__amount {
+    font-size: 1rem;      /* Mismo tamaño que el texto */
+    font-weight: 600;     /* Mismo peso */
+    letter-spacing: -0.5px;
+    white-space: nowrap;
+    /* El color se aplica por clase utilitaria (text-positive, etc) */
+}
+
+/* Separadores sutiles */
+.text-separator {
+    margin: 0 8px; /* Un poco más de aire */
+    color: rgba(255, 255, 255, 0.4); /* Muy sutil para no molestar */
+    font-weight: 400;
+}
+
+/* El saldo lateral también igualado (si se muestra) */
+.transaction-card__balance {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #FFFFFF;
+    text-align: right;
+}
+
+/* Modo Oscuro (Si tu sistema usa data-theme o media query) */
+@media (prefers-color-scheme: dark) {
+    .swipe-container, .transaction-card {
+        background-color: #1a1a1a;
+        background-color: var(--c-surface, #1a1a1a);
+    }
+}
+
+/* 4. ACCIONES OCULTAS (Botones traseros) */
+.swipe-actions-container {
+    position: absolute;
+    top: 0; 
+    bottom: 0; 
+    width: 50%; 
+    z-index: 1; /* Detrás de la tarjeta */
+    display: flex; 
+    align-items: center; 
+    padding: 0 20px;
+    box-sizing: border-box;
+    height: 64px; /* Asegura misma altura */
+}
+
+.swipe-actions-container.left { left: 0; background-color: #3b82f6; justify-content: flex-start; }
+.swipe-actions-container.right { right: 0; background-color: #ef4444; justify-content: flex-end; }
+.swipe-action-btn { background: none; border: none; color: white; display: flex; flex-direction: column; align-items: center; font-size: 11px; gap: 4px; cursor: pointer; }
+
+/* 5. DETALLES INTERNOS (Evita desbordamiento de texto) */
+.transaction-card__content {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-width: 0; /* CRÍTICO para que el texto se corte con ... */
+    height: 100%;
+}
+
+.transaction-card__details {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    margin-right: 12px;
+    overflow: hidden; /* Corta texto largo */
+}
+
+.transaction-card__row-1 {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* Pone "..." si es muy largo */
+    font-size: 0.95rem;
+}
+
+.transaction-card__row-2 {
+    font-size: 0.8rem;
+    color: #666;
+    color: var(--c-on-surface-secondary, #666);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 6. INDICADORES Y IMPORTES */
+.transaction-card__figures { text-align: right; flex-shrink: 0; }
+.transaction-card__amount { font-weight: 700; font-size: 0.95rem; }
+.transaction-card__balance { font-size: 0.75rem; color: #888; margin-top: 2px; }
+
+.transaction-card__indicator {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+}
+
+/* 7. CABECERAS (NO STICKY para evitar problemas visuales en lista virtual) */
+.movimiento-month-header, .movimiento-date-header {
+    position: relative !important; /* Forzamos no-sticky */
+    top: auto !important;
+    z-index: 5;
+    box-sizing: border-box;
+    width: 100%;
+}
 	
 /* === INICIO: Estilos para el Informe de Cuenta (Cartilla) - VERSIÓN FINAL CORREGIDA === */
 
@@ -926,7 +1118,7 @@ body { font-family: var(--font-family); background-color: var(--c-background); c
 #virtual-list-content { position: absolute; top: 0; left: 0; width: 100%; }
 
 /* Tarjeta de Transacción */
-.transaction-card { display: flex; align-items: flex-start; padding: var(--sp-2) 0; cursor: pointer; border-bottom: 1px solid var(--c-outline); line-height: 1.25; min-height: 64px; transition: background-color 0.2s; user-select: none; }
+
 .transaction-card:hover { background-color: var(--c-surface-variant); }
 .transaction-card:last-child { border-bottom: none; }
 .transaction-card__indicator { flex-shrink: 0; width: 3px; align-self: stretch; border-radius: 99px; margin-right: var(--sp-2); }
@@ -2269,10 +2461,206 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
     
     <script type="module">
+
+ /**
+ * 🏛️ MÓDULO: LA BÓVEDA (DataManager) - VERSIÓN FINAL COMPATIBLE
+ * Gestión profesional de datos usando IndexedDB.
+ */
+const Vault = (() => {
+    const DB_NAME = 'AiDANaI_Vault_V1';
+    const STORE_NAME = 'financial_data';
+    let dbInstance = null;
+
+    const init = () => new Promise((resolve, reject) => {
+        if (dbInstance) return resolve(dbInstance);
+        const request = indexedDB.open(DB_NAME, 1);
+
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                console.log('🏗️ Construyendo estructura de base de datos...');
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+
+        request.onsuccess = (e) => {
+            dbInstance = e.target.result;
+            console.log('✅ Bóveda (IndexedDB) abierta y lista.');
+            resolve(dbInstance);
+        };
+
+        request.onerror = (e) => {
+            console.error('❌ Error crítico en La Bóveda:', e.target.error);
+            reject(e.target.error);
+        };
+    });
+
+    const transaction = (mode, callback) => new Promise(async (resolve, reject) => {
+        try {
+            const db = await init();
+            const tx = db.transaction(STORE_NAME, mode);
+            const store = tx.objectStore(STORE_NAME);
+            const req = callback(store);
+            tx.oncomplete = () => resolve(req?.result);
+            tx.onerror = () => reject(tx.error);
+        } catch (error) { reject(error); }
+    });
+
+    return {
+        put: (key, value) => transaction('readwrite', store => store.put(value, key)),
+        get: (key) => transaction('readonly', store => store.get(key)),
+        delete: (key) => transaction('readwrite', store => store.delete(key)),
+        getAll: () => transaction('readonly', store => store.getAll())
+    };
+})();
+/**
+ * 🧱 El (Element Builder): Crea elementos HTML de forma segura.
+ * Sustituye a .innerHTML para evitar inyecciones de código.
+ */
+const El = (tag, options = {}) => {
+    const { cls, attrs, text, html, children } = options;
+    const el = document.createElement(tag);
+
+    // Clases
+    if (cls) {
+        if (Array.isArray(cls)) el.classList.add(...cls.filter(Boolean));
+        else el.classList.add(cls);
+    }
+
+    // Atributos (ej: type, src, id)
+    if (attrs) {
+        for (const [key, val] of Object.entries(attrs)) {
+            if (val !== null && val !== undefined) el.setAttribute(key, val);
+        }
+    }
+
+    // Contenido Texto (Seguro)
+    if (text !== undefined) el.textContent = text;
+    
+    // Contenido HTML (¡Cuidado! Usar solo si es estrictamente necesario y seguro)
+    if (html !== undefined) el.innerHTML = html;
+
+    // Hijos (Otros elementos creados con El)
+    if (children) {
+        children.forEach(child => {
+            if (child instanceof Node) el.appendChild(child);
+            else if (child) el.appendChild(document.createTextNode(String(child)));
+        });
+    }
+
+    return el;
+};
+
+// =========================================================
+// 🧠 CEREBRO: ESTADO DE LA APLICACIÓN (RAM) - VERSIÓN FINAL BLINDADA
+// =========================================================
+
+// 1. Definimos la estructura base de los datos (Tu esquema maestro)
+const getInitialState = () => ({
+    cuentas: [],
+    conceptos: [],
+    movimientos: [],
+    presupuestos: [],
+    recurrentes: [],
+    inversiones_historial: [],
+    inversion_cashflows: [],
+    config: { 
+        theme: 'dark', 
+        currency: 'EUR',
+        dashboardWidgets: [
+            'super-centro-operaciones', 
+            'net-worth-trend',          
+            'patrimonio-structure',     
+            'action-center'             
+        ]
+    }
+});
+
+// 🔥 EL PUENTE DE ORO (Corrección del Error):
+// Hacemos que la función vieja apunte a la nueva. Así arreglamos la línea 3099.
+const getInitialDb = getInitialState; 
+
+// 2. DEFINICIÓN MAESTRA: Aquí vive tu App ahora
+let AppState = getInitialState();
+
+// 3. EL SALVAVIDAS (Alias Global)
+// Mantenemos 'db' apuntando a AppState para todo el código legacy
+let db = AppState; 
+
+// 4. HIDRATACIÓN: Carga los datos de la Bóveda a la RAM
+async function hydrateAppState() {
+    try {
+        console.log('⏳ Cargando memoria local...');
+        const localData = await Vault.get('full_backup');
+        
+        if (localData) {
+            // Fusionamos con cuidado manteniendo la estructura
+            Object.assign(AppState, localData);
+            
+            // Re-vinculamos el alias por seguridad
+            db = AppState; 
+            
+            console.log('🔄 Memoria restaurada. Datos listos.');
+        } else {
+            console.log('⚠️ Bóveda vacía. Iniciando limpio.');
+        }
+        
+        // Disparamos eventos para despertar la UI
+        document.dispatchEvent(new CustomEvent('app-ready'));
+        // Intentamos renderizar si las funciones existen
+        if (typeof renderApp === 'function') renderApp();
+        if (typeof updateDashboard === 'function') updateDashboard();
+
+    } catch (e) {
+        console.error('Fatal: Error al hidratar.', e);
+    }
+}
+
+// 5. FUNCIÓN DE GUARDADO (PERSISTENCIA)
+const saveApp = async () => {
+    try {
+        // Clonamos para romper referencias (Deep Clone barato)
+        const dataToSave = JSON.parse(JSON.stringify(AppState));
+        await Vault.put('full_backup', dataToSave);
+        console.log('💾 Datos blindados en La Bóveda (IndexedDB)');
+    } catch (e) {
+        console.error('❌ Error al guardar backup:', e);
+    }
+};	
+	// ==========================================
+// 🧱 MÓDULO 1: SAFE MATH (Finanzas Seguras)
+// ==========================================
+const Money = {
+    // Convierte input de usuario ("10,50") a enteros internos (1050 céntimos)
+    fromInput: (str) => {
+        if (!str) return 0;
+        // Elimina todo lo que no sea número, coma o punto
+        let clean = str.replace(/[^\d.,-]/g, ''); 
+        // Reemplaza coma por punto para estandarizar
+        clean = clean.replace(',', '.');
+        const floatVal = parseFloat(clean);
+        return Math.round(floatVal * 100); // Guardamos siempre en céntimos
+    },
+
+    // Convierte enteros internos (1050) a formato visual ("10,50 €")
+    format: (cents) => {
+        return new Intl.NumberFormat('es-ES', {
+            style: 'currency',
+            currency: 'EUR'
+        }).format(cents / 100);
+    },
+
+    // Suma segura de enteros
+    add: (a, b) => (a || 0) + (b || 0),
+    
+    // Resta segura
+    subtract: (a, b) => (a || 0) - (b || 0)
+};
+
 	
 	const handleExportFilteredCsv = (btn) => {
-    // La lista de movimientos a exportar es la que ya tenemos filtrada en db.movimientos
-    const movementsToExport = db.movimientos;
+    // La lista de movimientos a exportar es la que ya tenemos filtrada enAppState.movimientos
+    const movementsToExport =AppState.movimientos;
 
     if (movementsToExport.length === 0) {
         showToast("No hay datos para exportar.", "warning");
@@ -2401,7 +2789,7 @@ const getRecurrentsForDate = (dateString) => {
     const results = [];
     const targetTime = targetDate.getTime();
     
-    db.recurrentes.forEach(r => {
+   AppState.recurrentes.forEach(r => {
         const nextDate = parseDateStringAsUTC(r.nextDate);
         if (!nextDate) return;
 
@@ -2452,20 +2840,6 @@ const getRecurrentsForDate = (dateString) => {
     return results;
 };
 
-const getInitialDb = () => ({
-    cuentas: [], 
-    conceptos: [], 
-    movimientos: [], 
-    recurrentes: [],
-    inversiones_historial: [],
-    inversion_cashflows: [],
-    config: { 
-        skipIntro: false,
-        dashboardWidgets: DEFAULT_DASHBOARD_WIDGETS,
-       
-    } 
-});
-		// ▼▼▼ PEGA ESTE BLOQUE DE CÓDIGO JS ▼▼▼
 
 // Variable global para guardar los filtros activos
 let diarioActiveFilters = null;
@@ -2486,7 +2860,7 @@ const showDiarioFiltersModal = () => {
     };
     
     populateMultiSelect('filter-diario-cuentas', getVisibleAccounts(), 'nombre');
-    populateMultiSelect('filter-diario-conceptos', db.conceptos, 'nombre');
+    populateMultiSelect('filter-diario-conceptos',AppState.conceptos, 'nombre');
 
     // Rellenamos el formulario con los filtros que ya estaban activos (si los hay)
     if (diarioActiveFilters) {
@@ -2536,7 +2910,7 @@ const clearDiarioFilters = async () => {
 };
 
 // ▲▲▲ FIN DEL BLOQUE A PEGAR ▲▲▲
-        let currentUser = null, unsubscribeListeners = [], db = getInitialDb(), deselectedAccountTypesFilter = new Set();
+        let currentUser = null, unsubscribeListeners = [], deselectedAccountTypesFilter = new Set();
 		let ptrState = {
 			startY: 0,
 			isPulling: false,
@@ -2831,9 +3205,9 @@ const updateSyncStatusIcon = () => {
 };
                 const buildDescriptionIndex = () => {
             descriptionIndex = {};
-            if (!db.movimientos || db.movimientos.length === 0) return;
+            if (!db.movimientos ||AppState.movimientos.length === 0) return;
 
-            const movementsToIndex = db.movimientos.slice(0, 500); 
+            const movementsToIndex =AppState.movimientos.slice(0, 500); 
 
             movementsToIndex.forEach(mov => {
                 const desc = mov.descripcion.trim().toLowerCase();
@@ -2952,8 +3326,9 @@ async function loadCoreData(uid) {
     });
 
     const unsubConfig = userRef.onSnapshot(doc => {
-        db.config = doc.exists && doc.data().config ? doc.data().config : getInitialDb().config;
-        localStorage.setItem('skipIntro', (db.config && db.config.skipIntro) || 'false');
+       AppState.config = doc.exists && doc.data().config ? doc.data().config : getInitialDb().config;
+        const shouldSkip = (db.config && AppState.config.skipIntro) === true; 
+Vault.put('skipIntro', shouldSkip).catch(console.error);
         loadConfig();
     }, error => console.error("Error escuchando la configuración del usuario: ", error));
     unsubscribeListeners.push(unsubConfig);
@@ -3023,26 +3398,27 @@ async function loadCoreData(uid) {
 
     }
     const checkAuthState = () => {
-            fbAuth.onAuthStateChanged((user) => {
-                if (user) {
-                    const storedPinHash = localStorage.getItem('pinUserHash');
-                    const storedPinEmail = localStorage.getItem('pinUserEmail');
+    // AÑADIDO 'async' AQUÍ 👇
+    fbAuth.onAuthStateChanged(async (user) => {
+        if (user) {
+            // Ahora sí podemos usar await aquí dentro
+            const storedPinHash = await Vault.get('pinUserHash', 'security');
+            const storedPinEmail = await Vault.get('pinUserEmail', 'security');
 
-                    if (storedPinHash && storedPinEmail === user.email) {
-                        showPinScreen(user);
-                    } else {
-                        currentUser = user;
-                        loadCoreData(user.uid);
-                    }
-                } else {
-                    currentUser = null;
-                    unsubscribeListeners.forEach(unsub => unsub());
-                    unsubscribeListeners = [];
-                    db = getInitialDb();
-                    showLoginScreen();
-                }
-            });
-        };
+            if (storedPinHash && storedPinEmail === user.email) {
+                showPinScreen(user);
+            } else {
+                currentUser = user;
+                loadCoreData(user.uid);
+            }
+        } else {
+            currentUser = null;
+            unsubscribeListeners.forEach(unsub => unsub());
+            unsubscribeListeners = [];
+            showLoginScreen();
+        }
+    });
+};
 
         const calculateNextDueDate = (currentDueDate, frequency) => {
             const d = new Date(currentDueDate);
@@ -3213,27 +3589,41 @@ const calculateTotals = (movs, visibleAccountIds) => {
 // --- ACTUALIZAR EL EVENT LISTENER ---
 // Añadir un nuevo listener para el evento 'change' en los selectores de los informes
 document.body.addEventListener('change', e => {
+    // 1. Manejo del selector de periodo (Dropdown)
     if (e.target.classList.contains('report-period-selector')) {
-        const reportId = e.target.closest('.report-filters').dataset.reportId;
+        // 🛡️ SEGURIDAD: Verificamos que el contenedor existe antes de leer datos
+        const container = e.target.closest('.report-filters');
+        if (!container) return; 
+
+        const reportId = container.dataset.reportId;
         const customFilters = select(`custom-date-filters-${reportId}`);
-        if (customFilters) customFilters.classList.toggle('hidden', e.target.value !== 'custom');
+        
+        if (customFilters) {
+            customFilters.classList.toggle('hidden', e.target.value !== 'custom');
+        }
         
         // Si no es personalizado, se regenera el informe inmediatamente
         if (e.target.value !== 'custom') {
             renderInformeDetallado(reportId);
         }
     }
-    // Añadir un listener para los inputs de fecha personalizados
+    
+    // 2. Manejo de los inputs de fecha personalizados (Desde / Hasta)
     if (e.target.type === 'date' && e.target.id.startsWith('filter-fecha-')) {
-        const reportId = e.target.closest('.report-filters').dataset.reportId;
-        const startDate = select(`filter-fecha-inicio-${reportId}`).value;
-        const endDate = select(`filter-fecha-fin-${reportId}`).value;
-        if(startDate && endDate) {
+        // 🛡️ SEGURIDAD: Verificamos que el contenedor existe
+        const container = e.target.closest('.report-filters');
+        if (!container) return; 
+
+        const reportId = container.dataset.reportId;
+        const startDateInput = select(`filter-fecha-inicio-${reportId}`);
+        const endDateInput = select(`filter-fecha-fin-${reportId}`);
+        
+        // Solo regeneramos si ambos inputs existen y tienen valor para evitar errores
+        if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
              renderInformeDetallado(reportId);
         }
     }
 });
-
 
         const generateId = () => fbDb.collection('users').doc().id;
         const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -3469,7 +3859,13 @@ const triggerSaveAnimation = (fromElement, color) => {
                 return;
             }
 
-            const storedHash = localStorage.getItem('pinUserHash');
+            // ✅ CÓDIGO REFACTORIZADO (IndexedDB)
+			// Al guardar el PIN:
+			await Vault.set('pinUserHash', pinHash, 'security');
+			await Vault.set('pinUserEmail', currentUser.email, 'security');
+
+			// Al verificar el PIN:
+			const storedHash = await Vault.get('pinUserHash', 'security');
             const isValid = await verifyPin(pin, storedHash);
 
             if (isValid) {
@@ -3514,7 +3910,7 @@ const triggerSaveAnimation = (fromElement, color) => {
 
     // ¡USAMOS NUESTRA FUNCIÓN MAESTRA OTRA VEZ!
     if (movementsToShow.length > 0) {
-        recalculateAndApplyRunningBalances(movementsToShow, db.cuentas);
+        recalculateAndApplyRunningBalances(movementsToShow,AppState.cuentas);
     }
 
     // Y ahora llamamos a la función que muestra la lista.
@@ -3541,20 +3937,36 @@ const triggerSaveAnimation = (fromElement, color) => {
                 });
             });
         };
-    const initApp = async () => {
-    // Esta es la función que realmente carga el resto de la aplicación.
-    const procederConCargaDeApp = () => {
+   const initApp = async () => {
+    // AÑADIDO 'async' AQUÍ 👇 para permitir el uso de await dentro
+    const procederConCargaDeApp = async () => {
         document.documentElement.lang = 'es';
-        setupTheme();
-        const savedTheme = localStorage.getItem('appTheme') || 'default';
+        
+        // Configuración inicial del tema
+        setupTheme(); 
+        // === CAMBIO: Leer preferencia de Intro desde Vault ===
+    const skipIntroPref = await Vault.get('skipIntro');
+    
+    // Si la preferencia es true, ocultamos la intro manualmente
+    if (skipIntroPref === true) {
+        const introScreen = document.getElementById('intro-screen'); // Asegúrate que tu ID sea este
+        if (introScreen) introScreen.style.display = 'none';
+        // Opcional: Actualizar el estado global si lo usas
+        if (AppState.config) AppState.config.skipIntro = true;
+    }
+        // AHORA SÍ FUNCIONA: await dentro de una función async
+        const savedTheme = await Vault.get('appTheme') || 'default';
         document.body.dataset.theme = savedTheme;
+        
         updateThemeIcon();
         attachEventListeners();
-        checkAuthState(); // ¡La llamada clave está aquí!
+        
+        // Iniciamos la escucha de autenticación
+        checkAuthState(); 
     };
 
-    // LLAMAMOS DIRECTAMENTE A LA CARGA DE LA APP, IGNORANDO EL VÍDEO
-    procederConCargaDeApp();
+    // AÑADIDO 'await' AQUÍ 👇 para esperar a que termine la carga antes de seguir
+    await procederConCargaDeApp();
 };
 
 		window.addEventListener('online', () => {
@@ -3572,26 +3984,31 @@ window.addEventListener('offline', () => {
     syncState = 'error';
     updateSyncStatusIcon();
 });
-    const startMainApp = async () => {
-            const loginScreen = select('login-screen');
-            const pinLoginScreen = select('pin-login-screen');
-            const appRoot = select('app-root');
+ const startMainApp = async () => {
+    const loginScreen = select('login-screen');
+    const pinLoginScreen = select('pin-login-screen');
+    const appRoot = select('app-root');
 
-            if (loginScreen) loginScreen.classList.remove('login-view--visible');
-            if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
-            if (appRoot) appRoot.classList.add('app-layout--visible');
-            
-            populateAllDropdowns();
-            loadConfig();
-            
-            measureListItemHeights();
-            
-            updateSyncStatusIcon();
-            buildIntelligentIndex();
-			navigateTo(PAGE_IDS.INICIO, true);
-            updateThemeIcon(localStorage.getItem('appTheme') || 'default');
-            isInitialLoadComplete = true;
-			};
+    if (loginScreen) loginScreen.classList.remove('login-view--visible');
+    if (pinLoginScreen) pinLoginScreen.classList.remove('login-view--visible');
+    if (appRoot) appRoot.classList.add('app-layout--visible');
+    
+    populateAllDropdowns();
+    loadConfig();
+    
+    measureListItemHeights();
+    
+    updateSyncStatusIcon();
+    buildIntelligentIndex();
+    navigateTo(PAGE_IDS.INICIO, true);
+    
+    // Recuperar tema guardado de forma segura
+    const savedTheme = await Vault.get('appTheme') || 'default';
+    document.body.dataset.theme = savedTheme;
+    updateThemeIcon(); // Ya no necesita pasarle el tema, lo lee del body
+    
+    isInitialLoadComplete = true;
+};
 
         
     const showLoginScreen = () => {
@@ -3816,7 +4233,7 @@ const navigateTo = async (pageId, isInitial = false) => {
     Chart.register(ChartDataLabels);
 };
         
-    const buildIntelligentIndex = (movementsSource = db.movimientos) => {
+    const buildIntelligentIndex = (movementsSource =AppState.movimientos) => {
     intelligentIndex.clear(); 
     if (!movementsSource || movementsSource.length === 0) return;
 
@@ -4199,8 +4616,8 @@ const calculatePortfolioPerformance = async (cuentaId = null) => {
             populateTraspasoDropdowns();
             
             populate('filter-cuenta', visibleAccounts, 'nombre', 'id', true); 
-            populate('movimiento-concepto', db.conceptos, 'nombre', 'id', false, true); 
-            populate('filter-concepto', db.conceptos, 'nombre', 'id', true);
+            populate('movimiento-concepto',AppState.conceptos, 'nombre', 'id', false, true); 
+            populate('filter-concepto',AppState.conceptos, 'nombre', 'id', true);
             const budgetYearSelect = select('budget-year-selector'); if(budgetYearSelect) { const currentVal = budgetYearSelect.value; const currentYear = new Date().getFullYear(); let years = new Set([currentYear]); (db.presupuestos || []).forEach((p) => years.add(p.ano)); budgetYearSelect.innerHTML = [...years].sort((a,b) => b-a).map(y => `<option value="${y}">${y}</option>`).join(''); if(currentVal && [...years].some(y => y == parseInt(currentVal))) budgetYearSelect.value = currentVal; else budgetYearSelect.value = String(currentYear); }
         };
 
@@ -4403,124 +4820,171 @@ const renderPortfolioMainContent = async (targetContainerId) => {
     }, 50);
 };
 
-        const renderVirtualListItem = (item) => {
-			if (item.type === 'month-header') {
-    const monthName = item.date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    return `
-        <div class="movimiento-month-header">
-            <h3 class="movimiento-month-header__title">${monthName}</h3>
-            <div class="movimiento-month-header__summary">
-                <p class="text-positive">${formatCurrency(item.income)}</p>
-                <p class="text-negative">${formatCurrency(item.expense)}</p>
-                <p class="${item.net >= 0 ? 'text-positive' : 'text-negative'}" style="border-top: 1px solid var(--c-outline); margin-top: 2px; padding-top: 2px;">
-                    ${formatCurrency(item.net)}
-                </p>
-            </div>
-        </div>
-    `;
+/**
+ * 🎨 RENDERIZADOR: Convierte datos brutos en Nodos DOM.
+ * Devuelve un HTMLElement (o Fragment), NUNCA un string HTML.
+ */
+const renderVirtualListItem = (item) => {
+    // CASO 1: Cabecera de Mes
+    if (item.type === 'month-header') {
+        const monthName = item.date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+        const netClass = item.net >= 0 ? 'text-positive' : 'text-negative';
+        
+        return El('div', { cls: 'movimiento-month-header', children: [
+            El('h3', { cls: 'movimiento-month-header__title', text: monthName }),
+            El('div', { cls: 'movimiento-month-header__summary', children: [
+                El('p', { cls: 'text-positive', text: formatCurrency(item.income) }),
+                El('p', { cls: 'text-negative', text: formatCurrency(item.expense) }),
+                El('p', { cls: netClass, attrs: { style: 'border-top: 1px solid var(--c-outline); margin-top: 2px; padding-top: 2px;' }, text: formatCurrency(item.net) })
+            ]})
+        ]});
     }
-            if (item.type === 'pending-header') {
-                return `
-                    <div class="movimiento-date-header" style="background-color: var(--c-warning); color: var(--c-black); font-weight: 800; letter-spacing: 0.5px;">
-                        <span>
-                            <span class="material-icons" style="font-size: 16px; vertical-align: bottom; margin-right: 4px;">update</span>
-                            RECURRENTES PENDIENTES (${item.count})
-                        </span>
-                    </div>`;
-            }
 
-            if (item.type === 'pending-item') {
-				const r = item.recurrent;
-				const nextDate = new Date(r.nextDate + 'T12:00:00Z');
-				const formattedDate = nextDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-				const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
+    // CASO 2: Cabecera de Pendientes
+    if (item.type === 'pending-header') {
+        return El('div', { 
+            cls: 'movimiento-date-header', 
+            attrs: { style: 'background-color: var(--c-warning); color: var(--c-black); font-weight: 800; letter-spacing: 0.5px;' },
+            children: [
+                El('span', { children: [
+                    El('span', { cls: 'material-icons', attrs: { style: 'font-size: 16px; vertical-align: bottom; margin-right: 4px;' }, text: 'update' }),
+                    document.createTextNode(` RECURRENTES PENDIENTES (${item.count})`)
+                ]})
+            ]
+        });
+    }
 
-    return `
-    <div class="transaction-card" id="pending-recurrente-${r.id}" style="background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);">
-        <div class="transaction-card__indicator transaction-card__indicator--recurrent"></div>
-        <div class="transaction-card__content">
-            <div class="transaction-card__details">
-                <div class="transaction-card__row-1">${escapeHTML(r.descripcion)}</div>
-                <div class="transaction-card__row-2" style="font-weight: 600; color: var(--c-warning);">Pendiente desde: ${formattedDate}</div>
-                
-                <!-- NUEVO: Ahora las acciones están mejor organizadas y con el botón Editar -->
-                <div class="acciones-recurrentes-corregidas">
-                    <button class="btn btn--secondary" data-action="edit-recurrente-from-pending" data-id="${r.id}" title="Editar antes de añadir" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">edit</span>
-                        <span>Editar</span>
-                    </button>
-                    <button class="btn btn--secondary" data-action="skip-recurrent" data-id="${r.id}" title="Omitir esta vez" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">skip_next</span>
-                        <span>No añadir</span>
-                    </button>
-                    <button class="btn btn--primary" data-action="confirm-recurrent" data-id="${r.id}" title="Crear el movimiento ahora" style="padding: 4px 8px; font-size: 0.7rem;">
-                        <span class="material-icons" style="font-size: 14px;">check</span>
-                        <span>Añadir Ahora</span>
-                    </button>
-                </div>
-            </div>
-            <div class="transaction-card__figures">
-                <strong class="transaction-card__amount ${amountClass}">${formatCurrency(r.cantidad)}</strong>
-            </div>
-        </div>
-    </div>`;
-}
-            if (item.type === 'date-header') {
-                const dateObj = new Date(item.date + 'T12:00:00Z');
-                const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
-                const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-                return `
-                    <div class="movimiento-date-header">
-                        <span>${day} ${dateStr}</span>
-                        <span>${formatCurrency(item.total)}</span>
-                    </div>
-                `;
-            }
-			if (item.type === 'transaction') {
-        return TransactionCardComponent(item.movement, { cuentas: db.cuentas, conceptos: db.conceptos });
-		}
+    // CASO 3: Item Pendiente (Tarjeta Recurrente)
+    if (item.type === 'pending-item') {
+        const r = item.recurrent;
+        const formattedDate = new Date(r.nextDate + 'T12:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+        const amountClass = r.cantidad >= 0 ? 'text-positive' : 'text-negative';
         
-        };
+        return El('div', { 
+            cls: 'transaction-card', 
+            attrs: { id: `pending-recurrente-${r.id}`, style: 'background-color: color-mix(in srgb, var(--c-warning) 10%, transparent);' },
+            children: [
+                El('div', { cls: ['transaction-card__indicator', 'transaction-card__indicator--recurrent'] }),
+                El('div', { cls: 'transaction-card__content', children: [
+                    El('div', { cls: 'transaction-card__details', children: [
+                        El('div', { cls: 'transaction-card__row-1', text: r.descripcion }),
+                        El('div', { cls: 'transaction-card__row-2', attrs: { style: 'font-weight: 600; color: var(--c-warning);' }, text: `Pendiente desde: ${formattedDate}` }),
+                        El('div', { cls: 'acciones-recurrentes-corregidas', children: [
+                            El('button', { cls: ['btn', 'btn--secondary'], attrs: { 'data-action': 'edit-recurrente-from-pending', 'data-id': r.id, title: 'Editar', style: 'padding: 4px 8px; font-size: 0.7rem;' }, children: [ El('span', { cls: 'material-icons', attrs: { style: 'font-size: 14px;' }, text: 'edit' }), document.createTextNode(' Editar') ] }),
+                            El('button', { cls: ['btn', 'btn--secondary'], attrs: { 'data-action': 'skip-recurrent', 'data-id': r.id, title: 'Omitir', style: 'padding: 4px 8px; font-size: 0.7rem;' }, children: [ El('span', { cls: 'material-icons', attrs: { style: 'font-size: 14px;' }, text: 'skip_next' }), document.createTextNode(' No añadir') ] }),
+                            El('button', { cls: ['btn', 'btn--primary'], attrs: { 'data-action': 'confirm-recurrent', 'data-id': r.id, title: 'Añadir', style: 'padding: 4px 8px; font-size: 0.7rem;' }, children: [ El('span', { cls: 'material-icons', attrs: { style: 'font-size: 14px;' }, text: 'check' }), document.createTextNode(' Añadir Ahora') ] })
+                        ]})
+                    ]}),
+                    El('div', { cls: 'transaction-card__figures', children: [
+                        El('strong', { cls: ['transaction-card__amount', amountClass], text: formatCurrency(r.cantidad) })
+                    ]})
+                ]})
+            ]
+        });
+    }
+
+    // CASO 4: Cabecera de Día
+    if (item.type === 'date-header') {
+        const dateObj = new Date(item.date + 'T12:00:00Z');
+        const day = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase().replace('.', '');
+        const dateStr = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
         
-        const renderVisibleItems = () => {
-            if (!vList.scrollerEl || !vList.contentEl) return; 
-            const scrollTop = vList.scrollerEl.scrollTop;
-            const containerHeight = vList.scrollerEl.clientHeight;
-            let startIndex = -1, endIndex = -1;
-            
-            for (let i = 0; i < vList.itemMap.length; i++) {
-                const item = vList.itemMap[i];
-                if (startIndex === -1 && item.offset + item.height > scrollTop) {
-                    startIndex = Math.max(0, i - vList.renderBuffer);
-                }
-                if (endIndex === -1 && item.offset + item.height > scrollTop + containerHeight) {
-                    endIndex = Math.min(vList.itemMap.length - 1, i + vList.renderBuffer);
-                    break;
-                }
-            }
-            if (startIndex === -1 && vList.items.length > 0) startIndex = 0;
-            if (endIndex === -1) endIndex = vList.itemMap.length - 1;
-            
-            if (startIndex === vList.lastRenderedRange.start && endIndex === vList.lastRenderedRange.end) return;
-            
-            let visibleHtml = ''; 
-            for (let i = startIndex; i <= endIndex; i++) {
-                if (vList.items[i]) visibleHtml += renderVirtualListItem(vList.items[i]);
-            }
-            vList.contentEl.innerHTML = visibleHtml; 
-			const renderedItems = vList.contentEl.querySelectorAll('.list-item-animate');
-renderedItems.forEach((item, index) => {
-    // Aplicamos la clase que dispara la animación con un pequeño retraso
-    // para cada elemento, creando el efecto cascada.
-    setTimeout(() => {
-        item.classList.add('item-enter-active');
-    }, index * 40); // 40 milisegundos de retraso entre cada item
-});
-            const offsetY = vList.itemMap[startIndex] ? vList.itemMap[startIndex].offset : 0; 
-            vList.contentEl.style.transform = `translateY(${offsetY}px)`; 
-            vList.lastRenderedRange = { start: startIndex, end: endIndex };
-        };
+        return El('div', { cls: 'movimiento-date-header', children: [
+            El('span', { text: `${day} ${dateStr}` }),
+            El('span', { text: formatCurrency(item.total) })
+        ]});
+    }
+
+    // CASO 5: Movimiento Normal (Llamada al componente)
+    if (item.type === 'transaction') {
+        return TransactionCardComponent(item.movement, { cuentas: AppState.cuentas, conceptos: AppState.conceptos });
+    }
+};
+        
+/**
+ * 🎬 MOTOR DE PINTADO (Versión Reparada)
+ * Asegura que el scroll tenga altura y pinta los elementos.
+ */
+const renderVisibleItems = () => {
+    // 1. Validaciones de seguridad
+    if (!vList.scrollerEl || !vList.contentEl) {
+        console.warn("Virtual Scroller: Elementos DOM no encontrados");
+        return;
+    }
+    
+    // 2. RESCATE DE ALTURA: Si el spacer no existe o tiene altura 0, lo forzamos.
+    // Buscamos el elemento espaciador (normalmente el primer hijo o un div específico)
+    let spacer = document.getElementById('virtual-scroller-spacer');
+    if (!spacer) {
+        // Si no existe, intentamos usar el contentEl, pero lo ideal es tener un spacer
+        // Asumimos que vList.totalHeight se calculó en calculateVirtualMap
+        if (vList.totalHeight > 0 && vList.scrollerEl.scrollHeight <= vList.scrollerEl.clientHeight) {
+             // Crear un spacer falso si no hay scroll
+             spacer = document.createElement('div');
+             spacer.id = 'virtual-scroller-spacer';
+             spacer.style.width = '1px';
+             spacer.style.height = `${vList.totalHeight}px`;
+             spacer.style.position = 'absolute';
+             spacer.style.top = '0';
+             spacer.style.zIndex = '-1';
+             vList.scrollerEl.prepend(spacer);
+        }
+    } else {
+        // Aseguramos que tenga la altura correcta
+        if (vList.totalHeight && spacer.style.height !== `${vList.totalHeight}px`) {
+            spacer.style.height = `${vList.totalHeight}px`;
+        }
+    }
+
+    const scrollTop = vList.scrollerEl.scrollTop;
+    const containerHeight = vList.scrollerEl.clientHeight;
+
+    // 3. Cálculo de visibilidad
+    let startIndex = -1, endIndex = -1;
+    // Búsqueda optimizada (O(N) es rápido para <10k items, si es lento usaremos búsqueda binaria luego)
+    for (let i = 0; i < vList.itemMap.length; i++) {
+        const item = vList.itemMap[i];
+        if (startIndex === -1 && item.offset + item.height > scrollTop) {
+            startIndex = Math.max(0, i - vList.renderBuffer);
+        }
+        if (endIndex === -1 && item.offset + item.height > scrollTop + containerHeight) {
+            endIndex = Math.min(vList.itemMap.length - 1, i + vList.renderBuffer);
+            break;
+        }
+    }
+
+    if (startIndex === -1 && vList.items.length > 0) startIndex = 0;
+    if (endIndex === -1) endIndex = vList.itemMap.length - 1;
+
+    // 4. Renderizado (Solo si cambia el rango)
+    if (startIndex === vList.lastRenderedRange.start && endIndex === vList.lastRenderedRange.end) return;
+
+    const fragment = document.createDocumentFragment();
+    for (let i = startIndex; i <= endIndex; i++) {
+        if (vList.items[i]) {
+            // Pasamos el índice 'i' por si renderVirtualListItem lo necesita
+            const node = renderVirtualListItem(vList.items[i], i); 
+            if (node) fragment.appendChild(node);
+        }
+    }
+
+    vList.contentEl.textContent = '';
+    vList.contentEl.appendChild(fragment);
+
+    // 5. Posicionamiento del bloque renderizado
+    const offsetY = vList.itemMap[startIndex] ? vList.itemMap[startIndex].offset : 0;
+    vList.contentEl.style.transform = `translateY(${offsetY}px)`;
+    
+    // Animación de entrada
+    requestAnimationFrame(() => {
+        const renderedItems = vList.contentEl.querySelectorAll('.list-item-animate');
+        renderedItems.forEach((item, index) => {
+            setTimeout(() => item.classList.add('item-enter-active'), index * 20);
+        });
+    });
+
+    vList.lastRenderedRange = { start: startIndex, end: endIndex };
+};
 // =================================================================
 // === INICIO: NUEVA FUNCIÓN AYUDANTE PARA REFRESCOS RÁPIDOS     ===
 // =================================================================
@@ -4771,7 +5235,7 @@ select('virtual-list-content').innerHTML = skeletonHTML;
         
         // Añadimos los nuevos movimientos a la caché local.
         if (newMovementsChunk.length > 0) {
-            db.movimientos.push(...newMovementsChunk);
+           AppState.movimientos.push(...newMovementsChunk);
             // Volvemos a procesar los balances acumulados sobre la lista completa
             await processMovementsForRunningBalance(db.movimientos, true);
         }
@@ -4899,14 +5363,14 @@ const renderDiarioPage = async () => {
             return true;
         });
         
-        db.movimientos = movementsToDisplay;
+       AppState.movimientos = movementsToDisplay;
 
     } else {
         // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
         if (scrollTrigger) scrollTrigger.classList.remove('hidden');
         select('diario-filter-active-indicator').classList.add('hidden');
         
-        db.movimientos = [];
+       AppState.movimientos = [];
         lastVisibleMovementDoc = null;
         allMovementsLoaded = false;
         isLoadingMoreMovements = false;
@@ -5036,89 +5500,106 @@ const renderPatrimonioPage = async () => {
     populateAllDropdowns();
     renderInicioResumenView();
 };
- 
-// =====================================================================
-// === INICIO: PASO 1 - REEMPLAZA ESTA FUNCIÓN POR COMPLETO          ===
-// =====================================================================
 /**
- * Genera el HTML para una tarjeta de movimiento o traspaso con sus acciones de swipe.
- * @param {object} m - El objeto del movimiento.
- * @param {object} dbData - Objeto con acceso a `db.cuentas` y `db.conceptos`.
- * @returns {string} El string HTML del componente completo.
+ * 🔳 COMPONENTE BLOQUE: Sin Fechas, Tamaños Igualados, Color en Cuentas
  */
-const TransactionCardComponent = (m, dbData) => {
-    const { cuentas, conceptos } = dbData;
+const TransactionCardComponent = (m, { cuentas, conceptos }) => {
+    // 1. Datos Comunes
+    const isTraspaso = m.tipo === 'traspaso';
+    const amountText = formatCurrency(m.cantidad);
+
+    // 2. Variables de renderizado
+    let cardBorderClass, typeClass, row1Content, row2Content, balanceDisplay;
+
+    if (isTraspaso) {
+        // =========================================================
+        // 🔄 TRASPASO (Cuentas Azules en Fila 1)
+        // =========================================================
+        cardBorderClass = 'card-type-transfer';
+        typeClass = 'text-info'; // Azul
+
+        const cOrigen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
+        const cDestino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+
+        // Saldos (usando la lógica de lectura directa que ya reparamos)
+        const saldoSalida = (m.runningBalanceOrigen !== undefined) ? formatCurrency(m.runningBalanceOrigen) : '---';
+        const saldoEntrada = (m.runningBalanceDestino !== undefined) ? formatCurrency(m.runningBalanceDestino) : '---';
+
+        // FILA 1: Cuenta A ➔ Cuenta B (AMBAS AZULES, igual que el importe)
+        row1Content = [
+            El('span', { cls: 'text-info', text: cOrigen }),
+            El('span', { cls: ['text-separator', 'text-info'], text: '➔' }),
+            El('span', { cls: 'text-info', text: cDestino })
+        ];
+
+        // FILA 2: (Saldo A) ➔ (Saldo B) - (Blancos, sin fecha)
+        row2Content = [
+            El('span', { text: `(${saldoSalida})` }),
+            El('span', { cls: ['text-separator', 'text-info'], text: '➔' }),
+            El('span', { text: `(${saldoEntrada})` })
+        ];
+
+        balanceDisplay = null;
+
+    } else {
+        // =========================================================
+        // 🟢 MOVIMIENTO NORMAL (Cuenta Coloreada en Fila 2)
+        // =========================================================
+        const cuenta = cuentas.find(c => c.id === m.cuentaId);
+        const concepto = conceptos.find(c => c.id === m.conceptoId);
+        const isIncome = m.cantidad >= 0;
+
+        if (isIncome) {
+            typeClass = 'text-positive'; // Verde
+            cardBorderClass = 'card-type-income';
+        } else {
+            typeClass = 'text-negative'; // Rojo
+            cardBorderClass = 'card-type-expense';
+        }
+
+        // FILA 1: Concepto -> Detalle (Blancos)
+        row1Content = [
+            El('span', { text: toSentenceCase(concepto?.nombre || 'General') }),
+            El('span', { cls: 'text-separator', text: '→' }),
+            El('span', { cls: 'fw-normal', text: toSentenceCase(m.descripcion || 'Sin detalle') })
+        ];
+
+        // FILA 2: Cuenta (DEL MISMO COLOR QUE EL IMPORTE)
+        // Quitamos la fecha, solo mostramos la cuenta coloreada
+        row2Content = [
+            El('span', { cls: typeClass, text: cuenta?.nombre || 'S/C' }) 
+        ];
+
+        // Saldo lateral (Blanco puro, mismo tamaño)
+        const saldoStandard = (m.runningBalance !== undefined) ? formatCurrency(m.runningBalance) : '---';
+        balanceDisplay = El('div', { cls: 'transaction-card__balance', text: saldoStandard });
+    }
+
+    // 3. Highlight y Renderizado
     const highlightClass = (m.id === newMovementIdToHighlight) ? 'list-item-animate' : '';
 
-    const formattedDate = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    let cardContentHTML = '';
-
-    if (m.tipo === 'traspaso') {
-        const origen = cuentas.find(c => c.id === m.cuentaOrigenId);
-        const destino = cuentas.find(c => c.id === m.cuentaDestinoId);
-        cardContentHTML = `
-            <div class="transaction-card__indicator transaction-card__indicator--transfer"></div>
-            <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__concept">${escapeHTML(m.descripcion) || 'Traspaso'}</div>
-                    <div class="transaction-card__description">${formattedDate}</div>
-                    <div class="transaction-card__transfer-details">
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_upward</span> ${(origen?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceOrigen)}</span>
-                        </div>
-                        <div class="transaction-card__transfer-row">
-                            <span><span class="material-icons">arrow_downward</span> ${(destino?.nombre) || '?'}</span>
-                            <span class="transaction-card__balance">${formatCurrency(m.runningBalanceDestino)}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="transaction-card__figures">
-                    <div class="transaction-card__amount text-info">${formatCurrency(m.cantidad)}</div>
-                </div>
-            </div>`;
-    } else {
-        const cuenta = cuentas.find(c => c.id === m.cuentaId);
-        const concept = conceptos.find(c => c.id === m.conceptoId);
-        const amountClass = m.cantidad >= 0 ? 'text-positive' : 'text-negative';
-        const indicatorClass = m.cantidad >= 0 ? 'transaction-card__indicator--income' : 'transaction-card__indicator--expense';
-        cardContentHTML = `
-            <div class="transaction-card__indicator ${indicatorClass}"></div>
-            <div class="transaction-card__content">
-                <div class="transaction-card__details">
-                    <div class="transaction-card__row-1">${toSentenceCase(concept?.nombre || 'S/C')}</div>
-                    <div class="transaction-card__row-2">${formattedDate} • ${escapeHTML(m.descripcion)}</div>
-                </div>
-                <div class="transaction-card__figures">
-                    <div class="transaction-card__amount ${amountClass}">${formatCurrency(m.cantidad)}</div>
-                    <div class="transaction-card__balance">${formatCurrency(m.runningBalance)}</div>
-                    <div class="transaction-card__row-2" style="text-align: right;">${escapeHTML(cuenta?.nombre || 'S/C')}</div>
-                </div>
-            </div>`;
-    }
-    
- // Envolvemos el contenido de la tarjeta con el contenedor de swipe y sus acciones
-    return `
-    <div class="swipe-container list-item-animate">
-        <div class="swipe-actions-container left">
-            <button class="swipe-action-btn duplicate" data-action="swipe-duplicate-movement" data-id="${m.id}">
-                <span class="material-icons">content_copy</span>
-                <span>Duplicar</span>
-            </button>
-        </div>
-        <div class="swipe-actions-container right">
-            <button class="swipe-action-btn delete" data-action="swipe-delete-movement" data-id="${m.id}" data-is-recurrent="false">
-                <span class="material-icons">delete</span>
-                <span>Borrar</span>
-            </button>
-        </div>
-        <div class="transaction-card ${highlightClass}" data-id="${m.id}" data-action="edit-movement-from-list">
-            ${cardContentHTML}
-        </div>
-    </div>`;
+    return El('div', { cls: ['swipe-container', 'list-item-animate'], children: [
+        // Swipe Actions (Sin cambios)
+        El('div', { cls: ['swipe-actions-container', 'left'], children: [El('button', { cls: ['swipe-action-btn', 'duplicate'], attrs: { 'data-action': 'swipe-duplicate-movement', 'data-id': m.id }, children: [El('span', { cls: 'material-icons', text: 'content_copy' }), El('span', { text: 'Copiar' })]})]}),
+        El('div', { cls: ['swipe-actions-container', 'right'], children: [El('button', { cls: ['swipe-action-btn', 'delete'], attrs: { 'data-action': 'swipe-delete-movement', 'data-id': m.id }, children: [El('span', { cls: 'material-icons', text: 'delete' }), El('span', { text: 'Borrar' })]})]}),
+        
+        // Tarjeta
+        El('div', { 
+            cls: ['transaction-card', cardBorderClass, highlightClass], 
+            attrs: { 'data-id': m.id, 'data-action': 'edit-movement-from-list' }, 
+            children: [
+                El('div', { cls: 'transaction-card__details', children: [
+                    El('div', { cls: 'transaction-card__row-1', children: row1Content }),
+                    El('div', { cls: 'transaction-card__row-2', children: row2Content })
+                ]}),
+                El('div', { cls: 'transaction-card__figures', children: [
+                    El('div', { cls: ['transaction-card__amount', typeClass], text: amountText }),
+                    balanceDisplay
+                ].filter(Boolean) })
+            ]
+        })
+    ]});
 };
-// ▼▼▼ REEMPLAZA TU FUNCIÓN renderPortfolioEvolutionChart CON ESTA VERSIÓN ESPECTACULAR ▼▼▼
-
 /**
  * Renderiza un gráfico de área apilado que muestra la evolución del capital aportado y las ganancias/pérdidas.
  * @param {string} targetContainerId - El ID del contenedor donde se dibujará el gráfico.
@@ -5614,7 +6095,7 @@ const renderInicioResumenView = () => {
 
     destroyAllCharts();
 
-    const widgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
+    const widgetOrder = (db.config &&AppState.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
 
     // AHORA, esta función solo imprime los esqueletos con una etiqueta especial.
     resumenContentContainer.innerHTML = widgetOrder.map(widgetId => {
@@ -5704,7 +6185,7 @@ const renderInicioResumenView = () => {
     const now = new Date();
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     
-    const pending = db.recurrentes
+    const pending =AppState.recurrentes
     .filter(r => {
         // --- ¡ESTA ES LA CORRECCIÓN CLAVE! ---
         // Primero, nos aseguramos de que la fecha existe antes de intentar usarla.
@@ -5979,7 +6460,7 @@ const updateNetWorthChart = async (saldos) => {
     // ... El resto del cuerpo de la función para obtener datos y crear el gráfico
     // se mantiene EXACTAMENTE IGUAL que en la versión que ya tenéis...
     const visibleAccountIds = new Set(Object.keys(saldos));
-    const cuentas = db.cuentas.filter(c => visibleAccountIds.has(c.id));
+    const cuentas =AppState.cuentas.filter(c => visibleAccountIds.has(c.id));
 
     if (allMovements.length === 0 && cuentas.length === 0) {
         if(chartContainer) {
@@ -6287,7 +6768,7 @@ const updateDashboardData = async () => {
     // Misma lógica que ya tienes para calcular los totales por concepto
     const cTots = current.reduce((a, m) => {
         if (m.tipo === 'movimiento' && m.conceptoId) {
-            const con = db.conceptos.find((c) => c.id === m.conceptoId);
+            const con =AppState.conceptos.find((c) => c.id === m.conceptoId);
             if(con){
                 if (!a[m.conceptoId]) a[m.conceptoId] = { total: 0, movements: [], icon: con.icon || 'label' };
                 a[m.conceptoId].total += m.cantidad;
@@ -6302,7 +6783,7 @@ const updateDashboardData = async () => {
     // Dibuja el gráfico (sin cambios en esta parte)
     const colorSuccess = getComputedStyle(document.body).getPropertyValue('--c-chart-positive').trim();
     const colorDanger = getComputedStyle(document.body).getPropertyValue('--c-danger').trim();
-    conceptosChart = new Chart(chartCtx, { type: 'bar', data: { labels: sortedTotals.map(([id]) => toSentenceCase(db.conceptos.find(c => c.id === id)?.nombre || '?')), datasets: [{ data: sortedTotals.map(([, data]) => data.total / 100), backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger), borderRadius: 6, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (context) => `Total: ${formatCurrency(context.parsed.y * 100)}` } } }, scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } }, onClick: (event, elements) => { if (elements.length === 0) return; const index = elements[0].index; const [conceptoId, data] = sortedTotals[index]; const concepto = db.conceptos.find(c => c.id === conceptoId); const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Desconocido'; hapticFeedback('light'); showDrillDownModal(`Movimientos de: ${conceptoNombre}`, data.movements); }, onHover: (event, chartElement) => { event.native.target.style.cursor = chartElement.length ? 'pointer' : 'default'; } } });
+    conceptosChart = new Chart(chartCtx, { type: 'bar', data: { labels: sortedTotals.map(([id]) => toSentenceCase(db.conceptos.find(c => c.id === id)?.nombre || '?')), datasets: [{ data: sortedTotals.map(([, data]) => data.total / 100), backgroundColor: sortedTotals.map(([, data]) => data.total >= 0 ? colorSuccess : colorDanger), borderRadius: 6, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (context) => `Total: ${formatCurrency(context.parsed.y * 100)}` } } }, scales: { y: { ticks: { callback: (value) => `${value.toLocaleString('es-ES')}` } } }, onClick: (event, elements) => { if (elements.length === 0) return; const index = elements[0].index; const [conceptoId, data] = sortedTotals[index]; const concepto =AppState.conceptos.find(c => c.id === conceptoId); const conceptoNombre = concepto ? toSentenceCase(concepto.nombre) : 'Desconocido'; hapticFeedback('light'); showDrillDownModal(`Movimientos de: ${conceptoNombre}`, data.movements); }, onHover: (event, chartElement) => { event.native.target.style.cursor = chartElement.length ? 'pointer' : 'default'; } } });
 
     // --- ⭐ NUEVA LÓGICA PARA RENDERIZAR LA LISTA AGRUPADA ---
     
@@ -6318,7 +6799,7 @@ const updateDashboardData = async () => {
 
         // La función para renderizar cada fila (la hemos extraído para no repetir código)
         const renderRow = ([id, data]) => {
-            const concepto = db.conceptos.find(c => c.id === id);
+            const concepto =AppState.conceptos.find(c => c.id === id);
             const nombreConcepto = (concepto && concepto.nombre) || 'Desconocido';
             const amountClass = data.total >= 0 ? 'text-positive' : 'text-negative';
             const percentage = totalPeriodValue > 0 ? (Math.abs(data.total) / totalPeriodValue) * 100 : 0;
@@ -6378,7 +6859,7 @@ const renderInformeWidgetContent = async () => {
     const container = select('informe-widget-content');
     if (!container) return;
 
-    const reportConfig = db.config?.savedReports?.main;
+    const reportConfig =AppState.config?.savedReports?.main;
 
     if (!reportConfig) {
         container.innerHTML = `
@@ -6647,7 +7128,7 @@ const showDrillDownModal = (title, movements) => {
            <p>No se han encontrado movimientos para esta selección.</p>
        </div>`
     : movements.map(m => 
-          TransactionCardComponent(m, { cuentas: db.cuentas, conceptos: db.conceptos })
+          TransactionCardComponent(m, { cuentas:AppState.cuentas, conceptos:AppState.conceptos })
       )
       .join('')
       .replace(/data-action="edit-movement-from-list"/g, 'data-action="edit-movement-from-modal"');
@@ -6764,7 +7245,7 @@ const showAccountMovementsModal = async (cId) => {
         
         // ¡LA MAGIA SUCEDE AQUÍ! Usamos nuestra nueva función para preparar los datos.
         if (accountMovements.length > 0) {
-            recalculateAndApplyRunningBalances(accountMovements, db.cuentas);
+            recalculateAndApplyRunningBalances(accountMovements,AppState.cuentas);
         }
         
         // Llamamos directamente a showDrillDownModal, que ya sabe cómo mostrar la lista.
@@ -6799,7 +7280,7 @@ const showAccountMovementsModal = async (cId) => {
     // 3. ¡EL PASO CRÍTICO QUE FALTABA!
     // Calculamos los saldos acumulados para esta lista específica de movimientos.
     if (accountMovementsInPeriod.length > 0) {
-        recalculateAndApplyRunningBalances(accountMovementsInPeriod, db.cuentas);
+        recalculateAndApplyRunningBalances(accountMovementsInPeriod,AppState.cuentas);
     }
 
     // 4. Usamos la función de modal existente para mostrar el resultado ya procesado.
@@ -7010,15 +7491,15 @@ const performGlobalSearch = async (query) => {
     // --- SECCIÓN DE MOVIMIENTOS MEJORADA ---
     const movs = allMovements
         .map(m => {
-            const concepto = db.conceptos.find(c => c.id === m.conceptoId);
+            const concepto =AppState.conceptos.find(c => c.id === m.conceptoId);
             const conceptoNombre = (concepto && concepto.nombre) || '';
             let cuentaInfo = '';
             if (m.tipo === 'traspaso') {
-                const origen = db.cuentas.find(c => c.id === m.cuentaOrigenId);
-                const destino = db.cuentas.find(c => c.id === m.cuentaDestinoId);
+                const origen =AppState.cuentas.find(c => c.id === m.cuentaOrigenId);
+                const destino =AppState.cuentas.find(c => c.id === m.cuentaDestinoId);
                 cuentaInfo = `${(origen && origen.nombre) || ''} → ${(destino && destino.nombre) || ''}`;
             } else {
-                const cuenta = db.cuentas.find(c => c.id === m.cuentaId);
+                const cuenta =AppState.cuentas.find(c => c.id === m.cuentaId);
                 cuentaInfo = (cuenta && cuenta.nombre) || '';
             }
             const fecha = new Date(m.fecha).toLocaleDateString('es-ES');
@@ -7094,7 +7575,7 @@ const performGlobalSearch = async (query) => {
 
 		// REEMPLAZA tu función showValoracionModal con esta versión
 const showValoracionModal = (cuentaId) => {
-    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+    const cuenta =AppState.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) return;
 
     const fechaISO = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
@@ -7130,7 +7611,7 @@ const showValoracionModal = (cuentaId) => {
 const handleSaveValoracion = async (form, btn) => {
     setButtonLoading(btn, true);
     const cuentaId = form.dataset.id;
-    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+    const cuenta =AppState.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) {
         showToast("Error: No se pudo encontrar la cuenta.", "danger");
         setButtonLoading(btn, false);
@@ -7172,11 +7653,11 @@ const handleSaveValoracion = async (form, btn) => {
 
         if (existingIndex > -1) {
             // Si existe, la actualizamos directamente en la memoria.
-            db.inversiones_historial[existingIndex].valor = valorEnCentimos;
+           AppState.inversiones_historial[existingIndex].valor = valorEnCentimos;
         } else {
             // Si no existe, la añadimos a la memoria.
-            if (!db.inversiones_historial) db.inversiones_historial = [];
-            db.inversiones_historial.push({ id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
+            if (!db.inversiones_historial)AppState.inversiones_historial = [];
+           AppState.inversiones_historial.push({ id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
         }
 
         // 2. Nos aseguramos de que el filtro para este tipo de activo esté visible.
@@ -7298,20 +7779,22 @@ const showHelpModal = () => {
 };
 
 
- // REEMPLAZA LA FUNCIÓN ANTIGUA CON ESTA
-const handleToggleTheme = () => {
+ const handleToggleTheme = async () => {
     const themeKeys = Object.keys(THEMES);
+    // Leemos de la Bóveda en lugar de localStorage (si ya lo migraste) o del dataset
     const currentTheme = document.body.dataset.theme || 'default';
     const currentIndex = themeKeys.indexOf(currentTheme);
     const nextIndex = (currentIndex + 1) % themeKeys.length;
     const newTheme = themeKeys[nextIndex];
-
+    
     document.body.dataset.theme = newTheme;
-    localStorage.setItem('appTheme', newTheme);
+    
+    // Guardamos en la Bóveda de forma asíncrona
+    await Vault.set('appTheme', newTheme);
+    
     hapticFeedback('light');
-    updateThemeIcon(); // No necesita parámetro, ahora es más inteligente
-
-    // Esto es importante para que los gráficos recarguen sus colores
+    updateThemeIcon();
+    
     if (conceptosChart) conceptosChart.destroy();
     if (liquidAssetsChart) liquidAssetsChart.destroy();
     
@@ -7335,25 +7818,78 @@ const handleToggleTheme = () => {
             renderConceptosModalList(); 
         };
         
-        const renderConceptosModalList = () => { 
-            const list = select('conceptos-modal-list'); 
-            if (!list) return;
-			 const searchQuery = select('concepto-search-input')?.value.toLowerCase() || '';
-    const conceptosFiltrados = (db.conceptos || []).filter(c => 
-        c.nombre.toLowerCase().includes(searchQuery)
-    );
-            list.innerHTML = conceptosFiltrados.length === 0 
-                ? `<p style="font-size:var(--fs-sm); color:var(--c-on-surface-secondary); text-align:center; padding: var(--sp-4) 0;">No hay conceptos.</p>` 
-                : conceptosFiltrados.sort((a,b) => a.nombre.localeCompare(b.nombre)).map((c) => {
-                    const icon = (c && c.icon) || 'label';
-                    const nombre = (c && c.nombre) || '';
-                    return `<div id="concepto-item-${c.id}" class="modal__list-item"><div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;"><span class="material-icons" style="color: var(--c-primary);">${icon}</span><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(nombre)}</span></div><div style="display: flex; align-items: center; gap: var(--sp-1); flex-shrink: 0;"><button class="icon-btn" data-action="edit-concepto" data-id="${c.id}" title="Editar Concepto"><span class="material-icons">edit_note</span></button><button class="icon-btn" data-action="delete-concepto" data-id="${c.id}" title="Eliminar Concepto"><span class="material-icons">delete_outline</span></button></div></div>`;
-                }).join(''); 
-        };
+        const renderConceptosModalList = () => {
+    const list = select('conceptos-modal-list');
+    if (!list) return;
+
+    // Limpiamos la lista de forma segura
+    list.textContent = ''; 
+
+    const searchQuery = select('concepto-search-input')?.value.toLowerCase() || '';
+    const conceptosFiltrados = (AppState.conceptos || []) // Usamos AppState directamente
+        .filter(c => c.nombre.toLowerCase().includes(searchQuery))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    if (conceptosFiltrados.length === 0) {
+        list.appendChild(
+            El('p', { 
+                text: 'No hay conceptos que coincidan.', 
+                attrs: { style: 'text-align:center; padding: 20px; color: var(--c-on-surface-secondary);' } 
+            })
+        );
+        return;
+    }
+
+    // Usamos un Fragmento para insertar todo de golpe (Mejora rendimiento)
+    const fragment = document.createDocumentFragment();
+
+    conceptosFiltrados.forEach(c => {
+        const item = El('div', {
+            cls: 'modal__list-item',
+            attrs: { id: `concepto-item-${c.id}` },
+            children: [
+                // Parte Izquierda: Icono y Nombre
+                El('div', {
+                    attrs: { style: 'display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;' },
+                    children: [
+                        El('span', { 
+                            cls: 'material-icons', 
+                            text: c.icon || 'label', 
+                            attrs: { style: 'color: var(--c-primary);' } 
+                        }),
+                        El('span', { 
+                            text: c.nombre, 
+                            attrs: { style: 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' } 
+                        })
+                    ]
+                }),
+                // Parte Derecha: Botones
+                El('div', {
+                    attrs: { style: 'display: flex; gap: 8px;' },
+                    children: [
+                        El('button', {
+                            cls: 'icon-btn',
+                            attrs: { 'data-action': 'edit-concepto', 'data-id': c.id, 'title': 'Editar' },
+                            children: [ El('span', { cls: 'material-icons', text: 'edit_note' }) ]
+                        }),
+                        El('button', {
+                            cls: 'icon-btn',
+                            attrs: { 'data-action': 'delete-concepto', 'data-id': c.id, 'title': 'Eliminar' },
+                            children: [ El('span', { cls: 'material-icons', text: 'delete_outline' }) ]
+                        })
+                    ]
+                })
+            ]
+        });
+        fragment.appendChild(item);
+    });
+
+    list.appendChild(fragment);
+};
         
         const showConceptoEditForm = (id) => {
             const itemContainer = select(`concepto-item-${id}`);
-            const concepto = db.conceptos.find(c => c.id === id);
+            const concepto =AppState.conceptos.find(c => c.id === id);
             if (!itemContainer || !concepto) return;
             itemContainer.innerHTML = `
                 <form class="inline-edit-form" data-id="${id}" novalidate>
@@ -7409,7 +7945,7 @@ const handleToggleTheme = () => {
     
         const showAccountEditForm = (id) => {
             const itemContainer = select(`cuenta-item-${id}`);
-            const cuenta = db.cuentas.find(c => c.id === id);
+            const cuenta =AppState.cuentas.find(c => c.id === id);
             if (!itemContainer || !cuenta) return;
             itemContainer.innerHTML = `
                 <form class="inline-edit-form" data-id="${id}" novalidate>
@@ -7518,7 +8054,7 @@ const handleToggleTheme = () => {
 // === INICIO: MODAL DE CONFIGURACIÓN DE WIDGETS (v2.2 - VERSIÓN FINAL) ===
 // =========================================================================
 const showDashboardConfigModal = () => {
-    const savedWidgetOrder = (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
+    const savedWidgetOrder = (db.config &&AppState.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS;
     const widgetOrder = savedWidgetOrder.filter(widgetId => AVAILABLE_WIDGETS[widgetId]);
     
     let listHtml = widgetOrder.map(widgetId => 
@@ -7565,9 +8101,9 @@ const handleSaveDashboardConfig = async (btn) => {
         .filter(item => item.querySelector('input[type="checkbox"]').checked)
         .map(item => item.dataset.id);
 
-    if (!db.config) db.config = {};
-    db.config.dashboardWidgets = newOrder;
-    await fbDb.collection('users').doc(currentUser.uid).set({ config: db.config }, { merge: true });
+    if (!db.config)AppState.config = {};
+   AppState.config.dashboardWidgets = newOrder;
+    await fbDb.collection('users').doc(currentUser.uid).set({ config:AppState.config }, { merge: true });
     
     setButtonLoading(btn, false);
     hideModal('generic-modal');
@@ -7630,7 +8166,7 @@ const handleGenerateInformeCuenta = async (form, btn) => {
         return;
     }
 
-    const cuenta = db.cuentas.find(c => c.id === cuentaId);
+    const cuenta =AppState.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) {
          showToast("Cuenta no encontrada.", "danger");
          setButtonLoading(btn, false);
@@ -7738,7 +8274,7 @@ const handleGenerateInformeCuenta = async (form, btn) => {
             // 3. BUCLE PARA AÑADIR LAS FILAS DE MOVIMIENTOS Y CALCULAR TOTALES
             for (const mov of movementsForMonth) {
                 // Añadir la fila del movimiento al HTML
-                resultadoHtml += renderInformeCuentaRow(mov, cuentaId, db.cuentas); // Usa el runningBalance precalculado
+                resultadoHtml += renderInformeCuentaRow(mov, cuentaId,AppState.cuentas); // Usa el runningBalance precalculado
 
                 // Calcular el impacto de este movimiento y sumarlo a los totales del mes
                 const impact = calculateAccountImpact(mov, cuentaId);
@@ -7934,7 +8470,7 @@ const attachEventListeners = () => {
             },
             'context-duplicate': () => {
                 hideModal('generic-modal');
-                const movement = db.movimientos.find(m => m.id === id);
+                const movement =AppState.movimientos.find(m => m.id === id);
                 if(movement) handleDuplicateMovement(movement);
             },
             'context-delete': () => {
@@ -8001,7 +8537,7 @@ const attachEventListeners = () => {
             },
             'show-day-details': () => {
                 const date = actionTarget.dataset.date;
-                const movementsOfDay = db.movimientos.filter(m => m.fecha.startsWith(date));
+                const movementsOfDay =AppState.movimientos.filter(m => m.fecha.startsWith(date));
                 if (movementsOfDay.length > 0) {
                     const formattedDate = new Date(date + 'T12:00:00Z').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
                     showDrillDownModal(`Movimientos del ${formattedDate}`, movementsOfDay);
@@ -8050,7 +8586,7 @@ const attachEventListeners = () => {
             'delete-movement-from-modal': () => { const isRecurrent = (actionTarget.dataset.isRecurrent === 'true'); const idToDelete = select('movimiento-id').value; const message = isRecurrent ? '¿Seguro que quieres eliminar esta operación recurrente?' : '¿Seguro que quieres eliminar este movimiento?'; showConfirmationModal(message, async () => { hideModal('movimiento-modal'); await deleteMovementAndAdjustBalance(idToDelete, isRecurrent); }); },
             'swipe-delete-movement': () => { const isRecurrent = actionTarget.dataset.isRecurrent === 'true'; showConfirmationModal('¿Seguro que quieres eliminar este movimiento?', async () => { await deleteMovementAndAdjustBalance(id, isRecurrent); }); },
             'swipe-duplicate-movement': () => {
-                const movement = db.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id);
+                const movement =AppState.movimientos.find(m => m.id === id) || recentMovementsCache.find(m => m.id === id);
                 if (movement) {
                     handleDuplicateMovement(movement);
                 }
@@ -8096,7 +8632,39 @@ const attachEventListeners = () => {
                     'Confirmar Auditoría Completa'
                 );
             }, 'json-wizard-back-2': () => goToJSONStep(1), 'json-wizard-import-final': () => handleFinalJsonImport(btn),
-            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 'set-pin': async () => { const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo."); if (pin === null) return; if (pin === "") { localStorage.removeItem('pinUserHash'); localStorage.removeItem('pinUserEmail'); showToast('PIN de acceso rápido eliminado.', 'info'); return; } if (!/^\d{4}$/.test(pin)) { showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger'); return; } const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos."); if (pin !== pinConfirm) { showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger'); return; } const pinHash = await hashPin(pin); localStorage.setItem('pinUserHash', pinHash); localStorage.setItem('pinUserEmail', currentUser.email); hapticFeedback('success'); showToast('¡PIN de acceso rápido configurado con éxito!', 'info'); },
+            'toggle-traspaso-accounts-filter': () => populateTraspasoDropdowns(), 
+			'set-pin': async () => { // <--- El async ya debería estar aquí
+    const pin = prompt("Introduce tu nuevo PIN de 4 dígitos. Déjalo en blanco para eliminarlo.");
+    if (pin === null) return;
+    
+    if (pin === "") {
+        // Borramos de la Bóveda
+        await Vault.delete('pinUserHash', 'security');
+        await Vault.delete('pinUserEmail', 'security');
+        showToast('PIN de acceso rápido eliminado.', 'info');
+        return;
+    }
+    
+    if (!/^\d{4}$/.test(pin)) {
+        showToast('El PIN debe contener exactamente 4 dígitos numéricos.', 'danger');
+        return;
+    }
+    
+    const pinConfirm = prompt("Confirma tu nuevo PIN de 4 dígitos.");
+    if (pin !== pinConfirm) {
+        showToast('Los PINs no coinciden. Inténtalo de nuevo.', 'danger');
+        return;
+    }
+    
+    const pinHash = await hashPin(pin);
+    
+    // Guardamos en la Bóveda
+    await Vault.set('pinUserHash', pinHash, 'security');
+    await Vault.set('pinUserEmail', currentUser.email, 'security');
+    
+    hapticFeedback('success');
+    showToast('¡PIN de acceso rápido configurado con éxito!', 'info');
+},
             'edit-recurrente-from-pending': () => startMovementForm(id, true),
             'confirm-recurrent': () => handleConfirmRecurrent(id, btn), 'skip-recurrent': () => handleSkipRecurrent(id, btn),
             };
@@ -8476,13 +9044,13 @@ const toggleFabMenu = () => {
 const handleConfirmRecurrent = async (id, btn) => {
     if (btn) setButtonLoading(btn, true);
 
-    const recurrenteIndex = db.recurrentes.findIndex(r => r.id === id);
+    const recurrenteIndex =AppState.recurrentes.findIndex(r => r.id === id);
     if (recurrenteIndex === -1) {
         showToast("Error: no se encontró la operación recurrente.", "danger");
         if (btn) setButtonLoading(btn, false);
         return;
     }
-    const recurrente = db.recurrentes[recurrenteIndex];
+    const recurrente =AppState.recurrentes[recurrenteIndex];
 
     try {
         const newMovementId = generateId();
@@ -8500,16 +9068,16 @@ const handleConfirmRecurrent = async (id, btn) => {
             cuentaDestinoId: recurrente.cuentaDestinoId
         };
         
-        db.movimientos.unshift(newMovementData);
+       AppState.movimientos.unshift(newMovementData);
 
         // === ¡AQUÍ ESTÁ LA MAGIA! ===
         if (recurrente.frequency === 'once') {
             // Si es de única vez, lo eliminamos de la lista local de recurrentes.
-            db.recurrentes.splice(recurrenteIndex, 1);
+           AppState.recurrentes.splice(recurrenteIndex, 1);
         } else {
             // Si es periódico, calculamos la siguiente fecha.
             const nextDueDate = calculateNextDueDate(recurrente.nextDate, recurrente.frequency);
-            db.recurrentes[recurrenteIndex].nextDate = nextDueDate.toISOString().slice(0, 10);
+           AppState.recurrentes[recurrenteIndex].nextDate = nextDueDate.toISOString().slice(0, 10);
         }
         
         // Refrescamos la UI al instante
@@ -8565,7 +9133,7 @@ const handleConfirmRecurrent = async (id, btn) => {
 const handleSkipRecurrent = async (id, btn) => {
     if (btn) setButtonLoading(btn, true);
 
-    const recurrente = db.recurrentes.find(r => r.id === id);
+    const recurrente =AppState.recurrentes.find(r => r.id === id);
     if (!recurrente) {
         showToast("Error: no se encontró la operación recurrente.", "danger");
         if (btn) setButtonLoading(btn, false);
@@ -8739,24 +9307,24 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     // Revertir el impacto del movimiento antiguo si estamos editando
     if (oldData) {
         if (oldData.tipo === 'traspaso') {
-            const origen = db.cuentas.find(c => c.id === oldData.cuentaOrigenId);
+            const origen =AppState.cuentas.find(c => c.id === oldData.cuentaOrigenId);
             if (origen) origen.saldo += oldData.cantidad;
-            const destino = db.cuentas.find(c => c.id === oldData.cuentaDestinoId);
+            const destino =AppState.cuentas.find(c => c.id === oldData.cuentaDestinoId);
             if (destino) destino.saldo -= oldData.cantidad;
         } else {
-            const cuenta = db.cuentas.find(c => c.id === oldData.cuentaId);
+            const cuenta =AppState.cuentas.find(c => c.id === oldData.cuentaId);
             if (cuenta) cuenta.saldo -= oldData.cantidad;
         }
     }
 
     // Aplicar el impacto del nuevo movimiento
     if (newData.tipo === 'traspaso') {
-        const origen = db.cuentas.find(c => c.id === newData.cuentaOrigenId);
+        const origen =AppState.cuentas.find(c => c.id === newData.cuentaOrigenId);
         if (origen) origen.saldo -= newData.cantidad;
-        const destino = db.cuentas.find(c => c.id === newData.cuentaDestinoId);
+        const destino =AppState.cuentas.find(c => c.id === newData.cuentaDestinoId);
         if (destino) destino.saldo += newData.cantidad;
     } else {
-        const cuenta = db.cuentas.find(c => c.id === newData.cuentaId);
+        const cuenta =AppState.cuentas.find(c => c.id === newData.cuentaId);
         if (cuenta) cuenta.saldo += newData.cantidad;
     }
 };
@@ -8823,6 +9391,7 @@ const handleSaveMovement = async (form, btn) => {
             if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
                 renderPlanificacionPage();
             }
+			saveApp();
             return true;
 
         } catch (error) {
@@ -8879,19 +9448,19 @@ const handleSaveMovement = async (form, btn) => {
     try {
         let oldMovementData = null;
         if (mode.startsWith('edit')) {
-            oldMovementData = db.movimientos.find(m => m.id === dataFromForm.id) || null;
+            oldMovementData =AppState.movimientos.find(m => m.id === dataFromForm.id) || null;
         }
         
         applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
 
         if (mode.startsWith('edit')) {
-            const index = db.movimientos.findIndex(m => m.id === dataFromForm.id);
-            if (index !== -1) db.movimientos[index] = dataFromForm;
+            const index =AppState.movimientos.findIndex(m => m.id === dataFromForm.id);
+            if (index !== -1)AppState.movimientos[index] = dataFromForm;
         } else {
-            db.movimientos.unshift(dataFromForm);
+           AppState.movimientos.unshift(dataFromForm);
             newMovementIdToHighlight = dataFromForm.id;
         }
-        db.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
+       AppState.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
 
         updateLocalDataAndRefreshUI();
         
@@ -9018,7 +9587,7 @@ const handleAddConcept = async (btn) => {
  };
  const handleSaveConfig = async (btn) => { 
      setButtonLoading(btn, true);
-     const newConfig = { dashboardWidgets: (db.config && db.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS };
+     const newConfig = { dashboardWidgets: (db.config &&AppState.config.dashboardWidgets) || DEFAULT_DASHBOARD_WIDGETS };
      await fbDb.collection('users').doc(currentUser.uid).set({ config: newConfig }, { merge: true });
      localStorage.setItem('skipIntro', String(newConfig.skipIntro));
      setButtonLoading(btn, false);
@@ -9037,7 +9606,7 @@ const handleAddConcept = async (btn) => {
              const snapshot = await fbDb.collection('users').doc(currentUser.uid).collection(collectionName).get();
              dataPayload[collectionName] = snapshot.docs.map(doc => doc.data());
          }
-         dataPayload.config = db.config;
+         dataPayload.config =AppState.config;
 
          const exportObject = {
              meta: {
@@ -9081,8 +9650,8 @@ const handleAddConcept = async (btn) => {
      
      try {
          const allMovements = await fetchAllMovementsForSearch();
-         const allCuentas = db.cuentas;
-         const allConceptos = db.conceptos;
+         const allCuentas =AppState.cuentas;
+         const allConceptos =AppState.conceptos;
 
          const cuentasMap = new Map(allCuentas.map(c => [c.id, c]));
          const conceptosMap = new Map(allConceptos.map(c => [c.id, c]));
@@ -9519,13 +10088,13 @@ const deleteMovementAndAdjustBalance = async (id, isRecurrent = false) => {
         // 1. ELIMINACIÓN DE DATOS (Optimista e Inmediata)
         let itemToDelete;
         if (isRecurrent) {
-            const index = db.recurrentes.findIndex(r => r.id === id);
+            const index =AppState.recurrentes.findIndex(r => r.id === id);
             if (index === -1) throw new Error("Recurrente no encontrado.");
-            [itemToDelete] = db.recurrentes.splice(index, 1);
+            [itemToDelete] =AppState.recurrentes.splice(index, 1);
         } else {
-            const index = db.movimientos.findIndex(m => m.id === id);
+            const index =AppState.movimientos.findIndex(m => m.id === id);
             if (index === -1) throw new Error("Movimiento no encontrado.");
-            [itemToDelete] = db.movimientos.splice(index, 1);
+            [itemToDelete] =AppState.movimientos.splice(index, 1);
         }
 
         // 2. EFECTO VISUAL (Si el elemento está en pantalla)
@@ -9635,7 +10204,7 @@ const handleSaveInvestmentAccounts = async (form, btn) => {
     setButtonLoading(btn, true);
     const selectedIds = new Set(Array.from(form.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value));
     const batch = fbDb.batch();
-    db.cuentas.forEach(c => {
+   AppState.cuentas.forEach(c => {
         const ref = fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(c.id);
         batch.update(ref, { esInversion: selectedIds.has(c.id) });
     });
@@ -9961,7 +10530,7 @@ const handleInteractionEnd = (e) => {
     swipeState.isSwipeIntent = false;
 };
 const showContextMenuForMovement = (movementId) => {
-    const movement = db.movimientos.find(m => m.id === movementId);
+    const movement =AppState.movimientos.find(m => m.id === movementId);
     if (!movement) return;
 
     const html = `
@@ -10068,8 +10637,8 @@ const handleDescriptionInput = () => {
 
             // 5. El resto del código simplemente muestra la lista de sugerencias, como ya hacía antes.
             suggestionsBox.innerHTML = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).map(s => {
-                const concepto = db.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
-                const cuenta = db.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
+                const concepto =AppState.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
+                const cuenta =AppState.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
                 return `
                     <div class="suggestion-item" 
                          data-action="apply-description-suggestion"
