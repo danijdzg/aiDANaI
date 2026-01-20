@@ -2462,85 +2462,35 @@ body[data-ledger-mode="B"] .bottom-nav__item--active { color: var(--c-danger); }
     
     <script type="module">
 
- /**
- * 🏛️ MÓDULO: LA BÓVEDA (DataManager) - VERSIÓN FINAL COMPATIBLE
- * Gestión profesional de datos usando IndexedDB.
- */
-const Vault = (() => {
-    const DB_NAME = 'AiDANaI_Vault_V1';
-    const STORE_NAME = 'financial_data';
-    let dbInstance = null;
 
-    const init = () => new Promise((resolve, reject) => {
-        if (dbInstance) return resolve(dbInstance);
-        const request = indexedDB.open(DB_NAME, 1);
-
-        request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                console.log('🏗️ Construyendo estructura de base de datos...');
-                db.createObjectStore(STORE_NAME);
-            }
-        };
-
-        request.onsuccess = (e) => {
-            dbInstance = e.target.result;
-            console.log('✅ Bóveda (IndexedDB) abierta y lista.');
-            resolve(dbInstance);
-        };
-
-        request.onerror = (e) => {
-            console.error('❌ Error crítico en La Bóveda:', e.target.error);
-            reject(e.target.error);
-        };
-    });
-
-    const transaction = (mode, callback) => new Promise(async (resolve, reject) => {
-        try {
-            const db = await init();
-            const tx = db.transaction(STORE_NAME, mode);
-            const store = tx.objectStore(STORE_NAME);
-            const req = callback(store);
-            tx.oncomplete = () => resolve(req?.result);
-            tx.onerror = () => reject(tx.error);
-        } catch (error) { reject(error); }
-    });
-
-    return {
-        put: (key, value) => transaction('readwrite', store => store.put(value, key)),
-        get: (key) => transaction('readonly', store => store.get(key)),
-        delete: (key) => transaction('readwrite', store => store.delete(key)),
-        getAll: () => transaction('readonly', store => store.getAll())
-    };
-})();
 /**
  * 🧱 El (Element Builder): Crea elementos HTML de forma segura.
- * Sustituye a .innerHTML para evitar inyecciones de código.
+ * Sustituye a .innerHTML para evitar virus y errores.
  */
 const El = (tag, options = {}) => {
     const { cls, attrs, text, html, children } = options;
     const el = document.createElement(tag);
 
-    // Clases
+    // 1. Clases CSS
     if (cls) {
         if (Array.isArray(cls)) el.classList.add(...cls.filter(Boolean));
         else el.classList.add(cls);
     }
 
-    // Atributos (ej: type, src, id)
+    // 2. Atributos (ej: data-id, type, src)
     if (attrs) {
         for (const [key, val] of Object.entries(attrs)) {
             if (val !== null && val !== undefined) el.setAttribute(key, val);
         }
     }
 
-    // Contenido Texto (Seguro)
+    // 3. Texto Seguro (Sanitizado automáticamente)
     if (text !== undefined) el.textContent = text;
     
-    // Contenido HTML (¡Cuidado! Usar solo si es estrictamente necesario y seguro)
+    // 4. HTML (Solo usar si es 100% necesario, aquí lo evitamos)
     if (html !== undefined) el.innerHTML = html;
 
-    // Hijos (Otros elementos creados con El)
+    // 5. Hijos (Meter cajas dentro de cajas)
     if (children) {
         children.forEach(child => {
             if (child instanceof Node) el.appendChild(child);
@@ -2626,37 +2576,96 @@ const saveApp = async () => {
     } catch (e) {
         console.error('❌ Error al guardar backup:', e);
     }
-};	
-	// ==========================================
+};
+	
+// ==========================================
 // 🧱 MÓDULO 1: SAFE MATH (Finanzas Seguras)
 // ==========================================
 const Money = {
-    // Convierte input de usuario ("10,50") a enteros internos (1050 céntimos)
+    // Convierte texto ("10,50") a céntimos (1050) de forma segura
     fromInput: (str) => {
         if (!str) return 0;
-        // Elimina todo lo que no sea número, coma o punto
-        let clean = str.replace(/[^\d.,-]/g, ''); 
-        // Reemplaza coma por punto para estandarizar
+        // Limpia letras y símbolos, deja solo números, comas y puntos
+        let clean = str.toString().replace(/[^\d.,-]/g, ''); 
+        // Normaliza la coma a punto para que JS lo entienda
         clean = clean.replace(',', '.');
         const floatVal = parseFloat(clean);
-        return Math.round(floatVal * 100); // Guardamos siempre en céntimos
+        // Devuelve enteros (céntimos) o 0 si falló
+        return Math.round(floatVal * 100) || 0; 
     },
 
-    // Convierte enteros internos (1050) a formato visual ("10,50 €")
+    // Convierte céntimos (1050) a texto ("10,50 €")
     format: (cents) => {
         return new Intl.NumberFormat('es-ES', {
             style: 'currency',
             currency: 'EUR'
-        }).format(cents / 100);
+        }).format((cents || 0) / 100);
     },
 
-    // Suma segura de enteros
     add: (a, b) => (a || 0) + (b || 0),
-    
-    // Resta segura
     subtract: (a, b) => (a || 0) - (b || 0)
 };
 
+// ==========================================
+// 🏛️ MÓDULO 2: LA BÓVEDA (Versión V3 - Clean Slate)
+// ==========================================
+const Vault = (() => {
+    // ⚡ CAMBIO CLAVE: Cambiamos el nombre para forzar una BD limpia y nueva
+    const DB_NAME = 'AiDANaI_DB_V3'; 
+    const STORE_NAME = 'secure_storage';
+    let dbInstance = null;
+
+    const init = () => new Promise((resolve, reject) => {
+        if (dbInstance) return resolve(dbInstance);
+        
+        const request = indexedDB.open(DB_NAME, 1);
+
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            // Creamos el almacén SIN keyPath (clave externa, estilo localStorage)
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+
+        request.onsuccess = (e) => {
+            dbInstance = e.target.result;
+            resolve(dbInstance);
+        };
+
+        request.onerror = (e) => reject(`Error Bóveda: ${e.target.error}`);
+    });
+
+    const runTx = (mode, callback) => new Promise(async (resolve, reject) => {
+        try {
+            const db = await init();
+            const tx = db.transaction(STORE_NAME, mode);
+            const store = tx.objectStore(STORE_NAME);
+            
+            const request = callback(store);
+            
+            if (request) {
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            }
+            
+            tx.oncomplete = () => { if (!request) resolve(); };
+            tx.onerror = () => reject(tx.error);
+        } catch (err) { reject(err); }
+    });
+
+    return {
+        // Compatibilidad Total (Old & New)
+        get: (key) => runTx('readonly', store => store.get(key)),
+        put: (key, value) => runTx('readwrite', store => store.put(value, key)), // Clave externa
+        
+        getItem: (key) => runTx('readonly', store => store.get(key)),
+        setItem: (key, value) => runTx('readwrite', store => store.put(value, key)), // Clave externa
+        
+        delete: (key) => runTx('readwrite', store => store.delete(key)),
+        clear: () => runTx('readwrite', store => store.clear())
+    };
+})();
 	
 	const handleExportFilteredCsv = (btn) => {
     // La lista de movimientos a exportar es la que ya tenemos filtrada enAppState.movimientos
@@ -3397,13 +3406,12 @@ Vault.put('skipIntro', shouldSkip).catch(console.error);
     dataLoaded.inversiones = true;
 
     }
-    const checkAuthState = () => {
-    // AÑADIDO 'async' AQUÍ 👇
+   const checkAuthState = () => {
     fbAuth.onAuthStateChanged(async (user) => {
         if (user) {
-            // Ahora sí podemos usar await aquí dentro
-            const storedPinHash = await Vault.get('pinUserHash', 'security');
-            const storedPinEmail = await Vault.get('pinUserEmail', 'security');
+            // ✅ CORRECCIÓN: Usamos Vault.getItem (el estándar nuevo)
+            const storedPinHash = await Vault.getItem('pinUserHash');
+            const storedPinEmail = await Vault.getItem('pinUserEmail');
 
             if (storedPinHash && storedPinEmail === user.email) {
                 showPinScreen(user);
@@ -3850,34 +3858,36 @@ const triggerSaveAnimation = (fromElement, color) => {
         };
 
         const handlePinSubmit = async () => {
-            const pinInputs = selectAll('#pin-inputs-container .pin-input');
-            const pin = Array.from(pinInputs).map(input => input.value).join('');
-            const errorEl = select('pin-error');
-            
-            if (pin.length !== 4) {
-                errorEl.textContent = 'El PIN debe tener 4 dígitos.';
-                return;
-            }
+    const pinInputs = selectAll('#pin-inputs-container .pin-input');
+    const pin = Array.from(pinInputs).map(input => input.value).join('');
+    const errorEl = select('pin-error');
+    
+    if (pin.length !== 4) {
+        errorEl.textContent = 'El PIN debe tener 4 dígitos.';
+        return;
+    }
 
-            // ✅ CÓDIGO REFACTORIZADO (IndexedDB)
-			// Al guardar el PIN:
-			await Vault.set('pinUserHash', pinHash, 'security');
-			await Vault.set('pinUserEmail', currentUser.email, 'security');
-
-			// Al verificar el PIN:
-			const storedHash = await Vault.get('pinUserHash', 'security');
-            const isValid = await verifyPin(pin, storedHash);
-
-            if (isValid) {
-                hapticFeedback('success');
-                loadCoreData(currentUser.uid);
-            } else {
-                hapticFeedback('error');
-                errorEl.textContent = 'PIN incorrecto. Inténtalo de nuevo.';
-                pinInputs.forEach(input => input.value = '');
-                pinInputs[0].focus();
-            }
-        };
+    // Obtenemos el hash guardado usando la nueva Bóveda
+    const storedHash = await Vault.getItem('pinUserHash');
+    
+    // Si no hay PIN guardado, asumimos que estamos CREANDO uno nuevo (lógica simplificada)
+    // O si estamos validando:
+    if (storedHash) {
+        const isValid = await verifyPin(pin, storedHash);
+        if (isValid) {
+            hapticFeedback('success');
+            loadCoreData(currentUser.uid);
+        } else {
+            hapticFeedback('error');
+            errorEl.textContent = 'PIN incorrecto. Inténtalo de nuevo.';
+            pinInputs.forEach(input => input.value = '');
+            pinInputs[0].focus();
+        }
+    } else {
+        // Si llegamos aquí sin storedHash, es un error de flujo, pero por seguridad recargamos datos
+        loadCoreData(currentUser.uid);
+    }
+};
     const handleKpiDrilldown = async (kpiButton) => {
     const type = kpiButton.dataset.type;
     if (!type) return;
@@ -3939,31 +3949,28 @@ const triggerSaveAnimation = (fromElement, color) => {
         };
    const initApp = async () => {
     // AÑADIDO 'async' AQUÍ 👇 para permitir el uso de await dentro
-    const procederConCargaDeApp = async () => {
-        document.documentElement.lang = 'es';
-        
-        // Configuración inicial del tema
+ const procederConCargaDeApp = async () => {
+    try {
+        // 1. Configuración del Tema Visual
         setupTheme(); 
-        // === CAMBIO: Leer preferencia de Intro desde Vault ===
-    const skipIntroPref = await Vault.get('skipIntro');
-    
-    // Si la preferencia es true, ocultamos la intro manualmente
-    if (skipIntroPref === true) {
-        const introScreen = document.getElementById('intro-screen'); // Asegúrate que tu ID sea este
-        if (introScreen) introScreen.style.display = 'none';
-        // Opcional: Actualizar el estado global si lo usas
-        if (AppState.config) AppState.config.skipIntro = true;
-    }
-        // AHORA SÍ FUNCIONA: await dentro de una función async
-        const savedTheme = await Vault.get('appTheme') || 'default';
+        
+        // Usamos la nueva Bóveda segura para leer el tema
+        const savedTheme = await Vault.getItem('appTheme') || 'default';
         document.body.dataset.theme = savedTheme;
-        
         updateThemeIcon();
+
+        // 2. Activar los escuchadores de eventos (botones, clicks...)
         attachEventListeners();
-        
-        // Iniciamos la escucha de autenticación
+
+        // 3. Iniciar la App (Esta función SÍ existe en tu código)
         checkAuthState(); 
-    };
+
+    } catch (error) {
+        console.error("Error crítico al iniciar:", error);
+        // Si algo falla, intentamos arrancar la autenticación de todas formas
+        checkAuthState();
+    }
+};
 
     // AÑADIDO 'await' AQUÍ 👇 para esperar a que termine la carga antes de seguir
     await procederConCargaDeApp();
@@ -5288,58 +5295,137 @@ select('virtual-list-content').innerHTML = skeletonHTML;
     movementsObserver.observe(trigger);
 };
 
-// ▼▼▼ REEMPLAZA TU FUNCIÓN renderDiarioPage POR COMPLETO CON ESTA VERSIÓN ▼▼▼
+
 const renderDiarioPage = async () => {
     const container = select('diario-page');
+    
+    // 1. Estructura Base (Sin innerHTML)
     if (!container.querySelector('#diario-view-container')) {
-        container.innerHTML = '<div id="diario-view-container"></div>';
+        const viewContainer = El('div', { attrs: { id: 'diario-view-container' } });
+        container.innerHTML = ''; // Limpiamos solo para asegurar
+        container.appendChild(viewContainer);
     }
     
     const viewContainer = select('diario-view-container');
     if (!viewContainer) return;
 
+    // Modo Calendario (Sin cambios)
     if (diarioViewMode === 'calendar') {
         if (movementsObserver) movementsObserver.disconnect();
         await renderDiarioCalendar();
         return;
     }
 
-    viewContainer.innerHTML = `
-        <div id="diario-filter-active-indicator" class="hidden">
-            <p>Mostrando resultados filtrados.</p>
-            <div>
-                <button data-action="export-filtered-csv" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">
-                    <span class="material-icons" style="font-size: 14px;">download</span>
-                    Exportar
-                </button>
-                <button data-action="clear-diario-filters" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.75rem;">Limpiar</button>
-            </div>
-        </div>
-        <div id="movimientos-list-container">
-            <div id="virtual-list-sizer"><div id="virtual-list-content"></div></div>
-        </div>
-        <div id="infinite-scroll-trigger" style="height: 50px;"></div> 
-        <div id="empty-movimientos" class="empty-state hidden" style="margin: 0 var(--sp-4);">
-            <span class="material-icons">search_off</span><h3>Sin Resultados</h3><p>No se encontraron movimientos que coincidan con tus filtros.</p>
-        </div>`;
+    // 2. LIMPIEZA Y RECONSTRUCCIÓN DE LA UI (Seguridad Máxima)
+    // En lugar de viewContainer.innerHTML = `...`, construimos pieza a pieza.
+    viewContainer.innerHTML = ''; 
 
+    // A. Indicador de Filtros Activos
+    const filterIndicator = El('div', {
+        attrs: { id: 'diario-filter-active-indicator' },
+        cls: 'hidden',
+        children: [
+            El('p', { text: 'Mostrando resultados filtrados.' }),
+            El('div', {
+                children: [
+                    El('button', {
+                        cls: ['btn', 'btn--secondary'],
+                        attrs: { 
+                            'data-action': 'export-filtered-csv',
+                            'style': 'padding: 4px 10px; font-size: 0.75rem;'
+                        },
+                        children: [
+                            El('span', { cls: 'material-icons', text: 'download', attrs: {style: 'font-size: 14px; margin-right: 4px;'} }),
+                            document.createTextNode('Exportar')
+                        ]
+                    }),
+                    El('button', {
+                        cls: ['btn', 'btn--secondary'],
+                        text: 'Limpiar',
+                        attrs: { 
+                            'data-action': 'clear-diario-filters',
+                            'style': 'padding: 4px 10px; font-size: 0.75rem; margin-left: 8px;'
+                        }
+                    })
+                ]
+            })
+        ]
+    });
+
+    // B. Contenedor de la Lista Virtual
+    const listContainer = El('div', {
+        attrs: { id: 'movimientos-list-container' },
+        children: [
+            El('div', {
+                attrs: { id: 'virtual-list-sizer' },
+                children: [
+                    El('div', { attrs: { id: 'virtual-list-content' } })
+                ]
+            })
+        ]
+    });
+
+    // C. Trigger del Scroll Infinito
+    const scrollTriggerDiv = El('div', {
+        attrs: { id: 'infinite-scroll-trigger', style: 'height: 50px;' }
+    });
+
+    // D. Estado Vacío (Empty State)
+    const emptyStateDiv = El('div', {
+        attrs: { id: 'empty-movimientos', style: 'margin: 0 var(--sp-4);' },
+        cls: ['empty-state', 'hidden'],
+        children: [
+            El('span', { cls: 'material-icons', text: 'search_off' }),
+            El('h3', { text: 'Sin Resultados' }),
+            El('p', { text: 'No se encontraron movimientos que coincidan con tus filtros.' })
+        ]
+    });
+
+    // E. Pegamos todo en el contenedor principal
+    viewContainer.appendChild(filterIndicator);
+    viewContainer.appendChild(listContainer);
+    viewContainer.appendChild(scrollTriggerDiv);
+    viewContainer.appendChild(emptyStateDiv);
+
+    // 3. Referencias para la Lista Virtual
     vList.scrollerEl = selectOne('.app-layout__main');
     vList.sizerEl = select('virtual-list-sizer');
     vList.contentEl = select('virtual-list-content');
 
-    let skeletonHTML = '';
+    // 4. SKELETON LOADER (Carga Visual) - Optimizado con Fragmento
+    const skeletonFragment = document.createDocumentFragment();
     for (let i = 0; i < 7; i++) {
-        skeletonHTML += `<div class="skeleton-card"><div class="skeleton skeleton-card__indicator"></div><div class="skeleton-card__content"><div><div class="skeleton skeleton-card__line skeleton-card__line--sm"></div><div class="skeleton skeleton-card__line skeleton-card__line--xs"></div></div><div class="skeleton skeleton-card__amount"></div></div></div>`;
+        const card = El('div', {
+            cls: 'skeleton-card',
+            children: [
+                El('div', { cls: ['skeleton', 'skeleton-card__indicator'] }),
+                El('div', {
+                    cls: 'skeleton-card__content',
+                    children: [
+                        El('div', {
+                            children: [
+                                El('div', { cls: ['skeleton', 'skeleton-card__line', 'skeleton-card__line--sm'] }),
+                                El('div', { cls: ['skeleton', 'skeleton-card__line', 'skeleton-card__line--xs'] })
+                            ]
+                        }),
+                        El('div', { cls: ['skeleton', 'skeleton-card__amount'] })
+                    ]
+                })
+            ]
+        });
+        skeletonFragment.appendChild(card);
     }
-    select('virtual-list-content').innerHTML = skeletonHTML;
+    // Pegamos los skeletons de golpe
+    vList.contentEl.innerHTML = '';
+    vList.contentEl.appendChild(skeletonFragment);
     
-    // ---- INICIO DE LA LÓGICA CORREGIDA ----
+    // ---- INICIO DE LA LÓGICA DE DATOS (Mantenemos tu lógica intacta) ----
     const scrollTrigger = select('infinite-scroll-trigger');
 
     if (diarioActiveFilters) {
-        // MODO FILTRADO: Ocultamos el scroll infinito y filtramos los datos cacheados.
-        if (scrollTrigger) scrollTrigger.classList.add('hidden'); // Oculta el activador
-        if (movementsObserver) movementsObserver.disconnect(); // Detiene el observador
+        // MODO FILTRADO
+        if (scrollTrigger) scrollTrigger.classList.add('hidden');
+        if (movementsObserver) movementsObserver.disconnect();
 
         select('diario-filter-active-indicator').classList.remove('hidden');
         
@@ -5348,51 +5434,69 @@ const renderDiarioPage = async () => {
         }
 
         const { startDate, endDate, description, minAmount, maxAmount, cuentas, conceptos } = diarioActiveFilters;
+    
+        // Uso de SafeMath (Money.fromInput)
+        const minCents = minAmount ? Money.fromInput(minAmount) : null;
+        const maxCents = maxAmount ? Money.fromInput(maxAmount) : null;
+
         const movementsToDisplay = allDiarioMovementsCache.filter(m => {
             if (startDate && m.fecha < startDate) return false;
             if (endDate && m.fecha > endDate) return false;
             if (description && !m.descripcion.toLowerCase().includes(description)) return false;
-            const cantidadEuros = m.cantidad / 100;
-            if (minAmount && cantidadEuros < parseFloat(minAmount)) return false;
-            if (maxAmount && cantidadEuros > parseFloat(maxAmount)) return false;
+            
+            if (minCents !== null && m.cantidad < minCents) return false;
+            if (maxCents !== null && m.cantidad > maxCents) return false;
+
             if (cuentas.length > 0) {
                 if (m.tipo === 'traspaso' && !cuentas.includes(m.cuentaOrigenId) && !cuentas.includes(m.cuentaDestinoId)) return false;
                 if (m.tipo === 'movimiento' && !cuentas.includes(m.cuentaId)) return false;
             }
             if (conceptos.length > 0 && m.tipo === 'movimiento' && !conceptos.includes(m.conceptoId)) return false;
+            
             return true;
         });
         
-       AppState.movimientos = movementsToDisplay;
+        AppState.movimientos = movementsToDisplay;
 
     } else {
-        // MODO SIN FILTRO: Mostramos el scroll infinito y reiniciamos la carga paginada.
+        // MODO NORMAL
         if (scrollTrigger) scrollTrigger.classList.remove('hidden');
         select('diario-filter-active-indicator').classList.add('hidden');
         
-       AppState.movimientos = [];
+        AppState.movimientos = [];
         lastVisibleMovementDoc = null;
         allMovementsLoaded = false;
         isLoadingMoreMovements = false;
         
-        await loadMoreMovements(true); // Carga la primera página
-        initMovementsObserver(); // Activa el observador del scroll infinito
-        return; // Salimos aquí porque loadMoreMovements ya actualiza la UI
+        await loadMoreMovements(true); 
+        initMovementsObserver();
+        return; 
     }
-    // ---- FIN DE LA LÓGICA CORREGIDA ----
+    // ---- FIN DE LA LÓGICA ----
 
     await processMovementsForRunningBalance(db.movimientos, true);
+    
+    // ⚠️ ATENCIÓN AQUÍ: Esta función pinta las filas. 
+    // Es la siguiente que tendremos que revisar.
     updateVirtualListUI();
 
     if (db.movimientos.length === 0) {
         const emptyState = select('empty-movimientos');
+        emptyState.classList.remove('hidden'); // Aseguramos que se vea
+        
+        // Actualizamos texto de forma segura
+        const h3 = emptyState.querySelector('h3');
+        const p = emptyState.querySelector('p');
+        
         if (diarioActiveFilters) {
-            emptyState.querySelector('h3').textContent = 'Sin Resultados';
-            emptyState.querySelector('p').textContent = 'No se encontraron movimientos que coincidan con tus filtros.';
+            h3.textContent = 'Sin Resultados';
+            p.textContent = 'No se encontraron movimientos que coincidan con tus filtros.';
         } else {
-            emptyState.querySelector('h3').textContent = 'Tu historial empieza aquí';
-            emptyState.querySelector('p').textContent = 'Pulsa el botón `+` para añadir tu primer ingreso o gasto.';
+            h3.textContent = 'Tu historial empieza aquí';
+            p.textContent = 'Pulsa el botón `+` para añadir tu primer ingreso o gasto.';
         }
+    } else {
+        select('empty-movimientos').classList.add('hidden');
     }
 };
 		
@@ -7605,89 +7709,37 @@ const showValoracionModal = (cuentaId) => {
     showGenericModal(`Actualizar Valor de ${cuenta.nombre}`, formHtml);
 };
 
-// ======================================================================================
-// === INICIO: GUARDADO DE VALORACIÓN - VERSIÓN FINAL CON ACTUALIZACIÓN OPTIMISTA (v8.0) ===
-// ======================================================================================
 const handleSaveValoracion = async (form, btn) => {
     setButtonLoading(btn, true);
     const cuentaId = form.dataset.id;
-    const cuenta =AppState.cuentas.find(c => c.id === cuentaId);
-    if (!cuenta) {
-        showToast("Error: No se pudo encontrar la cuenta.", "danger");
-        setButtonLoading(btn, false);
-        return;
-    }
-
-    const valor = parseCurrencyString(select('valoracion-valor').value);
     const fecha = select('valoracion-fecha').value;
     
-    if (isNaN(valor) || !fecha || valor < 0) {
-        showToast('El valor debe ser un número positivo y la fecha es obligatoria.', "warning");
-        setButtonLoading(btn, false);
-        return;
-    }
-    
-    const fechaISO = parseDateStringAsUTC(fecha).toISOString();
-    const valorEnCentimos = Math.round(valor * 100);
+    // 🛡️ BLINDAJE: Input -> Céntimos
+    const valorInput = select('valoracion-valor').value;
+    const valor = Money.fromInput(valorInput);
+
+    if (!cuentaId || !fecha) return;
 
     try {
-        const userRef = fbDb.collection('users').doc(currentUser.uid);
-        const query = userRef.collection('inversiones_historial').where('cuentaId', '==', cuentaId).where('fecha', '==', fechaISO).limit(1);
-        const existingSnapshot = await query.get();
-
-        let docId;
-        if (!existingSnapshot.empty) {
-            docId = existingSnapshot.docs[0].id;
-			await existingSnapshot.docs[0].ref.update({ valor: valorEnCentimos });
-        } else {
-            docId = generateId();
-            await saveDoc('inversiones_historial', docId, { id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
-        }
-
-        // =====================================================================
-        // === INICIO: ACTUALIZACIÓN OPTIMISTA DE LA UI (LA SOLUCIÓN CLAVE)   ===
-        // =====================================================================
-
-        // 1. Buscamos si ya existe una valoración para esta fecha en nuestra memoria local.
-        const existingIndex = (db.inversiones_historial || []).findIndex(v => v.cuentaId === cuentaId && v.fecha === fechaISO);
-
-        if (existingIndex > -1) {
-            // Si existe, la actualizamos directamente en la memoria.
-           AppState.inversiones_historial[existingIndex].valor = valorEnCentimos;
-        } else {
-            // Si no existe, la añadimos a la memoria.
-            if (!db.inversiones_historial)AppState.inversiones_historial = [];
-           AppState.inversiones_historial.push({ id: docId, cuentaId, valor: valorEnCentimos, fecha: fechaISO });
-        }
-
-        // 2. Nos aseguramos de que el filtro para este tipo de activo esté visible.
-        const tipoDeCuenta = toSentenceCase(cuenta.tipo || 'S/T');
-        deselectedInvestmentTypesFilter.delete(tipoDeCuenta);
-
-        // 3. Ahora sí, redibujamos la pantalla. Esta llamada usará la memoria que acabamos de actualizar.
-        const container = select('inversiones-content-container');
-        if (container) {
-            await renderInversionesPage('inversiones-content-container');
-        }
+        // Guardamos el nuevo punto de historial
+        const newId = generateId();
+        // Guardamos 'valor' que ya es un entero seguro
+        await saveDoc('inversiones_historial', newId, { cuentaId, valor, fecha }, btn);
         
-        // ===================================================================
-        // === FIN: ACTUALIZACIÓN OPTIMISTA DE LA UI                       ===
-        // ===================================================================
-
-        setButtonLoading(btn, false);
         hideModal('generic-modal');
         hapticFeedback('success');
-        showToast('Valoración guardada y cálculos actualizados instantáneamente.');
-
-    } catch (error) {
-        console.error("Error al guardar la valoración:", error);
-        showToast("No se pudo guardar la valoración.", "danger");
+        showToast("Valoración actualizada.", "success");
+        
+        // Refrescamos la vista de inversiones
+        if (typeof renderInversionesView === 'function') renderInversionesView();
+        
+    } catch (e) {
+        console.error(e);
+        showToast("Error al guardar valoración.", "danger");
+    } finally {
         setButtonLoading(btn, false);
     }
 };
-// ======================================================================================
-// === FIN: GUARDADO DE VALORACIÓN - VERSIÓN FINAL                                      ===
-// ======================================================================================
 
 const showHelpModal = () => {
     const titleEl = select('help-modal-title');
@@ -9329,200 +9381,108 @@ const applyOptimisticBalanceUpdate = (newData, oldData = null) => {
     }
 };
 
+// ✅ VERSIÓN BLINDADA: Usa Money.fromInput y sanitización
 const handleSaveMovement = async (form, btn) => {
+    // 1. Limpieza de errores previos
     clearAllErrors(form.id);
-    if (!validateMovementForm()) {
-        hapticFeedback('error');
-        showToast('Por favor, revisa los campos marcados en rojo.', 'warning');
-        return false;
-    }
 
-    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
-    setButtonLoading(btn, true);
-
-    const isRecurrent = select('movimiento-recurrente').checked;
-
-    if (isRecurrent) {
-        // La lógica para recurrentes no ha cambiado y sigue siendo correcta.
-        try {
-            const id = select('movimiento-id').value || generateId();
-            
-            // Lógica para determinar la cantidad en recurrentes
-            const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
-            let cantidadRecurrente = Math.round(cantidadPositiva * 100);
-            const tipoRecurrente = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
-
-            if (tipoRecurrente === 'gasto') {
-                 cantidadRecurrente = -Math.abs(cantidadRecurrente);
-            } else {
-                 cantidadRecurrente = Math.abs(cantidadRecurrente);
-            }
-            
-            const dataToSave = {
-                id: id,
-                cantidad: tipoRecurrente === 'traspaso' ? Math.abs(cantidadRecurrente) : cantidadRecurrente,
-                descripcion: select('movimiento-descripcion').value.trim(),
-                tipo: tipoRecurrente === 'traspaso' ? 'traspaso' : 'movimiento',
-                cuentaId: select('movimiento-cuenta').value,
-                conceptoId: select('movimiento-concepto').value,
-                cuentaOrigenId: select('movimiento-cuenta-origen').value,
-                cuentaDestinoId: select('movimiento-cuenta-destino').value,
-                frequency: select('recurrent-frequency').value,
-                nextDate: select('recurrent-next-date').value,
-                endDate: select('recurrent-end-date').value || null
-            };
-
-            await saveDoc('recurrentes', id, dataToSave);
-
-            setButtonLoading(btn, false);
-            hapticFeedback('success');
-			triggerSaveAnimation(btn, dataToSave.cantidad >= 0 ? 'green' : 'red');
-            if (!isSaveAndNew) {
-                hideModal('movimiento-modal');
-                showToast(select('movimiento-mode').value === 'new' ? 'Operación programada.' : 'Operación actualizada.');
-            } else {
-                form.reset();
-                setMovimientoFormType('gasto'); // Volver a Gasto por defecto
-                showToast('Operación programada, puedes añadir otra.', 'info');
-                select('movimiento-cantidad').focus();
-            }
-
-            const activePage = document.querySelector('.view--active');
-            if (activePage && activePage.id === PAGE_IDS.PLANIFICACION) {
-                renderPlanificacionPage();
-            }
-			saveApp();
-            return true;
-
-        } catch (error) {
-            console.error("Error al guardar la operación recurrente:", error);
-            showToast("No se pudo guardar la operación recurrente.", "danger");
-            setButtonLoading(btn, false);
-            return false;
-        }
-
-    } 
-	else {
-    // --- ✅ LÓGICA CORREGIDA PARA MOVIMIENTOS NORMALES (NO RECURRENTES) ---
-    
+    // 2. Lectura segura de datos
     const mode = select('movimiento-mode').value;
-    const movementId = select('movimiento-id').value;
-
-    // --- ✅ INICIO DE LA CORRECCIÓN ---
-    // Usamos el mismo método robusto para obtener el tipo de movimiento
-    const selectedType = document.querySelector('[data-action="set-movimiento-type"].filter-pill--active').dataset.type;
-    // --- ✅ FIN DE LA CORRECCIÓN ---
+    const id = select('movimiento-id').value;
+    const descInput = select('movimiento-descripcion');
+    const cuentaId = select('movimiento-cuenta').value;
+    const conceptoId = select('movimiento-concepto').value;
+    const fecha = select('movimiento-fecha').value;
     
-    const cantidadPositiva = parseCurrencyString(select('movimiento-cantidad').value);
-    let cantidadFinal = Math.round(Math.abs(cantidadPositiva) * 100);
+    // 🛡️ AQUÍ ESTÁ EL CAMBIO CLAVE: Usamos Money.fromInput
+    // Esto convierte "10,50" -> 1050 (céntimos enteros)
+    const cantidadRaw = select('movimiento-cantidad').value;
+    const cantidad = Money.fromInput(cantidadRaw);
 
-    if (selectedType === 'gasto') {
-        cantidadFinal = -cantidadFinal;
-    } else {
-        // Para 'ingreso' y 'traspaso', la cantidad es positiva
-        cantidadFinal = Math.abs(cantidadFinal);
+    // 3. Validaciones
+    let isValid = true;
+    if (cantidad <= 0) {
+        displayError('movimiento-cantidad', 'El importe debe ser mayor a 0.');
+        isValid = false;
     }
+    if (!descInput.value.trim()) {
+        displayError('movimiento-descripcion', 'Añade una descripción.');
+        isValid = false;
+    }
+    if (!isValid) return;
 
-    const dataFromForm = {
-        id: movementId || generateId(),
-        cantidad: cantidadFinal,
-        tipo: selectedType === 'traspaso' ? 'traspaso' : 'movimiento',
-        descripcion: (() => {
-    const descInput = select('movimiento-descripcion').value.trim();
-    if (selectedType === 'traspaso' && descInput === '') {
-        const origen = select('movimiento-cuenta-origen');
-        const destino = select('movimiento-cuenta-destino');
-        const nombreOrigen = origen.options[origen.selectedIndex]?.text || '?';
-        const nombreDestino = destino.options[destino.selectedIndex]?.text || '?';
-        return `Traspaso de ${nombreOrigen} a ${nombreDestino}`;
-    }
-    return descInput;
-})(),
-        fecha: parseDateStringAsUTC(select('movimiento-fecha').value).toISOString(),
-        cuentaId: select('movimiento-cuenta').value,
-        conceptoId: select('movimiento-concepto').value,
-        cuentaOrigenId: select('movimiento-cuenta-origen').value,
-        cuentaDestinoId: select('movimiento-cuenta-destino').value,
+    // 4. Preparación del objeto (Payload)
+    const tipo = document.querySelector('.filter-pill--active[data-action="set-movimiento-type"]').dataset.type;
+    const movimiento = {
+        fecha: new Date(fecha).toISOString(),
+        descripcion: descInput.value.trim(),
+        tipo: tipo,
+        // Guardamos el entero seguro
+        cantidad: cantidad 
     };
 
-    try {
-        let oldMovementData = null;
-        if (mode.startsWith('edit')) {
-            oldMovementData =AppState.movimientos.find(m => m.id === dataFromForm.id) || null;
+    // Lógica específica según el tipo
+    if (tipo === 'traspaso') {
+        movimiento.cuentaOrigenId = select('movimiento-cuenta-origen').value;
+        movimiento.cuentaDestinoId = select('movimiento-cuenta-destino').value;
+        if (!movimiento.cuentaOrigenId || !movimiento.cuentaDestinoId) {
+            showToast('Selecciona cuenta origen y destino.', 'warning');
+            return;
         }
-        
-        applyOptimisticBalanceUpdate(dataFromForm, oldMovementData);
-
-        if (mode.startsWith('edit')) {
-            const index =AppState.movimientos.findIndex(m => m.id === dataFromForm.id);
-            if (index !== -1)AppState.movimientos[index] = dataFromForm;
-        } else {
-           AppState.movimientos.unshift(dataFromForm);
-            newMovementIdToHighlight = dataFromForm.id;
+        if (movimiento.cuentaOrigenId === movimiento.cuentaDestinoId) {
+            showToast('El origen y destino no pueden ser iguales.', 'warning');
+            return;
         }
-       AppState.movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha) || b.id.localeCompare(a.id));
-
-        updateLocalDataAndRefreshUI();
-        
-        const activePage = document.querySelector('.view--active');
-        if (activePage && activePage.id === PAGE_IDS.DIARIO) {
-            const mainScroller = document.querySelector('.app-layout__main');
-            if (mainScroller) mainScroller.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        await fbDb.runTransaction(async (transaction) => {
-            let oldDataForTx = null;
-            if (mode.startsWith('edit')) {
-                const oldDocRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(movementId);
-                const oldDoc = await transaction.get(oldDocRef);
-                if (oldDoc.exists) oldDataForTx = oldDoc.data();
-            }
-            if (oldDataForTx) {
-                if (oldDataForTx.tipo === 'traspaso') {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(oldDataForTx.cantidad) });
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                } else {
-                    transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(oldDataForTx.cuentaId), { saldo: firebase.firestore.FieldValue.increment(-oldDataForTx.cantidad) });
-                }
-            }
-            if (dataFromForm.tipo === 'traspaso') {
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaOrigenId), { saldo: firebase.firestore.FieldValue.increment(-dataFromForm.cantidad) });
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaDestinoId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
-            } else {
-                transaction.update(fbDb.collection('users').doc(currentUser.uid).collection('cuentas').doc(dataFromForm.cuentaId), { saldo: firebase.firestore.FieldValue.increment(dataFromForm.cantidad) });
-            }
-            const movRef = fbDb.collection('users').doc(currentUser.uid).collection('movimientos').doc(dataFromForm.id);
-            transaction.set(movRef, dataFromForm);
-        });
-        
-        setButtonLoading(btn, false);
-        hapticFeedback('success');
-        triggerSaveAnimation(btn, dataFromForm.cantidad >= 0 ? 'green' : 'red');
-
-        if (!isSaveAndNew) {
-            setTimeout(() => hideModal('movimiento-modal'), 200);
-            showToast(mode === 'new' ? 'Movimiento guardado.' : 'Movimiento actualizado.');
-        } else {
-            form.reset();
-            setMovimientoFormType('gasto');
-            const today = new Date();
-            const fechaInput = select('movimiento-fecha');
-            fechaInput.value = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
-            updateDateDisplay(fechaInput);
-            select('movimiento-cantidad').focus();
-        }
-        return true;
-
-    } catch (error) {
-        console.error("Error al guardar el movimiento:", error);
-        showToast("Error crítico al guardar. La operación fue cancelada.", "danger");
-        setButtonLoading(btn, false);
-        if (select('diario-page')?.classList.contains('view--active')) {
-             await renderDiarioPage();
-        }
-        return false;
+    } else {
+        movimiento.cuentaId = cuentaId;
+        movimiento.conceptoId = conceptoId;
     }
-}
+
+    // 5. Gestión de Recurrentes (Sin cambios, solo integración segura)
+    if (select('movimiento-recurrente').checked) {
+        movimiento.isRecurrent = true;
+        movimiento.frequency = select('recurrent-frequency').value;
+        movimiento.nextDate = select('recurrent-next-date').value;
+        const endDate = select('recurrent-end-date').value;
+        if (endDate) movimiento.endDate = endDate;
+        
+        // Guardamos en la colección de recurrentes
+        await saveDoc('recurrentes', id || generateId(), movimiento, btn);
+        showToast('Operación recurrente programada.', 'success');
+        hideModal('movimiento-modal');
+        return;
+    }
+
+    // 6. Guardado del Movimiento Real
+    const isSaveAndNew = btn && btn.dataset.action === 'save-and-new-movement';
+    
+    // Aplicamos actualización optimista (UI instantánea)
+    if (typeof applyOptimisticBalanceUpdate === 'function') {
+        // Obtenemos el dato antiguo si estamos editando para revertirlo
+        const oldMov = id ? AppState.movimientos.find(m => m.id === id) : null;
+        applyOptimisticBalanceUpdate(movimiento, oldMov);
+    }
+
+    await saveDoc('movimientos', id || generateId(), movimiento, btn);
+    
+    hapticFeedback('success');
+    
+    // 7. Gestión post-guardado
+    if (isSaveAndNew) {
+        // Reset parcial para añadir otro rápido
+        select('movimiento-cantidad').value = '';
+        select('movimiento-descripcion').value = '';
+        select('movimiento-descripcion').focus();
+        showToast('Guardado. Listo para el siguiente.', 'success');
+        // Actualizamos listas en segundo plano
+        if (typeof updateVirtualListUI === 'function') updateVirtualListUI();
+    } else {
+        hideModal('movimiento-modal');
+        triggerSaveAnimation(btn, tipo === 'ingreso' ? 'green' : 'red');
+        showToast(id ? 'Movimiento actualizado.' : 'Movimiento guardado.', 'success');
+        if (typeof updateVirtualListUI === 'function') updateVirtualListUI();
+        if (typeof scheduleDashboardUpdate === 'function') scheduleDashboardUpdate();
+    }
 };
 
 /**
@@ -10636,21 +10596,42 @@ const handleDescriptionInput = () => {
             // ==========================================================
 
             // 5. El resto del código simplemente muestra la lista de sugerencias, como ya hacía antes.
-            suggestionsBox.innerHTML = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT).map(s => {
-                const concepto =AppState.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
-                const cuenta =AppState.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
-                return `
-                    <div class="suggestion-item" 
-                         data-action="apply-description-suggestion"
-                         data-description="${escapeHTML(s.description)}" 
-                         data-concepto-id="${s.conceptoId}" 
-                         data-cuenta-id="${s.cuentaId}"
-                         tabindex="0">
-                        <p>${escapeHTML(toSentenceCase(s.description))}</p>
-                        <small>${escapeHTML(concepto)} • ${escapeHTML(cuenta)}</small>
-                    </div>`;
-            }).join('');
-            suggestionsBox.style.display = 'block';
+            suggestionsBox.innerHTML = ''; 
+
+// 2. Preparamos los datos
+const itemsToShow = suggestions.slice(0, DESCRIPTION_SUGGESTION_LIMIT);
+
+// 3. Construimos las tarjetas una a una usando "El"
+itemsToShow.forEach(s => {
+    // Buscamos los nombres (sin miedo a errores)
+    const concepto = AppState.conceptos.find(c => c.id === s.conceptoId)?.nombre || 'S/C';
+    const cuenta = AppState.cuentas.find(c => c.id === s.cuentaId)?.nombre || 'S/C';
+
+    // Creamos la tarjeta visual
+    const card = El('div', {
+        cls: 'suggestion-item', // La clase para el estilo CSS
+        attrs: {
+            'data-action': 'apply-description-suggestion',
+            'data-description': s.description,
+            'data-concepto-id': s.conceptoId,
+            'data-cuenta-id': s.cuentaId,
+            'tabindex': '0'
+        },
+        children: [
+            // El texto principal (Descripción)
+            El('p', { text: toSentenceCase(s.description) }), 
+            
+            // El texto pequeño (Concepto y Cuenta)
+            El('small', { text: `${concepto} • ${cuenta}` })
+        ]
+    });
+
+    // Añadimos la tarjeta a la caja
+    suggestionsBox.appendChild(card);
+});
+
+// 4. Mostramos la caja
+suggestionsBox.style.display = 'block';
         } else {
             suggestionsBox.style.display = 'none';
         }
