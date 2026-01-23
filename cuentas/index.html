@@ -2645,6 +2645,18 @@ html, body {
     
     <script type="module">
 
+// --- HERRAMIENTA DE SEGURIDAD (ANTI-HACKERS) ---
+// Esta función convierte caracteres peligrosos en texto inofensivo.
+const escapeHTML = (str) => {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+// ----------------------------------------------
 
 /**
  * 🎨 UI ENGINE (Motor Gráfico)
@@ -4219,8 +4231,7 @@ const triggerSaveAnimation = (fromElement, color) => {
             const step = (timestamp) => { if (!startTime) startTime = timestamp; const p = Math.min((timestamp - startTime) / duration, 1); const current = p * (end - start*100) + start*100; el.textContent = formatAsCurrency ? formatCurrency(current) : `${prefix}${current.toFixed(2)}${suffix}`; if (p < 1) requestAnimationFrame(step); else el.textContent = formatAsCurrency ? formatCurrency(end) : `${prefix}${end/100}${suffix}`; };
             requestAnimationFrame(step);
         };
-        const escapeHTML = str => (str || '').replace(/[&<>"']/g, match => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[match]);
-        
+              
         const parseCurrencyString = (str) => {
             if (typeof str !== 'string' || !str.trim()) return NaN;
             
@@ -5740,7 +5751,7 @@ const createCardHTML = (m, cuentas, conceptos) => {
     
     // Colores de Icono
     let colorClass = isTraspaso ? 'text-blue' : (isGasto ? 'text-red' : 'text-green');
-
+    
     // Flecha separadora estética
     const flecha = '<span style="color:#666; margin:0 5px;">➔</span>';
 
@@ -5749,48 +5760,73 @@ const createCardHTML = (m, cuentas, conceptos) => {
 
     if (isTraspaso) {
         // --- TRASPASOS ---
-        const origen = cuentas.find(c => c.id === m.cuentaOrigenId)?.nombre || 'Origen';
-        const destino = cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || 'Destino';
+        const origenObj = cuentas.find(c => c.id === m.cuentaOrigenId);
+        const destinoObj = cuentas.find(c => c.id === m.cuentaDestinoId);
         
-        // Fila 1 Izq: CUENTA A ---> CUENTA B (Azul)
+        const origen = escapeHTML(origenObj ? origenObj.nombre : 'Origen');
+        const destino = escapeHTML(destinoObj ? destinoObj.nombre : 'Destino');
+
+        // Fila 1 Izq: CUENTA A ---> CUENTA B
         row1Left = `<span class="${colorClass}">${origen.toUpperCase()} ${flecha} ${destino.toUpperCase()}</span>`;
         
-        // Fila 1 Der: Importe (Azul)
+        // Fila 1 Der: Importe del Traspaso
         row1Right = `<span class="${colorClass}">${formatCurrency(Math.abs(m.cantidad))}</span>`;
         
-        // Fila 2 Izq: SALDO A ---> SALDO B (Blanco, Grande y a la Izquierda)
-        const sOut = m.runningBalanceOrigen != null ? formatCurrency(m.runningBalanceOrigen) : '---';
-        const sIn = m.runningBalanceDestino != null ? formatCurrency(m.runningBalanceDestino) : '---';
+        // --- CORRECCIÓN DE SALDOS ---
+        // 1. Intentamos leer saldo origen específico, si no existe, usamos el genérico 'runningBalance'
+        const valOrigen = (m.runningBalanceOrigen !== undefined && m.runningBalanceOrigen !== null) 
+                          ? m.runningBalanceOrigen 
+                          : m.runningBalance;
+                          
+        // 2. Intentamos leer saldo destino
+        const valDestino = m.runningBalanceDestino; 
+
+        // 3. Formateamos textos
+        const sOut = (valOrigen !== undefined && valOrigen !== null) ? formatCurrency(valOrigen) : '';
+        const sIn = (valDestino !== undefined && valDestino !== null) ? formatCurrency(valDestino) : '';
+
+        // 4. Decidimos qué pintar según qué datos tengamos
+        if (sOut && sIn) {
+            // Tenemos ambos: Pintamos "100€ -> 200€"
+            row2Left = `<span style="color:#FFFFFF; font-size:1rem; font-weight:700;">${sOut} ${flecha} ${sIn}</span>`;
+        } else if (sOut) {
+            // Solo tenemos origen: Pintamos "100€" (mejor que nada)
+            row2Left = `<span style="color:#FFFFFF; font-size:1rem; font-weight:700;">${sOut}</span>`;
+        } else {
+            // No hay saldos calculados en este registro: Dejamos vacío o ponemos guión discreto
+            row2Left = `<span style="color:#666; font-size:0.9rem;">--</span>`;
+        }
         
-        // APLICAMOS EL ESTILO SOLICITADO: Blanco y mismo tamaño que cantidad (aprox 1rem)
-        row2Left = `<span style="color:#FFFFFF; font-size:1rem; font-weight:700;">${sOut} ${flecha} ${sIn}</span>`;
-        
-        // Fila 2 Der: Vacía (según instrucción)
-        row2Right = '';
+        row2Right = ''; // En traspasos la derecha abajo va vacía para no saturar
 
     } else {
         // --- INGRESOS Y PAGOS ---
-        const concepto = conceptos.find(c => c.id === m.conceptoId)?.nombre || 'Varios';
-        const desc = m.descripcion || ''; 
-        const cuenta = cuentas.find(c => c.id === m.cuentaId)?.nombre || 'Cuenta';
+        const conceptoObj = conceptos.find(c => c.id === m.conceptoId);
+        const cuentaObj = cuentas.find(c => c.id === m.cuentaId);
+        
+        // 🛡️ SEGURIDAD XSS: Limpiamos todo texto que venga del usuario
+        // Esto convierte "<script>" en "&lt;script&gt;" para que no se ejecute
+        const concepto = escapeHTML(conceptoObj ? conceptoObj.nombre : 'Varios');
+        const desc = escapeHTML(m.descripcion || '');
+        const cuenta = escapeHTML(cuentaObj ? cuentaObj.nombre : 'Cuenta');
 
         // Fila 1 Izq: CONCEPTO ---> DETALLE (Blanco Puro)
         if (desc) {
-            // Forzamos color blanco puro (#FFF)
             row1Left = `<span style="color:#FFFFFF;">${concepto} ${flecha} ${desc}</span>`;
         } else {
             row1Left = `<span style="color:#FFFFFF;">${concepto}</span>`;
         }
-        
+
         // Fila 1 Der: Importe (Color según tipo)
         row1Right = `<span class="${colorClass}">${formatCurrency(m.cantidad)}</span>`;
-        
+
         // Fila 2 Izq: CUENTA (Mayúsculas y Color)
         row2Left = `<span class="${colorClass}">${cuenta.toUpperCase()}</span>`;
-        
+
         // Fila 2 Der: SALDO (Blanco, Grande y a la Derecha)
         const saldo = m.runningBalance != null ? formatCurrency(m.runningBalance) : '';
-        // APLICAMOS EL ESTILO SOLICITADO: Blanco y tamaño grande
+        
+        // Estilo: Blanco y tamaño grande
         row2Right = `<span style="color:#FFFFFF; font-size:1rem; font-weight:700;">${saldo}</span>`;
     }
 
@@ -5800,14 +5836,14 @@ const createCardHTML = (m, cuentas, conceptos) => {
         <div class="tx-symbol-left ${colorClass}">
             <span class="material-icons">${iconLeft}</span>
         </div>
-
         <div class="tx-row1-left">${row1Left}</div>
         <div class="tx-row2-left" style="white-space:nowrap;">${row2Left}</div>
-
         <div class="tx-row1-right">${row1Right}</div>
         <div class="tx-row2-right">${row2Right}</div>
     </div>`;
 };
+
+
 // 2. LÓGICA DE LISTA VIRTUAL (Posicionamiento Absoluto para precisión)
 let diarioItems = []; // Almacén de items calculados
 
