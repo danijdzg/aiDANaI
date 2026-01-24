@@ -5832,7 +5832,7 @@ const createCardHTML = (m, cuentas, conceptos) => {
 
     // C. Construcción del HTML
     return `
-    <div class="transaction-card" data-id="${m.id}">
+    <div class="transaction-card" data-id="${m.id}" data-action="edit-movement-from-list" style="cursor: pointer;">
         <div class="tx-symbol-left ${colorClass}">
             <span class="material-icons">${iconLeft}</span>
         </div>
@@ -5841,6 +5841,11 @@ const createCardHTML = (m, cuentas, conceptos) => {
         <div class="tx-row1-right">${row1Right}</div>
         <div class="tx-row2-right">${row2Right}</div>
     </div>`;
+	};
+	
+	const TransactionCardComponent = (m) => {
+    // Redirigimos la llamada antigua a la nueva función moderna
+    return createCardHTML(m, AppState.cuentas, AppState.conceptos);
 };
 
 
@@ -8936,6 +8941,10 @@ const attachEventListeners = () => {
                     handleDuplicateMovement(movement);
                 }
             },
+			'edit-movement-from-list': () => {
+            // Llamamos a la función de editar (false indica que no es recurrente)
+            startMovementForm(id, false);
+        },
             'search-result-movimiento': (e) => {
                 hideModal('global-search-modal');
                 startMovementForm(e.target.closest('[data-id]').dataset.id, false);
@@ -9118,74 +9127,60 @@ const attachEventListeners = () => {
     const suggestionsBox = select('description-suggestions'); if (suggestionsBox) { suggestionsBox.addEventListener('click', (e) => { const suggestionItem = e.target.closest('.suggestion-item'); if (suggestionItem) { const { description, conceptoId, cuentaId } = suggestionItem.dataset; applyDescriptionSuggestion(description, conceptoId, cuentaId); } }); }
     const fechaDisplayButton = select('movimiento-fecha-display'); const fechaRealInput = select('movimiento-fecha'); if (fechaDisplayButton && fechaRealInput) { fechaDisplayButton.addEventListener('click', () => fechaRealInput.showPicker()); fechaRealInput.addEventListener('input', () => updateDateDisplay(fechaRealInput)); }
     const diarioContainer = select('diario-page');
-if (diarioContainer) {
-    const mainScroller = selectOne('.app-layout__main');
+    if (diarioContainer) {
+        const mainScroller = selectOne('.app-layout__main');
 
-    diarioContainer.addEventListener('touchstart', (e) => {
-        if (mainScroller.scrollTop > 0) return;
+        // Solo detectamos el inicio para el "Pull to Refresh"
+        diarioContainer.addEventListener('touchstart', (e) => {
+            if (mainScroller.scrollTop > 0) return;
+            ptrState.startY = e.touches[0].clientY;
+            ptrState.isPulling = true;
+            // ELIMINADO: handleInteractionStart(e);
+        }, { passive: true });
 
-        ptrState.startY = e.touches[0].clientY;
-        ptrState.isPulling = true;
-        
-        if (e.target.closest('.transaction-card')) {
-            handleInteractionStart(e);
-        }
-    }, { passive: true });
+        diarioContainer.addEventListener('touchmove', (e) => {
+            if (!ptrState.isPulling) return; // Si no es recarga, no hacemos nada
 
-    diarioContainer.addEventListener('touchmove', (e) => {
-        if (!ptrState.isPulling) {
-            handleInteractionMove(e);
-            return;
-        }
+            const currentY = e.touches[0].clientY;
+            ptrState.distance = currentY - ptrState.startY;
 
-        const currentY = e.touches[0].clientY;
-        ptrState.distance = currentY - ptrState.startY;
-
-        if (ptrState.distance > 0) {
-            e.preventDefault(); 
-            
-            const indicator = select('pull-to-refresh-indicator');
-            if (indicator) {
-                indicator.classList.add('visible');
-                const rotation = Math.min(ptrState.distance * 2, 360);
-                indicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`;
-            }
-        }
-    }, { passive: false });
-
-    diarioContainer.addEventListener('touchend', async (e) => {
-        const indicator = select('pull-to-refresh-indicator');
-
-        if (ptrState.isPulling && ptrState.distance > ptrState.threshold) {
-            hapticFeedback('medium');
-            if (indicator) {
-                indicator.querySelector('.spinner').style.animation = 'spin 1s linear infinite';
-            }
-
-            await loadMoreMovements(true);
-
-            setTimeout(() => {
+            // Solo actuamos si arrastra hacia abajo (Pull to refresh)
+            if (ptrState.distance > 0) {
+                // e.preventDefault(); // Opcional: comentar si bloquea el scroll nativo
+                const indicator = select('pull-to-refresh-indicator');
                 if (indicator) {
-                    indicator.classList.remove('visible');
-                    indicator.querySelector('.spinner').style.animation = '';
+                    indicator.classList.add('visible');
+                    const rotation = Math.min(ptrState.distance * 2, 360);
+                    indicator.querySelector('.spinner').style.transform = `rotate(${rotation}deg)`;
                 }
-            }, 500);
+            }
+        }, { passive: false });
 
-        } else if (indicator) {
-            indicator.classList.remove('visible');
-        }
-        
-        ptrState.isPulling = false;
-        ptrState.distance = 0;
-
-        handleInteractionEnd(e);
-    });
-
-    diarioContainer.addEventListener('mousedown', (e) => e.target.closest('.transaction-card') && handleInteractionStart(e));
-    diarioContainer.addEventListener('mousemove', handleInteractionMove);
-    diarioContainer.addEventListener('mouseup', handleInteractionEnd);
-    diarioContainer.addEventListener('mouseleave', handleInteractionEnd);
-}
+        diarioContainer.addEventListener('touchend', async (e) => {
+            const indicator = select('pull-to-refresh-indicator');
+            
+            // Lógica de Pull-to-Refresh
+            if (ptrState.isPulling && ptrState.distance > ptrState.threshold) {
+                hapticFeedback('medium');
+                if (indicator) {
+                    indicator.querySelector('.spinner').style.animation = 'spin 1s linear infinite';
+                }
+                await loadMoreMovements(true);
+                setTimeout(() => {
+                    if (indicator) {
+                        indicator.classList.remove('visible');
+                        indicator.querySelector('.spinner').style.animation = '';
+                    }
+                }, 500);
+            } else if (indicator) {
+                indicator.classList.remove('visible');
+            }
+            
+            ptrState.isPulling = false;
+            ptrState.distance = 0;
+            // ELIMINADO: handleInteractionEnd(e);
+        });
+    }
     const mainScroller = selectOne('.app-layout__main');
     if (mainScroller) {
         let scrollRAF = null;
