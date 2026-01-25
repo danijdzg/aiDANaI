@@ -895,7 +895,7 @@ body {
     border-radius: 20px; 
 }
 .app-layout--visible { display: flex; opacity: 1; }
-.app-layout__main { flex: 1; position:relative; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-top: 44px; padding-bottom: 48px; padding: 44px 0 48px 0; }
+.app-layout__main { flex: 1; position:relative; height: 100%; overflow-y: auto; padding-top: 44px; padding-bottom: 48px; padding: 44px 0 48px 0; }
 .view { display: none; flex-direction: column; width: 100%; padding: 0 var(--sp-4); gap: var(--sp-4); }
 .view--active { display: flex; }
 
@@ -922,7 +922,6 @@ body {
     background-color: var(--c-surface); 
     border-top: 1px solid var(--c-outline); 
     display: flex; 
-    padding-bottom: env(safe-area-inset-bottom); 
     z-index: 200; 
     box-shadow: 0 -2px 15px rgba(0,0,0,0.2); 
     height: 48px; 
@@ -957,7 +956,7 @@ body {
 /* --- Botón Flotante (FAB) --- */
 .fab-container {
     position: fixed;
-    bottom: calc(64px + env(safe-area-inset-bottom)); /* 48px de la barra + 16px de margen */
+    bottom: 64px; 
     right: 16px;  /* Más pegado al borde */
     z-index: 1040;
     display: flex;
@@ -1080,7 +1079,7 @@ body {
 .modal-overlay--active .modal { transform: translateY(0); }
 .modal__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-3); flex-shrink: 0;}
 .modal__title { font-size: var(--fs-xl); font-weight: 800; }
-.modal__body { overflow-y: auto; flex-grow: 1; -webkit-overflow-scrolling: touch; padding-right: var(--sp-2); margin-right: calc(-1 * var(--sp-2)); }
+.modal__body { overflow-y: auto; flex-grow: 1; padding-right: var(--sp-2); margin-right: calc(-1 * var(--sp-2)); }
 .modal__list-item { display:flex; justify-content:space-between; align-items:center; padding: var(--sp-3) 0; border-bottom:1px solid var(--c-outline); gap: var(--sp-2); }
 .modal__list-item:last-child { border-bottom: none; }
 .modal__actions { margin-top: var(--sp-4); display: flex; justify-content: flex-end; gap: var(--sp-2); width: 100%;}
@@ -1355,7 +1354,7 @@ body {
 }
 /* --- Calculadora Flotante --- */
 #calculator-overlay { z-index: 1100; /* Debe estar por encima de otros modales */ }
-.calculator-ui { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%); width: 100%; max-width: 420px; z-index: 10; background-color: var(--c-surface-variant); border-top: 1px solid var(--c-outline); padding: var(--sp-3); padding-bottom: calc(var(--sp-3) + env(safe-area-inset-bottom)); border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; box-shadow: 0 -5px 20px rgba(0,0,0,0.3); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); visibility: hidden; }
+.calculator-ui { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%); width: 100%; max-width: 420px; z-index: 10; background-color: var(--c-surface-variant); border-top: 1px solid var(--c-outline); padding: var(--sp-3); padding-bottom:var(--sp-3); border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; box-shadow: 0 -5px 20px rgba(0,0,0,0.3); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); visibility: hidden; }
 #calculator-overlay.modal-overlay--active .calculator-ui { transform: translateX(-50%) translateY(0); visibility: visible; }
 .modal__body.calculator-active { padding-bottom: 0; }
 .calculator-display { font-size: 2.1rem; font-weight: 300; text-align: right; padding: var(--sp-1) var(--sp-3); margin-bottom: var(--sp-3); min-height: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1449,19 +1448,57 @@ body {
 .patrimonio-header-grid__filters .kpi-item__label { margin-bottom: var(--sp-3); font-weight: 600; }
 
 
-/* Si la pantalla es suficientemente grande, saltamos al modo PC */
-@media (min-width: 850px) and (min-height: 950px) {
+/* ================================================================= */
+/* === MODO PC: 800px DE ANCHO (SOLO DETECTAMOS ANCHO)           === */
+/* ================================================================= */
+
+/* CORRECCIÓN: Quitamos el límite de altura (min-height) para que funcione
+   en todos los portátiles y monitores estándar */
+@media (min-width: 850px) {
+
+    /* 1. EL CAMBIO PRINCIPAL: Ancho de 800px */
     .app-layout {
-        width: 800px !important; /* Forzamos ancho PC */
-        height: 900px !important; /* Forzamos alto PC */
+        width: 800px !important;   /* Doble ancho activado */
+        height: 900px !important;  /* Altura fija */
+        
+        /* Centrado perfecto en PC */
+        margin: 0 auto !important;
+        max-width: none !important; 
+    }
+
+    /* 2. ADAPTACIÓN DE CONTENIDOS (Columnas dobles) */
+    
+    /* Indicadores (KPIs) a 4 columnas para llenar el ancho */
+    .kpi-grid {
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: 20px !important;
+    }
+
+    /* Formularios a 2 columnas (Izquierda / Derecha) */
+    .form-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important; 
+        gap: 20px !important;
+        align-items: start !important;
+    }
+
+    /* Excepción: El botón de "Guardar" y campos anchos deben ocupar todo */
+    .form-grid .btn--block, 
+    .form-grid .form-group-full,
+    #movimiento-descripcion { 
+        grid-column: 1 / -1 !important; /* Ocupar las 2 columnas */
     }
     
-    /* Opcional: Ajustes para aprovechar el ancho extra en PC */
-    .kpi-grid {
-        grid-template-columns: repeat(3, 1fr); /* 3 columnas de KPIs */
+    /* Tarjetas de transacciones con más aire */
+    .transaction-card {
+        padding: 15px 30px !important; 
     }
-    .form-grid {
-        grid-template-columns: 1fr 1fr; /* Formularios a 2 columnas */
+    
+    /* Ajuste de modales para que no se vean gigantes en 800px */
+    .modal {
+        max-width: 500px !important; 
+        margin: 0 auto !important; 
+        border-radius: 16px 16px 0 0 !important;
     }
 }
 
@@ -1854,7 +1891,6 @@ body {
 
 /* Evita el rebote elástico de la página entera (solo scroll interno) */
 html, body {
-    overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent; /* Quita el cuadro azul al tocar */
 }
 
@@ -2105,6 +2141,58 @@ html, body {
     caret-color: #00B34D !important;
 }
 
+/* ================================================================= */
+/* === OCULTAR BARRAS DE DESPLAZAMIENTO (SCROLL INVISIBLE)       === */
+/* ================================================================= */
+
+/* 1. Para Chrome, Safari, Edge y Opera */
+*::-webkit-scrollbar {
+    display: none !important;     /* Oculta la barra visualmente */
+    width: 0 !important;          /* Ancho cero */
+    background: transparent !important; /* Fondo transparente */
+}
+
+/* 2. Para Firefox */
+* {
+    scrollbar-width: none !important; /* Propiedad específica de Firefox */
+}
+
+/* 3. Para Internet Explorer y Edge antiguo */
+* {
+    -ms-overflow-style: none !important; 
+}
+
+/* 4. Aseguramos específicamente el contenedor principal */
+.app-layout__main {
+    scrollbar-width: none !important; 
+    -ms-overflow-style: none !important;
+}
+
+.app-layout__main::-webkit-scrollbar {
+    display: none !important;
+}
+
+/* === CORRECCIÓN DEFINITIVA: FONDO NEGRO AMOLED PARA DIARIO === */
+    
+    /* 1. Forzamos el negro puro en las tarjetas de transacción */
+    #diario-page .transaction-card {
+        background-color: #000000 !important;
+        border-bottom: 1px solid #1a1a1a !important; /* Línea separadora muy sutil */
+        box-shadow: none !important;
+    }
+
+    /* 2. Aseguramos que el contenedor de fondo también sea negro */
+    #diario-page, 
+    #movimientos-list-container,
+    #virtual-list-content {
+        background-color: #000000 !important;
+    }
+
+    /* 3. Corrección para los bordes/huecos si usas deslizamiento (Swipe) */
+    #diario-page .swipe-container {
+        background-color: #000000 !important;
+    }
+
    </style>
 	
 </head>
@@ -2188,13 +2276,10 @@ html, body {
         <span class="bottom-nav__label">Diario</span>
     </button>
             <button data-action="navigate" data-page="inversiones-page" class="bottom-nav__item">
-                <span class="material-icons">rocket_launch</span>
-                <span class="bottom-nav__label">Inversiones</span>
-            </button>
-            <button data-action="navigate" data-page="otros-page" class="bottom-nav__item">
-    <span class="material-icons">apps</span>
-    <span class="bottom-nav__label">Otros</span>
+    <span class="material-icons">analytics</span>
+    <span class="bottom-nav__label">Análisis</span>
 </button>
+ 
             <button data-action="navigate" data-page="configuracion-page" class="bottom-nav__item">
                 <span class="material-icons">settings</span>
                 <span class="bottom-nav__label">Ajustes</span>
@@ -2277,10 +2362,7 @@ html, body {
 			<section id="inversiones-page" class="view">
                 <!-- El contenido del portafolio se renderizará aquí -->
             </section>
-            <section id="otros-page" class="view">
-    <!-- El nuevo contenido unificado se renderizará aquí -->
-</section>
-            
+              
             <section id="configuracion-page" class="view">
                 <div class="card card--no-bg accordion-wrapper">
                     <details class="accordion">
@@ -3028,7 +3110,6 @@ const PAGE_IDS = {
     INICIO: 'inicio-page',
     DIARIO: 'diario-page',
     INVERSIONES: 'inversiones-page',
-    OTROS: 'otros-page',
     CONFIGURACION: 'config-page',
     AJUSTES: 'config-page', 
     LOGIN: 'login-screen'
@@ -4884,9 +4965,8 @@ const navigateTo = async (pageId, isInitial = false) => {
     const pageRenderers = {
     [PAGE_IDS.INICIO]: { title: 'Inicio', render: renderInicioPage , actions: standardActions },
     [PAGE_IDS.DIARIO]: { title: 'Diario', render: renderDiarioPage, actions: standardActions },
-    [PAGE_IDS.INVERSIONES]: { title: 'Inversiones', render: renderInversionesView, actions: standardActions },
-    [PAGE_IDS.OTROS]: { title: 'Otros', render: renderOtrosPage, actions: standardActions }, // <-- AÑADIDO
-	[PAGE_IDS.CONFIGURACION]: { title: 'Ajustes', render: loadConfig, actions: standardActions },
+    [PAGE_IDS.INVERSIONES]: { title: 'Análisis', render: renderInversionesView, actions: standardActions },
+   	[PAGE_IDS.CONFIGURACION]: { title: 'Ajustes', render: loadConfig, actions: standardActions },
 };
     if (pageRenderers[pageId]) {
         if (leftEl) {
@@ -5485,7 +5565,7 @@ const renderPortfolioMainContent = async (targetContainerId) => {
             </div>
         </div>
 
-        <details class="accordion" open style="margin-bottom: var(--sp-4);">
+        <details class="accordion" style="margin-bottom: var(--sp-4);">
             <summary><h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);"><span class="material-icons">pie_chart</span>Asignación y Filtros</h3><span class="material-icons accordion__icon">expand_more</span></summary>
             <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
                 <div class="filter-pills" style="margin-bottom: var(--sp-2);">${pillsHTML}</div>
@@ -5930,14 +6010,17 @@ const renderPatrimonioPage = async () => {
                    
  const loadConfig = () => {
     console.log("⚙️ Cargando Ajustes...");
-    
     // Solo actualizamos el email visualmente
     const userEmailEl = document.getElementById('config-user-email');
-    if (userEmailEl && window.currentUser) {
-        userEmailEl.textContent = window.currentUser.email;
-    }
     
-    // YA NO BUSCAMOS EL BOTÓN AQUÍ porque tiene el onclick="window.realizarLogout()" en el HTML
+    // CORRECCIÓN: Usamos la variable 'currentUser' del ámbito local o consultamos Firebase directamente
+    const usuarioActivo = currentUser || (typeof firebase !== 'undefined' ? firebase.auth().currentUser : null);
+
+    if (userEmailEl && usuarioActivo) {
+        userEmailEl.textContent = usuarioActivo.email;
+    } else if (userEmailEl) {
+        userEmailEl.textContent = "Usuario no identificado";
+    }
 };
 		
     const renderInicioPage  = () => {
@@ -6923,33 +7006,72 @@ const renderOtrosPage = () => {
     const container = select(PAGE_IDS.INVERSIONES);
     if (!container) return;
 
-    // Ahora esta función se encarga de TODO: crea el esqueleto y llama a las funciones que lo rellenan.
     container.innerHTML = `
         <div id="inversiones-content-container">
-            <!-- Nuevo Acordeón para el Gráfico de Evolución -->
-            <details class="accordion" open style="margin-bottom: var(--sp-4);">
+            
+            <div class="card card--no-bg accordion-wrapper" style="margin-bottom: var(--sp-4);">
+                <details class="accordion">
+                    <summary>
+                        <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
+                            <span class="material-icons">event_repeat</span>Movimientos Recurrentes
+                        </h3>
+                        <span class="material-icons accordion__icon">expand_more</span>
+                    </summary>
+                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                        <div id="pending-recurrents-container"></div>
+                        <p class="form-label" style="margin-bottom: var(--sp-3);">Pulsa en una operación para editarla. Estas son las que se ejecutarán en el futuro.</p>
+                        <div id="recurrentes-list-container"></div>
+                    </div>
+                </details>
+
+                <details id="acordeon-extracto_cuenta" class="accordion informe-acordeon">
+                    <summary>
+                        <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
+                            <span class="material-icons">wysiwyg</span> 
+                            <span>Extracto de Cuenta (Cartilla)</span>
+                        </h3>
+                        <span class="material-icons accordion__icon">expand_more</span>
+                    </summary>
+                    <div class="accordion__content" style="padding: var(--sp-3) var(--sp-4);">
+                        <div id="informe-content-extracto_cuenta">
+                            <form id="informe-cuenta-form" novalidate>
+                                <div class="form-group">
+                                    <label for="informe-cuenta-select" class="form-label">Selecciona una cuenta:</label>
+                                    <select id="informe-cuenta-select" class="form-select" required></select>
+                                </div>
+                                <button type="submit" class="btn btn--primary btn--full">Generar Extracto</button>
+                            </form>
+                            <div id="informe-resultado-container" style="margin-top: var(--sp-4);"></div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+            <details class="accordion" style="margin-bottom: var(--sp-4);">
                 <summary>
                     <h3 class="card__title" style="margin:0; padding: 0; color: var(--c-on-surface);">
-                        <span class="material-icons">show_chart</span>
-                        Evolución del Portafolio
+                        <span class="material-icons">show_chart</span> Evolución del Portafolio
                     </h3>
                     <span class="material-icons accordion__icon">expand_more</span>
                 </summary>
                 <div class="accordion__content" id="portfolio-evolution-container" style="padding: var(--sp-3) var(--sp-4);">
-                    <!-- Esqueleto de carga para el gráfico de evolución -->
                     <div class="chart-container skeleton" style="height: 220px; border-radius: var(--border-radius-lg);"></div>
                 </div>
             </details>
 
-            <!-- El resto de tu HTML de la página de Inversiones se generará después -->
             <div id="portfolio-main-content">
-                <!-- Esqueleto de carga para el resto de la página -->
                 <div class="skeleton" style="height: 300px; border-radius: var(--border-radius-lg);"></div>
             </div>
         </div>
     `;
-	    // Llamamos a las dos funciones que rellenarán cada parte.
+
+    // Inicializamos TODO: Herramientas y Gráficos
     setTimeout(async () => {
+        // 1. Inicializar lógica de herramientas
+        populateAllDropdowns(); 
+        renderPendingRecurrents();
+        renderRecurrentsListOnPage();
+
+        // 2. Inicializar gráficos de análisis
         await renderPortfolioEvolutionChart('portfolio-evolution-container');
         await renderPortfolioMainContent('portfolio-main-content');
     }, 50);
