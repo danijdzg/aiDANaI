@@ -3,451 +3,531 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
-    <title>aiDANaI-ctas</title>
+    <title>Gestor Financiero Pro</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-	<meta name="theme-color" content="#00B34D" />
-	<link rel="manifest" href="manifest.json">	
-	<link rel="icon" href="icons/favicon.ico" sizes="any">
-    <link rel="icon" href="icons/favicon-32x32.png" type="image/png" sizes="32x32">
-    <link rel="icon" href="icons/favicon-16x16.png" type="image/png" sizes="16x16">
-    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-	<meta name="theme-color" content="#00B34D" />
-    
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-	<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0"></script>
-	<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>   
-    <link rel="stylesheet" href="style.css">	
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+    <style>
+        :root {
+            --c-bg: #000000;
+            --c-surface: #1c1c1e;
+            --c-surface-2: #2c2c2e;
+            --c-primary: #0a84ff;
+            --c-success: #30d158;
+            --c-danger: #ff453a;
+            --c-transfer: #0a84ff;
+            --c-text: #ffffff;
+            --c-text-sec: #8e8e93;
+            --c-border: #38383a;
+            --font-main: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--c-bg);
+            color: var(--c-text);
+            font-family: var(--font-main);
+            margin: 0; padding: 0; height: 100vh; overflow: hidden;
+        }
+        
+        *::-webkit-scrollbar { display: none; }
+        
+        .app-layout { display: flex; flex-direction: column; height: 100%; }
+        
+        /* CABECERA */
+        header { padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--c-border); }
+        h1 { margin: 0; font-size: 22px; }
+        
+        /* AREA PRINCIPAL */
+        .app-main { flex: 1; overflow-y: auto; padding: 20px; padding-bottom: 100px; }
+
+        /* === RESUMEN (DASHBOARD) === */
+        .dashboard-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .summary-card {
+            background: var(--c-surface);
+            border: 1px solid var(--c-border);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+        }
+        .summary-label { display: block; font-size: 12px; color: var(--c-text-sec); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+        .summary-value { font-size: 18px; font-weight: 700; }
+        .val-ingreso { color: var(--c-success); }
+        .val-gasto { color: var(--c-danger); }
+        .val-traspaso { color: var(--c-transfer); }
+
+        /* === TABLA EXCEL === */
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            background: var(--c-surface);
+            border-radius: 12px;
+            border: 1px solid var(--c-border);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 900px;
+        }
+        
+        th {
+            background: var(--c-surface-2);
+            color: var(--c-text-sec);
+            font-size: 12px;
+            text-transform: uppercase;
+            padding: 12px;
+            text-align: left;
+            position: sticky; top: 0;
+            border-bottom: 1px solid var(--c-border);
+            white-space: nowrap;
+            cursor: pointer; /* Mano al pasar por encima */
+            user-select: none; /* Evita seleccionar texto al hacer doble click */
+            transition: background 0.2s;
+        }
+        
+        th:hover {
+            background: #3a3a3c;
+            color: #fff;
+        }
+
+        .sort-icon {
+            font-size: 10px;
+            margin-left: 5px;
+            vertical-align: middle;
+            opacity: 0.5;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--c-border);
+            font-size: 14px;
+            color: var(--c-text);
+            vertical-align: middle;
+        }
+        
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: rgba(255,255,255,0.05); }
+
+        /* Estilos específicos de columnas */
+        .td-date { color: var(--c-text-sec); font-variant-numeric: tabular-nums; width: 100px; text-align: center;}
+        .td-amount { font-weight: 700; text-align: right; font-family: monospace; font-size: 15px; }
+        .td-cuenta { color: var(--c-primary); font-weight: 500; }
+        .td-concepto { font-weight: 500; }
+        .td-desc { color: var(--c-text-sec); font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .td-beneficiario { font-weight: 600; color: #fbbf24; text-align: center; }
+
+        /* === RESTO DE UI === */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 4000; display: none; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-body { background: var(--c-surface); width: 90%; max-width: 450px; border-radius: 24px; padding: 24px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+        
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; margin-bottom: 8px; color: var(--c-text-sec); font-size: 13px; }
+        .form-input { width: 100%; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text); padding: 12px; border-radius: 12px; font-size: 16px; outline: none; box-sizing: border-box; }
+        select.form-input { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 10px center; background-size: 20px; }
+
+        .filter-pills { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
+        .filter-pill { background: var(--c-surface-2); border: 1px solid var(--c-border); color: var(--c-text-sec); padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+        .filter-pill--active[data-type="gasto"] { background: var(--c-danger); color: white; border-color: var(--c-danger); }
+        .filter-pill--active[data-type="ingreso"] { background: var(--c-success); color: white; border-color: var(--c-success); }
+        .filter-pill--active[data-type="traspaso"] { background: var(--c-transfer); color: white; border-color: var(--c-transfer); }
+
+        .btn-primary { width: 100%; background: var(--c-primary); color: white; border: none; padding: 14px; border-radius: 14px; font-size: 16px; font-weight: 600; margin-top: 10px; cursor: pointer; }
+
+        /* Calculadora */
+        .calculator-ui { position: fixed; top: 50%; left: 50%; transform: translate(-50%, 150vh); width: 90%; max-width: 380px; background: var(--c-surface); border-radius: 24px; padding: 20px; z-index: 5000; box-shadow: 0 40px 80px rgba(0,0,0,0.7); display: none; animation: slideUpToCenter 0.5s forwards; }
+        .calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+        .calc-btn { background: var(--c-surface-2); border: none; color: var(--c-text); height: 60px; border-radius: 15px; font-size: 20px; cursor: pointer; }
+        .calc-btn.confirm { background: var(--c-primary); color: white; grid-column: span 2; }
+        .calc-display { background: var(--c-bg); color: var(--c-text); font-size: 32px; text-align: right; padding: 20px; border-radius: 16px; margin-bottom: 10px; }
+
+        /* FAB Menu */
+        .fab-container { position: fixed; bottom: 0; left: 0; width: 100%; height: 0; display: flex; justify-content: center; z-index: 9000; }
+        .fab-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: -1; }
+        .fab-container.active .fab-overlay { opacity: 0.8; pointer-events: all; height: 100vh; }
+        #fab-main-btn { position: absolute; bottom: 30px; width: 50px; height: 50px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.8); background: linear-gradient(135deg, #ffffac, #ffd700, #fbbf24); display: flex; justify-content: center; align-items: center; color: #5c4d00; transition: all 0.4s; z-index: 9002; box-shadow: 0 0 15px rgba(255,215,0,0.6); }
+        .fab-container.active #fab-main-btn { transform: rotate(135deg) scale(0.9); background: linear-gradient(145deg, #333, #000); border-color: rgba(255,255,255,0.3); color: white; }
+        .fab-action-btn { position: absolute; bottom: 35px; left: 50%; width: 50px; height: 50px; border-radius: 50%; border: none; color: white; display: flex; justify-content: center; align-items: center; transform: translateX(-50%) scale(0); opacity: 0; z-index: 9001; transition: all 0.3s; }
+        .fab-container.active .btn-gasto { transform: translate(calc(-50% - 80px), -60px) scale(1); opacity: 1; background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .fab-container.active .btn-traspaso { transform: translate(-50%, -100px) scale(1); opacity: 1; background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .fab-container.active .btn-ingreso { transform: translate(calc(-50% + 80px), -60px) scale(1); opacity: 1; background: linear-gradient(135deg, #10b981, #059669); }
+        .fab-label { position: absolute; top: 115%; left: 50%; transform: translateX(-50%); background: #000; color: #fff; font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: 6px; opacity: 0; transition: opacity 0.3s ease 0.1s; }
+        .fab-container.active .fab-label { opacity: 1; }
+
+        @keyframes slideUpToCenter { 0% { transform: translate(-50%, 150vh); opacity: 0; } 100% { transform: translate(-50%, -50%); opacity: 1; } }
+        @keyframes fadeInCenter { from { opacity: 0; transform: translate(0, -20px); } to { opacity: 1; transform: translate(0, 0); } }
+        #import-file-input { display: none; }
+    </style>
 </head>
+<body>
 
-<body data-ledger-mode="A">
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="login-screen" class="login-view">
-        <div class="login-view__card">
-            <div class="login-view__logo" style="display: flex; align-items: center; justify-content: center; width: 90px; height: 90px; background: var(--c-surface-variant); border-radius: 24px; margin: 0 auto 1rem auto; box-shadow: 0 0 25px rgba(0, 179, 77, 0.2);">
-				<span class="material-icons" style="font-size: 48px; color: var(--c-primary);">lock</span>
-			</div>
-            <h2 id="login-title" class="login-view__title">Bienvenido de nuevo</h2>
-            <p class="login-view__tagline">Inicia sesión para controlar tus finanzas.</p>
-            <form id="login-form" noValidate>
-                <div class="form-group form-group--with-icon">
-                    <span class="material-icons">alternate_email</span>
-                    <input type="email" id="login-email" class="form-input" placeholder="Correo electrónico" required autoComplete="email" autoCapitalize="none" aria-describedby="login-email-error" />
-                    <span class="form-error" id="login-email-error"></span>
-                </div>
-                <div class="form-group form-group--with-icon">
-                    <span class="material-icons">lock</span>
-                    <input type="password" id="login-password" class="form-input" placeholder="Contraseña" required autoComplete="current-password" aria-describedby="login-password-error" />
-                    <span class="form-error" id="login-password-error"></span>
-                </div>
-                <div class="login-view__actions">
-                    <a href="#" class="login-view__link" data-action="forgot-password">¿Olvidaste tu contraseña?</a>
-                </div>
-                <p id="login-error" class="form-error" style="min-height: 16px; margin-top: 8px;"></p>
-                <div class="login-view__footer">
-                    <button type="submit" data-action="login" class="btn btn--primary btn--full">Iniciar Sesión</button>
-                    <p class="login-view__secondary-action">
-                        <span>¿No tienes una cuenta?</span> <a href="#" class="login-view__link" data-action="show-register">Regístrate aquí</a>
-                    </p>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div id="pin-login-screen" class="login-view">
-        <div class="starry-background"></div>
-        <div class="login-view__card">
-            <div class="login-view__logo" style="display: flex; align-items: center; justify-content: center; width: 90px; height: 90px; background: var(--c-surface-variant); border-radius: 24px; margin: 0 auto 1rem auto; box-shadow: 0 0 25px rgba(0, 179, 77, 0.2);">
-    <span class="material-icons" style="font-size: 48px; color: var(--c-primary);">lock</span>
-</div>
-            <h2 class="login-view__title">Acceso Rápido</h2>
-            <p class="login-view__tagline">Introduce tu PIN de 4 dígitos.</p>
-            <form id="pin-form">
-                <div class="pin-inputs" id="pin-inputs-container">
-                    <input type="password" class="pin-input" pattern="[0-9]*" inputmode="numeric" maxlength="1" required>
-                    <input type="password" class="pin-input" pattern="[0-9]*" inputmode="numeric" maxlength="1" required>
-                    <input type="password" class="pin-input" pattern="[0-9]*" inputmode="numeric" maxlength="1" required>
-                    <input type="password" class="pin-input" pattern="[0-9]*" inputmode="numeric" maxlength="1" required>
-                </div>
-                <p id="pin-error" class="form-error" style="min-height: 16px; margin-top: 8px;"></p>
-            </form>
-            <div class="login-view__footer">
-                <p class="login-view__secondary-action">
-                    <a href="#" class="login-view__link" data-action="use-password-instead">Usar contraseña en su lugar</a>
-                </p>
-                <p class="login-view__secondary-action" style="margin-top: var(--sp-2);">
-                    <a href="#" class="login-view__link" data-action="logout">O iniciar sesión con otra cuenta</a>
-                </p>
-            </div>
-        </div>
-    </div>
-    
-    <div id="app-root" class="app-layout">
-		
-       <nav class="bottom-nav">
-    <button data-action="navigate" data-page="panel-page" class="bottom-nav__item">
-        <span class="material-icons">dashboard</span>
-        <span class="bottom-nav__label">Panel</span>
-    </button>
-    
-    <button data-action="navigate" data-page="diario-page" class="bottom-nav__item">
-        <span class="material-icons">receipt_long</span>
-        <span class="bottom-nav__label">Diario</span>
-    </button>
-    
-    <div class="bottom-nav__spacer"></div>
-    
-    <button data-action="navigate" data-page="patrimonio-page" class="bottom-nav__item">
-        <span class="material-icons">account_balance</span>
-        <span class="bottom-nav__label">Patrimonio</span>
-    </button>
-    
-    <button data-action="navigate" data-page="planificar-page" class="bottom-nav__item">
-        <span class="material-icons">edit_calendar</span>
-        <span class="bottom-nav__label">Planificar</span>
-    </button>
-</nav>
-		<div class="fab-container" id="fab-container">
-    <div class="fab-backdrop" id="fab-backdrop"></div>
-    
-    <div class="fab-options">
-        <button class="fab-option fab-option--gasto" data-type="gasto">
-            <span class="fab-label">Pago</span> 
-            <div class="fab-icon-holder"><span class="material-icons">arrow_downward</span></div>
-        </button>
-
-        <button class="fab-option fab-option--traspaso" data-type="traspaso">
-            <span class="fab-label">Traspaso</span>
-            <div class="fab-icon-holder"><span class="material-icons">swap_horiz</span></div>
-        </button>
-
-        <button class="fab-option fab-option--ingreso" data-type="ingreso">
-            <span class="fab-label">Ingreso</span>
-            <div class="fab-icon-holder"><span class="material-icons">arrow_upward</span></div>
-        </button>
-    </div>
-
-    <button class="fab-main-btn" id="fab-trigger">
-        <span class="material-icons fab-icon-plus">add</span>
-        <span class="material-icons fab-icon-close">close</span>
-    </button>
-</div>
-        <div class="top-bar">
-    <div class="top-bar__left" style="display: flex; align-items: center; gap: 10px;">
-    <span class="material-icons" style="font-size: 40px; color: #00B34D;">account_balance_wallet</span>
-	<span id="page-title-display" style="font-weight: 600; font-size: 1.1rem;"></span>
-	<button id="ledger-toggle-btn" class="btn btn--secondary" data-action="toggle-ledger" title="Cambiar Caja">
-            Caja A
-        </button>
-</div>
-	<div class="top-bar__left-button">
-        
-       </div>
-    <div style="flex-grow: 1;"></div>
-
-    <div class="top-bar-actions" style="display: flex; gap: 5px; align-items: center;">
-        
-        <button class="icon-btn" data-action="global-search" aria-label="Buscar">
-            <span class="material-icons">search</span>
-        </button>
-
-        <button class="icon-btn" data-action="open-calculator" aria-label="Calculadora">
-            <span class="material-icons">calculate</span>
-        </button>
-
-        <button class="icon-btn" data-action="navigate" data-page="ajustes-page" aria-label="Ajustes">
-            <span class="material-icons">settings</span>
-        </button>
-
-        <button class="icon-btn" data-action="logout" aria-label="Salir">
-            <span class="material-icons" style="color: #ff6b6b;">logout</span>
-        </button>
-    </div>
-</div>
-
-        <main class="app-layout__main">
-            <section id="panel-page" class="view"></section>
-            <section id="diario-page" class="view" style="padding: 0; gap: 0;"></section>
-            <section id="patrimonio-page" class="view"></section>
-            <section id="planificar-page" class="view"></section>
-            <section id="ajustes-page" class="view"></section>
-        </main>
-    </div>
-    
-    <div id="toast-container" aria-live="assertive"></div>
-    
- <!-- EN index.html - REEMPLAZA EL MODAL #movimiento-modal POR COMPLETO -->
-<div id="movimiento-modal" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal">
-        <div class="modal__grabber"></div>
-        
-        <header class="modal__header">
-            <h3 id="form-movimiento-title" class="modal__title">Nuevo Movimiento</h3>
-            <button class="icon-btn" data-action="close-modal" data-modal-id="movimiento-modal"><span class="material-icons">close</span></button>
+    <div class="app-layout">
+        <header>
+            <h1>Mis Finanzas</h1>
+            <button onclick="document.getElementById('import-file-input').click()" style="background: none; border: none; color: var(--c-primary); font-weight: 600; cursor: pointer;">Importar Excel</button>
         </header>
-        
-        <div class="modal__body">
-            <form id="form-movimiento" novalidate>
-                <input type="hidden" id="movimiento-id" />
-                <input type="hidden" id="movimiento-mode" value="new" />
 
-                <div class="filter-pills" style="justify-content: center;">
-                    <button type="button" class="filter-pill filter-pill--active" data-action="set-movimiento-type" data-type="gasto">Gasto</button>
-                    <button type="button" class="filter-pill" data-action="set-movimiento-type" data-type="ingreso">Ingreso</button>
-                    <button type="button" class="filter-pill" data-action="set-movimiento-type" data-type="traspaso">Traspaso</button>
+        <div class="app-main">
+            
+            <div class="dashboard-summary">
+                <div class="summary-card">
+                    <span class="summary-label">Ingresos</span>
+                    <span class="summary-value val-ingreso" id="sum-ingreso">0,00 €</span>
                 </div>
-
-                <div class="form-field-compact" id="movimiento-cantidad-form-group">
-                    <label for="movimiento-cantidad">IMPORTE (€)</label>
-                    <div class="input-wrapper">
-                         <input type="text" id="movimiento-cantidad" required placeholder="0,00" inputmode="decimal" autocomplete="off" class="input-amount-calculator" />
-                    </div>
-                    <span class="form-error" id="movimiento-cantidad-error"></span>
+                <div class="summary-card">
+                    <span class="summary-label">Gastos</span>
+                    <span class="summary-value val-gasto" id="sum-gasto">0,00 €</span>
                 </div>
-
-                <div class="dense-form-grid">
-    
-    <div id="movimiento-fields" class="two-columns">
-        <div class="form-field-compact">
-            <div class="input-wrapper">
-                <select id="movimiento-concepto" required></select>
-            </div>
-        </div>
-        <div class="form-field-compact">
-            <div class="input-wrapper">
-                <select id="movimiento-cuenta" required></select>
-            </div>
-        </div>
-    </div>
-
-    <div id="traspaso-fields" class="hidden two-columns">
-        <div class="form-field-compact">
-            <div class="input-wrapper">
-                <select id="movimiento-cuenta-origen"></select>
-            </div>
-        </div>
-        <div class="form-field-compact">
-            <div class="input-wrapper">
-                <select id="movimiento-cuenta-destino"></select>
-            </div>
-        </div>
-    </div>
-
-    <div class="form-field-compact full-width-field">
-        <div class="input-wrapper">
-            <input type="text" id="movimiento-descripcion" required placeholder="Nota..." autocomplete="off" />
-        </div>
-    </div>
-
-</div>
-                
-                <div class="date-recurrent-row">
-                    <div class="input-wrapper" style="flex: 1;">
-                        <input type="date" id="movimiento-fecha" class="visually-hidden" required />
-                        <button type="button" id="movimiento-fecha-display" class="date-button-compact">
-                            <span class="material-icons" style="font-size: 16px;">calendar_today</span>
-                            <span id="movimiento-fecha-text">Hoy</span>
-                        </button>
-                    </div>
-                    
-                    <div class="recurrent-toggle-compact">
-                        <label for="movimiento-recurrente">Repetir</label>
-                        <label class="form-switch">
-                            <input type="checkbox" id="movimiento-recurrente">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
+                <div class="summary-card">
+                    <span class="summary-label">Traspasos</span>
+                    <span class="summary-value val-traspaso" id="sum-traspaso">0,00 €</span>
                 </div>
+            </div>
 
-                <div id="recurrent-options" class="hidden" style="margin-bottom: 4px;">
-    <div class="recurrent-options__main" style="display: flex; gap: 6px;">
-        <select id="recurrent-frequency" style="flex: 1.2; min-width: 0;">
-            <option value="monthly" selected>Mensual</option>
-            <option value="weekly">Semanal</option>
-            <option value="daily">Diaria</option>
-            <option value="yearly">Anual</option>
-        </select>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th onclick="ordenarPor('fecha')">Fecha <span class="sort-icon" id="sort-fecha">▼</span></th>
+                            <th onclick="ordenarPor('importe')" style="text-align: right;">Cantidad <span class="sort-icon" id="sort-importe"></span></th>
+                            <th onclick="ordenarPor('cuenta')">Cuenta <span class="sort-icon" id="sort-cuenta"></span></th>
+                            <th onclick="ordenarPor('concepto')">Conceptos <span class="sort-icon" id="sort-concepto"></span></th>
+                            <th onclick="ordenarPor('detalle')">Descripción <span class="sort-icon" id="sort-detalle"></span></th>
+                            <th onclick="ordenarPor('beneficiario')" style="text-align: center;">Beneficiario <span class="sort-icon" id="sort-beneficiario"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-movimientos-body">
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 40px; color: var(--c-text-sec);">
+                                Sin datos. Importa un Excel o añade uno con (+).
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
         
-        <input type="date" id="recurrent-next-date" title="Inicio" style="flex: 1; min-width: 0;">
-        
-        <input type="date" id="recurrent-end-date" title="Fin (Opcional)" style="flex: 1; min-width: 0; color: var(--c-on-surface-secondary);">
+        <input type="file" id="import-file-input" accept=".xlsx, .xls">
     </div>
-    
-    <div id="weekly-day-selector" class="hidden" style="margin-top:6px;">
-        <div id="weekly-day-selector-buttons">
-            <button type="button" class="day-selector-btn" data-day="1">L</button>
-            <button type="button" class="day-selector-btn" data-day="2">M</button>
-            <button type="button" class="day-selector-btn" data-day="3">X</button>
-            <button type="button" class="day-selector-btn" data-day="4">J</button>
-            <button type="button" class="day-selector-btn" data-day="5">V</button>
-            <button type="button" class="day-selector-btn" data-day="6">S</button>
-            <button type="button" class="day-selector-btn" data-day="0">D</button>
+
+    <div class="fab-container" id="fab-menu">
+        <div class="fab-overlay" onclick="toggleFab()"></div>
+        <div class="fab-actions">
+            <button class="fab-action-btn btn-gasto" onclick="abrirModalGasto()"><span class="material-icons">remove</span><span class="fab-label">Gasto</span></button>
+            <button class="fab-action-btn btn-traspaso" onclick="abrirModalTraspaso()"><span class="material-icons">swap_horiz</span><span class="fab-label">Traspaso</span></button>
+            <button class="fab-action-btn btn-ingreso" onclick="abrirModalIngreso()"><span class="material-icons">add</span><span class="fab-label">Ingreso</span></button>
+        </div>
+        <button id="fab-main-btn" onclick="toggleFab()"><span class="material-icons">add</span></button>
+    </div>
+
+    <div class="calculator-ui" id="calculator">
+        <div class="calc-display" id="calc-display">0</div>
+        <div class="calc-grid">
+            <button class="calc-btn" onclick="calcInput('7')">7</button><button class="calc-btn" onclick="calcInput('8')">8</button><button class="calc-btn" onclick="calcInput('9')">9</button><button class="calc-btn" onclick="calcInput('/')">÷</button>
+            <button class="calc-btn" onclick="calcInput('4')">4</button><button class="calc-btn" onclick="calcInput('5')">5</button><button class="calc-btn" onclick="calcInput('6')">6</button><button class="calc-btn" onclick="calcInput('*')">×</button>
+            <button class="calc-btn" onclick="calcInput('1')">1</button><button class="calc-btn" onclick="calcInput('2')">2</button><button class="calc-btn" onclick="calcInput('3')">3</button><button class="calc-btn" onclick="calcInput('-')">-</button>
+            <button class="calc-btn" onclick="calcInput('0')">0</button><button class="calc-btn" onclick="calcInput('.')">.</button><button class="calc-btn confirm" onclick="calcConfirm()">OK</button>
         </div>
     </div>
-</div>
 
-                <div class="modal__actions">
-     <button type="button" id="delete-movimiento-btn" data-action="delete-movement-from-modal" class="icon-btn hidden" style="background: var(--c-surface-variant); width: 40px;" title="Eliminar"><span class="material-icons text-danger">delete</span></button>
-     
-     <button type="button" id="duplicate-movimiento-btn" data-action="duplicate-movement-from-modal" class="icon-btn hidden" style="background: var(--c-surface-variant); width: 40px;" title="Duplicar"><span class="material-icons text-warning">content_copy</span></button>
-     
-     <button id="save-and-new-movimiento-btn" type="button" data-action="save-and-new-movement" class="btn btn--secondary" style="flex: 1;">+ Otro</button>
-     <button id="save-movimiento-btn" type="submit" class="btn btn--primary" style="flex: 1.5;">Guardar</button>
-</div>
+    <div class="modal-overlay" id="form-modal">
+        <div class="modal-body">
+            <h3 style="margin-top: 0; text-align: center;">Nuevo Movimiento</h3>
+            <div class="filter-pills">
+                <button type="button" class="filter-pill" data-type="gasto" onclick="setType('gasto')">Gasto</button>
+                <button type="button" class="filter-pill" data-type="ingreso" onclick="setType('ingreso')">Ingreso</button>
+                <button type="button" class="filter-pill" data-type="traspaso" onclick="setType('traspaso')">Traspaso</button>
+            </div>
+            <form id="form-movimiento" onsubmit="guardarMovimiento(event)">
+                <div class="form-group">
+                    <label class="form-label">Cantidad</label>
+                    <input type="text" id="input-cantidad" class="form-input" placeholder="0.00" readonly onclick="abrirCalculadora()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Descripción</label>
+                    <input type="text" id="input-descripcion" class="form-input" placeholder="Ej: Compra mensual">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Beneficiario</label>
+                    <select id="input-beneficiario" class="form-input">
+                        <option value="">-- Seleccionar --</option>
+                        <option value="Dani">Dani</option>
+                        <option value="Norma">Norma</option>
+                        <option value="Comunes">Comunes</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fecha</label>
+                    <input type="date" id="input-fecha" class="form-input">
+                </div>
+                <button type="submit" class="btn-primary">Guardar</button>
+                <button type="button" onclick="cerrarModal()" style="width:100%; padding: 12px; margin-top: 10px; background: none; border: none; color: var(--c-text-sec); cursor: pointer;">Cancelar</button>
             </form>
         </div>
     </div>
-</div>
-                 
-    <div id="generic-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="generic-modal-title">
-        <div class="modal">
-            <header class="modal__header">
-                <h3 id="generic-modal-title" class="modal__title"></h3>
-                <button class="icon-btn" data-action="close-modal" data-modal-id="generic-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
-            </header>
-            <div id="generic-modal-body" class="modal__body"></div>
-        </div>
-    </div>
 
-	<div id="diario-filters-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diario-filters-title">
-        <div class="modal">
-            <div class="modal__grabber"></div>
-            <header class="modal__header" style="padding-top: var(--sp-2);">
-                <h3 id="diario-filters-title" class="modal__title">Filtrar Diario</h3>
-                <button class="icon-btn" data-action="close-modal" data-modal-id="diario-filters-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
-            </header>
-            <div class="modal__body">
-                <form id="diario-filters-form" novalidate>
-                    <div class="form-group"><label class="form-label">Rango de Fechas</label><div class="form-grid" style="grid-template-columns: 1fr 1fr;"><input type="date" id="filter-diario-start-date" class="form-input"><input type="date" id="filter-diario-end-date" class="form-input"></div></div>
-                    <div class="form-group"><label for="filter-diario-description" class="form-label">La descripción contiene...</label><input type="search" id="filter-diario-description" class="form-input" placeholder="Ej: Amazon, compra semanal..."></div>
-                    <div class="form-group"><label class="form-label">Importe entre...</label><div class="form-grid" style="grid-template-columns: 1fr 1fr;"><input type="number" id="filter-diario-min-amount" class="form-input" placeholder="Mínimo (€)"><input type="number" id="filter-diario-max-amount" class="form-input" placeholder="Máximo (€)"></div></div>
-                    <div class="form-group"><label for="filter-diario-cuentas" class="form-label">Cuentas (selección múltiple)</label><select id="filter-diario-cuentas" class="form-select" multiple style="height: 120px;"></select></div>
-                    <div class="form-group"><label for="filter-diario-conceptos" class="form-label">Conceptos (selección múltiple)</label><select id="filter-diario-conceptos" class="form-select" multiple style="height: 120px;"></select></div>
-                    <div class="modal__actions" style="justify-content: space-between;"><button type="button" data-action="clear-diario-filters" class="btn btn--secondary">Limpiar Filtros</button><button type="submit" class="btn btn--primary">Aplicar Filtros</button></div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div id="global-search-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
-        <div class="modal"><header class="modal__header"><div id="global-search-input-wrapper"><span class="material-icons" style="color: var(--c-on-surface-secondary);">search</span><input type="search" id="global-search-input" placeholder="Buscar en toda la app..." autocomplete="off"></div><button class="icon-btn" data-action="close-modal" data-modal-id="global-search-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button></header><div id="global-search-results" class="modal__body"><div class="empty-state" style="background:transparent; border: none;"><span class="material-icons">manage_search</span><h3>Encuéntralo todo</h3><p>Busca movimientos, cuentas o conceptos. <br>Atajo: <strong>Cmd/Ctrl + K</strong></p></div></div></div>
-    </div>
+<script>
+    // 1. ESTADO GLOBAL
+    let movimientos = [];
+    let calcValue = '';
     
-    <div id="json-import-wizard-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="json-wizard-title">
-        <div class="modal" style="max-width: 500px; height: auto; max-height: 85vh;"><header class="modal__header"><h3 id="json-wizard-title" class="modal__title">Asistente de Importación JSON</h3><button class="icon-btn" data-action="close-modal" data-modal-id="json-import-wizard-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button></header><div id="json-wizard-body" class="modal__body" style="display: flex; flex-direction: column;"><div id="json-wizard-step-1" class="json-wizard-step"><h4>Paso 1: Selecciona tu copia de seguridad</h4><p class="form-label" style="margin-bottom: var(--sp-3);">Arrastra y suelta el archivo <code>.json</code> o haz clic para seleccionarlo. La importación reemplazará <strong>todos</strong> tus datos actuales.</p><div id="json-drop-zone"><span class="material-icons" style="font-size: 48px; color: var(--c-outline);">upload_file</span><p id="json-drop-zone-text">Arrastra tu archivo aquí o haz clic</p></div><div id="json-file-error" class="form-error" style="text-align: center; margin-top: var(--sp-3);"></div></div><div id="json-wizard-step-2" class="json-wizard-step" style="display: none;"><h4>Paso 2: Revisa y confirma</h4><p class="form-label" style="margin-bottom: var(--sp-3);">Hemos analizado tu archivo. Si los datos son correctos, pulsa "Importar" para reemplazar tus datos actuales.</p><div id="json-preview-container"><ul id="json-preview-list"></ul><div class="form-error" style="margin-top: var(--sp-2); text-align: center;"><strong>Atención:</strong> <span>Esta acción es irreversible.</span></div></div><div class="modal__actions" style="justify-content: space-between;"><button class="btn btn--secondary" data-action="json-wizard-back-2">Atrás</button><button class="btn btn--danger" data-action="json-wizard-import-final"><span class="material-icons">warning</span><span>Importar y Reemplazar</span></button></div></div><div id="json-wizard-step-3" class="json-wizard-step" style="display: none; justify-content: center; align-items: center; text-align: center; min-height: 200px;"><div id="json-import-progress"><span class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></span><h4 style="margin-top: var(--sp-4);">Importando...</h4><p>Estamos guardando tus datos. Por favor, no cierres esta ventana.</p></div><div id="json-import-result" style="display: none;"><span class="material-icons" style="font-size: 60px; color: var(--c-success);">task_alt</span><h4 id="json-result-title" style="margin-top: var(--sp-2);">¡Importación Completada!</h4><p id="json-result-message"></p><div class="modal__actions" style="justify-content: center;"><button class="btn btn--primary" data-action="close-modal" data-modal-id="json-import-wizard-modal">Finalizar</button></div></div></div></div></div>
-    </div>
+    // Estado de Ordenación (Por defecto Fecha Descendente)
+    let ordenActual = { columna: 'fecha', direccion: 'desc' };
 
-    <div id="exit-screen"><p>Finanzas al día ✅ Movimientos revisados 👀  <br>💰 aiDANaI simplifica tus cuentas 💰</p></div>
+    // 2. IMPORTACIÓN EXCEL
+    const setupImportListener = () => {
+        const fileInput = document.getElementById('import-file-input');
+        if (fileInput) {
+            const newInp = fileInput.cloneNode(true);
+            fileInput.parentNode.replaceChild(newInp, fileInput);
+            newInp.addEventListener('change', (e) => {
+                if (e.target.files[0]) processImport(e.target.files[0]);
+                newInp.value = '';
+            });
+        }
+    };
+    document.addEventListener('DOMContentLoaded', setupImportListener);
+
+    const processImport = (file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                const sheetName = workbook.SheetNames.find(n => n.toLowerCase() === 'movimientos') || workbook.SheetNames[0];
+                
+                // === CAMBIO CLAVE: EMPEZAR EN FILA 66 (INDEX 65) ===
+                // range: 65 indica que la lectura empieza en la fila index 65 (fila 66 en Excel)
+                // De esta forma, la fila 66 será la fila 0 (headers) y la 67 la fila 1 (datos)
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { 
+                    header: 1, 
+                    raw: false, 
+                    dateNF: 'yyyy-mm-dd',
+                    range: 65 
+                });
+
+                if (!rows || rows.length < 2) { alert('Excel vacío o rango incorrecto (¿Datos a partir de fila 66?).'); return; }
+                parseRows(rows);
+            } catch (err) { alert('Error al leer Excel.'); }
+        };
+        setTimeout(() => reader.readAsArrayBuffer(file), 20);
+    };
+
+    const parseRows = (rows) => {
+        const nuevos = [];
+        // Empezamos en i = 1 porque i=0 son los encabezados (fila 66)
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            // Validación mínima: si no hay fecha ni importe, saltamos
+            if (!row || (!row[0] && !row[1])) continue;
+
+            // Columnas Esperadas (Index relativo al inicio):
+            // 0: Fecha, 1: Importe, 2: Cuenta, 3: Concepto, 4: Descripcion, 5: Beneficiario
+
+            // A. Fecha
+            let fecha = new Date().toISOString().split('T')[0];
+            try {
+                if (row[0] instanceof Date) fecha = row[0].toISOString().split('T')[0];
+                else if (row[0]) {
+                    const parts = String(row[0]).trim().split(/[-/]/);
+                    if (parts.length === 3) fecha = (parts[0].length===4) ? `${parts[0]}-${parts[1]}-${parts[2]}` : `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
+            } catch(e){}
+
+            // B. Importe
+            let impStr = String(row[1] || '0').replace(/[^\d.,-]/g, '').replace(',', '.');
+            let importe = parseFloat(impStr) || 0;
+
+            // C. Tipo (Deducción)
+            let tipo = 'gasto';
+            const texto = (String(row[3]||'') + String(row[4]||'')).toUpperCase();
+            if (texto.includes('TRASPASO')) tipo = 'traspaso';
+            else if (importe >= 0) tipo = 'ingreso';
+
+            nuevos.push({
+                id: Date.now() + i,
+                fecha: fecha,
+                importe: importe,
+                cuenta: String(row[2] || 'Caja').replace(/"/g,''),
+                concepto: String(row[3] || 'General'),
+                detalle: String(row[4] || ''),
+                beneficiario: String(row[5] || ''),
+                tipo: tipo
+            });
+        }
+
+        movimientos = movimientos.concat(nuevos);
+        renderMovimientos();
+        alert(`✅ Importados ${nuevos.length} registros desde fila 67.`);
+    };
+
+    // 3. FUNCIÓN DE ORDENACIÓN (NUEVA)
+    function ordenarPor(columna) {
+        if (ordenActual.columna === columna) {
+            // Si ya estamos en esa columna, invertimos dirección
+            ordenActual.direccion = ordenActual.direccion === 'asc' ? 'desc' : 'asc';
+        } else {
+            // Nueva columna, empezamos ascendente
+            ordenActual.columna = columna;
+            ordenActual.direccion = 'asc';
+        }
+        renderMovimientos();
+    }
+
+    // 4. RENDERIZADO (TABLA + ORDEN + TOTALES)
+    function renderMovimientos() {
+        const tbody = document.getElementById('tabla-movimientos-body');
+        
+        // A. Actualizar Iconos de Ordenación
+        document.querySelectorAll('.sort-icon').forEach(icon => icon.textContent = '');
+        const icono = ordenActual.direccion === 'asc' ? '▲' : '▼';
+        const iconSpan = document.getElementById(`sort-${ordenActual.columna}`);
+        if(iconSpan) iconSpan.textContent = icono;
+
+        // B. Copiar y Ordenar Lista
+        let lista = [...movimientos];
+        
+        lista.sort((a, b) => {
+            let valA = a[ordenActual.columna];
+            let valB = b[ordenActual.columna];
+
+            // Tratamiento especial para strings (ignorar mayúsculas)
+            if (typeof valA === 'string') valA = valA.toLowerCase();
+            if (typeof valB === 'string') valB = valB.toLowerCase();
+
+            // Comparación
+            if (valA < valB) return ordenActual.direccion === 'asc' ? -1 : 1;
+            if (valA > valB) return ordenActual.direccion === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        // C. Calcular Totales
+        let tIng = 0, tGas = 0, tTras = 0;
+
+        // D. Generar HTML Filas
+        if (lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;">Sin datos</td></tr>';
+            actualizarTotales(0,0,0);
+            return;
+        }
+
+        const html = lista.map(m => {
+            if(m.tipo === 'ingreso') tIng += m.importe;
+            else if(m.tipo === 'gasto') tGas += m.importe;
+            else tTras += Math.abs(m.importe);
+
+            // Formato Fecha
+            let fechaFmt = m.fecha;
+            if (m.fecha.includes('-')) {
+                const [y, mm, d] = m.fecha.split('-');
+                fechaFmt = `${d}/${mm}/${y}`;
+            }
+
+            // Formato Dinero
+            const fmtMoney = new Intl.NumberFormat('es-ES', { 
+                style: 'currency', currency: 'EUR', minimumFractionDigits: 2 
+            }).format(Math.abs(m.importe));
+
+            let color = '';
+            let signo = '';
+            if(m.tipo === 'gasto') { color = 'var(--c-danger)'; signo = '-'; }
+            else if(m.tipo === 'ingreso') { color = 'var(--c-success)'; signo = '+'; }
+            else { color = 'var(--c-transfer)'; }
+
+            return `
+                <tr>
+                    <td class="td-date">${fechaFmt}</td>
+                    <td class="td-amount" style="color: ${color}">${signo}${fmtMoney}</td>
+                    <td class="td-cuenta">${m.cuenta}</td>
+                    <td class="td-concepto">${m.concepto}</td>
+                    <td class="td-desc" title="${m.detalle}">${m.detalle}</td>
+                    <td class="td-beneficiario">${m.beneficiario}</td>
+                </tr>
+            `;
+        }).join('');
+
+        tbody.innerHTML = html;
+        actualizarTotales(tIng, tGas, tTras);
+    }
+
+    function actualizarTotales(ing, gas, tras) {
+        const fmt = (n) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
+        document.getElementById('sum-ingreso').textContent = fmt(ing);
+        document.getElementById('sum-gasto').textContent = fmt(gas); 
+        document.getElementById('sum-traspaso').textContent = fmt(tras);
+    }
+
+    // 5. FUNCIONES UI
+    function toggleFab() { document.getElementById('fab-menu').classList.toggle('active'); }
+    function abrirModalGasto() { toggleFab(); openModal('gasto'); }
+    function abrirModalIngreso() { toggleFab(); openModal('ingreso'); }
+    function abrirModalTraspaso() { toggleFab(); openModal('traspaso'); }
     
+    function openModal(t) { 
+        document.getElementById('form-modal').classList.add('active'); 
+        document.getElementById('form-movimiento').reset();
+        document.getElementById('input-fecha').valueAsDate = new Date();
+        setType(t); 
+    }
+    function cerrarModal() { document.getElementById('form-modal').classList.remove('active'); }
+    function setType(t) {
+        document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('filter-pill--active'));
+        document.querySelector(`.filter-pill[data-type="${t}"]`).classList.add('filter-pill--active');
+        document.getElementById('form-movimiento').dataset.currentType = t;
+    }
     
-    <div id="calculator-overlay" class="modal-overlay" style="background: transparent;">
-    <div id="calculator-ui" class="calculator-ui">
-        <div id="calculator-history-display" class="calculator-history-display"></div>
-        <div id="calculator-display" class="calculator-display">0</div>
-        
-        <div id="calculator-grid" class="calculator-grid">
-            <button class="calculator-btn" data-key="clear" style="color: var(--c-danger); font-weight:700;">AC</button>
-            <button class="calculator-btn" data-key="divide" style="font-size: 1.4rem;">÷</button>
-            <button class="calculator-btn" data-key="multiply" style="font-size: 1.4rem;">×</button>
-            <button class="calculator-btn" data-key="backspace"><span class="material-icons backspace-icon">backspace</span></button>
+    function guardarMovimiento(e) {
+        e.preventDefault();
+        const t = document.getElementById('form-movimiento').dataset.currentType || 'gasto';
+        let imp = parseFloat(document.getElementById('input-cantidad').value) || 0;
+        if (t === 'gasto') imp = -Math.abs(imp); else imp = Math.abs(imp);
 
-            <button class="calculator-btn" data-key="7">7</button>
-            <button class="calculator-btn" data-key="8">8</button>
-            <button class="calculator-btn" data-key="9">9</button>
-            <button class="calculator-btn" data-key="subtract" style="font-size: 1.8rem;">−</button>
+        movimientos.unshift({
+            id: Date.now(),
+            fecha: document.getElementById('input-fecha').value,
+            importe: imp,
+            cuenta: 'Manual', 
+            concepto: 'General', 
+            detalle: document.getElementById('input-descripcion').value,
+            beneficiario: document.getElementById('input-beneficiario').value,
+            tipo: t
+        });
+        renderMovimientos();
+        cerrarModal();
+    }
 
-            <button class="calculator-btn" data-key="4">4</button>
-            <button class="calculator-btn" data-key="5">5</button>
-            <button class="calculator-btn" data-key="6">6</button>
-            <button class="calculator-btn" data-key="add" style="font-size: 1.6rem;">+</button>
-
-            <button class="calculator-btn" data-key="1">1</button>
-            <button class="calculator-btn" data-key="2">2</button>
-            <button class="calculator-btn" data-key="3">3</button>
-            <button class="btn btn--primary calculator-btn btn-confirm" id="calculator-btn-done" data-key="done" style="grid-row: span 2; background-color: var(--c-primary);">OK</button>
-
-            <button class="calculator-btn zero" data-key="0">0</button>
-            <button class="calculator-btn" data-key="comma">,</button>
-        </div>
-    </div>
-</div>
-	
-	<div id="irr-history-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="irr-history-title">
-        <div class="modal"><div class="modal__grabber"></div><header class="modal__header"><h3 id="irr-history-title" class="modal__title">Evolución de la TIR</h3><button class="icon-btn" data-action="close-modal" data-modal-id="irr-history-modal" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button></header><div id="irr-history-body" class="modal__body"><div class="chart-container" style="height: 100%;"><canvas id="irr-history-chart"></canvas></div></div></div>
-	</div> 
-	<!-- ▼▼▼ INICIO: MEJORA 1 - Bottom Sheet para Acciones Rápidas ▼▼▼ -->
-    <div id="main-add-sheet" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="main-add-sheet-title">
-        <div class="modal">
-            <div class="modal__grabber"></div>
-            <header class="modal__header" style="padding-top: var(--sp-2);">
-                <h3 id="main-add-sheet-title" class="modal__title">¿Qué quieres añadir?</h3>
-                <button class="icon-btn" data-action="close-modal" data-modal-id="main-add-sheet" title="Cerrar" aria-label="Cerrar"><span class="material-icons">close</span></button>
-            </header>
-            <div class="modal__body" id="main-add-sheet-body">
-                <button class="add-sheet-button" data-action="open-movement-form" data-type="gasto">
-                    <span class="material-icons" style="color: var(--c-danger);">trending_down</span>
-                    <span>Añadir Gasto</span>
-                </button>
-                <button class="add-sheet-button" data-action="open-movement-form" data-type="ingreso">
-                    <span class="material-icons" style="color: var(--c-success);">trending_up</span>
-                    <span>Añadir Ingreso</span>
-                </button>
-                <button class="add-sheet-button" data-action="open-movement-form" data-type="traspaso">
-                    <span class="material-icons" style="color: var(--c-info);">swap_horiz</span>
-                    <span>Hacer un Traspaso</span>
-                </button>
-            </div>
-        </div>
-    </div>
-	
-	<div id="calculator-iframe-modal" class="modal-overlay" 
-     style="z-index: 20000 !important; background-color: #000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; pointer-events: auto;">
-    
-    <div class="modal" style="padding: 0; width: 100%; height: 100%; max-height: 100dvh; background-color: #000; display: flex; flex-direction: column; pointer-events: auto;">
-        
-        <button class="icon-btn" data-action="close-modal" data-modal-id="calculator-iframe-modal" 
-                style="position: absolute; top: 20px; right: 20px; z-index: 20010; background: rgba(50,50,50,0.8); color: white; border: 1px solid rgba(255,255,255,0.3); width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; pointer-events: auto;">
-            <span class="material-icons" style="font-size: 24px;">close</span>
-        </button>
-        
-        <iframe id="calculator-frame" 
-                src="" 
-                style="width: 100%; height: 100%; border: none; flex-grow: 1; background-color: #000;" 
-                frameborder="0"
-                loading="eager">
-        </iframe>
-    </div>
-</div>
-	<div id="help-modal" class="modal-overlay">
-    <div class="modal" style="max-height: 85vh; display: flex; flex-direction: column;">
-        <div class="modal-header" style="flex-shrink: 0;">
-            <div style="flex-grow:1;"></div>
-            <button class="icon-btn" data-action="close-modal" data-modal-id="help-modal">
-                <span class="material-icons">close</span>
-            </button>
-        </div>
-        
-        <div id="help-modal-content" style="overflow-y: auto; padding: 20px; color: var(--c-on-surface);">
-            </div>
-        
-        <div style="padding: 15px; border-top: 1px solid var(--c-outline); flex-shrink: 0;">
-            <button class="btn btn--primary" data-action="close-modal" data-modal-id="help-modal" style="width: 100%;">
-                ¡Entendido!
-            </button>
-        </div>
-    </div>
-</div>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
-	
-    <script type="module" src="main.js"></script>
-	
+    // Calculadora
+    function abrirCalculadora() { 
+        document.getElementById('calculator').style.display = 'block'; 
+        calcValue = ''; updateCalcDisplay(); 
+    }
+    function calcInput(k) { 
+        if(calcValue==='0') calcValue=''; 
+        calcValue += k; updateCalcDisplay(); 
+    }
+    function updateCalcDisplay() { document.getElementById('calc-display').innerText = calcValue || '0'; }
+    function calcConfirm() { 
+        try { 
+            document.getElementById('input-cantidad').value = parseFloat(eval(calcValue)).toFixed(2);
+            document.getElementById('calculator').style.display = 'none'; 
+        } catch(e) { 
+            setTimeout(() => { calcValue=''; updateCalcDisplay(); }, 500); 
+        } 
+    }
+</script>
 </body>
 </html>
