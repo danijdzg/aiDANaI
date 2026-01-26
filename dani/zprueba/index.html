@@ -410,7 +410,7 @@
     function procesarExcelArrayBuffer(buffer) {
         try {
             const data = new Uint8Array(buffer);
-            // raw: true es CRUCIAL para obtener los números reales
+            // raw: true CRUCIAL para obtener los números reales
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const sheetName = workbook.SheetNames.find(n => n.toLowerCase() === 'movimientos') || workbook.SheetNames[0];
             
@@ -439,6 +439,28 @@
             str = str.replace(/\./g, '');
         }
         return parseFloat(str) || 0;
+    }
+
+    // === NUEVA FUNCIÓN: CALCULAR SALDOS PROGRESIVOS ===
+    function recalcularSaldos() {
+        // 1. Crear una copia ordenada cronológicamente (antiguo a nuevo) para calcular
+        let cronologico = [...movimientos].sort((a, b) => {
+            // Si timestamps son iguales, usamos ID (orden de fila) para estabilidad
+            if (a.timestamp === b.timestamp) return a.id - b.id;
+            return a.timestamp - b.timestamp;
+        });
+
+        // 2. Acumuladores por cuenta
+        const saldosTemp = {};
+
+        // 3. Recorrer y asignar saldo al movimiento
+        cronologico.forEach(m => {
+            if (!saldosTemp[m.cuenta]) saldosTemp[m.cuenta] = 0;
+            saldosTemp[m.cuenta] += m.importe;
+            
+            // Guardamos el saldo resultante EN ESE MOMENTO
+            m.saldoCalculado = saldosTemp[m.cuenta];
+        });
     }
 
     const parseRows = (rows) => {
@@ -491,33 +513,35 @@
             const textoAnalisis = (conceptoStr + " " + detalleStr).toUpperCase();
             
             if (textoAnalisis.includes('TRASPASO')) {
-                tipo = 'traspaso'; // AZUL
+                tipo = 'traspaso'; 
             } else {
                 if (importe >= 0) tipo = 'ingreso';
             }
 
             nuevos.push({
-                id: Date.now() + i,
+                id: Date.now() + i, // ID único para orden estable
                 timestamp: timestamp,
                 importe: importe,
                 cuenta: cuentaOrigen,
                 concepto: conceptoStr,
                 detalle: detalleStr,
                 beneficiario: beneficiarioStr,
-                tipo: tipo
+                tipo: tipo,
+                saldoCalculado: 0 // Se rellenará luego
             });
         }
         movimientos = nuevos; 
         
+        // CALCULAR SALDOS REALES
+        recalcularSaldos();
+
         // Actualizar UI Filtros
         actualizarSelectsFiltros(cuentasSet, conceptosSet, beneficiariosSet);
         
         renderMovimientos();
     };
 
-    // ========================================================
-    // 2. LÓGICA DE FILTROS
-    // ========================================================
+    // ... Resto de funciones de filtros ...
     function toggleFilters() {
         document.getElementById('filters-panel').classList.toggle('active');
     }
@@ -580,12 +604,7 @@
     function renderMovimientos() {
         const tbody = document.getElementById('tabla-movimientos-body');
         
-        // 1. Saldos globales (ignora filtros para saldo de cuenta)
-        const saldos = {};
-        movimientos.forEach(m => {
-            if (!saldos[m.cuenta]) saldos[m.cuenta] = 0;
-            saldos[m.cuenta] += m.importe;
-        });
+        // El saldo YA está calculado en m.saldoCalculado por recalcularSaldos()
 
         // 2. Filtrado
         let lista = movimientos.filter(m => {
@@ -618,7 +637,16 @@
         // 3. Ordenar
         lista.sort((a, b) => {
             let valA, valB;
+            // SI ORDENAMOS POR FECHA (LÓGICA MEJORADA)
             if (ordenActual.columna === 'fecha') {
+                if (a.timestamp === b.timestamp) {
+                    // DESEMPATE: Por Saldo Calculado
+                    // Si es DESC (lo más nuevo arriba), mostramos primero el saldo MAYOR (o final)
+                    // Asumimos que el saldo final es el "último" estado del día.
+                    return ordenActual.direccion === 'asc' 
+                        ? a.saldoCalculado - b.saldoCalculado 
+                        : b.saldoCalculado - a.saldoCalculado;
+                }
                 valA = a.timestamp;
                 valB = b.timestamp;
             } else {
@@ -627,6 +655,7 @@
                 if (typeof valA === 'string') valA = valA.toLowerCase();
                 if (typeof valB === 'string') valB = valB.toLowerCase();
             }
+            
             if (valA < valB) return ordenActual.direccion === 'asc' ? -1 : 1;
             if (valA > valB) return ordenActual.direccion === 'asc' ? 1 : -1;
             return 0;
@@ -663,10 +692,9 @@
             else if(m.tipo === 'ingreso') { color = 'var(--c-success)'; }
             else { color = 'var(--c-transfer)'; } 
 
-            const saldoCuenta = saldos[m.cuenta] || 0;
             const saldoFmt = new Intl.NumberFormat('es-ES', { 
                 style: 'currency', currency: 'EUR', minimumFractionDigits: 2 
-            }).format(saldoCuenta);
+            }).format(m.saldoCalculado);
 
             return `
                 <tr>
@@ -699,7 +727,7 @@
         setVal('sum-neto', neto);
     }
 
-    // Funciones UI
+    // Funciones UI (toggleFab, abrirModal, etc. igual que antes)
     function toggleFab() { document.getElementById('fab-menu').classList.toggle('active'); }
     function abrirModalGasto() { toggleFab(); openModal('gasto'); }
     function abrirModalIngreso() { toggleFab(); openModal('ingreso'); }
@@ -731,8 +759,11 @@
             cuenta: 'Manual', concepto: 'General', 
             detalle: document.getElementById('input-descripcion').value,
             beneficiario: document.getElementById('input-beneficiario').value,
-            tipo: t
+            tipo: t,
+            saldoCalculado: 0
         });
+        
+        recalcularSaldos();
         actualizarSelectsFiltros(new Set(movimientos.map(m=>m.cuenta)), new Set(movimientos.map(m=>m.concepto)), new Set(movimientos.map(m=>m.beneficiario)));
         renderMovimientos();
         cerrarModal();
