@@ -50,7 +50,17 @@
         
         /* CABECERA */
         header { padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--c-border); background-color: #000; }
-        h1 { margin: 0; font-size: 22px; color: white; }
+        
+        /* TÍTULO CORPORATIVO */
+        h1 { 
+            margin: 0; 
+            font-size: 24px; 
+            color: #FFFF00; /* AMARILLO */
+            font-weight: 800; /* NEGRITA EXTRA */
+            font-family: 'Inter', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
         
         .status-badge {
             font-size: 12px; padding: 6px 12px; border-radius: 20px; font-weight: 600;
@@ -69,6 +79,40 @@
         .summary-label { display: block; font-size: 12px; color: var(--c-warning); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
         .summary-value { font-size: 18px; font-weight: 700; }
         
+        /* === PANEL DE FILTROS AVANZADO === */
+        .filters-section { margin-bottom: 15px; }
+        .filters-toggle {
+            background: #222; border: 1px solid var(--c-border); color: var(--c-text);
+            padding: 10px 20px; border-radius: 12px; cursor: pointer;
+            display: flex; align-items: center; gap: 8px; font-weight: 600;
+            width: 100%; box-sizing: border-box; justify-content: center;
+            transition: background 0.2s;
+        }
+        .filters-toggle:hover { background: #333; }
+        
+        .filters-panel {
+            display: none; /* Oculto por defecto */
+            background: #111; border: 1px solid var(--c-border);
+            border-radius: 12px; padding: 15px; margin-top: 10px;
+            animation: fadeIn 0.2s ease;
+        }
+        .filters-panel.active { display: block; }
+        
+        /* Grids para filtros */
+        .filters-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .filters-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        
+        .filter-input {
+            width: 100%; background: #000; color: #fff;
+            border: 1px solid var(--c-border); padding: 10px;
+            border-radius: 8px; font-size: 13px; box-sizing: border-box;
+        }
+        .filter-input::placeholder { color: #555; }
+        
+        .filters-actions { display: flex; gap: 10px; margin-top: 15px; }
+        .btn-filter-apply { background: var(--c-primary); color: white; border: none; padding: 10px; border-radius: 8px; flex: 2; cursor: pointer; font-weight: 600; }
+        .btn-filter-clear { background: #333; color: white; border: none; padding: 10px; border-radius: 8px; flex: 1; cursor: pointer; }
+
         /* === TABLA === */
         .table-container { 
             width: 100%; 
@@ -118,6 +162,7 @@
 
         /* Helpers */
         .hidden { display: none; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
         /* Modal & Form */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 4000; display: none; justify-content: center; align-items: center; }
@@ -183,6 +228,39 @@
                 <div class="summary-card">
                     <span class="summary-label">Saldo Neto</span>
                     <span class="summary-value" id="sum-neto">0,00 €</span>
+                </div>
+            </div>
+
+            <div class="filters-section">
+                <button class="filters-toggle" onclick="toggleFilters()">
+                    <span class="material-icons">tune</span> Filtros Avanzados
+                </button>
+                <div class="filters-panel" id="filters-panel">
+                    
+                    <div class="filters-row-3">
+                        <select id="filtro-cuenta" class="filter-input"><option value="">Todas Cuentas</option></select>
+                        <select id="filtro-concepto" class="filter-input"><option value="">Todos Conceptos</option></select>
+                        <select id="filtro-beneficiario" class="filter-input"><option value="">Todos Beneficiarios</option></select>
+                    </div>
+
+                    <div class="filters-row-2">
+                        <input type="date" id="filtro-fecha-desde" class="filter-input" placeholder="Desde">
+                        <input type="date" id="filtro-fecha-hasta" class="filter-input" placeholder="Hasta">
+                    </div>
+
+                    <div class="filters-row-2">
+                        <input type="number" id="filtro-importe-min" class="filter-input" placeholder="Importe Mín (€)" step="0.01">
+                        <input type="number" id="filtro-importe-max" class="filter-input" placeholder="Importe Máx (€)" step="0.01">
+                    </div>
+
+                    <div style="margin-bottom: 10px;">
+                        <input type="text" id="filtro-texto" class="filter-input" placeholder="Buscar en descripción...">
+                    </div>
+
+                    <div class="filters-actions">
+                        <button class="btn-filter-apply" onclick="aplicarFiltros()">Aplicar Filtros</button>
+                        <button class="btn-filter-clear" onclick="limpiarFiltros()">Limpiar</button>
+                    </div>
                 </div>
             </div>
 
@@ -267,8 +345,19 @@
     
     let movimientos = [];
     let calcValue = '';
-    // ORDENACIÓN: Por defecto FECHA DESCENDENTE (Más moderna arriba)
     let ordenActual = { columna: 'fecha', direccion: 'desc' };
+    
+    // Estado de filtros
+    let filtrosActivos = {
+        cuenta: '',
+        concepto: '',
+        beneficiario: '',
+        texto: '',
+        fechaDesde: '',
+        fechaHasta: '',
+        importeMin: '',
+        importeMax: ''
+    };
 
     document.addEventListener('DOMContentLoaded', () => {
         cargarExcelLocal();
@@ -321,11 +410,12 @@
     function procesarExcelArrayBuffer(buffer) {
         try {
             const data = new Uint8Array(buffer);
+            // raw: true es CRUCIAL para obtener los números reales
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const sheetName = workbook.SheetNames.find(n => n.toLowerCase() === 'movimientos') || workbook.SheetNames[0];
             
             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { 
-                header: 1, raw: false, dateNF: 'yyyy-mm-dd', range: 65 
+                header: 1, raw: true, dateNF: 'yyyy-mm-dd', range: 65 
             });
 
             if (!rows || rows.length < 2) { 
@@ -339,47 +429,144 @@
         }
     }
 
+    // === PARSEO MONEDA ROBUSTO ===
+    function parsearMoneda(val) {
+        if (typeof val === 'number') return val;
+        let str = String(val || '0').trim().replace(/[€$£\s]/g, '');
+        if (str.includes(',')) {
+            str = str.replace(/\./g, '').replace(',', '.');
+        } else {
+            str = str.replace(/\./g, '');
+        }
+        return parseFloat(str) || 0;
+    }
+
     const parseRows = (rows) => {
         const nuevos = [];
+        const cuentasSet = new Set();
+        const conceptosSet = new Set();
+        const beneficiariosSet = new Set();
+
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
             if (!row || !row[1] || !row[3]) continue;
             
-            // MAPEO: 0:Fecha, 1:Cuenta, 2:Concepto, 3:Cantidad, 4:Desc, 5:Beneficiario
-            let fecha = new Date().toISOString().split('T')[0];
-            try {
-                if (row[0] instanceof Date) fecha = row[0].toISOString().split('T')[0];
-                else if (row[0]) {
-                    const parts = String(row[0]).trim().split(/[-/]/);
-                    if (parts.length === 3) fecha = (parts[0].length===4) ? `${parts[0]}-${parts[1]}-${parts[2]}` : `${parts[2]}-${parts[1]}-${parts[0]}`;
+            // FECHA
+            let timestamp = 0;
+            if (row[0] instanceof Date) {
+                timestamp = row[0].getTime();
+            } else {
+                let fechaStr = String(row[0] || '').trim();
+                if (fechaStr.includes('-')) {
+                    timestamp = new Date(fechaStr).getTime();
+                } else if (fechaStr.includes('/')) {
+                    const parts = fechaStr.split('/');
+                    if (parts.length === 3) {
+                        let d = parseInt(parts[0]);
+                        let m = parseInt(parts[1]) - 1;
+                        let y = parseInt(parts[2]);
+                        if (y < 100) y += 2000;
+                        timestamp = new Date(y, m, d).getTime();
+                    }
                 }
-            } catch(e){}
+            }
+            if (isNaN(timestamp) || timestamp === 0) timestamp = Date.now();
 
-            // CANTIDAD (/100)
-            let impRaw = String(row[3] || '0');
-            let impClean = impRaw.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
-            let importe = (parseFloat(impClean) || 0) / 100;
+            // IMPORTE
+            let importe = parsearMoneda(row[3]);
 
+            // CAMPOS
+            const cuentaOrigen = String(row[1] || '').replace(/"/g,'').trim(); 
+            const conceptoStr = String(row[2] || 'General').trim();           
+            const detalleStr = String(row[4] || '').trim();
+            const beneficiarioStr = String(row[5] || '').trim();
+            
+            // Recopilar para filtros
+            if(cuentaOrigen) cuentasSet.add(cuentaOrigen);
+            if(conceptoStr) conceptosSet.add(conceptoStr);
+            if(beneficiarioStr) beneficiariosSet.add(beneficiarioStr);
+
+            // TIPO
             let tipo = 'gasto';
-            const texto = (String(row[2]||'') + String(row[4]||'')).toUpperCase();
-            if (texto.includes('TRASPASO')) tipo = 'traspaso';
-            else if (importe >= 0) tipo = 'ingreso';
+            const textoAnalisis = (conceptoStr + " " + detalleStr).toUpperCase();
+            
+            if (textoAnalisis.includes('TRASPASO')) {
+                tipo = 'traspaso'; // AZUL
+            } else {
+                if (importe >= 0) tipo = 'ingreso';
+            }
 
             nuevos.push({
                 id: Date.now() + i,
-                fecha: fecha,
+                timestamp: timestamp,
                 importe: importe,
-                cuenta: String(row[1] || '').replace(/"/g,''),
-                concepto: String(row[2] || 'General'),
-                detalle: String(row[4] || ''),
-                beneficiario: String(row[5] || ''),
+                cuenta: cuentaOrigen,
+                concepto: conceptoStr,
+                detalle: detalleStr,
+                beneficiario: beneficiarioStr,
                 tipo: tipo
             });
         }
         movimientos = nuevos; 
+        
+        // Actualizar UI Filtros
+        actualizarSelectsFiltros(cuentasSet, conceptosSet, beneficiariosSet);
+        
         renderMovimientos();
     };
 
+    // ========================================================
+    // 2. LÓGICA DE FILTROS
+    // ========================================================
+    function toggleFilters() {
+        document.getElementById('filters-panel').classList.toggle('active');
+    }
+
+    function actualizarSelectsFiltros(cuentas, conceptos, beneficiarios) {
+        const fill = (id, set, label) => {
+            const el = document.getElementById(id);
+            const current = el.value;
+            el.innerHTML = `<option value="">${label}</option>`;
+            Array.from(set).sort().forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item; opt.textContent = item;
+                el.appendChild(opt);
+            });
+            el.value = current;
+        };
+
+        fill('filtro-cuenta', cuentas, 'Todas las Cuentas');
+        fill('filtro-concepto', conceptos, 'Todos los Conceptos');
+        fill('filtro-beneficiario', beneficiarios, 'Todos los Beneficiarios');
+    }
+
+    function aplicarFiltros() {
+        filtrosActivos.cuenta = document.getElementById('filtro-cuenta').value;
+        filtrosActivos.concepto = document.getElementById('filtro-concepto').value;
+        filtrosActivos.beneficiario = document.getElementById('filtro-beneficiario').value;
+        filtrosActivos.texto = document.getElementById('filtro-texto').value.toLowerCase();
+        filtrosActivos.fechaDesde = document.getElementById('filtro-fecha-desde').value;
+        filtrosActivos.fechaHasta = document.getElementById('filtro-fecha-hasta').value;
+        filtrosActivos.importeMin = document.getElementById('filtro-importe-min').value;
+        filtrosActivos.importeMax = document.getElementById('filtro-importe-max').value;
+        renderMovimientos();
+    }
+
+    function limpiarFiltros() {
+        document.getElementById('filtro-cuenta').value = '';
+        document.getElementById('filtro-concepto').value = '';
+        document.getElementById('filtro-beneficiario').value = '';
+        document.getElementById('filtro-texto').value = '';
+        document.getElementById('filtro-fecha-desde').value = '';
+        document.getElementById('filtro-fecha-hasta').value = '';
+        document.getElementById('filtro-importe-min').value = '';
+        document.getElementById('filtro-importe-max').value = '';
+        aplicarFiltros();
+    }
+
+    // ========================================================
+    // 3. RENDERIZADO Y ORDENACIÓN
+    // ========================================================
     function ordenarPor(columna) {
         if (ordenActual.columna === columna) {
             ordenActual.direccion = ordenActual.direccion === 'asc' ? 'desc' : 'asc';
@@ -393,31 +580,63 @@
     function renderMovimientos() {
         const tbody = document.getElementById('tabla-movimientos-body');
         
-        // Saldos por cuenta
+        // 1. Saldos globales (ignora filtros para saldo de cuenta)
         const saldos = {};
         movimientos.forEach(m => {
             if (!saldos[m.cuenta]) saldos[m.cuenta] = 0;
             saldos[m.cuenta] += m.importe;
         });
 
-        // Ordenar (Fechas: strings ISO yyyy-mm-dd se ordenan bien lexicográficamente)
-        let lista = [...movimientos];
-        lista.sort((a, b) => {
-            let valA = a[ordenActual.columna];
-            let valB = b[ordenActual.columna];
-            if (typeof valA === 'string') valA = valA.toLowerCase();
-            if (typeof valB === 'string') valB = valB.toLowerCase();
+        // 2. Filtrado
+        let lista = movimientos.filter(m => {
+            if (filtrosActivos.cuenta && m.cuenta !== filtrosActivos.cuenta) return false;
+            if (filtrosActivos.concepto && m.concepto !== filtrosActivos.concepto) return false;
+            if (filtrosActivos.beneficiario && m.beneficiario !== filtrosActivos.beneficiario) return false;
             
+            if (filtrosActivos.texto) {
+                const contenido = (m.descripcion + ' ' + m.detalle).toLowerCase();
+                if (!contenido.includes(filtrosActivos.texto)) return false;
+            }
+
+            if (filtrosActivos.fechaDesde) {
+                const dDesde = new Date(filtrosActivos.fechaDesde);
+                dDesde.setHours(0,0,0,0);
+                if (m.timestamp < dDesde.getTime()) return false;
+            }
+            if (filtrosActivos.fechaHasta) {
+                const dHasta = new Date(filtrosActivos.fechaHasta);
+                dHasta.setHours(23,59,59,999);
+                if (m.timestamp > dHasta.getTime()) return false;
+            }
+
+            if (filtrosActivos.importeMin !== '' && m.importe < parseFloat(filtrosActivos.importeMin)) return false;
+            if (filtrosActivos.importeMax !== '' && m.importe > parseFloat(filtrosActivos.importeMax)) return false;
+
+            return true;
+        });
+
+        // 3. Ordenar
+        lista.sort((a, b) => {
+            let valA, valB;
+            if (ordenActual.columna === 'fecha') {
+                valA = a.timestamp;
+                valB = b.timestamp;
+            } else {
+                valA = a[ordenActual.columna];
+                valB = b[ordenActual.columna];
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+            }
             if (valA < valB) return ordenActual.direccion === 'asc' ? -1 : 1;
             if (valA > valB) return ordenActual.direccion === 'asc' ? 1 : -1;
             return 0;
         });
 
-        // Totales Dashboard
+        // 4. Totales de la VISTA FILTRADA
         let tIng = 0, tGas = 0, tNeto = 0;
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;">Sin datos</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;">No se encontraron movimientos.</td></tr>';
             actualizarTotales(0,0,0);
             return;
         }
@@ -425,26 +644,24 @@
         const html = lista.map(m => {
             if(m.tipo === 'ingreso') tIng += m.importe;
             else if(m.tipo === 'gasto') tGas += m.importe;
-            
-            // Neto: Suma algebraica
             tNeto += m.importe;
 
-            // FECHA: dd/mm/aaaa (Año Completo)
-            let fechaFmt = m.fecha;
-            if (m.fecha.includes('-')) {
-                const [y, mm, d] = m.fecha.split('-');
-                fechaFmt = `${d}/${mm}/${y}`;
-            }
+            const dateObj = new Date(m.timestamp);
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const y = dateObj.getFullYear();
+            const fechaFmt = `${d}/${mo}/${y}`;
 
-            // MONEDA
             const fmtMoney = (val) => new Intl.NumberFormat('es-ES', { 
                 style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2
             }).format(Math.abs(val));
 
             let color = '', signo = '';
-            if(m.tipo === 'gasto') { color = 'var(--c-danger)'; signo = '-'; }
-            else if(m.tipo === 'ingreso') { color = 'var(--c-success)'; signo = '+'; }
-            else { color = 'var(--c-transfer)'; }
+            if (m.importe < 0) { signo = '-'; } else { signo = '+'; }
+
+            if(m.tipo === 'gasto') { color = 'var(--c-danger)'; }
+            else if(m.tipo === 'ingreso') { color = 'var(--c-success)'; }
+            else { color = 'var(--c-transfer)'; } 
 
             const saldoCuenta = saldos[m.cuenta] || 0;
             const saldoFmt = new Intl.NumberFormat('es-ES', { 
@@ -471,14 +688,12 @@
 
     function actualizarTotales(ing, gas, neto) {
         const fmt = (n) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
-        
         const setVal = (id, val) => {
             const el = document.getElementById(id);
             el.textContent = fmt(val);
             if (val >= 0) el.style.color = 'var(--c-success)';
             else el.style.color = 'var(--c-danger)';
         };
-
         setVal('sum-ingreso', ing);
         setVal('sum-gasto', gas);
         setVal('sum-neto', neto);
@@ -511,18 +726,18 @@
 
         movimientos.unshift({
             id: Date.now(),
-            fecha: document.getElementById('input-fecha').value,
+            timestamp: new Date(document.getElementById('input-fecha').value).getTime(),
             importe: imp,
             cuenta: 'Manual', concepto: 'General', 
             detalle: document.getElementById('input-descripcion').value,
             beneficiario: document.getElementById('input-beneficiario').value,
             tipo: t
         });
+        actualizarSelectsFiltros(new Set(movimientos.map(m=>m.cuenta)), new Set(movimientos.map(m=>m.concepto)), new Set(movimientos.map(m=>m.beneficiario)));
         renderMovimientos();
         cerrarModal();
     }
 
-    // Calculadora
     function abrirCalculadora() { 
         document.getElementById('calculator').style.display = 'block'; 
         calcValue = ''; updateCalcDisplay(); 
