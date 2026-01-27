@@ -158,6 +158,7 @@
             top: 0; 
             z-index: 10; /* Asegura que flote por encima de los datos */
             box-shadow: 0 2px 5px rgba(0,0,0,0.5); /* Sombra para separarlo de las filas */
+			transition: all 0.3s ease;
         }
         td { 
             padding: 8px 12px; /* Un poco menos de padding vertical */
@@ -662,25 +663,31 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         });
 
-        // === MOTOR DE ORDENACIÓN INTELIGENTE 2.0 ===
+       // === MOTOR DE ORDENACIÓN INTELIGENTE 3.0 (CORREGIDO) ===
         lista.sort((a, b) => {
-            let valA = a[window.ordenActivo.campo]; 
-            let valB = b[window.ordenActivo.campo];
+            let campo = window.ordenActivo.campo;
+            let valA = a[campo]; 
+            let valB = b[campo];
             
-            // Si es texto, normalizamos a minúsculas para comparar bien
+            // 1. Normalizamos texto a minúsculas para evitar errores
             if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
             
-            // 1. CRITERIO PRINCIPAL (Lo que tú hayas clicado: Fecha, Importe, etc.)
+            // 2. CRITERIO DE DESEMPATE (La Solución):
+            // Si el valor principal es IDÉNTICO (ej: misma fecha)
+            if (valA === valB) {
+                // Y si estamos ordenando por Fecha (ts) y es la misma Cuenta...
+                if (campo === 'ts' && a.cuenta === b.cuenta) {
+                    // ...Usamos el SALDO para desempatar. 
+                    // Esto asegura que los movimientos sigan la lógica bancaria (saldo progresivo).
+                    return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
+                }
+                // Si es otro campo (ej: mismo Importe), desempatamos por fecha para estabilidad
+                return a.ts - b.ts; 
+            }
+            
+            // 3. Ordenación Normal (Si no son iguales)
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
-            
-            // 2. NUEVA LÓGICA DE DESEMPATE (Tu petición)
-            // "Si hay empate (mismo día) Y es la misma cuenta..."
-            if (valA === valB && window.ordenActivo.campo === 'ts' && a.cuenta === b.cuenta) {
-                // ...ordenamos por el SALDO para que tenga sentido contable.
-                // Si ordenamos descendente (lo más nuevo arriba), queremos ver el saldo final arriba.
-                return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
-            }
             
             return 0;
         });
@@ -825,10 +832,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function actualizarFlechasUI(campo) {
-        // Reset visual simple para indicar qué está activo (solo color)
-        document.querySelectorAll('th').forEach(th => th.style.color = '');
+        // Quitamos el brillo a todas las cabeceras
+        document.querySelectorAll('th').forEach(th => {
+            th.style.color = 'var(--c-accent)'; // Color púrpura original
+            th.style.textShadow = 'none';
+            th.style.borderBottom = '1px solid var(--c-accent)';
+        });
+
+        // Aplicamos el Azul Neón a la columna activa
         const thActivo = document.getElementById('th-' + campo);
-        if(thActivo) thActivo.style.color = 'var(--c-primary)';
+        if(thActivo) {
+            thActivo.style.color = 'var(--c-primary)';
+            thActivo.style.textShadow = '0 0 10px var(--c-primary)';
+            thActivo.style.borderBottom = '2px solid var(--c-primary)';
+        }
     }
 	
 </script>
