@@ -132,18 +132,68 @@
         .view-section.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Dashboard */
-        .dashboard-grid { display: grid; gap: 15px; margin-top: 20px; }
-        .card { 
-            background: #050505; 
-            border: 1px solid #222; 
-            border-radius: 16px; 
-            padding: 20px; 
-            text-align: center;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        /* === SUPER DASHBOARD (ESTILO HUD) === */
+        .master-card {
+            background: linear-gradient(145deg, #0a0a0a, #000000);
+            border: 1px solid #333;
+            border-top: 3px solid var(--c-danger); /* Borde superior rojo como la imagen */
+            border-radius: 20px;
+            padding: 20px;
+            margin-top: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             position: relative;
             overflow: hidden;
         }
+        
+        /* Efecto de luz ambiental roja suave */
+        .master-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--c-danger), transparent);
+            opacity: 0.5;
+        }
+
+        .card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 25px; border-bottom: 1px solid #222; padding-bottom: 10px;
+        }
+
+        .card-title {
+            font-size: 14px; font-weight: 800; letter-spacing: 2px; color: #fff;
+            text-transform: uppercase; font-family: 'Inter', sans-serif;
+        }
+
+        .period-select {
+            background: #111; border: 1px solid #333; color: #fff;
+            padding: 5px 10px; border-radius: 6px; font-size: 12px;
+            cursor: pointer; outline: none;
+        }
+
+        /* GRILLA 2x2 */
+        .kpi-grid-2x2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* Dos columnas exactas */
+            gap: 20px 10px; /* Separación vertical grande, horizontal pequeña */
+        }
+
+        .kpi-box {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        .kpi-label {
+            font-size: 10px; font-weight: 700; color: #888; letter-spacing: 1px;
+            margin-bottom: 5px; text-transform: uppercase;
+        }
+
+        .kpi-value {
+            font-size: 26px; font-weight: 800; /* Números muy grandes */
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        /* Colores específicos para KPIs */
+        .kpi-ing { color: var(--c-success); text-shadow: 0 0 15px rgba(57, 255, 20, 0.2); }
+        .kpi-gas { color: var(--c-danger); text-shadow: 0 0 15px rgba(255, 46, 77, 0.2); }
+        .kpi-aho { color: var(--c-primary); } /* Azul para el % de ahorro */
+		
         /* Efecto de resplandor dinámico según el contenido */
         .card:has(.val-pos) { border-color: rgba(57, 255, 20, 0.3); box-shadow: 0 0 20px rgba(57, 255, 20, 0.05); }
         .card:has(.val-neg) { border-color: rgba(255, 46, 77, 0.3); box-shadow: 0 0 20px rgba(255, 46, 77, 0.05); }
@@ -522,18 +572,36 @@
             <div class="app-main">
                 
                 <div id="tab-inicio" class="view-section active">
-                    <div class="dashboard-grid">
-                        <div class="card">
-                            <span class="card-label">Ingresos</span>
-                            <span class="card-value val-pos" id="kpi-ing">0,00 €</span>
+                    <div class="master-card">
+                        <div class="card-header">
+                            <span class="card-title">RESUMEN</span>
+                            <select id="dash-period" class="period-select" onchange="actualizarDashboard()">
+                                <option value="year">Este Año</option>
+                                <option value="month">Este Mes</option>
+                                <option value="all">Histórico</option>
+                            </select>
                         </div>
-                        <div class="card">
-                            <span class="card-label">Gastos</span>
-                            <span class="card-value val-neg" id="kpi-gas">0,00 €</span>
-                        </div>
-                        <div class="card">
-                            <span class="card-label">Saldo Neto</span>
-                            <span class="card-value" id="kpi-net">0,00 €</span>
+
+                        <div class="kpi-grid-2x2">
+                            <div class="kpi-box">
+                                <span class="kpi-label">INGRESOS</span>
+                                <span class="kpi-value kpi-ing" id="d-ing">0,00</span>
+                            </div>
+
+                            <div class="kpi-box">
+                                <span class="kpi-label">GASTOS</span>
+                                <span class="kpi-value kpi-gas" id="d-gas">0,00</span>
+                            </div>
+
+                            <div class="kpi-box">
+                                <span class="kpi-label">NETO</span>
+                                <span class="kpi-value" id="d-net">0,00</span>
+                            </div>
+
+                            <div class="kpi-box">
+                                <span class="kpi-label">AHORRO</span>
+                                <span class="kpi-value kpi-aho" id="d-aho">0.00%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -756,6 +824,7 @@ document.addEventListener('DOMContentLoaded', () => {
         datos = temp;
         actualizarFiltrosUI(cuentas, conceptos, benefs);
         renderizar();
+		actualizarDashboard();
     }
 
     function renderizar() {
@@ -955,6 +1024,50 @@ document.addEventListener('DOMContentLoaded', () => {
             thActivo.style.textShadow = '0 0 10px var(--c-primary)';
             thActivo.style.borderBottom = '2px solid var(--c-primary)';
         }
+    }
+
+// === LÓGICA DEL NUEVO DASHBOARD ===
+    function actualizarDashboard() {
+        if(!datos.length) return;
+
+        const periodo = document.getElementById('dash-period').value;
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+
+        // 1. Filtrar datos según el selector
+        let dashData = datos.filter(m => {
+            const d = new Date(m.ts);
+            if (periodo === 'year') return d.getFullYear() === currentYear;
+            if (periodo === 'month') return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+            return true; // 'all'
+        });
+
+        // 2. Calcular Totales
+        let ing = 0, gas = 0;
+        dashData.forEach(m => {
+            if (m.tipo === 'ingreso') ing += m.importe;
+            if (m.tipo === 'gasto') gas += Math.abs(m.importe); // Sumamos gastos como positivo para el cálculo
+        });
+
+        let neto = ing - gas;
+        
+        // 3. Calcular Tasa de Ahorro (Avoid division by zero)
+        let tasaAhorro = 0;
+        if (ing > 0) {
+            tasaAhorro = ((ing - gas) / ing) * 100;
+        }
+
+        // 4. Renderizar en el DOM
+        // Usamos tu formateador 'fmt' que ya no tiene símbolo de euro
+        document.getElementById('d-ing').innerText = fmt(ing);
+        document.getElementById('d-gas').innerText = '-' + fmt(gas); // Ponemos el menos explícito
+        
+        const elNeto = document.getElementById('d-net');
+        elNeto.innerText = fmt(neto);
+        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas');
+
+        document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
     }
 	
 </script>
