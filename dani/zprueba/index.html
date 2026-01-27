@@ -400,21 +400,36 @@
             <div class="app-main">
                 
                 <div id="tab-inicio" class="view-section active">
-                    <div class="dashboard-grid">
-                        <div class="card">
-                            <span class="card-label">Ingresos</span>
-                            <span class="card-value val-pos" id="kpi-ing">0,00 €</span>
-                        </div>
-                        <div class="card">
-                            <span class="card-label">Gastos</span>
-                            <span class="card-value val-neg" id="kpi-gas">0,00 €</span>
-                        </div>
-                        <div class="card">
-                            <span class="card-label">Saldo Neto</span>
-                            <span class="card-value" id="kpi-net">0,00 €</span>
-                        </div>
+				<div style="background:#111; border:1px solid #333; border-radius:12px; padding:15px; margin-top:10px; margin-bottom:20px">
+                    <div style="display:flex; gap:10px; margin-bottom:10px">
+                        <button class="btn-gray" style="flex:1; font-size:12px" onclick="setRango('mes')">📅 Este Mes</button>
+                        <button class="btn-gray" style="flex:1; font-size:12px" onclick="setRango('ano')">📆 Este Año</button>
+                        <button class="btn-gray" style="flex:1; font-size:12px" onclick="setRango('todo')">∞ Todo</button>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; align-items:center">
+                        <input type="date" id="dash-desde" class="filter-input" onchange="syncFechasManual()">
+                        <input type="date" id="dash-hasta" class="filter-input" onchange="syncFechasManual()">
                     </div>
                 </div>
+                    <div class="dashboard-grid">
+                        <div class="card" onclick="verDetalle('ingreso')" style="cursor:pointer; transition:transform 0.1s" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">
+                            <span class="card-label">Ingresos</span>
+                            <span class="card-value val-pos" id="kpi-ing">0,00 €</span>
+                            <span style="font-size:10px; color:#666">Ver detalle →</span>
+                        </div>
+                        
+                        <div class="card" onclick="verDetalle('gasto')" style="cursor:pointer; transition:transform 0.1s" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">
+                            <span class="card-label">Gastos</span>
+                            <span class="card-value val-neg" id="kpi-gas">0,00 €</span>
+                            <span style="font-size:10px; color:#666">Ver detalle →</span>
+                        </div>
+                        
+                        <div class="card" onclick="verDetalle('')" style="cursor:pointer; transition:transform 0.1s" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">
+                            <span class="card-label">Saldo Neto</span>
+                            <span class="card-value" id="kpi-net">0,00 €</span>
+                            <span style="font-size:10px; color:#666">Ver movimientos →</span>
+                        </div>
+                    </div>
 
                 <div id="tab-movs" class="view-section">
                     
@@ -515,7 +530,7 @@
     try { msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); } catch(e){}
 
     let datos = [];
-    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '' };
+    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
     let modoNube = false;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -649,16 +664,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const tbody = document.getElementById('lista-movimientos');
         
         let lista = datos.filter(m => {
+            // Filtro de TIPO (Nuevo para Dashboard)
+            if (filtros.tipo) {
+                if (filtros.tipo === 'ingreso' && m.importe < 0) return false;
+                if (filtros.tipo === 'gasto' && m.importe >= 0) return false;
+            }
+
             if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
             if (filtros.concepto && m.concepto !== filtros.concepto) return false;
             if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
             if (filtros.texto) {
                 if (!(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
             }
+            // Importante: Usamos filtros.desde/hasta que ahora vendrán del Dashboard
             if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
-            if (filtros.hasta && m.ts > new Date(filtros.hasta).getTime()) return false;
-            if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
-            if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
+            if (filtros.hasta && m.ts > new Date(filtros.hasta + 'T23:59:59').getTime()) return false; // Ajuste fin de día
+            
             return true;
         });
 
@@ -830,6 +851,60 @@ document.addEventListener('DOMContentLoaded', () => {
         const thActivo = document.getElementById('th-' + campo);
         if(thActivo) thActivo.style.color = 'var(--c-primary)';
     }
+	
+	// === CONTROL DE DASHBOARD Y FECHAS ===
+
+    // 1. Configurar fechas rápidas
+    function setRango(modo) {
+        const hoy = new Date();
+        let d = '', h = '';
+        
+        if (modo === 'mes') {
+            // Primer día del mes actual
+            d = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+            // Último día del mes actual
+            h = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split('T')[0];
+        } else if (modo === 'ano') {
+            d = new Date(hoy.getFullYear(), 0, 1).toISOString().split('T')[0];
+            h = new Date(hoy.getFullYear(), 11, 31).toISOString().split('T')[0];
+        }
+        
+        // Actualizar inputs visuales
+        document.getElementById('dash-desde').value = d;
+        document.getElementById('dash-hasta').value = h;
+        
+        // Sincronizar y renderizar
+        syncFechasManual();
+    }
+
+    // 2. Sincronizar inputs del Dashboard con el sistema de filtros global
+    function syncFechasManual() {
+        filtros.desde = document.getElementById('dash-desde').value;
+        filtros.hasta = document.getElementById('dash-hasta').value;
+        
+        // También actualizamos los inputs de la pestaña "Movimientos" para que coincidan
+        document.getElementById('f-desde').value = filtros.desde;
+        document.getElementById('f-hasta').value = filtros.hasta;
+        
+        renderizar();
+    }
+
+    // 3. Drill-down: Ir a movimientos filtrados
+    function verDetalle(tipo) {
+        filtros.tipo = tipo; // 'ingreso', 'gasto' o '' (todo)
+        irPestana('movs');   // Cambiar pantalla
+        renderizar();        // Aplicar filtro
+        
+        // Feedback visual en filtros
+        if(tipo) mostrarEstado('Filtrando por: ' + tipo.toUpperCase(), 'normal');
+    }
+
+    // 4. Inicialización automática al cargar datos
+    const originalProcesar = procesarDatos;
+    procesarDatos = function(json) {
+        originalProcesar(json); // Llamar a la original
+        setRango('mes');        // Y luego forzar "Este Mes" por defecto
+    };
 	
 </script>
 </body>
