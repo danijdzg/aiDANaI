@@ -534,19 +534,31 @@
     let modoNube = false;
 
 document.addEventListener('DOMContentLoaded', () => {
-        // Listener para el archivo local (por si acaso)
+        // 1. Listener para archivo local
         document.getElementById('file-input').addEventListener('change', (e) => {
             if(e.target.files[0]) leerExcel(e.target.files[0]);
         });
 
-        // --- CAMBIO: Arrancar en modo Nube automáticamente ---
-        cambiarModo('cloud'); // Pone la interfaz en modo OneDrive
+        // 2. Configuración visual inicial
+        cambiarModo('cloud'); 
         
-        // Intentar abrir la ventana de login automáticamente
-        // Nota: Si el navegador bloquea el popup, verás el botón para pulsar manualmente.
-        setTimeout(() => {
-            loginOneDrive();
-        }, 500);
+        // 3. LÓGICA DE RETORNO (Handle Redirect)
+        // Esto verifica si el usuario acaba de aterrizar viniendo de Microsoft
+        if (msalInstance) {
+            msalInstance.handleRedirectPromise()
+                .then(resp => {
+                    if (resp) {
+                        // ¡Éxito! Volvimos con el token
+                        mostrarEstado('Conectado. Buscando...', 'normal');
+                        buscarFicheroNube(resp.accessToken);
+                    }
+                    // Si resp es null, es que el usuario entró normal a la página. No hacemos nada.
+                })
+                .catch(err => {
+                    console.error("Error Login:", err);
+                    mostrarEstado('Error de autenticación', 'err');
+                });
+        }
     });
 
     function cambiarModo(modo) {
@@ -566,13 +578,16 @@ document.addEventListener('DOMContentLoaded', () => {
         el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
     }
 
-    async function loginOneDrive() {
+    function loginOneDrive() {
         if (!msalInstance) { alert("Configura el ClientID"); return; }
-        try {
-            const resp = await msalInstance.loginPopup({ scopes: ["User.Read", "Files.Read"] });
-            mostrarEstado('Conectado. Buscando...', 'normal');
-            buscarFicheroNube(resp.accessToken);
-        } catch (e) { mostrarEstado('Error Login', 'err'); }
+        
+        // CAMBIO CRÍTICO: Usamos Redirect en lugar de Popup para evitar bloqueos
+        msalInstance.loginRedirect({
+            scopes: ["User.Read", "Files.Read"]
+        }).catch(err => {
+            console.error(err);
+            mostrarEstado('Error iniciando redirección', 'err');
+        });
     }
 
     async function buscarFicheroNube(token) {
