@@ -400,41 +400,26 @@
             <div class="app-main">
                 
                 <div id="tab-inicio" class="view-section active">
-				<div style="background:#111; border:1px solid #333; border-radius:12px; padding:15px; margin-top:10px; margin-bottom:20px">
-                    <div style="display:flex; gap:10px; margin-bottom:10px">
-                        <button class="btn-gray" style="flex:1; font-size:12px" onclick="setRango('mes')">📅 Este Mes</button>
-                        <button class="btn-gray" style="flex:1; font-size:12px" onclick="setRango('ano')">📆 Este Año</button>
-                        <button class="btn-gray" style="flex:1; font-size:12px" onclick="setRango('todo')">∞ Todo</button>
-                    </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; align-items:center">
-                        <input type="date" id="dash-desde" class="filter-input" onchange="syncFechasManual()">
-                        <input type="date" id="dash-hasta" class="filter-input" onchange="syncFechasManual()">
-                    </div>
-                </div>
                     <div class="dashboard-grid">
-                        <div class="card" onclick="verDetalle('ingreso')" style="cursor:pointer; transition:transform 0.1s" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">
+                        <div class="card">
                             <span class="card-label">Ingresos</span>
                             <span class="card-value val-pos" id="kpi-ing">0,00 €</span>
-                            <span style="font-size:10px; color:#666">Ver detalle →</span>
                         </div>
-                        
-                        <div class="card" onclick="verDetalle('gasto')" style="cursor:pointer; transition:transform 0.1s" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">
+                        <div class="card">
                             <span class="card-label">Gastos</span>
                             <span class="card-value val-neg" id="kpi-gas">0,00 €</span>
-                            <span style="font-size:10px; color:#666">Ver detalle →</span>
                         </div>
-                        
-                        <div class="card" onclick="verDetalle('')" style="cursor:pointer; transition:transform 0.1s" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">
+                        <div class="card">
                             <span class="card-label">Saldo Neto</span>
                             <span class="card-value" id="kpi-net">0,00 €</span>
-                            <span style="font-size:10px; color:#666">Ver movimientos →</span>
                         </div>
                     </div>
+                </div>
 
                 <div id="tab-movs" class="view-section">
                     
                     <button class="filters-toggle" onclick="toggleFiltros()">
-                        <span class="material-icons">filter_list</span> Filtros / Buscar
+                        <span class="material-icons">filter_list</span> Filtros Avanzados
                     </button>
 
                     <div id="panel-filtros" class="filters-container">
@@ -451,23 +436,24 @@
                             <input type="number" id="f-min" class="filter-input" placeholder="Min €">
                             <input type="number" id="f-max" class="filter-input" placeholder="Max €">
                         </div>
-                        <input type="text" id="f-texto" class="filter-input" placeholder="Buscar texto..." style="margin-bottom:10px; width:100%">
+                        <input type="text" id="f-texto" class="filter-input" placeholder="Buscar en descripción..." style="margin-bottom:10px; width:100%">
                         
                         <button class="btn-apply" onclick="aplicarFiltros()">Aplicar Filtros</button>
                         <button class="btn-clear" onclick="limpiarFiltros()">Limpiar y Cerrar</button>
                     </div>
-
-                    <div id="contador-filas" style="font-size:11px; color:#666; margin-bottom:5px; text-align:right; font-style:italic">Esperando datos...</div>
-
+					<div id="contador-filas" style="font-size:11px; color:#666; margin-bottom:5px; text-align:right; font-style:italic">Esperando datos...</div>
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
                                     <th id="th-ts" onclick="cambiarOrden('ts')" style="width:95px; cursor:pointer">Fecha ⇅</th>
+                                    
                                     <th id="th-importe" onclick="cambiarOrden('importe')" style="width:90px; text-align:right; cursor:pointer">Importe ⇅</th>
                                     <th id="th-cuenta" onclick="cambiarOrden('cuenta')" style="width:160px; cursor:pointer">Cuenta ⇅</th>
                                     <th id="th-concepto" onclick="cambiarOrden('concepto')" style="width:110px; cursor:pointer">Concepto ⇅</th>
+                                    
                                     <th id="th-detalle" onclick="cambiarOrden('detalle')" style="cursor:pointer">Descripción ⇅</th>
+                                    
                                     <th id="th-beneficiario" onclick="cambiarOrden('beneficiario')" style="width:80px; cursor:pointer">Beneficiario ⇅</th>
                                 </tr>
                             </thead>
@@ -529,48 +515,23 @@
     try { msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); } catch(e){}
 
     let datos = [];
-	// Si esta variable faltaba, la pantalla se queda negra al intentar ordenar
-    window.ordenActivo = { campo: 'ts', asc: false };
-    // Definición limpia de filtros
-    let filtros = { 
-        cuenta: '', 
-        concepto: '', 
-        beneficiario: '', 
-        texto: '', 
-        desde: '',  // Importante: vacío
-        hasta: '',  // Importante: vacío
-        min: '', 
-        max: '', 
-        tipo: ''    // Importante: vacío
-    };
+    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '' };
     let modoNube = false;
 
 document.addEventListener('DOMContentLoaded', () => {
-        // 1. Listener para archivo local
+        // Listener para el archivo local (por si acaso)
         document.getElementById('file-input').addEventListener('change', (e) => {
             if(e.target.files[0]) leerExcel(e.target.files[0]);
         });
 
-        // 2. Configuración visual inicial
-        cambiarModo('cloud'); 
+        // --- CAMBIO: Arrancar en modo Nube automáticamente ---
+        cambiarModo('cloud'); // Pone la interfaz en modo OneDrive
         
-        // 3. LÓGICA DE RETORNO (Handle Redirect)
-        // Esto verifica si el usuario acaba de aterrizar viniendo de Microsoft
-        if (msalInstance) {
-            msalInstance.handleRedirectPromise()
-                .then(resp => {
-                    if (resp) {
-                        // ¡Éxito! Volvimos con el token
-                        mostrarEstado('Conectado. Buscando...', 'normal');
-                        buscarFicheroNube(resp.accessToken);
-                    }
-                    // Si resp es null, es que el usuario entró normal a la página. No hacemos nada.
-                })
-                .catch(err => {
-                    console.error("Error Login:", err);
-                    mostrarEstado('Error de autenticación', 'err');
-                });
-        }
+        // Intentar abrir la ventana de login automáticamente
+        // Nota: Si el navegador bloquea el popup, verás el botón para pulsar manualmente.
+        setTimeout(() => {
+            loginOneDrive();
+        }, 500);
     });
 
     function cambiarModo(modo) {
@@ -590,16 +551,13 @@ document.addEventListener('DOMContentLoaded', () => {
         el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
     }
 
-    function loginOneDrive() {
+    async function loginOneDrive() {
         if (!msalInstance) { alert("Configura el ClientID"); return; }
-        
-        // CAMBIO CRÍTICO: Usamos Redirect en lugar de Popup para evitar bloqueos
-        msalInstance.loginRedirect({
-            scopes: ["User.Read", "Files.Read"]
-        }).catch(err => {
-            console.error(err);
-            mostrarEstado('Error iniciando redirección', 'err');
-        });
+        try {
+            const resp = await msalInstance.loginPopup({ scopes: ["User.Read", "Files.Read"] });
+            mostrarEstado('Conectado. Buscando...', 'normal');
+            buscarFicheroNube(resp.accessToken);
+        } catch (e) { mostrarEstado('Error Login', 'err'); }
     }
 
     async function buscarFicheroNube(token) {
@@ -626,7 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
-            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true });
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, range: 65 });
             procesarDatos(json);
             mostrarEstado('Datos cargados', 'ok');
         };
@@ -634,19 +592,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function procesarDatos(filas) {
-        // 1. Limpieza inicial
-        datos = [];
         const temp = [];
         const cuentas = new Set(), conceptos = new Set(), benefs = new Set();
 
-        // 2. Recorrer filas (saltando cabecera)
         for (let i = 1; i < filas.length; i++) {
             const row = filas[i];
-            if (!row || !row[1] || typeof row[3] === 'undefined') continue; // Validación extra
+            if (!row || !row[1] || !row[3]) continue;
 
             let ts = row[0] instanceof Date ? row[0].getTime() : Date.now();
             
-            // Limpieza de importe
             let imp = 0;
             if (typeof row[3] === 'number') imp = row[3];
             else {
@@ -656,10 +610,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 imp = parseFloat(s) || 0;
             }
 
-            const cta = String(row[1] || '').trim();
-            const con = String(row[2] || '').trim();
-            const desc = String(row[4] || '').trim();
-            const ben = String(row[5] || '').trim();
+            // === MAPEO CORREGIDO ===
+            // Col 1: Cuenta | Col 2: Concepto | Col 4: Descripcion | Col 5: Beneficiario
+            const cta = String(row[1] || '').trim(); // Cuenta
+            const con = String(row[2] || '').trim(); // Concepto (Estaba Benef)
+            const desc = String(row[4] || '').trim(); // Descripcion (Estaba Concepto)
+            const ben = String(row[5] || '').trim(); // Beneficiario (Estaba Desc)
 
             if(cta) cuentas.add(cta);
             if(con) conceptos.add(con);
@@ -676,10 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 3. Ordenar por fecha original para calcular saldos
         temp.sort((a, b) => a.ts - b.ts || a.id - b.id);
-        
-        // 4. Calcular Saldos
         const ac = {};
         temp.forEach(m => {
             if (!ac[m.cuenta]) ac[m.cuenta] = 0;
@@ -688,118 +641,96 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         datos = temp;
-        
-        // 5. Actualizar interfaz
         actualizarFiltrosUI(cuentas, conceptos, benefs);
-        
-        // ¡IMPORTANTE!: Reseteamos los filtros de fecha visuales para evitar bloqueos
-        document.getElementById('dash-desde').value = '';
-        document.getElementById('dash-hasta').value = '';
-        document.getElementById('f-desde').value = '';
-        document.getElementById('f-hasta').value = '';
-        filtros.desde = '';
-        filtros.hasta = '';
-        
-        renderizar(); 
-        irPestana('movs'); // <--- AÑADE ESTO: Fuerza la vista de la tabla al cargar
-        mostrarEstado('Datos cargados', 'ok');
+        renderizar();
     }
 
     function renderizar() {
-        try {
-            const tbody = document.getElementById('lista-movimientos');
-            const contador = document.getElementById('contador-filas');
-            
-            if (!datos || datos.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay datos cargados (o el archivo está vacío)</td></tr>';
-                if(contador) contador.innerText = '';
-                return;
+        const tbody = document.getElementById('lista-movimientos');
+        
+        let lista = datos.filter(m => {
+            if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
+            if (filtros.concepto && m.concepto !== filtros.concepto) return false;
+            if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
+            if (filtros.texto) {
+                if (!(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
             }
+            if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
+            if (filtros.hasta && m.ts > new Date(filtros.hasta).getTime()) return false;
+            if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
+            if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
+            return true;
+        });
 
-            // 1. FILTRADO
-            let lista = datos.filter(m => {
-                if (filtros.tipo) {
-                    if (filtros.tipo === 'ingreso' && m.importe < 0) return false;
-                    if (filtros.tipo === 'gasto' && m.importe >= 0) return false;
-                }
-                if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
-                if (filtros.concepto && m.concepto !== filtros.concepto) return false;
-                if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
-                if (filtros.texto && !(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
-                
-                // Fechas
-                if (filtros.desde && m.ts < new Date(filtros.desde).setHours(0,0,0,0)) return false;
-                if (filtros.hasta && m.ts > new Date(filtros.hasta).setHours(23,59,59,999)) return false;
-
-                return true;
-            });
-
-            // 2. ORDENACIÓN (Protegida)
-            if (!window.ordenActivo) window.ordenActivo = { campo: 'ts', asc: false }; // Autoreparación
+        // === MOTOR DE ORDENACIÓN INTELIGENTE 2.0 ===
+        lista.sort((a, b) => {
+            let valA = a[window.ordenActivo.campo]; 
+            let valB = b[window.ordenActivo.campo];
             
-            lista.sort((a, b) => {
-                let valA = a[window.ordenActivo.campo] || ''; 
-                let valB = b[window.ordenActivo.campo] || '';
-                
-                if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
-                
-                if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
-                if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
-                
-                if (valA === valB && window.ordenActivo.campo === 'ts' && a.cuenta === b.cuenta) {
-                    return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
-                }
-                return 0;
-            });
-
-            // 3. ACTUALIZAR KPIS
-            let i=0, g=0, n=0;
-            lista.forEach(m => {
-                if(m.importe >= 0) i += m.importe;
-                else g += m.importe;
-                n += m.importe;
-            });
-            const fmt = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(v);
-            document.getElementById('kpi-ing').innerText = fmt(i);
-            document.getElementById('kpi-gas').innerText = fmt(g);
-            document.getElementById('kpi-net').innerText = fmt(n);
-            document.getElementById('kpi-net').className = 'card-value ' + (n>=0?'val-pos':'val-neg');
-            if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
-
-            // 4. HTML
-            if (lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay movimientos con estos filtros</td></tr>';
-                return;
+            // Si es texto, normalizamos a minúsculas para comparar bien
+            if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+            
+            // 1. CRITERIO PRINCIPAL (Lo que tú hayas clicado: Fecha, Importe, etc.)
+            if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
+            if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
+            
+            // 2. NUEVA LÓGICA DE DESEMPATE (Tu petición)
+            // "Si hay empate (mismo día) Y es la misma cuenta..."
+            if (valA === valB && window.ordenActivo.campo === 'ts' && a.cuenta === b.cuenta) {
+                // ...ordenamos por el SALDO para que tenga sentido contable.
+                // Si ordenamos descendente (lo más nuevo arriba), queremos ver el saldo final arriba.
+                return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
             }
+            
+            return 0;
+        });
 
-            tbody.innerHTML = lista.map(m => {
-                const date = new Date(m.ts).toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'});
-                const dateFull = new Date(m.ts).toLocaleDateString('es-ES');
-                let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
-                let signo = m.importe > 0 ? '+' : '';
-
-                return `
-                    <tr>
-                        <td class="pc-only">${dateFull}</td>
-                        <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
-                        <td class="pc-only ${color}">${m.cuenta} (${fmt(m.saldo)})</td>
-                        <td class="pc-only">${m.concepto}</td>
-                        <td class="pc-only">${m.detalle}</td>
-                        <td class="pc-only">${m.beneficiario}</td>
-
-                        <td class="mob-only td-date-mob">${date}</td>
-                        <td class="mob-only td-cuenta-mob ${color}">${m.cuenta} <span class="saldo-small">(${fmt(m.saldo)})</span></td>
-                        <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
-                        <td class="mob-only td-desc-mob"><strong style="color:#fff">${m.concepto}</strong> - ${m.detalle}</td>
-                        <td class="mob-only td-ben-mob">${m.beneficiario}</td>
-                    </tr>
-                `;
-            }).join('');
-
-        } catch (error) {
-            console.error(error);
-            document.getElementById('lista-movimientos').innerHTML = `<tr><td colspan="6" style="color:red; padding:20px">ERROR DE RENDERIZADO: ${error.message}</td></tr>`;
+        let i=0, g=0, n=0;
+        lista.forEach(m => {
+            if(m.tipo==='ingreso') i+=m.importe;
+            if(m.tipo==='gasto') g+=m.importe;
+            n+=m.importe;
+        });
+        const fmt = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(v);
+        document.getElementById('kpi-ing').innerText = fmt(i);
+        document.getElementById('kpi-gas').innerText = fmt(g);
+        document.getElementById('kpi-net').innerText = fmt(n);
+        document.getElementById('kpi-net').className = 'card-value ' + (n>=0?'val-pos':'val-neg');
+		document.getElementById('contador-filas').innerText = `Mostrando ${lista.length} movimientos`;
+        if (lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos cargados</td></tr>';
+            return;
         }
+
+        tbody.innerHTML = lista.map(m => {
+            const date = new Date(m.ts).toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'});
+            const dateFull = new Date(m.ts).toLocaleDateString('es-ES');
+            let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
+            let signo = m.importe > 0 ? '+' : '';
+
+            // LOGICA RENDERIZADO MÓVIL (2 LINEAS EXACTAS)
+            return `
+                <tr>
+                    <td class="pc-only">${dateFull}</td>
+                    <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
+                    <td class="pc-only ${color}">${m.cuenta} (${fmt(m.saldo)})</td>
+                    <td class="pc-only">${m.concepto}</td>
+                    <td class="pc-only">${m.detalle}</td>
+                    <td class="pc-only">${m.beneficiario}</td>
+
+                    <td class="mob-only td-date-mob">${date}</td>
+                    <td class="mob-only td-cuenta-mob ${color}">
+                        ${m.cuenta} <span class="saldo-small">(${fmt(m.saldo)})</span>
+                    </td>
+                    <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
+
+                    <td class="mob-only td-desc-mob">
+                        <strong style="color:#fff">${m.concepto}</strong> - ${m.detalle}
+                    </td>
+                    <td class="mob-only td-ben-mob">${m.beneficiario}</td>
+                </tr>
+            `;
+        }).join('');
     }
 
     function irPestana(p) {
@@ -899,60 +830,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const thActivo = document.getElementById('th-' + campo);
         if(thActivo) thActivo.style.color = 'var(--c-primary)';
     }
-	
-	// === CONTROL DE DASHBOARD Y FECHAS ===
-
-    // 1. Configurar fechas rápidas
-    function setRango(modo) {
-        const hoy = new Date();
-        let d = '', h = '';
-        
-        if (modo === 'mes') {
-            // Primer día del mes actual
-            d = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
-            // Último día del mes actual
-            h = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split('T')[0];
-        } else if (modo === 'ano') {
-            d = new Date(hoy.getFullYear(), 0, 1).toISOString().split('T')[0];
-            h = new Date(hoy.getFullYear(), 11, 31).toISOString().split('T')[0];
-        }
-        
-        // Actualizar inputs visuales
-        document.getElementById('dash-desde').value = d;
-        document.getElementById('dash-hasta').value = h;
-        
-        // Sincronizar y renderizar
-        syncFechasManual();
-    }
-
-    // 2. Sincronizar inputs del Dashboard con el sistema de filtros global
-    function syncFechasManual() {
-        filtros.desde = document.getElementById('dash-desde').value;
-        filtros.hasta = document.getElementById('dash-hasta').value;
-        
-        // También actualizamos los inputs de la pestaña "Movimientos" para que coincidan
-        document.getElementById('f-desde').value = filtros.desde;
-        document.getElementById('f-hasta').value = filtros.hasta;
-        
-        renderizar();
-    }
-
-    // 3. Drill-down: Ir a movimientos filtrados
-    function verDetalle(tipo) {
-        filtros.tipo = tipo; // 'ingreso', 'gasto' o '' (todo)
-        irPestana('movs');   // Cambiar pantalla
-        renderizar();        // Aplicar filtro
-        
-        // Feedback visual en filtros
-        if(tipo) mostrarEstado('Filtrando por: ' + tipo.toUpperCase(), 'normal');
-    }
-
-    // 4. Inicialización automática al cargar datos
-    const originalProcesar = procesarDatos;
-    procesarDatos = function(json) {
-        originalProcesar(json); // Llamar a la original
-        setRango('todo');        // Y luego forzar "Este Mes" por defecto
-    };
 	
 </script>
 </body>
