@@ -178,7 +178,30 @@
         .kpi-box {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
+		/* Efecto Botón en los KPIs */
+        .kpi-click { 
+            cursor: pointer; 
+            transition: transform 0.2s, background 0.2s; 
+            border-radius: 10px;
+            padding: 5px; /* Zona de click un poco más amplia */
+        }
+        .kpi-click:hover { 
+            background: rgba(255,255,255,0.05); 
+            transform: scale(1.05); /* Pequeño zoom al pasar el ratón */
+        }
+        .kpi-click:active { transform: scale(0.95); }
 
+        /* Inputs de fecha mini para el header */
+        .mini-date {
+            background: #111; border: 1px solid #333; color: var(--c-primary);
+            border-radius: 4px; padding: 4px; font-size: 11px; font-family: 'Inter';
+            outline: none;
+        }
+        /* Ajuste móvil para que las fechas no rompan la cabecera */
+        @media (max-width: 450px) {
+            .mini-date { width: 85px; } 
+            #custom-dates { flex-direction: column; gap: 2px !important; }
+        }
         .kpi-label {
             font-size: 10px; font-weight: 700; color: #888; letter-spacing: 1px;
             margin-bottom: 5px; text-transform: uppercase;
@@ -575,25 +598,32 @@
                     <div class="master-card">
                         <div class="card-header">
                             <span class="card-title">RESUMEN</span>
-                            <select id="dash-period" class="period-select" onchange="actualizarDashboard()">
-                                <option value="year">Este Año</option>
-                                <option value="month">Este Mes</option>
-                                <option value="all">Histórico</option>
-                            </select>
+                            <div style="display:flex; gap:5px; align-items:center">
+                                <div id="custom-dates" style="display:none; gap:5px;">
+                                    <input type="date" id="d-start" class="mini-date" onchange="actualizarDashboard()">
+                                    <input type="date" id="d-end" class="mini-date" onchange="actualizarDashboard()">
+                                </div>
+                                
+                                <select id="dash-period" class="period-select" onchange="toggleCustomDates(); actualizarDashboard()">
+                                    <option value="year">Este Año</option>
+                                    <option value="month">Este Mes</option>
+                                    <option value="custom">Personalizado</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div class="kpi-grid-2x2">
-                            <div class="kpi-box">
+                            <div class="kpi-box kpi-click" onclick="verDetalleKPI('ingreso')">
                                 <span class="kpi-label">INGRESOS</span>
                                 <span class="kpi-value kpi-ing" id="d-ing">0,00</span>
                             </div>
 
-                            <div class="kpi-box">
+                            <div class="kpi-box kpi-click" onclick="verDetalleKPI('gasto')">
                                 <span class="kpi-label">GASTOS</span>
                                 <span class="kpi-value kpi-gas" id="d-gas">0,00</span>
                             </div>
 
-                            <div class="kpi-box">
+                            <div class="kpi-box kpi-click" onclick="verDetalleKPI('neto')">
                                 <span class="kpi-label">NETO</span>
                                 <span class="kpi-value" id="d-net">0,00</span>
                             </div>
@@ -696,7 +726,7 @@
     try { msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); } catch(e){}
 
     let datos = [];
-    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '' };
+    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
     let modoNube = false;
 	// Hacemos el formateador GLOBAL para que lo use la Tabla y el Dashboard
     const fmt = (v) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
@@ -833,6 +863,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const tbody = document.getElementById('lista-movimientos');
         
         let lista = datos.filter(m => {
+			// --- NUEVO FILTRO INTERNO POR TIPO ---
+            // Si filtramos por 'ingreso' o 'gasto' estricto
+            if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
+            // Si filtramos por 'neto', queremos todo MENOS traspasos
+            if (filtros.tipo === 'neto' && m.tipo === 'traspaso') return false;
             if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
             if (filtros.concepto && m.concepto !== filtros.concepto) return false;
             if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
@@ -1023,48 +1058,103 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-// === LÓGICA DEL NUEVO DASHBOARD ===
-    function actualizarDashboard() {
-        if(!datos.length) return;
+// === LÓGICA DASHBOARD 2.0 (CON RANGO PERSONALIZADO) ===
+    
+    function toggleCustomDates() {
+        const isCustom = document.getElementById('dash-period').value === 'custom';
+        document.getElementById('custom-dates').style.display = isCustom ? 'flex' : 'none';
+        
+        // Si activamos custom y están vacíos, ponemos fechas por defecto (mes actual)
+        if(isCustom && !document.getElementById('d-start').value) {
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            document.getElementById('d-start').valueAsDate = firstDay;
+            document.getElementById('d-end').valueAsDate = lastDay;
+        }
+    }
 
+    function getFechasDashboard() {
         const periodo = document.getElementById('dash-period').value;
         const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
+        let fInicio, fFin;
 
-        // 1. Filtrar datos según el selector
-        let dashData = datos.filter(m => {
-            const d = new Date(m.ts);
-            if (periodo === 'year') return d.getFullYear() === currentYear;
-            if (periodo === 'month') return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-            return true; // 'all'
-        });
+        if (periodo === 'year') {
+            fInicio = new Date(now.getFullYear(), 0, 1);
+            fFin = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        } else if (periodo === 'month') {
+            fInicio = new Date(now.getFullYear(), now.getMonth(), 1);
+            fFin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        } else if (periodo === 'custom') {
+            // Cogemos los valores de los inputs date (que son string yyyy-mm-dd)
+            const s = document.getElementById('d-start').value;
+            const e = document.getElementById('d-end').value;
+            if(!s || !e) return null; // Aún no hay fechas
+            fInicio = new Date(s);
+            fFin = new Date(e);
+            fFin.setHours(23, 59, 59); // Final del día
+        }
+        return { start: fInicio, end: fFin }; // Retorna 'null' si es histórico (option 'all' que quitamos, pero por seguridad) o error
+    }
+
+    function actualizarDashboard() {
+        if(!datos.length) return;
+        
+        const rango = getFechasDashboard();
+        
+        // 1. Filtrar datos
+        let dashData = datos;
+        if (rango && rango.start) {
+            dashData = datos.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
+        }
 
         // 2. Calcular Totales
         let ing = 0, gas = 0;
         dashData.forEach(m => {
             if (m.tipo === 'ingreso') ing += m.importe;
-            if (m.tipo === 'gasto') gas += Math.abs(m.importe); // Sumamos gastos como positivo para el cálculo
+            if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
         });
 
         let neto = ing - gas;
-        
-        // 3. Calcular Tasa de Ahorro (Avoid division by zero)
-        let tasaAhorro = 0;
-        if (ing > 0) {
-            tasaAhorro = ((ing - gas) / ing) * 100;
-        }
+        let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // 4. Renderizar en el DOM
-        // Usamos tu formateador 'fmt' que ya no tiene símbolo de euro
+        // 3. Renderizar
         document.getElementById('d-ing').innerText = fmt(ing);
-        document.getElementById('d-gas').innerText = '-' + fmt(gas); // Ponemos el menos explícito
+        document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
         const elNeto = document.getElementById('d-net');
         elNeto.innerText = fmt(neto);
-        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas');
+        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas'); // Color verde/rojo según resultado
 
         document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
+    }
+
+    // === DRILL-DOWN: DE DASHBOARD A LISTA ===
+    function verDetalleKPI(tipoObjetivo) {
+        // 1. Obtener fechas del dashboard actual
+        const rango = getFechasDashboard();
+        
+        // 2. Limpiar filtros anteriores
+        limpiarFiltros(); 
+        
+        // 3. Aplicar fechas al filtro global
+        if(rango && rango.start) {
+            // Formato YYYY-MM-DD para los inputs del filtro
+            document.getElementById('f-desde').valueAsDate = rango.start;
+            document.getElementById('f-hasta').valueAsDate = rango.end;
+            filtros.desde = document.getElementById('f-desde').value;
+            filtros.hasta = document.getElementById('f-hasta').value;
+        }
+
+        // 4. Aplicar tipo (Ingreso, Gasto o Neto)
+        filtros.tipo = tipoObjetivo; // 'ingreso', 'gasto', o 'neto'
+        
+        // 5. Renderizar y cambiar pestaña
+        aplicarFiltros(); // Esto refresca la tabla con los nuevos criterios
+        irPestana('movs');
+        
+        // Feedback visual (opcional): mostrar mensaje de qué estamos viendo
+        mostrarEstado(`Viendo detalle: ${tipoObjetivo.toUpperCase()}`, 'ok');
     }
 	
 </script>
