@@ -663,35 +663,33 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         });
 
-       // === MOTOR DE ORDENACIÓN INTELIGENTE 3.0 (CORREGIDO) ===
+       // === MOTOR DE ORDENACIÓN INTELIGENTE 4.0 (DEFINITIVO) ===
         lista.sort((a, b) => {
             let campo = window.ordenActivo.campo;
             let valA = a[campo]; 
             let valB = b[campo];
             
-            // 1. Normalizamos texto a minúsculas para evitar errores
+            // 1. Normalización de texto
             if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
             
-            // 2. CRITERIO DE DESEMPATE (La Solución):
-            // Si el valor principal es IDÉNTICO (ej: misma fecha)
+            // 2. CRITERIO DE DESEMPATE (LA SOLUCIÓN):
+            // Si el valor principal es IDÉNTICO (ej: 5 movimientos el mismo día)
             if (valA === valB) {
-                // Y si estamos ordenando por Fecha (ts) y es la misma Cuenta...
-                if (campo === 'ts' && a.cuenta === b.cuenta) {
-                    // ...Usamos el SALDO para desempatar. 
-                    // Esto asegura que los movimientos sigan la lógica bancaria (saldo progresivo).
-                    return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
-                }
-                // Si es otro campo (ej: mismo Importe), desempatamos por fecha para estabilidad
-                return a.ts - b.ts; 
+                // Aquí estaba el secreto: No hay que ordenar por el valor del saldo,
+                // sino por el "ID" (el orden en que entraron). 
+                // Esto obliga a que la columna saldo respete la secuencia matemática original.
+                
+                // Si es Ascendente (Viejo -> Nuevo): ID 1, luego ID 2...
+                // Si es Descendente (Nuevo -> Viejo): ID 2, luego ID 1...
+                return window.ordenActivo.asc ? (a.id - b.id) : (b.id - a.id);
             }
             
-            // 3. Ordenación Normal (Si no son iguales)
+            // 3. Ordenación Normal
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
             
             return 0;
         });
-
         let i=0, g=0, n=0;
         lista.forEach(m => {
             if(m.tipo==='ingreso') i+=m.importe;
