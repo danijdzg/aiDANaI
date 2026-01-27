@@ -530,7 +530,18 @@
     try { msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); } catch(e){}
 
     let datos = [];
-    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
+    // Definición limpia de filtros
+    let filtros = { 
+        cuenta: '', 
+        concepto: '', 
+        beneficiario: '', 
+        texto: '', 
+        desde: '',  // Importante: vacío
+        hasta: '',  // Importante: vacío
+        min: '', 
+        max: '', 
+        tipo: ''    // Importante: vacío
+    };
     let modoNube = false;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -622,15 +633,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function procesarDatos(filas) {
+        // 1. Limpieza inicial
+        datos = [];
         const temp = [];
         const cuentas = new Set(), conceptos = new Set(), benefs = new Set();
 
+        // 2. Recorrer filas (saltando cabecera)
         for (let i = 1; i < filas.length; i++) {
             const row = filas[i];
-            if (!row || !row[1] || !row[3]) continue;
+            if (!row || !row[1] || typeof row[3] === 'undefined') continue; // Validación extra
 
             let ts = row[0] instanceof Date ? row[0].getTime() : Date.now();
             
+            // Limpieza de importe
             let imp = 0;
             if (typeof row[3] === 'number') imp = row[3];
             else {
@@ -640,12 +655,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 imp = parseFloat(s) || 0;
             }
 
-            // === MAPEO CORREGIDO ===
-            // Col 1: Cuenta | Col 2: Concepto | Col 4: Descripcion | Col 5: Beneficiario
-            const cta = String(row[1] || '').trim(); // Cuenta
-            const con = String(row[2] || '').trim(); // Concepto (Estaba Benef)
-            const desc = String(row[4] || '').trim(); // Descripcion (Estaba Concepto)
-            const ben = String(row[5] || '').trim(); // Beneficiario (Estaba Desc)
+            const cta = String(row[1] || '').trim();
+            const con = String(row[2] || '').trim();
+            const desc = String(row[4] || '').trim();
+            const ben = String(row[5] || '').trim();
 
             if(cta) cuentas.add(cta);
             if(con) conceptos.add(con);
@@ -662,7 +675,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // 3. Ordenar por fecha original para calcular saldos
         temp.sort((a, b) => a.ts - b.ts || a.id - b.id);
+        
+        // 4. Calcular Saldos
         const ac = {};
         temp.forEach(m => {
             if (!ac[m.cuenta]) ac[m.cuenta] = 0;
@@ -671,70 +687,95 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         datos = temp;
+        
+        // 5. Actualizar interfaz
         actualizarFiltrosUI(cuentas, conceptos, benefs);
-        renderizar();
+        
+        // ¡IMPORTANTE!: Reseteamos los filtros de fecha visuales para evitar bloqueos
+        document.getElementById('dash-desde').value = '';
+        document.getElementById('dash-hasta').value = '';
+        document.getElementById('f-desde').value = '';
+        document.getElementById('f-hasta').value = '';
+        filtros.desde = '';
+        filtros.hasta = '';
+        
+        renderizar(); // Pintar todo
+        mostrarEstado('Datos cargados correctamente', 'ok');
     }
 
     function renderizar() {
         const tbody = document.getElementById('lista-movimientos');
+        const contador = document.getElementById('contador-filas');
         
+        // 1. FILTRADO SEGURO
         let lista = datos.filter(m => {
-            // Filtro de TIPO (Nuevo para Dashboard)
+            // Filtro de TIPO (Dashboard)
             if (filtros.tipo) {
                 if (filtros.tipo === 'ingreso' && m.importe < 0) return false;
                 if (filtros.tipo === 'gasto' && m.importe >= 0) return false;
             }
 
+            // Filtros de texto/select
             if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
             if (filtros.concepto && m.concepto !== filtros.concepto) return false;
             if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
             if (filtros.texto) {
                 if (!(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
             }
-            // Importante: Usamos filtros.desde/hasta que ahora vendrán del Dashboard
-            if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
-            if (filtros.hasta && m.ts > new Date(filtros.hasta + 'T23:59:59').getTime()) return false; // Ajuste fin de día
+
+            // Filtros de Fecha (Robustos)
+            if (filtros.desde && filtros.desde !== '') {
+                // Truco: Ponemos la hora a 00:00:00
+                if (m.ts < new Date(filtros.desde).setHours(0,0,0,0)) return false;
+            }
+            if (filtros.hasta && filtros.hasta !== '') {
+                // Truco: Ponemos la hora a 23:59:59 para incluir el día entero
+                if (m.ts > new Date(filtros.hasta).setHours(23,59,59,999)) return false;
+            }
+            
+            // Filtros numéricos
+            if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
+            if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
             
             return true;
         });
 
-        // === MOTOR DE ORDENACIÓN INTELIGENTE 2.0 ===
+        // 2. ORDENACIÓN INTELIGENTE (Fecha + Saldo)
         lista.sort((a, b) => {
             let valA = a[window.ordenActivo.campo]; 
             let valB = b[window.ordenActivo.campo];
             
-            // Si es texto, normalizamos a minúsculas para comparar bien
             if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
             
-            // 1. CRITERIO PRINCIPAL (Lo que tú hayas clicado: Fecha, Importe, etc.)
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
             
-            // 2. NUEVA LÓGICA DE DESEMPATE (Tu petición)
-            // "Si hay empate (mismo día) Y es la misma cuenta..."
+            // Desempate por Saldo si es la misma fecha y cuenta
             if (valA === valB && window.ordenActivo.campo === 'ts' && a.cuenta === b.cuenta) {
-                // ...ordenamos por el SALDO para que tenga sentido contable.
-                // Si ordenamos descendente (lo más nuevo arriba), queremos ver el saldo final arriba.
                 return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
             }
-            
             return 0;
         });
 
+        // 3. CÁLCULO DE TOTALES (KPIs)
         let i=0, g=0, n=0;
         lista.forEach(m => {
-            if(m.tipo==='ingreso') i+=m.importe;
-            if(m.tipo==='gasto') g+=m.importe;
-            n+=m.importe;
+            if(m.importe >= 0) i += m.importe;
+            else g += m.importe;
+            n += m.importe;
         });
+        
         const fmt = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(v);
         document.getElementById('kpi-ing').innerText = fmt(i);
         document.getElementById('kpi-gas').innerText = fmt(g);
         document.getElementById('kpi-net').innerText = fmt(n);
         document.getElementById('kpi-net').className = 'card-value ' + (n>=0?'val-pos':'val-neg');
-		document.getElementById('contador-filas').innerText = `Mostrando ${lista.length} movimientos`;
+        
+        if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
+
+        // 4. GENERACIÓN HTML
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos cargados</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay movimientos con estos filtros</td></tr>';
             return;
         }
 
@@ -744,7 +785,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
             let signo = m.importe > 0 ? '+' : '';
 
-            // LOGICA RENDERIZADO MÓVIL (2 LINEAS EXACTAS)
             return `
                 <tr>
                     <td class="pc-only">${dateFull}</td>
