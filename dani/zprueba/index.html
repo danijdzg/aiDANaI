@@ -662,16 +662,26 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         });
 
-        // === NUEVA ORDENACIÓN DINÁMICA ===
+        // === MOTOR DE ORDENACIÓN INTELIGENTE 2.0 ===
         lista.sort((a, b) => {
             let valA = a[window.ordenActivo.campo]; 
             let valB = b[window.ordenActivo.campo];
             
-            // Si es texto, ignorar mayúsculas
+            // Si es texto, normalizamos a minúsculas para comparar bien
             if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
             
+            // 1. CRITERIO PRINCIPAL (Lo que tú hayas clicado: Fecha, Importe, etc.)
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
+            
+            // 2. NUEVA LÓGICA DE DESEMPATE (Tu petición)
+            // "Si hay empate (mismo día) Y es la misma cuenta..."
+            if (valA === valB && window.ordenActivo.campo === 'ts' && a.cuenta === b.cuenta) {
+                // ...ordenamos por el SALDO para que tenga sentido contable.
+                // Si ordenamos descendente (lo más nuevo arriba), queremos ver el saldo final arriba.
+                return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
+            }
+            
             return 0;
         });
 
