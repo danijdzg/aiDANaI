@@ -530,6 +530,8 @@
     try { msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); } catch(e){}
 
     let datos = [];
+	// Si esta variable faltaba, la pantalla se queda negra al intentar ordenar
+    window.ordenActivo = { campo: 'ts', asc: false };
     // Definición limpia de filtros
     let filtros = { 
         cuenta: '', 
@@ -625,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
-            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, range: 65 });
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true });
             procesarDatos(json);
             mostrarEstado('Datos cargados', 'ok');
         };
@@ -704,109 +706,100 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderizar() {
-        const tbody = document.getElementById('lista-movimientos');
-        const contador = document.getElementById('contador-filas');
-        
-        // 1. FILTRADO SEGURO
-        let lista = datos.filter(m => {
-            // Filtro de TIPO (Dashboard)
-            if (filtros.tipo) {
-                if (filtros.tipo === 'ingreso' && m.importe < 0) return false;
-                if (filtros.tipo === 'gasto' && m.importe >= 0) return false;
+        try {
+            const tbody = document.getElementById('lista-movimientos');
+            const contador = document.getElementById('contador-filas');
+            
+            if (!datos || datos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay datos cargados (o el archivo está vacío)</td></tr>';
+                if(contador) contador.innerText = '';
+                return;
             }
 
-            // Filtros de texto/select
-            if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
-            if (filtros.concepto && m.concepto !== filtros.concepto) return false;
-            if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
-            if (filtros.texto) {
-                if (!(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
+            // 1. FILTRADO
+            let lista = datos.filter(m => {
+                if (filtros.tipo) {
+                    if (filtros.tipo === 'ingreso' && m.importe < 0) return false;
+                    if (filtros.tipo === 'gasto' && m.importe >= 0) return false;
+                }
+                if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
+                if (filtros.concepto && m.concepto !== filtros.concepto) return false;
+                if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
+                if (filtros.texto && !(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
+                
+                // Fechas
+                if (filtros.desde && m.ts < new Date(filtros.desde).setHours(0,0,0,0)) return false;
+                if (filtros.hasta && m.ts > new Date(filtros.hasta).setHours(23,59,59,999)) return false;
+
+                return true;
+            });
+
+            // 2. ORDENACIÓN (Protegida)
+            if (!window.ordenActivo) window.ordenActivo = { campo: 'ts', asc: false }; // Autoreparación
+            
+            lista.sort((a, b) => {
+                let valA = a[window.ordenActivo.campo] || ''; 
+                let valB = b[window.ordenActivo.campo] || '';
+                
+                if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+                
+                if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
+                if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
+                
+                if (valA === valB && window.ordenActivo.campo === 'ts' && a.cuenta === b.cuenta) {
+                    return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
+                }
+                return 0;
+            });
+
+            // 3. ACTUALIZAR KPIS
+            let i=0, g=0, n=0;
+            lista.forEach(m => {
+                if(m.importe >= 0) i += m.importe;
+                else g += m.importe;
+                n += m.importe;
+            });
+            const fmt = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(v);
+            document.getElementById('kpi-ing').innerText = fmt(i);
+            document.getElementById('kpi-gas').innerText = fmt(g);
+            document.getElementById('kpi-net').innerText = fmt(n);
+            document.getElementById('kpi-net').className = 'card-value ' + (n>=0?'val-pos':'val-neg');
+            if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
+
+            // 4. HTML
+            if (lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay movimientos con estos filtros</td></tr>';
+                return;
             }
 
-            // Filtros de Fecha (Robustos)
-            if (filtros.desde && filtros.desde !== '') {
-                // Truco: Ponemos la hora a 00:00:00
-                if (m.ts < new Date(filtros.desde).setHours(0,0,0,0)) return false;
-            }
-            if (filtros.hasta && filtros.hasta !== '') {
-                // Truco: Ponemos la hora a 23:59:59 para incluir el día entero
-                if (m.ts > new Date(filtros.hasta).setHours(23,59,59,999)) return false;
-            }
-            
-            // Filtros numéricos
-            if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
-            if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
-            
-            return true;
-        });
+            tbody.innerHTML = lista.map(m => {
+                const date = new Date(m.ts).toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'});
+                const dateFull = new Date(m.ts).toLocaleDateString('es-ES');
+                let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
+                let signo = m.importe > 0 ? '+' : '';
 
-        // 2. ORDENACIÓN INTELIGENTE (Fecha + Saldo)
-        lista.sort((a, b) => {
-            let valA = a[window.ordenActivo.campo]; 
-            let valB = b[window.ordenActivo.campo];
-            
-            if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
-            
-            if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
-            if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
-            
-            // Desempate por Saldo si es la misma fecha y cuenta
-            if (valA === valB && window.ordenActivo.campo === 'ts' && a.cuenta === b.cuenta) {
-                return window.ordenActivo.asc ? (a.saldo - b.saldo) : (b.saldo - a.saldo);
-            }
-            return 0;
-        });
+                return `
+                    <tr>
+                        <td class="pc-only">${dateFull}</td>
+                        <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
+                        <td class="pc-only ${color}">${m.cuenta} (${fmt(m.saldo)})</td>
+                        <td class="pc-only">${m.concepto}</td>
+                        <td class="pc-only">${m.detalle}</td>
+                        <td class="pc-only">${m.beneficiario}</td>
 
-        // 3. CÁLCULO DE TOTALES (KPIs)
-        let i=0, g=0, n=0;
-        lista.forEach(m => {
-            if(m.importe >= 0) i += m.importe;
-            else g += m.importe;
-            n += m.importe;
-        });
-        
-        const fmt = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(v);
-        document.getElementById('kpi-ing').innerText = fmt(i);
-        document.getElementById('kpi-gas').innerText = fmt(g);
-        document.getElementById('kpi-net').innerText = fmt(n);
-        document.getElementById('kpi-net').className = 'card-value ' + (n>=0?'val-pos':'val-neg');
-        
-        if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
+                        <td class="mob-only td-date-mob">${date}</td>
+                        <td class="mob-only td-cuenta-mob ${color}">${m.cuenta} <span class="saldo-small">(${fmt(m.saldo)})</span></td>
+                        <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
+                        <td class="mob-only td-desc-mob"><strong style="color:#fff">${m.concepto}</strong> - ${m.detalle}</td>
+                        <td class="mob-only td-ben-mob">${m.beneficiario}</td>
+                    </tr>
+                `;
+            }).join('');
 
-        // 4. GENERACIÓN HTML
-        if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay movimientos con estos filtros</td></tr>';
-            return;
+        } catch (error) {
+            console.error(error);
+            document.getElementById('lista-movimientos').innerHTML = `<tr><td colspan="6" style="color:red; padding:20px">ERROR DE RENDERIZADO: ${error.message}</td></tr>`;
         }
-
-        tbody.innerHTML = lista.map(m => {
-            const date = new Date(m.ts).toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'});
-            const dateFull = new Date(m.ts).toLocaleDateString('es-ES');
-            let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
-            let signo = m.importe > 0 ? '+' : '';
-
-            return `
-                <tr>
-                    <td class="pc-only">${dateFull}</td>
-                    <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
-                    <td class="pc-only ${color}">${m.cuenta} (${fmt(m.saldo)})</td>
-                    <td class="pc-only">${m.concepto}</td>
-                    <td class="pc-only">${m.detalle}</td>
-                    <td class="pc-only">${m.beneficiario}</td>
-
-                    <td class="mob-only td-date-mob">${date}</td>
-                    <td class="mob-only td-cuenta-mob ${color}">
-                        ${m.cuenta} <span class="saldo-small">(${fmt(m.saldo)})</span>
-                    </td>
-                    <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
-
-                    <td class="mob-only td-desc-mob">
-                        <strong style="color:#fff">${m.concepto}</strong> - ${m.detalle}
-                    </td>
-                    <td class="mob-only td-ben-mob">${m.beneficiario}</td>
-                </tr>
-            `;
-        }).join('');
     }
 
     function irPestana(p) {
