@@ -852,15 +852,26 @@
                 </div>
 
             </div>
-
+			<div id="tab-patri" class="view-section">
+    <div style="text-align: center; margin-bottom: 20px;">
+        <span class="kpi-label">TOTAL PATRIMONIO</span>
+        <div id="total-patri-valor" class="kpi-value" style="font-size: 42px; color: var(--c-primary); text-shadow: 0 0 20px var(--c-primary);">0,00€</div>
+    </div>
+    
+    <div id="lista-cuentas-patri" style="display: grid; gap: 15px;">
+        </div>
+</div>
             <nav class="bottom-nav">
-                <button class="nav-item active" id="nav-inicio" onclick="irPestana('inicio')">
-                    <span class="material-icons">dashboard</span> Inicio
-                </button>
-                <button class="nav-item" id="nav-movs" onclick="irPestana('movs')">
-                    <span class="material-icons">list</span> Movimientos
-                </button>
-            </nav>
+    <button class="nav-item active" id="nav-inicio" onclick="irPestana('inicio')">
+        <span class="material-icons">dashboard</span> Inicio
+    </button>
+    <button class="nav-item" id="nav-patri" onclick="irPestana('patri')">
+        <span class="material-icons">account_balance_wallet</span> Patrimonio
+    </button>
+    <button class="nav-item" id="nav-movs" onclick="irPestana('movs')">
+        <span class="material-icons">list</span> Movimientos
+    </button>
+</nav>
 
             <button id="fab-add" class="fab-btn" style="display:none" onclick="abrirModal()">+</button>
 
@@ -1320,12 +1331,17 @@
 
     // === UTILS UI ===
     function irPestana(p) {
-        document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
-        document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
-        document.getElementById('tab-'+p).classList.add('active');
-        document.getElementById('nav-'+p).classList.add('active');
-        document.getElementById('fab-add').style.display = p==='movs'?'flex':'none';
-    }
+    document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+    
+    document.getElementById('tab-'+p).classList.add('active');
+    document.getElementById('nav-'+p).classList.add('active');
+    
+    // Si entramos a patrimonio, ejecutamos el cálculo
+    if(p === 'patri') actualizarPatrimonio();
+    
+    document.getElementById('fab-add').style.display = p==='movs'?'flex':'none';
+}
     
     function toggleCustomDates() {
         const isCustom = document.getElementById('dash-period').value === 'custom';
@@ -1855,7 +1871,40 @@ if (rango && rango.start) {
         inputCant.focus(); // Ponemos el foco por si quiere cambiar el importe
     }
 	
-	
+	function actualizarPatrimonio() {
+    const contenedor = document.getElementById('lista-cuentas-patri');
+    const totalEl = document.getElementById('total-patri-valor');
+    
+    // 1. Calcular saldos finales por cuenta (considerando el filtro de Propietario D&N)
+    const saldos = {};
+    datos.filter(m => pasaFiltroPropietario(m)).forEach(m => {
+        saldos[m.cuenta] = (saldos[m.cuenta] || 0) + m.importe;
+    });
+
+    // 2. Limpiar y dibujar tarjetas
+    contenedor.innerHTML = '';
+    let sumaTotal = 0;
+
+    Object.keys(saldos).sort().forEach(cta => {
+        const monto = saldos[cta];
+        sumaTotal += monto;
+        const colorClase = monto >= 0 ? 'val-pos' : 'val-neg';
+        
+        contenedor.innerHTML += `
+            <div class="master-card" style="margin-top:0; padding: 15px; border-top: 2px solid ${monto >= 0 ? 'var(--c-success)' : 'var(--c-danger)'}">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div class="kpi-label" style="margin-bottom:0">${cta}</div>
+                        <div style="font-size: 10px; color: #555;">Saldo Actual</div>
+                    </div>
+                    <div class="kpi-value ${colorClase}" style="font-size: 20px;">${fmt(monto)}€</div>
+                </div>
+            </div>
+        `;
+    });
+
+    totalEl.innerText = fmt(sumaTotal) + '€';
+}
 
 </script>
 </body>
