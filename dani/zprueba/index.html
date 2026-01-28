@@ -852,14 +852,25 @@
 					
                 </div>
 				<div id="tab-patri" class="view-section">
-    <div style="text-align: center; margin-bottom: 25px; margin-top: 10px;">
-        <span class="kpi-label" style="display:block; margin-bottom:5px;">TOTAL PATRIMONIO</span>
-        <div id="total-patri-valor" class="kpi-value" style="font-size: 38px; color: var(--c-primary);">---</div>
+    
+    <div style="text-align: center; padding: 25px 0 15px 0;">
+        <span class="kpi-label" style="letter-spacing: 3px;">PATRIMONIO TOTAL</span>
+        <div id="total-patri-valor" class="kpi-value" style="font-size: 42px; margin-top: 5px;">---</div>
     </div>
 
-    <div id="lista-cuentas-patri" style="display: flex; flex-direction: column; gap: 15px; padding-bottom: 100px;">
-        <div style="text-align:center; color:#666; padding:20px;">Cargando datos...</div>
+    <div style="display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 2px solid var(--c-accent); margin-bottom: 5px; background: black; position: sticky; top: 0; z-index: 10;">
+        
+        <div onclick="cambiarOrdenPatrimonio('cuenta')" style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 11px; font-weight: bold; color: var(--c-accent); text-transform: uppercase;">CUENTA ⇅</span>
+        </div>
+
+        <div onclick="cambiarOrdenPatrimonio('saldo')" style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 11px; font-weight: bold; color: var(--c-accent); text-transform: uppercase;">SALDO ⇅</span>
+        </div>
     </div>
+
+    <div id="lista-cuentas-patri" style="display: flex; flex-direction: column; padding-bottom: 100px;">
+        </div>
 </div>
             </div>
 			
@@ -945,6 +956,7 @@
 	let idEnEdicion = null; // <--- NUEVA VARIABLE DE CONTROL
     let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
     let modoNube = false;
+	let ordenPatri = { campo: 'saldo', asc: false }; // Por defecto: De Mayor a Menor dinero
     let estadoPropietario = 0; // 0=Todos, 1=Dani, 2=Norma
     window.ordenActivo = { campo: 'ts', asc: false };
 
@@ -1980,6 +1992,107 @@ if (rango && rango.start) {
     
     // 5. Feedback visual para el usuario
     mostrarEstado('Extracto: ' + nombreCuenta, 'ok');
+}
+
+// === FUNCIÓN 1: CAMBIAR EL ORDEN AL HACER CLIC ===
+function cambiarOrdenPatrimonio(campo) {
+    // Si pulsamos lo mismo, invertimos el orden
+    if (ordenPatri.campo === campo) {
+        ordenPatri.asc = !ordenPatri.asc;
+    } else {
+        // Si es campo nuevo
+        ordenPatri.campo = campo;
+        // Si es 'saldo' preferimos descendente (mayor a menor) primero
+        // Si es 'cuenta' preferimos ascendente (A-Z) primero
+        ordenPatri.asc = (campo === 'cuenta');
+    }
+    
+    // Repintamos la tabla
+    actualizarPatrimonio();
+}
+
+// === FUNCIÓN 2: DIBUJAR LA TABLA COMPACTA ===
+function actualizarPatrimonio() {
+    const contenedor = document.getElementById('lista-cuentas-patri');
+    const totalEl = document.getElementById('total-patri-valor');
+
+    if (!datos || datos.length === 0) {
+        if(contenedor) contenedor.innerHTML = '<div style="text-align:center; padding:20px; color:#666">Sin datos</div>';
+        if(totalEl) totalEl.innerText = '0,00€';
+        return;
+    }
+
+    // 1. Calcular Saldos
+    const saldos = {};
+    const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+    datosFiltrados.forEach(m => {
+        const cta = m.cuenta.trim();
+        saldos[cta] = (saldos[cta] || 0) + m.importe;
+    });
+
+    // 2. Convertir a Lista para poder ordenar
+    let lista = Object.keys(saldos).map(cta => ({ cuenta: cta, saldo: saldos[cta] }));
+
+    // 3. Filtrar Cuentas a Cero
+    lista = lista.filter(item => Math.abs(item.saldo) >= 0.01);
+
+    // 4. ORDENAR (La magia ocurre aquí)
+    lista.sort((a, b) => {
+        let valA = a[ordenPatri.campo];
+        let valB = b[ordenPatri.campo];
+
+        // Si es texto, ignoramos mayúsculas
+        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+
+        if (valA < valB) return ordenPatri.asc ? -1 : 1;
+        if (valA > valB) return ordenPatri.asc ? 1 : -1;
+        return 0;
+    });
+
+    // 5. Renderizar Filas Compactas
+    contenedor.innerHTML = '';
+    let sumaTotal = 0;
+
+    lista.forEach(item => {
+        sumaTotal += item.saldo;
+        
+        const color = item.saldo >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+        const bgHover = 'rgba(255,255,255,0.05)'; // Efecto sutil al pasar ratón
+
+        // DISEÑO DE FILA ÚNICA (Estilo Excel/App Bancaria)
+        contenedor.innerHTML += `
+            <div onclick="verExtractoCuenta('${item.cuenta}')" 
+                 style="
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center; 
+                    padding: 15px 15px; 
+                    border-bottom: 1px solid #222; 
+                    cursor: pointer; 
+                    transition: background 0.2s;
+                 "
+                 onmouseover="this.style.background='${bgHover}'"
+                 onmouseout="this.style.background='transparent'"
+            >
+                <div style="font-weight: 600; font-size: 15px; color: white;">
+                    ${item.cuenta}
+                </div>
+
+                <div style="font-weight: 700; font-size: 16px; color: ${color}; text-align: right;">
+                    ${fmt(item.saldo)}€
+                </div>
+            </div>
+        `;
+    });
+
+    // Actualizar Total Global
+    totalEl.innerText = fmt(sumaTotal) + '€';
+    totalEl.className = 'kpi-value ' + (sumaTotal >= 0 ? 'kpi-ing' : 'kpi-gas');
+    
+    // Si no hay cuentas visibles
+    if(lista.length === 0) {
+        contenedor.innerHTML = '<div style="padding:20px; text-align:center; color:#555; font-style:italic">No hay cuentas con saldo activo</div>';
+    }
 }
 
 </script>
