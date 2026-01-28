@@ -805,7 +805,7 @@
                         <div style="text-align:center; padding: 10px 0;">
                             <span class="card-title" style="font-size:14px; display:block; margin-bottom:10px">PATRIMONIO NETO</span>
                             <span class="kpi-value val-std-blue" id="d-patri-total" style="font-size:36px">0,00 €</span>
-                            <div style="margin-top:5px; font-size:10px; color:#666; font-style:italic">PULSA PARA VER DETALLE</div>
+                           <div style="margin-top:5px; font-size:10px; color:var(--c-warning); font-style:italic">PULSA PARA VER DETALLE</div>
                         </div>
                     </div>
 
@@ -1343,22 +1343,24 @@
     }
 
     function actualizarDashboard() {
-        if(!datos.length) return;
+        // 1. Si no hay datos, no hacemos nada (se queda en 0)
+        if(!datos || datos.length === 0) return;
         
-        // --- PARTE 1: RESUMEN (Ingresos/Gastos del periodo) ---
+        // --- PREPARACIÓN ---
         const rango = getFechasDashboard();
+        // Filtramos por el propietario activo (Dani/Norma/Todos)
+        let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
         
-        // Filtramos por propietario
-        let datosFiltradosOwner = datos.filter(m => pasaFiltroPropietario(m));
         
-        // Filtramos por fecha (Solo para la tarjeta roja)
-        let dashData = datosFiltradosOwner;
+        // --- CÁLCULO 1: TARJETA RESUMEN (Ingresos/Gastos del periodo) ---
+        // Aplicamos filtro de fecha solo para esta tarjeta
+        let datosResumen = datosPropietario;
         if (rango && rango.start) {
-             dashData = dashData.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
+             datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
         }
 
         let ing = 0, gas = 0;
-        dashData.forEach(m => {
+        datosResumen.forEach(m => {
             if (m.tipo === 'ingreso') ing += m.importe;
             if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
         });
@@ -1366,33 +1368,34 @@
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // Renderizar Tarjeta Roja
+        // PINTAR RESUMEN
         document.getElementById('d-ing').innerText = fmt(ing);
         document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
         const elNeto = document.getElementById('d-net');
         elNeto.innerText = fmt(neto);
-        // Usamos colores standard (Verde/Rojo)
         elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
 
         document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
         
-        // --- PARTE 2: PATRIMONIO (Suma total histórica) ---
-        // Para el patrimonio usamos TODOS los datos del propietario seleccionado (sin filtro de fecha)
-        let totalPatrimonio = 0;
-        datosFiltradosOwner.forEach(m => {
-            totalPatrimonio += m.importe;
-        });
+
+        // --- CÁLCULO 2: PATRIMONIO (Suma Histórica TOTAL) ---
+        // Aquí usamos 'datosPropietario' (SIN filtrar fecha) porque el patrimonio es histórico
+        // Usamos .reduce para una suma matemática precisa de todos los movimientos
+        let totalPatrimonio = datosPropietario.reduce((acumulado, movimiento) => {
+            return acumulado + movimiento.importe;
+        }, 0);
         
         const elPatri = document.getElementById('d-patri-total');
         if(elPatri) {
             elPatri.innerText = fmt(totalPatrimonio) + ' €';
+            
+            // Forzamos el color azul por si acaso se perdió
+            elPatri.classList.add('val-std-blue');
         }
 
-        // --- PARTE 3: GRÁFICO ---
-        // (Si tienes la función de actualizar gráfico, aquí se llamaría. 
-        // Si no la tienes definida en este bloque, asegúrate de que el canvas exista)
-        if(typeof actualizarGrafico === 'function') actualizarGrafico(dashData);
+        // --- EXTRAS ---
+        if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
 
     // === UTILS UI ===
