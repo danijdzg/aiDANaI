@@ -1217,6 +1217,7 @@
         actualizarFiltrosUI(cuentas, conceptos, benefs);
         renderizar();
         actualizarDashboard();
+		actualizarPatrimonio();
 		revisarBotonExportar();
     }
 
@@ -1965,72 +1966,109 @@ if (rango && rango.start) {
     }
 	
 	function actualizarPatrimonio() {
-    const contenedor = document.getElementById('lista-cuentas-patri');
-    const totalEl = document.getElementById('total-patri-valor');
+        // IDs de los elementos de destino
+        const contenedorLista = document.getElementById('lista-cuentas-patri'); // Lista en pestaña Patrimonio
+        const elTotalDetalle = document.getElementById('total-patri-valor');    // Total en pestaña Patrimonio
+        const elTotalHome = document.getElementById('d-patri-total');           // Total en pestaña INICIO (Tarjeta Azul)
 
-    // PROTECCIONES
-    if (!contenedor || !totalEl) return;
-    if (!datos || datos.length === 0) {
-        contenedor.innerHTML = '<div style="text-align:center; color:#666; padding:40px; border:1px dashed #333; border-radius:10px;">No hay datos cargados.<br>Carga un Excel o conecta la nube.</div>';
-        totalEl.innerText = '0,00€';
-        return;
-    }
+        // 1. Protección contra datos vacíos
+        if (!datos || datos.length === 0) {
+            if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#666">Sin datos cargados</div>';
+            const cero = fmt(0) + ' €';
+            if(elTotalDetalle) elTotalDetalle.innerText = cero;
+            if(elTotalHome) elTotalHome.innerText = cero;
+            return;
+        }
 
-    // 1. Calcular saldos
-    const saldos = {};
-    const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
-    
-    datosFiltrados.forEach(m => {
-        const nombreCuenta = m.cuenta.trim();
-        saldos[nombreCuenta] = (saldos[nombreCuenta] || 0) + m.importe;
-    });
-
-    // 2. Renderizar
-    contenedor.innerHTML = '';
-    let sumaTotal = 0;
-    const cuentasOrdenadas = Object.keys(saldos).sort();
-    let cuentasVisibles = 0;
-
-    cuentasOrdenadas.forEach(cta => {
-        const monto = saldos[cta];
+        // 2. Calcular Saldos por Cuenta (Filtrando por propietario D&N)
+        const saldos = {};
+        const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
         
-        // --- FILTRO: SI ES 0 (o casi 0), NO LO MOSTRAMOS ---
-        if (Math.abs(monto) < 0.01) return;
+        datosFiltrados.forEach(m => {
+            const cta = m.cuenta.trim();
+            // Suma robusta para evitar errores de texto
+            const val = parseFloat(m.importe) || 0;
+            saldos[cta] = (saldos[cta] || 0) + val;
+        });
 
-        sumaTotal += monto;
-        cuentasVisibles++;
+        // 3. Agrupar por TIPO (Banco, Inversión, etc.) y Calcular GRAN TOTAL
+        const grupos = {};
+        let sumaTotal = 0;
+
+        Object.keys(saldos).forEach(cta => {
+            const saldo = saldos[cta];
+            // Filtro cosmético: Ocultar cuentas con saldo 0 (evita ruido)
+            if (Math.abs(saldo) < 0.01) return;
+
+            sumaTotal += saldo; // Sumamos al Gran Patrimonio
+
+            // Buscamos configuración (o asignamos defecto)
+            const config = (mapaCuentas && mapaCuentas[cta]) ? mapaCuentas[cta] : { tipo: 'OTROS', esInversion: false };
+            const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
+
+            if (!grupos[nombreGrupo]) {
+                grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
+            }
+            
+            grupos[nombreGrupo].total += saldo;
+            grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
+        });
+
+        // 4. ACTUALIZACIÓN VISUAL (AQUÍ ESTÁ LA SOLUCIÓN)
         
-        // Colores Neón
-        const colorTexto = monto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-        const colorBorde = monto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-        const icono = monto >= 0 ? 'trending_up' : 'trending_down';
+        const textoTotal = fmt(sumaTotal) + ' €';
+        const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg'; // Azul si positivo, Rojo si deuda
 
-        // AÑADIMOS EL EVENTO ONCLICK Y EL CURSOR POINTER
-        contenedor.innerHTML += `
-            <div class="master-card" onclick="verExtractoCuenta('${cta}')" style="margin-top:0; padding: 15px; border-top: none; border-left: 4px solid ${colorBorde}; background: #0a0a0a; cursor: pointer; transition: transform 0.2s;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display:flex; flex-direction:column; gap:4px;">
-                        <span style="font-size: 14px; font-weight:700; color:white;">${cta}</span>
-                        <span style="font-size: 10px; color:#666; text-transform:uppercase;">Saldo Actual <span style="color:var(--c-primary); font-size:9px;">(VER EXTRACTO)</span></span>
+        // A) Actualizamos pestaña DETALLE
+        if (elTotalDetalle) {
+            elTotalDetalle.innerText = textoTotal;
+            elTotalDetalle.className = 'kpi-value ' + claseColor;
+        }
+
+        // B) Actualizamos pestaña INICIO (¡El arreglo que pedías!)
+        if (elTotalHome) {
+            elTotalHome.innerText = textoTotal;
+            elTotalHome.className = 'kpi-value ' + claseColor;
+        }
+
+        // 5. Renderizar la Lista de Cuentas (Acordeón)
+        if (contenedorLista) {
+            contenedorLista.innerHTML = '';
+            
+            // Si todo es 0
+            if (Object.keys(grupos).length === 0) {
+                contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#555">No hay cuentas con saldo</div>';
+                return;
+            }
+
+            Object.keys(grupos).sort().forEach(nombreGrupo => {
+                const grupo = grupos[nombreGrupo];
+                const colorGrupo = grupo.esInversion ? '#BF5AF2' : '#FFFFFF'; 
+                const bordeEstilo = grupo.esInversion ? '3px solid #BF5AF2' : '3px solid #333';
+                
+                let htmlCuentas = '';
+                grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
+                    const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+                    htmlCuentas += `
+                        <div onclick="verExtractoCuenta('${c.nombre}')" style="display:flex; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #1a1a1a; cursor:pointer;">
+                            <span style="color:#bbb; font-size:13px;">${c.nombre}</span>
+                            <span style="color:${colorVal}; font-weight:700; font-size:13px;">${fmt(c.valor)}€</span>
+                        </div>
+                    `;
+                });
+
+                contenedorLista.innerHTML += `
+                    <div style="margin-bottom: 12px; background: #080808; border-radius: 10px; overflow:hidden; border-left: ${bordeEstilo}; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
+                        <div style="padding: 10px 15px; background: #111; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #222;">
+                            <span style="color:${colorGrupo}; font-weight:800; font-size:11px; letter-spacing:1px;">${nombreGrupo}</span>
+                            <span style="color:#fff; font-weight:700; font-size:14px;">${fmt(grupo.total)}€</span>
+                        </div>
+                        <div>${htmlCuentas}</div>
                     </div>
-                    <div style="text-align:right;">
-                        <span style="font-size: 18px; font-weight:800; color:${colorTexto}; text-shadow: 0 0 10px rgba(0,0,0,0.5);">${fmt(monto)}€</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    // Aviso si todas las cuentas están a cero
-    if (cuentasVisibles === 0) {
-        contenedor.innerHTML = '<div style="text-align:center; color:#666; font-style:italic; padding:20px;">Todas las cuentas están a 0,00€</div>';
+                `;
+            });
+        }
     }
-
-    // Actualizar el gran total (incluye todo, incluso lo oculto si quisieras, pero aquí suma lo visible)
-    totalEl.innerText = fmt(sumaTotal) + '€';
-    totalEl.style.color = sumaTotal >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-    totalEl.style.textShadow = sumaTotal >= 0 ? '0 0 20px rgba(57, 255, 20, 0.4)' : '0 0 20px rgba(255, 46, 77, 0.4)';
-}
 
 	function verExtractoCuenta(nombreCuenta) {
     // 1. Limpiamos cualquier filtro previo para evitar confusiones
