@@ -1504,10 +1504,17 @@
         document.getElementById('modal-manual').classList.remove('active');
         idEnEdicion = null; // Resetear variable siempre al terminar
         
-        // Activar botón de exportar
-        const btnExport = document.getElementById('btn-export-excel');
-        btnExport.style.display = 'flex';
-        btnExport.classList.add('btn-glow');
+        // === ZONA DE DECISIÓN INTELIGENTE ===
+        if (modoNube) {
+            // SI ESTAMOS EN LA NUBE: Guardar directo
+            guardarCambiosEnFichero(true); // 'true' indica que es automático
+        } else {
+            // SI ESTAMOS EN LOCAL: Recordar exportar
+            mostrarEstado('Dato en memoria. Recuerda exportar el Excel.', 'normal');
+            const btnExport = document.getElementById('btn-export-excel');
+            btnExport.style.display = 'flex';
+            btnExport.classList.add('btn-glow');
+        }
     }
 
     let calcVal = '';
@@ -1646,67 +1653,88 @@ if (rango && rango.start) {
         mostrarEstado(`Viendo detalle: ${tipoObjetivo.toUpperCase()}`, 'ok');
     }
 	
-	// === MOTOR DE GUARDADO AUTOMÁTICO ===
-    
-    async function guardarCambiosEnFichero() {
-        mostrarEstado('Guardando cambios...', 'normal');
+	// === MOTOR DE SINCRONIZACIÓN EN LA NUBE (AUTO-SAVE) ===
+    async function guardarCambiosEnFichero(esAutomatico = false) {
+        if (!modoNube) {
+            // Si es modo local, comportamiento antiguo (descarga)
+            generarYDescargarExcel();
+            return;
+        }
 
-        // 1. PREPARAR DATOS: Convertimos el JSON de la app al formato de filas de Excel
-        // Estructura original: Fecha | Cuenta | Concepto | Importe | Detalle | Beneficiario
-        const filasExcel = datos.map(m => {
-            return [
-                new Date(m.ts), // Col A: Fecha
-                m.cuenta,       // Col B: Cuenta
-                m.concepto,     // Col C: Concepto
-                m.importe,      // Col D: Importe
-                m.detalle,      // Col E: Descripción
-                m.beneficiario  // Col F: Beneficiario
-            ];
-        });
+        // Feedback visual inmediato
+        mostrarEstado('⏳ Sincronizando con OneDrive...', 'normal');
+        
+        // 1. Preparar los datos
+        const wb = generarLibroExcel();
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 
-        // Añadimos cabecera
-        filasExcel.unshift(["Fecha", "Cuenta", "Concepto", "Importe", "Descripción", "Beneficiario"]);
+        try {
+            // 2. Obtener un token fresco (Silenciosamente)
+            const account = msalInstance.getAllAccounts()[0];
+            if (!account) throw new Error("No hay sesión activa");
+            
+            const tokenResp = await msalInstance.acquireTokenSilent({
+                scopes: ["Files.ReadWrite.All"],
+                account: account
+            });
 
-        // 2. CREAR LIBRO EXCEL VIRTUAL
-        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+            // 3. ENVIAR A ONEDRIVE (PUT = Sobrescribir)
+            const url = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
+            const resp = await fetch(url, {
+                method: 'PUT',
+                headers: {
+                    "Authorization": `Bearer ${tokenResp.accessToken}`,
+                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                },
+                body: wbout
+            });
 
-        if (modoNube && oneDriveToken) {
-            // === MODO NUBE: Sobrescribir en OneDrive ===
-            try {
-                // Generar binario
-                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            if (resp.ok) {
+                mostrarEstado('✅ Guardado en Nube correctamente', 'ok');
                 
-                // Subir a Microsoft Graph
-                const url = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
-                const resp = await fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        "Authorization": `Bearer ${oneDriveToken}`,
-                        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    },
-                    body: wbout
-                });
-
-                if (resp.ok) {
-                    mostrarEstado('¡Guardado en OneDrive!', 'ok');
-                    setTimeout(() => mostrarEstado('Sincronizado', 'ok'), 3000);
-                } else {
-                    throw new Error("Error subiendo");
+                // Si fue automático, quitamos el brillo del botón exportar porque ya está a salvo
+                if(esAutomatico) {
+                    const btnExport = document.getElementById('btn-export-excel');
+                    btnExport.classList.remove('btn-glow');
+                    btnExport.style.display = 'none'; // Lo ocultamos, ya no hace falta
                 }
-            } catch (e) {
-                mostrarEstado('Error al guardar en Nube', 'err');
-                // Fallback: Descargar local si falla la nube
-                XLSX.writeFile(wb, "aidanai_rescue.xlsx");
+                
+                setTimeout(() => mostrarEstado('Sincronizado', 'ok'), 3000);
+            } else {
+                throw new Error("Error en la respuesta de Microsoft");
             }
 
-        } else {
-            // === MODO LOCAL: Descargar archivo nuevo ===
-            // Los navegadores PROHIBEN sobrescribir archivos locales por seguridad
-            XLSX.writeFile(wb, "aidanai_actualizado.xlsx");
-            mostrarEstado('Archivo descargado', 'ok');
+        } catch (e) {
+            console.error(e);
+            mostrarEstado('⚠️ Error al subir. Descargando copia de seguridad...', 'err');
+            // Si falla la nube, descargamos localmente para no perder datos
+            XLSX.writeFile(wb, "aidanai_rescue.xlsx");
         }
+    }
+
+    // Funciones auxiliares para no repetir código
+    function generarLibroExcel() {
+        // Estructura de 65 filas vacías + datos
+        const filasExcel = Array(65).fill([]); 
+        filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
+
+        datos.forEach(m => {
+            filasExcel.push([
+                new Date(m.ts), m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario
+            ]);
+        });
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
+        ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
+        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+        return wb;
+    }
+
+    function generarYDescargarExcel() {
+        const wb = generarLibroExcel();
+        XLSX.writeFile(wb, "aidanai_local.xlsx");
+        mostrarEstado('Archivo descargado (Modo Local)', 'ok');
     }
 	
 	// Función para mostrar el botón de exportar cuando hay datos
@@ -1717,43 +1745,16 @@ if (rango && rango.start) {
         }
     }
 
-    // FUNCIÓN MAESTRA DE EXPORTACIÓN
-    function exportarExcel() {
+   function exportarExcel() {
         if (!datos.length) return;
-	// Quitamos el brillo porque el usuario ya ha exportado los cambios
         document.getElementById('btn-export-excel').classList.remove('btn-glow');
-        // 1. Creamos la estructura de 65 filas vacías (para respetar tu formato original)
-        const filasExcel = Array(65).fill([]); 
-
-        // 2. Añadimos la fila de encabezados
-        filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
-
-        // 3. Convertimos nuestros datos al formato de filas de Excel
-        datos.forEach(m => {
-            const fechaObj = new Date(m.ts);
-            filasExcel.push([
-                fechaObj,      // Col 0: Fecha
-                m.cuenta,      // Col 1: Cuenta
-                m.concepto,    // Col 2: Concepto
-                m.importe,     // Col 3: Importe
-                m.detalle,     // Col 4: Descripción
-                m.beneficiario // Col 5: Beneficiario
-            ]);
-        });
-
-        // 4. Creamos el libro de Excel con la librería SheetJS
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
         
-        // Ajustamos el formato de la columna de fecha para que Excel la entienda
-        ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
-
-        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-
-        // 5. Descargamos el archivo con el nombre exacto que espera tu app
-        XLSX.writeFile(wb, "aidanai.xlsx");
-        
-        mostrarEstado('Archivo "aidanai.xlsx" generado con éxito', 'ok');
+        // Reutilizamos la lógica nueva
+        if (modoNube) {
+            guardarCambiosEnFichero(false); // Forzar subida manual
+        } else {
+            generarYDescargarExcel(); // Descarga local
+        }
     }
 	
 </script>
