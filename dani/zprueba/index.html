@@ -1400,28 +1400,36 @@
         if(d.value === '') d.value = c;
     }
     function guardarManual() {
+        // 1. Capturamos TODOS los valores reales del formulario
         const imp = parseFloat(document.getElementById('m-cantidad').value);
         const desc = document.getElementById('m-desc').value;
         const fecha = document.getElementById('m-fecha').value;
         
-        if(!imp || !desc || !fecha) {
-            alert("Por favor, rellena todos los campos");
+        // AQUÍ ESTABA EL ERROR: Antes no leíamos estos campos
+        const cuenta = document.getElementById('m-cuenta').value;
+        const concepto = document.getElementById('m-concepto').value;
+        const beneficiario = document.getElementById('m-beneficiario').value;
+        
+        // 2. Validación de seguridad
+        if(!imp || !desc || !fecha || !cuenta || !concepto) {
+            alert("Por favor, completa todos los campos (Importe, Cuenta, Concepto, Descripción y Fecha)");
             return;
         }
 
+        // 3. Guardamos el movimiento con los datos REALES
         datos.push({
             id: Date.now(), 
             ts: new Date(fecha).getTime(),
             importe: imp, 
-            cuenta: 'MANUAL', 
-            concepto: 'GENERAL', 
+            cuenta: cuenta,               // <--- AHORA SÍ: Guarda la cuenta seleccionada
+            concepto: concepto,           // <--- AHORA SÍ: Guarda el concepto seleccionado
             detalle: desc,
-            beneficiario: '-', 
+            beneficiario: beneficiario || '-', // <--- AHORA SÍ: Guarda el beneficiario (o un guion si está vacío)
             tipo: imp >= 0 ? 'ingreso' : 'gasto', 
             saldo: 0
         });
         
-        // Recalcular y reordenar
+        // 4. Recalcular saldos y reordenar por fecha
         datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
         const ac = {};
         datos.forEach(m => {
@@ -1430,18 +1438,23 @@
             m.saldo = ac[m.cuenta];
         });
 
+        // 5. Actualizar la pantalla
         renderizar();
         actualizarDashboard();
         document.getElementById('modal-manual').classList.remove('active');
         
-        // Limpiar campos para la próxima
+        // 6. Limpiar el formulario para la próxima vez
         document.getElementById('m-cantidad').value = '';
         document.getElementById('m-desc').value = '';
+        document.getElementById('m-cuenta').value = '';       // Limpiamos select
+        document.getElementById('m-concepto').value = '';     // Limpiamos select
+        document.getElementById('m-beneficiario').value = ''; // Limpiamos select
         
-        mostrarEstado('¡Movimiento añadido! No olvides exportar para guardar permanentemente.', 'ok');
-		// Activar el recordatorio visual en el botón de exportar
+        mostrarEstado('¡Movimiento añadido! Exporta para guardar.', 'ok');
+
+        // 7. Activar el brillo del botón EXPORTAR (Recordatorio)
         const btnExport = document.getElementById('btn-export-excel');
-        btnExport.style.display = 'flex'; // Nos aseguramos de que sea visible
+        btnExport.style.display = 'flex';
         btnExport.classList.add('btn-glow');
     }
 
