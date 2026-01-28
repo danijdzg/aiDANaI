@@ -857,71 +857,100 @@
             redirectUri: window.location.href
         }
     };
-    let msalInstance;
-    try { msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); } catch(e){}
+const MSAL_CONFIG = {
+        auth: {
+            clientId: "TU-CLIENT-ID-AQUI", // <--- ¡¡NO OLVIDES PEGAR TU ID AQUÍ!!
+            authority: "https://login.microsoftonline.com/common",
+            redirectUri: window.location.href
+        }
+    };
 
+    // VARIABLES GLOBALES
+    let msalInstance;
+    let oneDriveToken = null; // Token para guardar archivos
     let datos = [];
     let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
-	let estadoPropietario = 0; // 0=Todos, 1=Dani, 2=Norma
     let modoNube = false;
-	// Hacemos el formateador GLOBAL para que lo use la Tabla y el Dashboard
+    let estadoPropietario = 0; // 0=Todos, 1=Dani, 2=Norma
+    window.ordenActivo = { campo: 'ts', asc: false };
+
+    // Formateador de moneda
     const fmt = (v) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
-	
-document.addEventListener('DOMContentLoaded', () => {
-        // 1. Configurar el listener para archivo local (Plan B)
-        document.getElementById('file-input').addEventListener('change', (e) => {
-            if(e.target.files[0]) leerExcel(e.target.files[0]);
-        });
 
-        // 2. FORZAR VISUALMENTE EL MODO NUBE
-        // Esto oculta los botones locales y muestra los de la nube inmediatamente
-        cambiarModo('cloud');
-        
-        // 3. MENSAJE DE ESPERA
-        mostrarEstado('Iniciando conexión...', 'normal');
+    // === ARRANQUE DE LA APLICACIÓN ===
+    document.addEventListener('DOMContentLoaded', () => {
+        // 1. Inicializar MSAL (Librería Microsoft)
+        try { 
+            msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); 
+        } catch(e){
+            console.error("Error MSAL:", e);
+        }
 
-        // 4. LANZAMIENTO AUTOMÁTICO
-        // Damos 1 segundo de cortesía para que la librería MSAL cargue correctamente
+        // 2. Configurar Listener para Archivo Local (Plan B)
+        const fileInput = document.getElementById('file-input');
+        if(fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                if(e.target.files[0]) leerExcel(e.target.files[0]);
+            });
+        }
+
+        // 3. Forzar Modo Nube Visualmente al inicio
+        cambiarModo('cloud'); 
+
+        // 4. Intentar Auto-Login con un pequeño retraso para asegurar carga
+        mostrarEstado('Conectando con la nube...', 'normal');
         setTimeout(() => {
-            if (typeof loginOneDrive === 'function') {
-                console.log("Intentando auto-login...");
-                loginOneDrive(); 
+            if (msalInstance) {
+                loginOneDrive();
             } else {
-                mostrarEstado('Error: Recarga la página', 'err');
+                mostrarEstado('Librería no cargada. Usa modo local.', 'err');
+                cambiarModo('local');
             }
         }, 1000);
     });
 
+    // === GESTIÓN DE MODOS (LOCAL vs NUBE) ===
     function cambiarModo(modo) {
         modoNube = (modo === 'cloud');
+        
+        // Actualizar Botones Superiores
         document.getElementById('mode-local').className = modoNube ? 'source-option' : 'source-option active';
         document.getElementById('mode-cloud').className = modoNube ? 'source-option active cloud' : 'source-option';
+        
+        // Actualizar Botones de Acción
         document.getElementById('btn-load-local').style.display = modoNube ? 'none' : 'flex';
-        document.getElementById('btn-load-cloud').style.display = modoNube ? 'flex' : 'none';
-        mostrarEstado(modoNube ? 'Modo Nube: Inicia sesión' : 'Modo Local: Elige archivo', 'normal');
+        const btnCloud = document.getElementById('btn-load-cloud');
+        btnCloud.style.display = modoNube ? 'flex' : 'none';
+        
+        // Resetear estado
+        mostrarEstado(modoNube ? 'Conectando...' : 'Modo Local: Elige archivo', 'normal');
         datos = [];
         renderizar();
+        actualizarDashboard();
     }
 
     function mostrarEstado(txt, tipo) {
         const el = document.getElementById('msg-estado');
-        el.innerText = txt;
-        el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
+        if(el) {
+            el.innerText = txt;
+            el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
+        }
     }
 
-   // Variable global para guardar el permiso de escritura
-    let oneDriveToken = null;
-
+    // === LÓGICA ONEDRIVE (LECTURA Y ESCRITURA) ===
     async function loginOneDrive() {
-        if (!msalInstance) { alert("Configura el ClientID"); return; }
+        if (!msalInstance) { alert("Error: MSAL no iniciado"); return; }
         try {
-            const resp = await msalInstance.loginPopup({ scopes: ["User.Read", "Files.ReadWrite.All"] }); // <--- OJO: Permiso de escritura añadido
-            oneDriveToken = resp.accessToken; // <--- GUARDAMOS EL TOKEN AQUÍ
-            mostrarEstado('Conectado. Buscando...', 'normal');
+            // Pedimos permisos de Lectura Y ESCRITURA
+            const resp = await msalInstance.loginPopup({ scopes: ["User.Read", "Files.ReadWrite.All"] });
+            oneDriveToken = resp.accessToken; // Guardamos la llave
+            mostrarEstado('Conectado. Buscando archivo...', 'normal');
             buscarFicheroNube(resp.accessToken);
-        } catch (e) { 
+        } catch (e) {
             console.error(e);
-            mostrarEstado('Error Login (Revisa consola)', 'err'); 
+            mostrarEstado('Acceso denegado o cerrado', 'err');
+            // Si falla el login, mostramos el botón manual por si quiere reintentar
+            document.getElementById('btn-load-cloud').style.display = 'flex';
         }
     }
 
@@ -931,9 +960,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` }});
             const json = await resp.json();
             const f = json.value.find(x => x.name.toLowerCase() === 'aidanai.xlsx');
-            if (f) descargarContenido(f['@microsoft.graph.downloadUrl']);
-            else mostrarEstado('aidanai.xlsx no encontrado', 'err');
-        } catch (e) { mostrarEstado('Error buscando', 'err'); }
+            
+            if (f) {
+                descargarContenido(f['@microsoft.graph.downloadUrl']);
+            } else {
+                mostrarEstado('aidanai.xlsx no encontrado en raíz', 'err');
+            }
+        } catch (e) { 
+            console.error(e);
+            mostrarEstado('Error buscando archivo', 'err'); 
+        }
     }
 
     async function descargarContenido(url) {
@@ -941,17 +977,70 @@ document.addEventListener('DOMContentLoaded', () => {
             const resp = await fetch(url);
             const blob = await resp.blob();
             leerExcel(blob);
-        } catch (e) { mostrarEstado('Error descarga', 'err'); }
+        } catch (e) { mostrarEstado('Error descargando', 'err'); }
     }
 
+    async function guardarCambiosEnFichero() {
+        mostrarEstado('Guardando cambios...', 'normal');
+
+        // 1. Convertir datos a formato Excel
+        const filasExcel = datos.map(m => {
+            return [
+                new Date(m.ts), // A
+                m.cuenta,       // B
+                m.concepto,     // C
+                m.importe,      // D
+                m.detalle,      // E
+                m.beneficiario  // F
+            ];
+        });
+        // Cabecera
+        filasExcel.unshift(["Fecha", "Cuenta", "Concepto", "Importe", "Descripción", "Beneficiario"]);
+
+        // 2. Crear binario
+        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+
+        if (modoNube && oneDriveToken) {
+            // MODO NUBE: Sobrescribir
+            try {
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const url = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
+                
+                const resp = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        "Authorization": `Bearer ${oneDriveToken}`,
+                        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    },
+                    body: wbout
+                });
+
+                if (resp.ok) {
+                    mostrarEstado('¡Guardado en Nube!', 'ok');
+                    setTimeout(() => mostrarEstado('Sincronizado', 'ok'), 3000);
+                } else { throw new Error("Error API"); }
+            } catch (e) {
+                mostrarEstado('Error al subir. Descargando copia local...', 'err');
+                XLSX.writeFile(wb, "aidanai_rescue.xlsx");
+            }
+        } else {
+            // MODO LOCAL: Descargar
+            XLSX.writeFile(wb, "aidanai_actualizado.xlsx");
+            mostrarEstado('Archivo descargado', 'ok');
+        }
+    }
+
+    // === PROCESAMIENTO DE DATOS ===
     function leerExcel(blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
-            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, range: 65 });
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, range: 0 }); // Range 0 para leer cabeceras si hace falta, pero procesamos desde 1
             procesarDatos(json);
-            mostrarEstado('Datos cargados', 'ok');
+            mostrarEstado('Datos cargados correctamente', 'ok');
         };
         reader.readAsArrayBuffer(blob);
     }
@@ -959,35 +1048,44 @@ document.addEventListener('DOMContentLoaded', () => {
     function procesarDatos(filas) {
         const temp = [];
         const cuentas = new Set(), conceptos = new Set(), benefs = new Set();
-
+        
+        // Empezamos en 1 saltando cabecera
         for (let i = 1; i < filas.length; i++) {
             const row = filas[i];
-            if (!row || !row[1] || !row[3]) continue;
+            if (!row || (!row[1] && !row[3])) continue; // Si no hay cuenta ni importe, saltar
 
-            let ts = row[0] instanceof Date ? row[0].getTime() : Date.now();
+            let fecha = row[0];
+            let ts = (fecha instanceof Date) ? fecha.getTime() : Date.now();
             
+            // Limpieza de importe
             let imp = 0;
             if (typeof row[3] === 'number') imp = row[3];
             else {
                 let s = String(row[3]).replace(/[^\d.,-]/g, '');
-                if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
-                else s = s.replace(/\./g, '');
+                // Detectar formato europeo (1.000,00) vs americano (1,000.00)
+                if (s.includes(',') && s.indexOf('.') < s.indexOf(',')) {
+                     // Caso 1.000,00 -> Quitar puntos, cambiar coma por punto
+                     s = s.replace(/\./g, '').replace(',', '.');
+                } else if (s.includes(',')) {
+                     // Caso simple con coma decimal
+                     s = s.replace(',', '.');
+                }
                 imp = parseFloat(s) || 0;
             }
 
-            // === MAPEO CORREGIDO ===
-            // Col 1: Cuenta | Col 2: Concepto | Col 4: Descripcion | Col 5: Beneficiario
-            const cta = String(row[1] || '').trim(); // Cuenta
-            const con = String(row[2] || '').trim(); // Concepto (Estaba Benef)
-            const desc = String(row[4] || '').trim(); // Descripcion (Estaba Concepto)
-            const ben = String(row[5] || '').trim(); // Beneficiario (Estaba Desc)
+            const cta = String(row[1] || '').trim();
+            const con = String(row[2] || '').trim();
+            const desc = String(row[4] || '').trim(); // Col E
+            const ben = String(row[5] || '').trim();  // Col F
 
             if(cta) cuentas.add(cta);
             if(con) conceptos.add(con);
             if(ben) benefs.add(ben);
 
+            // Determinar tipo
             let tipo = 'gasto';
-            if ((con + desc).toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
+            const textoAnalisis = (con + ' ' + desc).toUpperCase();
+            if (textoAnalisis.includes('TRASPASO')) tipo = 'traspaso';
             else if (imp >= 0) tipo = 'ingreso';
 
             temp.push({
@@ -998,6 +1096,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         temp.sort((a, b) => a.ts - b.ts || a.id - b.id);
+        
+        // Calcular Saldos acumulados
         const ac = {};
         temp.forEach(m => {
             if (!ac[m.cuenta]) ac[m.cuenta] = 0;
@@ -1008,15 +1108,15 @@ document.addEventListener('DOMContentLoaded', () => {
         datos = temp;
         actualizarFiltrosUI(cuentas, conceptos, benefs);
         renderizar();
-		actualizarDashboard();
+        actualizarDashboard();
     }
 
-    // === LÓGICA DEL BOTÓN PROPIETARIO ===
+    // === INTERFAZ Y FILTROS ===
+    
+    // BOTÓN MAESTRO (DANI / NORMA)
     function toggleOwner() {
-        estadoPropietario = (estadoPropietario + 1) % 3; // Ciclo: 0 -> 1 -> 2 -> 0
+        estadoPropietario = (estadoPropietario + 1) % 3; 
         const btn = document.getElementById('btn-owner');
-        
-        // Resetear clases
         btn.className = 'btn-owner';
         
         if (estadoPropietario === 0) {
@@ -1029,39 +1129,30 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('owner-norma');
             btn.innerText = 'Norma';
         }
-        
-        // Actualizar TODO
         renderizar();
         actualizarDashboard();
     }
 
-    // Función auxiliar para saber si un movimiento pasa el filtro de propietario
     function pasaFiltroPropietario(m) {
-        if (estadoPropietario === 0) return true; // Todos pasan
+        if (estadoPropietario === 0) return true; 
         const letra = m.cuenta.trim().toUpperCase().charAt(0);
-        if (estadoPropietario === 1) return letra === 'D'; // Solo Dani
-        if (estadoPropietario === 2) return letra === 'N'; // Solo Norma
+        if (estadoPropietario === 1) return letra === 'D'; 
+        if (estadoPropietario === 2) return letra === 'N'; 
         return true;
     }
 
     function renderizar() {
         const tbody = document.getElementById('lista-movimientos');
-        
-        let lista = datos.filter(m => {
-            // 1. FILTRO MAESTRO (DANI / NORMA) - Prioritario
-            if (!pasaFiltroPropietario(m)) return false;
+        if(!tbody) return;
 
-			// --- NUEVO FILTRO INTERNO POR TIPO ---
-            // Si filtramos por 'ingreso' o 'gasto' estricto
+        let lista = datos.filter(m => {
+            if (!pasaFiltroPropietario(m)) return false;
             if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
-            // Si filtramos por 'neto', queremos todo MENOS traspasos
             if (filtros.tipo === 'neto' && m.tipo === 'traspaso') return false;
             if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
             if (filtros.concepto && m.concepto !== filtros.concepto) return false;
             if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
-            if (filtros.texto) {
-                if (!(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
-            }
+            if (filtros.texto && !(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
             if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
             if (filtros.hasta && m.ts > new Date(filtros.hasta).getTime()) return false;
             if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
@@ -1069,54 +1160,33 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         });
 
-       // === MOTOR DE ORDENACIÓN INTELIGENTE 4.0 (DEFINITIVO) ===
+        // Ordenación
         lista.sort((a, b) => {
             let campo = window.ordenActivo.campo;
-            let valA = a[campo]; 
-            let valB = b[campo];
-            
-            // 1. Normalización de texto
+            let valA = a[campo]; let valB = b[campo];
             if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
-            
-            // 2. CRITERIO DE DESEMPATE
-            if (valA === valB) {
-                return window.ordenActivo.asc ? (a.id - b.id) : (b.id - a.id);
-            }
-            
-            // 3. Ordenación Normal
+            if (valA === valB) return window.ordenActivo.asc ? (a.id - b.id) : (b.id - a.id);
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
-            
             return 0;
         });
-        
-        // Conteo rápido
-        let i=0, g=0, n=0;
-        lista.forEach(m => {
-            if(m.tipo==='ingreso') i+=m.importe;
-            if(m.tipo==='gasto') g+=m.importe;
-            n+=m.importe;
-        });
-        document.getElementById('contador-filas').innerText = `Mostrando ${lista.length} movimientos`;
+
+        const contador = document.getElementById('contador-filas');
+        if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
+
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos (Revisa filtros o propietario)</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos disponibles</td></tr>';
             return;
         }
 
         tbody.innerHTML = lista.map(m => {
-            // 1. FORMATO DE FECHA
-            const opcionesFecha = { day: '2-digit', month: '2-digit', year: '2-digit' };
-            const date = new Date(m.ts).toLocaleDateString('es-ES', opcionesFecha);
-            
-            // 2. LÓGICA DE COLORES NEÓN
+            const date = new Date(m.ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
             let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
             let signo = m.importe > 0 ? '+' : '';
 
-            // 3. RENDERIZADO HTML
             return `
                 <tr>
                     <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${date}</td>
-                    
                     <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
                     <td class="pc-only ${color}">${m.cuenta} (${fmt(m.saldo)})</td>
                     <td class="pc-only">${m.concepto}</td>
@@ -1124,12 +1194,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="pc-only">${m.beneficiario}</td>
 
                     <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${date}</td>
-                    
                     <td class="mob-only td-cuenta-mob ${color}">
                         ${m.cuenta} <span class="saldo-small">(${fmt(m.saldo)})</span>
                     </td>
                     <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
-
                     <td class="mob-only td-desc-mob">
                         <strong style="color:#fff">${m.concepto}</strong> - ${m.detalle}
                     </td>
@@ -1139,6 +1207,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
     }
 
+    // === DASHBOARD ===
+    function getFechasDashboard() {
+        const periodo = document.getElementById('dash-period').value;
+        const now = new Date();
+        let fInicio, fFin;
+
+        if (periodo === 'year') {
+            fInicio = new Date(now.getFullYear(), 0, 1);
+            fFin = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        } else if (periodo === 'month') {
+            fInicio = new Date(now.getFullYear(), now.getMonth(), 1);
+            fFin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        } else if (periodo === 'custom') {
+            const s = document.getElementById('d-start').value;
+            const e = document.getElementById('d-end').value;
+            if(!s || !e) return null;
+            fInicio = new Date(s);
+            fFin = new Date(e);
+            fFin.setHours(23, 59, 59);
+        }
+        return { start: fInicio, end: fFin };
+    }
+
+    function actualizarDashboard() {
+        if(!datos.length) return;
+        const rango = getFechasDashboard();
+        
+        let dashData = datos.filter(m => pasaFiltroPropietario(m));
+        if (rango && rango.start) {
+            dashData = dashData.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
+        }
+
+        let ing = 0, gas = 0;
+        dashData.forEach(m => {
+            if (m.tipo === 'ingreso') ing += m.importe;
+            if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
+        });
+        let neto = ing - gas;
+        let tasa = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
+
+        document.getElementById('d-ing').innerText = fmt(ing);
+        document.getElementById('d-gas').innerText = '-' + fmt(gas);
+        
+        const elNeto = document.getElementById('d-net');
+        elNeto.innerText = fmt(neto);
+        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas');
+        document.getElementById('d-aho').innerText = tasa.toFixed(2) + '%';
+    }
+
+    // === UTILS UI ===
     function irPestana(p) {
         document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
@@ -1146,20 +1264,38 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('nav-'+p).classList.add('active');
         document.getElementById('fab-add').style.display = p==='movs'?'flex':'none';
     }
+    
+    function toggleCustomDates() {
+        const isCustom = document.getElementById('dash-period').value === 'custom';
+        document.getElementById('custom-dates').style.display = isCustom ? 'flex' : 'none';
+    }
+    
+    function verDetalleKPI(tipo) {
+        const rango = getFechasDashboard();
+        limpiarFiltros();
+        if(rango) {
+             document.getElementById('f-desde').valueAsDate = rango.start;
+             document.getElementById('f-hasta').valueAsDate = rango.end;
+             filtros.desde = document.getElementById('f-desde').value;
+             filtros.hasta = document.getElementById('f-hasta').value;
+        }
+        filtros.tipo = tipo;
+        aplicarFiltros();
+        irPestana('movs');
+        mostrarEstado('Filtrando: ' + tipo.toUpperCase(), 'ok');
+    }
 
     function toggleFiltros() { document.getElementById('panel-filtros').classList.toggle('open'); }
-    
-    function actualizarFiltrosUI(ctas, cons, bens) {
+    function actualizarFiltrosUI(c, co, b) {
         const fill = (id, set, label) => {
             const el = document.getElementById(id);
             el.innerHTML = `<option value="">${label}</option>`;
             Array.from(set).sort().forEach(v => el.innerHTML += `<option value="${v}">${v}</option>`);
         };
-        fill('f-cuenta', ctas, 'Todas Cuentas');
-        fill('f-concepto', cons, 'Todos Conceptos');
-        fill('f-beneficiario', bens, 'Todos Beneficiarios');
+        fill('f-cuenta', c, 'Todas Cuentas');
+        fill('f-concepto', co, 'Todos Conceptos');
+        fill('f-beneficiario', b, 'Todos Beneficiarios');
     }
-
     function aplicarFiltros() {
         filtros.cuenta = document.getElementById('f-cuenta').value;
         filtros.concepto = document.getElementById('f-concepto').value;
@@ -1171,7 +1307,6 @@ document.addEventListener('DOMContentLoaded', () => {
         filtros.max = document.getElementById('f-max').value;
         renderizar();
     }
-
     function limpiarFiltros() {
         document.getElementById('f-cuenta').value = '';
         document.getElementById('f-concepto').value = '';
@@ -1181,92 +1316,65 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('f-hasta').value = '';
         document.getElementById('f-min').value = '';
         document.getElementById('f-max').value = '';
+        filtros.tipo = ''; 
         aplicarFiltros();
         document.getElementById('panel-filtros').classList.remove('open');
     }
+    function cambiarOrden(campo) {
+        if (window.ordenActivo.campo === campo) window.ordenActivo.asc = !window.ordenActivo.asc;
+        else { window.ordenActivo.campo = campo; window.ordenActivo.asc = !(campo==='ts'||campo==='importe'); }
+        renderizar();
+        // Actualizar UI flechas (simplificado)
+        document.querySelectorAll('th').forEach(t=>t.style.color='');
+        const th = document.getElementById('th-'+campo);
+        if(th) th.style.color='var(--c-primary)';
+    }
 
-    // === GESTIÓN DEL FORMULARIO DE ALTA ===
-
+    // === GESTIÓN FORMULARIO ALTA ===
     function abrirModal() { 
-        // 1. Mostrar Modal
         document.getElementById('modal-manual').classList.add('active');
-        
-        // 2. Poner Fecha de Hoy por defecto
         document.getElementById('m-fecha').valueAsDate = new Date();
-
-        // 3. Recopilar datos únicos del Excel actual para llenar los desplegables
-        const sCuentas = new Set();
-        const sConceptos = new Set();
-        const sBeneficiarios = new Set();
-
+        const sCuentas = new Set(), sConceptos = new Set(), sBeneficiarios = new Set();
         datos.forEach(d => {
             if(d.cuenta) sCuentas.add(d.cuenta);
             if(d.concepto) sConceptos.add(d.concepto);
             if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
         });
-
-        // 4. Función auxiliar para llenar un <select>
         const llenar = (id, set) => {
             const el = document.getElementById(id);
-            // Guardamos la primera opción (el placeholder)
             const first = el.options[0].outerHTML;
             el.innerHTML = first; 
-            // Añadimos las opciones ordenadas
-            Array.from(set).sort().forEach(val => {
-                el.innerHTML += `<option value="${val}">${val}</option>`;
-            });
+            Array.from(set).sort().forEach(val => el.innerHTML += `<option value="${val}">${val}</option>`);
         };
-
         llenar('m-cuenta', sCuentas);
         llenar('m-concepto', sConceptos);
         llenar('m-beneficiario', sBeneficiarios);
     }
-
-    function cerrarModal() {
-        document.getElementById('modal-manual').classList.remove('active');
-    }
-
-    // Copia el Concepto a la Descripción automáticamente (UX)
+    function cerrarModal() { document.getElementById('modal-manual').classList.remove('active'); }
     function autoRellenarDescripcion() {
-        const concepto = document.getElementById('m-concepto').value;
-        const descInput = document.getElementById('m-desc');
-        // Solo rellenar si la descripción está vacía para no borrar lo que el usuario escriba
-        if(descInput.value === '') {
-            descInput.value = concepto;
-        }
+        const c = document.getElementById('m-concepto').value;
+        const d = document.getElementById('m-desc');
+        if(d.value === '') d.value = c;
     }
-
     function guardarManual() {
-        // 1. Capturar valores
         const imp = parseFloat(document.getElementById('m-cantidad').value);
-        const cta = document.getElementById('m-cuenta').value || 'Efectivo'; // Default si no elige
+        const cta = document.getElementById('m-cuenta').value || 'Efectivo'; 
         const con = document.getElementById('m-concepto').value || 'Varios';
         const desc = document.getElementById('m-desc').value || con;
         const ben = document.getElementById('m-beneficiario').value || '-';
-        const fechaVal = document.getElementById('m-fecha').value;
+        const fVal = document.getElementById('m-fecha').value;
 
-        // Validación básica
-        if(!imp) { alert("Por favor, introduce un importe"); return; }
-        if(!fechaVal) { alert("Introduce una fecha"); return; }
+        if(!imp || !fVal) { alert("Falta importe o fecha"); return; }
 
-        // 2. Crear objeto movimiento
-        const nuevoMov = {
-            id: Date.now(), // ID único basado en milisegundos
-            ts: new Date(fechaVal).getTime(),
-            importe: imp, 
-            cuenta: cta, 
-            concepto: con, 
-            detalle: desc,
-            beneficiario: ben, 
-            tipo: imp >= 0 ? 'ingreso' : 'gasto', // Detecta tipo automático
-            saldo: 0 // Se recalcula abajo
+        const nuevo = {
+            id: Date.now(), ts: new Date(fVal).getTime(), importe: imp, 
+            cuenta: cta, concepto: con, detalle: desc, beneficiario: ben, 
+            tipo: imp >= 0 ? 'ingreso' : 'gasto', saldo: 0
         };
         
-        // 3. Insertar y Reordenar
-        datos.push(nuevoMov);
+        datos.push(nuevo);
         datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
         
-        // 4. Recalcular Saldos (Running Balance)
         const ac = {};
         datos.forEach(m => {
             if(!ac[m.cuenta]) ac[m.cuenta] = 0;
@@ -1274,18 +1382,14 @@ document.addEventListener('DOMContentLoaded', () => {
             m.saldo = ac[m.cuenta];
         });
 
-        // 5. Actualizar interfaz
         renderizar();
         actualizarDashboard();
         cerrarModal();
         
-        // Limpiar formulario para la próxima
         document.getElementById('m-cantidad').value = '';
         document.getElementById('m-desc').value = '';
-		// === NUEVO: GUARDAR EN EXCEL ===
+
         guardarCambiosEnFichero();
-    }
-		
     }
 
     let calcVal = '';
