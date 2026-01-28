@@ -1784,8 +1784,8 @@ if (rango && rango.start) {
 
     // Funciones auxiliares para no repetir código
     function generarLibroExcel() {
-        // Estructura de 65 filas vacías + datos
-        const filasExcel = Array(65).fill([]); 
+        // Estructura de 0 filas vacías + datos
+        const filasExcel = Array(0).fill([]); 
         filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
 
         datos.forEach(m => {
@@ -1897,13 +1897,8 @@ if (rango && rango.start) {
     const contenedor = document.getElementById('lista-cuentas-patri');
     const totalEl = document.getElementById('total-patri-valor');
 
-    // PROTECCIÓN: Si los elementos no existen en el HTML, paramos para no bloquear la app
-    if (!contenedor || !totalEl) {
-        console.error("Error: No encuentro los contenedores de patrimonio en el HTML");
-        return;
-    }
-
-    // PROTECCIÓN: Si no hay datos cargados
+    // PROTECCIONES
+    if (!contenedor || !totalEl) return;
     if (!datos || datos.length === 0) {
         contenedor.innerHTML = '<div style="text-align:center; color:#666; padding:40px; border:1px dashed #333; border-radius:10px;">No hay datos cargados.<br>Carga un Excel o conecta la nube.</div>';
         totalEl.innerText = '0,00€';
@@ -1915,7 +1910,6 @@ if (rango && rango.start) {
     const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
     
     datosFiltrados.forEach(m => {
-        // Normalizamos el nombre de la cuenta para evitar duplicados por mayúsculas/minúsculas
         const nombreCuenta = m.cuenta.trim();
         saldos[nombreCuenta] = (saldos[nombreCuenta] || 0) + m.importe;
     });
@@ -1924,22 +1918,29 @@ if (rango && rango.start) {
     contenedor.innerHTML = '';
     let sumaTotal = 0;
     const cuentasOrdenadas = Object.keys(saldos).sort();
+    let cuentasVisibles = 0;
 
     cuentasOrdenadas.forEach(cta => {
         const monto = saldos[cta];
+        
+        // --- FILTRO: SI ES 0 (o casi 0), NO LO MOSTRAMOS ---
+        if (Math.abs(monto) < 0.01) return;
+
         sumaTotal += monto;
+        cuentasVisibles++;
         
         // Colores Neón
         const colorTexto = monto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
         const colorBorde = monto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
         const icono = monto >= 0 ? 'trending_up' : 'trending_down';
 
+        // AÑADIMOS EL EVENTO ONCLICK Y EL CURSOR POINTER
         contenedor.innerHTML += `
-            <div class="master-card" style="margin-top:0; padding: 15px; border-top: none; border-left: 4px solid ${colorBorde}; background: #0a0a0a;">
+            <div class="master-card" onclick="verExtractoCuenta('${cta}')" style="margin-top:0; padding: 15px; border-top: none; border-left: 4px solid ${colorBorde}; background: #0a0a0a; cursor: pointer; transition: transform 0.2s;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display:flex; flex-direction:column; gap:4px;">
                         <span style="font-size: 14px; font-weight:700; color:white;">${cta}</span>
-                        <span style="font-size: 10px; color:#666; text-transform:uppercase;">Saldo Actual</span>
+                        <span style="font-size: 10px; color:#666; text-transform:uppercase;">Saldo Actual <span style="color:var(--c-primary); font-size:9px;">(VER EXTRACTO)</span></span>
                     </div>
                     <div style="text-align:right;">
                         <span style="font-size: 18px; font-weight:800; color:${colorTexto}; text-shadow: 0 0 10px rgba(0,0,0,0.5);">${fmt(monto)}€</span>
@@ -1948,11 +1949,37 @@ if (rango && rango.start) {
             </div>
         `;
     });
+    
+    // Aviso si todas las cuentas están a cero
+    if (cuentasVisibles === 0) {
+        contenedor.innerHTML = '<div style="text-align:center; color:#666; font-style:italic; padding:20px;">Todas las cuentas están a 0,00€</div>';
+    }
 
-    // Actualizar el gran total
+    // Actualizar el gran total (incluye todo, incluso lo oculto si quisieras, pero aquí suma lo visible)
     totalEl.innerText = fmt(sumaTotal) + '€';
     totalEl.style.color = sumaTotal >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
     totalEl.style.textShadow = sumaTotal >= 0 ? '0 0 20px rgba(57, 255, 20, 0.4)' : '0 0 20px rgba(255, 46, 77, 0.4)';
+}
+
+	function verExtractoCuenta(nombreCuenta) {
+    // 1. Limpiamos cualquier filtro previo para evitar confusiones
+    limpiarFiltros();
+
+    // 2. Establecemos el filtro de la cuenta seleccionada
+    const selectCuenta = document.getElementById('f-cuenta');
+    if(selectCuenta) {
+        selectCuenta.value = nombreCuenta;
+        filtros.cuenta = nombreCuenta; // Forzamos la variable interna de filtros
+    }
+
+    // 3. Aplicamos filtros y renderizamos la tabla
+    aplicarFiltros();
+
+    // 4. Viajamos a la pestaña de movimientos (Vista de Extracto)
+    irPestana('movs');
+    
+    // 5. Feedback visual para el usuario
+    mostrarEstado('Extracto: ' + nombreCuenta, 'ok');
 }
 
 </script>
