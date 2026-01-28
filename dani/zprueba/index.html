@@ -149,6 +149,22 @@
             display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .btn-load:hover { background: #222; border-color: #777; }
+		/* Estilo para el botón de Exportar */
+        .btn-export {
+            width: 100%; padding: 10px; border-radius: 8px;
+            background: transparent; color: var(--c-primary); 
+            border: 1px solid var(--c-primary);
+            cursor: pointer; font-size: 13px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            transition: all 0.3s;
+            margin-top: 5px;
+            box-shadow: inset 0 0 10px rgba(0, 184, 255, 0.1);
+        }
+        .btn-export:hover {
+            background: var(--c-primary);
+            color: black;
+            box-shadow: 0 0 20px var(--c-primary);
+        }
         .btn-onedrive { border-style: solid; border-color: #0078d4; background: #0078d4; }
         .btn-onedrive:hover { background: #005a9e; }
 
@@ -615,13 +631,29 @@
         .modal-overlay { top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; justify-content: center; align-items: center; }
         .modal-overlay.active { display: flex; }
         .modal-box { 
-            background: #111; 
-            border: 1px solid #333; 
-            
-            /* Sombra de profundidad Neón */
-            box-shadow: 0 -10px 40px rgba(0,0,0,0.8), 0 0 0 1px #222; 
+            background: #000; 
+            border: 2px solid var(--c-accent); 
+            box-shadow: 0 0 30px rgba(191, 90, 242, 0.4); /* Brillo Púrpura */
             z-index: 9501;
-            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Títulos de los campos en el modal */
+        .modal-label {
+            display: block;
+            color: var(--c-primary);
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        /* Contenedor de inputs para que brillen */
+        .input-group {
+            margin-bottom: 20px;
         }
 
         /* --- VERSIÓN PC --- */
@@ -665,6 +697,20 @@
         .full-btn { width: 100%; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; margin-top: 5px; }
         .btn-blue { background: var(--c-primary); color: white; }
         .btn-gray { background: #333; color: white; }
+		/* Animación de pulso para el recordatorio de exportar */
+        @keyframes pulse-blue-glow {
+            0% { box-shadow: 0 0 5px var(--c-primary); transform: scale(1); }
+            50% { box-shadow: 0 0 25px var(--c-primary), 0 0 10px var(--c-primary); transform: scale(1.02); }
+            100% { box-shadow: 0 0 5px var(--c-primary); transform: scale(1); }
+        }
+
+        /* Clase que activa el brillo */
+        .btn-glow {
+            animation: pulse-blue-glow 1.5s infinite ease-in-out;
+            border-width: 2px !important;
+            background: rgba(0, 184, 255, 0.1) !important;
+            color: white !important;
+        }
     </style>
 </head>
 <body>
@@ -699,6 +745,9 @@
 
                     <button id="btn-load-cloud" class="btn-load btn-onedrive" style="display:none" onclick="loginOneDrive()">
                         <span class="material-icons">login</span> Conectar con Microsoft
+                    </button>
+					<button id="btn-export-excel" class="btn-export" onclick="exportarExcel()" style="display:none">
+                        <span class="material-icons">download</span> EXPORTAR PARA ONEDRIVE
                     </button>
                 </div>
             </header>
@@ -1102,6 +1151,7 @@
         actualizarFiltrosUI(cuentas, conceptos, benefs);
         renderizar();
         actualizarDashboard();
+		revisarBotonExportar();
     }
 
     // === INTERFAZ Y FILTROS ===
@@ -1351,23 +1401,28 @@
     }
     function guardarManual() {
         const imp = parseFloat(document.getElementById('m-cantidad').value);
-        const cta = document.getElementById('m-cuenta').value || 'Efectivo'; 
-        const con = document.getElementById('m-concepto').value || 'Varios';
-        const desc = document.getElementById('m-desc').value || con;
-        const ben = document.getElementById('m-beneficiario').value || '-';
-        const fVal = document.getElementById('m-fecha').value;
-
-        if(!imp || !fVal) { alert("Falta importe o fecha"); return; }
-
-        const nuevo = {
-            id: Date.now(), ts: new Date(fVal).getTime(), importe: imp, 
-            cuenta: cta, concepto: con, detalle: desc, beneficiario: ben, 
-            tipo: imp >= 0 ? 'ingreso' : 'gasto', saldo: 0
-        };
+        const desc = document.getElementById('m-desc').value;
+        const fecha = document.getElementById('m-fecha').value;
         
-        datos.push(nuevo);
+        if(!imp || !desc || !fecha) {
+            alert("Por favor, rellena todos los campos");
+            return;
+        }
+
+        datos.push({
+            id: Date.now(), 
+            ts: new Date(fecha).getTime(),
+            importe: imp, 
+            cuenta: 'MANUAL', 
+            concepto: 'GENERAL', 
+            detalle: desc,
+            beneficiario: '-', 
+            tipo: imp >= 0 ? 'ingreso' : 'gasto', 
+            saldo: 0
+        });
+        
+        // Recalcular y reordenar
         datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
-        
         const ac = {};
         datos.forEach(m => {
             if(!ac[m.cuenta]) ac[m.cuenta] = 0;
@@ -1377,12 +1432,17 @@
 
         renderizar();
         actualizarDashboard();
-        cerrarModal();
+        document.getElementById('modal-manual').classList.remove('active');
         
+        // Limpiar campos para la próxima
         document.getElementById('m-cantidad').value = '';
         document.getElementById('m-desc').value = '';
-
-        guardarCambiosEnFichero();
+        
+        mostrarEstado('¡Movimiento añadido! No olvides exportar para guardar permanentemente.', 'ok');
+		// Activar el recordatorio visual en el botón de exportar
+        const btnExport = document.getElementById('btn-export-excel');
+        btnExport.style.display = 'flex'; // Nos aseguramos de que sea visible
+        btnExport.classList.add('btn-glow');
     }
 
     let calcVal = '';
@@ -1582,6 +1642,53 @@ if (rango && rango.start) {
             XLSX.writeFile(wb, "aidanai_actualizado.xlsx");
             mostrarEstado('Archivo descargado', 'ok');
         }
+    }
+	
+	// Función para mostrar el botón de exportar cuando hay datos
+    function revisarBotonExportar() {
+        const btn = document.getElementById('btn-export-excel');
+        if (datos.length > 0) {
+            btn.style.display = 'flex';
+        }
+    }
+
+    // FUNCIÓN MAESTRA DE EXPORTACIÓN
+    function exportarExcel() {
+        if (!datos.length) return;
+	// Quitamos el brillo porque el usuario ya ha exportado los cambios
+        document.getElementById('btn-export-excel').classList.remove('btn-glow');
+        // 1. Creamos la estructura de 65 filas vacías (para respetar tu formato original)
+        const filasExcel = Array(65).fill([]); 
+
+        // 2. Añadimos la fila de encabezados
+        filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
+
+        // 3. Convertimos nuestros datos al formato de filas de Excel
+        datos.forEach(m => {
+            const fechaObj = new Date(m.ts);
+            filasExcel.push([
+                fechaObj,      // Col 0: Fecha
+                m.cuenta,      // Col 1: Cuenta
+                m.concepto,    // Col 2: Concepto
+                m.importe,     // Col 3: Importe
+                m.detalle,     // Col 4: Descripción
+                m.beneficiario // Col 5: Beneficiario
+            ]);
+        });
+
+        // 4. Creamos el libro de Excel con la librería SheetJS
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
+        
+        // Ajustamos el formato de la columna de fecha para que Excel la entienda
+        ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
+
+        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+
+        // 5. Descargamos el archivo con el nombre exacto que espera tu app
+        XLSX.writeFile(wb, "aidanai.xlsx");
+        
+        mostrarEstado('Archivo "aidanai.xlsx" generado con éxito', 'ok');
     }
 	
 </script>
