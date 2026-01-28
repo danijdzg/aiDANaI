@@ -889,10 +889,14 @@
                 <label class="input-label">FECHA</label>
                 <input type="date" id="m-fecha" class="filter-input form-field" style="margin-bottom:20px">
 
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
-                    <button class="full-btn btn-blue" onclick="guardarManual()">GUARDAR</button>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom: 10px;">
+                    <button id="btn-modal-action" class="full-btn btn-blue" onclick="guardarManual()">GUARDAR</button>
                     <button class="full-btn btn-gray" onclick="cerrarModal()">CANCELAR</button>
                 </div>
+                
+                <button id="btn-modal-delete" class="full-btn" onclick="borrarMovimiento()" style="display:none; background:transparent; border:1px solid var(--c-danger); color:var(--c-danger);">
+                    <span class="material-icons" style="vertical-align:middle; font-size:16px">delete</span> ELIMINAR ESTE REGISTRO
+                </button>
             </div>
         </div>
         
@@ -1407,23 +1411,31 @@
         document.querySelector('#modal-manual .btn-blue').innerText = "ACTUALIZAR CAMBIOS";
     }
 	
-    // === GESTIÓN FORMULARIO ALTA ===
-    function abrirModal(esEdicion = false) { 
+   function abrirModal(esEdicion = false) { 
         document.getElementById('modal-manual').classList.add('active');
         
-        // Si NO es edición (es decir, pulsamos el botón +), reseteamos todo
+        const btnAction = document.getElementById('btn-modal-action');
+        const btnDelete = document.getElementById('btn-modal-delete');
+
         if (!esEdicion) {
-            idEnEdicion = null; // Modo "Nuevo"
+            // MODO NUEVO
+            idEnEdicion = null;
             document.getElementById('m-fecha').valueAsDate = new Date();
             document.getElementById('m-cantidad').value = '';
             document.getElementById('m-desc').value = '';
             
-            // Textos originales
+            // Textos y Botones
             document.querySelector('#modal-manual h3').innerText = "NUEVO MOVIMIENTO";
-            document.querySelector('#modal-manual .btn-blue').innerText = "GUARDAR";
+            btnAction.innerText = "GUARDAR";
+            btnDelete.style.display = 'none'; // <--- OCULTAR BORRAR
+        } else {
+            // MODO EDICIÓN
+            document.querySelector('#modal-manual h3').innerText = "EDITAR MOVIMIENTO";
+            btnAction.innerText = "ACTUALIZAR";
+            btnDelete.style.display = 'block'; // <--- MOSTRAR BORRAR
         }
 
-        // Rellenar las listas desplegables (esto se mantiene igual)
+        // Rellenar las listas (Igual que antes)
         const sCuentas = new Set(), sConceptos = new Set(), sBeneficiarios = new Set();
         datos.forEach(d => {
             if(d.cuenta) sCuentas.add(d.cuenta);
@@ -1432,11 +1444,11 @@
         });
         const llenar = (id, set) => {
             const el = document.getElementById(id);
-            const valActual = el.value; // Guardamos selección por si es edición
-            const first = '<option value="">Selecciona...</option>'; // Normalizamos opción 1
+            const valActual = el.value; 
+            const first = '<option value="">Selecciona...</option>';
             el.innerHTML = first; 
             Array.from(set).sort().forEach(val => el.innerHTML += `<option value="${val}">${val}</option>`);
-            if(valActual && esEdicion) el.value = valActual; // Restauramos valor si existía
+            if(valActual && esEdicion) el.value = valActual; 
         };
         llenar('m-cuenta', sCuentas);
         llenar('m-concepto', sConceptos);
@@ -1754,6 +1766,48 @@ if (rango && rango.start) {
             guardarCambiosEnFichero(false); // Forzar subida manual
         } else {
             generarYDescargarExcel(); // Descarga local
+        }
+    }
+	
+	function borrarMovimiento() {
+        if (!idEnEdicion) return;
+
+        // 1. Confirmación de seguridad (Nadie quiere borrar por error)
+        if(!confirm("⚠️ ¿Estás SEGURO de eliminar este movimiento?\n\nEsta acción actualizará tu Excel y no se puede deshacer.")) {
+            return;
+        }
+
+        // 2. Encontrar y Eliminar
+        const indice = datos.findIndex(d => d.id === idEnEdicion);
+        if (indice !== -1) {
+            datos.splice(indice, 1); // Lo saca del array
+            
+            // 3. Recalcular Saldos
+            datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
+            const ac = {};
+            datos.forEach(m => {
+                if(!ac[m.cuenta]) ac[m.cuenta] = 0;
+                ac[m.cuenta] += m.importe;
+                m.saldo = ac[m.cuenta];
+            });
+
+            // 4. Actualizar Interfaz
+            renderizar();
+            actualizarDashboard();
+            cerrarModal();
+            idEnEdicion = null;
+
+            mostrarEstado('🗑️ Registro eliminado.', 'ok');
+
+            // 5. GUARDAR CAMBIOS (NUBE O LOCAL)
+            if (modoNube) {
+                guardarCambiosEnFichero(true); // Sincronización automática
+            } else {
+                mostrarEstado('Eliminado. Recuerda exportar el Excel.', 'normal');
+                const btnExport = document.getElementById('btn-export-excel');
+                btnExport.style.display = 'flex';
+                btnExport.classList.add('btn-glow');
+            }
         }
     }
 	
