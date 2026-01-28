@@ -12,6 +12,7 @@
 
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         :root {
@@ -793,6 +794,12 @@
                                 <span class="kpi-value kpi-aho" id="d-aho">0.00%</span>
                             </div>
                         </div>
+						<div style="margin-top: 30px; position: relative; height: 250px; width: 100%;">
+                            <canvas id="gastosChart"></canvas>
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
+                                <span style="font-size: 10px; color: #666; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">TOP GASTOS</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -894,9 +901,16 @@
                     <button class="full-btn btn-gray" onclick="cerrarModal()">CANCELAR</button>
                 </div>
                 
-                <button id="btn-modal-delete" class="full-btn" onclick="borrarMovimiento()" style="display:none; background:transparent; border:1px solid var(--c-danger); color:var(--c-danger);">
-                    <span class="material-icons" style="vertical-align:middle; font-size:16px">delete</span> ELIMINAR ESTE REGISTRO
-                </button>
+                <div id="extra-actions" style="display:none; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                    
+                    <button class="full-btn" onclick="clonarMovimiento()" style="background:transparent; border:1px solid var(--c-warning); color:var(--c-warning);">
+                        <span class="material-icons" style="vertical-align:middle; font-size:16px">content_copy</span> CLONAR
+                    </button>
+
+                    <button class="full-btn" onclick="borrarMovimiento()" style="background:transparent; border:1px solid var(--c-danger); color:var(--c-danger);">
+                        <span class="material-icons" style="vertical-align:middle; font-size:16px">delete</span> ELIMINAR
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -1415,27 +1429,33 @@
         document.getElementById('modal-manual').classList.add('active');
         
         const btnAction = document.getElementById('btn-modal-action');
-        const btnDelete = document.getElementById('btn-modal-delete');
+        const areaExtras = document.getElementById('extra-actions'); // <--- NUEVO CONTENEDOR
 
         if (!esEdicion) {
-            // MODO NUEVO
+            // === MODO NUEVO ===
             idEnEdicion = null;
             document.getElementById('m-fecha').valueAsDate = new Date();
+            
+            // Limpiamos campos
             document.getElementById('m-cantidad').value = '';
             document.getElementById('m-desc').value = '';
             
             // Textos y Botones
             document.querySelector('#modal-manual h3').innerText = "NUEVO MOVIMIENTO";
             btnAction.innerText = "GUARDAR";
-            btnDelete.style.display = 'none'; // <--- OCULTAR BORRAR
+            
+            // Ocultamos zona de clonar/borrar
+            if(areaExtras) areaExtras.style.display = 'none'; 
         } else {
-            // MODO EDICIÓN
+            // === MODO EDICIÓN ===
             document.querySelector('#modal-manual h3').innerText = "EDITAR MOVIMIENTO";
             btnAction.innerText = "ACTUALIZAR";
-            btnDelete.style.display = 'block'; // <--- MOSTRAR BORRAR
+            
+            // Mostramos zona de clonar/borrar (Grid para que salgan en paralelo)
+            if(areaExtras) areaExtras.style.display = 'grid'; 
         }
 
-        // Rellenar las listas (Igual que antes)
+        // Rellenar las listas (Esto sigue igual)
         const sCuentas = new Set(), sConceptos = new Set(), sBeneficiarios = new Set();
         datos.forEach(d => {
             if(d.cuenta) sCuentas.add(d.cuenta);
@@ -1635,6 +1655,7 @@ if (rango && rango.start) {
         elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas'); // Color verde/rojo según resultado
 
         document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
+		actualizarGrafico();
     }
 
     // === DRILL-DOWN: DE DASHBOARD A LISTA ===
@@ -1809,6 +1830,121 @@ if (rango && rango.start) {
                 btnExport.classList.add('btn-glow');
             }
         }
+    }
+	
+	function clonarMovimiento() {
+        // 1. Feedback visual
+        mostrarEstado('📋 Datos clonados. Revisa y pulsa GUARDAR.', 'normal');
+
+        // 2. Convertimos el formulario a modo "NUEVO"
+        idEnEdicion = null; // Rompemos el vínculo con el ID antiguo
+        
+        // 3. Establecemos la fecha a HOY
+        document.getElementById('m-fecha').valueAsDate = new Date();
+
+        // 4. Cambiamos la interfaz para que el usuario sepa que es nuevo
+        document.querySelector('#modal-manual h3').innerText = "NUEVO (COPIA)";
+        document.getElementById('btn-modal-action').innerText = "GUARDAR COPIA";
+        
+        // 5. Ocultamos los botones extra (no puedes borrar ni clonar lo que aún no has guardado)
+        document.getElementById('extra-actions').style.display = 'none';
+
+        // 6. Efecto visual: Hacemos un pequeño "flash" en el input de cantidad
+        const inputCant = document.getElementById('m-cantidad');
+        inputCant.style.background = '#333';
+        setTimeout(() => inputCant.style.background = '', 300);
+        inputCant.focus(); // Ponemos el foco por si quiere cambiar el importe
+    }
+	
+	// === MOTOR GRÁFICO (CHART.JS) ===
+    let myChart = null; // Variable global para el gráfico
+
+    function actualizarGrafico() {
+        // 1. Obtener datos filtrados por fecha (igual que el dashboard)
+        const rango = getFechasDashboard();
+        let datosGrafico = datos.filter(m => m.tipo === 'gasto' && pasaFiltroPropietario(m)); // Solo gastos y propietario activo
+
+        if (rango && rango.start) {
+            datosGrafico = datosGrafico.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
+        }
+
+        // 2. Agrupar por CONCEPTO
+        const agrupado = {};
+        datosGrafico.forEach(m => {
+            const concepto = m.concepto || 'OTROS';
+            if (!agrupado[concepto]) agrupado[concepto] = 0;
+            agrupado[concepto] += m.importe; // Sumamos (será negativo)
+        });
+
+        // 3. Preparar datos para Chart.js
+        // Ordenamos para mostrar los gastos más grandes primero
+        const etiquetas = Object.keys(agrupado).sort((a, b) => agrupado[a] - agrupado[b]); // Orden ascendente porque son negativos
+        const valores = etiquetas.map(k => Math.abs(agrupado[k])); // Convertimos a positivo para el gráfico
+
+        // Paleta de Colores Neón (Cyberpunk)
+        const coloresNeon = [
+            '#FF2E4D', // Rojo
+            '#BF5AF2', // Púrpura
+            '#00B8FF', // Azul
+            '#FFD60A', // Amarillo
+            '#39FF14', // Verde
+            '#FF9F0A', // Naranja
+            '#FFFFFF', // Blanco
+            '#888888'  // Gris
+        ];
+
+        // 4. Dibujar o Actualizar el Gráfico
+        const ctx = document.getElementById('gastosChart');
+        if(!ctx) return;
+
+        // Si ya existe un gráfico previo, lo destruimos para crear el nuevo
+        if (myChart) {
+            myChart.destroy();
+        }
+
+        myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: etiquetas,
+                datasets: [{
+                    data: valores,
+                    backgroundColor: coloresNeon,
+                    borderColor: '#000000', // Bordes negros para separar segmentos
+                    borderWidth: 2,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%', // Hace el agujero del donut más grande
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#FFFFFF', // Texto blanco
+                            font: { family: 'Inter', size: 10 },
+                            usePointStyle: true,
+                            padding: 20
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#111',
+                        titleColor: '#BF5AF2',
+                        bodyColor: '#FFF',
+                        borderColor: '#333',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                let value = context.parsed || 0;
+                                return ' ' + label + ': ' + fmt(value) + ' €';
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 	
 </script>
