@@ -911,6 +911,7 @@
     let msalInstance;
     let oneDriveToken = null; // Token para guardar archivos
     let datos = [];
+	let idEnEdicion = null; // <--- NUEVA VARIABLE DE CONTROL
     let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
     let modoNube = false;
     let estadoPropietario = 0; // 0=Todos, 1=Dani, 2=Norma
@@ -1228,7 +1229,7 @@
             let signo = m.importe > 0 ? '+' : '';
 
             return `
-                <tr>
+                <tr onclick="cargarParaEditar(${m.id})" style="cursor:pointer">
                     <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${date}</td>
                     <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
                     <td class="pc-only ${color}">${m.cuenta} (${fmt(m.saldo)})</td>
@@ -1372,11 +1373,57 @@
         const th = document.getElementById('th-'+campo);
         if(th) th.style.color='var(--c-primary)';
     }
+	
+	// === FUNCIÓN PARA CARGAR EDICIÓN ===
+    function cargarParaEditar(id) {
+        // 1. Encontrar el movimiento
+        const mov = datos.find(d => d.id === id);
+        if (!mov) return;
 
+        // 2. Marcar que estamos editando
+        idEnEdicion = id;
+
+        // 3. Rellenar selects PRIMERO (para asegurar opciones)
+        abrirModal(true); // Pasamos 'true' para indicar que es edición visual
+
+        // 4. Inyectar valores en los inputs
+        document.getElementById('m-cantidad').value = mov.importe;
+        document.getElementById('m-desc').value = mov.detalle;
+        
+        // Manejo especial de la fecha para input type="date"
+        const fechaObj = new Date(mov.ts);
+        const dia = ("0" + fechaObj.getDate()).slice(-2);
+        const mes = ("0" + (fechaObj.getMonth() + 1)).slice(-2);
+        const anio = fechaObj.getFullYear();
+        document.getElementById('m-fecha').value = `${anio}-${mes}-${dia}`;
+
+        // Seleccionar valores en los desplegables
+        document.getElementById('m-cuenta').value = mov.cuenta;
+        document.getElementById('m-concepto').value = mov.concepto;
+        document.getElementById('m-beneficiario').value = mov.beneficiario;
+
+        // 5. Cambiar título y botón visualmente
+        document.querySelector('#modal-manual h3').innerText = "EDITAR MOVIMIENTO";
+        document.querySelector('#modal-manual .btn-blue').innerText = "ACTUALIZAR CAMBIOS";
+    }
+	
     // === GESTIÓN FORMULARIO ALTA ===
-    function abrirModal() { 
+    function abrirModal(esEdicion = false) { 
         document.getElementById('modal-manual').classList.add('active');
-        document.getElementById('m-fecha').valueAsDate = new Date();
+        
+        // Si NO es edición (es decir, pulsamos el botón +), reseteamos todo
+        if (!esEdicion) {
+            idEnEdicion = null; // Modo "Nuevo"
+            document.getElementById('m-fecha').valueAsDate = new Date();
+            document.getElementById('m-cantidad').value = '';
+            document.getElementById('m-desc').value = '';
+            
+            // Textos originales
+            document.querySelector('#modal-manual h3').innerText = "NUEVO MOVIMIENTO";
+            document.querySelector('#modal-manual .btn-blue').innerText = "GUARDAR";
+        }
+
+        // Rellenar las listas desplegables (esto se mantiene igual)
         const sCuentas = new Set(), sConceptos = new Set(), sBeneficiarios = new Set();
         datos.forEach(d => {
             if(d.cuenta) sCuentas.add(d.cuenta);
@@ -1385,9 +1432,11 @@
         });
         const llenar = (id, set) => {
             const el = document.getElementById(id);
-            const first = el.options[0].outerHTML;
+            const valActual = el.value; // Guardamos selección por si es edición
+            const first = '<option value="">Selecciona...</option>'; // Normalizamos opción 1
             el.innerHTML = first; 
             Array.from(set).sort().forEach(val => el.innerHTML += `<option value="${val}">${val}</option>`);
+            if(valActual && esEdicion) el.value = valActual; // Restauramos valor si existía
         };
         llenar('m-cuenta', sCuentas);
         llenar('m-concepto', sConceptos);
@@ -1400,36 +1449,48 @@
         if(d.value === '') d.value = c;
     }
     function guardarManual() {
-        // 1. Capturamos TODOS los valores reales del formulario
         const imp = parseFloat(document.getElementById('m-cantidad').value);
         const desc = document.getElementById('m-desc').value;
         const fecha = document.getElementById('m-fecha').value;
-        
-        // AQUÍ ESTABA EL ERROR: Antes no leíamos estos campos
         const cuenta = document.getElementById('m-cuenta').value;
         const concepto = document.getElementById('m-concepto').value;
         const beneficiario = document.getElementById('m-beneficiario').value;
         
-        // 2. Validación de seguridad
         if(!imp || !desc || !fecha || !cuenta || !concepto) {
-            alert("Por favor, completa todos los campos (Importe, Cuenta, Concepto, Descripción y Fecha)");
+            alert("Por favor, completa todos los campos principales.");
             return;
         }
 
-        // 3. Guardamos el movimiento con los datos REALES
-        datos.push({
-            id: Date.now(), 
-            ts: new Date(fecha).getTime(),
-            importe: imp, 
-            cuenta: cuenta,               // <--- AHORA SÍ: Guarda la cuenta seleccionada
-            concepto: concepto,           // <--- AHORA SÍ: Guarda el concepto seleccionado
-            detalle: desc,
-            beneficiario: beneficiario || '-', // <--- AHORA SÍ: Guarda el beneficiario (o un guion si está vacío)
-            tipo: imp >= 0 ? 'ingreso' : 'gasto', 
-            saldo: 0
-        });
+        if (idEnEdicion) {
+            // === MODO EDICIÓN: ACTUALIZAR EXISTENTE ===
+            const indice = datos.findIndex(d => d.id === idEnEdicion);
+            if (indice !== -1) {
+                datos[indice].ts = new Date(fecha).getTime();
+                datos[indice].importe = imp;
+                datos[indice].cuenta = cuenta;
+                datos[indice].concepto = concepto;
+                datos[indice].detalle = desc;
+                datos[indice].beneficiario = beneficiario || '-';
+                datos[indice].tipo = imp >= 0 ? 'ingreso' : 'gasto';
+                mostrarEstado('Movimiento actualizado correctamente', 'ok');
+            }
+        } else {
+            // === MODO CREACIÓN: AÑADIR NUEVO ===
+            datos.push({
+                id: Date.now(), 
+                ts: new Date(fecha).getTime(),
+                importe: imp, 
+                cuenta: cuenta, 
+                concepto: concepto, 
+                detalle: desc,
+                beneficiario: beneficiario || '-', 
+                tipo: imp >= 0 ? 'ingreso' : 'gasto', 
+                saldo: 0
+            });
+            mostrarEstado('Nuevo movimiento añadido', 'ok');
+        }
         
-        // 4. Recalcular saldos y reordenar por fecha
+        // Recalcular saldos globales
         datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
         const ac = {};
         datos.forEach(m => {
@@ -1438,21 +1499,12 @@
             m.saldo = ac[m.cuenta];
         });
 
-        // 5. Actualizar la pantalla
         renderizar();
         actualizarDashboard();
         document.getElementById('modal-manual').classList.remove('active');
+        idEnEdicion = null; // Resetear variable siempre al terminar
         
-        // 6. Limpiar el formulario para la próxima vez
-        document.getElementById('m-cantidad').value = '';
-        document.getElementById('m-desc').value = '';
-        document.getElementById('m-cuenta').value = '';       // Limpiamos select
-        document.getElementById('m-concepto').value = '';     // Limpiamos select
-        document.getElementById('m-beneficiario').value = ''; // Limpiamos select
-        
-        mostrarEstado('¡Movimiento añadido! Exporta para guardar.', 'ok');
-
-        // 7. Activar el brillo del botón EXPORTAR (Recordatorio)
+        // Activar botón de exportar
         const btnExport = document.getElementById('btn-export-excel');
         btnExport.style.display = 'flex';
         btnExport.classList.add('btn-glow');
