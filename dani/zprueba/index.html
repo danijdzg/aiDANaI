@@ -1655,7 +1655,6 @@ if (rango && rango.start) {
         elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas'); // Color verde/rojo según resultado
 
         document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
-		actualizarGrafico();
     }
 
     // === DRILL-DOWN: DE DASHBOARD A LISTA ===
@@ -1856,97 +1855,8 @@ if (rango && rango.start) {
         inputCant.focus(); // Ponemos el foco por si quiere cambiar el importe
     }
 	
-	// === MOTOR GRÁFICO (CHART.JS) ===
-    let myChart = null; // Variable global para el gráfico
-
-    function actualizarGrafico() {
-        // 1. Obtener datos filtrados por fecha (igual que el dashboard)
-        const rango = getFechasDashboard();
-        let datosGrafico = datos.filter(m => m.tipo === 'gasto' && pasaFiltroPropietario(m)); // Solo gastos y propietario activo
-
-        if (rango && rango.start) {
-            datosGrafico = datosGrafico.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
-        }
-
-        // 2. Agrupar por CONCEPTO
-        const agrupado = {};
-        datosGrafico.forEach(m => {
-            const concepto = m.concepto || 'OTROS';
-            if (!agrupado[concepto]) agrupado[concepto] = 0;
-            agrupado[concepto] += m.importe; // Sumamos (será negativo)
-        });
-
-        // 3. Preparar datos para Chart.js
-        // Ordenamos para mostrar los gastos más grandes primero
-        const etiquetas = Object.keys(agrupado).sort((a, b) => agrupado[a] - agrupado[b]); // Orden ascendente porque son negativos
-        const valores = etiquetas.map(k => Math.abs(agrupado[k])); // Convertimos a positivo para el gráfico
-
-        // Paleta de Colores Neón (Cyberpunk)
-        const coloresNeon = [
-            '#FF2E4D', // Rojo
-            '#BF5AF2', // Púrpura
-            '#00B8FF', // Azul
-            '#FFD60A', // Amarillo
-            '#39FF14', // Verde
-            '#FF9F0A', // Naranja
-            '#FFFFFF', // Blanco
-            '#888888'  // Gris
-        ];
-
-        // 4. Dibujar o Actualizar el Gráfico
-        const ctx = document.getElementById('gastosChart');
-        if(!ctx) return;
-
-        // Si ya existe un gráfico previo, lo destruimos para crear el nuevo
-        if (myChart) {
-            myChart.destroy();
-        }
-
-        myChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: etiquetas,
-                datasets: [{
-                    data: valores,
-                    backgroundColor: coloresNeon,
-                    borderColor: '#000000', // Bordes negros para separar segmentos
-                    borderWidth: 2,
-                    hoverOffset: 10
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '70%', // Hace el agujero del donut más grande
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            color: '#FFFFFF', // Texto blanco
-                            font: { family: 'Inter', size: 10 },
-                            usePointStyle: true,
-                            padding: 20
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: '#111',
-                        titleColor: '#BF5AF2',
-                        bodyColor: '#FFF',
-                        borderColor: '#333',
-                        borderWidth: 1,
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.label || '';
-                                let value = context.parsed || 0;
-                                return ' ' + label + ': ' + fmt(value) + ' €';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
 	
+
 </script>
 </body>
 </html>
