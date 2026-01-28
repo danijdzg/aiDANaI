@@ -71,6 +71,44 @@
         
         .app-layout { display: flex; flex-direction: column; height: 100%; width: 100%; }
         
+		/* === BOTÓN MAESTRO PROPIETARIO (D&N) === */
+        .btn-owner {
+            width: 40px; height: 40px; /* Círculo perfecto */
+            border-radius: 50%;
+            font-family: 'Inter', sans-serif; font-weight: 800; font-size: 10px;
+            cursor: pointer;
+            margin-right: 12px; /* Separación del título */
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            flex-shrink: 0; /* Evita que se aplaste en móviles */
+        }
+        
+        /* ESTADO 1: TODOS (Verde Transparente) */
+        .owner-all { 
+            background: transparent; 
+            color: var(--c-success); 
+            border: 2px solid var(--c-success);
+            box-shadow: inset 0 0 5px rgba(57, 255, 20, 0.2);
+        }
+
+        /* ESTADO 2: DANI (Azul Sólido) */
+        .owner-dani { 
+            background: var(--c-primary); 
+            color: #000000; 
+            border: 2px solid var(--c-primary);
+            box-shadow: 0 0 15px var(--c-primary);
+            transform: scale(1.1); /* Un poco más grande al activarse */
+        }
+
+        /* ESTADO 3: NORMA (Rojo Sólido) */
+        .owner-norma { 
+            background: var(--c-danger); 
+            color: #000000; 
+            border: 2px solid var(--c-danger);
+            box-shadow: 0 0 15px var(--c-danger);
+            transform: scale(1.1);
+        }
+		
         /* CABECERA */
         header { 
             padding: 15px 20px; display: flex; flex-direction: column; gap: 12px;
@@ -568,7 +606,13 @@
         <div class="app-layout">
             <header>
                 <div class="header-top">
-                    <h2>aiDANaI</h2>
+                    <div style="display:flex; align-items:center">
+                        <button id="btn-owner" class="btn-owner owner-all" onclick="toggleOwner()">
+                            D&N
+                        </button>
+                        <h2>aiDANaI</h2>
+                    </div>
+                    
                     <div class="source-switch">
                         <button class="source-option active" id="mode-local" onclick="cambiarModo('local')">
                             <span class="material-icons" style="font-size:14px">folder</span> Local
@@ -727,6 +771,7 @@
 
     let datos = [];
     let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
+	let estadoPropietario = 0; // 0=Todos, 1=Dani, 2=Norma
     let modoNube = false;
 	// Hacemos el formateador GLOBAL para que lo use la Tabla y el Dashboard
     const fmt = (v) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
@@ -859,10 +904,46 @@ document.addEventListener('DOMContentLoaded', () => {
 		actualizarDashboard();
     }
 
+    // === LÓGICA DEL BOTÓN PROPIETARIO ===
+    function toggleOwner() {
+        estadoPropietario = (estadoPropietario + 1) % 3; // Ciclo: 0 -> 1 -> 2 -> 0
+        const btn = document.getElementById('btn-owner');
+        
+        // Resetear clases
+        btn.className = 'btn-owner';
+        
+        if (estadoPropietario === 0) {
+            btn.classList.add('owner-all');
+            btn.innerText = 'D & N';
+        } else if (estadoPropietario === 1) {
+            btn.classList.add('owner-dani');
+            btn.innerText = 'Dani';
+        } else {
+            btn.classList.add('owner-norma');
+            btn.innerText = 'Norma';
+        }
+        
+        // Actualizar TODO
+        renderizar();
+        actualizarDashboard();
+    }
+
+    // Función auxiliar para saber si un movimiento pasa el filtro de propietario
+    function pasaFiltroPropietario(m) {
+        if (estadoPropietario === 0) return true; // Todos pasan
+        const letra = m.cuenta.trim().toUpperCase().charAt(0);
+        if (estadoPropietario === 1) return letra === 'D'; // Solo Dani
+        if (estadoPropietario === 2) return letra === 'N'; // Solo Norma
+        return true;
+    }
+
     function renderizar() {
         const tbody = document.getElementById('lista-movimientos');
         
         let lista = datos.filter(m => {
+            // 1. FILTRO MAESTRO (DANI / NORMA) - Prioritario
+            if (!pasaFiltroPropietario(m)) return false;
+
 			// --- NUEVO FILTRO INTERNO POR TIPO ---
             // Si filtramos por 'ingreso' o 'gasto' estricto
             if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
@@ -890,15 +971,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // 1. Normalización de texto
             if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
             
-            // 2. CRITERIO DE DESEMPATE (LA SOLUCIÓN):
-            // Si el valor principal es IDÉNTICO (ej: 5 movimientos el mismo día)
+            // 2. CRITERIO DE DESEMPATE
             if (valA === valB) {
-                // Aquí estaba el secreto: No hay que ordenar por el valor del saldo,
-                // sino por el "ID" (el orden en que entraron). 
-                // Esto obliga a que la columna saldo respete la secuencia matemática original.
-                
-                // Si es Ascendente (Viejo -> Nuevo): ID 1, luego ID 2...
-                // Si es Descendente (Nuevo -> Viejo): ID 2, luego ID 1...
                 return window.ordenActivo.asc ? (a.id - b.id) : (b.id - a.id);
             }
             
@@ -908,6 +982,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             return 0;
         });
+        
+        // Conteo rápido
         let i=0, g=0, n=0;
         lista.forEach(m => {
             if(m.tipo==='ingreso') i+=m.importe;
@@ -916,12 +992,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('contador-filas').innerText = `Mostrando ${lista.length} movimientos`;
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos cargados</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos (Revisa filtros o propietario)</td></tr>';
             return;
         }
 
         tbody.innerHTML = lista.map(m => {
-            // 1. FORMATO DE FECHA: dd/mm/aa para TODOS (PC y Móvil)
+            // 1. FORMATO DE FECHA
             const opcionesFecha = { day: '2-digit', month: '2-digit', year: '2-digit' };
             const date = new Date(m.ts).toLocaleDateString('es-ES', opcionesFecha);
             
@@ -929,7 +1005,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
             let signo = m.importe > 0 ? '+' : '';
 
-            // 3. RENDERIZADO HTML (Con fecha amarilla forzada)
+            // 3. RENDERIZADO HTML
             return `
                 <tr>
                     <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${date}</td>
@@ -1102,11 +1178,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const rango = getFechasDashboard();
         
-        // 1. Filtrar datos
-        let dashData = datos;
-        if (rango && rango.start) {
-            dashData = datos.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
-        }
+        // 1. Filtrar datos (POR FECHA Y PROPIETARIO)
+let dashData = datos.filter(m => pasaFiltroPropietario(m)); // <--- AQUÍ APLICAMOS EL FILTRO DEL BOTÓN
+
+if (rango && rango.start) {
+     // Filtramos sobre lo que ya ha pasado el filtro de propietario
+     dashData = dashData.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
+}
 
         // 2. Calcular Totales
         let ing = 0, gas = 0;
