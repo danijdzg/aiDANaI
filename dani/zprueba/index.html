@@ -849,10 +849,7 @@
                             </tbody>
                         </table>
                     </div>
-                </div>
-
-            </div>
-			<div id="tab-patri" class="view-section">
+					<div id="tab-patri" class="view-section">
     <div style="text-align: center; margin-bottom: 20px;">
         <span class="kpi-label">TOTAL PATRIMONIO</span>
         <div id="total-patri-valor" class="kpi-value" style="font-size: 42px; color: var(--c-primary); text-shadow: 0 0 20px var(--c-primary);">0,00€</div>
@@ -861,6 +858,10 @@
     <div id="lista-cuentas-patri" style="display: grid; gap: 15px;">
         </div>
 </div>
+                </div>
+
+            </div>
+			
             <nav class="bottom-nav">
     <button class="nav-item active" id="nav-inicio" onclick="irPestana('inicio')">
         <span class="material-icons">dashboard</span> Inicio
@@ -1202,8 +1203,13 @@
             btn.classList.add('owner-norma');
             btn.innerText = 'Norma';
         }
+        
+        // Actualizamos TODO: Tabla, Dashboard y Patrimonio
         renderizar();
         actualizarDashboard();
+        if(document.getElementById('tab-patri').classList.contains('active')) {
+            actualizarPatrimonio();
+        }
     }
 
     function pasaFiltroPropietario(m) {
@@ -1877,33 +1883,46 @@ if (rango && rango.start) {
     
     // 1. Calcular saldos finales por cuenta (considerando el filtro de Propietario D&N)
     const saldos = {};
-    datos.filter(m => pasaFiltroPropietario(m)).forEach(m => {
+    const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+    
+    datosFiltrados.forEach(m => {
         saldos[m.cuenta] = (saldos[m.cuenta] || 0) + m.importe;
     });
 
     // 2. Limpiar y dibujar tarjetas
     contenedor.innerHTML = '';
     let sumaTotal = 0;
+    const cuentasOrdenadas = Object.keys(saldos).sort();
 
-    Object.keys(saldos).sort().forEach(cta => {
-        const monto = saldos[cta];
-        sumaTotal += monto;
-        const colorClase = monto >= 0 ? 'val-pos' : 'val-neg';
-        
-        contenedor.innerHTML += `
-            <div class="master-card" style="margin-top:0; padding: 15px; border-top: 2px solid ${monto >= 0 ? 'var(--c-success)' : 'var(--c-danger)'}">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div class="kpi-label" style="margin-bottom:0">${cta}</div>
-                        <div style="font-size: 10px; color: #555;">Saldo Actual</div>
+    if (cuentasOrdenadas.length === 0) {
+        contenedor.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No hay datos para este usuario</div>';
+    } else {
+        cuentasOrdenadas.forEach(cta => {
+            const monto = saldos[cta];
+            sumaTotal += monto;
+            const colorClase = monto >= 0 ? 'val-pos' : 'val-neg'; // Estilo Neón Verde o Rojo
+            const colorBorde = monto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+            
+            contenedor.innerHTML += `
+                <div class="master-card" style="margin-top:0; padding: 15px; border-top: 2px solid ${colorBorde}; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div class="kpi-label" style="margin-bottom:2px; font-size:11px; color:#aaa;">CUENTA</div>
+                            <div style="font-size: 15px; font-weight:bold; color:white;">${cta}</div>
+                        </div>
+                        <div class="kpi-value ${colorClase}" style="font-size: 20px;">${fmt(monto)}€</div>
                     </div>
-                    <div class="kpi-value ${colorClase}" style="font-size: 20px;">${fmt(monto)}€</div>
                 </div>
-            </div>
-        `;
-    });
+            `;
+        });
+        
+        // Espacio extra al final para scroll cómodo
+        contenedor.innerHTML += '<div style="height: 50px;"></div>';
+    }
 
     totalEl.innerText = fmt(sumaTotal) + '€';
+    // Coloreamos también el total principal
+    totalEl.className = 'kpi-value ' + (sumaTotal >= 0 ? 'kpi-ing' : 'kpi-gas');
 }
 
 </script>
