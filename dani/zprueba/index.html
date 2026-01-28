@@ -289,12 +289,38 @@
             border-radius: 0; /* Cuadrado para el estilo underline */
             box-sizing: border-box;
         }
-
+			
         .filter-input:focus {
             outline: none;
             border-bottom-color: var(--c-accent); /* Se ilumina al tocar */
             background: linear-gradient(to bottom, transparent, rgba(191, 90, 242, 0.05));
             box-shadow: 0 4px 10px -5px rgba(191, 90, 242, 0.3);
+        }
+		
+		/* Estilos extra para el formulario modal */
+        .input-label {
+            font-size: 10px; color: #888; font-weight: bold; margin-top: 10px; display: block;
+        }
+        
+        .form-field {
+            margin-bottom: 5px; 
+            background: #0a0a0a; /* Fondo un poco más claro para distinguir el campo */
+            border-radius: 4px;
+            border-bottom: 1px solid #333;
+        }
+        
+        /* Corrección para Selects en móviles */
+        select.form-field {
+            -webkit-appearance: none; /* Quita el estilo nativo de Apple/Android */
+            appearance: none;
+            cursor: pointer;
+            color: white;
+        }
+        
+        /* Foco Neón */
+        .form-field:focus {
+            border-bottom-color: var(--c-primary);
+            background: #111;
         }
 
         /* Ajuste especial para fechas y selects para que no se vean feos */
@@ -788,12 +814,36 @@
 
         <div id="modal-manual" class="modal-overlay">
             <div class="modal-box">
-                <h3 style="color:white; margin-top:0">Añadir Movimiento</h3>
-                <input type="number" id="m-cantidad" class="filter-input" placeholder="Cantidad (+/-)" style="margin-bottom:10px; width:100%">
-                <input type="text" id="m-desc" class="filter-input" placeholder="Descripción" style="margin-bottom:10px; width:100%">
-                <input type="date" id="m-fecha" class="filter-input" style="margin-bottom:10px; width:100%">
-                <button class="full-btn btn-blue" onclick="guardarManual()">Guardar</button>
-                <button class="full-btn btn-gray" onclick="document.getElementById('modal-manual').classList.remove('active')">Cancelar</button>
+                <h3 style="color:var(--c-accent); margin-top:0; text-transform:uppercase; letter-spacing:1px">Nuevo Movimiento</h3>
+                
+                <label class="input-label">IMPORTE</label>
+                <input type="number" id="m-cantidad" class="filter-input form-field" placeholder="Ej: -50.00 (Gasto) o 1200 (Ingreso)">
+                
+                <label class="input-label">CUENTA</label>
+                <select id="m-cuenta" class="filter-input form-field">
+                    <option value="">Selecciona Cuenta...</option>
+                </select>
+
+                <label class="input-label">CONCEPTO</label>
+                <select id="m-concepto" class="filter-input form-field" onchange="autoRellenarDescripcion()">
+                    <option value="">Selecciona Concepto...</option>
+                </select>
+
+                <label class="input-label">DESCRIPCIÓN</label>
+                <input type="text" id="m-desc" class="filter-input form-field" placeholder="Detalle del movimiento">
+
+                <label class="input-label">BENEFICIARIO</label>
+                <select id="m-beneficiario" class="filter-input form-field">
+                    <option value="">Selecciona Beneficiario...</option>
+                </select>
+
+                <label class="input-label">FECHA</label>
+                <input type="date" id="m-fecha" class="filter-input form-field" style="margin-bottom:20px">
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+                    <button class="full-btn btn-blue" onclick="guardarManual()">GUARDAR</button>
+                    <button class="full-btn btn-gray" onclick="cerrarModal()">CANCELAR</button>
+                </div>
             </div>
         </div>
         
@@ -1119,25 +1169,103 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('panel-filtros').classList.remove('open');
     }
 
-    function abrirModal() { document.getElementById('modal-manual').classList.add('active'); }
-    function guardarManual() {
-        const imp = parseFloat(document.getElementById('m-cantidad').value);
-        if(!imp) return;
-        datos.push({
-            id: Date.now(), ts: new Date(document.getElementById('m-fecha').value || Date.now()).getTime(),
-            importe: imp, cuenta: 'Manual', concepto: 'General', detalle: document.getElementById('m-desc').value,
-            beneficiario: '-', tipo: imp>=0?'ingreso':'gasto', saldo:0
-        });
+    // === GESTIÓN DEL FORMULARIO DE ALTA ===
+
+    function abrirModal() { 
+        // 1. Mostrar Modal
+        document.getElementById('modal-manual').classList.add('active');
         
+        // 2. Poner Fecha de Hoy por defecto
+        document.getElementById('m-fecha').valueAsDate = new Date();
+
+        // 3. Recopilar datos únicos del Excel actual para llenar los desplegables
+        const sCuentas = new Set();
+        const sConceptos = new Set();
+        const sBeneficiarios = new Set();
+
+        datos.forEach(d => {
+            if(d.cuenta) sCuentas.add(d.cuenta);
+            if(d.concepto) sConceptos.add(d.concepto);
+            if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
+        });
+
+        // 4. Función auxiliar para llenar un <select>
+        const llenar = (id, set) => {
+            const el = document.getElementById(id);
+            // Guardamos la primera opción (el placeholder)
+            const first = el.options[0].outerHTML;
+            el.innerHTML = first; 
+            // Añadimos las opciones ordenadas
+            Array.from(set).sort().forEach(val => {
+                el.innerHTML += `<option value="${val}">${val}</option>`;
+            });
+        };
+
+        llenar('m-cuenta', sCuentas);
+        llenar('m-concepto', sConceptos);
+        llenar('m-beneficiario', sBeneficiarios);
+    }
+
+    function cerrarModal() {
+        document.getElementById('modal-manual').classList.remove('active');
+    }
+
+    // Copia el Concepto a la Descripción automáticamente (UX)
+    function autoRellenarDescripcion() {
+        const concepto = document.getElementById('m-concepto').value;
+        const descInput = document.getElementById('m-desc');
+        // Solo rellenar si la descripción está vacía para no borrar lo que el usuario escriba
+        if(descInput.value === '') {
+            descInput.value = concepto;
+        }
+    }
+
+    function guardarManual() {
+        // 1. Capturar valores
+        const imp = parseFloat(document.getElementById('m-cantidad').value);
+        const cta = document.getElementById('m-cuenta').value || 'Efectivo'; // Default si no elige
+        const con = document.getElementById('m-concepto').value || 'Varios';
+        const desc = document.getElementById('m-desc').value || con;
+        const ben = document.getElementById('m-beneficiario').value || '-';
+        const fechaVal = document.getElementById('m-fecha').value;
+
+        // Validación básica
+        if(!imp) { alert("Por favor, introduce un importe"); return; }
+        if(!fechaVal) { alert("Introduce una fecha"); return; }
+
+        // 2. Crear objeto movimiento
+        const nuevoMov = {
+            id: Date.now(), // ID único basado en milisegundos
+            ts: new Date(fechaVal).getTime(),
+            importe: imp, 
+            cuenta: cta, 
+            concepto: con, 
+            detalle: desc,
+            beneficiario: ben, 
+            tipo: imp >= 0 ? 'ingreso' : 'gasto', // Detecta tipo automático
+            saldo: 0 // Se recalcula abajo
+        };
+        
+        // 3. Insertar y Reordenar
+        datos.push(nuevoMov);
         datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
+        
+        // 4. Recalcular Saldos (Running Balance)
         const ac = {};
         datos.forEach(m => {
             if(!ac[m.cuenta]) ac[m.cuenta] = 0;
             ac[m.cuenta] += m.importe;
             m.saldo = ac[m.cuenta];
         });
+
+        // 5. Actualizar interfaz
         renderizar();
-        document.getElementById('modal-manual').classList.remove('active');
+        actualizarDashboard();
+        cerrarModal();
+        
+        // Limpiar formulario para la próxima
+        document.getElementById('m-cantidad').value = '';
+        document.getElementById('m-desc').value = '';
     }
 
     let calcVal = '';
