@@ -868,19 +868,28 @@
     const fmt = (v) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 	
 document.addEventListener('DOMContentLoaded', () => {
-        // Listener para el archivo local (por si acaso)
+        // 1. Configurar el listener para archivo local (Plan B)
         document.getElementById('file-input').addEventListener('change', (e) => {
             if(e.target.files[0]) leerExcel(e.target.files[0]);
         });
 
-        // --- CAMBIO: Arrancar en modo Nube automáticamente ---
-        cambiarModo('cloud'); // Pone la interfaz en modo OneDrive
+        // 2. FORZAR VISUALMENTE EL MODO NUBE
+        // Esto oculta los botones locales y muestra los de la nube inmediatamente
+        cambiarModo('cloud');
         
-        // Intentar abrir la ventana de login automáticamente
-        // Nota: Si el navegador bloquea el popup, verás el botón para pulsar manualmente.
+        // 3. MENSAJE DE ESPERA
+        mostrarEstado('Iniciando conexión...', 'normal');
+
+        // 4. LANZAMIENTO AUTOMÁTICO
+        // Damos 1 segundo de cortesía para que la librería MSAL cargue correctamente
         setTimeout(() => {
-            loginOneDrive();
-        }, 500);
+            if (typeof loginOneDrive === 'function') {
+                console.log("Intentando auto-login...");
+                loginOneDrive(); 
+            } else {
+                mostrarEstado('Error: Recarga la página', 'err');
+            }
+        }, 1000);
     });
 
     function cambiarModo(modo) {
