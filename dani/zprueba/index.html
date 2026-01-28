@@ -804,8 +804,10 @@
                     <div class="master-card blue-card" onclick="irPestana('patri')">
                         <div style="text-align:center; padding: 10px 0;">
                             <span class="card-title" style="font-size:14px; display:block; margin-bottom:10px">PATRIMONIO NETO</span>
+                            
                             <span class="kpi-value val-std-blue" id="d-patri-total" style="font-size:36px">0,00 €</span>
-                           <div style="margin-top:5px; font-size:10px; color:var(--c-warning); font-style:italic">PULSA PARA VER DETALLE</div>
+                            
+                            <div style="margin-top:5px; font-size:10px; color:var(--c-warning); font-style:italic">PULSA PARA VER DETALLE</div>
                         </div>
                     </div>
 
@@ -1343,17 +1345,18 @@
     }
 
     function actualizarDashboard() {
-        // 1. Si no hay datos, no hacemos nada (se queda en 0)
-        if(!datos || datos.length === 0) return;
-        
-        // --- PREPARACIÓN ---
+        // Si no hay datos cargados, paramos para evitar errores
+        if (!datos || datos.length === 0) return;
+
+        // 1. OBTENER FILTROS
         const rango = getFechasDashboard();
-        // Filtramos por el propietario activo (Dani/Norma/Todos)
+        // Filtro de Propietario (Dani / Norma / Todos)
         let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
-        
-        
-        // --- CÁLCULO 1: TARJETA RESUMEN (Ingresos/Gastos del periodo) ---
-        // Aplicamos filtro de fecha solo para esta tarjeta
+
+        // ----------------------------------------------------
+        // CÁLCULO A: TARJETA ROJA (RESUMEN DEL PERIODO)
+        // ----------------------------------------------------
+        // Aquí SÍ aplicamos el filtro de fecha (Mes/Año/Rango)
         let datosResumen = datosPropietario;
         if (rango && rango.start) {
              datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
@@ -1362,42 +1365,51 @@
         let ing = 0, gas = 0;
         datosResumen.forEach(m => {
             if (m.tipo === 'ingreso') ing += m.importe;
-            if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
+            if (m.tipo === 'gasto') gas += Math.abs(m.importe);
         });
 
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // PINTAR RESUMEN
-        document.getElementById('d-ing').innerText = fmt(ing);
-        document.getElementById('d-gas').innerText = '-' + fmt(gas);
+        // Pintamos la Tarjeta Roja
+        if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
+        if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
         const elNeto = document.getElementById('d-net');
-        elNeto.innerText = fmt(neto);
-        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
+        if(elNeto) {
+            elNeto.innerText = fmt(neto);
+            elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
+        }
+        if(document.getElementById('d-aho')) document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
 
-        document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
-        
 
-        // --- CÁLCULO 2: PATRIMONIO (Suma Histórica TOTAL) ---
-        // Aquí usamos 'datosPropietario' (SIN filtrar fecha) porque el patrimonio es histórico
-        // Usamos .reduce para una suma matemática precisa de todos los movimientos
-        let totalPatrimonio = datosPropietario.reduce((acumulado, movimiento) => {
-            return acumulado + movimiento.importe;
-        }, 0);
+        // ----------------------------------------------------
+        // CÁLCULO B: TARJETA AZUL (PATRIMONIO TOTAL HISTÓRICO)
+        // ----------------------------------------------------
+        // IMPORTANTE: Aquí usamos 'datosPropietario' (SIN filtrar por fecha)
+        // porque el patrimonio es la suma de TODA la historia, no solo de este mes.
         
+        let totalPatrimonio = 0;
+        for(let i = 0; i < datosPropietario.length; i++) {
+            // Suma segura: ignora valores corruptos si los hubiera
+            let valor = parseFloat(datosPropietario[i].importe);
+            if(!isNaN(valor)) {
+                totalPatrimonio += valor;
+            }
+        }
+
         const elPatri = document.getElementById('d-patri-total');
         if(elPatri) {
             elPatri.innerText = fmt(totalPatrimonio) + ' €';
-            
-            // Forzamos el color azul por si acaso se perdió
-            elPatri.classList.add('val-std-blue');
+            elPatri.classList.add('val-std-blue'); // Forzamos el color azul
         }
 
-        // --- EXTRAS ---
+        // ----------------------------------------------------
+        // EXTRAS
+        // ----------------------------------------------------
         if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
-
+	
     // === UTILS UI ===
     function irPestana(p) {
     // 1. Ocultar todas las pestañas
