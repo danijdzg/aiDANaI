@@ -1059,10 +1059,54 @@
                 break;
         }
     };
+	
     let msalInstance;
     let oneDriveToken = null; 
     let datos = [];
 	let idEnEdicion = null; 
+	// === LÓGICA DE INTEGRACIÓN CALCULADORA ===
+    let campoDestinoCalculadora = null;
+    let ultimoClickIgual = 0;
+
+    function abrirCalculadora(idCampo) {
+        campoDestinoCalculadora = document.getElementById(idCampo);
+        document.getElementById('calc-overlay').style.display = 'flex';
+        vibrar('clonar');
+    }
+
+    function cerrarCalculadora() {
+        document.getElementById('calc-overlay').style.display = 'none';
+        campoDestinoCalculadora = null;
+    }
+
+    // Escuchar el mensaje desde calculadora.html
+    // RECEPTOR DE DATOS DE CALCULADORA (ACTUALIZADO)
+    window.addEventListener('message', function(event) {
+        if (event.data.tipo === 'tecla_igual') {
+            const ahora = Date.now();
+            // Detectar DOBLE CLIC en el "=" (menos de 500ms)
+            if (ahora - ultimoClickIgual < 500) {
+                if (campoDestinoCalculadora) {
+                    // Tomamos el valor de la calculadora
+                    let valorFinal = event.data.valor;
+                    
+                    // Si el valor viene con comas de la calculadora, las pasamos a puntos para el sistema
+                    valorFinal = valorFinal.toString().replace(',', '.');
+                    
+                    // Lo inyectamos en el campo del formulario
+                    campoDestinoCalculadora.value = valorFinal;
+                    
+                    // Forzamos a la aplicación a reconocer que el dato cambió
+                    campoDestinoCalculadora.dispatchEvent(new Event('input'));
+                    campoDestinoCalculadora.dispatchEvent(new Event('change'));
+
+                    cerrarCalculadora();
+                    vibrar('ingreso');
+                }
+            }
+            ultimoClickIgual = ahora;
+        }
+    });
     let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
     let modoNube = false;
 	let ordenPatri = { campo: 'saldo', asc: false }; 
@@ -1414,6 +1458,11 @@
         if (!mov) return;
         idEnEdicion = id;
         abrirModal(true); 
+		// Activar calculadora en modo edición
+        const campoImporteEdit = document.getElementById('m-cantidad');
+        campoImporteEdit.setAttribute('readonly', true);
+        campoImporteEdit.style.cursor = 'pointer';
+        campoImporteEdit.onclick = () => abrirCalculadora('m-cantidad');
         document.getElementById('m-cantidad').value = mov.importe;
         document.getElementById('m-desc').value = mov.detalle;
         const fechaObj = new Date(mov.ts);
@@ -1436,6 +1485,11 @@
             idEnEdicion = null;
             document.getElementById('m-fecha').valueAsDate = new Date();
             document.getElementById('m-cantidad').value = '';
+			// Hacer que el campo importe abra la calculadora y no se pueda escribir a mano
+        const campoImporte = document.getElementById('m-cantidad');
+        campoImporte.setAttribute('readonly', true);
+        campoImporte.style.cursor = 'pointer';
+        campoImporte.onclick = () => abrirCalculadora('m-cantidad');
             document.getElementById('m-desc').value = '';
             document.querySelector('#modal-manual h3').innerText = "NUEVO MOVIMIENTO";
             btnAction.innerText = "GUARDAR";
@@ -1940,5 +1994,13 @@
         }
     }
 </script>
+
+<div id="calc-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:99999; flex-direction:column; align-items:center; justify-content:center;">
+    <div style="width:100%; max-width:400px; height:90%; position:relative; border:2px solid var(--c-primary); box-shadow: 0 0 20px var(--c-primary);">
+        <button onclick="cerrarCalculadora()" style="position:absolute; top:-40px; right:0; background:none; border:none; color:white; font-size:30px; cursor:pointer;">&times; Cerrar</button>
+        <iframe id="calc-iframe" src="calculadora.html" style="width:100%; height:100%; border:none;"></iframe>
+    </div>
+</div>
+
 </body>
 </html>
