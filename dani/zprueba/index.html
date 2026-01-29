@@ -807,6 +807,37 @@
         /* 4. FECHAS Y DETALLES EN TABLAS */
         .td-date-mob, .td-desc-mob, .td-ben-mob { opacity: 1 !important; }
         .td-desc-mob strong { color: var(--c-primary); } /* Concepto en Azul */
+		/* === DESGLOSE PATRIMONIO (LIQUIDEZ vs INVERSIÓN) === */
+        .patri-breakdown {
+            background: rgba(0,0,0,0.3); /* Fondo más oscuro para separar */
+            border-top: 1px solid #222;
+            border-radius: 12px;
+            padding: 12px 10px;
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+        }
+        
+        /* Línea separadora vertical sutil */
+        .patri-breakdown::after {
+            content: ''; position: absolute; left: 50%; top: 10px; bottom: 10px;
+            width: 1px; background: #222;
+        }
+
+        .patri-col { 
+            flex: 1; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+        }
+        
+        /* Valores en Verde Neón (como en la foto) */
+        .val-breakdown {
+            font-size: 18px; 
+            font-weight: 700; 
+            color: var(--c-success); 
+            text-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
+            margin-top: 4px;
+        }
 		
     </style>
 </head>
@@ -899,12 +930,24 @@
                     </div>
 
                     <div class="master-card blue-card" onclick="irPestana('patri')">
-                        <div style="text-align:center; padding: 10px 0;">
-                            <span class="card-title" style="font-size:14px; display:block; margin-bottom:10px">PATRIMONIO NETO</span>
+                        <div class="card-header" style="border:none; padding-bottom:0; margin-bottom:5px">
+                            <span class="card-title">PATRIMONIO NETO</span>
+                        </div>
+                        
+                        <div style="text-align:center; margin-bottom:5px">
+                            <span class="kpi-value val-std-blue" id="d-patri-total" style="font-size:38px">0,00 €</span>
+                        </div>
+
+                        <div class="patri-breakdown">
+                            <div class="patri-col">
+                                <span class="kpi-label">LIQUIDEZ</span>
+                                <span class="val-breakdown" id="d-patri-liq">0,00 €</span>
+                            </div>
                             
-                            <span class="kpi-value val-std-blue" id="d-patri-total" style="font-size:36px">0,00 €</span>
-                            
-                            <div style="margin-top:5px; font-size:10px; color:var(--c-warning); font-style:italic">PULSA PARA VER DETALLE</div>
+                            <div class="patri-col">
+                                <span class="kpi-label">CAPITAL INV.</span>
+                                <span class="val-breakdown" id="d-patri-inv">0,00 €</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1887,21 +1930,22 @@
     }
 
     function actualizarDashboard() {
-        if(!datos.length) return;
+        if(!datos || datos.length === 0) return;
         
+        // 1. OBTENER FILTROS Y DATOS BASE
         const rango = getFechasDashboard();
-        
-        // 1. Filtrar datos (POR FECHA Y PROPIETARIO)
-let dashData = datos.filter(m => pasaFiltroPropietario(m)); // <--- AQUÍ APLICAMOS EL FILTRO DEL BOTÓN
+        let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
 
-if (rango && rango.start) {
-     // Filtramos sobre lo que ya ha pasado el filtro de propietario
-     dashData = dashData.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
-}
+        // ============================================================
+        // CEREBRO 1: TARJETA ROJA (RESUMEN DEL PERIODO)
+        // ============================================================
+        let datosResumen = datosPropietario;
+        if (rango && rango.start) {
+             datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
+        }
 
-        // 2. Calcular Totales
         let ing = 0, gas = 0;
-        dashData.forEach(m => {
+        datosResumen.forEach(m => {
             if (m.tipo === 'ingreso') ing += m.importe;
             if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
         });
@@ -1909,15 +1953,59 @@ if (rango && rango.start) {
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // 3. Renderizar
-        document.getElementById('d-ing').innerText = fmt(ing);
-        document.getElementById('d-gas').innerText = '-' + fmt(gas);
+        // Pintar Tarjeta Roja
+        if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
+        if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
         const elNeto = document.getElementById('d-net');
-        elNeto.innerText = fmt(neto);
-        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas'); // Color verde/rojo según resultado
+        if(elNeto) {
+            elNeto.innerText = fmt(neto);
+            elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
+        }
+        if(document.getElementById('d-aho')) document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
 
-        document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
+
+        // ============================================================
+        // CEREBRO 2: TARJETA AZUL (PATRIMONIO INTELIGENTE)
+        // Clasifica en: LIQUIDEZ (Bancos, Efectivo, Tarjetas) vs INVERSIÓN
+        // ============================================================
+        
+        let totalPatrimonio = 0;
+        let totalLiquidez = 0;
+        let totalInversion = 0;
+        
+        datosPropietario.forEach(m => {
+            totalPatrimonio += m.importe;
+            
+            // Consultamos la configuración de la cuenta
+            const cta = m.cuenta.trim();
+            const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) 
+                           ? mapaCuentas[cta] 
+                           : { tipo: 'OTROS', esInversion: false };
+
+            if(config.esInversion) {
+                totalInversion += m.importe;
+            } else {
+                // Todo lo que NO sea inversión (Bancos, Efectivo, Deudas tarjeta) va a Liquidez
+                totalLiquidez += m.importe;
+            }
+        });
+
+        // 1. Total Global (Azul)
+        const elPatri = document.getElementById('d-patri-total');
+        if(elPatri) {
+            elPatri.innerText = fmt(totalPatrimonio) + ' €';
+            elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
+        }
+
+        // 2. Desglose (Verde Neón)
+        if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(totalLiquidez) + ' €';
+        if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(totalInversion) + ' €';
+
+        // ============================================================
+        // EXTRAS
+        // ============================================================
+        if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
 
     // === DRILL-DOWN: DE DASHBOARD A LISTA ===
