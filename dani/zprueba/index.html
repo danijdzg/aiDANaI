@@ -1346,19 +1346,23 @@
     }
 
     function actualizarDashboard() {
-        // Si no hay datos cargados, paramos para evitar errores
-        if (!datos || datos.length === 0) return;
-
-        // 1. OBTENER FILTROS
+        // Si no hay datos, no hacemos nada
+        if(!datos || datos.length === 0) return;
+        
+        // 1. OBTENER FILTROS Y DATOS BASE
         const rango = getFechasDashboard();
-        // Filtro de Propietario (Dani / Norma / Todos)
+        // Filtramos PRIMERO por el propietario activo (Dani / Norma / Todos)
+        // Esta es la base común para ambas tarjetas
         let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
 
-        // ----------------------------------------------------
-        // CÁLCULO A: TARJETA ROJA (RESUMEN DEL PERIODO)
-        // ----------------------------------------------------
-        // Aquí SÍ aplicamos el filtro de fecha (Mes/Año/Rango)
+
+        // ============================================================
+        // CEREBRO 1: TARJETA ROJA (RESUMEN DEL PERIODO)
+        // Necesita filtro de FECHAS (Mes/Año)
+        // ============================================================
+        
         let datosResumen = datosPropietario;
+        // Aplicamos filtro de fecha solo si existe rango
         if (rango && rango.start) {
              datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
         }
@@ -1366,48 +1370,54 @@
         let ing = 0, gas = 0;
         datosResumen.forEach(m => {
             if (m.tipo === 'ingreso') ing += m.importe;
-            if (m.tipo === 'gasto') gas += Math.abs(m.importe);
+            if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
         });
 
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // Pintamos la Tarjeta Roja
+        // PINTAR DATOS ROJOS
         if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
         if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
         const elNeto = document.getElementById('d-net');
         if(elNeto) {
             elNeto.innerText = fmt(neto);
-            elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
+            elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
         }
         if(document.getElementById('d-aho')) document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
 
 
-        // ----------------------------------------------------
-        // CÁLCULO B: TARJETA AZUL (PATRIMONIO TOTAL HISTÓRICO)
-        // ----------------------------------------------------
-        // IMPORTANTE: Aquí usamos 'datosPropietario' (SIN filtrar por fecha)
-        // porque el patrimonio es la suma de TODA la historia, no solo de este mes.
-        
+        // ============================================================
+        // CEREBRO 2: TARJETA AZUL (PATRIMONIO HISTÓRICO)
+        // IGNORA las fechas. Suma TODO el historial.
+        // ============================================================
+
+        // Usamos 'datosPropietario' (que tiene todo el historial sin filtrar fecha)
         let totalPatrimonio = 0;
-        for(let i = 0; i < datosPropietario.length; i++) {
-            // Suma segura: ignora valores corruptos si los hubiera
-            let valor = parseFloat(datosPropietario[i].importe);
-            if(!isNaN(valor)) {
-                totalPatrimonio += valor;
-            }
-        }
+        
+        // Suma simple y robusta
+        datosPropietario.forEach(m => {
+            totalPatrimonio += m.importe;
+        });
 
         const elPatri = document.getElementById('d-patri-total');
         if(elPatri) {
             elPatri.innerText = fmt(totalPatrimonio) + ' €';
-            elPatri.classList.add('val-std-blue'); // Forzamos el color azul
+            
+            // Colorear según sea positivo (Azul) o deuda (Rojo)
+            // Nota: Usamos 'val-std-blue' para positivo para mantener el estilo de la tarjeta azul
+            if(totalPatrimonio >= 0) {
+                elPatri.className = 'kpi-value val-std-blue';
+            } else {
+                elPatri.className = 'kpi-value val-std-neg';
+            }
         }
 
-        // ----------------------------------------------------
-        // EXTRAS
-        // ----------------------------------------------------
+        // ============================================================
+        // EXTRAS (Gráfico)
+        // ============================================================
+        // El gráfico debe reflejar el periodo seleccionado (Tarjeta Roja)
         if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
 	
