@@ -1135,20 +1135,41 @@
         }
     }
 
-    // === PROCESAMIENTO DE DATOS ===
+    // Variable global para guardar la configuración de cuentas
+    let mapaCuentas = {}; 
+
     function leerExcel(blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
             
-            // CORRECCIÓN CRÍTICA:
-            // Quitamos "range: 66". Ahora lee todo el documento desde A1.
-            // 'header: 1' significa que nos da una matriz cruda (filas y columnas)
-            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true }); 
+            // 1. LEER MOVIMIENTOS (Primera hoja o la llamada 'Movimientos')
+            // Intentamos buscar por nombre, si no, cogemos la primera
+            let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
+            const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
             
-            procesarDatos(json);
-            mostrarEstado('Datos cargados correctamente (Lectura Completa)', 'ok');
+            // 2. LEER CONFIGURACIÓN (Hoja 'Config')
+            mapaCuentas = {}; // Resetear
+            const wsConfigName = wb.SheetNames.find(n => n.toLowerCase() === 'config');
+            
+            if (wsConfigName) {
+                const jsonConfig = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName]);
+                // Convertimos la lista en un diccionario para búsqueda rápida
+                jsonConfig.forEach(row => {
+                    if(row.Cuenta) {
+                        mapaCuentas[row.Cuenta.trim()] = {
+                            tipo: row.Tipo || 'Otros',
+                            esInversion: (row.EsInversion && row.EsInversion.toString().toUpperCase() === 'SI')
+                        };
+                    }
+                });
+                mostrarEstado('Datos y Configuración cargados', 'ok');
+            } else {
+                mostrarEstado('Aviso: Hoja "Config" no encontrada. Se usarán valores por defecto.', 'normal');
+            }
+            
+            procesarDatos(jsonMovs);
         };
         reader.readAsArrayBuffer(blob);
     }
@@ -2118,90 +2139,115 @@ function cambiarOrdenPatrimonio(campo) {
     actualizarPatrimonio();
 }
 
-// === FUNCIÓN 2: DIBUJAR LA TABLA COMPACTA ===
+// === FUNCIÓN MAESTRA: PATRIMONIO AGRUPADO Y TOTALES ===
 function actualizarPatrimonio() {
-    const contenedor = document.getElementById('lista-cuentas-patri');
-    const totalEl = document.getElementById('total-patri-valor');
+    // IDs de los elementos de destino
+    const contenedorLista = document.getElementById('lista-cuentas-patri'); // Lista en pestaña Patrimonio
+    const elTotalDetalle = document.getElementById('total-patri-valor');    // Total en pestaña Patrimonio
+    const elTotalHome = document.getElementById('d-patri-total');           // Total en pestaña INICIO (Tarjeta Azul)
 
+    // 1. Protección contra datos vacíos
     if (!datos || datos.length === 0) {
-        if(contenedor) contenedor.innerHTML = '<div style="text-align:center; padding:20px; color:#666">Sin datos</div>';
-        if(totalEl) totalEl.innerText = '0,00€';
+        if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#666">Sin datos cargados</div>';
+        const cero = fmt(0) + ' €';
+        if(elTotalDetalle) elTotalDetalle.innerText = cero;
+        if(elTotalHome) elTotalHome.innerText = cero;
         return;
     }
 
-    // 1. Calcular Saldos
+    // 2. Calcular Saldos por Cuenta (Filtrando por propietario activo D&N)
     const saldos = {};
     const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+    
     datosFiltrados.forEach(m => {
         const cta = m.cuenta.trim();
-        saldos[cta] = (saldos[cta] || 0) + m.importe;
+        // Suma robusta para evitar errores de texto
+        const val = parseFloat(m.importe) || 0;
+        saldos[cta] = (saldos[cta] || 0) + val;
     });
 
-    // 2. Convertir a Lista para poder ordenar
-    let lista = Object.keys(saldos).map(cta => ({ cuenta: cta, saldo: saldos[cta] }));
-
-    // 3. Filtrar Cuentas a Cero
-    lista = lista.filter(item => Math.abs(item.saldo) >= 0.01);
-
-    // 4. ORDENAR (La magia ocurre aquí)
-    lista.sort((a, b) => {
-        let valA = a[ordenPatri.campo];
-        let valB = b[ordenPatri.campo];
-
-        // Si es texto, ignoramos mayúsculas
-        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
-
-        if (valA < valB) return ordenPatri.asc ? -1 : 1;
-        if (valA > valB) return ordenPatri.asc ? 1 : -1;
-        return 0;
-    });
-
-    // 5. Renderizar Filas Compactas
-    contenedor.innerHTML = '';
+    // 3. Agrupar por TIPO (Banco, Inversión, etc.) usando tu mapaCuentas
+    const grupos = {};
     let sumaTotal = 0;
 
-    lista.forEach(item => {
-        sumaTotal += item.saldo;
+    Object.keys(saldos).forEach(cta => {
+        const saldo = saldos[cta];
+        // Filtro cosmético: Ocultar cuentas con saldo insignificante
+        if (Math.abs(saldo) < 0.01) return;
+
+        sumaTotal += saldo; // Sumamos al Gran Patrimonio Total
+
+        // Buscamos configuración en el mapa cargado desde Excel (o asignamos defecto)
+        const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) ? mapaCuentas[cta] : { tipo: 'OTROS', esInversion: false };
+        const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
+
+        if (!grupos[nombreGrupo]) {
+            grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
+        }
         
-        const color = item.saldo >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-        const bgHover = 'rgba(255,255,255,0.05)'; // Efecto sutil al pasar ratón
-
-        // DISEÑO DE FILA ÚNICA (Estilo Excel/App Bancaria)
-        contenedor.innerHTML += `
-            <div onclick="verExtractoCuenta('${item.cuenta}')" 
-                 style="
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center; 
-                    padding: 15px 15px; 
-                    border-bottom: 1px solid #222; 
-                    cursor: pointer; 
-                    transition: background 0.2s;
-                 "
-                 onmouseover="this.style.background='${bgHover}'"
-                 onmouseout="this.style.background='transparent'"
-            >
-                <div style="font-weight: 600; font-size: 15px; color: white;">
-                    ${item.cuenta}
-                </div>
-
-                <div style="font-weight: 700; font-size: 16px; color: ${color}; text-align: right;">
-                    ${fmt(item.saldo)}€
-                </div>
-            </div>
-        `;
+        grupos[nombreGrupo].total += saldo;
+        grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
     });
 
-    // Actualizar Total Global
-    totalEl.innerText = fmt(sumaTotal) + '€';
-    totalEl.className = 'kpi-value ' + (sumaTotal >= 0 ? 'kpi-ing' : 'kpi-gas');
-    
-    // Si no hay cuentas visibles
-    if(lista.length === 0) {
-        contenedor.innerHTML = '<div style="padding:20px; text-align:center; color:#555; font-style:italic">No hay cuentas con saldo activo</div>';
+    // 4. ACTUALIZACIÓN VISUAL (LA CLAVE DEL ÉXITO)
+    const textoTotal = fmt(sumaTotal) + ' €';
+    // Azul si es positivo, Rojo si es deuda
+    const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg'; 
+
+    // A) Actualizamos pestaña DETALLE
+    if (elTotalDetalle) {
+        elTotalDetalle.innerText = textoTotal;
+        elTotalDetalle.className = 'kpi-value ' + claseColor;
+    }
+
+    // B) Actualizamos pestaña INICIO (Aquí arreglamos el 0,00€ de la tarjeta principal)
+    if (elTotalHome) {
+        elTotalHome.innerText = textoTotal;
+        // Forzamos la clase para asegurar el color correcto
+        elTotalHome.className = 'kpi-value ' + claseColor;
+    }
+
+    // 5. Renderizar la Lista de Cuentas (Acordeón Agrupado)
+    if (contenedorLista) {
+        contenedorLista.innerHTML = '';
+        
+        if (Object.keys(grupos).length === 0) {
+            contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#555">No hay cuentas con saldo</div>';
+            return;
+        }
+
+        // Ordenamos los grupos alfabéticamente
+        Object.keys(grupos).sort().forEach(nombreGrupo => {
+            const grupo = grupos[nombreGrupo];
+            // Estilo visual diferenciado para Inversiones (Púrpura) vs Bancos (Blanco)
+            const colorGrupo = grupo.esInversion ? '#BF5AF2' : '#FFFFFF'; 
+            const bordeEstilo = grupo.esInversion ? '3px solid #BF5AF2' : '3px solid #333';
+            
+            let htmlCuentas = '';
+            // Ordenamos cuentas dentro del grupo (Mayor saldo primero)
+            grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
+                const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+                htmlCuentas += `
+                    <div onclick="verExtractoCuenta('${c.nombre}')" style="display:flex; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #1a1a1a; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='#111'" onmouseout="this.style.background='transparent'">
+                        <span style="color:#bbb; font-size:13px;">${c.nombre}</span>
+                        <span style="color:${colorVal}; font-weight:700; font-size:13px;">${fmt(c.valor)}€</span>
+                    </div>
+                `;
+            });
+
+            // Tarjeta del Grupo
+            contenedorLista.innerHTML += `
+                <div style="margin-bottom: 12px; background: #080808; border-radius: 10px; overflow:hidden; border-left: ${bordeEstilo}; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
+                    <div style="padding: 10px 15px; background: #111; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #222;">
+                        <span style="color:${colorGrupo}; font-weight:800; font-size:11px; letter-spacing:1px;">${nombreGrupo}</span>
+                        <span style="color:#fff; font-weight:700; font-size:14px;">${fmt(grupo.total)}€</span>
+                    </div>
+                    <div>${htmlCuentas}</div>
+                </div>
+            `;
+        });
     }
 }
-
 </script>
 </body>
 </html>
