@@ -2176,9 +2176,9 @@ function cambiarOrdenPatrimonio(campo) {
 // === FUNCIÓN MAESTRA: PATRIMONIO AGRUPADO Y TOTALES ===
 function actualizarPatrimonio() {
     // IDs de los elementos de destino
-    const contenedorLista = document.getElementById('lista-cuentas-patri'); // Lista en pestaña Patrimonio
-    const elTotalDetalle = document.getElementById('total-patri-valor');    // Total en pestaña Patrimonio
-    const elTotalHome = document.getElementById('d-patri-total');           // Total en pestaña INICIO (Tarjeta Azul)
+    const contenedorLista = document.getElementById('lista-cuentas-patri');
+    const elTotalDetalle = document.getElementById('total-patri-valor');
+    const elTotalHome = document.getElementById('d-patri-total');
 
     // 1. Protección contra datos vacíos
     if (!datos || datos.length === 0) {
@@ -2189,29 +2189,30 @@ function actualizarPatrimonio() {
         return;
     }
 
-    // 2. Calcular Saldos por Cuenta (Filtrando por propietario activo D&N)
+    // 2. Calcular Saldos por Cuenta
     const saldos = {};
     const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
     
     datosFiltrados.forEach(m => {
         const cta = m.cuenta.trim();
-        // Suma robusta para evitar errores de texto
         const val = parseFloat(m.importe) || 0;
         saldos[cta] = (saldos[cta] || 0) + val;
     });
 
-    // 3. Agrupar por TIPO (Banco, Inversión, etc.) usando tu mapaCuentas
+    // 3. Agrupar por TIPO y Calcular GRAN TOTAL
     const grupos = {};
     let sumaTotal = 0;
 
+    // Primero calculamos el TOTAL ABSOLUTO para poder sacar porcentajes después
+    Object.keys(saldos).forEach(cta => {
+        if (Math.abs(saldos[cta]) >= 0.01) sumaTotal += saldos[cta];
+    });
+
+    // Ahora agrupamos
     Object.keys(saldos).forEach(cta => {
         const saldo = saldos[cta];
-        // Filtro cosmético: Ocultar cuentas con saldo insignificante
         if (Math.abs(saldo) < 0.01) return;
 
-        sumaTotal += saldo; // Sumamos al Gran Patrimonio Total
-
-        // Buscamos configuración en el mapa cargado desde Excel (o asignamos defecto)
         const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) ? mapaCuentas[cta] : { tipo: 'OTROS', esInversion: false };
         const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
 
@@ -2223,25 +2224,20 @@ function actualizarPatrimonio() {
         grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
     });
 
-    // 4. ACTUALIZACIÓN VISUAL (LA CLAVE DEL ÉXITO)
+    // 4. ACTUALIZACIÓN VISUAL TOTALES
     const textoTotal = fmt(sumaTotal) + ' €';
-    // Azul si es positivo, Rojo si es deuda
     const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg'; 
 
-    // A) Actualizamos pestaña DETALLE
     if (elTotalDetalle) {
         elTotalDetalle.innerText = textoTotal;
         elTotalDetalle.className = 'kpi-value ' + claseColor;
     }
-
-    // B) Actualizamos pestaña INICIO (Aquí arreglamos el 0,00€ de la tarjeta principal)
     if (elTotalHome) {
         elTotalHome.innerText = textoTotal;
-        // Forzamos la clase para asegurar el color correcto
         elTotalHome.className = 'kpi-value ' + claseColor;
     }
 
-    // 5. Renderizar la Lista de Cuentas (Acordeón Agrupado)
+    // 5. Renderizar la Lista con PORCENTAJES
     if (contenedorLista) {
         contenedorLista.innerHTML = '';
         
@@ -2250,30 +2246,45 @@ function actualizarPatrimonio() {
             return;
         }
 
-        // Ordenamos los grupos alfabéticamente
         Object.keys(grupos).sort().forEach(nombreGrupo => {
             const grupo = grupos[nombreGrupo];
-            // Estilo visual diferenciado para Inversiones (Púrpura) vs Bancos (Blanco)
             const colorGrupo = grupo.esInversion ? '#BF5AF2' : '#FFFFFF'; 
             const bordeEstilo = grupo.esInversion ? '3px solid #BF5AF2' : '3px solid #333';
             
+            // CÁLCULO % DEL GRUPO (Evitamos división por cero)
+            const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(1) : '0.0';
+            
             let htmlCuentas = '';
-            // Ordenamos cuentas dentro del grupo (Mayor saldo primero)
+            
             grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
                 const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+                // CÁLCULO % DE LA CUENTA
+                const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
+                
                 htmlCuentas += `
-                    <div onclick="verExtractoCuenta('${c.nombre}')" style="display:flex; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #1a1a1a; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='#111'" onmouseout="this.style.background='transparent'">
-                        <span style="color:#bbb; font-size:13px;">${c.nombre}</span>
-                        <span style="color:${colorVal}; font-weight:700; font-size:13px;">${fmt(c.valor)}€</span>
+                    <div onclick="verExtractoCuenta('${c.nombre}')" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #1a1a1a; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='#111'" onmouseout="this.style.background='transparent'">
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="color:#bbb; font-size:13px; font-weight:500">${c.nombre}</span>
+                            <div style="width:50px; height:2px; background:#222; margin-top:3px; border-radius:2px; overflow:hidden">
+                                <div style="width:${Math.abs(pctCuenta)}%; height:100%; background:${colorVal}; opacity:0.7"></div>
+                            </div>
+                        </div>
+                        
+                        <div style="text-align:right">
+                            <div style="color:${colorVal}; font-weight:700; font-size:13px;">${fmt(c.valor)}€</div>
+                            <div style="color:#666; font-size:10px; font-weight:600; font-family:'Inter', sans-serif;">${pctCuenta}%</div>
+                        </div>
                     </div>
                 `;
             });
 
-            // Tarjeta del Grupo
             contenedorLista.innerHTML += `
                 <div style="margin-bottom: 12px; background: #080808; border-radius: 10px; overflow:hidden; border-left: ${bordeEstilo}; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
                     <div style="padding: 10px 15px; background: #111; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #222;">
-                        <span style="color:${colorGrupo}; font-weight:800; font-size:11px; letter-spacing:1px;">${nombreGrupo}</span>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <span style="color:${colorGrupo}; font-weight:800; font-size:11px; letter-spacing:1px;">${nombreGrupo}</span>
+                            <span style="background:#222; color:#888; padding:2px 6px; border-radius:4px; font-size:9px; font-weight:bold">${pctGrupo}%</span>
+                        </div>
                         <span style="color:#fff; font-weight:700; font-size:14px;">${fmt(grupo.total)}€</span>
                     </div>
                     <div>${htmlCuentas}</div>
@@ -2282,6 +2293,7 @@ function actualizarPatrimonio() {
         });
     }
 }
+
 </script>
 </body>
 </html>
