@@ -2262,7 +2262,28 @@ function cambiarOrdenPatrimonio(campo) {
     actualizarPatrimonio();
 }
 
-// === FUNCIÓN MAESTRA: PATRIMONIO AGRUPADO (DISEÑO ASSET CARDS DENSO) ===
+// === INTERRUPTOR DEL ACORDEÓN ===
+    function togglePatriGroup(id) {
+        const lista = document.getElementById('list-' + id);
+        const icono = document.getElementById('icon-' + id);
+        
+        if (!lista) return;
+
+        // Si está oculto, lo mostramos
+        if (lista.style.display === 'none') {
+            lista.style.display = 'block';
+            if(icono) icono.innerText = 'expand_less'; // Flecha arriba
+            if(icono) icono.style.color = '#fff';      // Iluminar icono
+        } 
+        // Si está visible, lo ocultamos
+        else {
+            lista.style.display = 'none';
+            if(icono) icono.innerText = 'expand_more'; // Flecha abajo
+            if(icono) icono.style.color = '#666';      // Apagar icono
+        }
+    }
+
+// === FUNCIÓN MAESTRA: PATRIMONIO INTERACTIVO (ACORDEÓN) ===
 function actualizarPatrimonio() {
     const contenedorLista = document.getElementById('lista-cuentas-patri');
     const elTotalDetalle = document.getElementById('total-patri-valor');
@@ -2288,15 +2309,20 @@ function actualizarPatrimonio() {
     // 2. Agrupar y Totales
     const grupos = {};
     let sumaTotal = 0;
+    
+    // Calcular Total Global primero
     Object.keys(saldos).forEach(cta => {
         if (Math.abs(saldos[cta]) >= 0.01) sumaTotal += saldos[cta];
     });
 
+    // Agrupar
     Object.keys(saldos).forEach(cta => {
         const saldo = saldos[cta];
         if (Math.abs(saldo) < 0.01) return;
+        
         const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) ? mapaCuentas[cta] : { tipo: 'OTROS', esInversion: false };
         const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
+        
         if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
         grupos[nombreGrupo].total += saldo;
         grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
@@ -2308,7 +2334,7 @@ function actualizarPatrimonio() {
     if (elTotalDetalle) { elTotalDetalle.innerText = textoTotal; elTotalDetalle.className = 'kpi-value ' + claseColor; }
     if (elTotalHome) { elTotalHome.innerText = textoTotal; elTotalHome.className = 'kpi-value ' + claseColor; }
 
-    // 4. Renderizar Lista (NUEVO DISEÑO DENSO)
+    // 4. Renderizar ACORDEÓN
     if (contenedorLista) {
         contenedorLista.innerHTML = '';
         if (Object.keys(grupos).length === 0) {
@@ -2318,19 +2344,18 @@ function actualizarPatrimonio() {
 
         Object.keys(grupos).sort().forEach(nombreGrupo => {
             const grupo = grupos[nombreGrupo];
-            // Colores: Púrpura para inversión, Blanco/Gris para el resto
             const colorTitle = grupo.esInversion ? '#BF5AF2' : '#aaaaaa'; 
-            // Borde lateral de neón para el grupo
             const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #333;';
-            
             const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
             
+            // Generar ID único seguro para el grupo (sin espacios)
+            const groupId = nombreGrupo.replace(/[^a-zA-Z0-9]/g, '');
+
             let htmlCuentas = '';
             grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
                 const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
                 const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
                 
-                // HTML del item de cuenta (usando las nuevas clases CSS densas)
                 htmlCuentas += `
                     <div class="patri-account-item" onclick="verExtractoCuenta('${c.nombre}')">
                         <div class="patri-acc-name-col">
@@ -2347,17 +2372,24 @@ function actualizarPatrimonio() {
                 `;
             });
 
-            // HTML de la Tarjeta de Grupo (Asset Card)
+            // ESTRUCTURA ACORDEÓN: Cabecera Clicable + Lista Oculta
             contenedorLista.innerHTML += `
                 <div class="patri-group-card" style="${borderStyle}">
-                    <div class="patri-group-header">
+                    <div class="patri-group-header" onclick="togglePatriGroup('${groupId}')" style="cursor:pointer; user-select: none;">
                         <div style="display:flex; gap:8px; align-items:center;">
                             <span class="patri-group-title" style="color:${colorTitle}">${nombreGrupo}</span>
                             <span style="background:#222; color:#666; padding:1px 5px; border-radius:3px; font-size:8px; font-weight:bold">${pctGrupo}%</span>
                         </div>
-                        <span class="patri-group-total">${fmt(grupo.total)}€</span>
+                        
+                        <div style="display:flex; align-items:center; gap:10px">
+                            <span class="patri-group-total">${fmt(grupo.total)}€</span>
+                            <span class="material-icons" id="icon-${groupId}" style="font-size:18px; color:#666; transition:all 0.3s">expand_more</span>
+                        </div>
                     </div>
-                    <div class="patri-account-list">${htmlCuentas}</div>
+                    
+                    <div id="list-${groupId}" class="patri-account-list" style="display:none; animation: fadeIn 0.3s ease;">
+                        ${htmlCuentas}
+                    </div>
                 </div>
             `;
         });
