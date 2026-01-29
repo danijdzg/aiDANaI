@@ -1285,58 +1285,6 @@
         } catch (e) { mostrarEstado('Error descargando', 'err'); }
     }
 
-    async function guardarCambiosEnFichero() {
-        mostrarEstado('Guardando cambios...', 'normal');
-
-        // 1. Convertir datos a formato Excel
-        const filasExcel = datos.map(m => {
-            return [
-                new Date(m.ts), // A
-                m.cuenta,       // B
-                m.concepto,     // C
-                m.importe,      // D
-                m.detalle,      // E
-                m.beneficiario  // F
-            ];
-        });
-        // Cabecera
-        filasExcel.unshift(["Fecha", "Cuenta", "Concepto", "Importe", "Descripción", "Beneficiario"]);
-
-        // 2. Crear binario
-        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-
-        if (modoNube && oneDriveToken) {
-            // MODO NUBE: Sobrescribir
-            try {
-                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                const url = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
-                
-                const resp = await fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        "Authorization": `Bearer ${oneDriveToken}`,
-                        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    },
-                    body: wbout
-                });
-
-                if (resp.ok) {
-                    mostrarEstado('¡Guardado en Nube!', 'ok');
-                    setTimeout(() => mostrarEstado('Sincronizado', 'ok'), 3000);
-                } else { throw new Error("Error API"); }
-            } catch (e) {
-                mostrarEstado('Error al subir. Descargando copia local...', 'err');
-                XLSX.writeFile(wb, "aidanai_rescue.xlsx");
-            }
-        } else {
-            // MODO LOCAL: Descargar
-            XLSX.writeFile(wb, "aidanai_actualizado.xlsx");
-            mostrarEstado('Archivo descargado', 'ok');
-        }
-    }
-
     // Variable global para guardar la configuración de cuentas
     let mapaCuentas = {}; 
 
@@ -1550,105 +1498,6 @@
                 </tr>
             `;
         }).join('');
-    }
-
-    // === DASHBOARD ===
-    function getFechasDashboard() {
-        const periodo = document.getElementById('dash-period').value;
-        const now = new Date();
-        let fInicio, fFin;
-
-        if (periodo === 'year') {
-            fInicio = new Date(now.getFullYear(), 0, 1);
-            fFin = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
-        } else if (periodo === 'month') {
-            fInicio = new Date(now.getFullYear(), now.getMonth(), 1);
-            fFin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-        } else if (periodo === 'custom') {
-            const s = document.getElementById('d-start').value;
-            const e = document.getElementById('d-end').value;
-            if(!s || !e) return null;
-            fInicio = new Date(s);
-            fFin = new Date(e);
-            fFin.setHours(23, 59, 59);
-        }
-        return { start: fInicio, end: fFin };
-    }
-
-    function actualizarDashboard() {
-        // Si no hay datos, no hacemos nada
-        if(!datos || datos.length === 0) return;
-        
-        // 1. OBTENER FILTROS Y DATOS BASE
-        const rango = getFechasDashboard();
-        // Filtramos PRIMERO por el propietario activo (Dani / Norma / Todos)
-        // Esta es la base común para ambas tarjetas
-        let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
-
-
-        // ============================================================
-        // CEREBRO 1: TARJETA ROJA (RESUMEN DEL PERIODO)
-        // Necesita filtro de FECHAS (Mes/Año)
-        // ============================================================
-        
-        let datosResumen = datosPropietario;
-        // Aplicamos filtro de fecha solo si existe rango
-        if (rango && rango.start) {
-             datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
-        }
-
-        let ing = 0, gas = 0;
-        datosResumen.forEach(m => {
-            if (m.tipo === 'ingreso') ing += m.importe;
-            if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
-        });
-
-        let neto = ing - gas;
-        let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
-
-        // PINTAR DATOS ROJOS
-        if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
-        if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
-        
-        const elNeto = document.getElementById('d-net');
-        if(elNeto) {
-            elNeto.innerText = fmt(neto);
-            elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
-        }
-        if(document.getElementById('d-aho')) document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
-
-
-        // ============================================================
-        // CEREBRO 2: TARJETA AZUL (PATRIMONIO HISTÓRICO)
-        // IGNORA las fechas. Suma TODO el historial.
-        // ============================================================
-
-        // Usamos 'datosPropietario' (que tiene todo el historial sin filtrar fecha)
-        let totalPatrimonio = 0;
-        
-        // Suma simple y robusta
-        datosPropietario.forEach(m => {
-            totalPatrimonio += m.importe;
-        });
-
-        const elPatri = document.getElementById('d-patri-total');
-        if(elPatri) {
-            elPatri.innerText = fmt(totalPatrimonio) + ' €';
-            
-            // Colorear según sea positivo (Azul) o deuda (Rojo)
-            // Nota: Usamos 'val-std-blue' para positivo para mantener el estilo de la tarjeta azul
-            if(totalPatrimonio >= 0) {
-                elPatri.className = 'kpi-value val-std-blue';
-            } else {
-                elPatri.className = 'kpi-value val-std-neg';
-            }
-        }
-
-        // ============================================================
-        // EXTRAS (Gráfico)
-        // ============================================================
-        // El gráfico debe reflejar el periodo seleccionado (Tarjeta Roja)
-        if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
 	
     // === UTILS UI ===
@@ -1904,19 +1753,6 @@
 	// === ESTADO Y CONTROL DE ORDENACIÓN ===
     window.ordenActivo = { campo: 'ts', asc: false }; // Por defecto: Fecha descendente
 
-    function cambiarOrden(campo) {
-        // Si clicamos el mismo campo, invertimos el orden. Si es nuevo, empezamos asc (o desc para números)
-        if (window.ordenActivo.campo === campo) {
-            window.ordenActivo.asc = !window.ordenActivo.asc;
-        } else {
-            window.ordenActivo.campo = campo;
-            // Por UX: Fechas e Importes suelen quererse ver primero los más recientes/altos (Desc)
-            window.ordenActivo.asc = !(campo === 'ts' || campo === 'importe'); 
-        }
-        renderizar(); // Repintar la tabla
-        actualizarFlechasUI(campo); // (Opcional: feedback visual)
-    }
-
     function actualizarFlechasUI(campo) {
         // Quitamos el brillo a todas las cabeceras
         document.querySelectorAll('th').forEach(th => {
@@ -1950,29 +1786,7 @@
         }
     }
 
-    function getFechasDashboard() {
-        const periodo = document.getElementById('dash-period').value;
-        const now = new Date();
-        let fInicio, fFin;
-
-        if (periodo === 'year') {
-            fInicio = new Date(now.getFullYear(), 0, 1);
-            fFin = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
-        } else if (periodo === 'month') {
-            fInicio = new Date(now.getFullYear(), now.getMonth(), 1);
-            fFin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-        } else if (periodo === 'custom') {
-            // Cogemos los valores de los inputs date (que son string yyyy-mm-dd)
-            const s = document.getElementById('d-start').value;
-            const e = document.getElementById('d-end').value;
-            if(!s || !e) return null; // Aún no hay fechas
-            fInicio = new Date(s);
-            fFin = new Date(e);
-            fFin.setHours(23, 59, 59); // Final del día
-        }
-        return { start: fInicio, end: fFin }; // Retorna 'null' si es histórico (option 'all' que quitamos, pero por seguridad) o error
-    }
-
+    
     function actualizarDashboard() {
         if(!datos || datos.length === 0) return;
         
@@ -2046,38 +1860,55 @@
         if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(totalLiquidez) + ' €';
         if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(totalInversion) + ' €';
 		// ============================================================
-        // CEREBRO 3: CÁLCULOS DE LIBERTAD FINANCIERA (NUEVO)
+        // CEREBRO 3: CÁLCULOS RIGUROSOS (NORMALIZACIÓN MENSUAL)
         // ============================================================
         
-        // 1. Definimos el Gasto Mensual de referencia.
-        // Usamos la variable 'gas' calculada arriba. 
-        // IMPORTANTE: Para que sea preciso, el usuario debe tener seleccionado "Este Mes" o un promedio realista.
-        // Si el gasto es 0 (ej: inicio de mes), usamos 1 para evitar errores matemáticos.
-        let gastoMensualRef = (gas > 0) ? gas : 1; 
+        // 1. CÁLCULO DEL TIEMPO: ¿Cuántos días estamos analizando?
+        // Calculamos la diferencia en milisegundos y convertimos a días
+        const unDia = 1000 * 60 * 60 * 24;
+        let diasDelPeriodo = Math.round(Math.abs((rango.end - rango.start) / unDia)) + 1;
+        // Protección: Mínimo 1 día para evitar dividir por cero
+        diasDelPeriodo = Math.max(1, diasDelPeriodo);
 
-        // 2. Cobertura (Liquidez / Gasto Mensual)
-        // Cuántos meses aguantas con el dinero del banco.
-        let mesesCobertura = totalLiquidez / gastoMensualRef;
+        // 2. NORMALIZACIÓN: Convertimos el gasto del periodo a "Ritmo Mensual"
+        // Fórmula: (Gasto Total / Días) * 30.44 (promedio días/mes)
+        // Esto nos dice: "A este ritmo, ¿cuánto gastarías en un mes estándar?"
+        let gastoMensualProyectado = (gas / diasDelPeriodo) * 30.44;
 
-        // 3. Libertad Financiera (Regla del 4% o x300 meses)
-        // Objetivo: Tener ahorrado 300 veces tu gasto mensual para vivir de rentas.
-        // Fórmula: (Patrimonio Total / (Gasto Mensual * 300)) * 100
-        let objetivoFIRE = gastoMensualRef * 300; 
+        // Protección visual: Si el gasto es 0 o muy bajo, usamos 1€ para que no salga "Infinito"
+        let baseCalculo = (gastoMensualProyectado > 1) ? gastoMensualProyectado : 1;
+
+        // 3. RATIO DE COBERTURA (Liquidez Real / Gasto Mensual Proyectado)
+        // Fuente: Defensive Interval Ratio (Finanzas Personales)
+        let mesesCobertura = totalLiquidez / baseCalculo;
+
+        // 4. LIBERTAD FINANCIERA (Regla del 4% / FIRE)
+        // Objetivo: Acumular 300 veces el gasto mensual (25 años de gastos)
+        let objetivoFIRE = baseCalculo * 300; 
         let pctLibertad = (totalPatrimonio / objetivoFIRE) * 100;
 
-        // 4. Actualizar la Pantalla
+        // 5. PINTAR RESULTADOS EN PANTALLA
         const elCob = document.getElementById('d-cobertura');
         const elLib = document.getElementById('d-libertad');
 
         if(elCob) {
-            // Tope visual: si es infinito o error, mostramos guión
-            if(gastoMensualRef <= 1) elCob.innerText = "---";
-            else elCob.innerText = mesesCobertura.toFixed(1) + " Meses";
+            // Si la liquidez es negativa (deudas), mostramos 0
+            if (totalLiquidez <= 0) {
+                elCob.innerText = "0.0 Meses";
+                elCob.style.color = "var(--c-danger)";
+            } else {
+                elCob.innerText = mesesCobertura.toFixed(1) + " Meses";
+                // Color dinámico: Rojo si < 3 meses, Amarillo si < 6, Verde si > 6
+                elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
+            }
         }
 
         if(elLib) {
-            if(gastoMensualRef <= 1) elLib.innerText = "0.00%";
-            else elLib.innerText = pctLibertad.toFixed(2) + "%";
+            // Tope visual 100% para no romper el diseño si ya eres libre
+            if (pctLibertad > 100) pctLibertad = 100;
+            if (pctLibertad < 0) pctLibertad = 0;
+            
+            elLib.innerText = pctLibertad.toFixed(2) + "%";
         }
         // ============================================================
         // EXTRAS
@@ -2283,111 +2114,6 @@
         inputCant.focus(); // Ponemos el foco por si quiere cambiar el importe
     }
 	
-	function actualizarPatrimonio() {
-        // IDs de los elementos de destino
-        const contenedorLista = document.getElementById('lista-cuentas-patri'); // Lista en pestaña Patrimonio
-        const elTotalDetalle = document.getElementById('total-patri-valor');    // Total en pestaña Patrimonio
-        const elTotalHome = document.getElementById('d-patri-total');           // Total en pestaña INICIO (Tarjeta Azul)
-
-        // 1. Protección contra datos vacíos
-        if (!datos || datos.length === 0) {
-            if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#666">Sin datos cargados</div>';
-            const cero = fmt(0) + ' €';
-            if(elTotalDetalle) elTotalDetalle.innerText = cero;
-            if(elTotalHome) elTotalHome.innerText = cero;
-            return;
-        }
-
-        // 2. Calcular Saldos por Cuenta (Filtrando por propietario D&N)
-        const saldos = {};
-        const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
-        
-        datosFiltrados.forEach(m => {
-            const cta = m.cuenta.trim();
-            // Suma robusta para evitar errores de texto
-            const val = parseFloat(m.importe) || 0;
-            saldos[cta] = (saldos[cta] || 0) + val;
-        });
-
-        // 3. Agrupar por TIPO (Banco, Inversión, etc.) y Calcular GRAN TOTAL
-        const grupos = {};
-        let sumaTotal = 0;
-
-        Object.keys(saldos).forEach(cta => {
-            const saldo = saldos[cta];
-            // Filtro cosmético: Ocultar cuentas con saldo 0 (evita ruido)
-            if (Math.abs(saldo) < 0.01) return;
-
-            sumaTotal += saldo; // Sumamos al Gran Patrimonio
-
-            // Buscamos configuración (o asignamos defecto)
-            const config = (mapaCuentas && mapaCuentas[cta]) ? mapaCuentas[cta] : { tipo: 'OTROS', esInversion: false };
-            const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
-
-            if (!grupos[nombreGrupo]) {
-                grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
-            }
-            
-            grupos[nombreGrupo].total += saldo;
-            grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
-        });
-
-        // 4. ACTUALIZACIÓN VISUAL (AQUÍ ESTÁ LA SOLUCIÓN)
-        
-        const textoTotal = fmt(sumaTotal) + ' €';
-        const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg'; // Azul si positivo, Rojo si deuda
-
-        // A) Actualizamos pestaña DETALLE
-        if (elTotalDetalle) {
-            elTotalDetalle.innerText = textoTotal;
-            elTotalDetalle.className = 'kpi-value ' + claseColor;
-        }
-
-        // B) Actualizamos pestaña INICIO (¡El arreglo que pedías!)
-        if (elTotalHome) {
-            elTotalHome.innerText = textoTotal;
-            elTotalHome.className = 'kpi-value ' + claseColor;
-        }
-
-        // 5. Renderizar la Lista de Cuentas (Acordeón)
-        if (contenedorLista) {
-            contenedorLista.innerHTML = '';
-            
-            // Si todo es 0
-            if (Object.keys(grupos).length === 0) {
-                contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#555">No hay cuentas con saldo</div>';
-                return;
-            }
-
-            Object.keys(grupos).sort().forEach(nombreGrupo => {
-                const grupo = grupos[nombreGrupo];
-                const colorGrupo = grupo.esInversion ? '#BF5AF2' : '#FFFFFF'; 
-                const bordeEstilo = grupo.esInversion ? '3px solid #BF5AF2' : '3px solid #333';
-                
-                let htmlCuentas = '';
-                grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
-                    const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-                    htmlCuentas += `
-                        <div onclick="verExtractoCuenta('${c.nombre}')" style="display:flex; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #1a1a1a; cursor:pointer;">
-                            <span style="color:#bbb; font-size:13px;">${c.nombre}</span>
-                            <span style="color:${colorVal}; font-weight:700; font-size:13px;">${fmt(c.valor)}€</span>
-                        </div>
-                    `;
-                });
-
-                contenedorLista.innerHTML += `
-                    <div style="margin-bottom: 12px; background: #080808; border-radius: 10px; overflow:hidden; border-left: ${bordeEstilo}; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
-                        <div style="padding: 10px 15px; background: #111; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #222;">
-                            <span style="color:${colorGrupo}; font-weight:800; font-size:11px; letter-spacing:1px;">${nombreGrupo}</span>
-                            <span style="color:#fff; font-weight:700; font-size:14px;">${fmt(grupo.total)}€</span>
-                        </div>
-                        <div>${htmlCuentas}</div>
-                    </div>
-                `;
-            });
-        }
-    }
-
 	function verExtractoCuenta(nombreCuenta) {
     // 1. Limpiamos cualquier filtro previo para evitar confusiones
     limpiarFiltros();
