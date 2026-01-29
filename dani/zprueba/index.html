@@ -1296,49 +1296,35 @@
     // Variable global para guardar la configuración de cuentas
     let mapaCuentas = {}; 
 
-    // Variable global para guardar la configuración de cuentas
-    let mapaCuentas = {}; 
-
     function leerExcel(blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
             
-            // 1. LEER MOVIMIENTOS (Hoja 'Movimientos' o la primera)
+            // 1. LEER MOVIMIENTOS (Primera hoja o la llamada 'Movimientos')
+            // Intentamos buscar por nombre, si no, cogemos la primera
             let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
-            // Leemos con 'header:1' y 'raw:true' para procesar manualmente
             const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
             
             // 2. LEER CONFIGURACIÓN (Hoja 'Config')
-            mapaCuentas = {}; // Resetear memoria
+            mapaCuentas = {}; // Resetear
             const wsConfigName = wb.SheetNames.find(n => n.toLowerCase() === 'config');
             
             if (wsConfigName) {
                 const jsonConfig = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName]);
-                
+                // Convertimos la lista en un diccionario para búsqueda rápida
                 jsonConfig.forEach(row => {
                     if(row.Cuenta) {
-                        // Limpieza del valor "EsInversion" para evitar errores
-                        let esInv = false;
-                        if (row.EsInversion) {
-                            // Convertimos a texto, quitamos espacios y mayúsculas
-                            const val = String(row.EsInversion).trim().toUpperCase();
-                            // Aceptamos SI, SÍ, YES, S...
-                            if (val === 'SI' || val === 'SÍ' || val === 'YES' || val === 'S') {
-                                esInv = true;
-                            }
-                        }
-
                         mapaCuentas[row.Cuenta.trim()] = {
                             tipo: row.Tipo || 'Otros',
-                            esInversion: esInv
+                            esInversion: (row.EsInversion && row.EsInversion.toString().toUpperCase() === 'SI')
                         };
                     }
                 });
-                mostrarEstado('Configuración cargada (' + Object.keys(mapaCuentas).length + ' cuentas)', 'ok');
+                mostrarEstado('Datos y Configuración cargados', 'ok');
             } else {
-                mostrarEstado('Aviso: Hoja "Config" no encontrada. Todo será Liquidez.', 'normal');
+                mostrarEstado('Aviso: Hoja "Config" no encontrada. Se usarán valores por defecto.', 'normal');
             }
             
             procesarDatos(jsonMovs);
@@ -1943,15 +1929,15 @@
         return { start: fInicio, end: fFin }; // Retorna 'null' si es histórico (option 'all' que quitamos, pero por seguridad) o error
     }
 
-   function actualizarDashboard() {
+    function actualizarDashboard() {
         if(!datos || datos.length === 0) return;
         
-        // 1. OBTENER FILTROS
+        // 1. OBTENER FILTROS Y DATOS BASE
         const rango = getFechasDashboard();
         let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
 
         // ============================================================
-        // PARTE 1: TARJETA ROJA (RESUMEN DEL PERIODO)
+        // CEREBRO 1: TARJETA ROJA (RESUMEN DEL PERIODO)
         // ============================================================
         let datosResumen = datosPropietario;
         if (rango && rango.start) {
@@ -1980,45 +1966,45 @@
 
 
         // ============================================================
-        // PARTE 2: TARJETA AZUL (PATRIMONIO INTELIGENTE)
+        // CEREBRO 2: TARJETA AZUL (PATRIMONIO INTELIGENTE)
+        // Clasifica en: LIQUIDEZ (Bancos, Efectivo, Tarjetas) vs INVERSIÓN
         // ============================================================
         
-        let sumaLiquidez = 0;
-        let sumaInversion = 0;
+        let totalPatrimonio = 0;
+        let totalLiquidez = 0;
+        let totalInversion = 0;
         
-        // Recorremos TODO el historial del propietario (sin filtro de fecha)
         datosPropietario.forEach(m => {
-            // Buscamos la configuración EXACTA de esta cuenta
-            // Usamos trim() para evitar fallos por espacios vacíos
-            const cta = m.cuenta ? m.cuenta.trim() : 'Desconocida';
+            totalPatrimonio += m.importe;
             
-            // Recuperamos la config cargada en el Paso 1
-            const config = (mapaCuentas && mapaCuentas[cta]) 
+            // Consultamos la configuración de la cuenta
+            const cta = m.cuenta.trim();
+            const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) 
                            ? mapaCuentas[cta] 
                            : { tipo: 'OTROS', esInversion: false };
 
-            if(config.esInversion === true) {
-                sumaInversion += m.importe;
+            if(config.esInversion) {
+                totalInversion += m.importe;
             } else {
-                sumaLiquidez += m.importe;
+                // Todo lo que NO sea inversión (Bancos, Efectivo, Deudas tarjeta) va a Liquidez
+                totalLiquidez += m.importe;
             }
         });
 
-        // Suma final
-        let totalPatrimonio = sumaLiquidez + sumaInversion;
-
-        // 1. Pintar Total Global (Azul)
+        // 1. Total Global (Azul)
         const elPatri = document.getElementById('d-patri-total');
         if(elPatri) {
             elPatri.innerText = fmt(totalPatrimonio) + ' €';
             elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
         }
 
-        // 2. Pintar Desglose (Verde Neón)
-        if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(sumaLiquidez) + ' €';
-        if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(sumaInversion) + ' €';
+        // 2. Desglose (Verde Neón)
+        if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(totalLiquidez) + ' €';
+        if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(totalInversion) + ' €';
 
+        // ============================================================
         // EXTRAS
+        // ============================================================
         if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
 
