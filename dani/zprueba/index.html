@@ -1932,14 +1932,15 @@
     function actualizarDashboard() {
         if(!datos || datos.length === 0) return;
         
-        // 1. OBTENER FILTROS Y DATOS BASE
+        // 1. OBTENER FILTROS DE FECHA Y PROPIETARIO
         const rango = getFechasDashboard();
         let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
 
         // ============================================================
-        // CEREBRO 1: TARJETA ROJA (RESUMEN DEL PERIODO)
+        // PARTE 1: TARJETA ROJA (Resumen Ingresos/Gastos del Periodo)
         // ============================================================
         let datosResumen = datosPropietario;
+        // Aplicar filtro de fecha solo para el resumen
         if (rango && rango.start) {
              datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
         }
@@ -1953,7 +1954,7 @@
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // Pintar Tarjeta Roja
+        // Pintar Tarjeta Roja (Resumen)
         if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
         if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
@@ -1966,44 +1967,47 @@
 
 
         // ============================================================
-        // CEREBRO 2: TARJETA AZUL (PATRIMONIO INTELIGENTE)
-        // Clasifica en: LIQUIDEZ (Bancos, Efectivo, Tarjetas) vs INVERSIÓN
+        // PARTE 2: TARJETA AZUL (Patrimonio Neto Estricto)
+        // Lógica: Suma de Liquidez + Inversión = Patrimonio Total
         // ============================================================
         
-        let totalPatrimonio = 0;
-        let totalLiquidez = 0;
-        let totalInversion = 0;
+        let sumaLiquidez = 0;
+        let sumaInversion = 0;
         
+        // Recorremos TODO el historial del propietario (sin filtro de fecha)
         datosPropietario.forEach(m => {
-            totalPatrimonio += m.importe;
-            
-            // Consultamos la configuración de la cuenta
+            // Verificamos si la cuenta es de inversión según el Excel
             const cta = m.cuenta.trim();
             const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) 
                            ? mapaCuentas[cta] 
-                           : { tipo: 'OTROS', esInversion: false };
+                           : { tipo: 'OTROS', esInversion: false }; // Por defecto NO es inversión
 
             if(config.esInversion) {
-                totalInversion += m.importe;
+                // Si es inversión -> Bolsa de Capital Invertido
+                sumaInversion += m.importe;
             } else {
-                // Todo lo que NO sea inversión (Bancos, Efectivo, Deudas tarjeta) va a Liquidez
-                totalLiquidez += m.importe;
+                // Si NO es inversión (Banco, Efectivo, Tarjeta) -> Bolsa de Liquidez
+                // Nota: Las tarjetas de crédito (saldo negativo) restarán liquidez automáticamente aquí.
+                sumaLiquidez += m.importe;
             }
         });
 
-        // 1. Total Global (Azul)
+        // CÁLCULO FINAL: La suma de las partes
+        let totalPatrimonio = sumaLiquidez + sumaInversion;
+
+        // 1. Pintar Total Global (Azul)
         const elPatri = document.getElementById('d-patri-total');
         if(elPatri) {
             elPatri.innerText = fmt(totalPatrimonio) + ' €';
             elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
         }
 
-        // 2. Desglose (Verde Neón)
-        if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(totalLiquidez) + ' €';
-        if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(totalInversion) + ' €';
+        // 2. Pintar Desglose (Liquidez e Inversión)
+        if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(sumaLiquidez) + ' €';
+        if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(sumaInversion) + ' €';
 
         // ============================================================
-        // EXTRAS
+        // EXTRAS (Gráfico)
         // ============================================================
         if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
