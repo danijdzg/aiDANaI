@@ -1296,49 +1296,35 @@
     // Variable global para guardar la configuración de cuentas
     let mapaCuentas = {}; 
 
-    // Variable global para guardar la configuración de cuentas
-    let mapaCuentas = {}; 
-
     function leerExcel(blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
             
-            // 1. LEER MOVIMIENTOS (Hoja 'Movimientos' o la primera)
+            // 1. LEER MOVIMIENTOS (Primera hoja o la llamada 'Movimientos')
+            // Intentamos buscar por nombre, si no, cogemos la primera
             let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
-            // Leemos con 'header:1' y 'raw:true' para procesar manualmente
             const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
             
             // 2. LEER CONFIGURACIÓN (Hoja 'Config')
-            mapaCuentas = {}; // Resetear memoria
+            mapaCuentas = {}; // Resetear
             const wsConfigName = wb.SheetNames.find(n => n.toLowerCase() === 'config');
             
             if (wsConfigName) {
                 const jsonConfig = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName]);
-                
+                // Convertimos la lista en un diccionario para búsqueda rápida
                 jsonConfig.forEach(row => {
                     if(row.Cuenta) {
-                        // Limpieza del valor "EsInversion" para evitar errores
-                        let esInv = false;
-                        if (row.EsInversion) {
-                            // Convertimos a texto, quitamos espacios y mayúsculas
-                            const val = String(row.EsInversion).trim().toUpperCase();
-                            // Aceptamos SI, SÍ, YES, S...
-                            if (val === 'SI' || val === 'SÍ' || val === 'YES' || val === 'S') {
-                                esInv = true;
-                            }
-                        }
-
                         mapaCuentas[row.Cuenta.trim()] = {
                             tipo: row.Tipo || 'Otros',
-                            esInversion: esInv
+                            esInversion: (row.EsInversion && row.EsInversion.toString().toUpperCase() === 'SI')
                         };
                     }
                 });
-                mostrarEstado('Configuración cargada (' + Object.keys(mapaCuentas).length + ' cuentas)', 'ok');
+                mostrarEstado('Datos y Configuración cargados', 'ok');
             } else {
-                mostrarEstado('Aviso: Hoja "Config" no encontrada. Todo será Liquidez.', 'normal');
+                mostrarEstado('Aviso: Hoja "Config" no encontrada. Se usarán valores por defecto.', 'normal');
             }
             
             procesarDatos(jsonMovs);
@@ -1944,23 +1930,21 @@
     }
 
     function actualizarDashboard() {
-        if(!datos || datos.length === 0) return;
+        if(!datos.length) return;
         
-        // 1. OBTENER FILTROS DE FECHA Y PROPIETARIO
         const rango = getFechasDashboard();
-        let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
+        
+        // 1. Filtrar datos (POR FECHA Y PROPIETARIO)
+let dashData = datos.filter(m => pasaFiltroPropietario(m)); // <--- AQUÍ APLICAMOS EL FILTRO DEL BOTÓN
 
-        // ============================================================
-        // PARTE 1: TARJETA ROJA (Resumen Ingresos/Gastos del Periodo)
-        // ============================================================
-        let datosResumen = datosPropietario;
-        // Aplicar filtro de fecha solo para el resumen
-        if (rango && rango.start) {
-             datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
-        }
+if (rango && rango.start) {
+     // Filtramos sobre lo que ya ha pasado el filtro de propietario
+     dashData = dashData.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
+}
 
+        // 2. Calcular Totales
         let ing = 0, gas = 0;
-        datosResumen.forEach(m => {
+        dashData.forEach(m => {
             if (m.tipo === 'ingreso') ing += m.importe;
             if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
         });
@@ -1968,62 +1952,15 @@
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // Pintar Tarjeta Roja (Resumen)
-        if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
-        if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
+        // 3. Renderizar
+        document.getElementById('d-ing').innerText = fmt(ing);
+        document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
         const elNeto = document.getElementById('d-net');
-        if(elNeto) {
-            elNeto.innerText = fmt(neto);
-            elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
-        }
-        if(document.getElementById('d-aho')) document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
+        elNeto.innerText = fmt(neto);
+        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'kpi-ing' : 'kpi-gas'); // Color verde/rojo según resultado
 
-
-        // ============================================================
-        // PARTE 2: TARJETA AZUL (Patrimonio Neto Estricto)
-        // Lógica: Suma de Liquidez + Inversión = Patrimonio Total
-        // ============================================================
-        
-        let sumaLiquidez = 0;
-        let sumaInversion = 0;
-        
-        // Recorremos TODO el historial del propietario (sin filtro de fecha)
-        datosPropietario.forEach(m => {
-            // Verificamos si la cuenta es de inversión según el Excel
-            const cta = m.cuenta.trim();
-            const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) 
-                           ? mapaCuentas[cta] 
-                           : { tipo: 'OTROS', esInversion: false }; // Por defecto NO es inversión
-
-            if(config.esInversion) {
-                // Si es inversión -> Bolsa de Capital Invertido
-                sumaInversion += m.importe;
-            } else {
-                // Si NO es inversión (Banco, Efectivo, Tarjeta) -> Bolsa de Liquidez
-                // Nota: Las tarjetas de crédito (saldo negativo) restarán liquidez automáticamente aquí.
-                sumaLiquidez += m.importe;
-            }
-        });
-
-        // CÁLCULO FINAL: La suma de las partes
-        let totalPatrimonio = sumaLiquidez + sumaInversion;
-
-        // 1. Pintar Total Global (Azul)
-        const elPatri = document.getElementById('d-patri-total');
-        if(elPatri) {
-            elPatri.innerText = fmt(totalPatrimonio) + ' €';
-            elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
-        }
-
-        // 2. Pintar Desglose (Liquidez e Inversión)
-        if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(sumaLiquidez) + ' €';
-        if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(sumaInversion) + ' €';
-
-        // ============================================================
-        // EXTRAS (Gráfico)
-        // ============================================================
-        if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
+        document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
     }
 
     // === DRILL-DOWN: DE DASHBOARD A LISTA ===
