@@ -704,6 +704,38 @@
             text-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
             margin-top: 4px;
         }
+		/* === MODO PRIVACIDAD (BLUR) === */
+        body.privacy-mode .kpi-value, 
+        body.privacy-mode .td-amount, 
+        body.privacy-mode .patri-acc-val,
+        body.privacy-mode .val-breakdown,
+        body.privacy-mode .orange-val,
+        body.privacy-mode .green-val-freedom,
+        body.privacy-mode .saldo-small {
+            filter: blur(6px);
+            transition: filter 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            user-select: none; /* Evita que se pueda seleccionar el texto oculto */
+        }
+
+        /* BOTÓN DE PRIVACIDAD (OJO) */
+        .btn-privacy {
+            background: rgba(255,255,255,0.1); 
+            border: 1px solid #333; 
+            color: #888;
+            width: 32px; height: 32px; 
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; 
+            transition: all 0.3s ease;
+        }
+        .btn-privacy:hover { background: #222; color: #fff; }
+        
+        .btn-privacy.active {
+            color: var(--c-primary); 
+            border-color: var(--c-primary);
+            box-shadow: 0 0 10px rgba(0, 184, 255, 0.2);
+            background: rgba(0, 184, 255, 0.1);
+        }
 		
     </style>
 </head>
@@ -718,6 +750,9 @@
                             D&N
                         </button>
                         <h2>aiDANaI</h2>
+						<button id="btn-privacy" class="btn-privacy" onclick="togglePrivacy()" style="margin-left:10px;">
+                            <span class="material-icons" style="font-size:18px">visibility</span>
+                        </button>
                     </div>
                     
                     <div class="source-switch">
@@ -1536,11 +1571,76 @@
         return { start: fInicio, end: fFin }; 
     }
 
+    // === CEREBRO: ANIMACIÓN Y DASHBOARD ===
+    
+    // Función Maestra de Animación (CountUp)
+    function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
+        const obj = document.getElementById(id);
+        if (!obj) return;
+        
+        // Si el valor es 0 o inválido, lo pintamos directo
+        if(isNaN(valorFinal)) { obj.innerText = prefijo + "---" + sufijo; return; }
+
+        const duracion = 1000; // 1 segundo de animación
+        const inicio = 0; // Siempre empezamos de 0 para efecto WOW
+        let tiempoInicio = null;
+
+        function paso(tiempo) {
+            if (!tiempoInicio) tiempoInicio = tiempo;
+            const progreso = Math.min((tiempo - tiempoInicio) / duracion, 1);
+            
+            // Efecto Easing (Empieza rápido, frena suave al final)
+            const easeOutQuart = 1 - Math.pow(1 - progreso, 4);
+            
+            const valorActual = inicio + (valorFinal - inicio) * easeOutQuart;
+
+            // Formatear
+            let texto = new Intl.NumberFormat('es-ES', { 
+                minimumFractionDigits: decimales, 
+                maximumFractionDigits: decimales 
+            }).format(valorActual);
+
+            obj.innerText = prefijo + texto + sufijo;
+
+            if (progreso < 1) {
+                window.requestAnimationFrame(paso);
+            } else {
+                // Asegurar valor final exacto
+                let textoFinal = new Intl.NumberFormat('es-ES', { 
+                    minimumFractionDigits: decimales, 
+                    maximumFractionDigits: decimales 
+                }).format(valorFinal);
+                obj.innerText = prefijo + textoFinal + sufijo;
+            }
+        }
+        
+        window.requestAnimationFrame(paso);
+    }
+
+    // Función Modo Privacidad
+    function togglePrivacy() {
+        document.body.classList.toggle('privacy-mode');
+        const btn = document.getElementById('btn-privacy');
+        const icon = btn.querySelector('.material-icons');
+        
+        if (document.body.classList.contains('privacy-mode')) {
+            btn.classList.add('active');
+            icon.innerText = 'visibility_off';
+            mostrarEstado('Modo Privacidad Activado', 'normal');
+        } else {
+            btn.classList.remove('active');
+            icon.innerText = 'visibility';
+            mostrarEstado('Modo Privacidad Desactivado', 'normal');
+        }
+    }
+
+    // === NUEVO DASHBOARD CON ANIMACIONES ===
     function actualizarDashboard() {
         if(!datos || datos.length === 0) return;
         const rango = getFechasDashboard();
         let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
 
+        // 1. CÁLCULOS RESUMEN
         let datosResumen = datosPropietario;
         if (rango && rango.start) {
              datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
@@ -1555,15 +1655,20 @@
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
-        if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
+        // ANIMAMOS LOS VALORES DE LA TARJETA ROJA
+        animarValor('d-ing', ing);
+        animarValor('d-gas', gas, '-', ''); // Gasto siempre con menos delante
+        
         const elNeto = document.getElementById('d-net');
         if(elNeto) {
-            elNeto.innerText = fmt(neto);
+            animarValor('d-net', neto);
             elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
         }
-        if(document.getElementById('d-aho')) document.getElementById('d-aho').innerText = tasaAhorro.toFixed(2) + '%';
+        
+        animarValor('d-aho', tasaAhorro, '', '%', 2);
 
+
+        // 2. CÁLCULOS PATRIMONIO (Tarjeta Azul)
         let totalPatrimonio = 0, totalLiquidez = 0, totalInversion = 0;
         datosPropietario.forEach(m => {
             totalPatrimonio += m.importe;
@@ -1574,14 +1679,15 @@
 
         const elPatri = document.getElementById('d-patri-total');
         if(elPatri) {
-            elPatri.innerText = fmt(totalPatrimonio) + ' €';
+            // Animamos y luego ajustamos color
+            animarValor('d-patri-total', totalPatrimonio, '', ' €');
             elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
         }
 
-        if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(totalLiquidez) + ' €';
-        if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(totalInversion) + ' €';
+        animarValor('d-patri-liq', totalLiquidez, '', ' €');
+        animarValor('d-patri-inv', totalInversion, '', ' €');
         
-        // --- COBERTURA & FIRE (NORMALIZACIÓN MENSUAL) ---
+        // 3. CÁLCULOS COBERTURA & FIRE (Normalización)
         const unDia = 1000 * 60 * 60 * 24;
         let diasDelPeriodo = Math.round(Math.abs((rango.end - rango.start) / unDia)) + 1;
         diasDelPeriodo = Math.max(1, diasDelPeriodo);
@@ -1593,23 +1699,23 @@
         let objetivoFIRE = baseCalculo * 300; 
         let pctLibertad = (totalPatrimonio / objetivoFIRE) * 100;
 
+        // PINTAR Y ANIMAR RESULTADOS FIRE
         const elCob = document.getElementById('d-cobertura');
-        const elLib = document.getElementById('d-libertad');
-
         if(elCob) {
             if (totalLiquidez <= 0) {
                 elCob.innerText = "0.0 Meses";
                 elCob.style.color = "var(--c-danger)";
             } else {
-                elCob.innerText = mesesCobertura.toFixed(1) + " Meses";
+                animarValor('d-cobertura', mesesCobertura, '', ' Meses', 1);
                 elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
             }
         }
 
+        const elLib = document.getElementById('d-libertad');
         if(elLib) {
             if (pctLibertad > 100) pctLibertad = 100;
             if (pctLibertad < 0) pctLibertad = 0;
-            elLib.innerText = pctLibertad.toFixed(2) + "%";
+            animarValor('d-libertad', pctLibertad, '', '%', 2);
         }
         
         if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
