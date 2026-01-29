@@ -1296,35 +1296,49 @@
     // Variable global para guardar la configuración de cuentas
     let mapaCuentas = {}; 
 
+    // Variable global para guardar la configuración de cuentas
+    let mapaCuentas = {}; 
+
     function leerExcel(blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
             
-            // 1. LEER MOVIMIENTOS (Primera hoja o la llamada 'Movimientos')
-            // Intentamos buscar por nombre, si no, cogemos la primera
+            // 1. LEER MOVIMIENTOS (Hoja 'Movimientos' o la primera)
             let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
+            // Leemos con 'header:1' y 'raw:true' para procesar manualmente
             const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
             
             // 2. LEER CONFIGURACIÓN (Hoja 'Config')
-            mapaCuentas = {}; // Resetear
+            mapaCuentas = {}; // Resetear memoria
             const wsConfigName = wb.SheetNames.find(n => n.toLowerCase() === 'config');
             
             if (wsConfigName) {
                 const jsonConfig = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName]);
-                // Convertimos la lista en un diccionario para búsqueda rápida
+                
                 jsonConfig.forEach(row => {
                     if(row.Cuenta) {
+                        // Limpieza del valor "EsInversion" para evitar errores
+                        let esInv = false;
+                        if (row.EsInversion) {
+                            // Convertimos a texto, quitamos espacios y mayúsculas
+                            const val = String(row.EsInversion).trim().toUpperCase();
+                            // Aceptamos SI, SÍ, YES, S...
+                            if (val === 'SI' || val === 'SÍ' || val === 'YES' || val === 'S') {
+                                esInv = true;
+                            }
+                        }
+
                         mapaCuentas[row.Cuenta.trim()] = {
                             tipo: row.Tipo || 'Otros',
-                            esInversion: (row.EsInversion && row.EsInversion.toString().toUpperCase() === 'SI')
+                            esInversion: esInv
                         };
                     }
                 });
-                mostrarEstado('Datos y Configuración cargados', 'ok');
+                mostrarEstado('Configuración cargada (' + Object.keys(mapaCuentas).length + ' cuentas)', 'ok');
             } else {
-                mostrarEstado('Aviso: Hoja "Config" no encontrada. Se usarán valores por defecto.', 'normal');
+                mostrarEstado('Aviso: Hoja "Config" no encontrada. Todo será Liquidez.', 'normal');
             }
             
             procesarDatos(jsonMovs);
@@ -1929,18 +1943,17 @@
         return { start: fInicio, end: fFin }; // Retorna 'null' si es histórico (option 'all' que quitamos, pero por seguridad) o error
     }
 
-    function actualizarDashboard() {
+   function actualizarDashboard() {
         if(!datos || datos.length === 0) return;
         
-        // 1. OBTENER FILTROS DE FECHA Y PROPIETARIO
+        // 1. OBTENER FILTROS
         const rango = getFechasDashboard();
         let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
 
         // ============================================================
-        // PARTE 1: TARJETA ROJA (Resumen Ingresos/Gastos del Periodo)
+        // PARTE 1: TARJETA ROJA (RESUMEN DEL PERIODO)
         // ============================================================
         let datosResumen = datosPropietario;
-        // Aplicar filtro de fecha solo para el resumen
         if (rango && rango.start) {
              datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
         }
@@ -1954,7 +1967,7 @@
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
 
-        // Pintar Tarjeta Roja (Resumen)
+        // Pintar Tarjeta Roja
         if(document.getElementById('d-ing')) document.getElementById('d-ing').innerText = fmt(ing);
         if(document.getElementById('d-gas')) document.getElementById('d-gas').innerText = '-' + fmt(gas);
         
@@ -1967,8 +1980,7 @@
 
 
         // ============================================================
-        // PARTE 2: TARJETA AZUL (Patrimonio Neto Estricto)
-        // Lógica: Suma de Liquidez + Inversión = Patrimonio Total
+        // PARTE 2: TARJETA AZUL (PATRIMONIO INTELIGENTE)
         // ============================================================
         
         let sumaLiquidez = 0;
@@ -1976,23 +1988,23 @@
         
         // Recorremos TODO el historial del propietario (sin filtro de fecha)
         datosPropietario.forEach(m => {
-            // Verificamos si la cuenta es de inversión según el Excel
-            const cta = m.cuenta.trim();
-            const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) 
+            // Buscamos la configuración EXACTA de esta cuenta
+            // Usamos trim() para evitar fallos por espacios vacíos
+            const cta = m.cuenta ? m.cuenta.trim() : 'Desconocida';
+            
+            // Recuperamos la config cargada en el Paso 1
+            const config = (mapaCuentas && mapaCuentas[cta]) 
                            ? mapaCuentas[cta] 
-                           : { tipo: 'OTROS', esInversion: false }; // Por defecto NO es inversión
+                           : { tipo: 'OTROS', esInversion: false };
 
-            if(config.esInversion) {
-                // Si es inversión -> Bolsa de Capital Invertido
+            if(config.esInversion === true) {
                 sumaInversion += m.importe;
             } else {
-                // Si NO es inversión (Banco, Efectivo, Tarjeta) -> Bolsa de Liquidez
-                // Nota: Las tarjetas de crédito (saldo negativo) restarán liquidez automáticamente aquí.
                 sumaLiquidez += m.importe;
             }
         });
 
-        // CÁLCULO FINAL: La suma de las partes
+        // Suma final
         let totalPatrimonio = sumaLiquidez + sumaInversion;
 
         // 1. Pintar Total Global (Azul)
@@ -2002,13 +2014,11 @@
             elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
         }
 
-        // 2. Pintar Desglose (Liquidez e Inversión)
+        // 2. Pintar Desglose (Verde Neón)
         if(document.getElementById('d-patri-liq')) document.getElementById('d-patri-liq').innerText = fmt(sumaLiquidez) + ' €';
         if(document.getElementById('d-patri-inv')) document.getElementById('d-patri-inv').innerText = fmt(sumaInversion) + ' €';
 
-        // ============================================================
-        // EXTRAS (Gráfico)
-        // ============================================================
+        // EXTRAS
         if(typeof actualizarGrafico === 'function') actualizarGrafico(datosResumen);
     }
 
