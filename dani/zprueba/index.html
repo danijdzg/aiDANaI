@@ -1224,59 +1224,69 @@
         } catch (e) { mostrarEstado('Error descargando', 'err'); }
     }
 
-    // BORRA LA FUNCIÓN leerExcel ANTIGUA Y PEGA ESTA NUEVA VERSIÓN COMPLETA:
-
 function leerExcel(archivo) {
     const reader = new FileReader();
     
     reader.onload = function(e) {
         const data = new Uint8Array(e.target.result);
-        
-        // 1. AQUÍ SE DEFINE 'wb'. Todo el código debe estar DENTRO de esta función.
+        // 1. Leemos el libro entero
         const wb = XLSX.read(data, {type: 'array'});
 
-        // --- INICIO LÓGICA DE CONFIGURACIÓN ---
+        // --- PARTE A: CARGAR CONFIGURACIÓN (TablaConfig) ---
+        // Buscamos la hoja "TablaConfig" (ignorando mayúsculas/minúsculas)
         const nombreHojaConfig = wb.SheetNames.find(n => n.toUpperCase() === "TABLACONFIG");
         
+        // Reiniciamos el mapa de cuentas global
+        window.mapaCuentas = {};
+        window.globalConfigData = [];
+
         if (nombreHojaConfig) {
-            console.log("Procesando configuración desde:", nombreHojaConfig);
+            console.log("Cargando configuración desde:", nombreHojaConfig);
             const wsConfig = wb.Sheets[nombreHojaConfig];
+            // Leemos los datos de configuración
             const dataConfig = XLSX.utils.sheet_to_json(wsConfig, {header: 1});
             
-            // Guardamos config global
-            window.globalConfigData = dataConfig; 
-            
-            // Rellenamos mapaCuentas
-            window.mapaCuentas = {};
+            // Guardamos los datos crudos para poder exportarlos luego sin perderlos
+            window.globalConfigData = dataConfig;
+
+            // Procesamos fila a fila (empezando en 1 para saltar cabeceras)
             for(let i = 1; i < dataConfig.length; i++) {
                 const row = dataConfig[i];
-                if(!row || row.length < 2) continue;
+                if(!row || row.length < 2) continue; // Si la fila está vacía, saltar
                 
-                const cta = String(row[0]).trim().toUpperCase();
-                const tipo = String(row[1]).trim();
+                // Columna A: Nombre Cuenta (ej: D-Binance)
+                const cuentaKey = String(row[0]).trim().toUpperCase(); 
+                // Columna B: Tipo (ej: Criptomonedas)
+                const tipoVal = String(row[1]).trim();
+                // Columna C: EsInversion (ej: Si/No)
                 const esInv = row[2] ? String(row[2]).trim().toUpperCase() === 'SI' : false;
                 
-                window.mapaCuentas[cta] = { tipo: tipo, esInversion: esInv };
+                // Guardamos en el mapa global
+                window.mapaCuentas[cuentaKey] = { 
+                    tipo: tipoVal, 
+                    esInversion: esInv 
+                };
             }
         } else {
-            console.warn("No se encontró TablaConfig. Se usarán valores por defecto.");
+            console.warn("AVISO: No se encontró la hoja 'TablaConfig'. Se usarán tipos por defecto (OTROS).");
         }
-        // --- FIN LÓGICA CONFIGURACIÓN ---
 
-        // --- INICIO LÓGICA MOVIMIENTOS ---
+        // --- PARTE B: CARGAR MOVIMIENTOS (TablaMovimientos) ---
+        // Buscamos la hoja de movimientos con varios nombres posibles para asegurar compatibilidad
         let nombreHojaMovs = wb.SheetNames.find(n => n.toUpperCase() === "TABLAMOVIMIENTOS");
         if (!nombreHojaMovs) {
             nombreHojaMovs = wb.SheetNames.find(n => n.toUpperCase() === "MOVIMIENTOS");
         }
         if (!nombreHojaMovs) {
-            nombreHojaMovs = wb.SheetNames[0]; // Fallback
+            // Si no encuentra nombre específico, usa la primera hoja del libro
+            nombreHojaMovs = wb.SheetNames[0]; 
         }
 
-        console.log("Leyendo movimientos de:", nombreHojaMovs);
+        console.log("Cargando movimientos desde:", nombreHojaMovs);
         const ws = wb.Sheets[nombreHojaMovs];
         const rawData = XLSX.utils.sheet_to_json(ws, {header: 1});
         
-        // Llamamos a la función que procesa los datos brutos
+        // Enviamos los datos a procesar (ahora mapaCuentas ya está lleno)
         procesarDatos(rawData);
     };
     
