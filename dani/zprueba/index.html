@@ -1927,54 +1927,56 @@ function leerExcel(blob) {
     }
 
    function exportarExcel() {
-   // 1. Guardar Movimientos con el nombre CORRECTO
-const wsMovs = XLSX.utils.aoa_to_sheet([cabeceras, ...cuerpo]);
-XLSX.utils.book_append_sheet(wb, wsMovs, "TablaMovimientos"); // <- CAMBIADO DE "Movimientos" A "TablaMovimientos"
+        try {
+            // 1. Crear un libro nuevo vacío
+            const wb = XLSX.utils.book_new();
 
-// 2. Guardar Configuración (Añadir este bloque que probablemente falta)
-if (globalConfigData && globalConfigData.length > 0) {
-    const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-    XLSX.utils.book_append_sheet(wb, wsConfig, "TablaConfig");
-}
-    // 1. Crear un libro nuevo vacío
-    const wb = XLSX.utils.book_new();
+            // 2. Definir las cabeceras
+            const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
+            
+            // 3. Transformar tus datos de memoria a formato Excel
+            const cuerpo = datos.map(m => [
+                // Formateamos la fecha a YYYY-MM-DD
+                new Date(m.ts).toISOString().split('T')[0], 
+                m.cuenta,
+                m.concepto,
+                m.importe,
+                m.detalle,
+                m.beneficiario
+            ]);
 
-    // --- PASO A: PREPARAR HOJA DE MOVIMIENTOS ---
-    // Definimos las cabeceras exactas que quieres en el Excel
-    const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
-    
-    // Transformamos tus datos de memoria (objetos) a filas de Excel (arrays)
-    const cuerpo = datos.map(m => [
-        // Formateamos la fecha a YYYY-MM-DD para que Excel la entienda bien
-        new Date(m.ts).toISOString().split('T')[0], 
-        m.cuenta,
-        m.concepto,
-        m.importe,
-        m.detalle,
-        m.beneficiario
-    ]);
+            // 4. Crear la hoja de Movimientos (Uniendo cabeceras + cuerpo)
+            const wsMovs = XLSX.utils.aoa_to_sheet([cabeceras, ...cuerpo]);
+            
+            // (Opcional) Dar ancho a las columnas para que se vea bonito al abrir
+            wsMovs['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
 
-   
-    // --- PASO B: PREPARAR HOJA DE CONFIGURACIÓN (CRUCIAL) ---
-    // Verificamos si tenemos cargada la configuración en memoria
-    if (globalConfigData && globalConfigData.length > 0) {
-        // Convertimos la matriz de configuración a una hoja
-        const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-        
-        // La añadimos al libro. IMPORTANTE: Usamos un nombre que contenga "Config"
-        // para que la función de lectura la encuentre la próxima vez.
-        XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
-    } else {
-        console.warn("Advertencia: Se está guardando sin datos de configuración.");
-        // Opcional: Crear una cabecera básica si está vacía para no perder la estructura
-        const wsConfigDummy = XLSX.utils.aoa_to_sheet([["Cuenta", "Tipo", "EsInversion"]]);
-        XLSX.utils.book_append_sheet(wb, wsConfigDummy, "Config");
+            // Añadir la hoja al libro
+            // Usamos "Movimientos" como nombre estándar
+            XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+            // 5. Guardar Configuración (Si existe en memoria)
+            // Esto es crucial para no perder tus categorías/cuentas al guardar
+            if (typeof globalConfigData !== 'undefined' && globalConfigData && globalConfigData.length > 0) {
+                const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
+                XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
+            } else {
+                console.warn("No hay configuración global para guardar. Se creará una hoja Config básica vacía.");
+                // Creamos una hoja Config mínima para evitar errores futuros de lectura
+                const wsConfigDummy = XLSX.utils.aoa_to_sheet([["Cuenta", "Tipo", "EsInversion"]]);
+                XLSX.utils.book_append_sheet(wb, wsConfigDummy, "Config");
+            }
+
+            // 6. Generar descarga del archivo
+            XLSX.writeFile(wb, "aidanai.xlsx");
+            
+            mostrarEstado('Archivo exportado correctamente', 'ok');
+
+        } catch (error) {
+            console.error("Error al exportar:", error);
+            mostrarEstado('Error al generar el Excel', 'err');
+        }
     }
-
-    // --- PASO C: DESCARGAR EL ARCHIVO ---
-    // Esto generará la descarga del archivo 'aidanai.xlsx' en el navegador
-    XLSX.writeFile(wb, "aidanai.xlsx");
-}
 
     function verExtractoCuenta(nombreCuenta) {
         limpiarFiltros();
