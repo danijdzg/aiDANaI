@@ -826,7 +826,7 @@
 				<select id="m-cuenta" class="filter-input form-field"><option value="">Selecciona Cuenta...</option></select>
 
 				<div id="bloque-destino" style="display:none;">
-					<label class="input-label" style="color:var(--c-transfer)!important">A CUENTA (DESTINO)</label>
+					<label class="input-label">A CUENTA (DESTINO)</label>
 					<select id="m-cuenta-destino" class="filter-input form-field">
 						<option value="">Selecciona Destino...</option>
 					</select>
@@ -1124,86 +1124,6 @@
         }
     }
 	
-	function procesarWorkbook(wb) {
-    // 1. BUSCAR Y CARGAR CONFIGURACIÓN (TablaConfig)
-    // Buscamos la hoja ignorando mayúsculas/minúsculas
-    const nombreHojaConfig = wb.SheetNames.find(n => n.toUpperCase() === "TABLACONFIG");
-    
-    if (nombreHojaConfig) {
-        const wsConfig = wb.Sheets[nombreHojaConfig];
-        const dataConfig = XLSX.utils.sheet_to_json(wsConfig, {header: 1});
-        
-        // Guardamos para futura exportación
-        globalConfigData = dataConfig;
-        
-        // Mapear las cuentas
-        mapaCuentas = {};
-        // Empezamos en i=1 para saltar cabecera
-        for(let i = 1; i < dataConfig.length; i++) {
-            const row = dataConfig[i];
-            if(!row || row.length < 2) continue;
-            
-            const cta = String(row[0]).trim().toUpperCase();
-            const tipo = String(row[1]).trim();
-            const esInv = row[2] ? String(row[2]).trim().toUpperCase() === 'SI' : false;
-            
-            mapaCuentas[cta] = { tipo: tipo, esInversion: esInv };
-        }
-        console.log("Configuración cargada:", mapaCuentas);
-    }
-
-    // 2. BUSCAR Y CARGAR MOVIMIENTOS (TablaMovimientos)
-    // Buscamos "TablaMovimientos", si no existe, buscamos "Movimientos", y si no, la primera hoja.
-    let nombreHojaMovs = wb.SheetNames.find(n => n.toUpperCase() === "TABLAMOVIMIENTOS");
-    if (!nombreHojaMovs) {
-        nombreHojaMovs = wb.SheetNames.find(n => n.toUpperCase() === "MOVIMIENTOS");
-    }
-    if (!nombreHojaMovs) {
-        nombreHojaMovs = wb.SheetNames[0]; // Fallback a la primera
-    }
-
-    const ws = wb.Sheets[nombreHojaMovs];
-    const rawData = XLSX.utils.sheet_to_json(ws, {header: 1});
-        
-        // --- AQUÍ VA TU LÓGICA DE PARSEO ACTUAL (SIMPLIFICADA) ---
-        datos = []; // Limpiamos datos actuales
-        // Empezamos en 1 para saltar cabecera
-        for (let i = 1; i < filas.length; i++) {
-            const row = filas[i];
-            if (!row || row.length === 0) continue;
-            
-            // Reconstruimos el objeto movimiento
-            // IMPORTANTE: Asegúrate de que el orden de columnas coincida con tu Excel
-            // [Fecha, Cuenta, Concepto, Importe, Descripción, Beneficiario]
-            let fecha = row[0]; 
-            let cuenta = row[1];
-            let concepto = row[2];
-            let importe = row[3];
-            let desc = row[4];
-            let bene = row[5];
-
-            // (Aquí iría tu lógica de limpieza de números y fechas que ya tienes en tu código)
-            // ...
-            
-            // Añadimos a la variable principal
-            datos.push({
-                id: (typeof fecha === 'object' ? fecha.getTime() : Date.now()) + i, // ID temporal si no hay
-                ts: (typeof fecha === 'object' ? fecha.getTime() : new Date(fecha).getTime()),
-                fecha: fecha,
-                cuenta: cuenta,
-                concepto: concepto,
-                importe: parseFloat(importe) || 0,
-                detalle: desc,
-                beneficiario: bene,
-                // Recalculamos el tipo
-                tipo: (parseFloat(importe) || 0) >= 0 ? 'ingreso' : 'gasto'
-            });
-        }
-        console.log("Movimientos cargados:", datos.length);
-    }
-
-        // Actualizamos la pantalla
-    actualizarDashboard();
 	
     async function buscarFicheroNube(token) {
         try {
@@ -1224,74 +1144,48 @@
         } catch (e) { mostrarEstado('Error descargando', 'err'); }
     }
 
-function leerExcel(archivo) {
-    const reader = new FileReader();
-    
-    reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        // 1. Leemos el libro entero
-        const wb = XLSX.read(data, {type: 'array'});
-
-        // --- PARTE A: CARGAR CONFIGURACIÓN (TablaConfig) ---
-        // Buscamos la hoja "TablaConfig" (ignorando mayúsculas/minúsculas)
-        const nombreHojaConfig = wb.SheetNames.find(n => n.toUpperCase() === "TABLACONFIG");
-        
-        // Reiniciamos el mapa de cuentas global
-        window.mapaCuentas = {};
-        window.globalConfigData = [];
-
-        if (nombreHojaConfig) {
-            console.log("Cargando configuración desde:", nombreHojaConfig);
-            const wsConfig = wb.Sheets[nombreHojaConfig];
-            // Leemos los datos de configuración
-            const dataConfig = XLSX.utils.sheet_to_json(wsConfig, {header: 1});
+function leerExcel(blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: 'array', cellDates: true });
             
-            // Guardamos los datos crudos para poder exportarlos luego sin perderlos
-            window.globalConfigData = dataConfig;
-
-            // Procesamos fila a fila (empezando en 1 para saltar cabeceras)
-            for(let i = 1; i < dataConfig.length; i++) {
-                const row = dataConfig[i];
-                if(!row || row.length < 2) continue; // Si la fila está vacía, saltar
-                
-                // Columna A: Nombre Cuenta (ej: D-Binance)
-                const cuentaKey = String(row[0]).trim().toUpperCase(); 
-                // Columna B: Tipo (ej: Criptomonedas)
-                const tipoVal = String(row[1]).trim();
-                // Columna C: EsInversion (ej: Si/No)
-                const esInv = row[2] ? String(row[2]).trim().toUpperCase() === 'SI' : false;
-                
-                // Guardamos en el mapa global
-                window.mapaCuentas[cuentaKey] = { 
-                    tipo: tipoVal, 
-                    esInversion: esInv 
-                };
+            // Lógica existente de Movimientos...
+            let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
+            const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
+            
+            mapaCuentas = {}; 
+            const wsConfigName = wb.SheetNames.find(n => n.toLowerCase() === 'config');
+            
+            if (wsConfigName) {
+                // === NUEVO: GUARDAMOS COPIA DE SEGURIDAD DE LA HOJA CONFIG ===
+                // Usamos {header: 1} para obtener una matriz pura (Array of Arrays) y no perder nada
+                globalConfigData = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName], { header: 1 });
+              
+                const jsonConfig = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName]);
+                jsonConfig.forEach(row => {
+                    // ... (tu lógica existente de mapaCuentas sigue igual) ...
+                    const keyCuenta = Object.keys(row).find(k => k.trim().toLowerCase() === 'cuenta');
+                    const keyTipo = Object.keys(row).find(k => k.trim().toLowerCase() === 'tipo');
+                    const keyInv = Object.keys(row).find(k => k.trim().toLowerCase() === 'esinversion');
+                    if(keyCuenta && row[keyCuenta]) {
+                        const nombreNormalizado = row[keyCuenta].toString().trim().toUpperCase();
+                        mapaCuentas[nombreNormalizado] = {
+                            tipo: (keyTipo && row[keyTipo]) ? row[keyTipo].toString().toUpperCase().trim() : 'OTROS',
+                            esInversion: (keyInv && row[keyInv] && row[keyInv].toString().toUpperCase() === 'SI')
+                        };
+                    }
+                });
+                mostrarEstado('Configuración cargada: ' + Object.keys(mapaCuentas).length + ' cuentas.', 'ok');
+            } else {
+                mostrarEstado('Aviso: Hoja "Config" no encontrada', 'normal');
+                globalConfigData = null; // Aseguramos que esté vacío si no existía
             }
-        } else {
-            console.warn("AVISO: No se encontró la hoja 'TablaConfig'. Se usarán tipos por defecto (OTROS).");
-        }
-
-        // --- PARTE B: CARGAR MOVIMIENTOS (TablaMovimientos) ---
-        // Buscamos la hoja de movimientos con varios nombres posibles para asegurar compatibilidad
-        let nombreHojaMovs = wb.SheetNames.find(n => n.toUpperCase() === "TABLAMOVIMIENTOS");
-        if (!nombreHojaMovs) {
-            nombreHojaMovs = wb.SheetNames.find(n => n.toUpperCase() === "MOVIMIENTOS");
-        }
-        if (!nombreHojaMovs) {
-            // Si no encuentra nombre específico, usa la primera hoja del libro
-            nombreHojaMovs = wb.SheetNames[0]; 
-        }
-
-        console.log("Cargando movimientos desde:", nombreHojaMovs);
-        const ws = wb.Sheets[nombreHojaMovs];
-        const rawData = XLSX.utils.sheet_to_json(ws, {header: 1});
-        
-        // Enviamos los datos a procesar (ahora mapaCuentas ya está lleno)
-        procesarDatos(rawData);
-    };
-    
-    reader.readAsArrayBuffer(archivo);
-}
+            procesarDatos(jsonMovs);
+        };
+        reader.readAsArrayBuffer(blob);
+    }
+	
     function procesarDatos(filas) {
         const temp = [];
         const cuentas = new Set(), conceptos = new Set(), benefs = new Set();
