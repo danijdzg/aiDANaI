@@ -1148,42 +1148,58 @@ function leerExcel(blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
+            // Leemos el archivo con soporte para fechas
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
             
-            // Lógica existente de Movimientos...
+            // ---------------------------------------------------------
+            // 1. CARGA DE MOVIMIENTOS
+            // ---------------------------------------------------------
+            // Busca 'movimientos' o usa la primera hoja disponible (más robusto)
             let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
             const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
             
-            mapaCuentas = {}; 
+            // ---------------------------------------------------------
+            // 2. CARGA DE CONFIGURACIÓN (Lógica Inteligente)
+            // ---------------------------------------------------------
+            window.mapaCuentas = {}; // Reiniciamos el mapa global
+            
+            // Búsqueda flexible: encuentra "Config", "TablaConfig", "CONFIG", etc.
             const wsConfigName = wb.SheetNames.find(n => 
                 n.trim().toUpperCase().includes("CONFIG") || 
                 n.trim().toUpperCase() === "TABLACONFIG"
             );
             
             if (wsConfigName) {
-                // === NUEVO: GUARDAMOS COPIA DE SEGURIDAD DE LA HOJA CONFIG ===
-                // Usamos {header: 1} para obtener una matriz pura (Array of Arrays) y no perder nada
-                globalConfigData = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName], { header: 1 });
+                // A. Guardamos copia pura (Array) para que al exportar no se pierdan datos
+                window.globalConfigData = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName], { header: 1 });
               
+                // B. Leemos como Objetos para identificar columnas por NOMBRE (no por posición)
                 const jsonConfig = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName]);
+                
                 jsonConfig.forEach(row => {
-                    // ... (tu lógica existente de mapaCuentas sigue igual) ...
+                    // Buscamos las claves (headers) de forma insensible a mayúsculas/espacios
                     const keyCuenta = Object.keys(row).find(k => k.trim().toLowerCase() === 'cuenta');
                     const keyTipo = Object.keys(row).find(k => k.trim().toLowerCase() === 'tipo');
                     const keyInv = Object.keys(row).find(k => k.trim().toLowerCase() === 'esinversion');
+                    
+                    // Solo procesamos si existe la cuenta
                     if(keyCuenta && row[keyCuenta]) {
                         const nombreNormalizado = row[keyCuenta].toString().trim().toUpperCase();
-                        mapaCuentas[nombreNormalizado] = {
+                        
+                        // Llenamos el mapa con lógica defensiva (si falta el tipo, pone OTROS)
+                        window.mapaCuentas[nombreNormalizado] = {
                             tipo: (keyTipo && row[keyTipo]) ? row[keyTipo].toString().toUpperCase().trim() : 'OTROS',
                             esInversion: (keyInv && row[keyInv] && row[keyInv].toString().toUpperCase() === 'SI')
                         };
                     }
                 });
-                mostrarEstado('Configuración cargada: ' + Object.keys(mapaCuentas).length + ' cuentas.', 'ok');
+                mostrarEstado('Configuración cargada: ' + Object.keys(window.mapaCuentas).length + ' cuentas.', 'ok');
             } else {
                 mostrarEstado('Aviso: Hoja "Config" no encontrada', 'normal');
-                globalConfigData = null; // Aseguramos que esté vacío si no existía
+                window.globalConfigData = null; 
             }
+            
+            // 3. Enviamos los movimientos a procesar
             procesarDatos(jsonMovs);
         };
         reader.readAsArrayBuffer(blob);
