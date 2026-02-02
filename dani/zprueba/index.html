@@ -832,8 +832,8 @@
             <option value="">Selecciona Cuenta...</option>
             </select>
 
-        <div id="bloque-destino" style="display:none; margin-top: 10px; margin-bottom: 10px; padding: 10px; border: 1px dashed var(--c-transfer); border-radius: 8px;">
-            <label class="input-label" style="color:var(--c-transfer)!important; font-weight:bold;">➡ A CUENTA (DESTINO)</label>
+        <div id="bloque-destino" style="display:none;">
+            <label class="input-label">A CUENTA (DESTINO)</label>
             <select id="m-cuenta-destino" class="filter-input form-field">
                 <option value="">Selecciona Destino...</option>
                 </select>
@@ -1144,16 +1144,107 @@
         }
     }
 
-    async function buscarFicheroNube(token) {
-        try {
-            const url = "https://graph.microsoft.com/v1.0/me/drive/root/children";
-            const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` }});
-            const json = await resp.json();
-            const f = json.value.find(x => x.name.toLowerCase() === 'aidanai.xlsx');
-            if (f) { descargarContenido(f['@microsoft.graph.downloadUrl']); } 
-            else { mostrarEstado('aidanai.xlsx no encontrado en raíz', 'err'); }
-        } catch (e) { console.error(e); mostrarEstado('Error buscando archivo', 'err'); }
+    // Variable global nueva para almacenar el ID
+let oneDriveFileId = null; 
+
+async function buscarFicheroNube(token) {
+    try {
+        const url = "https://graph.microsoft.com/v1.0/me/drive/root/children";
+        const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` }});
+        const json = await resp.json();
+        const f = json.value.find(x => x.name.toLowerCase() === 'aidanai.xlsx');
+        
+        if (f) { 
+            oneDriveFileId = f.id; // <--- GUARDAMOS EL ID AQUÍ
+            console.log("ID de archivo localizado:", oneDriveFileId);
+            descargarContenido(f['@microsoft.graph.downloadUrl']); 
+        } else { 
+            mostrarEstado('aidanai.xlsx no encontrado en raíz', 'err'); 
+        }
+    } catch (e) { 
+        console.error(e); 
+        mostrarEstado('Error buscando archivo', 'err'); 
     }
+}
+
+/**
+ * Sube SOLO las nuevas filas a la nube usando Graph API.
+ * Requiere que en el Excel exista una tabla llamada 'TablaMovimientos'.
+ * @param {Array} nuevasFilas Array de objetos con el formato interno de la app
+ */
+async function sincronizarPatchNube(nuevasFilas) {
+    if (!oneDriveFileId || !oneDriveToken) {
+        console.error("Falta ID de archivo o Token");
+        return;
+    }
+
+    mostrarEstado('☁️ Inyectando datos en la nube...', 'normal');
+
+    // 1. Preparamos los datos para Excel
+    // La API espera un array de arrays: [ [val1, val2...], [val1, val2...] ]
+    // Orden columnas Excel: FECHA | CUENTA | CONCEPTO | IMPORTE | DESCRIPCIÓN | BENEFICIARIO
+    const valoresExcel = nuevasFilas.map(m => {
+        // Convertimos fecha timestamp a formato compatible con Excel (YYYY-MM-DD suele funcionar bien en API)
+        const fechaObj = new Date(m.ts);
+        const fechaStr = fechaObj.toISOString().split('T')[0]; 
+        
+        return [
+            fechaStr,           // A: Fecha
+            m.cuenta,           // B: Cuenta
+            m.concepto,         // C: Concepto
+            m.importe,          // D: Importe (Number)
+            m.detalle,          // E: Descripción
+            m.beneficiario      // F: Beneficiario
+        ];
+    });
+
+    try {
+        // 2. Construimos el Payload
+        const payload = {
+            index: null, // null significa "añadir al final"
+            values: valoresExcel
+        };
+
+        // 3. Endpoint Mágico: Añadir filas a una Tabla específica
+        const endpoint = `https://graph.microsoft.com/v1.0/me/drive/items/${oneDriveFileId}/workbook/tables/TablaMovimientos/rows`;
+
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${oneDriveToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (resp.ok) {
+            mostrarEstado('✅ Datos sincronizados (Patch)', 'ok');
+            console.log("Patch exitoso:", await resp.json());
+            
+            // Opcional: Vibración de éxito "server-confirmed"
+            vibrar('ingreso'); 
+            
+            // Ocultar botón de guardar manual si todo fue bien
+            document.getElementById('btn-export-excel').style.display = 'none';
+        } else {
+            const err = await resp.json();
+            console.error("Error Graph API:", err);
+            
+            // Si falla porque no existe la tabla, avisamos
+            if (err.error && err.error.code === "ItemNotFound") {
+                alert("ERROR CRÍTICO: No encuentro 'TablaMovimientos' en tu Excel.\n\nPor favor, abre el Excel en OneDrive, selecciona tus datos y haz Insertar > Tabla. Llámala 'TablaMovimientos'.");
+            } else {
+                throw new Error(err.error ? err.error.message : "Error desconocido");
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        mostrarEstado('⚠️ Error sync nube. Guardando local...', 'err');
+        // Fallback: Si falla el patch, mostramos el botón para guardar a lo bruto (todo el archivo)
+        document.getElementById('btn-export-excel').style.display = 'flex';
+        document.getElementById('btn-export-excel').classList.add('btn-glow');
+    }
+}
 
     async function descargarContenido(url) {
         try {
@@ -1588,82 +1679,58 @@ function guardarMovimiento() {
         return; 
     }
 
-    // --- LÓGICA DE TRASPASO (DOBLE MOVIMIENTO) ---
+    // ... lógica anterior de guardarMovimiento ...
+
+    // Recolectamos las filas NUEVAS para enviarlas
+    // (En un traspaso son 2, en gasto/ingreso es 1)
+    let filasParaNube = [];
+    
+    // CASO TRASPASO
     if (modoTransaccionActual === 'traspaso') {
-        const cuentaDestino = document.getElementById('m-cuenta-destino').value;
+        // ... (código donde haces el push de las 2 filas) ...
+        // JUSTO DESPUÉS de hacer datos.push(...), añadimos a filasParaNube:
+        /* OJO: Como el código original hacía push directo, 
+           necesitamos capturar esos objetos antes o referencia a ellos.
+           Para simplificar, reconstruyamos el objeto temporal aquí o modifiquemos 
+           ligeramente la lógica superior.
+        */
+       
+       // MEJOR ESTRATEGIA: Modifica la parte final de tu función guardarMovimiento así:
+    }
+
+   
+    // 1. Refresco Local (Inmediato para el usuario)
+    datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
+    
+    // Recalcular saldos visuales
+    const ac = {};
+    datos.forEach(m => {
+        if(!ac[m.cuenta]) ac[m.cuenta] = 0;
+        ac[m.cuenta] += m.importe;
+        m.saldo = ac[m.cuenta];
+    });
+
+    renderizar();
+    actualizarDashboard();
+    actualizarPatrimonio(); 
+    document.getElementById('modal-manual').classList.remove('active');
+    
+    // 2. Sincronización Inteligente (Patching)
+    if (modoNube && oneDriveFileId) {
+        // Identificamos qué acabamos de añadir. 
+        // Truco: Si es traspaso, son las 2 últimas filas. Si no, la última.
+        const numFilas = (modoTransaccionActual === 'traspaso') ? 2 : 1;
+        // Obtenemos las últimas N filas del array 'datos'
+        const nuevasFilas = datos.slice(-numFilas);
         
-        if (!cuentaDestino) { alert("Selecciona la cuenta de Destino."); return; }
-        if (cuentaOrigen === cuentaDestino) { alert("El origen y el destino no pueden ser la misma cuenta."); return; }
-
-        // Movimiento 1: SALIDA (Gasto en Origen)
-        datos.push({
-            id: Date.now(), 
-            ts: new Date(fecha).getTime(),
-            importe: -Math.abs(impInput), // Siempre negativo
-            cuenta: cuentaOrigen,
-            concepto: 'Traspaso',
-            detalle: desc ? `Traspaso a ${cuentaDestino}: ${desc}` : `Traspaso a ${cuentaDestino}`,
-            beneficiario: beneficiario || 'Yo mismo',
-            tipo: 'traspaso',
-            saldo: 0
-        });
-
-        // Movimiento 2: ENTRADA (Ingreso en Destino) - Pequeño delay para ordenar ID
-        setTimeout(() => {
-            datos.push({
-                id: Date.now() + 1, 
-                ts: new Date(fecha).getTime(),
-                importe: Math.abs(impInput), // Siempre positivo
-                cuenta: cuentaDestino,
-                concepto: 'Traspaso',
-                detalle: desc ? `Traspaso desde ${cuentaOrigen}: ${desc}` : `Traspaso desde ${cuentaOrigen}`,
-                beneficiario: beneficiario || 'Yo mismo',
-                tipo: 'traspaso',
-                saldo: 0
-            });
-            
-            finalizarGuardado(true); // true = indica que fue traspaso
-        }, 50);
-
-        return; // Paramos aquí, el setTimeout termina el trabajo
-    }
-
-    // --- LÓGICA ESTÁNDAR (GASTO / INGRESO) ---
-    const concepto = document.getElementById('m-concepto').value;
-    if(!concepto) { alert("Falta el concepto."); return; }
-    
-    // Decidir signo basado en el modo, NO solo en lo que escribió la calculadora
-    let importeFinal = Math.abs(impInput);
-    if (modoTransaccionActual === 'pago') importeFinal = -importeFinal;
-    
-    if (idEnEdicion) {
-         // Edición de movimiento existente
-         const indice = datos.findIndex(d => d.id === idEnEdicion);
-         if (indice !== -1) {
-            datos[indice].ts = new Date(fecha).getTime();
-            datos[indice].importe = importeFinal;
-            datos[indice].cuenta = cuentaOrigen;
-            datos[indice].concepto = concepto;
-            datos[indice].detalle = desc;
-            datos[indice].beneficiario = beneficiario || '-';
-            datos[indice].tipo = importeFinal >= 0 ? 'ingreso' : 'gasto';
-         }
+        // Llamamos a la API
+        sincronizarPatchNube(nuevasFilas);
     } else {
-        // Nuevo movimiento normal
-        datos.push({
-            id: Date.now(), 
-            ts: new Date(fecha).getTime(), 
-            importe: importeFinal, 
-            cuenta: cuentaOrigen, 
-            concepto: concepto, 
-            detalle: desc, 
-            beneficiario: beneficiario || '-', 
-            tipo: importeFinal >= 0 ? 'ingreso' : 'gasto', 
-            saldo: 0
-        });
+        mostrarEstado('Guardado en memoria local.', 'normal');
+        revisarBotonExportar();
     }
     
-    finalizarGuardado(false);
+    idEnEdicion = null; 
 }
 
     // Función auxiliar para no repetir código de refresco
@@ -2603,77 +2670,89 @@ if(btnIgual) {
     }
 
     function accionFab(tipo) {
-        toggleFab(); // Cerramos el abanico
-        
-        const modalBox = document.querySelector('.modal-box');
-        const inputCant = document.getElementById('m-cantidad');
-        const titulo = document.querySelector('#modal-manual h3');
-        
-        // Elementos a manipular
-        const bloqueDestino = document.getElementById('bloque-destino');
-        const lblOrigen = document.getElementById('lbl-cuenta-origen');
-        const inputConcepto = document.getElementById('m-concepto');
-        const lblConcepto = inputConcepto.previousElementSibling; // La etiqueta "CONCEPTO"
-        
-        // Reset visual (Limpieza)
-        modalBox.style.transition = "all 0.3s ease";
-        bloqueDestino.style.display = 'none'; // Ocultar destino por defecto
-        inputConcepto.style.display = 'block'; // Mostrar concepto por defecto
-        lblConcepto.style.display = 'block';
-        lblOrigen.innerText = "CUENTA";
-        inputConcepto.value = ""; 
-        document.getElementById('m-desc').value = ""; // Limpiar descripción
+    toggleFab(); // Cerramos el menú circular
+    
+    const modalBox = document.querySelector('.modal-box');
+    const inputCant = document.getElementById('m-cantidad');
+    const titulo = document.querySelector('#modal-manual h3');
+    
+    // Elementos a manipular
+    const bloqueDestino = document.getElementById('bloque-destino');
+    const lblOrigen = document.getElementById('lbl-cuenta-origen');
+    const inputConcepto = document.getElementById('m-concepto');
+    const lblConcepto = inputConcepto.previousElementSibling; // La etiqueta "CONCEPTO"
+    
+    // 1. RESET VISUAL (Limpieza inicial)
+    // Ocultamos destino y mostramos concepto por defecto
+    bloqueDestino.style.display = 'none'; 
+    inputConcepto.style.display = 'block'; 
+    if(lblConcepto) lblConcepto.style.display = 'block';
+    
+    lblOrigen.innerText = "CUENTA";
+    inputConcepto.value = ""; 
+    document.getElementById('m-desc').value = ""; 
 
-        if (tipo === 'pagos') {
-            vibrar('gasto');
-            modoTransaccionActual = 'pago';
-            modalBox.style.borderColor = 'var(--c-danger)';
-            modalBox.style.boxShadow = '0 0 30px rgba(255, 46, 77, 0.3)';
-            inputCant.style.color = 'var(--c-danger)';
-            titulo.innerText = "NUEVO GASTO";
-            titulo.style.color = 'var(--c-danger)';
-            abrirModal();
-            
-        } else if (tipo === 'ingresos') {
-            vibrar('ingreso');
-            modoTransaccionActual = 'ingreso';
-            modalBox.style.borderColor = 'var(--c-success)';
-            modalBox.style.boxShadow = '0 0 30px rgba(57, 255, 20, 0.3)';
-            inputCant.style.color = 'var(--c-success)';
-            titulo.innerText = "NUEVO INGRESO";
-            titulo.style.color = 'var(--c-success)';
-            abrirModal();
+    // 2. CONFIGURACIÓN SEGÚN TIPO
+    if (tipo === 'pagos') {
+        vibrar('gasto');
+        modoTransaccionActual = 'pago';
+        
+        // Estética ROJA
+        modalBox.style.borderColor = 'var(--c-danger)';
+        modalBox.style.boxShadow = '0 0 30px rgba(255, 46, 77, 0.3)';
+        inputCant.style.color = 'var(--c-danger)';
+        titulo.innerText = "NUEVO GASTO";
+        titulo.style.color = 'var(--c-danger)';
+        
+        abrirModal();
+        
+    } else if (tipo === 'ingresos') {
+        vibrar('ingreso');
+        modoTransaccionActual = 'ingreso';
+        
+        // Estética VERDE
+        modalBox.style.borderColor = 'var(--c-success)';
+        modalBox.style.boxShadow = '0 0 30px rgba(57, 255, 20, 0.3)';
+        inputCant.style.color = 'var(--c-success)';
+        titulo.innerText = "NUEVO INGRESO";
+        titulo.style.color = 'var(--c-success)';
+        
+        abrirModal();
 
-        } else if (tipo === 'traspasos') {
-            vibrar('clonar');
-            modoTransaccionActual = 'traspaso';
-            
-            // Estética AZUL
-            modalBox.style.borderColor = 'var(--c-transfer)';
-            modalBox.style.boxShadow = '0 0 30px rgba(0, 184, 255, 0.3)';
-            inputCant.style.color = 'var(--c-transfer)';
-            titulo.innerText = "NUEVO TRASPASO";
-            titulo.style.color = 'var(--c-transfer)';
-            
-            // LOGICA ESPECIFICA DE TRASPASO
-            bloqueDestino.style.display = 'block'; // Mostramos el segundo selector
-            lblOrigen.innerText = "DESDE CUENTA (ORIGEN)"; // Cambiamos etiqueta
-            
-            // Ocultamos Concepto (Será fijo)
-            inputConcepto.style.display = 'none';
-            lblConcepto.style.display = 'none';
-            
-            // Pre-rellenamos descripción
-            document.getElementById('m-desc').value = "Traspaso";
-            
-            // Rellenamos el selector de destino con las mismas cuentas
-            const selectOrigen = document.getElementById('m-cuenta');
-            const selectDestino = document.getElementById('m-cuenta-destino');
-            selectDestino.innerHTML = selectOrigen.innerHTML; // Copiamos opciones
+    } else if (tipo === 'traspasos') {
+        vibrar('clonar');
+        modoTransaccionActual = 'traspaso';
+        
+        // Estética AZUL (Solo el borde del modal, NO los inputs internos)
+        modalBox.style.borderColor = 'var(--c-transfer)';
+        modalBox.style.boxShadow = '0 0 30px rgba(0, 184, 255, 0.3)';
+        inputCant.style.color = 'var(--c-transfer)';
+        titulo.innerText = "NUEVO TRASPASO";
+        titulo.style.color = 'var(--c-transfer)';
+        
+        // --- LÓGICA VISUAL TRASPASO ---
+        // Simplemente mostramos el div limpio
+        bloqueDestino.style.display = 'block'; 
+        
+        // Cambiamos etiqueta origen para que se entienda la dirección
+        lblOrigen.innerText = "DESDE CUENTA (ORIGEN)"; 
+        
+        // Ocultamos Concepto (Redundante en traspasos)
+        inputConcepto.style.display = 'none';
+        if(lblConcepto) lblConcepto.style.display = 'none';
+        
+        // Pre-rellenamos descripción
+        document.getElementById('m-desc').value = "Traspaso";
+        
+        // Aseguramos que el selector destino tenga las cuentas
+        const selectOrigen = document.getElementById('m-cuenta');
+        const selectDestino = document.getElementById('m-cuenta-destino');
+        // Copiamos el HTML interno para asegurar que tienen las mismas opciones
+        if(selectOrigen.innerHTML) selectDestino.innerHTML = selectOrigen.innerHTML;
 
-            abrirModal();
-        }
+        abrirModal();
     }
+}
 
     </script>
 </body>
