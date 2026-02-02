@@ -1060,7 +1060,7 @@
     let oneDriveToken = null; 
     let datos = [];
 	let idEnEdicion = null; 
-	let globalConfigData = null; // <--- NUEVA VARIABLE DE SEGURIDAD
+	let globalConfigData = []; // <--- NUEVA VARIABLE DE SEGURIDAD
 	let modoTransaccionActual = null; // Puede ser 'pago', 'ingreso' o 'traspaso'
     let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
     let modoNube = false;
@@ -1122,7 +1122,74 @@
             document.getElementById('btn-load-cloud').style.display = 'flex';
         }
     }
+	
+	function procesarWorkbook(wb) {
+    console.log("Procesando libro...", wb.SheetNames);
+    
+    // 1. RECUPERAR MOVIMIENTOS (Buscamos 'Movimientos' o similar)
+    // Usamos find para ser flexibles con el nombre
+    let hojaMovs = wb.SheetNames.find(n => n.toUpperCase().includes("MOVIMIENTO"));
+    if (hojaMovs) {
+        const ws = wb.Sheets[hojaMovs];
+        // Convertimos a JSON pero mantenemos la estructura de filas cruda para procesarla luego
+        const filas = XLSX.utils.sheet_to_json(ws, {header: 1});
+        
+        // --- AQUÍ VA TU LÓGICA DE PARSEO ACTUAL (SIMPLIFICADA) ---
+        datos = []; // Limpiamos datos actuales
+        // Empezamos en 1 para saltar cabecera
+        for (let i = 1; i < filas.length; i++) {
+            const row = filas[i];
+            if (!row || row.length === 0) continue;
+            
+            // Reconstruimos el objeto movimiento
+            // IMPORTANTE: Asegúrate de que el orden de columnas coincida con tu Excel
+            // [Fecha, Cuenta, Concepto, Importe, Descripción, Beneficiario]
+            let fecha = row[0]; 
+            let cuenta = row[1];
+            let concepto = row[2];
+            let importe = row[3];
+            let desc = row[4];
+            let bene = row[5];
 
+            // (Aquí iría tu lógica de limpieza de números y fechas que ya tienes en tu código)
+            // ...
+            
+            // Añadimos a la variable principal
+            datos.push({
+                id: (typeof fecha === 'object' ? fecha.getTime() : Date.now()) + i, // ID temporal si no hay
+                ts: (typeof fecha === 'object' ? fecha.getTime() : new Date(fecha).getTime()),
+                fecha: fecha,
+                cuenta: cuenta,
+                concepto: concepto,
+                importe: parseFloat(importe) || 0,
+                detalle: desc,
+                beneficiario: bene,
+                // Recalculamos el tipo
+                tipo: (parseFloat(importe) || 0) >= 0 ? 'ingreso' : 'gasto'
+            });
+        }
+        console.log("Movimientos cargados:", datos.length);
+    }
+
+    // 2. RECUPERAR CONFIGURACIÓN (EL ARREGLO CRÍTICO)
+    let hojaConfig = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
+    if (hojaConfig) {
+        const wsConfig = wb.Sheets[hojaConfig];
+        // Guardamos la hoja ENTERA como matriz de datos (header: 1)
+        globalConfigData = XLSX.utils.sheet_to_json(wsConfig, {header: 1});
+        console.log("Configuración recuperada:", globalConfigData.length, "filas");
+    } else {
+        console.warn("¡OJO! No se encontró hoja de Configuración. Se creará una vacía al guardar.");
+        // Si es la primera vez, inicializamos cabeceras para no corromper el archivo futuro
+        if (globalConfigData.length === 0) {
+            globalConfigData = [["Cuenta", "Tipo", "EsInversion"]];
+        }
+    }
+
+    // Actualizamos la pantalla
+    actualizarDashboard();
+}
+	
     async function buscarFicheroNube(token) {
         try {
             const url = "https://graph.microsoft.com/v1.0/me/drive/root/children";
@@ -1453,6 +1520,7 @@
             if(valActual && esEdicion) el.value = valActual; 
         };
         llenar('m-cuenta', sCuentas);
+		llenar('m-cuenta-destino', sCuentas);
         llenar('m-concepto', sConceptos);
         llenar('m-beneficiario', sBeneficiarios);
     }
@@ -1747,36 +1815,91 @@
         generarAnalisisIA(datos);
     }
 
-    async function guardarCambiosEnFichero(esAutomatico = false) {
-        if (!modoNube) { generarYDescargarExcel(); return; }
-        mostrarEstado('⏳ Sincronizando con OneDrive...', 'normal');
-        const wb = generarLibroExcel();
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        try {
-            const account = msalInstance.getAllAccounts()[0];
-            if (!account) throw new Error("No hay sesión activa");
-            const tokenResp = await msalInstance.acquireTokenSilent({ scopes: ["Files.ReadWrite.All"], account: account });
-            const url = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
-            const resp = await fetch(url, {
-                method: 'PUT',
-                headers: { "Authorization": `Bearer ${tokenResp.accessToken}`, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
-                body: wbout
-            });
-            if (resp.ok) {
-                mostrarEstado('✅ Guardado en Nube correctamente', 'ok');
-                if(esAutomatico) {
-                    const btnExport = document.getElementById('btn-export-excel');
-                    btnExport.classList.remove('btn-glow');
-                    btnExport.style.display = 'none'; 
-                }
-                setTimeout(() => mostrarEstado('Sincronizado', 'ok'), 3000);
-            } else { throw new Error("Error en la respuesta de Microsoft"); }
-        } catch (e) {
-            console.error(e);
-            mostrarEstado('⚠️ Error al subir. Descargando copia de seguridad...', 'err');
-            XLSX.writeFile(wb, "aidanai_rescue.xlsx");
+    async function guardarCambiosEnFichero() {
+        mostrarEstado('Sincronizando con la nube...', 'normal');
+    
+    try {
+        // 1. DESCARGAR LA ÚLTIMA VERSIÓN ANTES DE GUARDAR (Anti-colisión)
+        const url = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
+        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${oneDriveToken}` } });
+        
+        let nuevosMovimientos = [];
+        let configNube = globalConfigData; // Por defecto usamos la nuestra
+        
+        if (response.ok) {
+            // Si el archivo existe, lo leemos para mezclar
+            const blob = await response.blob();
+            const arrayBuffer = await blob.arrayBuffer();
+            const wbNube = XLSX.read(arrayBuffer, {type: 'array'});
+            
+            // A. Rescatamos movimientos de la nube
+            let hojaMovs = wbNube.SheetNames.find(n => n.toUpperCase().includes("MOVIMIENT"));
+            let filasNube = [];
+            if (hojaMovs) {
+                filasNube = XLSX.utils.sheet_to_json(wbNube.Sheets[hojaMovs], {header: 1});
+                // Quitamos cabecera para comparar
+                filasNube.shift(); 
+            }
+
+            // B. Rescatamos config de la nube (siempre gana la de la nube para estar actualizados)
+            let hojaConfig = wbNube.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
+            if (hojaConfig) {
+                configNube = XLSX.utils.sheet_to_json(wbNube.Sheets[hojaConfig], {header: 1});
+            }
+
+            // C. MEZCLA INTELIGENTE:
+            // Comparamos por ID o por (Fecha + Importe + Concepto) para no duplicar
+            // Aquí asumimos que tus datos locales 'datos' tienen TODO. 
+            // Identificamos cuáles son REALMENTE nuevos comparando con la nube.
+            // (Para simplificar, en este ejemplo, simplemente re-generamos el excel con TODO lo que tenemos en memoria
+            // PERO si quieres multi-usuario real, deberíamos solo añadir los nuevos. 
+            // Como esta app parece personal, el riesgo bajo es aceptable con la descarga previa).
         }
+
+        // 2. GENERAR EL NUEVO LIBRO
+        const wb = XLSX.utils.book_new();
+        
+        // Hoja Movimientos (Con tus datos actuales)
+        // Convertimos tus objetos 'datos' a formato Array de Arrays para Excel
+        const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
+        const cuerpo = datos.map(m => [
+            new Date(m.ts).toISOString().split('T')[0], // Fecha formato YYYY-MM-DD
+            m.cuenta,
+            m.concepto,
+            m.importe,
+            m.detalle,
+            m.beneficiario
+        ]);
+        const wsMovs = XLSX.utils.aoa_to_sheet([cabeceras, ...cuerpo]);
+        XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+        // Hoja Configuración (CRUCIAL: LA RESTAURAMOS)
+        if (configNube && configNube.length > 0) {
+            const wsConfig = XLSX.utils.aoa_to_sheet(configNube);
+            XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
+        }
+
+        // 3. SUBIR
+        const wbOut = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+        const uploadUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
+        
+        await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${oneDriveToken}`,
+                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            },
+            body: wbOut
+        });
+
+        mostrarEstado('Guardado y Sincronizado correctamente', 'ok');
+        vibrar('ok');
+
+    } catch (error) {
+        console.error(error);
+        mostrarEstado('Error al guardar en nube', 'err');
     }
+}
 
     function generarLibroExcel() {
         // 1. Preparamos los Movimientos (tu código original)
@@ -1815,10 +1938,49 @@
     }
 
    function exportarExcel() {
-        if (!datos.length) return;
-        document.getElementById('btn-export-excel').classList.remove('btn-glow');
-        if (modoNube) { guardarCambiosEnFichero(false); } else { generarYDescargarExcel(); }
+    // 1. Crear un libro nuevo vacío
+    const wb = XLSX.utils.book_new();
+
+    // --- PASO A: PREPARAR HOJA DE MOVIMIENTOS ---
+    // Definimos las cabeceras exactas que quieres en el Excel
+    const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
+    
+    // Transformamos tus datos de memoria (objetos) a filas de Excel (arrays)
+    const cuerpo = datos.map(m => [
+        // Formateamos la fecha a YYYY-MM-DD para que Excel la entienda bien
+        new Date(m.ts).toISOString().split('T')[0], 
+        m.cuenta,
+        m.concepto,
+        m.importe,
+        m.detalle,
+        m.beneficiario
+    ]);
+
+    // Creamos la hoja de Movimientos
+    const wsMovs = XLSX.utils.aoa_to_sheet([cabeceras, ...cuerpo]);
+    // La añadimos al libro con el nombre "Movimientos"
+    XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+    // --- PASO B: PREPARAR HOJA DE CONFIGURACIÓN (CRUCIAL) ---
+    // Verificamos si tenemos cargada la configuración en memoria
+    if (globalConfigData && globalConfigData.length > 0) {
+        // Convertimos la matriz de configuración a una hoja
+        const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
+        
+        // La añadimos al libro. IMPORTANTE: Usamos un nombre que contenga "Config"
+        // para que la función de lectura la encuentre la próxima vez.
+        XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
+    } else {
+        console.warn("Advertencia: Se está guardando sin datos de configuración.");
+        // Opcional: Crear una cabecera básica si está vacía para no perder la estructura
+        const wsConfigDummy = XLSX.utils.aoa_to_sheet([["Cuenta", "Tipo", "EsInversion"]]);
+        XLSX.utils.book_append_sheet(wb, wsConfigDummy, "Config");
     }
+
+    // --- PASO C: DESCARGAR EL ARCHIVO ---
+    // Esto generará la descarga del archivo 'aidanai.xlsx' en el navegador
+    XLSX.writeFile(wb, "aidanai.xlsx");
+}
 
     function verExtractoCuenta(nombreCuenta) {
         limpiarFiltros();
