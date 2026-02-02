@@ -1151,53 +1151,92 @@ function leerExcel(blob) {
             const wb = XLSX.read(data, { type: 'array', cellDates: true });
             
             // ---------------------------------------------------------
-            // 1. CARGA DE MOVIMIENTOS
+            // 1. CARGA DE CONFIGURACIÓN (MÉTODO ESCÁNER DE MATRIZ)
             // ---------------------------------------------------------
-            let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
-            const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
+            // Reiniciamos el mapa de cuentas
+            mapaCuentas = {}; 
             
-            // ---------------------------------------------------------
-            // 2. CARGA DE CONFIGURACIÓN (Corregido y Compatible)
-            // ---------------------------------------------------------
-            mapaCuentas = {}; // Usamos la variable directa, NO window.mapaCuentas
-            
-            // Buscamos la hoja de forma robusta (Local o Nube)
+            // A. Buscamos la hoja (Flexible: Config, TablaConfig, etc.)
             const wsConfigName = wb.SheetNames.find(n => 
                 n.trim().toUpperCase() === "TABLACONFIG" || 
                 n.trim().toUpperCase().includes("CONFIG")
             );
             
             if (wsConfigName) {
-                // Guardamos copia pura para exportar
-                globalConfigData = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName], { header: 1 });
-              
-                // Leemos como objetos para detectar columnas por nombre
-                const jsonConfig = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName]);
+                const wsConfig = wb.Sheets[wsConfigName];
                 
-                jsonConfig.forEach(row => {
-                    // Detección inteligente de columnas (Funciona si se mueven de sitio)
-                    const keyCuenta = Object.keys(row).find(k => k.trim().toLowerCase() === 'cuenta');
-                    const keyTipo = Object.keys(row).find(k => k.trim().toLowerCase() === 'tipo');
-                    const keyInv = Object.keys(row).find(k => k.trim().toLowerCase() === 'esinversion');
+                // B. Obtenemos TODOS los datos como una MATRIZ pura (Array de Arrays)
+                // Esto evita que la librería se confunda con filas vacías al principio
+                const matConfig = XLSX.utils.sheet_to_json(wsConfig, { header: 1 });
+                
+                // Guardamos para exportar (Global)
+                globalConfigData = matConfig;
+
+                // C. ESCANEO: Buscamos en qué fila y columna están los encabezados
+                let filaEncabezados = -1;
+                let colCuenta = -1;
+                let colTipo = -1;
+                let colInv = -1;
+
+                // Recorremos las primeras 20 filas buscando "Cuenta" y "Tipo"
+                for (let i = 0; i < Math.min(matConfig.length, 20); i++) {
+                    const row = matConfig[i];
+                    if (!row) continue;
                     
-                    if(keyCuenta && row[keyCuenta]) {
-                        const nombreNormalizado = row[keyCuenta].toString().trim().toUpperCase();
-                        
-                        // Asignamos al mapa usando lógica segura
-                        mapaCuentas[nombreNormalizado] = {
-                            tipo: (keyTipo && row[keyTipo]) ? row[keyTipo].toString().toUpperCase().trim() : 'OTROS',
-                            esInversion: (keyInv && row[keyInv] && row[keyInv].toString().toUpperCase() === 'SI')
-                        };
+                    // Buscamos las columnas en esta fila (insensible a mayúsculas/espacios)
+                    const idxC = row.findIndex(val => val && String(val).trim().toUpperCase() === 'CUENTA');
+                    const idxT = row.findIndex(val => val && String(val).trim().toUpperCase() === 'TIPO');
+                    
+                    // Si encontramos Cuenta y Tipo en la misma fila -> ESTA ES LA CABECERA
+                    if (idxC !== -1 && idxT !== -1) {
+                        filaEncabezados = i;
+                        colCuenta = idxC;
+                        colTipo = idxT;
+                        // Buscamos "EsInversion" en esta misma fila
+                        colInv = row.findIndex(val => val && String(val).trim().toUpperCase() === 'ESINVERSION');
+                        break; // Ya tenemos las coordenadas, paramos de buscar
                     }
-                });
-                mostrarEstado('Configuración cargada: ' + Object.keys(mapaCuentas).length + ' cuentas.', 'ok');
+                }
+
+                // D. PROCESAMOS LOS DATOS USANDO LAS COORDENADAS ENCONTRADAS
+                if (filaEncabezados !== -1) {
+                    // Empezamos a leer desde la fila siguiente a los encabezados
+                    for (let i = filaEncabezados + 1; i < matConfig.length; i++) {
+                        const row = matConfig[i];
+                        if (!row || !row[colCuenta]) continue; // Saltamos si no hay cuenta
+                        
+                        const cuentaKey = String(row[colCuenta]).trim().toUpperCase();
+                        
+                        // Leemos Tipo usando su columna fija (si existe)
+                        const tipoVal = (colTipo !== -1 && row[colTipo]) 
+                            ? String(row[colTipo]).trim() 
+                            : 'OTROS';
+                            
+                        // Leemos Inversión usando su columna fija (si existe)
+                        const esInv = (colInv !== -1 && row[colInv]) 
+                            ? String(row[colInv]).trim().toUpperCase() === 'SI' 
+                            : false;
+
+                        // Guardamos
+                        mapaCuentas[cuentaKey] = { tipo: tipoVal, esInversion: esInv };
+                    }
+                    mostrarEstado('Configuración: ' + Object.keys(mapaCuentas).length + ' cuentas detectadas.', 'ok');
+                } else {
+                    console.warn("No se encontraron los encabezados 'Cuenta' y 'Tipo' en la hoja Config.");
+                    mostrarEstado('Error: Encabezados Config no hallados', 'err');
+                }
             } else {
                 mostrarEstado('Aviso: Hoja "Config" no encontrada', 'normal');
-                // Si no hay config, intentamos asegurar que globalConfigData no sea undefined
                 if (typeof globalConfigData === 'undefined') globalConfigData = null;
             }
+
+            // ---------------------------------------------------------
+            // 2. CARGA DE MOVIMIENTOS
+            // ---------------------------------------------------------
+            let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
+            const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
             
-            // 3. Procesamos los movimientos
+            // 3. Procesamos todo
             procesarDatos(jsonMovs);
         };
         reader.readAsArrayBuffer(blob);
