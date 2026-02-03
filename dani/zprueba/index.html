@@ -1263,20 +1263,31 @@ async function procesarGuardado() {
     const fmt = (v) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
     document.addEventListener('DOMContentLoaded', () => {
-        try { msalInstance = new msal.PublicClientApplication(msalConfig); } catch(e){ console.error("Error MSAL:", e); }
+        // 1. Inicializar MSAL (sin forzar login todavía)
+        try { 
+            msalInstance = new msal.PublicClientApplication(msalConfig); 
+        } catch(e){ 
+            console.error("Error MSAL:", e); 
+        }
+
+        // 2. Configurar el input de archivo local
         const fileInput = document.getElementById('file-input');
         if(fileInput) {
             fileInput.addEventListener('change', (e) => {
                 if(e.target.files[0]) leerExcel(e.target.files[0]);
             });
         }
-        cambiarModo('cloud'); 
-        mostrarEstado('Conectando con la nube...', 'normal');
-        setTimeout(() => {
-            if (msalInstance) { loginOneDrive(); } else { mostrarEstado('Librería no cargada. Usa modo local.', 'err'); cambiarModo('local'); }
-        }, 1000);
         
-        // Arrancar también la calculadora
+        // 3. CAMBIO CRÍTICO: Forzamos modo 'local' por defecto al inicio
+        // Esto evita que busque OneDrive automáticamente.
+        cambiarModo('local'); 
+
+        // 4. Mensaje de estado neutral
+        mostrarEstado('Selecciona Local o Cloud para empezar', 'normal');
+
+        // NOTA: Hemos eliminado el setTimeout que llamaba a loginOneDrive() automáticamente.
+        
+        // 5. Arrancar la calculadora (esto sí lo dejamos)
         App.init();
     });
 
