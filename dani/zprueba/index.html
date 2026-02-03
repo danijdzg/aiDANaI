@@ -990,14 +990,146 @@
     // ==========================================================
     // CÓDIGO 1: LÓGICA DE INDEX.HTML (DASHBOARD)
     // ==========================================================
-    const MSAL_CONFIG = {
-        auth: {
+    const msalConfig = {
+    auth: {
             clientId: "2a1e29f1-6b47-4ba2-a48e-adc4339e4514",
             authority: "https://login.microsoftonline.com/common",
-            redirectUri: window.location.href
+        redirectUri: window.location.origin // Detecta automáticamente localhost o tu dominio
+    },
+    cache: {
+        cacheLocation: "sessionStorage", 
+        storeAuthStateInCookie: false, 
+    }
+};
+
+const graphConfig = {
+    graphMeEndpoint: "https://graph.microsoft.com/v1.0/me",
+    // ID del archivo en OneDrive (se obtiene dinámicamente o se fija una vez)
+    driveId: "ID_DE_TU_DRIVE", 
+    itemId: "ID_DEL_ARCHIVO_AIDANAI_XLSX" 
+};
+
+// Scopes necesarios para leer y escribir sin intervención constante
+const tokenRequest = {
+    scopes: ["User.Read", "Files.ReadWrite.All", "Sites.ReadWrite.All"] 
+};
+
+/**
+ * Escribe un nuevo movimiento en Excel de forma atómica.
+ * Seguro para múltiples usuarios simultáneos.
+ */
+async function agregarMovimientoSeguro(datosMovimiento) {
+    // 1. Validar datos antes de nada
+    if (!validarIntegridad(datosMovimiento)) {
+        throw new Error("Intento de inyección de datos o formato inválido.");
+    }
+
+    const { fecha, cuenta, concepto, importe, descripcion, beneficiario } = datosMovimiento;
+
+    // Convertimos a array puro, respetando el orden exacto de columnas del CSV
+    const rowData = [
+        [fecha, cuenta, concepto, parseFloat(importe), descripcion, beneficiario]
+    ];
+
+    try {
+        const accessToken = await obtenerToken(); // Función helper de MSAL
+        
+        // 2. LLAMADA A LA API (Endpoint Transaccional)
+        // Usamos /tables/Movimientos/rows/add
+        // Esto garantiza que Excel gestione el bloqueo de fila.
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${graphConfig.itemId}/workbook/tables/Movimientos/rows/add`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                "index": null, // null significa "añadir al final"
+                "values": rowData
+            })
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.json();
+            throw new Error(`Error API Microsoft: ${errorBody.error.message}`);
         }
-    };
+
+        return await response.json(); // Retorna la fila creada con éxito
+
+    } catch (error) {
+        console.error("Error crítico en escritura:", error);
+        // Aquí implementaríamos lógica de reintento (Exponential Backoff)
+        throw error;
+    }
+}
     
+	function validarIntegridad(data) {
+    // 1. Validación de Tipos
+    if (isNaN(data.importe)) return false;
+    if (!Date.parse(data.fecha)) return false;
+
+    // 2. Sanitización (Prevenir inyección de fórmulas de Excel '=CMD|...')
+    // Si un usuario pone "=1+1" en descripción, Excel podría ejecutarlo.
+    const forbiddenChars = ['=', '+', '-', '@'];
+    
+    // Función simple de limpieza
+    const clean = (str) => {
+        if (typeof str !== 'string') return str;
+        // Si empieza por carácter peligroso, añadir un apóstrofe para forzar texto
+        if (forbiddenChars.includes(str.charAt(0))) {
+            return "'" + str; 
+        }
+        // Escapar tags HTML para evitar XSS al leer de vuelta
+        return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    };
+
+    data.descripcion = clean(data.descripcion);
+    data.beneficiario = clean(data.beneficiario);
+    
+    return true;
+}
+	
+	// En tu función de guardar (dentro del modal)
+async function procesarGuardado() {
+    const btnGuardar = document.getElementById('btn-guardar');
+    const spinner = document.getElementById('loading-spinner'); // Asegúrate de tener este elemento
+    
+    // UI: Bloqueo
+    btnGuardar.disabled = true;
+    btnGuardar.innerText = "Sincronizando con la nube...";
+    document.body.style.cursor = 'wait';
+
+    try {
+        // Recopilar datos del formulario
+        const datos = {
+            fecha: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+            cuenta: document.getElementById('m-cuenta').value,
+            concepto: document.getElementById('m-concepto').value,
+            importe: document.getElementById('m-importe').value, // Aplicar signo según Ingreso/Gasto
+            descripcion: document.getElementById('m-desc').value,
+            beneficiario: "Dani" // O selector dinámico
+        };
+
+        await agregarMovimientoSeguro(datos);
+
+        // UI: Éxito
+        mostrarNotificacion("Guardado correctamente en OneDrive", "success");
+        cerrarModal();
+
+    } catch (error) {
+        // UI: Error
+        mostrarNotificacion("Error al sincronizar: " + error.message, "error");
+        vibrar('error');
+    } finally {
+        // UI: Restaurar
+        btnGuardar.disabled = false;
+        btnGuardar.innerText = "GUARDAR";
+        document.body.style.cursor = 'default';
+    }
+}
+	
     // === PUENTE ENTRE APLICACIONES ===
     let campoDestinoCalculadora = null;
 
