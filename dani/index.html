@@ -1025,38 +1025,71 @@
 
 const myMsal = new msal.PublicClientApplication(msalConfig);
 
-// --- ESTA ES LA CLAVE: Manejar el retorno del Redirect ---
-// Este código debe ejecutarse nada más cargar la página
+// --- BLOQUE CORREGIDO PARA EL INICIO ---
 window.addEventListener('load', async () => {
-    try {
-        // Inicializamos MSAL (necesario en versiones v2/v3)
-        await myMsal.initialize(); 
+    // 1. Inicializar MSAL
+    try { 
+        if (!msalInstance) {
+            msalInstance = new msal.PublicClientApplication(msalConfig); 
+        }
+        await msalInstance.initialize();
+    } catch(e){ 
+        console.error("Error inicializando MSAL:", e); 
+        mostrarEstado("Error iniciando librería de seguridad", "err");
+        return;
+    }
 
-        // Verificamos si regresamos de un login exitoso
-        const response = await myMsal.handleRedirectPromise();
+    // 2. Configurar el input de archivo local (siempre necesario)
+    const fileInput = document.getElementById('file-input');
+    if(fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            if(e.target.files[0]) leerExcel(e.target.files[0]);
+        });
+    }
+
+    // 3. Gestionar el retorno del Login de Microsoft
+    try {
+        const response = await msalInstance.handleRedirectPromise();
         
         if (response) {
-            // ¡Login exitoso! El usuario acaba de volver de Microsoft
+            // A) Login Exitoso: Guardamos datos y cargamos fichero
             console.log("Usuario logueado:", response.account.username);
-            sessionStorage.setItem('msalAccount', response.account.username);
             
-            // Opcional: Actualizar UI para mostrar que está conectado
-            actualizarEstadoConexion(true); 
+            // Guardamos el token globalmente para poder guardar después
+            oneDriveToken = response.accessToken; 
             
-            // Aquí podrías cargar los datos automáticamente si quisieras
-            // cargarDatosDesdeOneDrive(); 
+            // Actualizamos la interfaz (usando la función que SÍ existe)
+            mostrarEstado('Conectado: ' + response.account.username, 'ok');
+            
+            // Forzamos el modo nube visualmente
+            cambiarModo('cloud');
+            
+            // CARGAMOS EL FICHERO AUTOMÁTICAMENTE
+            buscarFicheroNube(response.accessToken);
+            
         } else {
-            // No venimos de un login, verificamos si ya había una sesión activa
-            const currentAccounts = myMsal.getAllAccounts();
+            // B) No venimos de un login: Estado Neutro o Local
+            // Verificamos si ya hay sesión activa silenciosa
+            const currentAccounts = msalInstance.getAllAccounts();
             if (currentAccounts.length > 0) {
-                console.log("Sesión recuperada:", currentAccounts[0].username);
-                actualizarEstadoConexion(true);
+                // Hay usuario en caché, pero no cargamos auto para evitar bloqueos
+                // Dejamos que el usuario decida pulsando el botón Cloud
+                cambiarModo('local');
+                mostrarEstado('Sesión detectada. Pulsa Cloud para conectar.', 'normal');
+            } else {
+                // Usuario totalmente nuevo o desconectado
+                cambiarModo('local');
+                mostrarEstado('Selecciona Local o Cloud', 'normal');
             }
         }
     } catch (error) {
-        console.error("Error al manejar el redirect:", error);
-        alert("Error de autenticación: " + error.message);
+        console.error("Error en el proceso de redirect:", error);
+        mostrarEstado("Error de autenticación: " + error.message, "err");
+        cambiarModo('local'); // Volver a local por seguridad
     }
+    
+    // 4. Arrancar la calculadora
+    App.init();
 });
 
 
