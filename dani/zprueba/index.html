@@ -1024,75 +1024,39 @@
     // 3. AQUÍ SIGUE TU CÓDIGO (NO BORRES LO DE ABAJO)
     // =========================================================
 
-    class ExcelDB {
+    // === CLASE GESTIÓN EXCEL v2.0 ===
+class ExcelDB {
     constructor(accessToken) {
         this.token = accessToken;
-        // Apuntamos al archivo específico
         this.baseUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/workbook";
     }
 
-    // Función auxiliar para llamadas API
     async callApi(endpoint, method, body = null) {
         const headers = new Headers();
         headers.append("Authorization", `Bearer ${this.token}`);
         headers.append("Content-Type", "application/json");
-
         const options = { method, headers };
         if (body) options.body = JSON.stringify(body);
 
         const response = await fetch(this.baseUrl + endpoint, options);
-        
-        // Manejo de errores básicos
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Error API (${response.status}): ${errorText}`);
-        }
+        if (!response.ok) throw new Error(await response.text());
         return await response.json();
     }
 
-    /**
-     * AÑADIR FILA (SEGURIDAD CONCURRENTE)
-     * Usa el endpoint /rows/add que pone la fila al final de la tabla
-     * sin tocar las filas existentes.
-     */
     async agregarMovimiento(datos) {
-        // Orden estricto de columnas: Fecha, Cuenta, Concepto, Importe, Descripción, Beneficiario
-        const fila = [[
-            datos.fecha, 
-            datos.cuenta, 
-            datos.concepto, 
-            datos.importe, 
-            datos.descripcion, 
-            datos.beneficiario
-        ]];
-
-        // 'TablaMovimientos' debe coincidir con el nombre que pusiste en Excel
-        return await this.callApi("/tables/TablaMovimientos/rows/add", "POST", {
-            index: null, // null significa "al final de la tabla"
-            values: fila
-        });
+        const fila = [[datos.fecha, datos.cuenta, datos.concepto, datos.importe, datos.descripcion, datos.beneficiario]];
+        return await this.callApi("/tables/TablaMovimientos/rows/add", "POST", { index: null, values: fila });
     }
 
-    /**
-     * LEER DATOS
-     * Obtiene solo los valores de la tabla, mucho más rápido que bajar el archivo.
-     */
-    async leerMovimientos() {
-        // Obtenemos los datos de la tabla creada
-        const data = await this.callApi("/tables/TablaMovimientos/rows", "GET");
-        // Graph devuelve { value: [ { values: [[...]] }, ... ] }
-        // Necesitamos aplanar esto para que sea fácil de usar
-        return data.value.map(fila => {
-            const celdas = fila.values[0];
-            return {
-                fecha: celdas[0],
-                cuenta: celdas[1],
-                concepto: celdas[2],
-                importe: celdas[3],
-                descripcion: celdas[4],
-                beneficiario: celdas[5]
-            };
-        });
+    // Método genérico para leer cualquier tabla
+    async leerTabla(nombreTabla) {
+        try {
+            const data = await this.callApi(`/tables/${nombreTabla}/rows`, "GET");
+            return data.value.map(row => row.values[0]); // Devuelve array limpio de valores
+        } catch (error) {
+            console.warn(`No se pudo leer la tabla ${nombreTabla}`, error);
+            return [];
+        }
     }
 }
  
@@ -2516,16 +2480,26 @@ if(btnIgual) {
 // Esta función se ejecuta cuando la página termina de cargar
 document.addEventListener("DOMContentLoaded", async () => {
     
-    // Verificamos si ya hay un usuario logueado
+    // 1. GESTIONAR EL REGRESO DEL LOGIN (Si venimos de una redirección)
+    try {
+        const response = await myMSALObj.handleRedirectPromise();
+        if (response) {
+            console.log("Regresamos del login exitosamente:", response);
+            mostrarInterfazLogueado();
+            await cargarDashboard();
+            return; // Salimos para no ejecutar lo de abajo innecesariamente
+        }
+    } catch (error) {
+        console.error("Error al volver del login:", error);
+    }
+
+    // 2. COMPROBACIÓN NORMAL (Si ya estábamos logueados de antes)
     const currentAccounts = myMSALObj.getAllAccounts();
-    
     if (currentAccounts.length > 0) {
-        // Si ya está logueado, saludamos y cargamos datos
-        console.log("Usuario detectado:", currentAccounts[0].username);
+        console.log("Usuario ya detectado:", currentAccounts[0].username);
         mostrarInterfazLogueado(); 
-        await cargarDashboard(); // Esta es la nueva función que creamos antes
+        await cargarDashboard();
     } else {
-        // Si no, mostramos botón de login
         console.log("Esperando inicio de sesión...");
     }
 });
@@ -2533,10 +2507,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 // Función para manejar el Login manual (conecta esto a tu botón de Login)
 async function signIn() {
     try {
-        const response = await myMSALObj.loginPopup(loginRequest);
-        console.log("Login exitoso:", response);
-        mostrarInterfazLogueado();
-        await cargarDashboard(); // Carga los datos de la nube
+        // En lugar de loginPopup, usamos loginRedirect
+        await myMSALObj.loginRedirect(loginRequest);
+        // La página se recargará, así que el código de abajo no se ejecuta inmediatamente
     } catch (error) {
         console.error("Error en login:", error);
     }
@@ -2550,6 +2523,124 @@ function mostrarInterfazLogueado() {
     
     const dashboard = document.getElementById('dashboard-container');
     if(dashboard) dashboard.classList.remove('dashboard-hidden');
+}
+
+// === LÓGICA DEL DASHBOARD (EL CEREBRO) ===
+
+let chartsInstances = {}; // Para guardar las gráficas y poder actualizarlas
+
+async function cargarDashboard() {
+    console.log("Iniciando carga del Dashboard...");
+    
+    try {
+        // 1. Obtener Token
+        const account = myMSALObj.getAllAccounts()[0];
+        if (!account) return; 
+        const response = await myMSALObj.acquireTokenSilent({ ...loginRequest, account: account });
+        
+        // 2. Conectar a Excel
+        const db = new ExcelDB(response.accessToken);
+
+        // 3. Descargar Datos en Paralelo (Config y Movimientos)
+        const [rawMovs, rawConfig] = await Promise.all([
+            db.leerTabla('TablaMovimientos'),
+            db.leerTabla('TablaConfig')
+        ]);
+
+        if (rawMovs.length === 0) {
+            console.log("No hay movimientos o error leyendo tabla.");
+            return;
+        }
+
+        // 4. Procesar Datos
+        const datos = procesarDatos(rawMovs, rawConfig);
+
+        // 5. Pintar en Pantalla
+        document.getElementById('dashboard-container').style.display = 'block'; // Mostrar panel
+        actualizarKPIs(datos);
+        renderizarGraficas(datos);
+        
+        console.log("Dashboard cargado con éxito.");
+
+    } catch (error) {
+        console.error("Error crítico cargando Dashboard:", error);
+        alert("Error cargando datos: " + error.message);
+    }
+}
+
+function procesarDatos(movimientos, configs) {
+    let total = 0, ingresos = 0, gastos = 0;
+    const gastosCat = {};
+    const saldosCuentas = {};
+    const mesActual = new Date().toISOString().slice(0, 7); // "2026-02"
+
+    movimientos.forEach(fila => {
+        // fila = [Fecha, Cuenta, Concepto, Importe, Desc, Beneficiario]
+        const fecha = fila[0];
+        const concepto = fila[2];
+        const importe = Number(fila[3]) || 0;
+        const esTraspaso = concepto === 'Traspaso';
+
+        // 1. Patrimonio Total (Suma todo)
+        total += importe;
+
+        // 2. Saldos por cuenta
+        const cta = fila[1];
+        if(!saldosCuentas[cta]) saldosCuentas[cta] = 0;
+        saldosCuentas[cta] += importe;
+
+        // 3. Ingresos/Gastos del Mes (Ignorando traspasos)
+        if (!esTraspaso && fecha.startsWith(mesActual)) {
+            if (importe > 0) ingresos += importe;
+            else {
+                gastos += importe;
+                // Sumar a categoría
+                if (!gastosCat[concepto]) gastosCat[concepto] = 0;
+                gastosCat[concepto] += Math.abs(importe);
+            }
+        }
+    });
+
+    return { total, ingresos, gastos, gastosCat, saldosCuentas };
+}
+
+function actualizarKPIs(d) {
+    const fmt = (n) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
+    document.getElementById('kpi-total').innerText = fmt(d.total);
+    document.getElementById('kpi-ingresos').innerText = fmt(d.ingresos);
+    document.getElementById('kpi-gastos').innerText = fmt(d.gastos);
+}
+
+function renderizarGraficas(d) {
+    // Gráfica de Gastos (Donut)
+    const ctx1 = document.getElementById('chart-gastos');
+    if (chartsInstances.gasto) chartsInstances.gasto.destroy();
+    chartsInstances.gasto = new Chart(ctx1, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(d.gastosCat),
+            datasets: [{ data: Object.values(d.gastosCat), borderWidth: 0 }]
+        }
+    });
+
+    // Gráfica de Cuentas (Barras) -> Top 5 cuentas
+    const topCuentas = Object.entries(d.saldosCuentas)
+        .sort((a,b) => b[1] - a[1]).slice(0, 5); // Ordenar y coger top 5
+
+    const ctx2 = document.getElementById('chart-cuentas');
+    if (chartsInstances.cta) chartsInstances.cta.destroy();
+    chartsInstances.cta = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: topCuentas.map(x => x[0]),
+            datasets: [{ 
+                label: 'Saldo', 
+                data: topCuentas.map(x => x[1]), 
+                backgroundColor: '#3b82f6' 
+            }]
+        },
+        options: { indexAxis: 'y' }
+    });
 }
 	
     </script>
