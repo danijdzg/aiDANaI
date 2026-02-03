@@ -648,10 +648,10 @@
                     <div id="msg-estado" class="status-badge">Listo</div>
                     
                     <div class="action-area">
-                        <button id="btn-load-local" class="btn-compact" onclick="document.getElementById('file-input').click()">
+                        <button id="btn-load-local" class="btn-compact">
                             <span class="material-icons" style="font-size:14px">upload</span> CARGAR
                         </button>
-                        <button id="btn-load-cloud" class="btn-compact btn-onedrive" style="display:none" onclick="loginOneDrive()">
+                        <button id="btn-load-cloud" class="btn-compact btn-onedrive" style="display:none" onclick="signIn()">
                             <span class="material-icons" style="font-size:14px">login</span> CONECTAR
                         </button>
                         <button id="btn-export-excel" class="btn-compact btn-export" onclick="exportarExcel()" style="display:none">
@@ -812,9 +812,7 @@
     </button>
 </nav>
         </div>
-
-        <input type="file" id="file-input" accept=".xlsx, .xls" style="display:none">
-
+       
         <div id="modal-manual" class="modal-overlay">
             <div class="modal-box">
                 <h3 style="color:var(--c-accent); margin-top:0; text-transform:uppercase; letter-spacing:1px">Nuevo Movimiento</h3>
@@ -987,17 +985,117 @@
     </div>
 
     <script>
-    // ==========================================================
-    // CÓDIGO 1: LÓGICA DE INDEX.HTML (DASHBOARD)
-    // ==========================================================
-    const MSAL_CONFIG = {
+// =========================================================
+    // 1. ZONA DE CONFIGURACIÓN (¡ESTO VA PRIMERO QUE NADA!)
+    // =========================================================
+
+    // Configuración de la conexión a Microsoft
+    const msalConfig = {
         auth: {
+            // ¡IMPORTANTE! Reemplaza esto con tu Client ID real
             clientId: "2a1e29f1-6b47-4ba2-a48e-adc4339e4514",
             authority: "https://login.microsoftonline.com/common",
-            redirectUri: window.location.href
+            redirectUri: window.location.origin
+        },
+        cache: {
+            cacheLocation: "localStorage",
+            storeAuthStateInCookie: false
         }
     };
-    
+
+    // Permisos requeridos
+    const loginRequest = {
+        scopes: ["User.Read", "Files.ReadWrite", "Files.ReadWrite.All"]
+    };
+
+    // =========================================================
+    // 2. ZONA DE INICIALIZACIÓN (¡ESTO VA SEGUNDO!)
+    // =========================================================
+
+    // Inicializamos el objeto MSAL AHORA que msalConfig ya existe
+    let myMSALObj;
+    try {
+        myMSALObj = new msal.PublicClientApplication(msalConfig);
+    } catch (e) {
+        console.error("Error iniciando MSAL. Revisa tu ClientID", e);
+    }
+
+    // =========================================================
+    // 3. AQUÍ SIGUE TU CÓDIGO (NO BORRES LO DE ABAJO)
+    // =========================================================
+
+    class ExcelDB {
+    constructor(accessToken) {
+        this.token = accessToken;
+        // Apuntamos al archivo específico
+        this.baseUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/workbook";
+    }
+
+    // Función auxiliar para llamadas API
+    async callApi(endpoint, method, body = null) {
+        const headers = new Headers();
+        headers.append("Authorization", `Bearer ${this.token}`);
+        headers.append("Content-Type", "application/json");
+
+        const options = { method, headers };
+        if (body) options.body = JSON.stringify(body);
+
+        const response = await fetch(this.baseUrl + endpoint, options);
+        
+        // Manejo de errores básicos
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Error API (${response.status}): ${errorText}`);
+        }
+        return await response.json();
+    }
+
+    /**
+     * AÑADIR FILA (SEGURIDAD CONCURRENTE)
+     * Usa el endpoint /rows/add que pone la fila al final de la tabla
+     * sin tocar las filas existentes.
+     */
+    async agregarMovimiento(datos) {
+        // Orden estricto de columnas: Fecha, Cuenta, Concepto, Importe, Descripción, Beneficiario
+        const fila = [[
+            datos.fecha, 
+            datos.cuenta, 
+            datos.concepto, 
+            datos.importe, 
+            datos.descripcion, 
+            datos.beneficiario
+        ]];
+
+        // 'TablaMovimientos' debe coincidir con el nombre que pusiste en Excel
+        return await this.callApi("/tables/TablaMovimientos/rows/add", "POST", {
+            index: null, // null significa "al final de la tabla"
+            values: fila
+        });
+    }
+
+    /**
+     * LEER DATOS
+     * Obtiene solo los valores de la tabla, mucho más rápido que bajar el archivo.
+     */
+    async leerMovimientos() {
+        // Obtenemos los datos de la tabla creada
+        const data = await this.callApi("/tables/TablaMovimientos/rows", "GET");
+        // Graph devuelve { value: [ { values: [[...]] }, ... ] }
+        // Necesitamos aplanar esto para que sea fácil de usar
+        return data.value.map(fila => {
+            const celdas = fila.values[0];
+            return {
+                fecha: celdas[0],
+                cuenta: celdas[1],
+                concepto: celdas[2],
+                importe: celdas[3],
+                descripcion: celdas[4],
+                beneficiario: celdas[5]
+            };
+        });
+    }
+}
+ 
     // === PUENTE ENTRE APLICACIONES ===
     let campoDestinoCalculadora = null;
 
@@ -1056,6 +1154,8 @@
         }
     };
 	
+
+	
     let msalInstance;
     let oneDriveToken = null; 
     let datos = [];
@@ -1073,7 +1173,7 @@
     const fmt = (v) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
     document.addEventListener('DOMContentLoaded', () => {
-        try { msalInstance = new msal.PublicClientApplication(MSAL_CONFIG); } catch(e){ console.error("Error MSAL:", e); }
+        try { msalInstance = new msal.PublicClientApplication(msalConfig); } catch(e){ console.error("Error MSAL:", e); }
         const fileInput = document.getElementById('file-input');
         if(fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -1082,10 +1182,7 @@
         }
         cambiarModo('cloud'); 
         mostrarEstado('Conectando con la nube...', 'normal');
-        setTimeout(() => {
-            if (msalInstance) { loginOneDrive(); } else { mostrarEstado('Librería no cargada. Usa modo local.', 'err'); cambiarModo('local'); }
-        }, 1000);
-        
+                
         // Arrancar también la calculadora
         App.init();
     });
@@ -1110,21 +1207,7 @@
         }
     }
 
-    async function loginOneDrive() {
-        if (!msalInstance) { alert("Error: MSAL no iniciado"); return; }
-        try {
-            const resp = await msalInstance.loginPopup({ scopes: ["User.Read", "Files.ReadWrite.All"] });
-            oneDriveToken = resp.accessToken; 
-            mostrarEstado('Conectado. Buscando archivo...', 'normal');
-            buscarFicheroNube(resp.accessToken);
-        } catch (e) {
-            console.error(e);
-            mostrarEstado('Acceso denegado o cerrado', 'err');
-            document.getElementById('btn-load-cloud').style.display = 'flex';
-        }
-    }
-	
-	
+ 
     async function buscarFicheroNube(token) {
         try {
             const url = "https://graph.microsoft.com/v1.0/me/drive/root/children";
@@ -1144,103 +1227,6 @@
         } catch (e) { mostrarEstado('Error descargando', 'err'); }
     }
 
-function leerExcel(blob) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const data = new Uint8Array(e.target.result);
-            const wb = XLSX.read(data, { type: 'array', cellDates: true });
-            
-            // ---------------------------------------------------------
-            // 1. CARGA DE CONFIGURACIÓN (MÉTODO ESCÁNER DE MATRIZ)
-            // ---------------------------------------------------------
-            // Reiniciamos el mapa de cuentas
-            mapaCuentas = {}; 
-            
-            // A. Buscamos la hoja (Flexible: Config, TablaConfig, etc.)
-            const wsConfigName = wb.SheetNames.find(n => 
-                n.trim().toUpperCase() === "TABLACONFIG" || 
-                n.trim().toUpperCase().includes("CONFIG")
-            );
-            
-            if (wsConfigName) {
-                const wsConfig = wb.Sheets[wsConfigName];
-                
-                // B. Obtenemos TODOS los datos como una MATRIZ pura (Array de Arrays)
-                // Esto evita que la librería se confunda con filas vacías al principio
-                const matConfig = XLSX.utils.sheet_to_json(wsConfig, { header: 1 });
-                
-                // Guardamos para exportar (Global)
-                globalConfigData = matConfig;
-
-                // C. ESCANEO: Buscamos en qué fila y columna están los encabezados
-                let filaEncabezados = -1;
-                let colCuenta = -1;
-                let colTipo = -1;
-                let colInv = -1;
-
-                // Recorremos las primeras 20 filas buscando "Cuenta" y "Tipo"
-                for (let i = 0; i < Math.min(matConfig.length, 20); i++) {
-                    const row = matConfig[i];
-                    if (!row) continue;
-                    
-                    // Buscamos las columnas en esta fila (insensible a mayúsculas/espacios)
-                    const idxC = row.findIndex(val => val && String(val).trim().toUpperCase() === 'CUENTA');
-                    const idxT = row.findIndex(val => val && String(val).trim().toUpperCase() === 'TIPO');
-                    
-                    // Si encontramos Cuenta y Tipo en la misma fila -> ESTA ES LA CABECERA
-                    if (idxC !== -1 && idxT !== -1) {
-                        filaEncabezados = i;
-                        colCuenta = idxC;
-                        colTipo = idxT;
-                        // Buscamos "EsInversion" en esta misma fila
-                        colInv = row.findIndex(val => val && String(val).trim().toUpperCase() === 'ESINVERSION');
-                        break; // Ya tenemos las coordenadas, paramos de buscar
-                    }
-                }
-
-                // D. PROCESAMOS LOS DATOS USANDO LAS COORDENADAS ENCONTRADAS
-                if (filaEncabezados !== -1) {
-                    // Empezamos a leer desde la fila siguiente a los encabezados
-                    for (let i = filaEncabezados + 1; i < matConfig.length; i++) {
-                        const row = matConfig[i];
-                        if (!row || !row[colCuenta]) continue; // Saltamos si no hay cuenta
-                        
-                        const cuentaKey = String(row[colCuenta]).trim().toUpperCase();
-                        
-                        // Leemos Tipo usando su columna fija (si existe)
-                        const tipoVal = (colTipo !== -1 && row[colTipo]) 
-                            ? String(row[colTipo]).trim() 
-                            : 'OTROS';
-                            
-                        // Leemos Inversión usando su columna fija (si existe)
-                        const esInv = (colInv !== -1 && row[colInv]) 
-                            ? String(row[colInv]).trim().toUpperCase() === 'SI' 
-                            : false;
-
-                        // Guardamos
-                        mapaCuentas[cuentaKey] = { tipo: tipoVal, esInversion: esInv };
-                    }
-                    mostrarEstado('Configuración: ' + Object.keys(mapaCuentas).length + ' cuentas detectadas.', 'ok');
-                } else {
-                    console.warn("No se encontraron los encabezados 'Cuenta' y 'Tipo' en la hoja Config.");
-                    mostrarEstado('Error: Encabezados Config no hallados', 'err');
-                }
-            } else {
-                mostrarEstado('Aviso: Hoja "Config" no encontrada', 'normal');
-                if (typeof globalConfigData === 'undefined') globalConfigData = null;
-            }
-
-            // ---------------------------------------------------------
-            // 2. CARGA DE MOVIMIENTOS
-            // ---------------------------------------------------------
-            let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
-            const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
-            
-            // 3. Procesamos todo
-            procesarDatos(jsonMovs);
-        };
-        reader.readAsArrayBuffer(blob);
-    }
 	
     function procesarDatos(filas) {
         const temp = [];
@@ -1521,91 +1507,67 @@ function leerExcel(blob) {
         const d = document.getElementById('m-desc');
         if(d.value === '') d.value = c;
     }
-    function guardarManual() {
-        const impInput = parseFloat(document.getElementById('m-cantidad').value); // Valor absoluto visual
-        const desc = document.getElementById('m-desc').value;
-        const fecha = document.getElementById('m-fecha').value;
-        const cuentaOrigen = document.getElementById('m-cuenta').value;
-        const beneficiario = document.getElementById('m-beneficiario').value;
-        
-        // Validación básica común
-        if(!impInput || !fecha || !cuentaOrigen) { alert("Faltan datos obligatorios."); return; }
-
-        // --- LÓGICA DE TRASPASO (DOBLE ASIENTO) ---
-        if (modoTransaccionActual === 'traspaso') {
-            const cuentaDestino = document.getElementById('m-cuenta-destino').value;
-            
-            if (!cuentaDestino) { alert("Selecciona la cuenta de Destino."); return; }
-            if (cuentaOrigen === cuentaDestino) { alert("El origen y el destino no pueden ser la misma cuenta."); return; }
-
-            // 1. ASIENTO DE SALIDA (GASTO)
-            datos.push({
-                id: Date.now(), // ID único
-                ts: new Date(fecha).getTime(),
-                importe: -Math.abs(impInput), // Forzamos negativo
-                cuenta: cuentaOrigen,
-                concepto: 'Traspaso', // Fijo
-                detalle: desc + ' (Salida)', // Añadimos sufijo para claridad
-                beneficiario: beneficiario || 'Yo mismo',
-                tipo: 'traspaso',
-                saldo: 0
-            });
-
-            // 2. ASIENTO DE ENTRADA (INGRESO) - Pequeño delay para que el ID sea distinto
-            setTimeout(() => {
-                datos.push({
-                    id: Date.now() + 1, // ID distinto
-                    ts: new Date(fecha).getTime(),
-                    importe: Math.abs(impInput), // Forzamos positivo
-                    cuenta: cuentaDestino,
-                    concepto: 'Traspaso', // Fijo
-                    detalle: desc + ' (Entrada)',
-                    beneficiario: beneficiario || 'Yo mismo',
-                    tipo: 'traspaso',
-                    saldo: 0
-                });
-                
-                finalizarGuardado(true); // true = es traspaso
-            }, 50);
-
-            return; // Detenemos aquí, la función 'finalizarGuardado' hará el resto
-        }
-
-        // --- LÓGICA NORMAL (PAGO / INGRESO) ---
-        const concepto = document.getElementById('m-concepto').value;
-        if(!concepto) { alert("Falta el concepto."); return; }
-        
-        // El signo ya viene decidido desde la calculadora/input
-        const importeFinal = modoTransaccionActual === 'pago' ? -Math.abs(impInput) : Math.abs(impInput);
-
-        if (idEnEdicion) {
-            // ... (Tu código de edición existente se mantiene igual aquí si lo usas) ...
-             const indice = datos.findIndex(d => d.id === idEnEdicion);
-             if (indice !== -1) {
-                datos[indice].ts = new Date(fecha).getTime();
-                datos[indice].importe = importeFinal;
-                datos[indice].cuenta = cuentaOrigen;
-                datos[indice].concepto = concepto;
-                datos[indice].detalle = desc;
-                datos[indice].beneficiario = beneficiario || '-';
-                datos[indice].tipo = importeFinal >= 0 ? 'ingreso' : 'gasto';
-             }
-        } else {
-            datos.push({
-                id: Date.now(), 
-                ts: new Date(fecha).getTime(), 
-                importe: importeFinal, 
-                cuenta: cuentaOrigen, 
-                concepto: concepto, 
-                detalle: desc, 
-                beneficiario: beneficiario || '-', 
-                tipo: importeFinal >= 0 ? 'ingreso' : 'gasto', 
-                saldo: 0
-            });
-        }
-        
-        finalizarGuardado(false);
+  
+	async function procesarGuardadoSeguro() {
+    // 1. Recoger valores del HTML
+    const fecha = document.getElementById('m-fecha').value;
+    const cuenta = document.getElementById('m-cuenta').value;
+    const concepto = document.getElementById('m-concepto').value;
+    let importe = parseFloat(document.getElementById('m-importe').value);
+    const desc = document.getElementById('m-desc').value;
+    
+    // Validar
+    if(!fecha || !cuenta || isNaN(importe)) {
+        alert("Faltan datos obligatorios");
+        return;
     }
+
+    // Lógica de signo (Si es Gasto, negativo)
+    // Asegúrate de que tu botón de gasto tiene la clase 'active' o ajusta esta lógica
+    const esGasto = document.getElementById('btn-gasto').classList.contains('active');
+    if(esGasto && importe > 0) importe = -importe;
+
+    // Feedback visual
+    const btn = document.getElementById('btn-guardar');
+    btn.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
+    btn.disabled = true;
+
+    try {
+        // 2. Obtener Token Silenciosamente
+        const account = myMSALObj.getAllAccounts()[0];
+        if (!account) throw new Error("No hay sesión iniciada");
+        
+        const response = await myMSALObj.acquireTokenSilent({
+            ...loginRequest,
+            account: account
+        });
+
+        // 3. INICIAR CONEXIÓN SEGURA
+        const db = new ExcelDB(response.accessToken);
+        
+        // 4. GUARDAR EN LA NUBE
+        await db.agregarMovimiento({
+            fecha: fecha,
+            cuenta: cuenta,
+            concepto: concepto,
+            importe: importe,
+            descripcion: desc,
+            beneficiario: "Dani" // O la lógica que uses para el usuario
+        });
+
+        alert("✅ Guardado correctamente en OneDrive");
+        cerrarModal(); // Tu función para cerrar el modal
+        
+        // Aquí llamaríamos a cargarDatos() para refrescar la pantalla
+        
+    } catch (error) {
+        console.error(error);
+        alert("❌ Error al guardar: " + error.message);
+    } finally {
+        btn.innerHTML = 'GUARDAR';
+        btn.disabled = false;
+    }
+}
 
     // Función auxiliar para no repetir código de refresco
     function finalizarGuardado(esTraspaso) {
@@ -1806,177 +1768,12 @@ function leerExcel(blob) {
         generarAnalisisIA(datos);
     }
 
-    async function guardarCambiosEnFichero() {
-        mostrarEstado('Sincronizando con la nube...', 'normal');
-    
-    try {
-        // 1. DESCARGAR LA ÚLTIMA VERSIÓN ANTES DE GUARDAR (Anti-colisión)
-        const url = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
-        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${oneDriveToken}` } });
-        
-        let nuevosMovimientos = [];
-        let configNube = globalConfigData; // Por defecto usamos la nuestra
-        
-        if (response.ok) {
-            // Si el archivo existe, lo leemos para mezclar
-            const blob = await response.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const wbNube = XLSX.read(arrayBuffer, {type: 'array'});
-            
-            // A. Rescatamos movimientos de la nube
-            let hojaMovs = wbNube.SheetNames.find(n => n.toUpperCase().includes("MOVIMIENT"));
-            let filasNube = [];
-            if (hojaMovs) {
-                filasNube = XLSX.utils.sheet_to_json(wbNube.Sheets[hojaMovs], {header: 1});
-                // Quitamos cabecera para comparar
-                filasNube.shift(); 
-            }
-
-            // B. Rescatamos config de la nube (siempre gana la de la nube para estar actualizados)
-            let hojaConfig = wbNube.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
-            if (hojaConfig) {
-                configNube = XLSX.utils.sheet_to_json(wbNube.Sheets[hojaConfig], {header: 1});
-            }
-
-            // C. MEZCLA INTELIGENTE:
-            // Comparamos por ID o por (Fecha + Importe + Concepto) para no duplicar
-            // Aquí asumimos que tus datos locales 'datos' tienen TODO. 
-            // Identificamos cuáles son REALMENTE nuevos comparando con la nube.
-            // (Para simplificar, en este ejemplo, simplemente re-generamos el excel con TODO lo que tenemos en memoria
-            // PERO si quieres multi-usuario real, deberíamos solo añadir los nuevos. 
-            // Como esta app parece personal, el riesgo bajo es aceptable con la descarga previa).
-        }
-
-        // 2. GENERAR EL NUEVO LIBRO
-        const wb = XLSX.utils.book_new();
-        
-        // Hoja Movimientos (Con tus datos actuales)
-        // Convertimos tus objetos 'datos' a formato Array de Arrays para Excel
-        const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
-        const cuerpo = datos.map(m => [
-            new Date(m.ts).toISOString().split('T')[0], // Fecha formato YYYY-MM-DD
-            m.cuenta,
-            m.concepto,
-            m.importe,
-            m.detalle,
-            m.beneficiario
-        ]);
-       
-        // Hoja Configuración (CRUCIAL: LA RESTAURAMOS)
-        if (configNube && configNube.length > 0) {
-            const wsConfig = XLSX.utils.aoa_to_sheet(configNube);
-            XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
-        }
-
-        // 3. SUBIR
-        const wbOut = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-        const uploadUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx:/content";
-        
-        await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${oneDriveToken}`,
-                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            },
-            body: wbOut
-        });
-
-        mostrarEstado('Guardado y Sincronizado correctamente', 'ok');
-        vibrar('ok');
-
-    } catch (error) {
-        console.error(error);
-        mostrarEstado('Error al guardar en nube', 'err');
-    }
-}
-
-    function generarLibroExcel() {
-        // 1. Preparamos los Movimientos (tu código original)
-        const filasExcel = Array(0).fill([]); 
-        filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
-        datos.forEach(m => { filasExcel.push([new Date(m.ts), m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario]); });
-        
-        // 2. Creamos el libro nuevo
-        const wb = XLSX.utils.book_new();
-        
-        // 3. Añadimos la hoja de Movimientos
-        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
-        ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
-        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-        
-        // === NUEVO: RESTAURAMOS LA HOJA CONFIG SI EXISTE ===
-        if (globalConfigData && globalConfigData.length > 0) {
-            // Convertimos la matriz guardada de vuelta a una Hoja de Excel
-            const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-            // La añadimos al libro con el nombre exacto "Config"
-            XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
-            console.log("Sistema: Hoja Config restaurada correctamente.");
-        }
-        return wb;
-    }
-
-    function generarYDescargarExcel() {
-        const wb = generarLibroExcel();
-        XLSX.writeFile(wb, "aidanai_local.xlsx");
-        mostrarEstado('Archivo descargado (Modo Local)', 'ok');
-    }
-	
+     
     function revisarBotonExportar() {
         const btn = document.getElementById('btn-export-excel');
         if (datos.length > 0) btn.style.display = 'flex';
     }
 
-   function exportarExcel() {
-        try {
-            // 1. Crear un libro nuevo vacío
-            const wb = XLSX.utils.book_new();
-
-            // 2. Definir las cabeceras
-            const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
-            
-            // 3. Transformar tus datos de memoria a formato Excel
-            const cuerpo = datos.map(m => [
-                // Formateamos la fecha a YYYY-MM-DD
-                new Date(m.ts).toISOString().split('T')[0], 
-                m.cuenta,
-                m.concepto,
-                m.importe,
-                m.detalle,
-                m.beneficiario
-            ]);
-
-            // 4. Crear la hoja de Movimientos (Uniendo cabeceras + cuerpo)
-            const wsMovs = XLSX.utils.aoa_to_sheet([cabeceras, ...cuerpo]);
-            
-            // (Opcional) Dar ancho a las columnas para que se vea bonito al abrir
-            wsMovs['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
-
-            // Añadir la hoja al libro
-            // Usamos "Movimientos" como nombre estándar
-            XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
-
-            // 5. Guardar Configuración (Si existe en memoria)
-            // Esto es crucial para no perder tus categorías/cuentas al guardar
-            if (typeof globalConfigData !== 'undefined' && globalConfigData && globalConfigData.length > 0) {
-                const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-                XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
-            } else {
-                console.warn("No hay configuración global para guardar. Se creará una hoja Config básica vacía.");
-                // Creamos una hoja Config mínima para evitar errores futuros de lectura
-                const wsConfigDummy = XLSX.utils.aoa_to_sheet([["Cuenta", "Tipo", "EsInversion"]]);
-                XLSX.utils.book_append_sheet(wb, wsConfigDummy, "Config");
-            }
-
-            // 6. Generar descarga del archivo
-            XLSX.writeFile(wb, "aidanai.xlsx");
-            
-            mostrarEstado('Archivo exportado correctamente', 'ok');
-
-        } catch (error) {
-            console.error("Error al exportar:", error);
-            mostrarEstado('Error al generar el Excel', 'err');
-        }
-    }
 
     function verExtractoCuenta(nombreCuenta) {
         limpiarFiltros();
@@ -2713,7 +2510,48 @@ if(btnIgual) {
             abrirModal();
         }
     }
+	
+	// --- 2. LÓGICA DE ARRANQUE AUTOMÁTICO ---
 
+// Esta función se ejecuta cuando la página termina de cargar
+document.addEventListener("DOMContentLoaded", async () => {
+    
+    // Verificamos si ya hay un usuario logueado
+    const currentAccounts = myMSALObj.getAllAccounts();
+    
+    if (currentAccounts.length > 0) {
+        // Si ya está logueado, saludamos y cargamos datos
+        console.log("Usuario detectado:", currentAccounts[0].username);
+        mostrarInterfazLogueado(); 
+        await cargarDashboard(); // Esta es la nueva función que creamos antes
+    } else {
+        // Si no, mostramos botón de login
+        console.log("Esperando inicio de sesión...");
+    }
+});
+
+// Función para manejar el Login manual (conecta esto a tu botón de Login)
+async function signIn() {
+    try {
+        const response = await myMSALObj.loginPopup(loginRequest);
+        console.log("Login exitoso:", response);
+        mostrarInterfazLogueado();
+        await cargarDashboard(); // Carga los datos de la nube
+    } catch (error) {
+        console.error("Error en login:", error);
+    }
+}
+
+function mostrarInterfazLogueado() {
+    // Ocultar login, mostrar dashboard, etc.
+    // Ajusta los IDs según tu HTML real
+    const btnLogin = document.getElementById('btn-login-ms'); // Tu botón de login
+    if(btnLogin) btnLogin.style.display = 'none';
+    
+    const dashboard = document.getElementById('dashboard-container');
+    if(dashboard) dashboard.classList.remove('dashboard-hidden');
+}
+	
     </script>
 </body>
 </html>
