@@ -994,13 +994,50 @@
     auth: {
             clientId: "2a1e29f1-6b47-4ba2-a48e-adc4339e4514",
             authority: "https://login.microsoftonline.com/common",
-        redirectUri: window.location.origin // Detecta automáticamente localhost o tu dominio
+        redirectUri: window.location.origin, // Esto detecta automáticamente tu dominio actual
     },
     cache: {
-        cacheLocation: "sessionStorage", 
-        storeAuthStateInCookie: false, 
+        cacheLocation: "localStorage", // Usar localStorage es más persistente para evitar logins constantes
+        storeAuthStateInCookie: false,
     }
 };
+
+const myMsal = new msal.PublicClientApplication(msalConfig);
+
+// --- ESTA ES LA CLAVE: Manejar el retorno del Redirect ---
+// Este código debe ejecutarse nada más cargar la página
+window.addEventListener('load', async () => {
+    try {
+        // Inicializamos MSAL (necesario en versiones v2/v3)
+        await myMsal.initialize(); 
+
+        // Verificamos si regresamos de un login exitoso
+        const response = await myMsal.handleRedirectPromise();
+        
+        if (response) {
+            // ¡Login exitoso! El usuario acaba de volver de Microsoft
+            console.log("Usuario logueado:", response.account.username);
+            sessionStorage.setItem('msalAccount', response.account.username);
+            
+            // Opcional: Actualizar UI para mostrar que está conectado
+            actualizarEstadoConexion(true); 
+            
+            // Aquí podrías cargar los datos automáticamente si quisieras
+            // cargarDatosDesdeOneDrive(); 
+        } else {
+            // No venimos de un login, verificamos si ya había una sesión activa
+            const currentAccounts = myMsal.getAllAccounts();
+            if (currentAccounts.length > 0) {
+                console.log("Sesión recuperada:", currentAccounts[0].username);
+                actualizarEstadoConexion(true);
+            }
+        }
+    } catch (error) {
+        console.error("Error al manejar el redirect:", error);
+        alert("Error de autenticación: " + error.message);
+    }
+});
+
 
 const graphConfig = {
     graphMeEndpoint: "https://graph.microsoft.com/v1.0/me",
@@ -1243,18 +1280,41 @@ async function procesarGuardado() {
     }
 
     async function loginOneDrive() {
-        if (!msalInstance) { alert("Error: MSAL no iniciado"); return; }
-        try {
-            const resp = await msalInstance.loginPopup({ scopes: ["User.Read", "Files.ReadWrite.All"] });
-            oneDriveToken = resp.accessToken; 
-            mostrarEstado('Conectado. Buscando archivo...', 'normal');
-            buscarFicheroNube(resp.accessToken);
-        } catch (e) {
-            console.error(e);
-            mostrarEstado('Acceso denegado o cerrado', 'err');
-            document.getElementById('btn-load-cloud').style.display = 'flex';
-        }
+    try {
+        // Definimos los permisos necesarios
+        const loginRequest = {
+            scopes: ["User.Read", "Files.ReadWrite.All", "Sites.ReadWrite.All"]
+        };
+
+        // En lugar de abrir una ventanita (que falla), redirigimos toda la página
+        await myMsal.loginRedirect(loginRequest);
+        // La ejecución se detiene aquí porque la página navega a Microsoft.
+        
+    } catch (error) {
+        console.error("Error iniciando login:", error);
+        mostrarNotificacion("Error al iniciar sesión: " + error.message, "error");
     }
+}
+
+// Función auxiliar para obtener el token silenciosamente antes de escribir/leer
+async function obtenerToken() {
+    const account = myMsal.getAllAccounts()[0];
+    if (!account) throw new Error("El usuario no ha iniciado sesión.");
+
+    const request = {
+        scopes: ["User.Read", "Files.ReadWrite.All", "Sites.ReadWrite.All"],
+        account: account
+    };
+
+    try {
+        const response = await myMsal.acquireTokenSilent(request);
+        return response.accessToken;
+    } catch (error) {
+        // Si falla el silencioso (token expirado), pedimos redirect de nuevo
+        console.warn("Token expirado, redirigiendo para renovar...");
+        await myMsal.acquireTokenRedirect(request);
+    }
+}
 	
 	
     async function buscarFicheroNube(token) {
