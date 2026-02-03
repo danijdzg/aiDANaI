@@ -2474,44 +2474,60 @@ if(btnIgual) {
             abrirModal();
         }
     }
-	
-	// --- 2. LÓGICA DE ARRANQUE AUTOMÁTICO ---
-
-// Esta función se ejecuta cuando la página termina de cargar
+// --- LÓGICA DE ARRANQUE Y MANEJO DE RETORNO ---
 document.addEventListener("DOMContentLoaded", async () => {
     
-    // 1. GESTIONAR EL REGRESO DEL LOGIN (Si venimos de una redirección)
+    // 1. GESTIONAR EL REGRESO (Cuando vuelves de Microsoft)
     try {
+        // Esta línea es mágica: captura el token si vienes de un login
         const response = await myMSALObj.handleRedirectPromise();
+        
         if (response) {
-            console.log("Regresamos del login exitosamente:", response);
+            console.log("¡Éxito! Regresamos del login con token.");
             mostrarInterfazLogueado();
             await cargarDashboard();
-            return; // Salimos para no ejecutar lo de abajo innecesariamente
+            return; // Importante: Paramos aquí para no duplicar cargas
         }
     } catch (error) {
-        console.error("Error al volver del login:", error);
+        console.error("Error al procesar el retorno del login:", error);
     }
 
-    // 2. COMPROBACIÓN NORMAL (Si ya estábamos logueados de antes)
+    // 2. COMPROBACIÓN ESTÁNDAR (Si ya estabas logueado de ayer)
     const currentAccounts = myMSALObj.getAllAccounts();
+    
     if (currentAccounts.length > 0) {
-        console.log("Usuario ya detectado:", currentAccounts[0].username);
+        console.log("Sesión detectada para:", currentAccounts[0].username);
         mostrarInterfazLogueado(); 
         await cargarDashboard();
     } else {
-        console.log("Esperando inicio de sesión...");
+        console.log("Esperando acción del usuario...");
+        // Asegurar que el botón de login se ve
+        const btnLogin = document.getElementById('btn-login-ms');
+        if(btnLogin) btnLogin.style.display = 'block';
     }
 });
 
-// Función para manejar el Login manual (conecta esto a tu botón de Login)
+// Función auxiliar para cambiar la UI
+function mostrarInterfazLogueado() {
+    const btnLogin = document.getElementById('btn-login-ms');
+    if(btnLogin) btnLogin.style.display = 'none';
+    
+    const dashboard = document.getElementById('dashboard-container');
+    if(dashboard) {
+        dashboard.style.display = 'block';
+        dashboard.classList.remove('dashboard-hidden');
+    }
+}
+
+// --- FUNCIÓN DE LOGIN (ESTRATEGIA REDIRECT - ROBUSTA) ---
 async function signIn() {
     try {
-        // En lugar de loginPopup, usamos loginRedirect
+        // Usamos loginRedirect en lugar de loginPopup.
+        // Esto navegará fuera de tu página hacia Microsoft.
         await myMSALObj.loginRedirect(loginRequest);
-        // La página se recargará, así que el código de abajo no se ejecuta inmediatamente
     } catch (error) {
-        console.error("Error en login:", error);
+        console.error("Error iniciando redirección:", error);
+        alert("No se pudo iniciar el login: " + error.message);
     }
 }
 
