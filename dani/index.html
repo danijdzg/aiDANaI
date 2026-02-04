@@ -1052,14 +1052,37 @@ const MSAL_CONFIG = {
         }
         async loadFile(fileName) {
             const token = await this.getToken();
+            
+            // ESTRATEGIA A: Acceso directo (Más rápido y fiable si está en la raíz)
+            // Intentamos acceder directamente a: /me/drive/root:/aidanai.xlsx
+            try {
+                const directUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}`;
+                const directRes = await fetch(directUrl, { headers: { Authorization: `Bearer ${token}` } });
+                
+                if (directRes.ok) {
+                    const fileItem = await directRes.json();
+                    this.fileId = fileItem.id;
+                    this.currentFileETag = fileItem.eTag;
+                    console.log("📄 Archivo localizado directamente en raíz.");
+                    
+                    const contentRes = await fetch(fileItem['@microsoft.graph.downloadUrl']);
+                    return await contentRes.arrayBuffer();
+                }
+            } catch (e) {
+                console.warn("Acceso directo falló, intentando búsqueda...");
+            }
+
+            // ESTRATEGIA B: Búsqueda (Fallback por si el archivo está en una subcarpeta)
             const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${fileName}')`;
             const searchRes = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
             const searchData = await searchRes.json();
-            
-            // SI NO ENCUENTRA EL ARCHIVO, LANZAMOS UN ERROR CONTROLADO
-            if (!searchData.value || searchData.value.length === 0) throw new Error("FILE_NOT_FOUND");
-            
-            // Filtramos para asegurar que es el archivo exacto y no una copia
+
+            if (!searchData.value || searchData.value.length === 0) {
+                // Si fallan las dos estrategias, entonces sí que no existe
+                throw new Error("FILE_NOT_FOUND");
+            }
+
+            // Tomamos el primer resultado exacto
             const fileItem = searchData.value.find(f => f.name === fileName) || searchData.value[0];
             this.fileId = fileItem.id;
             this.currentFileETag = fileItem.eTag; 
