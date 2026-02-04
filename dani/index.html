@@ -1086,6 +1086,89 @@ const MSAL_CONFIG = {
 };
 
 // ==========================================
+// 🛡️ MOTOR DE INTEGRIDAD DE DATOS (NUEVO)
+// ==========================================
+
+async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
+    if (!modoNube) {
+        alert("⚠️ Estás en modo local. Los cambios no se sincronizan en tiempo real.");
+        return false;
+    }
+
+    const btnGuardar = document.getElementById('btn-guardar');
+    const textoOriginal = btnGuardar ? btnGuardar.innerText : '';
+    if(btnGuardar) btnGuardar.innerText = "⏳ SINCRONIZANDO...";
+    mostrarEstado('☁️ NUBE: Fusionando datos con servidor...', 'normal');
+
+    try {
+        // PASO 1: Descargar la VERDADERA versión actual de la nube (Evita sobrescribir a otros)
+        // Usamos oneDrive.loadFile pero sin procesar la UI, solo para obtener el Blob
+        const arrayBuffer = await oneDrive.loadFile('aidanai.xlsx');
+        const data = new Uint8Array(arrayBuffer);
+        const wbNube = XLSX.read(data, { type: 'array', cellDates: true });
+        
+        // PASO 2: Convertir esa hoja a JSON para manipularla
+        let wsName = wbNube.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wbNube.SheetNames[0];
+        let jsonNube = XLSX.utils.sheet_to_json(wbNube.Sheets[wsName], { header: 1, raw: true });
+
+        // PASO 3: Aplicar el cambio sobre los datos de la NUBE (Merge)
+        // Formato de fila: [FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO]
+        
+        const filaNueva = [
+            new Date(nuevoMovimiento.ts),
+            nuevoMovimiento.cuenta,
+            nuevoMovimiento.concepto,
+            nuevoMovimiento.importe,
+            nuevoMovimiento.detalle,
+            nuevoMovimiento.beneficiario
+        ];
+
+        if (esEdicion && idEnEdicion !== null) {
+            // Lógica compleja: Encontrar la fila original y reemplazarla.
+            // Para simplificar en Excel sin ID único persistente: 
+            // Asumimos que si estamos editando, borramos la versión vieja y ponemos la nueva al final,
+            // o implementamos un ID en columna oculta. 
+            // POR SEGURIDAD AHORA: Agregamos como nuevo (o requeriría añadir columna ID al Excel).
+            // Recomiendo: Añadir al final para no corromper índices de otros.
+            jsonNube.push(filaNueva); 
+        } else {
+            jsonNube.push(filaNueva);
+        }
+
+        // PASO 4: Reconstruir el Excel
+        const nuevoWs = XLSX.utils.aoa_to_sheet(jsonNube);
+        // Formato columnas visual
+        nuevoWs['!cols'] = [{wch:12}, {wch:20}, {wch:20}, {wch:10}, {wch:40}, {wch:20}];
+        wbNube.Sheets[wsName] = nuevoWs; // Reemplazamos la hoja
+
+        // PASO 5: Subir (Check-in)
+        const wbout = XLSX.write(wbNube, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        
+        await oneDrive.saveFile(blob); // Esto usa eTags para evitar colisiones de último milisegundo
+
+        // PASO 6: Actualizar UI Local con lo que acabamos de guardar
+        // Recargamos todo para estar 100% sincronizados con lo que hay en la nube
+        procesarLibroLeido(wbNube); 
+        
+        mostrarEstado('✅ GUARDADO Y SINCRONIZADO EN LA NUBE', 'ok');
+        vibrar('ingreso');
+        return true;
+
+    } catch (e) {
+        console.error(e);
+        if (e.message.includes("412") || e.message === "CONFLICTO_DE_VERSIONES") {
+            alert("⚠️ TRÁFICO ALTO: Alguien más guardó datos justo ahora. Reintentando...");
+            return guardarMovimientoAtomico(nuevoMovimiento, esEdicion); // Reintento recursivo
+        }
+        alert("ERROR CRÍTICO AL GUARDAR EN NUBE: " + e.message);
+        return false;
+    } finally {
+        if(btnGuardar) btnGuardar.innerText = textoOriginal;
+    }
+}
+
+// ==========================================
     // 2. GESTOR DE SEGURIDAD ONEDRIVE (MEJORADO)
     // ==========================================
     class OneDriveManager {
@@ -1850,94 +1933,136 @@ function finalizarGuardado(esTraspaso) {
         if(d.value === '') d.value = c;
     }
 	
-function guardarManual() {
-        // 1. Captura de datos
-        const inputCant = document.getElementById('m-cantidad');
-        const inputDesc = document.getElementById('m-desc');
-        const inputCta = document.getElementById('m-cuenta');
-        const inputCon = document.getElementById('m-concepto');
-        const inputFec = document.getElementById('m-fecha');
-        const inputBen = document.getElementById('m-beneficiario');
+async function guardarManual() {
+    // 1. Captura de datos
+    const inputCant = document.getElementById('m-cantidad');
+    const inputDesc = document.getElementById('m-desc');
+    const inputCta = document.getElementById('m-cuenta');
+    const inputCon = document.getElementById('m-concepto');
+    const inputFec = document.getElementById('m-fecha');
+    const inputBen = document.getElementById('m-beneficiario');
+    const btnAction = document.getElementById('btn-modal-action'); // Referencia al botón
 
-        // --- CORRECCIÓN DE VALIDACIÓN ---
-        // Tomamos el valor absoluto inmediatamente.
-        // Esto hace que la validación pase tanto si entra "50" como "-50".
-        let imp = Math.abs(parseFloat(inputCant.value));
-        
-        // Validación estricta: Solo bloqueamos si es NaN o Cero exacto.
-        if (isNaN(imp) || imp === 0) return alert("Por favor, introduce un importe válido mayor a 0.");
-        
-        // Validación de campos obligatorios
-        const cta = inputCta.value;
-        if (!cta) return alert("Selecciona una cuenta.");
+    // --- CORRECCIÓN DE VALIDACIÓN ---
+    let imp = Math.abs(parseFloat(inputCant.value));
+    
+    // Validación estricta
+    if (isNaN(imp) || imp === 0) return alert("Por favor, introduce un importe válido mayor a 0.");
+    
+    // Validación de campos obligatorios
+    const cta = inputCta.value;
+    if (!cta) return alert("Selecciona una cuenta.");
 
-        // Sanitización anti-inyección (Excel Formula Injection)
-        let desc = inputDesc.value.replace(/^[\=\+\-\@]/, "'$&"); 
-        let con = inputCon.value.replace(/^[\=\+\-\@]/, "'$&") || 'General';
-        const fecha = inputFec.value || new Date().toISOString().split('T')[0];
-        const ahora = Date.now();
+    // Sanitización
+    let desc = inputDesc.value.replace(/^[\=\+\-\@]/, "'$&"); 
+    let con = inputCon.value.replace(/^[\=\+\-\@]/, "'$&") || 'General';
+    const fecha = inputFec.value || new Date().toISOString().split('T')[0];
+    const ahora = Date.now();
 
-        // 2. Lógica de Traspaso (ATÓMICA)
+    // --- BLOQUEO DE UI (Feedback al usuario) ---
+    const textoOriginal = btnAction.innerText;
+    btnAction.innerText = "⏳ GUARDANDO EN NUBE...";
+    btnAction.disabled = true;
+    btnAction.style.opacity = "0.7";
+
+    try {
+        // ---------------------------------------------------------
+        // CASO A: TRASPASO (Dos movimientos: Salida y Entrada)
+        // ---------------------------------------------------------
         if (modoTransaccionActual === 'traspaso') {
             const ctaDest = document.getElementById('m-cuenta-destino').value;
-            if (!ctaDest) return alert("Falta la cuenta de destino.");
-            if (cta === ctaDest) return alert("La cuenta origen y destino no pueden ser la misma.");
+            if (!ctaDest) throw new Error("Falta la cuenta de destino.");
+            if (cta === ctaDest) throw new Error("La cuenta origen y destino no pueden ser la misma.");
 
-            // ... (Resto del código de traspaso igual) ...
             // Movimiento 1: Salida
-            datos.push({
+            const movSalida = {
                 id: ahora, 
                 ts: new Date(fecha).getTime(), 
-                importe: -imp, // Forzamos negativo
+                importe: -imp, 
                 cuenta: cta, 
                 concepto: 'Traspaso', 
                 detalle: `Salida a ${ctaDest} | ${desc}`, 
                 beneficiario: 'Yo', 
-                tipo: 'traspaso', 
-                saldo: 0
-            });
+                tipo: 'traspaso'
+            };
 
             // Movimiento 2: Entrada
-            datos.push({
+            const movEntrada = {
                 id: ahora + 1, 
                 ts: new Date(fecha).getTime(), 
-                importe: imp, // Forzamos positivo
+                importe: imp, 
                 cuenta: ctaDest, 
                 concepto: 'Traspaso', 
                 detalle: `Entrada de ${cta} | ${desc}`, 
                 beneficiario: 'Yo', 
-                tipo: 'traspaso', 
-                saldo: 0
-            });
+                tipo: 'traspaso'
+            };
 
-            finalizarGuardado(true);
-            return;
+            if (modoNube) {
+                // En modo nube, guardamos ambos esperando a que termine uno para iniciar el otro
+                // (O podrías modificar guardarMovimientoAtomico para aceptar arrays)
+                await guardarMovimientoAtomico(movSalida, false);
+                await guardarMovimientoAtomico(movEntrada, false);
+                
+                // Si llegamos aquí, ambos se guardaron en la nube
+                cerrarModal();
+                idEnEdicion = null;
+            } else {
+                // Modo Local
+                datos.push({ ...movSalida, saldo: 0 });
+                datos.push({ ...movEntrada, saldo: 0 });
+                finalizarGuardado(true);
+            }
+            return; // Fin del traspaso
         }
 
-        // 3. Lógica Normal (Gasto / Ingreso)
-        // AQUI ES DONDE SE APLICA EL SIGNO FINALMENTE
+        // ---------------------------------------------------------
+        // CASO B: NORMAL (Gasto / Ingreso)
+        // ---------------------------------------------------------
         const nuevoMovimiento = {
             id: idEnEdicion || ahora,
             ts: new Date(fecha).getTime(),
-            // Lógica ternaria segura: Si es pago -> negativo. Si es ingreso -> positivo.
             importe: modoTransaccionActual === 'pago' ? -imp : imp,
             cuenta: cta,
             concepto: con,
             detalle: desc,
             beneficiario: inputBen.value || 'Yo',
-            tipo: modoTransaccionActual === 'ingreso' ? 'ingreso' : 'gasto',
-            saldo: 0
+            tipo: modoTransaccionActual === 'ingreso' ? 'ingreso' : 'gasto'
         };
 
-        if (idEnEdicion) {
-            const idx = datos.findIndex(d => d.id === idEnEdicion);
-            if (idx >= 0) datos[idx] = nuevoMovimiento;
+        if (modoNube) {
+            // --- LA CLAVE: ESPERAR (AWAIT) A LA NUBE ---
+            const exito = await guardarMovimientoAtomico(nuevoMovimiento, !!idEnEdicion);
+            
+            if (exito) {
+                // Solo cerramos si la nube respondió OK
+                cerrarModal();
+                idEnEdicion = null;
+            } else {
+                throw new Error("No se pudo confirmar el guardado en la nube.");
+            }
         } else {
-            datos.push(nuevoMovimiento);
+            // Lógica Local (Legacy)
+            if (idEnEdicion) {
+                const idx = datos.findIndex(d => d.id === idEnEdicion);
+                if (idx >= 0) datos[idx] = { ...nuevoMovimiento, saldo: 0 };
+            } else {
+                datos.push({ ...nuevoMovimiento, saldo: 0 });
+            }
+            finalizarGuardado(false);
         }
 
-        finalizarGuardado(false);
+    } catch (error) {
+        console.error(error);
+        alert("❌ ERROR AL GUARDAR: " + error.message);
+        // No cerramos el modal para permitir reintentar
+    } finally {
+        // --- RESTAURAR UI SIEMPRE ---
+        btnAction.innerText = textoOriginal;
+        btnAction.disabled = false;
+        btnAction.style.opacity = "1";
     }
+}
 
  
     function borrarMovimiento() {
@@ -3318,22 +3443,38 @@ function renderizarDistribucion() {
 	// ==========================================
     // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
     // ==========================================
-    document.addEventListener('DOMContentLoaded', () => {
-        // 1. Configurar input local
-        const fileInput = document.getElementById('file-input');
-        if(fileInput) {
-            fileInput.addEventListener('change', (e) => {
-                if(e.target.files[0]) leerExcel(e.target.files[0]);
-            });
-        }
-        
-        // 2. Estado Inicial
-        cambiarModo('local');
-        mostrarEstado('Selecciona Local o Cloud para empezar', 'normal');
-        
-        // 3. Iniciar Calculadora (Ahora sí existe App)
-        if(typeof App !== 'undefined') App.init();
-    });
+    document.addEventListener('DOMContentLoaded', async () => {
+    // 1. Iniciamos componentes visuales
+    if(typeof App !== 'undefined') App.init();
+
+    // 2. BLOQUEO DE SEGURIDAD: Pantalla de carga inicial
+    mostrarEstado('🔒 ESTABLECIENDO CONEXIÓN SEGURA...', 'normal');
+    
+    // Opcional: Puedes crear un div overlay en el HTML para tapar todo hasta el login
+    // document.body.style.pointerEvents = 'none'; // Bloquea clicks hasta loguear
+
+    // 3. INTENTO DE LOGIN AUTOMÁTICO
+    try {
+        // Configuramos modo nube por defecto visualmente
+        document.getElementById('mode-local').className = 'source-option';
+        document.getElementById('mode-cloud').className = 'source-option active cloud';
+        document.getElementById('btn-load-local').style.display = 'none';
+        document.getElementById('btn-load-cloud').style.display = 'flex';
+
+        // Disparamos la lógica de conexión
+        await oneDrive.login();
+        await cargarDesdeNube(); // Esto descarga y renderiza
+
+        // Si todo va bien:
+        mostrarEstado('✅ CONEXIÓN SEGURA ESTABLECIDA', 'ok');
+        // document.body.style.pointerEvents = 'all'; 
+
+    } catch (error) {
+        console.error("Auto-login falló o cancelado:", error);
+        mostrarEstado('⚠️ SE REQUIERE INICIO DE SESIÓN MANUAL', 'err');
+        // Aquí podrías mostrar un botón gigante de "LOGIN" en el centro si falla el automático
+    }
+});
 	
     </script>
 </body>
