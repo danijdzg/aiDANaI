@@ -1030,119 +1030,90 @@ const MSAL_CONFIG = {
     }
 };
 
-class OneDriveManager {
-    constructor() {
-        this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-        this.graphScopes = ["User.Read", "Files.ReadWrite.All"];
-        this.currentFileETag = null; // La clave para evitar sobreescrituras (Concurrency)
-        this.fileId = null;          // ID único del archivo en OneDrive
-    }
-
-    // 1. INICIAR SESIÓN
-    async login() {
-        try {
+// ==========================================
+    // 2. GESTOR DE SEGURIDAD ONEDRIVE (MEJORADO)
+    // ==========================================
+    class OneDriveManager {
+        constructor() {
+            this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+            this.graphScopes = ["User.Read", "Files.ReadWrite.All"];
+            this.currentFileETag = null; 
+            this.fileId = null;          
+        }
+        async login() {
             const response = await this.msalInstance.loginPopup({ scopes: this.graphScopes });
-            console.log("✅ Login exitoso:", response.account.username);
             return response.account;
-        } catch (error) {
-            console.error("❌ Error Login:", error);
-            throw error;
         }
-    }
-
-    // 2. OBTENER TOKEN SILENCIOSO (Para no pedir login a cada rato)
-    async getToken() {
-        const account = this.msalInstance.getAllAccounts()[0];
-        if (!account) throw new Error("No hay sesión activa. Refresca la página.");
-        const response = await this.msalInstance.acquireTokenSilent({ 
-            scopes: this.graphScopes, 
-            account: account 
-        });
-        return response.accessToken;
-    }
-
-    // 3. BUSCAR Y DESCARGAR ARCHIVO (Lectura Segura)
-    async loadFile(fileName) {
-        const token = await this.getToken();
-        
-        // A. Buscar ID del archivo
-        const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${fileName}')`;
-        const searchRes = await fetch(searchUrl, { 
-            headers: { Authorization: `Bearer ${token}` } 
-        });
-        const searchData = await searchRes.json();
-
-        if (!searchData.value || searchData.value.length === 0) {
-            throw new Error(`Archivo '${fileName}' no encontrado en OneDrive.`);
+        async getToken() {
+            const account = this.msalInstance.getAllAccounts()[0];
+            if (!account) throw new Error("No hay sesión activa.");
+            const response = await this.msalInstance.acquireTokenSilent({ scopes: this.graphScopes, account: account });
+            return response.accessToken;
         }
-
-        // Tomamos el primer resultado que coincida exactamente
-        const fileItem = searchData.value.find(f => f.name === fileName) || searchData.value[0];
+        async loadFile(fileName) {
+            const token = await this.getToken();
+            const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${fileName}')`;
+            const searchRes = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+            const searchData = await searchRes.json();
+            
+            // SI NO ENCUENTRA EL ARCHIVO, LANZAMOS UN ERROR CONTROLADO
+            if (!searchData.value || searchData.value.length === 0) throw new Error("FILE_NOT_FOUND");
+            
+            // Filtramos para asegurar que es el archivo exacto y no una copia
+            const fileItem = searchData.value.find(f => f.name === fileName) || searchData.value[0];
+            this.fileId = fileItem.id;
+            this.currentFileETag = fileItem.eTag; 
+            
+            const contentRes = await fetch(fileItem['@microsoft.graph.downloadUrl']);
+            return await contentRes.arrayBuffer();
+        }
         
-        this.fileId = fileItem.id;
-        this.currentFileETag = fileItem.eTag; // GUARDAMOS EL ETAG ACTUAL
-        console.log("📄 Archivo localizado. ID:", this.fileId, "ETag:", this.currentFileETag);
-
-        // B. Descargar contenido
-        const contentRes = await fetch(fileItem['@microsoft.graph.downloadUrl']);
-        const arrayBuffer = await contentRes.arrayBuffer();
-        
-        return arrayBuffer;
-    }
-
-    // 4. GUARDAR ARCHIVO (Escritura Atómica con Bloqueo)
-    async saveFile(contentBlob) {
-        if (!this.fileId) throw new Error("No se ha cargado el archivo previamente.");
-        
-        const token = await this.getToken();
-        const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/content`;
-
-        console.log("💾 Intentando guardar versión:", this.currentFileETag);
-
-        const response = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                // ESTA LÍNEA ES LA MAGIA: Si el ETag cambió en la nube, falla y no sobrescribe
-                'If-Match': this.currentFileETag 
-            },
-            body: contentBlob
-        });
-
-        if (response.status === 412) {
-            throw new Error("CONFLICTO_DE_VERSIONES"); 
+        // --- NUEVO: CREAR ARCHIVO SI NO EXISTE ---
+        async createFile(fileName, contentBlob) {
+            const token = await this.getToken();
+            // Usamos la ruta especial de Graph API para crear en la raíz
+            const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}:/content`;
+            
+            const response = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                },
+                body: contentBlob
+            });
+            
+            if (!response.ok) throw new Error("Error al crear archivo en OneDrive");
+            
+            const metaData = await response.json();
+            this.fileId = metaData.id;
+            this.currentFileETag = metaData.eTag;
+            return true;
         }
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error("Error al guardar en OneDrive: " + errorText);
+        async saveFile(contentBlob) {
+            if (!this.fileId) throw new Error("No se ha cargado el archivo previamente.");
+            const token = await this.getToken();
+            const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/content`;
+            
+            const response = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'If-Match': this.currentFileETag 
+                },
+                body: contentBlob
+            });
+            if (response.status === 412) throw new Error("CONFLICTO_DE_VERSIONES");
+            if (!response.ok) throw new Error("Error al guardar en OneDrive");
+            
+            const newMetaData = await response.json();
+            this.currentFileETag = newMetaData.eTag;
+            return true;
         }
-
-        // Actualizamos nuestro ETag local con la nueva versión confirmada
-        const newMetaData = await response.json();
-        this.currentFileETag = newMetaData.eTag;
-        console.log("✅ Guardado exitoso. Nuevo ETag:", this.currentFileETag);
-        
-        return true;
     }
-}
-
-// INSTANCIA GLOBAL (Para usarla en todo el código)
-const oneDrive = new OneDriveManager();
-	
-
-
-
-
-
-
-
-	
-	
- 
-
-
+    const oneDrive = new OneDriveManager();
 
     
 	function validarIntegridad(data) {
@@ -2854,48 +2825,61 @@ if(btnIgual) {
         }
     }
 	
-	// ==========================================
-// 🔌 CONEXIONES UI -> ONEDRIVE
 // ==========================================
-
-// Llama a esto desde tu botón HTML: onclick="iniciarCargaNube()"
-async function iniciarCargaNube() {
-    try {
-        mostrarEstado('Iniciando sesión...', 'normal');
-        
-        // 1. Login
-        await oneDrive.login();
-        
-        // 2. Cargar Datos
-        await cargarDesdeNube();
-
-        // 3. Actualizar UI
-        cambiarModo('cloud');
-
-    } catch (error) {
-        mostrarEstado('Error de conexión: ' + error.message, 'err');
+// 4. LÓGICA DE CARGA DE DATOS (Auto-Reparación)
+// ==========================================
+    async function iniciarCargaNube() {
+        try {
+            mostrarEstado('Iniciando sesión...', 'normal');
+            await oneDrive.login();
+            
+            try {
+                // Intentamos cargar el archivo existente
+                await cargarDesdeNube();
+                cambiarModo('cloud'); // Si existe, entramos en modo nube
+            } catch (loadError) {
+                // SI EL ARCHIVO NO EXISTE, PREGUNTAMOS SI CREARLO
+                if (loadError.message === "FILE_NOT_FOUND") {
+                    if(confirm("⚠️ El archivo 'aidanai.xlsx' no existe en tu OneDrive.\n\n¿Quieres que lo cree automáticamente ahora?")) {
+                        await crearArchivoInicial();
+                        cambiarModo('cloud');
+                    } else {
+                        mostrarEstado('Conexión cancelada (Falta archivo)', 'err');
+                    }
+                } else {
+                    // Si es otro error (contraseña, internet, etc), lo mostramos
+                    throw loadError;
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            mostrarEstado('Error: ' + error.message, 'err');
+        }
     }
-}
 
-async function cargarDesdeNube() {
-    mostrarEstado('Descargando aidanai.xlsx...', 'normal');
-    try {
-        // Usamos el gestor seguro para descargar
+    async function cargarDesdeNube() {
+        mostrarEstado('Buscando aidanai.xlsx...', 'normal');
         const arrayBuffer = await oneDrive.loadFile('aidanai.xlsx');
-        
-        // Leemos el Excel con SheetJS
         const data = new Uint8Array(arrayBuffer);
         const wb = XLSX.read(data, { type: 'array', cellDates: true });
-        
-        // Reutilizamos tu lógica de lectura existente
         procesarLibroLeido(wb); 
-        
         mostrarEstado('Conectado a la Nube', 'ok');
         modoNube = true;
-    } catch (error) {
-        throw error;
     }
-}
+
+    // NUEVA FUNCIÓN PARA CREAR EL ARCHIVO DESDE CERO
+    async function crearArchivoInicial() {
+        mostrarEstado('Creando archivo nuevo...', 'normal');
+        // Generamos un Excel limpio con la estructura correcta
+        const wb = generarLibroExcel(); 
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        
+        // Lo subimos a la nube
+        await oneDrive.createFile('aidanai.xlsx', blob);
+        mostrarEstado('✅ Archivo creado y conectado', 'ok');
+        modoNube = true;
+    }
 
 // Pequeño adaptador para que tu función leerExcel funcione con lo que baja de la nube
 function leerExcelDesdeBuffer(wb) {
