@@ -1743,22 +1743,53 @@ function finalizarGuardado(esTraspaso) {
         const mov = datos.find(d => d.id === id);
         if (!mov) return;
         idEnEdicion = id;
+        
+        // --- CORRECCIÓN VISUAL: Reseteamos la UI a "Modo Normal" ---
+        // Esto evita que si antes abriste un Traspaso, se quede el campo "Destino" visible
+        document.getElementById('bloque-destino').style.display = 'none';
+        document.getElementById('m-concepto').style.display = 'block';
+        document.getElementById('lbl-cuenta-origen').innerText = "CUENTA";
+        // Recuperamos la etiqueta de concepto para mostrarla también
+        const inputConcepto = document.getElementById('m-concepto');
+        if(inputConcepto.previousElementSibling) {
+            inputConcepto.previousElementSibling.style.display = 'block';
+        }
+        // ------------------------------------------------------------
+
         abrirModal(true); 
+        
         const campoImporteEdit = document.getElementById('m-cantidad');
         campoImporteEdit.setAttribute('readonly', true);
         campoImporteEdit.style.cursor = 'pointer';
         campoImporteEdit.onclick = () => abrirCalculadora('m-cantidad');
-        document.getElementById('m-cantidad').value = mov.importe;
-        document.getElementById('m-desc').value = mov.detalle;
-        const fechaObj = new Date(mov.ts);
-        const dia = ("0" + fechaObj.getDate()).slice(-2);
-        const mes = ("0" + (fechaObj.getMonth() + 1)).slice(-2);
-        const anio = fechaObj.getFullYear();
-        document.getElementById('m-fecha').value = `${anio}-${mes}-${dia}`;
+        
+        document.getElementById('m-cantidad').value = Math.abs(mov.importe);
         document.getElementById('m-cuenta').value = mov.cuenta;
         document.getElementById('m-concepto').value = mov.concepto;
+        document.getElementById('m-desc').value = mov.detalle;
+        
+        // Manejo seguro de fecha
+        try {
+            const fechaObj = new Date(mov.ts);
+            const dia = ("0" + fechaObj.getDate()).slice(-2);
+            const mes = ("0" + (fechaObj.getMonth() + 1)).slice(-2);
+            const anio = fechaObj.getFullYear();
+            document.getElementById('m-fecha').value = `${anio}-${mes}-${dia}`;
+        } catch(e) {
+            document.getElementById('m-fecha').valueAsDate = new Date();
+        }
+
         document.getElementById('m-beneficiario').value = mov.beneficiario;
-        document.querySelector('#modal-manual h3').innerText = "EDITAR MOVIMIENTO";
+        
+        // Importante: Al editar, forzamos que sea Pago o Ingreso (nunca Traspaso doble)
+        modoTransaccionActual = mov.tipo === 'ingreso' ? 'ingreso' : 'pago'; 
+        
+        // Ajustamos colores según el tipo
+        const titulo = document.querySelector('#modal-manual h3');
+        const color = modoTransaccionActual === 'ingreso' ? 'var(--c-success)' : 'var(--c-danger)';
+        titulo.style.color = color;
+        titulo.innerText = "EDITAR MOVIMIENTO";
+        
         document.querySelector('#modal-manual .btn-blue').innerText = "ACTUALIZAR CAMBIOS";
     }
 	
