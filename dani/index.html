@@ -2920,6 +2920,70 @@ function leerExcelDesdeBuffer(wb) {
     procesarDatos(jsonMovs);
 }
 
+// ==========================================
+// 5. FUNCIONES DE GUARDADO Y EXPORTACIÓN (FALTABAN ESTAS)
+// ==========================================
+
+async function guardarCambiosEnFichero() {
+    mostrarEstado('Sincronizando con la nube...', 'normal');
+    const btnGuardar = document.getElementById('btn-guardar');
+    if(btnGuardar) btnGuardar.innerText = "Subiendo...";
+
+    try {
+        const wb = generarLibroExcel();
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+
+        await oneDrive.saveFile(blob);
+        mostrarEstado('✅ Sincronizado correctamente', 'ok');
+        if(navigator.vibrate) navigator.vibrate(200);
+
+    } catch (error) {
+        if (error.message === "CONFLICTO_DE_VERSIONES") {
+            alert("⚠️ CONFLICTO: Alguien modificó el archivo mientras trabajabas. Se recargarán los datos.");
+            await cargarDesdeNube(); 
+        } else {
+            mostrarEstado('Error al guardar: ' + error.message, 'err');
+        }
+    } finally {
+        if(btnGuardar) btnGuardar.innerText = "GUARDAR";
+    }
+}
+
+function generarLibroExcel() {
+    const wb = XLSX.utils.book_new();
+    const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
+    const cuerpo = datos.map(m => [
+        new Date(m.ts).toISOString().split('T')[0], 
+        m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario
+    ]);
+    
+    const wsMovs = XLSX.utils.aoa_to_sheet([cabeceras, ...cuerpo]);
+    wsMovs['!cols'] = [{wch:12}, {wch:20}, {wch:20}, {wch:10}, {wch:40}, {wch:20}];
+    XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+    if (globalConfigData && globalConfigData.length > 0) {
+        const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
+        XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
+    } else {
+        const wsConfigDummy = XLSX.utils.aoa_to_sheet([["Cuenta", "Tipo", "EsInversion"]]);
+        XLSX.utils.book_append_sheet(wb, wsConfigDummy, "Config");
+    }
+    
+    return wb;
+}
+
+function exportarExcel() {
+    try {
+        const wb = generarLibroExcel();
+        XLSX.writeFile(wb, "aidanai_local.xlsx");
+        mostrarEstado('Archivo descargado (Local)', 'ok');
+    } catch (error) {
+        mostrarEstado('Error al exportar', 'err');
+    }
+}
+
+
 // Función inteligente para el botón GUARDAR
 function guardarUniversal() {
     if (modoNube) {
