@@ -698,8 +698,8 @@
             <input type="file" id="file-input" accept=".xlsx, .xls" style="display: none;">
 
             <button id="btn-load-local" class="btn-compact" onclick="document.getElementById('file-input').click()">
-                <span class="material-icons" style="font-size:14px">upload</span> CARGAR
-            </button>
+				<span class="material-icons" style="font-size:14px">upload</span> CARGAR
+			</button>
 
             <button id="btn-load-cloud" class="btn-compact btn-onedrive" style="display:none" onclick="iniciarCargaNube()">
                 <span class="material-icons" style="font-size:14px">cloud_sync</span> CONECTAR
@@ -1416,15 +1416,34 @@ async function cargarDesdeNube() {
 // 3. LÓGICA DE CARGA LOCAL (Desde input file)
 // Esta es la función correcta que define 'reader' internamente
 function leerExcel(blob) {
+    console.log("📖 Procesando archivo local..."); // Debug para ver si entra
+    mostrarEstado('Leyendo archivo local...', 'normal');
+    
     const reader = new FileReader();
+    
     reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array', cellDates: true });
-        procesarLibroLeido(wb); // Llamamos al procesador común
+        try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: 'array', cellDates: true });
+            
+            // Procesamos los datos igual que si vinieran de la nube
+            procesarLibroLeido(wb); 
+            
+            mostrarEstado('✅ Archivo Local Cargado', 'ok');
+            vibrar('ingreso'); // Feedback táctil
+        } catch (error) {
+            console.error(error);
+            mostrarEstado('❌ Error al leer el Excel', 'err');
+            alert("El archivo no parece ser un Excel válido o está corrupto.");
+        }
     };
-    reader.readAsArrayBuffer(blob); // ✅ Aquí sí funciona porque 'reader' existe
-}
+    
+    reader.onerror = () => {
+        mostrarEstado('❌ Error de lectura de archivo', 'err');
+    };
 
+    reader.readAsArrayBuffer(blob);
+}
 // 4. EL CEREBRO: PROCESA EL EXCEL (SEA LOCAL O NUBE)
 function procesarLibroLeido(wb) {
     // ---------------------------------------------------------
@@ -3443,39 +3462,68 @@ function renderizarDistribucion() {
 	// ==========================================
     // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
     // ==========================================
-    document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Iniciamos componentes visuales
+   document.addEventListener('DOMContentLoaded', async () => {
+    // ----------------------------------------------------
+    // 1. CONFIGURACIÓN DEL INPUT LOCAL (ESTO ES LO QUE FALTABA)
+    // ----------------------------------------------------
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+        // Eliminamos listeners anteriores para evitar duplicados (buena práctica)
+        const newFileInput = fileInput.cloneNode(true);
+        fileInput.parentNode.replaceChild(newFileInput, fileInput);
+        
+        newFileInput.addEventListener('change', (e) => {
+            console.log("📂 Evento de archivo local detectado");
+            if (e.target.files && e.target.files[0]) {
+                // Forzamos modo local visualmente
+                cambiarModo('local'); 
+                // Leemos el archivo
+                leerExcel(e.target.files[0]);
+                // Limpiamos el input para permitir cargar el mismo archivo dos veces si se necesita
+                e.target.value = ''; 
+            }
+        });
+    }
+
+    // ----------------------------------------------------
+    // 2. INICIALIZAR COMPONENTES (Calculadora, Audio, etc.)
+    // ----------------------------------------------------
     if(typeof App !== 'undefined') App.init();
 
-    // 2. BLOQUEO DE SEGURIDAD: Pantalla de carga inicial
-    mostrarEstado('🔒 ESTABLECIENDO CONEXIÓN SEGURA...', 'normal');
+    // ----------------------------------------------------
+    // 3. LÓGICA DE AUTO-LOGIN (NUBE)
+    // ----------------------------------------------------
+    // Solo intentamos conectar si NO estamos cargando un archivo local explícitamente
+    // (Aunque al inicio siempre está vacío)
     
-    // Opcional: Puedes crear un div overlay en el HTML para tapar todo hasta el login
-    // document.body.style.pointerEvents = 'none'; // Bloquea clicks hasta loguear
+    mostrarEstado('🔒 INICIANDO SISTEMA...', 'normal');
 
-    // 3. INTENTO DE LOGIN AUTOMÁTICO
     try {
-        // Configuramos modo nube por defecto visualmente
-        document.getElementById('mode-local').className = 'source-option';
-        document.getElementById('mode-cloud').className = 'source-option active cloud';
-        document.getElementById('btn-load-local').style.display = 'none';
-        document.getElementById('btn-load-cloud').style.display = 'flex';
-
-        // Disparamos la lógica de conexión
-        await oneDrive.login();
-        await cargarDesdeNube(); // Esto descarga y renderiza
-
-        // Si todo va bien:
-        mostrarEstado('✅ CONEXIÓN SEGURA ESTABLECIDA', 'ok');
-        // document.body.style.pointerEvents = 'all'; 
-
+        // Intentamos conexión silenciosa primero
+        const accounts = oneDrive.msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+            mostrarEstado('☁️ Conectando a la nube...', 'normal');
+            await oneDrive.login(); // Refresca token si es necesario
+            
+            // UI: Activar modo nube
+            document.getElementById('mode-local').className = 'source-option';
+            document.getElementById('mode-cloud').className = 'source-option active cloud';
+            document.getElementById('btn-load-local').style.display = 'none';
+            document.getElementById('btn-load-cloud').style.display = 'flex';
+            
+            await cargarDesdeNube();
+            mostrarEstado('✅ CONECTADO A ONEDRIVE', 'ok');
+        } else {
+            // Si no hay cuentas previas, nos quedamos en local esperando acción
+            cambiarModo('local'); 
+            mostrarEstado('Modo Local: Carga un archivo o Conecta', 'normal');
+        }
     } catch (error) {
-        console.error("Auto-login falló o cancelado:", error);
-        mostrarEstado('⚠️ SE REQUIERE INICIO DE SESIÓN MANUAL', 'err');
-        // Aquí podrías mostrar un botón gigante de "LOGIN" en el centro si falla el automático
+        console.warn("Auto-login no posible:", error);
+        cambiarModo('local');
+        mostrarEstado('Modo Local Listo', 'normal');
     }
 });
-	
     </script>
 </body>
 </html>
