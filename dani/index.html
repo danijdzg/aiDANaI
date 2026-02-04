@@ -2852,33 +2852,27 @@ if(btnIgual) {
 // 4. LÓGICA DE CARGA DE DATOS (Auto-Reparación)
 // ==========================================
     async function iniciarCargaNube() {
-        try {
-            mostrarEstado('Iniciando sesión...', 'normal');
-            await oneDrive.login();
-            
-            try {
-                // Intentamos cargar el archivo existente
-                await cargarDesdeNube();
-                cambiarModo('cloud'); // Si existe, entramos en modo nube
-            } catch (loadError) {
-                // SI EL ARCHIVO NO EXISTE, PREGUNTAMOS SI CREARLO
-                if (loadError.message === "FILE_NOT_FOUND") {
-                    if(confirm("⚠️ El archivo 'aidanai.xlsx' no existe en tu OneDrive.\n\n¿Quieres que lo cree automáticamente ahora?")) {
-                        await crearArchivoInicial();
-                        cambiarModo('cloud');
-                    } else {
-                        mostrarEstado('Conexión cancelada (Falta archivo)', 'err');
-                    }
-                } else {
-                    // Si es otro error (contraseña, internet, etc), lo mostramos
-                    throw loadError;
-                }
-            }
-        } catch (error) {
-            console.error(error);
-            mostrarEstado('Error: ' + error.message, 'err');
-        }
+    try {
+        mostrarEstado('Iniciando sesión...', 'normal');
+        
+        // 1. Login
+        await oneDrive.login();
+        
+        // 2. CORRECCIÓN CRÍTICA: Cambiamos a modo nube ANTES de cargar
+        // Esto limpia la pantalla y prepara la interfaz
+        cambiarModo('cloud'); 
+
+        // 3. AHORA cargamos los datos
+        // Como ya estamos en modo nube, los datos se quedarán en pantalla
+        await cargarDesdeNube();
+
+    } catch (error) {
+        console.error(error);
+        // Si falla, volvemos a local pero mostramos el error
+        cambiarModo('local');
+        mostrarEstado('Error de conexión: ' + error.message, 'err');
     }
+}
 
     async function cargarDesdeNube() {
         mostrarEstado('Buscando aidanai.xlsx...', 'normal');
