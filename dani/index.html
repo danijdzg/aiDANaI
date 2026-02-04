@@ -1426,34 +1426,32 @@ const MSAL_CONFIG = {
 
     function recibirInputCalculadora(valor) {
         if (campoDestinoCalculadora) {
-            // Convertimos a número para manipular el signo
-            let numero = parseFloat(valor.toString().replace(',', '.'));
+            // 1. Sanitización de entrada (Coma europea a Punto decimal)
+            let rawVal = valor.toString().replace(',', '.');
+            let numero = parseFloat(rawVal);
             
-            // LOGICA DE SIGNOS AUTOMÁTICA
-            if (modoTransaccionActual === 'pago') {
-                // Si es pago, forzamos negativo (aunque venga positivo)
-                numero = -Math.abs(numero);
-            } else if (modoTransaccionActual === 'ingreso') {
-                // Si es ingreso, forzamos positivo
-                numero = Math.abs(numero);
-            }
+            // --- CORRECCIÓN CRÍTICA ---
+            // Siempre enviamos el valor ABSOLUTO (Positivo) al campo visual.
+            // Eliminamos la lógica que forzaba el negativo aquí.
+            // El signo real se decide al guardar en 'guardarManual' basándose en el modo (pago/ingreso).
+            numero = Math.abs(numero);
             
-            // Devolvemos el valor formateado al campo
-            // Usamos toFixed(2) para asegurar formato moneda
+            // 2. Formateo a moneda estándar (2 decimales)
             campoDestinoCalculadora.value = numero.toFixed(2);
             
-            // Avisamos al sistema que hubo cambios
+            // 3. Disparar eventos para que el DOM detecte el cambio (Reactividad)
             campoDestinoCalculadora.dispatchEvent(new Event('input'));
             campoDestinoCalculadora.dispatchEvent(new Event('change'));
             
             vibrar('ingreso');
 
-            // Ghost Click Fix (Mantenemos tu corrección de seguridad)
+            // UX: Cierre automático con prevención de "Ghost Clicks"
             setTimeout(() => {
                 cerrarCalculadora();
-            }, 800);
+            }, 500);
         }
     }
+	
     const vibrar = (tipo) => {
         if (!("vibrate" in navigator)) return;
         switch(tipo) {
@@ -2059,29 +2057,36 @@ function finalizarGuardado(esTraspaso) {
         const inputFec = document.getElementById('m-fecha');
         const inputBen = document.getElementById('m-beneficiario');
 
-        let imp = parseFloat(inputCant.value);
+        // --- CORRECCIÓN DE VALIDACIÓN ---
+        // Tomamos el valor absoluto inmediatamente.
+        // Esto hace que la validación pase tanto si entra "50" como "-50".
+        let imp = Math.abs(parseFloat(inputCant.value));
+        
+        // Validación estricta: Solo bloqueamos si es NaN o Cero exacto.
+        if (isNaN(imp) || imp === 0) return alert("Por favor, introduce un importe válido mayor a 0.");
+        
+        // Validación de campos obligatorios
         const cta = inputCta.value;
-        // Sanitización básica: evitar fórmulas de Excel (=, +, -, @ al inicio)
+        if (!cta) return alert("Selecciona una cuenta.");
+
+        // Sanitización anti-inyección (Excel Formula Injection)
         let desc = inputDesc.value.replace(/^[\=\+\-\@]/, "'$&"); 
         let con = inputCon.value.replace(/^[\=\+\-\@]/, "'$&") || 'General';
         const fecha = inputFec.value || new Date().toISOString().split('T')[0];
-        
-        if (isNaN(imp) || imp <= 0) return alert("Por favor, introduce un importe válido.");
-        if (!cta) return alert("Selecciona una cuenta.");
-
         const ahora = Date.now();
 
-        // 2. Lógica de Traspaso (ATÓMICA - Sin setTimeout)
+        // 2. Lógica de Traspaso (ATÓMICA)
         if (modoTransaccionActual === 'traspaso') {
             const ctaDest = document.getElementById('m-cuenta-destino').value;
             if (!ctaDest) return alert("Falta la cuenta de destino.");
             if (cta === ctaDest) return alert("La cuenta origen y destino no pueden ser la misma.");
 
+            // ... (Resto del código de traspaso igual) ...
             // Movimiento 1: Salida
             datos.push({
                 id: ahora, 
                 ts: new Date(fecha).getTime(), 
-                importe: -Math.abs(imp),
+                importe: -imp, // Forzamos negativo
                 cuenta: cta, 
                 concepto: 'Traspaso', 
                 detalle: `Salida a ${ctaDest} | ${desc}`, 
@@ -2090,11 +2095,11 @@ function finalizarGuardado(esTraspaso) {
                 saldo: 0
             });
 
-            // Movimiento 2: Entrada (ID + 1ms para evitar colisión de claves)
+            // Movimiento 2: Entrada
             datos.push({
                 id: ahora + 1, 
                 ts: new Date(fecha).getTime(), 
-                importe: Math.abs(imp),
+                importe: imp, // Forzamos positivo
                 cuenta: ctaDest, 
                 concepto: 'Traspaso', 
                 detalle: `Entrada de ${cta} | ${desc}`, 
@@ -2106,6 +2111,31 @@ function finalizarGuardado(esTraspaso) {
             finalizarGuardado(true);
             return;
         }
+
+        // 3. Lógica Normal (Gasto / Ingreso)
+        // AQUI ES DONDE SE APLICA EL SIGNO FINALMENTE
+        const nuevoMovimiento = {
+            id: idEnEdicion || ahora,
+            ts: new Date(fecha).getTime(),
+            // Lógica ternaria segura: Si es pago -> negativo. Si es ingreso -> positivo.
+            importe: modoTransaccionActual === 'pago' ? -imp : imp,
+            cuenta: cta,
+            concepto: con,
+            detalle: desc,
+            beneficiario: inputBen.value || 'Yo',
+            tipo: modoTransaccionActual === 'ingreso' ? 'ingreso' : 'gasto',
+            saldo: 0
+        };
+
+        if (idEnEdicion) {
+            const idx = datos.findIndex(d => d.id === idEnEdicion);
+            if (idx >= 0) datos[idx] = nuevoMovimiento;
+        } else {
+            datos.push(nuevoMovimiento);
+        }
+
+        finalizarGuardado(false);
+    }
 
         // 3. Lógica Normal (Gasto / Ingreso)
         const nuevoMovimiento = {
