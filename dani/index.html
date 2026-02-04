@@ -1138,71 +1138,6 @@ const MSAL_CONFIG = {
     }
     const oneDrive = new OneDriveManager();
 
-    
-	function validarIntegridad(data) {
-    // 1. Validación de Tipos
-    if (isNaN(data.importe)) return false;
-    if (!Date.parse(data.fecha)) return false;
-
-    // 2. Sanitización (Prevenir inyección de fórmulas de Excel '=CMD|...')
-    // Si un usuario pone "=1+1" en descripción, Excel podría ejecutarlo.
-    const forbiddenChars = ['=', '+', '-', '@'];
-    
-    // Función simple de limpieza
-    const clean = (str) => {
-        if (typeof str !== 'string') return str;
-        // Si empieza por carácter peligroso, añadir un apóstrofe para forzar texto
-        if (forbiddenChars.includes(str.charAt(0))) {
-            return "'" + str; 
-        }
-        // Escapar tags HTML para evitar XSS al leer de vuelta
-        return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    };
-
-    data.descripcion = clean(data.descripcion);
-    data.beneficiario = clean(data.beneficiario);
-    
-    return true;
-}
-	
-	// En tu función de guardar (dentro del modal)
-async function procesarGuardado() {
-    const btnGuardar = document.getElementById('btn-guardar');
-    const spinner = document.getElementById('loading-spinner'); // Asegúrate de tener este elemento
-    
-    // UI: Bloqueo
-    btnGuardar.disabled = true;
-    btnGuardar.innerText = "Sincronizando con la nube...";
-    document.body.style.cursor = 'wait';
-
-    try {
-        // Recopilar datos del formulario
-        const datos = {
-            fecha: new Date().toISOString().split('T')[0], // YYYY-MM-DD
-            cuenta: document.getElementById('m-cuenta').value,
-            concepto: document.getElementById('m-concepto').value,
-            importe: document.getElementById('m-importe').value, // Aplicar signo según Ingreso/Gasto
-            descripcion: document.getElementById('m-desc').value,
-            beneficiario: "Dani" // O selector dinámico
-        };
-
-        await agregarMovimientoSeguro(datos);
-
-        // UI: Éxito
-        mostrarNotificacion("Guardado correctamente en OneDrive", "success");
-        cerrarModal();
-
-    } catch (error) {
-        // UI: Error
-        mostrarNotificacion("Error al sincronizar: " + error.message, "error");
-        vibrar('error');
-    } finally {
-        // UI: Restaurar
-        btnGuardar.disabled = false;
-        btnGuardar.innerText = "GUARDAR";
-        document.body.style.cursor = 'default';
-    }
-}
 	
     // === PUENTE ENTRE APLICACIONES ===
     let campoDestinoCalculadora = null;
@@ -1744,26 +1679,33 @@ function finalizarGuardado(esTraspaso) {
         if (!mov) return;
         idEnEdicion = id;
         
-        // --- CORRECCIÓN VISUAL: Reseteamos la UI a "Modo Normal" ---
-        // Esto evita que si antes abriste un Traspaso, se quede el campo "Destino" visible
-        document.getElementById('bloque-destino').style.display = 'none';
-        document.getElementById('m-concepto').style.display = 'block';
-        document.getElementById('lbl-cuenta-origen').innerText = "CUENTA";
-        // Recuperamos la etiqueta de concepto para mostrarla también
+        // --- CORRECCIÓN CLAVE: LIMPIEZA DE UI ---
+        // 1. Ocultar elementos de Traspaso
+        const bloqueDestino = document.getElementById('bloque-destino');
+        if(bloqueDestino) bloqueDestino.style.display = 'none';
+        
+        // 2. Restaurar elementos de Gasto/Ingreso normal
         const inputConcepto = document.getElementById('m-concepto');
-        if(inputConcepto.previousElementSibling) {
-            inputConcepto.previousElementSibling.style.display = 'block';
+        if(inputConcepto) {
+            inputConcepto.style.display = 'block';
+            if(inputConcepto.previousElementSibling) inputConcepto.previousElementSibling.style.display = 'block';
         }
-        // ------------------------------------------------------------
+        
+        // 3. Restaurar etiqueta original
+        const lblOrigen = document.getElementById('lbl-cuenta-origen');
+        if(lblOrigen) lblOrigen.innerText = "CUENTA";
+        // ----------------------------------------
 
         abrirModal(true); 
         
         const campoImporteEdit = document.getElementById('m-cantidad');
-        campoImporteEdit.setAttribute('readonly', true);
-        campoImporteEdit.style.cursor = 'pointer';
-        campoImporteEdit.onclick = () => abrirCalculadora('m-cantidad');
+        if(campoImporteEdit) {
+            campoImporteEdit.setAttribute('readonly', true);
+            campoImporteEdit.style.cursor = 'pointer';
+            campoImporteEdit.onclick = () => abrirCalculadora('m-cantidad');
+            campoImporteEdit.value = Math.abs(mov.importe);
+        }
         
-        document.getElementById('m-cantidad').value = Math.abs(mov.importe);
         document.getElementById('m-cuenta').value = mov.cuenta;
         document.getElementById('m-concepto').value = mov.concepto;
         document.getElementById('m-desc').value = mov.detalle;
@@ -1781,16 +1723,17 @@ function finalizarGuardado(esTraspaso) {
 
         document.getElementById('m-beneficiario').value = mov.beneficiario;
         
-        // Importante: Al editar, forzamos que sea Pago o Ingreso (nunca Traspaso doble)
+        // Forzamos el modo correcto (Nunca traspaso al editar)
         modoTransaccionActual = mov.tipo === 'ingreso' ? 'ingreso' : 'pago'; 
         
-        // Ajustamos colores según el tipo
         const titulo = document.querySelector('#modal-manual h3');
-        const color = modoTransaccionActual === 'ingreso' ? 'var(--c-success)' : 'var(--c-danger)';
-        titulo.style.color = color;
-        titulo.innerText = "EDITAR MOVIMIENTO";
+        const btn = document.querySelector('#btn-modal-action');
         
-        document.querySelector('#modal-manual .btn-blue').innerText = "ACTUALIZAR CAMBIOS";
+        if(titulo) {
+            titulo.innerText = "EDITAR MOVIMIENTO";
+            titulo.style.color = modoTransaccionActual === 'ingreso' ? 'var(--c-success)' : 'var(--c-danger)';
+        }
+        if(btn) btn.innerText = "ACTUALIZAR CAMBIOS";
     }
 	
    function abrirModal(esEdicion = false) { 
@@ -1839,89 +1782,84 @@ function finalizarGuardado(esTraspaso) {
         const d = document.getElementById('m-desc');
         if(d.value === '') d.value = c;
     }
+	
     function guardarManual() {
-        const impInput = parseFloat(document.getElementById('m-cantidad').value); // Valor absoluto visual
-        const desc = document.getElementById('m-desc').value;
-        const fecha = document.getElementById('m-fecha').value;
-        const cuentaOrigen = document.getElementById('m-cuenta').value;
-        const beneficiario = document.getElementById('m-beneficiario').value;
+        // 1. Captura de datos
+        const inputCant = document.getElementById('m-cantidad');
+        const inputDesc = document.getElementById('m-desc');
+        const inputCta = document.getElementById('m-cuenta');
+        const inputCon = document.getElementById('m-concepto');
+        const inputFec = document.getElementById('m-fecha');
+        const inputBen = document.getElementById('m-beneficiario');
+
+        let imp = parseFloat(inputCant.value);
+        const cta = inputCta.value;
+        // Sanitización básica: evitar fórmulas de Excel (=, +, -, @ al inicio)
+        let desc = inputDesc.value.replace(/^[\=\+\-\@]/, "'$&"); 
+        let con = inputCon.value.replace(/^[\=\+\-\@]/, "'$&") || 'General';
+        const fecha = inputFec.value || new Date().toISOString().split('T')[0];
         
-        // Validación básica común
-        if(!impInput || !fecha || !cuentaOrigen) { alert("Faltan datos obligatorios."); return; }
+        if (isNaN(imp) || imp <= 0) return alert("Por favor, introduce un importe válido.");
+        if (!cta) return alert("Selecciona una cuenta.");
 
-        // --- LÓGICA DE TRASPASO (DOBLE ASIENTO) ---
+        const ahora = Date.now();
+
+        // 2. Lógica de Traspaso (ATÓMICA - Sin setTimeout)
         if (modoTransaccionActual === 'traspaso') {
-            const cuentaDestino = document.getElementById('m-cuenta-destino').value;
-            
-            if (!cuentaDestino) { alert("Selecciona la cuenta de Destino."); return; }
-            if (cuentaOrigen === cuentaDestino) { alert("El origen y el destino no pueden ser la misma cuenta."); return; }
+            const ctaDest = document.getElementById('m-cuenta-destino').value;
+            if (!ctaDest) return alert("Falta la cuenta de destino.");
+            if (cta === ctaDest) return alert("La cuenta origen y destino no pueden ser la misma.");
 
-            // 1. ASIENTO DE SALIDA (GASTO)
+            // Movimiento 1: Salida
             datos.push({
-                id: Date.now(), // ID único
-                ts: new Date(fecha).getTime(),
-                importe: -Math.abs(impInput), // Forzamos negativo
-                cuenta: cuentaOrigen,
-                concepto: 'Traspaso', // Fijo
-                detalle: desc + ' (Salida)', // Añadimos sufijo para claridad
-                beneficiario: beneficiario || 'Yo mismo',
-                tipo: 'traspaso',
+                id: ahora, 
+                ts: new Date(fecha).getTime(), 
+                importe: -Math.abs(imp),
+                cuenta: cta, 
+                concepto: 'Traspaso', 
+                detalle: `Salida a ${ctaDest} | ${desc}`, 
+                beneficiario: 'Yo', 
+                tipo: 'traspaso', 
                 saldo: 0
             });
 
-            // 2. ASIENTO DE ENTRADA (INGRESO) - Pequeño delay para que el ID sea distinto
-            setTimeout(() => {
-                datos.push({
-                    id: Date.now() + 1, // ID distinto
-                    ts: new Date(fecha).getTime(),
-                    importe: Math.abs(impInput), // Forzamos positivo
-                    cuenta: cuentaDestino,
-                    concepto: 'Traspaso', // Fijo
-                    detalle: desc + ' (Entrada)',
-                    beneficiario: beneficiario || 'Yo mismo',
-                    tipo: 'traspaso',
-                    saldo: 0
-                });
-                
-                finalizarGuardado(true); // true = es traspaso
-            }, 50);
+            // Movimiento 2: Entrada (ID + 1ms para evitar colisión de claves)
+            datos.push({
+                id: ahora + 1, 
+                ts: new Date(fecha).getTime(), 
+                importe: Math.abs(imp),
+                cuenta: ctaDest, 
+                concepto: 'Traspaso', 
+                detalle: `Entrada de ${cta} | ${desc}`, 
+                beneficiario: 'Yo', 
+                tipo: 'traspaso', 
+                saldo: 0
+            });
 
-            return; // Detenemos aquí, la función 'finalizarGuardado' hará el resto
+            finalizarGuardado(true);
+            return;
         }
 
-        // --- LÓGICA NORMAL (PAGO / INGRESO) ---
-        const concepto = document.getElementById('m-concepto').value;
-        if(!concepto) { alert("Falta el concepto."); return; }
-        
-        // El signo ya viene decidido desde la calculadora/input
-        const importeFinal = modoTransaccionActual === 'pago' ? -Math.abs(impInput) : Math.abs(impInput);
+        // 3. Lógica Normal (Gasto / Ingreso)
+        const nuevoMovimiento = {
+            id: idEnEdicion || ahora,
+            ts: new Date(fecha).getTime(),
+            importe: modoTransaccionActual === 'pago' ? -Math.abs(imp) : Math.abs(imp),
+            cuenta: cta,
+            concepto: con,
+            detalle: desc,
+            beneficiario: inputBen.value || 'Yo',
+            tipo: modoTransaccionActual === 'ingreso' ? 'ingreso' : 'gasto',
+            saldo: 0
+        };
 
         if (idEnEdicion) {
-            // ... (Tu código de edición existente se mantiene igual aquí si lo usas) ...
-             const indice = datos.findIndex(d => d.id === idEnEdicion);
-             if (indice !== -1) {
-                datos[indice].ts = new Date(fecha).getTime();
-                datos[indice].importe = importeFinal;
-                datos[indice].cuenta = cuentaOrigen;
-                datos[indice].concepto = concepto;
-                datos[indice].detalle = desc;
-                datos[indice].beneficiario = beneficiario || '-';
-                datos[indice].tipo = importeFinal >= 0 ? 'ingreso' : 'gasto';
-             }
+            const idx = datos.findIndex(d => d.id === idEnEdicion);
+            if (idx >= 0) datos[idx] = nuevoMovimiento;
         } else {
-            datos.push({
-                id: Date.now(), 
-                ts: new Date(fecha).getTime(), 
-                importe: importeFinal, 
-                cuenta: cuentaOrigen, 
-                concepto: concepto, 
-                detalle: desc, 
-                beneficiario: beneficiario || '-', 
-                tipo: importeFinal >= 0 ? 'ingreso' : 'gasto', 
-                saldo: 0
-            });
+            datos.push(nuevoMovimiento);
         }
-        
+
         finalizarGuardado(false);
     }
 
@@ -2251,40 +2189,118 @@ function finalizarGuardado(esTraspaso) {
 function renderizarGraficoEvolucion(movimientos) {
     const ctx = document.getElementById('chartPatrimonio');
     const container = document.getElementById('box-grafico');
-    if (!movimientos || movimientos.length === 0) { container.classList.remove('visible'); return; }
-    container.classList.add('visible');
+
+    // Validación de seguridad
+    if (!movimientos || movimientos.length === 0) {
+        if (container) container.classList.remove('visible');
+        return;
+    }
+    if (container) container.classList.add('visible');
+
+    // 1. Preparar datos
     const movs = [...movimientos].sort((a, b) => a.ts - b.ts);
     const historia = {};
     let saldoAcumulado = 0;
+
     movs.forEach(m => {
         const fecha = new Date(m.ts);
+        // Agrupamos por mes para suavizar el gráfico (YYYY-MM)
+        // Si prefieres día a día, usa fecha.toISOString().split('T')[0]
         const llave = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
         saldoAcumulado += m.importe;
-        historia[llave] = saldoAcumulado; 
+        historia[llave] = saldoAcumulado;
     });
+
     const labels = Object.keys(historia);
     const dataPoints = Object.values(historia);
-    if (chartInstance) { chartInstance.destroy(); }
+
+    // 2. Destruir instancia anterior si existe
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+
+    // 3. Crear el Gráfico Profesional
     chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [{
-                label: 'Patrimonio', data: dataPoints, borderColor: '#00B8FF',
+                label: 'Patrimonio',
+                data: dataPoints,
+                borderColor: '#00B8FF', // Azul Cian Neón
+                borderWidth: 3,         // Línea un poco más gruesa
+                pointRadius: 0,         // OCULTAR PUNTOS (Estilo minimalista)
+                pointHoverRadius: 6,    // Mostrar punto al pasar el mouse
+                pointBackgroundColor: '#00B8FF',
+                pointBorderColor: '#FFFFFF',
+                pointBorderWidth: 2,
+                fill: true,             // Activar relleno
+                tension: 0.4,           // Curva suave
+                // --- GRADIENTE PROFESIONAL ---
                 backgroundColor: (context) => {
-                    const ctx = context.chart.ctx;
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-                    gradient.addColorStop(0, 'rgba(0, 184, 255, 0.4)');
-                    gradient.addColorStop(1, 'rgba(0, 184, 255, 0)');
+                    const chart = context.chart;
+                    const { ctx, chartArea } = chart;
+
+                    // Esperamos a que el gráfico tenga dimensiones
+                    if (!chartArea) return null;
+
+                    // Gradiente dinámico (Top -> Bottom del área real)
+                    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                    
+                    // Configuración de color: Azul a Transparente
+                    gradient.addColorStop(0, 'rgba(0, 184, 255, 0.5)'); // Arriba: 50% opacidad
+                    gradient.addColorStop(0.5, 'rgba(0, 184, 255, 0.1)'); // Medio: Muy sutil
+                    gradient.addColorStop(1, 'rgba(0, 184, 255, 0)');   // Abajo: Transparente
+                    
                     return gradient;
-                },
-                borderWidth: 2, pointBackgroundColor: '#000', pointBorderColor: '#00B8FF', fill: true, tension: 0.4
+                }
             }]
         },
         options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: (c) => new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(c.raw) } } },
-            scales: { x: { grid: { display: false }, ticks: { color: '#666', font: {size: 10} } }, y: { grid: { color: '#222' }, ticks: { color: '#666', font: {size: 10} } } }, interaction: { mode: 'nearest', axis: 'x', intersect: false }
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: { display: false }, // Sin leyenda
+                tooltip: {
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    titleColor: '#888',
+                    bodyFont: { size: 14, weight: 'bold' },
+                    padding: 10,
+                    displayColors: false,
+                    callbacks: {
+                        label: (c) => new Intl.NumberFormat('es-ES', { 
+                            style: 'currency', 
+                            currency: 'EUR' 
+                        }).format(c.raw)
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false }, // Sin líneas verticales
+                    ticks: { display: false } // (Opcional) Ocultar fechas abajo para limpieza total
+                },
+                y: {
+                    position: 'right', // Eje Y a la derecha (Estilo Trading)
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)', // Líneas horizontales muy sutiles
+                        borderDash: [5, 5] // Líneas punteadas
+                    },
+                    ticks: {
+                        color: '#666',
+                        font: { size: 10 },
+                        callback: function(value) {
+                            // Formato compacto (1k, 1M) si los números son grandes
+                            if(Math.abs(value) >= 1000) return (value/1000).toFixed(0) + 'k';
+                            return value;
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -2582,9 +2598,9 @@ function generarAnalisisIA(movimientos) {
 
         handleInput(k) {
             if(this.fresh) {
-                if(!"+-*/%".includes(k)) { this.expr=''; document.getElementById('secondary-display').classList.remove('visible'); }
-                this.fresh = false;
-            }
+				if(!"+-*/%".includes(k)) { this.expr=''; ... } // Si es número, borra. Si es operador, NO borra.
+				this.fresh = false;
+			}
             const last = this.expr.slice(-1);
             if (k === ',') k = '.';
             const isOp = "+-*/".includes(k);
@@ -3013,22 +3029,11 @@ function exportarExcel() {
         mostrarEstado('Error al exportar', 'err');
     }
 }
-
-
-// Función inteligente para el botón GUARDAR
-function guardarUniversal() {
-    if (modoNube) {
-        // Si estamos en modo Cloud, subimos a OneDrive
-        guardarCambiosEnFichero(); 
-    } else {
-        // Si estamos en modo Local, descargamos el archivo
-        exportarExcel();
-    }
-}
-	
-document.addEventListener('DOMContentLoaded', () => {
-        
-        // 2. Configurar el input de archivo local
+	// ==========================================
+    // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
+    // ==========================================
+    document.addEventListener('DOMContentLoaded', () => {
+        // 1. Configurar input local
         const fileInput = document.getElementById('file-input');
         if(fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -3036,18 +3041,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        // 3. CAMBIO CRÍTICO: Forzamos modo 'local' por defecto al inicio
-        // Esto evita que busque OneDrive automáticamente.
-        cambiarModo('local'); 
-
-        // 4. Mensaje de estado neutral
+        // 2. Estado Inicial
+        cambiarModo('local');
         mostrarEstado('Selecciona Local o Cloud para empezar', 'normal');
-
-        // NOTA: Hemos eliminado el setTimeout que llamaba a loginOneDrive() automáticamente.
         
-        // 5. Arrancar la calculadora (esto sí lo dejamos)
-        App.init();
-    });	
+        // 3. Iniciar Calculadora (Ahora sí existe App)
+        if(typeof App !== 'undefined') App.init();
+    });
 	
     </script>
 </body>
