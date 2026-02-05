@@ -554,8 +554,43 @@
         .chart-controls { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; background: #222; padding: 5px; border-radius: 12px; }
         .time-btn { background: transparent; border: none; color: #888; padding: 6px 14px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; }
         .time-btn.active { background: #444; color: white; }
-        .toast { position: fixed; top: 90px; left: 50%; transform: translate(-50%, -20px); background: #222; border: 1px solid #ff0033; color: white; padding: 12px 30px; border-radius: 40px; opacity: 0; transition: 0.3s; pointer-events: none; z-index: 200; }
-        .toast.show { opacity: 1; transform: translate(-50%, 0); }
+        /* --- NOTIFICACIONES TOAST MEJORADAS --- */
+.toast {
+    position: fixed;
+    bottom: 90px; /* Justo encima de la barra de navegación */
+    left: 50%;
+    transform: translateX(-50%) translateY(20px); /* Empieza un poco más abajo */
+    background: rgba(20, 20, 20, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Efecto rebote suave */
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0); /* Sube a su sitio */
+}
+
+/* Variantes de color según el tipo */
+.toast.success { border-color: var(--c-success); color: var(--c-success); }
+.toast.error { border-color: var(--c-danger); color: var(--c-danger); }
+.toast.info { border-color: var(--c-primary); color: var(--c-primary); }
+
+.toast-icon { font-size: 18px; }
 		/* =========================================
    NUEVOS ESTILOS: MENÚ FAB EN ABANICO
    ========================================= */
@@ -1343,6 +1378,44 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
         }
     }
 
+// Función global para lanzar notificaciones
+function lanzarToast(mensaje, tipo = 'info') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+
+    // Configurar icono según tipo
+    let icono = 'info';
+    if (tipo === 'success') icono = 'check_circle';
+    if (tipo === 'error') icono = 'warning';
+
+    // Inyectar contenido
+    toast.innerHTML = `<span class="material-icons toast-icon">${icono}</span><span>${mensaje}</span>`;
+    
+    // Resetear clases y añadir las nuevas
+    toast.className = 'toast show ' + tipo;
+    
+    // Vibración háptica si es posible
+    if (navigator.vibrate) navigator.vibrate(tipo === 'error' ? [50, 50, 50] : 30);
+
+    // Ocultar automáticamente
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// SOBRESCRIBIR la función mostrarEstado antigua para usar los nuevos Toasts
+window.mostrarEstado = function(txt, tipo) {
+    const mapTipo = (tipo === 'ok') ? 'success' : ((tipo === 'err') ? 'error' : 'info');
+    // Actualizamos también el badge de la cabecera por si acaso, pero lanzamos el toast
+    const el = document.getElementById('msg-estado');
+    if(el) {
+        el.innerText = txt;
+        el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
+    }
+    // Lanzar el Toast visual
+    lanzarToast(txt, mapTipo);
+};
+
 // --- NUEVAS VARIABLES PARA POLLING ---
 let pollingInterval = null;
 const TIEMPO_POLLING = 60000; // 60 segundos
@@ -1520,55 +1593,26 @@ function procesarDatos(filas) {
     // Saltamos la cabecera (i=1)
     for (let i = 1; i < filas.length; i++) {
         const row = filas[i];
-        // Validación básica: Si no hay cuenta ni importe, saltamos
         if (!row || (!row[1] && row[3] === undefined)) continue; 
 
-        // ----------------------------------------------------
-        // 🛠️ FIX FECHAS: Corrección definitiva del Bug "Fecha de Hoy"
-        // ----------------------------------------------------
+        // --- BLOQUE FECHAS (Mantener igual que tenías) ---
         let rawFecha = row[0];
         let ts;
-
-        if (rawFecha instanceof Date) {
-            // Caso 1: Excel nos da un objeto Date
-            ts = rawFecha.getTime();
-        } else if (typeof rawFecha === 'number') {
-            // Caso 2: Excel nos da un número serial (ej: 45319)
-            // Restamos 25569 días (diferencia entre 1970 y 1900) y multiplicamos por ms/día
-            ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
-        } else if (typeof rawFecha === 'string') {
-            // Caso 3: CSV o Texto (ej: "2024-01-01" o "01/01/2024")
-            // Intentamos parsear ISO estándar
+        if (rawFecha instanceof Date) ts = rawFecha.getTime();
+        else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
+        else if (typeof rawFecha === 'string') {
             let parsed = Date.parse(rawFecha);
-            if (!isNaN(parsed)) {
-                ts = parsed;
-            } else {
-                // Intento manual para formato DD/MM/YYYY español si falla el estándar
-                const partes = rawFecha.split('/');
-                if (partes.length === 3) {
-                    ts = new Date(`${partes[2]}-${partes[1]}-${partes[0]}`).getTime();
-                } else {
-                    ts = Date.now(); // Fallback solo si es irreconocible
-                }
-            }
-        } else {
-            ts = Date.now();
-        }
-        // ----------------------------------------------------
+            ts = !isNaN(parsed) ? parsed : Date.now();
+        } else ts = Date.now();
+        // -------------------------------------------------
 
-        // Limpieza de Importe (Manejo de comas decimales europeas)
+        // Limpieza de Importe
         let imp = 0;
-        if (typeof row[3] === 'number') {
-            imp = row[3];
-        } else {
-            let s = String(row[3]).replace(/[^\d.,-]/g, ''); // Solo números, puntos, comas y menos
-            if (s.includes(',') && s.indexOf('.') < s.indexOf(',')) { 
-                // Caso: 1.000,50
-                s = s.replace(/\./g, '').replace(',', '.'); 
-            } else if (s.includes(',')) { 
-                // Caso: 1000,50
-                s = s.replace(',', '.'); 
-            }
+        if (typeof row[3] === 'number') imp = row[3];
+        else {
+            let s = String(row[3]).replace(/[^\d.,-]/g, '');
+            if (s.includes(',') && s.indexOf('.') < s.indexOf(',')) s = s.replace(/\./g, '').replace(',', '.'); 
+            else if (s.includes(',')) s = s.replace(',', '.'); 
             imp = parseFloat(s) || 0;
         }
 
@@ -1581,19 +1625,24 @@ function procesarDatos(filas) {
         if(con) conceptos.add(con);
         if(ben) benefs.add(ben);
 
-        // Clasificación Automática
-        let tipo = 'gasto';
-        const textoAnalisis = (con + ' ' + desc).toUpperCase();
+        // --- CLASIFICACIÓN ESTRICTA (CORRECCIÓN) ---
+        let tipo = 'gasto'; // Por defecto
+        const textoFull = (con + ' ' + desc).toUpperCase();
         
-        // Detección mejorada de traspasos
-        if (textoAnalisis.includes('TRASPASO') || con.toUpperCase() === 'TRASPASO') {
+        // 1. Prioridad: ¿Dice explícitamente TRASPASO? -> AZUL
+        if (textoFull.includes('TRASPASO')) {
             tipo = 'traspaso';
-        } else if (imp >= 0) {
-            tipo = 'ingreso';
+        } 
+        // 2. Si no es traspaso, miramos el signo estricto
+        else if (imp >= 0) {
+            tipo = 'ingreso'; // VERDE
+        } else {
+            tipo = 'gasto';   // ROJO
         }
+        // -------------------------------------------
 
         temp.push({ 
-            id: i, // Usamos índice como ID temporal seguro
+            id: i, 
             ts: ts, 
             importe: imp, 
             cuenta: cta, 
@@ -1605,20 +1654,18 @@ function procesarDatos(filas) {
         });
     }
 
-    // Ordenar cronológicamente (Más reciente primero para visualización, o al revés para saldo)
+    // Ordenar y guardar
     temp.sort((a, b) => a.ts - b.ts || a.id - b.id);
 
-    // Recalcular Saldos Acumulados
     const ac = {};
     temp.forEach(m => {
         if (!ac[m.cuenta]) ac[m.cuenta] = 0;
         ac[m.cuenta] += m.importe;
-        m.saldo = ac[m.cuenta]; // Snapshot del saldo en ese momento
+        m.saldo = ac[m.cuenta]; 
     });
 
-    datos = temp; // Actualizamos la variable global
+    datos = temp;
     
-    // Refrescar toda la UI
     actualizarFiltrosUI(cuentas, conceptos, benefs);
     renderizar();
     actualizarDashboard();
@@ -1626,6 +1673,7 @@ function procesarDatos(filas) {
     revisarBotonExportar();
 }
 
+ 
 // ==========================================
 // 💾 FINALIZAR GUARDADO (Conexión con el nuevo sistema)
 // ==========================================
@@ -1894,7 +1942,11 @@ function finalizarGuardado(esTraspaso) {
         document.getElementById('m-beneficiario').value = mov.beneficiario;
         
         // Forzamos el modo correcto (Nunca traspaso al editar)
-        modoTransaccionActual = mov.tipo === 'ingreso' ? 'ingreso' : 'pago'; 
+        if (mov.tipo === 'traspaso') {
+    modoTransaccionActual = 'traspaso';
+} else {
+    modoTransaccionActual = mov.importe >= 0 ? 'ingreso' : 'pago';
+} 
         
         const titulo = document.querySelector('#modal-manual h3');
         const btn = document.querySelector('#btn-modal-action');
@@ -1956,92 +2008,203 @@ function finalizarGuardado(esTraspaso) {
 async function guardarManual() {
     const btnAction = document.getElementById('btn-modal-action');
     const inputCant = document.getElementById('m-cantidad');
-    const imp = Math.abs(parseFloat(inputCant.value));
+    let imp = parseFloat(inputCant.value);
     
     if (isNaN(imp) || imp === 0) return alert("Importe no válido");
+    
+    imp = Math.abs(imp); // Siempre positivo al inicio
+    
+    const cuentaOrigen = document.getElementById('m-cuenta').value;
+    const cuentaDestino = document.getElementById('m-cuenta-destino').value;
+    let concepto = document.getElementById('m-concepto').value || 'Varios';
+    let detalle = document.getElementById('m-desc').value;
+    const beneficiario = document.getElementById('m-beneficiario').value || 'Yo';
+    const fecha = new Date(document.getElementById('m-fecha').value).getTime();
 
-    const movimiento = {
-        ts: new Date(document.getElementById('m-fecha').value).getTime(),
-        importe: modoTransaccionActual === 'pago' ? -imp : imp,
-        cuenta: document.getElementById('m-cuenta').value,
-        concepto: document.getElementById('m-concepto').value || 'Varios',
-        detalle: document.getElementById('m-desc').value,
-        beneficiario: document.getElementById('m-beneficiario').value || 'Yo'
-    };
-
-    // UI Feedback
-    btnAction.innerText = "⏳ PROTEGIENDO DATOS...";
+    const textoOriginal = btnAction.innerText;
+    btnAction.innerText = "⏳ PROCESANDO...";
     btnAction.disabled = true;
 
     try {
-        if (modoNube) {
-            // LLAMADA ATÓMICA: No descargamos nada, solo enviamos la fila
-            await oneDrive.addRowToTable(movimiento);
-            
-            // Para mantener la UI local sincronizada, recargamos los datos del fondo
-            await cargarDesdeNube(); 
-            
-            cerrarModal();
-            mostrarEstado('✅ Guardado atómico exitoso', 'ok');
-        } else {
-            // Lógica local legacy
-            datos.push({...movimiento, id: Date.now(), saldo: 0});
-            finalizarGuardado(false);
+        const movimientosAGuardar = [];
+
+        if (modoTransaccionActual === 'pago') {
+            // PAGO (Rojo)
+            movimientosAGuardar.push({
+                ts: fecha,
+                importe: -imp,
+                cuenta: cuentaOrigen,
+                concepto: concepto,
+                detalle: detalle,
+                beneficiario: beneficiario,
+                tipo: 'gasto' // <--- FALTABA ESTO (IMPORTANTE)
+            });
+
+        } else if (modoTransaccionActual === 'ingreso') {
+            // INGRESO (Verde)
+            movimientosAGuardar.push({
+                ts: fecha,
+                importe: imp,
+                cuenta: cuentaOrigen,
+                concepto: concepto,
+                detalle: detalle,
+                beneficiario: beneficiario,
+                tipo: 'ingreso' // <--- FALTABA ESTO
+            });
+
+        } else if (modoTransaccionActual === 'traspaso') {
+            // TRASPASO (Azul)
+            if (!concepto.toUpperCase().includes('TRASPASO')) concepto = "TRASPASO - " + concepto;
+
+            if (cuentaDestino && cuentaDestino !== cuentaOrigen) {
+                // TRASPASO ENTRE CUENTAS (DOBLE MOVIMIENTO)
+                movimientosAGuardar.push({
+                    ts: fecha,
+                    importe: -imp,
+                    cuenta: cuentaOrigen,
+                    concepto: concepto,
+                    detalle: `>> A: ${cuentaDestino} | ${detalle}`,
+                    beneficiario: 'Mí mismo',
+                    tipo: 'traspaso' // <--- FALTABA ESTO
+                });
+
+                movimientosAGuardar.push({
+                    ts: fecha,
+                    importe: imp,
+                    cuenta: cuentaDestino,
+                    concepto: concepto,
+                    detalle: `<< DE: ${cuentaOrigen} | ${detalle}`,
+                    beneficiario: 'Mí mismo',
+                    tipo: 'traspaso' // <--- FALTABA ESTO
+                });
+
+            } else {
+                // TRASPASO SIMPLE
+                movimientosAGuardar.push({
+                    ts: fecha,
+                    importe: -imp,
+                    cuenta: cuentaOrigen,
+                    concepto: concepto,
+                    detalle: detalle,
+                    beneficiario: beneficiario,
+                    tipo: 'traspaso' // <--- FALTABA ESTO
+                });
+            }
         }
+
+        // GUARDADO
+        for (const mov of movimientosAGuardar) {
+            if (idEnEdicion && movimientosAGuardar.length === 1) {
+                const indice = datos.findIndex(d => d.id === idEnEdicion);
+                if (indice !== -1) {
+                    datos[indice] = { ...mov, id: idEnEdicion, saldo: 0 };
+                    if (modoNube) await guardarCambiosEnFichero(true);
+                }
+            } else {
+                if (modoNube) {
+                    await oneDrive.addRowToTable(mov);
+                } else {
+                    datos.push({ ...mov, id: Date.now() + Math.random(), saldo: 0 });
+                }
+            }
+        }
+
+        if(modoNube) await cargarDesdeNube();
+        else finalizarGuardado(modoTransaccionActual === 'traspaso');
+        
+        cerrarModal();
         vibrar('ingreso');
+
     } catch (e) {
         console.error(e);
-        alert("CRÍTICO: " + e.message);
+        alert("ERROR: " + e.message);
     } finally {
-        btnAction.innerText = "GUARDAR";
+        btnAction.innerText = textoOriginal;
         btnAction.disabled = false;
+        idEnEdicion = null;
     }
 }
 
  
-    function borrarMovimiento() {
-        if (!idEnEdicion) return;
-        if(!confirm("⚠️ ¿Estás SEGURO de eliminar este movimiento?\n\nEsta acción actualizará tu Excel y no se puede deshacer.")) return;
-        const indice = datos.findIndex(d => d.id === idEnEdicion);
-        if (indice !== -1) {
-            datos.splice(indice, 1); 
-            datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
-            const ac = {};
-            datos.forEach(m => {
-                if(!ac[m.cuenta]) ac[m.cuenta] = 0;
-                ac[m.cuenta] += m.importe;
-                m.saldo = ac[m.cuenta];
-            });
-            renderizar();
-            actualizarDashboard();
-            actualizarPatrimonio();
-            cerrarModal();
-            idEnEdicion = null;
-            mostrarEstado('🗑️ Registro eliminado.', 'ok');
-			vibrar('borrar');
-            if (modoNube) { guardarCambiosEnFichero(true); } 
-            else {
-                mostrarEstado('Eliminado. Recuerda exportar el Excel.', 'normal');
+    async function borrarMovimiento() {
+    if (!idEnEdicion) return;
+    if (!confirm("⚠️ ¿Estás SEGURO de eliminar este movimiento?\n\nEsta acción actualizará tu Excel y no se puede deshacer.")) return;
+    
+    const indice = datos.findIndex(d => d.id === idEnEdicion);
+    if (indice !== -1) {
+        // 1. Borrar del array local
+        datos.splice(indice, 1); 
+        
+        // 2. Feedback visual inmediato
+        cerrarModal();
+        mostrarEstado('🗑️ Eliminando...', 'normal');
+        
+        try {
+            if (modoNube) { 
+                // 3a. Modo Nube: Sobrescribir el archivo sin la fila borrada
+                await guardarCambiosEnFichero(true); 
+                mostrarEstado('🗑️ Registro eliminado de la nube.', 'ok');
+            } else {
+                // 3b. Modo Local: Recalcular y actualizar UI
+                // Reordenar y recalcular saldos
+                datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
+                const ac = {};
+                datos.forEach(m => {
+                    if(!ac[m.cuenta]) ac[m.cuenta] = 0;
+                    ac[m.cuenta] += m.importe;
+                    m.saldo = ac[m.cuenta];
+                });
+                
+                renderizar();
+                actualizarDashboard();
+                actualizarPatrimonio();
+                
+                mostrarEstado('Eliminado. Recuerda EXPORTAR el Excel.', 'normal');
                 const btnExport = document.getElementById('btn-export-excel');
-                btnExport.style.display = 'flex';
-                btnExport.classList.add('btn-glow');
+                if(btnExport) {
+                    btnExport.style.display = 'flex';
+                    btnExport.classList.add('btn-glow');
+                }
             }
+            vibrar('borrar');
+            idEnEdicion = null;
+            
+        } catch (e) {
+            alert("Error al eliminar: " + e.message);
+            // Si falla, recargar datos para evitar inconsistencia visual
+            if(modoNube) cargarDesdeNube();
         }
     }
+}
 	
 	function clonarMovimiento() {
-		vibrar('clonar');
-        mostrarEstado('📋 Datos clonados. Revisa y pulsa GUARDAR.', 'normal');
-        idEnEdicion = null; 
-        document.getElementById('m-fecha').valueAsDate = new Date();
-        document.querySelector('#modal-manual h3').innerText = "NUEVO (COPIA)";
-        document.getElementById('btn-modal-action').innerText = "GUARDAR COPIA";
-        document.getElementById('extra-actions').style.display = 'none';
-        const inputCant = document.getElementById('m-cantidad');
-        inputCant.style.background = '#333';
-        setTimeout(() => inputCant.style.background = '', 300);
-        inputCant.focus(); 
-    }
+    vibrar('clonar');
+    
+    // 1. Desvincular del ID original (CRÍTICO)
+    idEnEdicion = null; 
+    
+    // 2. Actualizar UI del Modal
+    const titulo = document.querySelector('#modal-manual h3');
+    if(titulo) titulo.innerText = "NUEVO (COPIA)";
+    
+    const btn = document.getElementById('btn-modal-action');
+    if(btn) btn.innerText = "GUARDAR COPIA";
+    
+    // 3. Ocultar botones de borrar/clonar (ya no estamos editando)
+    const extraActions = document.getElementById('extra-actions');
+    if(extraActions) extraActions.style.display = 'none';
+    
+    // 4. Establecer fecha a HOY (opcional, pero recomendado al clonar)
+    document.getElementById('m-fecha').valueAsDate = new Date();
+    
+    // 5. Efecto visual para indicar que ahora es un campo editable nuevo
+    const inputCant = document.getElementById('m-cantidad');
+    inputCant.style.transition = 'background 0.3s';
+    inputCant.style.background = '#333';
+    setTimeout(() => inputCant.style.background = '', 300);
+    
+    mostrarEstado('📋 Datos copiados. Ajusta y pulsa GUARDAR.', 'normal');
+}
 
     function getFechasDashboard() {
         const periodo = document.getElementById('dash-period').value;
@@ -2391,52 +2554,40 @@ function renderizarGraficoEvolucion(movimientos) {
                 }
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
+        // Dentro de renderizarGraficoEvolucion...
+options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+        legend: { display: false },
+        tooltip: { /* ... tu config actual ... */ }
+    },
+    scales: {
+        x: {
+            display: false, // Oculta TODO el eje X (etiquetas y líneas) para limpieza total
+            grid: {
+                display: false, // Asegura que no haya líneas verticales
+                drawBorder: false
+            }
+        },
+        y: {
+            position: 'right',
+            grid: {
+                display: false, // <--- ESTO ELIMINA LAS LÍNEAS HORIZONTALES
+                drawBorder: false // Elimina la línea del borde del eje
             },
-            plugins: {
-                legend: { display: false }, // Sin leyenda
-                tooltip: {
-                    backgroundColor: 'rgba(0,0,0,0.8)',
-                    titleColor: '#888',
-                    bodyFont: { size: 14, weight: 'bold' },
-                    padding: 10,
-                    displayColors: false,
-                    callbacks: {
-                        label: (c) => new Intl.NumberFormat('es-ES', { 
-                            style: 'currency', 
-                            currency: 'EUR' 
-                        }).format(c.raw)
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false }, // Sin líneas verticales
-                    ticks: { display: false } // (Opcional) Ocultar fechas abajo para limpieza total
-                },
-                y: {
-                    position: 'right', // Eje Y a la derecha (Estilo Trading)
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)', // Líneas horizontales muy sutiles
-                        borderDash: [5, 5] // Líneas punteadas
-                    },
-                    ticks: {
-                        color: '#666',
-                        font: { size: 10 },
-                        callback: function(value) {
-                            // Formato compacto (1k, 1M) si los números son grandes
-                            if(Math.abs(value) >= 1000) return (value/1000).toFixed(0) + 'k';
-                            return value;
-                        }
-                    }
+            ticks: {
+                color: '#666',
+                font: { size: 10 },
+                callback: function(value) {
+                    if(Math.abs(value) >= 1000) return (value/1000).toFixed(0) + 'k';
+                    return value;
                 }
             }
         }
+    }
+}
     });
 }
 
