@@ -2271,19 +2271,27 @@ async function guardarManual() {
 
     function actualizarDashboard() {
         if(!datos || datos.length === 0) return;
+        
+        // 1. Obtener datos según filtros visuales (para las gráficas y KPIs de arriba)
         const rango = getFechasDashboard();
         let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
         let datosResumen = datosPropietario;
+        
         if (rango && rango.start) {
              datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
         }
+
+        // 2. Calcular KPIs visuales (Ingresos/Gastos del periodo seleccionado)
         let ing = 0, gas = 0;
         datosResumen.forEach(m => {
             if (m.tipo === 'ingreso') ing += m.importe;
             if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
         });
+
         let neto = ing - gas;
         let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
+
+        // Actualizar KPIs superiores
         animarValor('d-ing', ing);
         animarValor('d-gas', gas, '-', ''); 
         const elNeto = document.getElementById('d-net');
@@ -2292,13 +2300,41 @@ async function guardarManual() {
             elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
         }
         animarValor('d-aho', tasaAhorro, '', '%', 2);
+
+        // 3. --- CORRECCIÓN: CÁLCULO DE PATRIMONIO Y GASTO MEDIO REAL ---
+        // Calculamos saldos totales (Liquidez e Inversión) iterando TODO el historial del propietario
         let totalPatrimonio = 0, totalLiquidez = 0, totalInversion = 0;
+        
+        // Variables para calcular el Gasto Mensual Promedio Histórico
+        let gastoTotalHistorico = 0;
+        let primerGasto = new Date(); // Fecha muy futura
+        let ultimoGasto = new Date(0); // Fecha muy pasada
+        let hayGastos = false;
+
         datosPropietario.forEach(m => {
+            // A. Suma de Saldos
             totalPatrimonio += m.importe;
             const ctaKey = m.cuenta.trim().toUpperCase();
             const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[ctaKey]) ? mapaCuentas[ctaKey] : { tipo: 'OTROS', esInversion: false };
-            if(config.esInversion) { totalInversion += m.importe; } else { totalLiquidez += m.importe; }
+            
+            if(config.esInversion) { 
+                totalInversion += m.importe; 
+            } else { 
+                totalLiquidez += m.importe; 
+            }
+
+            // B. Detección de Gasto Histórico (Para hacer la media real)
+            if (m.tipo === 'gasto') {
+                gastoTotalHistorico += Math.abs(m.importe);
+                const fechaM = new Date(m.ts);
+                // Encontrar el rango de fechas donde ha habido gastos
+                if (fechaM < primerGasto) primerGasto = fechaM;
+                if (fechaM > ultimoGasto) ultimoGasto = fechaM;
+                hayGastos = true;
+            }
         });
+
+        // Actualizar UI de Patrimonio
         const elPatri = document.getElementById('d-patri-total');
         if(elPatri) {
             animarValor('d-patri-total', totalPatrimonio, '', ' €');
@@ -2306,14 +2342,38 @@ async function guardarManual() {
         }
         animarValor('d-patri-liq', totalLiquidez, '', ' €');
         animarValor('d-patri-inv', totalInversion, '', ' €');
-        const unDia = 1000 * 60 * 60 * 24;
-        let diasDelPeriodo = Math.round(Math.abs((rango.end - rango.start) / unDia)) + 1;
-        diasDelPeriodo = Math.max(1, diasDelPeriodo);
-        let gastoMensualProyectado = (gas / diasDelPeriodo) * 30.44;
-        let baseCalculo = (gastoMensualProyectado > 1) ? gastoMensualProyectado : 1;
-        let mesesCobertura = totalLiquidez / baseCalculo;
-        let objetivoFIRE = baseCalculo * 300; 
+
+        // 4. --- LÓGICA FINANCIERA CORREGIDA (COBERTURA Y LIBERTAD) ---
+        
+        // Calculamos el Gasto Mensual Real basándonos en la media diaria histórica
+        // Esto evita que el indicador salte locamente si cambias el filtro de fecha.
+        let gastoMensualReal = 0;
+        
+        if (hayGastos) {
+            // Diferencia en milisegundos entre el primer y último gasto registrado
+            const diffTime = Math.abs(ultimoGasto - primerGasto);
+            // Convertir a días (mínimo 1 para evitar división por cero)
+            const diasTotales = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            
+            // Si llevamos poco tiempo registrando (ej. < 30 días), el promedio puede ser engañoso.
+            // Pero matemáticamente es: (Total Gastado / Días Registrados) * 30.44 días/mes
+            gastoMensualReal = (gastoTotalHistorico / diasTotales) * 30.44;
+        }
+
+        // Protección contra gastos 0 o irreales para no romper la división
+        if (gastoMensualReal < 1) gastoMensualReal = 1; 
+
+        // A. CÁLCULO COBERTURA (Runway)
+        // Fórmula: Liquidez Total / Gasto Mensual Promedio
+        let mesesCobertura = totalLiquidez / gastoMensualReal;
+
+        // B. CÁLCULO LIBERTAD FINANCIERA (FIRE)
+        // Regla del 4%: Necesitas 25 veces tu gasto anual (o 300 veces tu gasto mensual)
+        // Objetivo = GastoMensual * 300
+        let objetivoFIRE = gastoMensualReal * 300; 
         let pctLibertad = (totalPatrimonio / objetivoFIRE) * 100;
+
+        // Visualización Cobertura
         const elCob = document.getElementById('d-cobertura');
         if(elCob) {
             if (totalLiquidez <= 0) {
@@ -2321,15 +2381,20 @@ async function guardarManual() {
                 elCob.style.color = "var(--c-danger)";
             } else {
                 animarValor('d-cobertura', mesesCobertura, '', ' Meses', 1);
+                // Semáforo de salud financiera
                 elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
             }
         }
+
+        // Visualización Libertad
         const elLib = document.getElementById('d-libertad');
         if(elLib) {
-            if (pctLibertad > 100) pctLibertad = 100;
+            if (pctLibertad > 100) pctLibertad = 100; // Tope visual al 100%
             if (pctLibertad < 0) pctLibertad = 0;
             animarValor('d-libertad', pctLibertad, '', '%', 2);
         }
+
+        // Renderizado de gráficos
         renderizarGraficoEvolucion(datosPropietario);
         renderizarDonutGastos(datosResumen);
         generarAnalisisIA(datos);
