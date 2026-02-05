@@ -931,13 +931,13 @@
                     <div>
                         <label class="input-label">TIPO (CATEGORÍA)</label>
                         <select id="new-cta-tipo" class="filter-input form-field">
-                            <option value="AUTOCUSTODIA">Autocustodia</option>
-							<option value="BANCO">Banco</option>
-                            <option value="BOLSA">Bolsa</option>
-							<option value="CRIPTOMONEDAS">Criptomonedas</option>
-                            <option value="CROWDFUNDING">Crowdfunding</option>
-                            <option value="PLANPENSIONES">PlanPensiones</option>
-							<option value="TARJETA">Tarjeta</option>
+                            <option value="AUTOCUSTODIA">AUTOCUSTODIA</option>
+							<option value="BANCO">BANCO</option>
+                            <option value="BOLSA">BOLSA</option>
+							<option value="CRIPTOMONEDAS">CRIPTOMONEDAS</option>
+                            <option value="CROWDFUNDING">CROWDFUNDING</option>
+                            <option value="PLANPENSIONES">PLANPENSIONES</option>
+							<option value="TARJETA">TARJETA</option>
                         </select>
                     </div>
                     <div style="text-align:center; padding-bottom:10px;">
@@ -1825,34 +1825,6 @@ function finalizarGuardado(esTraspaso) {
         revisarBotonExportar();
     }
 }
-
-    function toggleOwner() {
-        // 1. Cambiar estado
-        estadoPropietario = (estadoPropietario + 1) % 3; 
-        
-        // 2. Actualizar Botón Visual
-        const btn = document.getElementById('btn-owner');
-        btn.className = 'btn-owner';
-        if (estadoPropietario === 0) { btn.classList.add('owner-all'); btn.innerText = 'D&N'; } 
-        else if (estadoPropietario === 1) { btn.classList.add('owner-dani'); btn.innerText = 'Dani'; } 
-        else { btn.classList.add('owner-norma'); btn.innerText = 'Norma'; }
-        
-        // 3. Actualizar Datos Generales
-        renderizar();          
-        actualizarDashboard(); 
-        actualizarPatrimonio(); 
-        
-        // 4. --- MAGIA AQUÍ --- Actualización reactiva del gráfico "Espectacular"
-        // Si la tarjeta de análisis está abierta, redibujamos el Treemap al instante
-        const cardDist = document.querySelector('.analysis-card');
-        if (cardDist && cardDist.classList.contains('open')) {
-            // Pequeño delay para permitir que el motor de renderizado respire
-            setTimeout(() => requestAnimationFrame(renderizarDistribucion), 50);
-        }
-
-        const nombre = estadoPropietario === 0 ? 'Todos' : (estadoPropietario === 1 ? 'Dani' : 'Norma');
-        mostrarEstado('Visualizando datos de: ' + nombre, 'ok');
-    }
 
     function pasaFiltroPropietario(m) {
         if (estadoPropietario === 0) return true; 
@@ -3349,36 +3321,54 @@ function exportarExcel() {
         mostrarEstado('Error al exportar', 'err');
     }
 }
-// ==========================================
-// 🥧 MOTOR GRÁFICO: DISTRIBUCIÓN DE RIQUEZA
-// ==========================================
-
+/* =========================================
+   🔄 CAMBIO DE USUARIO (TOGGLE OWNER)
+   ========================================= */
 function toggleOwner() {
-    // 1. Cambiar estado
-    estadoPropietario = (estadoPropietario + 1) % 3; 
-    
-    // 2. Actualizar Botón Visual
+    // 1. Lógica de cambio (0: Todos, 1: Dani, 2: Norma)
+    estadoPropietario = (estadoPropietario + 1) % 3;
+
+    // 2. Persistencia (Guardar preferencia)
+    localStorage.setItem('aidanai_estado_propietario', estadoPropietario);
+
+    // 3. Actualizar Botón Visual
     const btn = document.getElementById('btn-owner');
-    btn.className = 'btn-owner';
-    if (estadoPropietario === 0) { btn.classList.add('owner-all'); btn.innerText = 'D&N'; } 
-    else if (estadoPropietario === 1) { btn.classList.add('owner-dani'); btn.innerText = 'Dani'; } 
-    else { btn.classList.add('owner-norma'); btn.innerText = 'Norma'; }
-    
-    // 3. Actualizar Datos Generales
-    renderizar();          
-    actualizarDashboard(); 
-    actualizarPatrimonio(); 
-    
-    // 4. --- FORZAR ACTUALIZACIÓN DEL GRÁFICO ---
-    // Si estamos en la pestaña de Análisis (tab-patri), redibujamos.
-    const tabAnalisis = document.getElementById('tab-patri');
-    // Verificamos si la pestaña está activa (tiene la clase active)
-    if (tabAnalisis && tabAnalisis.classList.contains('active')) {
-        setTimeout(() => renderizarDistribucion(), 50);
+    if (btn) {
+        btn.className = 'btn-owner'; // Resetear clases
+        if (estadoPropietario === 0) { 
+            btn.classList.add('owner-all'); 
+            btn.innerText = 'D&N'; 
+        } else if (estadoPropietario === 1) { 
+            btn.classList.add('owner-dani'); 
+            btn.innerText = 'Dani'; 
+        } else { 
+            btn.classList.add('owner-norma'); 
+            btn.innerText = 'Norma'; 
+        }
     }
 
+    // 4. Actualizar Vistas y Listados
+    renderizar();          // Lista de movimientos (Diario)
+    actualizarDashboard(); // Tarjetas de Inicio (Patrimonio, Gastos...)
+    actualizarPatrimonio(); // Lista de cuentas (Análisis)
+
+    // 5. Actualizar Gráficos Avanzados (CORRECCIÓN IMPORTANTE)
+    // Usamos un pequeño timeout para no bloquear la UI durante la transición
+    setTimeout(() => {
+        // Redibujar el Rayos X (Sunburst) con los datos del nuevo usuario
+        if (typeof renderizarSunburstPatrimonio === 'function') {
+            renderizarSunburstPatrimonio();
+        }
+        
+        // Redibujar el Radar de Salud con los datos del nuevo usuario
+        if (typeof renderizarRadarSalud === 'function') {
+            renderizarRadarSalud();
+        }
+    }, 50);
+
+    // 6. Feedback al usuario
     const nombre = estadoPropietario === 0 ? 'Todos' : (estadoPropietario === 1 ? 'Dani' : 'Norma');
-    mostrarEstado('Visualizando datos de: ' + nombre, 'ok');
+    mostrarEstado('Visualizando: ' + nombre, 'normal');
 }
 
 /* =========================================
@@ -3391,26 +3381,21 @@ function renderizarSunburstPatrimonio() {
     const container = document.getElementById('chartSunburst');
     if (!container || !datos || datos.length === 0) return;
 
-    // 1. Destruir instancia previa para liberar memoria
     if (echartInstance) { echartInstance.dispose(); }
     echartInstance = echarts.init(container);
 
-    // 2. Procesar Datos y Construir Jerarquía
     const saldos = {};
     const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
 
-    // Calcular saldos por cuenta
     datosFiltrados.forEach(m => {
         const cta = m.cuenta.trim().toUpperCase();
         saldos[cta] = (saldos[cta] || 0) + m.importe;
     });
 
-    let totalPatrimonio = 0;
+    let patrimonioNetoReal = 0;
+    let activosBrutos = 0;
     let totalLiquidez = 0;
     let totalInversion = 0;
-
-    // Estructura del Árbol de Datos
-    // Nivel 1: Raíz (Invisible) -> Nivel 2: Liq/Inv -> Nivel 3: Tipo -> Nivel 4: Cuenta
     const childrenLiquidez = [];
     const childrenInversion = [];
     const mapTiposLiq = {};
@@ -3418,147 +3403,64 @@ function renderizarSunburstPatrimonio() {
 
     Object.keys(saldos).forEach(cta => {
         const valor = saldos[cta];
-        if (valor < 1) return; // Filtramos saldos negativos o cero para el gráfico
+        
+        // Sumamos TODO al neto (incluyendo deudas)
+        patrimonioNetoReal += valor;
 
-        totalPatrimonio += valor;
+        // Para el gráfico visual, solo mostramos lo positivo
+        if (valor < 0.01) return; 
+
+        activosBrutos += valor;
         const config = (mapaCuentas && mapaCuentas[cta]) ? mapaCuentas[cta] : { tipo: 'OTROS', esInversion: false };
         const tipo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
-
-        const nodoCuenta = {
-            name: cta,
-            value: valor,
-            // Guardamos el valor formateado para el tooltip
-            formatted: new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(valor)
-        };
+        const nodo = { name: cta, value: Number(valor.toFixed(2)) };
 
         if (config.esInversion) {
             totalInversion += valor;
             if (!mapTiposInv[tipo]) mapTiposInv[tipo] = { name: tipo, children: [] };
-            mapTiposInv[tipo].children.push(nodoCuenta);
+            mapTiposInv[tipo].children.push(nodo);
         } else {
             totalLiquidez += valor;
             if (!mapTiposLiq[tipo]) mapTiposLiq[tipo] = { name: tipo, children: [] };
-            mapTiposLiq[tipo].children.push(nodoCuenta);
+            mapTiposLiq[tipo].children.push(nodo);
         }
     });
 
-    // Convertir mapas a arrays
     Object.values(mapTiposLiq).forEach(g => childrenLiquidez.push(g));
     Object.values(mapTiposInv).forEach(g => childrenInversion.push(g));
 
     const dataTree = [{
-        name: 'PATRIMONIO',
+        name: 'ACTIVOS',
         children: [
-            {
-                name: 'LIQUIDEZ',
-                children: childrenLiquidez,
-                itemStyle: { color: '#00B8FF' } // Azul Cyan
-            },
-            {
-                name: 'INVERSIÓN',
-                children: childrenInversion,
-                itemStyle: { color: '#BF5AF2' } // Violeta Neón
-            }
+            { name: 'LIQUIDEZ', children: childrenLiquidez, itemStyle: { color: '#00B8FF' } },
+            { name: 'INVERSIÓN', children: childrenInversion, itemStyle: { color: '#BF5AF2' } }
         ]
     }];
 
-    // 3. Actualizar KPIs al pie del gráfico
-    const ratioLiq = totalPatrimonio > 0 ? ((totalLiquidez / totalPatrimonio) * 100).toFixed(0) : 0;
-    const ratioInv = totalPatrimonio > 0 ? ((totalInversion / totalPatrimonio) * 100).toFixed(0) : 0;
-    
-    document.getElementById('sb-total-val').innerText = new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(totalPatrimonio) + '€';
+    // Actualización del Texto Central (Neto Real)
+    document.getElementById('sb-total-val').innerText = new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(patrimonioNetoReal) + '€';
+    document.getElementById('sb-total-val').style.color = patrimonioNetoReal >= 0 ? '#fff' : '#FF2E4D';
+
+    // KPIs
+    const ratioLiq = activosBrutos > 0 ? ((totalLiquidez / activosBrutos) * 100).toFixed(0) : 0;
+    const ratioInv = activosBrutos > 0 ? ((totalInversion / activosBrutos) * 100).toFixed(0) : 0;
     document.getElementById('kpi-ratio-liq').innerText = ratioLiq + '%';
     document.getElementById('kpi-ratio-inv').innerText = ratioInv + '%';
-    
-    // Color dinámico de los KPIs
-    document.getElementById('kpi-ratio-liq').style.color = ratioLiq < 20 ? '#FF2E4D' : '#00B8FF'; // Alerta si poca liquidez
-    document.getElementById('kpi-ratio-inv').style.color = ratioInv > 50 ? '#BF5AF2' : '#FFFFFF';
 
-    // 4. Configuración del Sunburst
     const option = {
         backgroundColor: 'transparent',
-        tooltip: {
-            backgroundColor: 'rgba(0,0,0,0.9)',
-            borderColor: '#333',
-            textStyle: { color: '#fff' },
-            formatter: function (params) {
-                const val = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(params.value);
-                const pct = ((params.value / totalPatrimonio) * 100).toFixed(1) + '%';
-                return `<div style="font-weight:bold; color:${params.color}">${params.name}</div>
-                        <div style="font-size:16px;">${val}</div>
-                        <div style="font-size:10px; color:#aaa;">${pct} del Total</div>`;
-            }
-        },
         series: {
             type: 'sunburst',
             data: dataTree,
-            radius: ['15%', '90%'], // Tamaño del donut
-            sort: undefined, // Mantener orden lógico
-            emphasis: {
-                focus: 'ancestor'
-            },
-            
-            // Niveles visuales
-            levels: [
-                {}, // Nivel 0 (Centro invisible o Patrimonio)
-                {
-                    // Nivel 1: Liquidez vs Inversión
-                    r0: '15%', r: '40%',
-                    itemStyle: { borderWidth: 2, borderColor: '#000' },
-                    label: { rotate: 'tangential', color: '#fff', fontWeight: 'bold' }
-                },
-                {
-                    // Nivel 2: Tipos (Bancos, Crypto...)
-                    r0: '40%', r: '70%',
-                    itemStyle: { borderWidth: 1, borderColor: '#000', opacity: 0.9 },
-                    label: { align: 'right', color: '#eee', fontSize: 10 }
-                },
-                {
-                    // Nivel 3: Cuentas específicas
-                    r0: '70%', r: '75%', // Anillo fino exterior
-                    itemStyle: { borderWidth: 1, borderColor: '#000', opacity: 0.7 },
-                    label: { position: 'outside', padding: 3, silent: false, color: '#888' }
-                }
-            ]
+            radius: ['15%', '90%'],
+            label: { rotate: 'tangential' },
+            itemStyle: { borderRadius: 4, borderColor: '#000', borderWidth: 2 }
         }
     };
-
     echartInstance.setOption(option);
-
-    // Redimensionar si cambia la ventana
-    window.addEventListener('resize', function() {
-        echartInstance.resize();
-    });
-    
-    // Interacción: Click en el centro para resetear o en sectores para filtrar visualmente
-    echartInstance.on('click', function(params) {
-        // Podríamos añadir lógica aquí para filtrar la tabla inferior si quisieras
-        vibrar('ingreso');
-    });
+    window.addEventListener('resize', () => echartInstance && echartInstance.resize());
 }
 
-function toggleOwner() {
-    estadoPropietario = (estadoPropietario + 1) % 3; 
-    
-    const btn = document.getElementById('btn-owner');
-    btn.className = 'btn-owner';
-    if (estadoPropietario === 0) { btn.classList.add('owner-all'); btn.innerText = 'D&N'; } 
-    else if (estadoPropietario === 1) { btn.classList.add('owner-dani'); btn.innerText = 'Dani'; } 
-    else { btn.classList.add('owner-norma'); btn.innerText = 'Norma'; }
-    
-    renderizar();          
-    actualizarDashboard(); 
-    actualizarPatrimonio(); 
-    
-    // Si estamos en la pestaña de análisis, redibujamos todo
-    const tabAnalisis = document.getElementById('tab-patri');
-    if (tabAnalisis && tabAnalisis.classList.contains('active')) {
-        setTimeout(() => renderizarSunburstPatrimonio(), 50);
-    }
-
-    const nombre = estadoPropietario === 0 ? 'Todos' : (estadoPropietario === 1 ? 'Dani' : 'Norma');
-    mostrarEstado('Visualizando datos de: ' + nombre, 'ok');
-}
 	// ==========================================
     // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
     // ==========================================
@@ -3627,7 +3529,7 @@ function toggleOwner() {
 });
 
 /* =========================================
-   🕸️ GRÁFICO RADAR DE SALUD FINANCIERA
+   GRAFICO RADAR DE SALUD (CORREGIDO)
    ========================================= */
 let radarInstance = null;
 
@@ -3635,112 +3537,144 @@ function renderizarRadarSalud() {
     const container = document.getElementById('chartRadar');
     if (!container || !datos || datos.length === 0) return;
 
+    // Filtramos por usuario activo (Dani/Norma/Todos)
+    const misMovimientos = datos.filter(m => pasaFiltroPropietario(m));
+    if (misMovimientos.length === 0) { if (radarInstance) radarInstance.clear(); return; }
+
     if (radarInstance) { radarInstance.dispose(); }
     radarInstance = echarts.init(container);
 
-    // 1. CÁLCULO DE MÉTRICAS (Lógica Fintech Simplificada)
-    
-    // A. Ahorro (Target: 20% o más)
-    const ingresos = datos.filter(m => m.tipo === 'ingreso').reduce((a,b)=>a+b.importe,0);
-    const gastos = datos.filter(m => m.tipo === 'gasto').reduce((a,b)=>a+Math.abs(b.importe),0);
-    const tasaAhorro = ingresos > 0 ? ((ingresos - gastos) / ingresos) * 100 : 0;
-    // Score: 0 si negativo, 100 si > 40%, interpolado entre medias
-    let scoreAhorro = Math.min(100, Math.max(0, (tasaAhorro / 40) * 100));
+    // 1. SEPARACIÓN DE FLUJOS VS STOCK (LA CLAVE DEL FIX)
+    // Para calcular INGRESOS y GASTOS medios, ignoramos los saldos iniciales
+    const movimientosFlujo = misMovimientos.filter(m => 
+        !m.concepto.toLowerCase().includes('inicial') && 
+        !m.detalle.toLowerCase().includes('existencia inicial')
+    );
 
-    // B. Cobertura/Seguridad (Target: 6 meses de gastos)
-    // Asumimos gasto mensual medio (simplificado: total gastos / 12, o ajusta según tus datos)
-    // Para ser precisos, tomamos el dato del dashboard si existe, sino estimamos
-    let gastoMensual = gastos / 12; // Estimación simple anual
-    if (gastoMensual < 1) gastoMensual = 1;
+    // 2. CÁLCULO TEMPORAL PRECISO
+    // Usamos todos los movimientos para definir el rango de fechas real de la cuenta
+    const timestamps = misMovimientos.map(m => m.ts);
+    const minTs = Math.min(...timestamps);
+    const maxTs = Math.max(...timestamps);
     
-    // Obtenemos liquidez real calculada en actualizarDashboard
-    const elLiq = document.getElementById('d-patri-liq');
-    let liquidez = elLiq ? parseFloat(elLiq.innerText.replace(/[^\d,-]/g, '').replace(',','.')) : 0;
+    // Cálculo exacto de meses (con decimales)
+    const diffTime = Math.abs(maxTs - minTs);
+    const diffDays = diffTime / (1000 * 60 * 60 * 24); 
     
-    const mesesRunway = liquidez / gastoMensual;
-    // Score: 0 si 0 meses, 100 si > 12 meses. Target ideal 6 meses = 80 puntos
-    let scoreCobertura = Math.min(100, (mesesRunway / 12) * 100);
+    // Normalizamos a mínimo 1 mes para evitar divisiones por cero o proyecciones locas
+    // si acabas de empezar (ej: gastar 100€ en 1 día no significa 3000€/mes)
+    const mesesData = Math.max(1, diffDays / 30.44);
 
-    // C. Inversión (Target: 50% del patrimonio en inversión)
-    // Esto es subjetivo, depende de la edad, pero asumimos un perfil de crecimiento
-    const elInv = document.getElementById('d-patri-inv');
-    let inversion = elInv ? parseFloat(elInv.innerText.replace(/[^\d,-]/g, '').replace(',','.')) : 0;
-    let patrimonioTotal = liquidez + inversion;
-    let ratioInv = patrimonioTotal > 0 ? (inversion / patrimonioTotal) * 100 : 0;
-    // Score: Buscamos un equilibrio. 0% inv = bajo score. 100% inv = riesgo (bajo score).
-    // Idealmente entre 30% y 70%.
-    let scoreInversion = 0;
-    if (ratioInv <= 50) scoreInversion = (ratioInv / 50) * 100;
-    else scoreInversion = 100 - ((ratioInv - 50) * 2); // Penaliza si te pasas de exposición sin liquidez
-
-    // D. Estabilidad (Volatilidad de gastos)
-    // Si tienes muchos gastos pequeños vs pocos grandes. Por ahora, daremos un valor base alto
-    // para animar al usuario, o basarlo en si hay ingresos este mes.
-    let scoreEstabilidad = ingresos > gastos ? 90 : 40;
-
-    // SCORING TOTAL
-    const scoreTotal = Math.round((scoreAhorro + scoreCobertura + scoreInversion + scoreEstabilidad) / 4);
+    // 3. MEDIAS MENSUALES REALES (Sin saldos iniciales)
+    const totalGastos = movimientosFlujo.filter(m => m.tipo === 'gasto').reduce((a,b) => a + Math.abs(b.importe), 0);
+    const totalIngresos = movimientosFlujo.filter(m => m.tipo === 'ingreso').reduce((a,b) => a + b.importe, 0);
     
-    // Actualizar UI
+    const gastoMensual = totalGastos / mesesData;
+    const ingresoMensual = totalIngresos / mesesData;
+
+    // 4. PATRIMONIO ACTUAL (Aquí SÍ incluimos los saldos iniciales)
+    let liqActual = 0;
+    let invActual = 0;
+    const saldos = {};
+    
+    misMovimientos.forEach(m => {
+        const ctaKey = m.cuenta.trim().toUpperCase(); 
+        saldos[ctaKey] = (saldos[ctaKey] || 0) + m.importe;
+    });
+
+    Object.keys(saldos).forEach(ctaKey => {
+        const saldo = saldos[ctaKey];
+        const esInv = (mapaCuentas && mapaCuentas[ctaKey] && mapaCuentas[ctaKey].esInversion);
+        if (esInv) invActual += saldo;
+        else liqActual += saldo;
+    });
+    
+    const patrimonioTotal = liqActual + invActual;
+
+    // --- CÁLCULO DE PUNTUACIONES (SCORING) ---
+
+    // A. AHORRO (Objetivo: Ahorrar 30% de lo ganado)
+    // Si no hay ingresos de flujo, el ahorro es 0 (evita NaN)
+    let tasaAhorro = ingresoMensual > 0 ? ((ingresoMensual - gastoMensual) / ingresoMensual) * 100 : 0;
+    let scoreAhorro = Math.max(0, Math.min(100, (tasaAhorro / 30) * 100)); 
+
+    // B. COBERTURA (Runway - Objetivo: 6 meses de gastos)
+    // Usamos la Liquidez Real acumulada dividida por el Gasto Medio Real
+    let mesesRunway = (gastoMensual > 0 && liqActual > 0) ? liqActual / gastoMensual : 0;
+    let scoreCobertura = Math.max(0, Math.min(100, (mesesRunway / 6) * 100)); 
+
+    // C. LIBERTAD (Inversión - Objetivo: 60% del patrimonio invertido)
+    let ratioInv = (patrimonioTotal > 0 && invActual > 0) ? (invActual / patrimonioTotal) * 100 : 0;
+    let scoreLibertad = Math.max(0, Math.min(100, (ratioInv / 60) * 100));
+    
+    // Penalización: Si inviertes mucho pero te quedas sin caja (<3 meses), baja la nota
+    if (ratioInv > 70 && mesesRunway < 3) scoreLibertad -= 20;
+
+    // D. ESTABILIDAD (Equilibrio Ingresos vs Gastos)
+    let scoreEstabilidad = 0;
+    if (ingresoMensual > 0 && gastoMensual > 0) {
+        if (ingresoMensual >= gastoMensual) {
+            scoreEstabilidad = 100; // Vives dentro de tus posibilidades
+        } else {
+            // Penaliza proporcionalmente si gastas más de lo que ingresas
+            scoreEstabilidad = (ingresoMensual / gastoMensual) * 100;
+        }
+    }
+
+    const scoreTotal = Math.round((scoreAhorro + scoreCobertura + scoreLibertad + scoreEstabilidad) / 4);
+
+    // Visualización
     const elScore = document.getElementById('score-total');
     if(elScore) {
         elScore.innerText = scoreTotal;
-        elScore.style.color = scoreTotal > 70 ? 'var(--c-success)' : (scoreTotal > 40 ? 'var(--c-warning)' : 'var(--c-danger)');
+        let color = scoreTotal >= 75 ? '#39FF14' : (scoreTotal >= 50 ? '#FFD60A' : '#FF2E4D');
+        elScore.style.color = color;
+        elScore.style.textShadow = `0 0 15px ${color}66`;
     }
 
-    // 2. CONFIGURACIÓN ECHARTS
     const option = {
         backgroundColor: 'transparent',
         radar: {
             indicator: [
                 { name: 'AHORRO', max: 100 },
                 { name: 'COBERTURA', max: 100 },
-                { name: 'INVERSIÓN', max: 100 },
+                { name: 'LIBERTAD', max: 100 },
                 { name: 'ESTABILIDAD', max: 100 }
             ],
             radius: '65%',
             splitNumber: 4,
-            axisName: {
-                color: '#888',
-                fontWeight: 'bold',
-                fontSize: 10
-            },
-            splitLine: {
-                lineStyle: {
-                    color: [
-                        'rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.2)',
-                        'rgba(255, 255, 255, 0.4)', 'rgba(255, 255, 255, 0.6)'
-                    ].reverse()
-                }
-            },
-            splitArea: { show: false },
-            axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.3)' } }
+            axisName: { color: '#888', fontWeight: 'bold', fontSize: 10 },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+            splitArea: { show: false }
         },
-        series: [
-            {
-                type: 'radar',
-                data: [
-                    {
-                        value: [scoreAhorro, scoreCobertura, scoreInversion, scoreEstabilidad],
-                        name: 'Salud Financiera',
-                        symbol: 'none',
-                        lineStyle: { width: 2, color: '#39FF14' },
-                        areaStyle: {
-                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                                { offset: 0, color: 'rgba(57, 255, 20, 0.6)' },
-                                { offset: 1, color: 'rgba(57, 255, 20, 0.1)' }
-                            ])
-                        }
+        series: [{
+            type: 'radar',
+            data: [{
+                value: [scoreAhorro, scoreCobertura, scoreLibertad, scoreEstabilidad],
+                name: 'Financial Score',
+                symbol: 'circle',
+                symbolSize: 6,
+                itemStyle: { color: '#39FF14' },
+                lineStyle: { width: 2, color: '#39FF14' },
+                areaStyle: { color: 'rgba(57, 255, 20, 0.2)' },
+                tooltip: {
+                    trigger: 'item',
+                    formatter: function () {
+                        return `
+                        AHORRO: ${tasaAhorro.toFixed(1)}%<br>
+                        COBERTURA: ${mesesRunway.toFixed(1)} Meses<br>
+                        LIBERTAD: ${ratioInv.toFixed(1)}% Inv.<br>
+                        NOTA FINAL: ${scoreTotal}/100
+                        `;
                     }
-                ]
-            }
-        ]
+                }
+            }]
+        }]
     };
 
     radarInstance.setOption(option);
-    window.addEventListener('resize', function() { radarInstance.resize(); });
+    window.addEventListener('resize', () => { if(radarInstance) radarInstance.resize(); });
 }
-
 /* =========================================
    ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
    ========================================= */
