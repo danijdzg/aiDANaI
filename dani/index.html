@@ -1075,13 +1075,13 @@
 // CONFIGURACIÓN: CAMBIA ESTO POR TU CLIENT ID DE AZURE REAL
 const MSAL_CONFIG = {
     auth: {
-        clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb", // <--- ¡IMPORTANTE! Pon tu ID aquí
+        clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
         authority: "https://login.microsoftonline.com/common",
-        redirectUri: window.location.origin // Usa el origen actual dinámicamente
+        redirectUri: window.location.href.split('?')[0].split('#')[0] // Limpia la URL de parámetros
     },
     cache: {
-        cacheLocation: "sessionStorage", // Cambia localStorage por sessionStorage para evitar bloqueos de tracking
-        storeAuthStateInCookie: true // Activa esto para mayor compatibilidad en móviles/Safari
+        cacheLocation: "localStorage", // Cambia a localStorage para mayor persistencia
+        storeAuthStateInCookie: true   // Vital para navegadores con protección estricta
     }
 };
 
@@ -1180,7 +1180,14 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
     }
 
     async login() {
-        const response = await this.msalInstance.loginPopup({ scopes: this.graphScopes });
+        // Obligamos a limpiar el caché si hubo un error previo
+        const accounts = this.msalInstance.getAllAccounts();
+        if (accounts.length > 0) return accounts[0];
+
+        const response = await this.msalInstance.loginPopup({ 
+            scopes: this.graphScopes,
+            prompt: "select_account" // Esto ayuda a evitar el bloqueo de ventana
+        });
         return response.account;
     }
 
@@ -1194,17 +1201,15 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
         return response.accessToken;
     }
 
-    // Método para BUSCAR y OBTENER el archivo (Necesario para el Polling)
     async loadFile(fileName) {
         const token = await this.getToken();
-        // Buscamos el archivo para obtener su ID y su URL de descarga
         const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         
-        if (!res.ok) throw new Error("No se pudo localizar el archivo en OneDrive");
+        if (!res.ok) throw new Error("No se pudo localizar el archivo");
         
         const fileItem = await res.json();
-        this.fileId = fileItem.id; // Guardamos el ID para futuras operaciones
+        this.fileId = fileItem.id;
         
         const contentRes = await fetch(fileItem['@microsoft.graph.downloadUrl']);
         return await contentRes.arrayBuffer();
@@ -1383,39 +1388,28 @@ function detenerPolling() {
 async function iniciarCargaNube() {
     try {
         mostrarEstado('Iniciando sesión...', 'normal');
-        
-        // Login (si no está logueado)
         await oneDrive.login();
         
-        // Cargar fichero
+        // Una vez logueado, activamos el modo nube y el polling
+        cambiarModo('cloud'); 
         await cargarDesdeNube();
-
-        // Actualizar UI
-        cambiarModo('cloud');
-
+        mostrarEstado('✅ Conectado a OneDrive', 'ok');
     } catch (error) {
-        console.error(error);
+        console.error("Error en iniciarCargaNube:", error);
         mostrarEstado('Error: ' + error.message, 'err');
     }
 }
 
 // 2. LÓGICA DE DESCARGA DE ONEDRIVE
 async function cargarDesdeNube() {
-    mostrarEstado('Descargando aidanai.xlsx...', 'normal');
+    if (!modoNube) return;
     try {
-        // Usamos el gestor seguro para descargar
         const arrayBuffer = await oneDrive.loadFile('aidanai.xlsx');
-        
-        // Leemos el Excel con SheetJS
         const data = new Uint8Array(arrayBuffer);
         const wb = XLSX.read(data, { type: 'array', cellDates: true });
-        
-        // Reutilizamos tu lógica de lectura existente
         procesarLibroLeido(wb); 
-        
-        mostrarEstado('Conectado a la Nube', 'ok');
-        modoNube = true;
     } catch (error) {
+        console.error("Error en cargarDesdeNube:", error);
         throw error;
     }
 }
@@ -3036,41 +3030,6 @@ if(btnIgual) {
         }
     }
 	
-// ==========================================
-// 4. LÓGICA DE CARGA DE DATOS (Auto-Reparación)
-// ==========================================
-    async function iniciarCargaNube() {
-    try {
-        mostrarEstado('Iniciando sesión...', 'normal');
-        
-        // 1. Login
-        await oneDrive.login();
-        
-        // 2. CORRECCIÓN CRÍTICA: Cambiamos a modo nube ANTES de cargar
-        // Esto limpia la pantalla y prepara la interfaz
-        cambiarModo('cloud'); 
-
-        // 3. AHORA cargamos los datos
-        // Como ya estamos en modo nube, los datos se quedarán en pantalla
-        await cargarDesdeNube();
-
-    } catch (error) {
-        console.error(error);
-        // Si falla, volvemos a local pero mostramos el error
-        cambiarModo('local');
-        mostrarEstado('Error de conexión: ' + error.message, 'err');
-    }
-}
-
-    async function cargarDesdeNube() {
-        mostrarEstado('Buscando aidanai.xlsx...', 'normal');
-        const arrayBuffer = await oneDrive.loadFile('aidanai.xlsx');
-        const data = new Uint8Array(arrayBuffer);
-        const wb = XLSX.read(data, { type: 'array', cellDates: true });
-        procesarLibroLeido(wb); 
-        mostrarEstado('Conectado a la Nube', 'ok');
-        modoNube = true;
-    }
 
     // NUEVA FUNCIÓN PARA CREAR EL ARCHIVO DESDE CERO
     async function crearArchivoInicial() {
