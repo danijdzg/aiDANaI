@@ -1172,108 +1172,75 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
     // 2. GESTOR DE SEGURIDAD ONEDRIVE (MEJORADO)
     // ==========================================
     class OneDriveManager {
-        constructor() {
-            this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-            this.graphScopes = ["User.Read", "Files.ReadWrite.All"];
-            this.currentFileETag = null; 
-            this.fileId = null;          
-        }
-        async login() {
-            const response = await this.msalInstance.loginPopup({ scopes: this.graphScopes });
-            return response.account;
-        }
-        async getToken() {
-            const account = this.msalInstance.getAllAccounts()[0];
-            if (!account) throw new Error("No hay sesión activa.");
-            const response = await this.msalInstance.acquireTokenSilent({ scopes: this.graphScopes, account: account });
-            return response.accessToken;
-        }
-        async loadFile(fileName) {
-            const token = await this.getToken();
-            
-            // ESTRATEGIA A: Acceso directo (Más rápido y fiable si está en la raíz)
-            // Intentamos acceder directamente a: /me/drive/root:/aidanai.xlsx
-            try {
-                const directUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}`;
-                const directRes = await fetch(directUrl, { headers: { Authorization: `Bearer ${token}` } });
-                
-                if (directRes.ok) {
-                    const fileItem = await directRes.json();
-                    this.fileId = fileItem.id;
-                    this.currentFileETag = fileItem.eTag;
-                    console.log("📄 Archivo localizado directamente en raíz.");
-                    
-                    const contentRes = await fetch(fileItem['@microsoft.graph.downloadUrl']);
-                    return await contentRes.arrayBuffer();
-                }
-            } catch (e) {
-                console.warn("Acceso directo falló, intentando búsqueda...");
-            }
-
-            // ESTRATEGIA B: Búsqueda (Fallback por si el archivo está en una subcarpeta)
-            const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${fileName}')`;
-            const searchRes = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
-            const searchData = await searchRes.json();
-
-            if (!searchData.value || searchData.value.length === 0) {
-                // Si fallan las dos estrategias, entonces sí que no existe
-                throw new Error("FILE_NOT_FOUND");
-            }
-
-            // Tomamos el primer resultado exacto
-            const fileItem = searchData.value.find(f => f.name === fileName) || searchData.value[0];
-            this.fileId = fileItem.id;
-            this.currentFileETag = fileItem.eTag; 
-            
-            const contentRes = await fetch(fileItem['@microsoft.graph.downloadUrl']);
-            return await contentRes.arrayBuffer();
-        }
-        
-        // --- NUEVO: CREAR ARCHIVO SI NO EXISTE ---
-        async createFile(fileName, contentBlob) {
-            const token = await this.getToken();
-            // Usamos la ruta especial de Graph API para crear en la raíz
-            const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}:/content`;
-            
-            const response = await fetch(uploadUrl, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                },
-                body: contentBlob
-            });
-            
-            if (!response.ok) throw new Error("Error al crear archivo en OneDrive");
-            
-            const metaData = await response.json();
-            this.fileId = metaData.id;
-            this.currentFileETag = metaData.eTag;
-            return true;
-        }
-
-        async saveFile(contentBlob) {
-            if (!this.fileId) throw new Error("No se ha cargado el archivo previamente.");
-            const token = await this.getToken();
-            const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/content`;
-            
-            const response = await fetch(uploadUrl, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'If-Match': this.currentFileETag 
-                },
-                body: contentBlob
-            });
-            if (response.status === 412) throw new Error("CONFLICTO_DE_VERSIONES");
-            if (!response.ok) throw new Error("Error al guardar en OneDrive");
-            
-            const newMetaData = await response.json();
-            this.currentFileETag = newMetaData.eTag;
-            return true;
-        }
+    constructor() {
+        this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+        this.graphScopes = ["User.Read", "Files.ReadWrite"];
+        this.fileId = null;
+        this.tableName = "TablaMovimientos"; // El nombre que pusimos en el Paso 1
     }
+
+    async login() {
+        const response = await this.msalInstance.loginPopup({ scopes: this.graphScopes });
+        return response.account;
+    }
+
+    async getToken() {
+        const account = this.msalInstance.getAllAccounts()[0];
+        if (!account) throw new Error("SESION_EXPIRADA");
+        const response = await this.msalInstance.acquireTokenSilent({ 
+            scopes: this.graphScopes, 
+            account: account 
+        });
+        return response.accessToken;
+    }
+
+    // Encuentra el ID del archivo una sola vez
+    async identifyFile() {
+        if (this.fileId) return this.fileId;
+        const token = await this.getToken();
+        const url = `https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        this.fileId = data.id;
+        return this.fileId;
+    }
+
+    /**
+     * INSERCIÓN ATÓMICA DE FILA (Seguridad Multi-usuario)
+     * En lugar de subir todo el archivo, enviamos solo la fila a la tabla de Excel.
+     */
+    async addRowToTable(movimiento) {
+        const token = await this.getToken();
+        const id = await this.identifyFile();
+        
+        // Formateamos la fila como espera la API de Excel (matriz de matrices)
+        const rowValues = [[
+            new Date(movimiento.ts).toISOString().split('T')[0], // Fecha ISO
+            movimiento.cuenta,
+            movimiento.concepto,
+            movimiento.importe,
+            movimiento.detalle,
+            movimiento.beneficiario
+        ]];
+
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/tables/${this.tableName}/rows`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ values: rowValues })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error.message || "Error al escribir en la tabla");
+        }
+        return await response.json();
+    }
+}
     const oneDrive = new OneDriveManager();
 
 	
@@ -1349,16 +1316,24 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
     
 
     function cambiarModo(modo) {
-        modoNube = (modo === 'cloud');
-        document.getElementById('mode-local').className = modoNube ? 'source-option' : 'source-option active';
-        document.getElementById('mode-cloud').className = modoNube ? 'source-option active cloud' : 'source-option';
-        document.getElementById('btn-load-local').style.display = modoNube ? 'none' : 'flex';
-        document.getElementById('btn-load-cloud').style.display = modoNube ? 'flex' : 'none';
-        mostrarEstado(modoNube ? 'Conectando...' : 'Modo Local: Elige archivo', 'normal');
-        datos = [];
-        renderizar();
-        actualizarDashboard();
+    modoNube = (modo === 'cloud');
+    document.getElementById('mode-local').className = modoNube ? 'source-option' : 'source-option active';
+    document.getElementById('mode-cloud').className = modoNube ? 'source-option active cloud' : 'source-option';
+    document.getElementById('btn-load-local').style.display = modoNube ? 'none' : 'flex';
+    document.getElementById('btn-load-cloud').style.display = modoNube ? 'flex' : 'none';
+    
+    if (modoNube) {
+        mostrarEstado('Conectando...', 'normal');
+        iniciarPolling(); // <--- ACTIVAR RELOJ
+    } else {
+        mostrarEstado('Modo Local: Elige archivo', 'normal');
+        detenerPolling(); // <--- PARAR RELOJ
     }
+    
+    datos = [];
+    renderizar();
+    actualizarDashboard();
+}
 
     function mostrarEstado(txt, tipo) {
         const el = document.getElementById('msg-estado');
@@ -1367,6 +1342,43 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
             el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
         }
     }
+
+// --- NUEVAS VARIABLES PARA POLLING ---
+let pollingInterval = null;
+const TIEMPO_POLLING = 60000; // 60 segundos
+
+function iniciarPolling() {
+    if (pollingInterval) return; // Evitar duplicados
+
+    console.log("🔄 Sistema de Polling Activado (60s)");
+    
+    pollingInterval = setInterval(async () => {
+        const modalActivo = document.getElementById('modal-manual').classList.contains('active');
+        
+        // REGLAS DE SEGURIDAD:
+        // 1. Solo si estamos en modo nube.
+        // 2. NO pollear si el usuario está editando o creando un movimiento (modal abierto).
+        // 3. NO pollear si no hay una sesión activa de OneDrive.
+        if (modoNube && !modalActivo && !idEnEdicion) {
+            try {
+                console.log("🕒 Sincronizando datos automáticamente...");
+                await cargarDesdeNube();
+                // Opcional: mostrar un mensaje fugaz en el estado
+                mostrarEstado('Actualizado automáticamente', 'ok');
+            } catch (error) {
+                console.warn("Error en sincronización automática:", error);
+            }
+        }
+    }, TIEMPO_POLLING);
+}
+
+function detenerPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log("⏹️ Polling Desactivado");
+    }
+}
 
 // ==========================================
 // 🔄 GESTIÓN DE DATOS UNIFICADA (LOCAL Y NUBE)
@@ -1953,133 +1965,47 @@ function finalizarGuardado(esTraspaso) {
     }
 	
 async function guardarManual() {
-    // 1. Captura de datos
+    const btnAction = document.getElementById('btn-modal-action');
     const inputCant = document.getElementById('m-cantidad');
-    const inputDesc = document.getElementById('m-desc');
-    const inputCta = document.getElementById('m-cuenta');
-    const inputCon = document.getElementById('m-concepto');
-    const inputFec = document.getElementById('m-fecha');
-    const inputBen = document.getElementById('m-beneficiario');
-    const btnAction = document.getElementById('btn-modal-action'); // Referencia al botón
-
-    // --- CORRECCIÓN DE VALIDACIÓN ---
-    let imp = Math.abs(parseFloat(inputCant.value));
+    const imp = Math.abs(parseFloat(inputCant.value));
     
-    // Validación estricta
-    if (isNaN(imp) || imp === 0) return alert("Por favor, introduce un importe válido mayor a 0.");
-    
-    // Validación de campos obligatorios
-    const cta = inputCta.value;
-    if (!cta) return alert("Selecciona una cuenta.");
+    if (isNaN(imp) || imp === 0) return alert("Importe no válido");
 
-    // Sanitización
-    let desc = inputDesc.value.replace(/^[\=\+\-\@]/, "'$&"); 
-    let con = inputCon.value.replace(/^[\=\+\-\@]/, "'$&") || 'General';
-    const fecha = inputFec.value || new Date().toISOString().split('T')[0];
-    const ahora = Date.now();
+    const movimiento = {
+        ts: new Date(document.getElementById('m-fecha').value).getTime(),
+        importe: modoTransaccionActual === 'pago' ? -imp : imp,
+        cuenta: document.getElementById('m-cuenta').value,
+        concepto: document.getElementById('m-concepto').value || 'Varios',
+        detalle: document.getElementById('m-desc').value,
+        beneficiario: document.getElementById('m-beneficiario').value || 'Yo'
+    };
 
-    // --- BLOQUEO DE UI (Feedback al usuario) ---
-    const textoOriginal = btnAction.innerText;
-    btnAction.innerText = "⏳ GUARDANDO EN NUBE...";
+    // UI Feedback
+    btnAction.innerText = "⏳ PROTEGIENDO DATOS...";
     btnAction.disabled = true;
-    btnAction.style.opacity = "0.7";
 
     try {
-        // ---------------------------------------------------------
-        // CASO A: TRASPASO (Dos movimientos: Salida y Entrada)
-        // ---------------------------------------------------------
-        if (modoTransaccionActual === 'traspaso') {
-            const ctaDest = document.getElementById('m-cuenta-destino').value;
-            if (!ctaDest) throw new Error("Falta la cuenta de destino.");
-            if (cta === ctaDest) throw new Error("La cuenta origen y destino no pueden ser la misma.");
-
-            // Movimiento 1: Salida
-            const movSalida = {
-                id: ahora, 
-                ts: new Date(fecha).getTime(), 
-                importe: -imp, 
-                cuenta: cta, 
-                concepto: 'Traspaso', 
-                detalle: `Salida a ${ctaDest} | ${desc}`, 
-                beneficiario: 'Yo', 
-                tipo: 'traspaso'
-            };
-
-            // Movimiento 2: Entrada
-            const movEntrada = {
-                id: ahora + 1, 
-                ts: new Date(fecha).getTime(), 
-                importe: imp, 
-                cuenta: ctaDest, 
-                concepto: 'Traspaso', 
-                detalle: `Entrada de ${cta} | ${desc}`, 
-                beneficiario: 'Yo', 
-                tipo: 'traspaso'
-            };
-
-            if (modoNube) {
-                // En modo nube, guardamos ambos esperando a que termine uno para iniciar el otro
-                // (O podrías modificar guardarMovimientoAtomico para aceptar arrays)
-                await guardarMovimientoAtomico(movSalida, false);
-                await guardarMovimientoAtomico(movEntrada, false);
-                
-                // Si llegamos aquí, ambos se guardaron en la nube
-                cerrarModal();
-                idEnEdicion = null;
-            } else {
-                // Modo Local
-                datos.push({ ...movSalida, saldo: 0 });
-                datos.push({ ...movEntrada, saldo: 0 });
-                finalizarGuardado(true);
-            }
-            return; // Fin del traspaso
-        }
-
-        // ---------------------------------------------------------
-        // CASO B: NORMAL (Gasto / Ingreso)
-        // ---------------------------------------------------------
-        const nuevoMovimiento = {
-            id: idEnEdicion || ahora,
-            ts: new Date(fecha).getTime(),
-            importe: modoTransaccionActual === 'pago' ? -imp : imp,
-            cuenta: cta,
-            concepto: con,
-            detalle: desc,
-            beneficiario: inputBen.value || 'Yo',
-            tipo: modoTransaccionActual === 'ingreso' ? 'ingreso' : 'gasto'
-        };
-
         if (modoNube) {
-            // --- LA CLAVE: ESPERAR (AWAIT) A LA NUBE ---
-            const exito = await guardarMovimientoAtomico(nuevoMovimiento, !!idEnEdicion);
+            // LLAMADA ATÓMICA: No descargamos nada, solo enviamos la fila
+            await oneDrive.addRowToTable(movimiento);
             
-            if (exito) {
-                // Solo cerramos si la nube respondió OK
-                cerrarModal();
-                idEnEdicion = null;
-            } else {
-                throw new Error("No se pudo confirmar el guardado en la nube.");
-            }
+            // Para mantener la UI local sincronizada, recargamos los datos del fondo
+            await cargarDesdeNube(); 
+            
+            cerrarModal();
+            mostrarEstado('✅ Guardado atómico exitoso', 'ok');
         } else {
-            // Lógica Local (Legacy)
-            if (idEnEdicion) {
-                const idx = datos.findIndex(d => d.id === idEnEdicion);
-                if (idx >= 0) datos[idx] = { ...nuevoMovimiento, saldo: 0 };
-            } else {
-                datos.push({ ...nuevoMovimiento, saldo: 0 });
-            }
+            // Lógica local legacy
+            datos.push({...movimiento, id: Date.now(), saldo: 0});
             finalizarGuardado(false);
         }
-
-    } catch (error) {
-        console.error(error);
-        alert("❌ ERROR AL GUARDAR: " + error.message);
-        // No cerramos el modal para permitir reintentar
+        vibrar('ingreso');
+    } catch (e) {
+        console.error(e);
+        alert("CRÍTICO: " + e.message);
     } finally {
-        // --- RESTAURAR UI SIEMPRE ---
-        btnAction.innerText = textoOriginal;
+        btnAction.innerText = "GUARDAR";
         btnAction.disabled = false;
-        btnAction.style.opacity = "1";
     }
 }
 
@@ -3512,6 +3438,7 @@ function renderizarDistribucion() {
             document.getElementById('btn-load-cloud').style.display = 'flex';
             
             await cargarDesdeNube();
+			iniciarPolling(); // <--- ASEGURAR ARRANQUE AQUÍ
             mostrarEstado('✅ CONECTADO A ONEDRIVE', 'ok');
         } else {
             // Si no hay cuentas previas, nos quedamos en local esperando acción
