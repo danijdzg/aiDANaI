@@ -1077,11 +1077,11 @@ const MSAL_CONFIG = {
     auth: {
         clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb", // <--- ¡IMPORTANTE! Pon tu ID aquí
         authority: "https://login.microsoftonline.com/common",
-        redirectUri: window.location.href.split('?')[0]
+        redirectUri: window.location.origin // Usa el origen actual dinámicamente
     },
     cache: {
-        cacheLocation: "localStorage",
-        storeAuthStateInCookie: false
+        cacheLocation: "sessionStorage", // Cambia localStorage por sessionStorage para evitar bloqueos de tracking
+        storeAuthStateInCookie: true // Activa esto para mayor compatibilidad en móviles/Safari
     }
 };
 
@@ -1171,12 +1171,12 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
 // ==========================================
     // 2. GESTOR DE SEGURIDAD ONEDRIVE (MEJORADO)
     // ==========================================
-    class OneDriveManager {
+   class OneDriveManager {
     constructor() {
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         this.graphScopes = ["User.Read", "Files.ReadWrite"];
         this.fileId = null;
-        this.tableName = "TablaMovimientos"; // El nombre que pusimos en el Paso 1
+        this.tableName = "TablaMovimientos"; 
     }
 
     async login() {
@@ -1194,28 +1194,29 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
         return response.accessToken;
     }
 
-    // Encuentra el ID del archivo una sola vez
-    async identifyFile() {
-        if (this.fileId) return this.fileId;
+    // Método para BUSCAR y OBTENER el archivo (Necesario para el Polling)
+    async loadFile(fileName) {
         const token = await this.getToken();
-        const url = `https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx`;
+        // Buscamos el archivo para obtener su ID y su URL de descarga
+        const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        this.fileId = data.id;
-        return this.fileId;
+        
+        if (!res.ok) throw new Error("No se pudo localizar el archivo en OneDrive");
+        
+        const fileItem = await res.json();
+        this.fileId = fileItem.id; // Guardamos el ID para futuras operaciones
+        
+        const contentRes = await fetch(fileItem['@microsoft.graph.downloadUrl']);
+        return await contentRes.arrayBuffer();
     }
 
-    /**
-     * INSERCIÓN ATÓMICA DE FILA (Seguridad Multi-usuario)
-     * En lugar de subir todo el archivo, enviamos solo la fila a la tabla de Excel.
-     */
+    // Inserción Atómica (Para que varios usuarios escriban a la vez)
     async addRowToTable(movimiento) {
         const token = await this.getToken();
-        const id = await this.identifyFile();
+        if (!this.fileId) await this.loadFile('aidanai.xlsx');
         
-        // Formateamos la fila como espera la API de Excel (matriz de matrices)
         const rowValues = [[
-            new Date(movimiento.ts).toISOString().split('T')[0], // Fecha ISO
+            new Date(movimiento.ts).toISOString().split('T')[0],
             movimiento.cuenta,
             movimiento.concepto,
             movimiento.importe,
@@ -1223,22 +1224,16 @@ async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
             movimiento.beneficiario
         ]];
 
-        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/tables/${this.tableName}/rows`;
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/${this.tableName}/rows`;
         
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ values: rowValues })
         });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error.message || "Error al escribir en la tabla");
-        }
-        return await response.json();
+        if (!response.ok) throw new Error("Error al insertar fila en la tabla de Excel");
+        return true;
     }
 }
     const oneDrive = new OneDriveManager();
