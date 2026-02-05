@@ -869,7 +869,7 @@
     </div>
 </div>
                     <div id="lista-cuentas-patri" style="display: flex; flex-direction: column; padding-bottom: 0;"></div>
-<div class="master-card" style="margin-top: 20px; margin-bottom: 0; border-color: var(--c-accent); background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
+<div class="master-card" style="margin-top: 20px; margin-bottom: 0; border-color: #FF2E4D; background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
     <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
         <div style="display:flex; flex-direction:column;">
             <span class="card-title" style="font-size:14px; letter-spacing:1px;">RAYOS X PATRIMONIAL</span>
@@ -1634,12 +1634,9 @@ function leerExcel(blob) {
 }
 // 4. EL CEREBRO: PROCESA EL EXCEL (SEA LOCAL O NUBE)
 function procesarLibroLeido(wb) {
-    // ---------------------------------------------------------
     // 1. CARGA DE CONFIGURACIÓN
-    // ---------------------------------------------------------
     mapaCuentas = {}; 
     
-    // A. Buscamos la hoja Config
     const wsConfigName = wb.SheetNames.find(n => 
         n.trim().toUpperCase() === "TABLACONFIG" || 
         n.trim().toUpperCase().includes("CONFIG")
@@ -1648,9 +1645,9 @@ function procesarLibroLeido(wb) {
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
         const matConfig = XLSX.utils.sheet_to_json(wsConfig, { header: 1 });
-        globalConfigData = matConfig; // Guardamos copia
+        globalConfigData = matConfig; 
 
-        // Escaneo de encabezados
+        // Escaneo de encabezados INTELIGENTE
         let filaEncabezados = -1;
         let colCuenta = -1;
         let colTipo = -1;
@@ -1660,14 +1657,21 @@ function procesarLibroLeido(wb) {
             const row = matConfig[i];
             if (!row) continue;
             
+            // Buscamos las columnas clave
             const idxC = row.findIndex(val => val && String(val).trim().toUpperCase() === 'CUENTA');
-            const idxT = row.findIndex(val => val && String(val).trim().toUpperCase() === 'TIPO');
             
-            if (idxC !== -1 && idxT !== -1) {
+            // CORRECCIÓN AQUÍ: Ahora buscamos 'ES_INVERSION' O 'ESINVERSION' para que no falle nunca
+            const idxI = row.findIndex(val => {
+                if (!val) return false;
+                const v = String(val).trim().toUpperCase();
+                return v === 'ESINVERSION' || v === 'ES_INVERSION' || v === 'ES INVERSION';
+            });
+
+            if (idxC !== -1) {
                 filaEncabezados = i;
                 colCuenta = idxC;
-                colTipo = idxT;
-                colInv = row.findIndex(val => val && String(val).trim().toUpperCase() === 'ESINVERSION');
+                colTipo = row.findIndex(val => val && String(val).trim().toUpperCase() === 'TIPO');
+                colInv = idxI; // Guardamos el índice correcto de la columna inversión
                 break;
             }
         }
@@ -1679,17 +1683,17 @@ function procesarLibroLeido(wb) {
                 
                 const cuentaKey = String(row[colCuenta]).trim().toUpperCase();
                 const tipoVal = (colTipo !== -1 && row[colTipo]) ? String(row[colTipo]).trim() : 'OTROS';
+                
+                // Lectura robusta del valor SI/NO
                 const esInv = (colInv !== -1 && row[colInv]) ? String(row[colInv]).trim().toUpperCase() === 'SI' : false;
 
                 mapaCuentas[cuentaKey] = { tipo: tipoVal, esInversion: esInv };
             }
-            mostrarEstado('Configuración: ' + Object.keys(mapaCuentas).length + ' cuentas.', 'ok');
+            mostrarEstado('Configuración cargada: ' + Object.keys(mapaCuentas).length + ' cuentas.', 'ok');
         }
     }
 
-    // ---------------------------------------------------------
     // 2. CARGA DE MOVIMIENTOS
-    // ---------------------------------------------------------
     let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
     const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
     
