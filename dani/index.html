@@ -917,23 +917,68 @@
                 </div>
                 
                 <div id="tab-ajustes" class="view-section">
-                    <div style="padding: 20px;">
-                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;"><span class="material-icons" style="font-size: 28px; color: var(--c-accent);">psychology</span><h3 style="margin:0; color: #fff; font-size:16px; text-transform:uppercase;">INTELIGENCIA FINANCIERA</h3></div>
-                        <div class="ai-terminal">
-                            <div class="ai-header"><span>> SYSTEM.ANALYSIS_RUNNING...</span><span style="font-size:9px; opacity:0.7">V 2.0</span></div>
-                            <div id="ai-output" class="ai-content"><span class="blink-cursor">Esperando datos...</span></div>
-                        </div>
-				<div class="master-card" style="margin-top: 15px; border-color: #333;">
-                            <div class="card-header"><span class="card-title">PREFERENCIAS</span></div>
-                            <div style="padding: 15px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><span style="font-size:13px; color:#fff">Modo Desarrollador</span><span style="font-size:11px; color:var(--c-success); font-weight:bold;">ACTIVO</span></div>
-                                <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:13px; color:#fff">Versión App</span><span style="font-size:11px; color:#666;">2025.01.29</span></div>
-                            </div>
-                        </div>
+    <div style="padding: 20px; padding-bottom: 100px;">
+        
+        <h3 style="color:var(--c-primary); margin-bottom:20px; text-transform:uppercase; letter-spacing:1px;">Gestión de Datos Maestros</h3>
+
+        <div class="master-card" style="margin-top:0; border-color: #333;">
+            <div class="card-header"><span class="card-title">NUEVA CUENTA</span></div>
+            <div style="padding: 15px;">
+                <label class="input-label">NOMBRE DE LA CUENTA</label>
+                <input type="text" id="new-cta-nombre" class="filter-input form-field" placeholder="Ej: Revolut Metal">
+                
+                <div style="display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:end;">
+                    <div>
+                        <label class="input-label">TIPO (CATEGORÍA)</label>
+                        <select id="new-cta-tipo" class="filter-input form-field">
+                            <option value="AUTOCUSTODIA">Autocustodia</option>
+							<option value="BANCO">Banco</option>
+                            <option value="BOLSA">Bolsa</option>
+							<option value="CRIPTOMONEDAS">Criptomonedas</option>
+                            <option value="CROWDFUNDING">Crowdfunding</option>
+                            <option value="PLANPENSIONES">PlanPensiones</option>
+							<option value="TARJETA">Tarjeta</option>
+                        </select>
+                    </div>
+                    <div style="text-align:center; padding-bottom:10px;">
+                        <label class="input-label" style="margin-bottom:5px">¿ES INVERSIÓN?</label>
+                        <input type="checkbox" id="new-cta-inv" style="width:20px; height:20px; accent-color:var(--c-primary);">
                     </div>
                 </div>
-			
-           <nav class="bottom-nav">
+                
+                <button class="full-btn btn-blue" onclick="guardarAjuste('cuenta')" style="margin-top:15px">AÑADIR CUENTA</button>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:20px;">
+            
+            <div class="master-card" style="margin:0; border-color: #333;">
+                <div class="card-header"><span class="card-title" style="font-size:11px">NUEVO CONCEPTO</span></div>
+                <div style="padding: 10px;">
+                    <input type="text" id="new-concepto" class="filter-input form-field" placeholder="Ej: Gimnasio">
+                    <button class="full-btn btn-gray" onclick="guardarAjuste('concepto')" style="margin-top:10px; font-size:10px;">GUARDAR</button>
+                </div>
+            </div>
+
+            <div class="master-card" style="margin:0; border-color: #333;">
+                <div class="card-header"><span class="card-title" style="font-size:11px">NUEVO BENEFICIARIO</span></div>
+                <div style="padding: 10px;">
+                    <input type="text" id="new-benef" class="filter-input form-field" placeholder="Ej: Amazon">
+                    <button class="full-btn btn-gray" onclick="guardarAjuste('beneficiario')" style="margin-top:10px; font-size:10px;">GUARDAR</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px; font-size:11px; color:#888; font-style:italic;">
+            <span class="material-icons" style="font-size:14px; vertical-align:middle; color:var(--c-warning)">info</span>
+            <b>NOTA:</b> Los elementos añadidos estarán disponibles inmediatamente en los desplegables. Para eliminar o editar, accede directamente al archivo Excel en la hoja "Configuracion".
+        </div>
+
+    </div>
+	
+	</div>
+		
+		<nav class="bottom-nav">
     <button class="nav-item active" id="nav-inicio" onclick="irPestana('inicio')">
         <span class="material-icons">dashboard</span> Inicio
     </button>
@@ -1306,22 +1351,15 @@ class OneDriveManager {
         return await res.arrayBuffer();
     }
 
-    // Insertar fila al final de la tabla (Atomic Append)
-    async addRowToTable(movimiento) {
+    // CAMBIO: Ahora aceptamos 'nombreTabla' como parámetro opcional
+    async addRowToTable(datosFila, nombreTabla = null) {
         const token = await this.getToken();
-        const fechaIso = new Date(movimiento.ts).toISOString().split('T')[0];
+        const tableTarget = nombreTabla || this.tableName; // Si no especificas, usa la de Movimientos
         
-        // Estructura: [FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO]
-        const values = [[
-            fechaIso,
-            movimiento.cuenta,
-            movimiento.concepto,
-            movimiento.importe,
-            movimiento.detalle,
-            movimiento.beneficiario
-        ]];
+        // La API espera un array de arrays [[col1, col2, ...]]
+        const values = [datosFila];
 
-        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/${this.tableName}/rows`;
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/${tableTarget}/rows`;
         
         const response = await fetch(url, {
             method: 'POST',
@@ -2074,6 +2112,11 @@ function finalizarGuardado(esTraspaso) {
             if(d.concepto) sConceptos.add(d.concepto);
             if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
         });
+		// 2. --- NUEVO: AÑADIR LO QUE HAY EN LA CONFIGURACIÓN ---
+		// Esto asegura que las cuentas nuevas aparezcan aunque no las hayas usado nunca
+		if (mapaCuentas) {
+			Object.keys(mapaCuentas).forEach(c => sCuentas.add(c));
+		}
         const llenar = (id, set) => {
             const el = document.getElementById(id);
             const valActual = el.value; 
@@ -3696,6 +3739,72 @@ function renderizarRadarSalud() {
 
     radarInstance.setOption(option);
     window.addEventListener('resize', function() { radarInstance.resize(); });
+}
+
+/* =========================================
+   ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
+   ========================================= */
+async function guardarAjuste(tipo) {
+    if (!modoNube) return alert("⚠️ Debes estar conectado a la Nube (Modo Cloud) para guardar configuraciones.");
+    
+    const btnTextOriginal = event.target.innerText;
+    event.target.innerText = "GUARDANDO...";
+    event.target.disabled = true;
+
+    try {
+        if (tipo === 'cuenta') {
+            const nombre = document.getElementById('new-cta-nombre').value.trim().toUpperCase();
+            const categoria = document.getElementById('new-cta-tipo').value;
+            const esInv = document.getElementById('new-cta-inv').checked ? "SI" : "NO";
+            
+            if (!nombre) throw new Error("El nombre es obligatorio");
+
+            // 1. Guardar en Excel (TablaCuentas)
+            // Estructura: [CUENTA, TIPO, ES_INVERSION]
+            await oneDrive.addRowToTable([nombre, categoria, esInv], 'TablaCuentas');
+            
+            // 2. Actualizar memoria local (para que salga en el Sunburst y desplegables ya)
+            mapaCuentas[nombre] = { tipo: categoria, esInversion: (esInv === "SI") };
+            
+            // Limpiar
+            document.getElementById('new-cta-nombre').value = "";
+            mostrarEstado(`✅ Cuenta "${nombre}" creada`, 'ok');
+        } 
+        else if (tipo === 'concepto') {
+            const val = document.getElementById('new-concepto').value.trim();
+            if (!val) throw new Error("Escribe un concepto");
+            
+            // Guardar en TablaConceptos
+            await oneDrive.addRowToTable([val], 'TablaConceptos');
+            
+            // No necesitamos actualizar un mapa global de conceptos porque se leen dinámicamente,
+            // pero podríamos añadirlo a un set temporal si fuera necesario.
+            document.getElementById('new-concepto').value = "";
+            mostrarEstado(`✅ Concepto "${val}" añadido`, 'ok');
+        }
+        else if (tipo === 'beneficiario') {
+            const val = document.getElementById('new-benef').value.trim();
+            if (!val) throw new Error("Escribe un beneficiario");
+            
+            // Guardar en TablaBeneficiarios
+            await oneDrive.addRowToTable([val], 'TablaBeneficiarios');
+            
+            document.getElementById('new-benef').value = "";
+            mostrarEstado(`✅ Beneficiario "${val}" añadido`, 'ok');
+        }
+
+        vibrar('ingreso');
+        
+        // OPCIONAL: Recargar todo para asegurar sincronización total
+        // await cargarDesdeNube(); 
+
+    } catch (e) {
+        console.error(e);
+        alert("Error: " + e.message);
+    } finally {
+        event.target.innerText = btnTextOriginal;
+        event.target.disabled = false;
+    }
 }
 
     </script>
