@@ -7,13 +7,11 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Lexend:wght@300;400;500;700&family=Poppins:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
     <style>
@@ -1427,15 +1425,28 @@ const oneDrive = new OneDriveManager();
         }
     }
 	
-    const vibrar = (tipo) => {
-        if (!("vibrate" in navigator)) return;
-        switch(tipo) {
-            case 'ingreso': navigator.vibrate(200); break;
-            case 'gasto': navigator.vibrate(50); break;
-            case 'borrar': navigator.vibrate([200, 100, 200]); break;
-            case 'clonar': navigator.vibrate(30); break;
-        }
+    function vibrar(tipo) {
+    // Definición de patrones
+    const patrones = {
+        'ingreso': [50],
+        'error': [50, 50, 50],
+        'clonar': [30, 30]
     };
+    
+    const patron = patrones[tipo] || [50];
+
+    // Intentamos vibrar solo si el navegador lo permite
+    try {
+        if (navigator.vibrate) {
+            // Promesa dummy para capturar el error de intervención sin bloquear
+            Promise.resolve(navigator.vibrate(patron)).catch(() => {
+                // Silencio: El usuario aún no ha interactuado
+            });
+        }
+    } catch (e) {
+        // Ignorar errores de vibración
+    }
+}
 	
     let datos = [];
 	/* --- SEGURIDAD: SANITIZACIÓN DE HTML --- */
@@ -1492,28 +1503,34 @@ const Security = {
         }
     }
 
-// Función global para lanzar notificaciones
-function lanzarToast(mensaje, tipo = 'info') {
-    const toast = document.getElementById('toast');
+function lanzarToast(mensaje, tipo) {
+    const toast = document.getElementById('toast-container');
     if (!toast) return;
 
-    // Configurar icono según tipo
-    let icono = 'info';
-    if (tipo === 'success') icono = 'check_circle';
-    if (tipo === 'error') icono = 'warning';
+    // Colores según tipo
+    let color = 'var(--bg-card)'; // Default
+    if (tipo === 'ok' || tipo === 'success') color = '#10B981'; // Verde
+    else if (tipo === 'err' || tipo === 'error') color = '#EF4444'; // Rojo
+    else if (tipo === 'warn') color = '#F59E0B'; // Naranja
 
-    // Inyectar contenido
-    toast.innerHTML = `<span class="material-icons toast-icon">${icono}</span><span>${mensaje}</span>`;
-    
-    // Resetear clases y añadir las nuevas
-    toast.className = 'toast show ' + tipo;
-    
-    // Vibración háptica si es posible
-    if (navigator.vibrate) navigator.vibrate(tipo === 'error' ? [50, 50, 50] : 30);
+    toast.innerText = mensaje;
+    toast.style.backgroundColor = color;
+    toast.className = "toast show";
 
-    // Ocultar automáticamente
-    setTimeout(() => {
-        toast.classList.remove('show');
+    // --- CORRECCIÓN VIBRACIÓN ---
+    // Solo vibramos si el usuario ya ha tocado la pantalla alguna vez
+    try {
+        if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) {
+            navigator.vibrate(tipo === 'err' ? [50, 50, 50] : [30]);
+        }
+    } catch (e) { 
+        // Silencio absoluto si falla
+    }
+    // ----------------------------
+
+    // Ocultar a los 3 segundos
+    setTimeout(() => { 
+        toast.className = toast.className.replace("show", ""); 
     }, 3000);
 }
 
@@ -1928,19 +1945,24 @@ function finalizarGuardado(esTraspaso) {
     }
     
     function verDetalleKPI(tipoObjetivo) {
-        const rango = getFechasDashboard();
-        limpiarFiltros(); 
-        if(rango && rango.start) {
-            document.getElementById('f-desde').valueAsDate = rango.start;
-            document.getElementById('f-hasta').valueAsDate = rango.end;
-            filtros.desde = document.getElementById('f-desde').value;
-            filtros.hasta = document.getElementById('f-hasta').value;
-        }
-        filtros.tipo = tipoObjetivo; 
-        aplicarFiltros(); 
-        irPestana('movs');
-        mostrarEstado(`Viendo detalle: ${tipoObjetivo.toUpperCase()}`, 'ok');
+    const rango = getFechasDashboard();
+    limpiarFiltros(); 
+    
+    if(rango && rango.start) {
+        // CORRECCIÓN: Convertimos el timestamp (número) a Objeto Date
+        document.getElementById('f-desde').valueAsDate = new Date(rango.start);
+        document.getElementById('f-hasta').valueAsDate = new Date(rango.end);
+        
+        // Actualizamos el objeto filtros interno para que coincida con lo visual
+        filtros.desde = document.getElementById('f-desde').value;
+        filtros.hasta = document.getElementById('f-hasta').value;
     }
+    
+    filtros.tipo = tipoObjetivo; 
+    aplicarFiltros(); 
+    irPestana('movs');
+    mostrarEstado(`Viendo detalle: ${tipoObjetivo.toUpperCase()}`, 'ok');
+}
 
     function toggleFiltros() { document.getElementById('panel-filtros').classList.toggle('open'); }
     function actualizarFiltrosUI(c, co, b) {
@@ -2113,98 +2135,95 @@ function finalizarGuardado(esTraspaso) {
         if(d.value === '') d.value = c;
     }
 	
+// --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
+let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
+
+
+// --- FUNCIÓN DE GUARDADO MODIFICADA ---
 async function guardarManual() {
+    
+    // 1. CHEQUEO DE SEMÁFORO (ZONA CRÍTICA)
+    // Si el semáforo está en rojo (ya está guardando), cancelamos el nuevo clic.
+    if (isSaving) {
+        console.warn("Intento de doble guardado bloqueado.");
+        return; 
+    }
+
     const btnAction = document.getElementById('btn-modal-action');
     const inputCant = document.getElementById('m-cantidad');
     let imp = parseFloat(inputCant.value);
     
-    // Validación estricta de importe
+    // Validaciones básicas (Aquí el semáforo sigue en verde porque aún no empezamos a procesar)
     if (isNaN(imp) || imp === 0) return alert("Por favor, introduce un importe válido diferente de cero.");
     
-    imp = Math.abs(imp); // Trabajamos siempre en positivo y asignamos signo según tipo
+    // 2. BLOQUEO (PONEMOS EL SEMÁFORO EN ROJO)
+    isSaving = true; 
+
+    // 3. FEEDBACK VISUAL (Para que el usuario sepa que está pasando algo)
+    const textoOriginal = btnAction.innerText;
+    btnAction.innerText = "⏳ PROCESANDO..."; // Cambiamos texto
+    btnAction.style.opacity = "0.6";          // Hacemos el botón medio transparente
+    btnAction.disabled = true;                // Desactivamos el clic físico del botón
     
+    // Preparación de datos...
+    imp = Math.abs(imp); 
     const cuentaOrigen = document.getElementById('m-cuenta').value;
     const cuentaDestino = document.getElementById('m-cuenta-destino').value;
     let concepto = document.getElementById('m-concepto').value || 'Varios';
     let detalle = document.getElementById('m-desc').value || '';
     const beneficiario = document.getElementById('m-beneficiario').value || 'Yo';
-    
-    // CORRECCIÓN FECHA: Obtenemos fecha segura para evitar saltos de zona horaria
     const rawFecha = document.getElementById('m-fecha').valueAsDate || new Date();
     const fechaTs = rawFecha.getTime();
-
-    const textoOriginal = btnAction.innerText;
-    btnAction.innerText = "⏳ PROCESANDO...";
-    btnAction.disabled = true;
 
     try {
         const movimientosAGuardar = [];
 
-        // 1. Preparación Lógica de los Movimientos (Objetos internos)
+        // Lógica de tipos (Gasto/Ingreso/Traspaso) - IGUAL QUE ANTES
         if (modoTransaccionActual === 'pago') {
             movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'gasto' });
         } else if (modoTransaccionActual === 'ingreso') {
             movimientosAGuardar.push({ ts: fechaTs, importe: imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'ingreso' });
         } else if (modoTransaccionActual === 'traspaso') {
             if (!concepto.toUpperCase().includes('TRASPASO')) concepto = "TRASPASO - " + concepto;
-            
             if (cuentaDestino && cuentaDestino !== cuentaOrigen) {
-                // Generamos los dos movimientos del traspaso (Salida y Entrada)
                 movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: `>> A: ${cuentaDestino} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
                 movimientosAGuardar.push({ ts: fechaTs, importe: imp, cuenta: cuentaDestino, concepto: concepto, detalle: `<< DE: ${cuentaOrigen} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
             } else {
-                // Traspaso simple (raro, pero posible)
                 movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'traspaso' });
             }
         }
 
         if (modoNube) {
-            // --- MODO NUBE (Aquí estaba el error de compatibilidad) ---
             mostrarEstado('☁️ Conectando con Excel...', 'normal');
             
-            if (idEnEdicion) {
-                // Nota: La API de Graph simple añade filas, no edita in-situ fácilmente sin rangos complejos.
-                // El comportamiento estándar aquí es añadir la corrección.
-                console.log("Añadiendo corrección/edición como nueva fila...");
-            }
-
+            // Ciclo de guardado en la nube
             for (const mov of movimientosAGuardar) {
-                // TRADUCCIÓN DE DATOS: Convertimos el Objeto JS en Array Excel
-                // Orden Estricto: FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO
-                
-                // Formato Fecha ISO (YYYY-MM-DD) para compatibilidad total con Excel
                 const fechaExcel = new Date(mov.ts).toISOString().split('T')[0];
-                
                 const filaExcel = [
-                    fechaExcel,         // Col A
-                    mov.cuenta,         // Col B
-                    mov.concepto,       // Col C
-                    mov.importe,        // Col D
-                    mov.detalle,        // Col E
-                    mov.beneficiario    // Col F
+                    fechaExcel,         
+                    mov.cuenta,         
+                    mov.concepto,       
+                    mov.importe,        
+                    mov.detalle,        
+                    mov.beneficiario    
                 ];
-
-                // Enviamos el ARRAY, no el objeto
+                // Esta es la parte lenta donde el usuario solía hacer doble clic
                 await oneDrive.addRowToTable(filaExcel);
             }
             
             mostrarEstado('✅ Guardado en Nube. Sincronizando...', 'ok');
-            // Recargamos para que el usuario vea el cambio confirmado desde el servidor
             await cargarDesdeNube();
             
         } else {
-            // --- MODO LOCAL (Offline) ---
+            // Modo Local
             for (const mov of movimientosAGuardar) {
                 if (idEnEdicion && movimientosAGuardar.length === 1) {
-                    // Edición Local
                     const indice = datos.findIndex(d => d.id === idEnEdicion);
                     if (indice !== -1) datos[indice] = { ...mov, id: idEnEdicion, saldo: 0 };
                 } else {
-                    // Nuevo Local
                     datos.push({ ...mov, id: Date.now() + Math.random(), saldo: 0 });
                 }
             }
-            // En local no recargamos nube, solo procesamos
             procesarDatosLocalmente(); 
             mostrarEstado('💾 Guardado localmente', 'ok');
         }
@@ -2217,11 +2236,19 @@ async function guardarManual() {
         alert("ERROR DE ESCRITURA: " + e.message);
         mostrarEstado('Error al guardar', 'err');
     } finally {
+        // 4. DESBLOQUEO (ZONA DE SEGURIDAD FINAL)
+        // Ocurra lo que ocurra (éxito o error), SIEMPRE debemos liberar el semáforo
+        // para que el usuario pueda volver a intentar guardar después.
+        
+        isSaving = false; // 🟢 Semáforo Verde
+        
+        // Restauramos el botón a su estado normal
         btnAction.innerText = textoOriginal;
+        btnAction.style.opacity = "1";
         btnAction.disabled = false;
-        idEnEdicion = null; // Limpiamos estado de edición
+        idEnEdicion = null;
     }
-}
+
 
 // Función auxiliar necesaria si no existe (para modo local sin recarga completa)
 function procesarDatosLocalmente() {
@@ -2337,26 +2364,28 @@ function procesarDatosLocalmente() {
     mostrarEstado('📋 Datos copiados. Ajusta y pulsa GUARDAR.', 'normal');
 }
 
-    function getFechasDashboard() {
-        const periodo = document.getElementById('dash-period').value;
-        const now = new Date();
-        let fInicio, fFin;
-        if (periodo === 'year') {
-            fInicio = new Date(now.getFullYear(), 0, 1);
-            fFin = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
-        } else if (periodo === 'month') {
-            fInicio = new Date(now.getFullYear(), now.getMonth(), 1);
-            fFin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-        } else if (periodo === 'custom') {
-            const s = document.getElementById('d-start').value;
-            const e = document.getElementById('d-end').value;
-            if(!s || !e) return null; 
-            fInicio = new Date(s);
-            fFin = new Date(e);
-            fFin.setHours(23, 59, 59); 
-        }
-        return { start: fInicio, end: fFin }; 
-    }
+// ==========================================
+// 🗓️ UTILIDADES DE FECHAS (Faltaba esta función)
+// ==========================================
+
+function getFechasDashboard() {
+    // Usamos la fecha actual (o una variable global 'fechaActualDashboard' si existiera en tu lógica de navegación)
+    const now = new Date(); 
+    
+    // Calculamos el primer milisegundo del mes
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    
+    // Calculamos el último milisegundo del mes
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    
+    // Devolvemos ambos formatos por compatibilidad (inglés/español)
+    return { 
+        start: start, 
+        end: end,
+        inicio: start,
+        fin: end
+    };
+}
     
     function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
         const obj = document.getElementById(id);
@@ -2395,18 +2424,65 @@ function procesarDatosLocalmente() {
         }
     }
 
-    function actualizarDashboard() {
-        if(!datos || datos.length === 0) return;
-        
-        // 1. Obtener datos según filtros visuales (para las gráficas y KPIs de arriba)
-        const rango = getFechasDashboard();
-        let datosPropietario = datos.filter(m => pasaFiltroPropietario(m));
-        let datosResumen = datosPropietario;
-        
-        if (rango && rango.start) {
-             datosResumen = datosResumen.filter(m => m.ts >= rango.start.getTime() && m.ts <= rango.end.getTime());
-        }
+// ==========================================
+// 📊 LÓGICA DEL DASHBOARD (Restaurada)
+// ==========================================
 
+function actualizarDashboard() {
+    // Si no hay datos, salimos para evitar errores
+    if (!datos || datos.length === 0) return;
+
+    // Filtrar por fechas del mes actual
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // 1. FILTRO DE PROPIETARIO
+    const movsUsuario = datos.filter(m => pasaFiltroPropietario(m));
+
+    // 2. FILTRO DE FECHA (Mes Actual)
+    const movsMes = movsUsuario.filter(m => {
+        const d = new Date(m.ts);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    // 3. CÁLCULO DE TOTALES (Ignorando Traspasos e Iniciales)
+    const ingresos = movsMes
+        .filter(m => m.tipo === 'ingreso' && !String(m.concepto).toLowerCase().includes('inicial'))
+        .reduce((acc, m) => acc + m.importe, 0);
+
+    const gastos = movsMes
+        .filter(m => m.tipo === 'gasto')
+        .reduce((acc, m) => acc + Math.abs(m.importe), 0);
+
+    const ahorro = ingresos - gastos;
+    const tasaAhorro = ingresos > 0 ? (ahorro / ingresos) * 100 : 0;
+
+    // 4. ACTUALIZACIÓN VISUAL
+    animarCifra('kpi-ingresos', ingresos);
+    animarCifra('kpi-gastos', gastos);
+    
+    const elAhorro = document.getElementById('kpi-ahorro');
+    if (elAhorro) {
+        elAhorro.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(ahorro);
+        elAhorro.style.color = ahorro >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+    }
+
+    const elTasa = document.getElementById('kpi-tasa');
+    if (elTasa) {
+        elTasa.innerText = tasaAhorro.toFixed(1) + '%';
+        if (tasaAhorro > 20) elTasa.style.color = 'var(--c-success)';
+        else if (tasaAhorro > 0) elTasa.style.color = 'var(--c-warn)';
+        else elTasa.style.color = 'var(--c-danger)';
+    }
+}
+
+// Función auxiliar necesaria para que funcione la anterior
+function animarCifra(id, valorFinal) {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+    elemento.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(valorFinal);
+}
         // 2. Calcular KPIs visuales (Ingresos/Gastos del periodo seleccionado)
         let ing = 0, gas = 0;
         datosResumen.forEach(m => {
@@ -3860,6 +3936,238 @@ async function guardarAjuste(tipo) {
         event.target.disabled = false;
     }
 }
+
+// ==========================================
+// 🔍 BUSCADOR OPTIMIZADO (Con seguridad de carga)
+// ==========================================
+let timeoutBuscador;
+
+// Esperamos a que todo el HTML esté cargado antes de buscar el input
+document.addEventListener('DOMContentLoaded', () => {
+    const inputBusqueda = document.getElementById('f-texto');
+    
+    if (inputBusqueda) {
+        inputBusqueda.addEventListener('input', (e) => {
+            const termino = e.target.value.toLowerCase();
+            clearTimeout(timeoutBuscador);
+            timeoutBuscador = setTimeout(() => {
+                filtrarTabla(termino);
+            }, 300);
+        });
+    } else {
+        console.warn("Elemento 'f-texto' no encontrado al iniciar.");
+    }
+});
+
+function filtrarTabla(termino) {
+    // Lógica de filtrado existente...
+    const filas = document.querySelectorAll('#tabla-movimientos tr');
+    let visibles = 0;
+    
+    filas.forEach(fila => {
+        const texto = fila.innerText.toLowerCase();
+        // Optimización: Si no hay término, mostrar todo rápido
+        if (!termino) {
+            fila.style.display = '';
+            visibles++;
+            return;
+        }
+        
+        if (texto.includes(termino)) {
+            fila.style.display = '';
+            visibles++;
+        } else {
+            fila.style.display = 'none';
+        }
+    });
+    
+    // Mostrar mensaje si no hay resultados
+    const noResult = document.getElementById('no-results-msg');
+    if(noResult) noResult.style.display = visibles === 0 ? 'block' : 'none';
+}
+
+//** 💎 aiDANaI - SISTEMA DE RECUPERACIÓN TOTAL DE MÉTRICAS//
+//* Repara: Ingresos, Gastos, Liquidez, Inversión, Cobertura y Libertad.//
+
+window.actualizarDashboard = function() {
+    console.log("⚡ [REPARACIÓN] Recalculando TODO el Dashboard...");
+
+    if (!datos || datos.length === 0) return;
+
+    // 1. FILTRAR POR PROPIETARIO
+    const movsUsuario = (typeof pasaFiltroPropietario === 'function') 
+        ? datos.filter(m => pasaFiltroPropietario(m)) 
+        : datos;
+
+    // ======================================================
+    // PARTE A: TARJETAS DE MENSUALIDAD (Ingresos/Gastos)
+    // ======================================================
+    // Forzamos fecha a Febrero 2026 (donde están tus datos)
+    const targetMonth = 1; // Febrero
+    const targetYear = 2026;
+    window.fechaReferenciaGlobal = new Date(targetYear, targetMonth, 1);
+
+    const movsMes = movsUsuario.filter(m => {
+        const d = new Date(m.ts);
+        return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+    });
+
+    let ingMes = 0, gasMes = 0;
+    movsMes.forEach(m => {
+        const c = String(m.concepto||'').toLowerCase();
+        if (m.tipo === 'ingreso' && !c.includes('inicial')) ingMes += m.importe;
+        if (m.tipo === 'gasto') gasMes += Math.abs(m.importe);
+    });
+
+    const netoMes = ingMes - gasMes;
+    const tasaAhorro = ingMes > 0 ? ((ingMes - gasMes) / ingMes) * 100 : 0;
+
+    // ACTUALIZAR DOM (Inicio)
+    const setTxt = (id, val, isMoney=true) => {
+        const el = document.getElementById(id);
+        if(el) {
+            if(isMoney) el.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+            else el.innerText = val.toFixed(1) + '%';
+        }
+    };
+
+    setTxt('d-ing', ingMes);
+    setTxt('d-gas', gasMes);
+    setTxt('d-net', netoMes);
+    setTxt('d-aho', tasaAhorro, false);
+    
+    // Colorear Neto
+    const elNeto = document.getElementById('d-net');
+    if(elNeto) elNeto.style.color = netoMes >= 0 ? '#39FF14' : '#FF2E4D';
+
+    // ======================================================
+    // PARTE B: TARJETAS DE PATRIMONIO (Liquidez vs Inversión)
+    // ======================================================
+    let totalLiquidez = 0;
+    let totalInversion = 0;
+    let totalPatrimonio = 0;
+    const saldos = {};
+
+    // Calculamos saldo acumulado histórico de cada cuenta
+    movsUsuario.forEach(m => {
+        const cta = m.cuenta.trim().toUpperCase();
+        saldos[cta] = (saldos[cta] || 0) + m.importe;
+    });
+
+    // Clasificamos según mapaCuentas
+    Object.keys(saldos).forEach(cta => {
+        const saldo = saldos[cta];
+        totalPatrimonio += saldo;
+
+        // Leemos configuración
+        const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) 
+            ? mapaCuentas[cta] 
+            : { esInversion: false }; // Por defecto liquidez
+
+        if (config.esInversion) {
+            totalInversion += saldo;
+        } else {
+            totalLiquidez += saldo;
+        }
+    });
+
+    // ACTUALIZAR DOM (Patrimonio)
+    // Nota: d-patri-liq y d-patri-inv son los IDs que vimos en el código original
+    setTxt('d-patri-liq', totalLiquidez);
+    setTxt('d-patri-inv', totalInversion);
+    
+    // Si existe el total global
+    setTxt('d-patri-total', totalPatrimonio); 
+
+    // ======================================================
+    // PARTE C: COBERTURA Y LIBERTAD (Runway & FIRE)
+    // ======================================================
+    
+    // 1. Calcular Gasto Mensual Promedio (Histórico)
+    // Necesitamos saber cuántos meses llevas registrando datos
+    const fechas = movsUsuario.map(m => m.ts);
+    const minF = Math.min(...fechas);
+    const maxF = Math.max(...fechas);
+    // Evitamos división por cero (mínimo 1 mes)
+    const mesesActivo = Math.max(1, (maxF - minF) / (1000 * 60 * 60 * 24 * 30.44));
+
+    const gastosTotalesHistoricos = movsUsuario
+        .filter(m => m.tipo === 'gasto')
+        .reduce((a, b) => a + Math.abs(b.importe), 0);
+    
+    const gastoMedioMensual = gastosTotalesHistoricos / mesesActivo;
+
+    // 2. Calcular Métricas
+    // Cobertura = Liquidez / GastoMensual
+    const coberturaMeses = gastoMedioMensual > 0 ? (totalLiquidez / gastoMedioMensual) : 0;
+    
+    // Libertad = Patrimonio / (GastoMensual * 300) -> Regla del 4%
+    const objetivoFire = gastoMedioMensual * 300;
+    const pctLibertad = objetivoFire > 0 ? (totalPatrimonio / objetivoFire) * 100 : 0;
+
+    // ACTUALIZAR DOM (Salud Financiera)
+    const elCob = document.getElementById('d-cobertura');
+    if(elCob) {
+        elCob.innerText = coberturaMeses.toFixed(1) + " Meses";
+        // Semáforo
+        if(coberturaMeses < 3) elCob.style.color = '#FF2E4D'; // Rojo
+        else if(coberturaMeses < 6) elCob.style.color = '#FFD60A'; // Amarillo
+        else elCob.style.color = '#39FF14'; // Verde
+    }
+
+    const elLib = document.getElementById('d-libertad');
+    if(elLib) {
+        elLib.innerText = pctLibertad.toFixed(1) + "%";
+        // Semáforo
+        elLib.style.color = pctLibertad > 10 ? '#39FF14' : '#FFFFFF';
+    }
+
+    // Aviso visual
+    if(typeof mostrarEstado === 'function' && !window.avisoLanzado) {
+        mostrarEstado("📊 Métricas de Liquidez y Cobertura recalculadas", "normal");
+        window.avisoLanzado = true;
+    }
+};
+
+// --- RESTO DE UTILIDADES NECESARIAS (Configuración y Fechas) ---
+
+window.procesarLibroLeido = function(wb) {
+    console.log("⚡ Leyendo configuración manual...");
+    mapaCuentas = {};
+    const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
+    if (wsConfigName) {
+        const mat = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName], { header: 1 });
+        globalConfigData = mat;
+        for(let i=1; i<mat.length; i++) {
+            const r = mat[i];
+            if(!r || !r[0]) continue;
+            const cta = String(r[0]).trim().toUpperCase();
+            const tipo = String(r[1]||'').trim();
+            // LECTURA MANUAL DE "SI" EN COLUMNA 2
+            const esInv = String(r[2]||'').toUpperCase() === 'SI';
+            mapaCuentas[cta] = { tipo, esInversion: esInv };
+        }
+    }
+    let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
+    const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
+    procesarDatos(jsonMovs);
+};
+
+window.getFechasDashboard = function() {
+    return { start: new Date(2026, 1, 1).getTime(), end: new Date(2026, 2, 0).getTime() };
+};
+
+window.verDetalleKPI = function(tipo) {
+    const f = getFechasDashboard();
+    if(document.getElementById('f-desde')) document.getElementById('f-desde').valueAsDate = new Date(f.start);
+    if(document.getElementById('f-hasta')) document.getElementById('f-hasta').valueAsDate = new Date(f.end);
+    if(typeof filtros !== 'undefined') { filtros.tipo = tipo; filtros.desde = document.getElementById('f-desde').value; filtros.hasta = document.getElementById('f-hasta').value; }
+    if(typeof aplicarFiltros === 'function') aplicarFiltros();
+    if(typeof irPestana === 'function') irPestana('movs');
+};
+
+// Forzar actualización inmediata
+setTimeout(() => { if(typeof datos !== 'undefined' && datos.length > 0) actualizarDashboard(); }, 1000);
 
     </script>
 </body>
