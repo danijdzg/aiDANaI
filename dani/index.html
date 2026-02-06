@@ -2118,16 +2118,20 @@ async function guardarManual() {
     const inputCant = document.getElementById('m-cantidad');
     let imp = parseFloat(inputCant.value);
     
-    if (isNaN(imp) || imp === 0) return alert("Importe no válido");
+    // Validación estricta de importe
+    if (isNaN(imp) || imp === 0) return alert("Por favor, introduce un importe válido diferente de cero.");
     
-    imp = Math.abs(imp); 
+    imp = Math.abs(imp); // Trabajamos siempre en positivo y asignamos signo según tipo
     
     const cuentaOrigen = document.getElementById('m-cuenta').value;
     const cuentaDestino = document.getElementById('m-cuenta-destino').value;
     let concepto = document.getElementById('m-concepto').value || 'Varios';
-    let detalle = document.getElementById('m-desc').value;
+    let detalle = document.getElementById('m-desc').value || '';
     const beneficiario = document.getElementById('m-beneficiario').value || 'Yo';
-    const fecha = new Date(document.getElementById('m-fecha').value).getTime();
+    
+    // CORRECCIÓN FECHA: Obtenemos fecha segura para evitar saltos de zona horaria
+    const rawFecha = document.getElementById('m-fecha').valueAsDate || new Date();
+    const fechaTs = rawFecha.getTime();
 
     const textoOriginal = btnAction.innerText;
     btnAction.innerText = "⏳ PROCESANDO...";
@@ -2136,61 +2140,102 @@ async function guardarManual() {
     try {
         const movimientosAGuardar = [];
 
-        // Lógica de tipos (Pago, Ingreso, Traspaso)
+        // 1. Preparación Lógica de los Movimientos (Objetos internos)
         if (modoTransaccionActual === 'pago') {
-            movimientosAGuardar.push({ ts: fecha, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'gasto' });
+            movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'gasto' });
         } else if (modoTransaccionActual === 'ingreso') {
-            movimientosAGuardar.push({ ts: fecha, importe: imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'ingreso' });
+            movimientosAGuardar.push({ ts: fechaTs, importe: imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'ingreso' });
         } else if (modoTransaccionActual === 'traspaso') {
             if (!concepto.toUpperCase().includes('TRASPASO')) concepto = "TRASPASO - " + concepto;
+            
             if (cuentaDestino && cuentaDestino !== cuentaOrigen) {
-                movimientosAGuardar.push({ ts: fecha, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: `>> A: ${cuentaDestino} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
-                movimientosAGuardar.push({ ts: fecha, importe: imp, cuenta: cuentaDestino, concepto: concepto, detalle: `<< DE: ${cuentaOrigen} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
+                // Generamos los dos movimientos del traspaso (Salida y Entrada)
+                movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: `>> A: ${cuentaDestino} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
+                movimientosAGuardar.push({ ts: fechaTs, importe: imp, cuenta: cuentaDestino, concepto: concepto, detalle: `<< DE: ${cuentaOrigen} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
             } else {
-                movimientosAGuardar.push({ ts: fecha, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'traspaso' });
+                // Traspaso simple (raro, pero posible)
+                movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'traspaso' });
             }
         }
 
         if (modoNube) {
-            // --- GUARDADO EN NUBE (API GRAPH) ---
-            mostrarEstado('☁️ Guardando en Tabla Excel...', 'normal');
+            // --- MODO NUBE (Aquí estaba el error de compatibilidad) ---
+            mostrarEstado('☁️ Conectando con Excel...', 'normal');
             
+            if (idEnEdicion) {
+                // Nota: La API de Graph simple añade filas, no edita in-situ fácilmente sin rangos complejos.
+                // El comportamiento estándar aquí es añadir la corrección.
+                console.log("Añadiendo corrección/edición como nueva fila...");
+            }
+
             for (const mov of movimientosAGuardar) {
-                if (idEnEdicion) {
-                    alert("⚠️ La edición en modo nube no modifica la fila anterior, añade una corrección. Se recomienda borrar y crear de nuevo.");
-                }
-                await oneDrive.addRowToTable(mov);
+                // TRADUCCIÓN DE DATOS: Convertimos el Objeto JS en Array Excel
+                // Orden Estricto: FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO
+                
+                // Formato Fecha ISO (YYYY-MM-DD) para compatibilidad total con Excel
+                const fechaExcel = new Date(mov.ts).toISOString().split('T')[0];
+                
+                const filaExcel = [
+                    fechaExcel,         // Col A
+                    mov.cuenta,         // Col B
+                    mov.concepto,       // Col C
+                    mov.importe,        // Col D
+                    mov.detalle,        // Col E
+                    mov.beneficiario    // Col F
+                ];
+
+                // Enviamos el ARRAY, no el objeto
+                await oneDrive.addRowToTable(filaExcel);
             }
             
             mostrarEstado('✅ Guardado en Nube. Sincronizando...', 'ok');
-            // Recargamos datos para ver reflejado el cambio
+            // Recargamos para que el usuario vea el cambio confirmado desde el servidor
             await cargarDesdeNube();
             
         } else {
-            // --- GUARDADO LOCAL ---
+            // --- MODO LOCAL (Offline) ---
             for (const mov of movimientosAGuardar) {
                 if (idEnEdicion && movimientosAGuardar.length === 1) {
+                    // Edición Local
                     const indice = datos.findIndex(d => d.id === idEnEdicion);
                     if (indice !== -1) datos[indice] = { ...mov, id: idEnEdicion, saldo: 0 };
                 } else {
+                    // Nuevo Local
                     datos.push({ ...mov, id: Date.now() + Math.random(), saldo: 0 });
                 }
             }
-            finalizarGuardado(modoTransaccionActual === 'traspaso');
+            // En local no recargamos nube, solo procesamos
+            procesarDatosLocalmente(); 
+            mostrarEstado('💾 Guardado localmente', 'ok');
         }
         
         cerrarModal();
         vibrar('ingreso');
 
     } catch (e) {
-        console.error(e);
-        alert("ERROR: " + e.message);
+        console.error("Error al guardar:", e);
+        alert("ERROR DE ESCRITURA: " + e.message);
         mostrarEstado('Error al guardar', 'err');
     } finally {
         btnAction.innerText = textoOriginal;
         btnAction.disabled = false;
-        idEnEdicion = null;
+        idEnEdicion = null; // Limpiamos estado de edición
     }
+}
+
+// Función auxiliar necesaria si no existe (para modo local sin recarga completa)
+function procesarDatosLocalmente() {
+    datos.sort((a, b) => a.ts - b.ts);
+    // Recalcular saldos
+    const ac = {};
+    datos.forEach(m => {
+        if (!ac[m.cuenta]) ac[m.cuenta] = 0;
+        ac[m.cuenta] += m.importe;
+        m.saldo = ac[m.cuenta];
+    });
+    renderizar();
+    actualizarDashboard();
+    actualizarPatrimonio();
 }
 
  
