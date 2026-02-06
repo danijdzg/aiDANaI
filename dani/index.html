@@ -29,8 +29,29 @@
             --c-text: #FFFFFF;      
             --c-border: #333333;    
             --font-main: 'Inter', sans-serif;
-        }
+			/* COLORES DE IDENTIDAD */
+			--theme-dn: #32D74B;    /* Verde (Todos) */
+			--theme-dani: #0A84FF;  /* Azul (Dani) */
+			--theme-norma: #FF453A; /* Rojo (Norma) */
+    
+			/* Variable dinámica que cambiará con JS */
+			--current-theme: var(--theme-dn);
+		}
+		/* 1. Aplicar color al Título */
+		.logo {
+			color: var(--current-theme) !important;
+			transition: color 0.3s ease; /* Transición suave */
+		}
 
+		/* 2. Aplicar color a la Pestaña Activa del Pie de Página */
+		.nav-item.active {
+			color: var(--current-theme) !important;
+		}
+		.nav-item.active i, 
+		.nav-item.active span {
+			color: var(--current-theme) !important;
+			transition: color 0.3s ease;
+		}
         body { 
             font-family: 'Inter', sans-serif; 
             background-color: var(--c-bg); 
@@ -732,23 +753,66 @@
     height: auto !important;
     padding: 10px;
 }
+/* --- BOTÓN DE USUARIO PREMIUM --- */
+.btn-avatar-glow {
+    /* Forma y tamaño */
+    width: 42px;
+    height: 42px;
+    border-radius: 50%; /* Círculo perfecto */
+    margin-right: 15px; /* Separación con el texto */
+    
+    /* Estilo Visual */
+    background: rgba(255, 255, 255, 0.08); /* Fondo cristal suave */
+    border: 2px solid var(--current-theme); /* El borde toma el color del usuario (Verde/Azul/Rojo) */
+    box-shadow: 0 0 15px var(--current-theme); /* Resplandor de neón del color del usuario */
+    
+    /* Comportamiento */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Animación "bouncy" */
+}
 
-    </style>
+/* El icono de dentro */
+.btn-avatar-glow .material-icons {
+    font-size: 24px;
+    color: var(--current-theme); /* El muñeco también se colorea */
+    transition: color 0.3s ease;
+}
+
+/* Efecto al pasar el ratón */
+.btn-avatar-glow:hover {
+    transform: scale(1.1); /* Se hace un poco más grande */
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 25px var(--current-theme); /* Brilla más */
+}
+
+/* Efecto al pulsar */
+.btn-avatar-glow:active {
+    transform: scale(0.9); /* Se encoge como un botón real */
+}
+ /* Añadir la palabra Meses automáticamente después del número */
+#d-cobertura::after {
+    content: " Meses";
+    font-size: 0.7em; /* Un poco más pequeño queda mejor */
+    opacity: 0.7;
+    margin-left: 4px;
+}  
+   </style>
 </head>
 <body>
     <div id="app-viewport">
         <div class="app-layout">
             <header>
     <div class="header-row-top">
-        <div class="brand-area">
-            <button id="btn-owner" class="btn-owner owner-all" onclick="toggleOwner()" style="width:28px; height:28px; font-size:9px; margin:0;">
-                D&N
-            </button>
-            <h2>aiDANaI</h2>
-            <button id="btn-privacy" class="btn-privacy" onclick="togglePrivacy()" style="margin-left:10px;">
-                <span class="material-icons" style="font-size:18px">visibility</span>
-            </button>
-        </div>
+        <div class="brand-area" style="display: flex; align-items: center;">
+    <button id="btn-user-filter" class="btn-avatar-glow" onclick="toggleUsuario()">
+        <span class="material-icons">person</span>
+    </button>
+
+    <h1 class="logo" id="app-title" style="margin: 0; font-size: 24px; font-weight: 800;">D & N</h1>
+</div>
         
         <div class="source-switch">
             <button class="source-option active" id="mode-local" onclick="cambiarModo('local')">
@@ -1189,6 +1253,15 @@
     <script>
 	
 // ==========================================
+// 🆔 UTILIDADES DE IDENTIDAD (NUEVO)
+// ==========================================
+function generateUUID() {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+}
+	
+// ==========================================
 // 🛡️ MÓDULO DE SEGURIDAD ONEDRIVE (OneDriveManager)
 // ==========================================
 
@@ -1205,110 +1278,22 @@ const MSAL_CONFIG = {
     }
 };
 
-// ==========================================
-// 🛡️ MOTOR DE INTEGRIDAD DE DATOS (NUEVO)
-// ==========================================
-
-async function guardarMovimientoAtomico(nuevoMovimiento, esEdicion = false) {
-    if (!modoNube) {
-        alert("⚠️ Estás en modo local. Los cambios no se sincronizan en tiempo real.");
-        return false;
-    }
-
-    const btnGuardar = document.getElementById('btn-guardar');
-    const textoOriginal = btnGuardar ? btnGuardar.innerText : '';
-    if(btnGuardar) btnGuardar.innerText = "⏳ SINCRONIZANDO...";
-    mostrarEstado('☁️ NUBE: Fusionando datos con servidor...', 'normal');
-
-    try {
-        // PASO 1: Descargar la VERDADERA versión actual de la nube (Evita sobrescribir a otros)
-        // Usamos oneDrive.loadFile pero sin procesar la UI, solo para obtener el Blob
-        const arrayBuffer = await oneDrive.loadFile('aidanai.xlsx');
-        const data = new Uint8Array(arrayBuffer);
-        const wbNube = XLSX.read(data, { type: 'array', cellDates: true });
-        
-        // PASO 2: Convertir esa hoja a JSON para manipularla
-        let wsName = wbNube.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wbNube.SheetNames[0];
-        let jsonNube = XLSX.utils.sheet_to_json(wbNube.Sheets[wsName], { header: 1, raw: true });
-
-        // PASO 3: Aplicar el cambio sobre los datos de la NUBE (Merge)
-        // Formato de fila: [FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO]
-        
-        const filaNueva = [
-            new Date(nuevoMovimiento.ts),
-            nuevoMovimiento.cuenta,
-            nuevoMovimiento.concepto,
-            nuevoMovimiento.importe,
-            nuevoMovimiento.detalle,
-            nuevoMovimiento.beneficiario
-        ];
-
-        if (esEdicion && idEnEdicion !== null) {
-            // Lógica compleja: Encontrar la fila original y reemplazarla.
-            // Para simplificar en Excel sin ID único persistente: 
-            // Asumimos que si estamos editando, borramos la versión vieja y ponemos la nueva al final,
-            // o implementamos un ID en columna oculta. 
-            // POR SEGURIDAD AHORA: Agregamos como nuevo (o requeriría añadir columna ID al Excel).
-            // Recomiendo: Añadir al final para no corromper índices de otros.
-            jsonNube.push(filaNueva); 
-        } else {
-            jsonNube.push(filaNueva);
-        }
-
-        // PASO 4: Reconstruir el Excel
-        const nuevoWs = XLSX.utils.aoa_to_sheet(jsonNube);
-        // Formato columnas visual
-        nuevoWs['!cols'] = [{wch:12}, {wch:20}, {wch:20}, {wch:10}, {wch:40}, {wch:20}];
-        wbNube.Sheets[wsName] = nuevoWs; // Reemplazamos la hoja
-
-        // PASO 5: Subir (Check-in)
-        const wbout = XLSX.write(wbNube, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/octet-stream' });
-        
-        await oneDrive.saveFile(blob); // Esto usa eTags para evitar colisiones de último milisegundo
-
-        // PASO 6: Actualizar UI Local con lo que acabamos de guardar
-        // Recargamos todo para estar 100% sincronizados con lo que hay en la nube
-        procesarLibroLeido(wbNube); 
-        
-        mostrarEstado('✅ GUARDADO Y SINCRONIZADO EN LA NUBE', 'ok');
-        vibrar('ingreso');
-        return true;
-
-    } catch (e) {
-        console.error(e);
-        if (e.message.includes("412") || e.message === "CONFLICTO_DE_VERSIONES") {
-            alert("⚠️ TRÁFICO ALTO: Alguien más guardó datos justo ahora. Reintentando...");
-            return guardarMovimientoAtomico(nuevoMovimiento, esEdicion); // Reintento recursivo
-        }
-        alert("ERROR CRÍTICO AL GUARDAR EN NUBE: " + e.message);
-        return false;
-    } finally {
-        if(btnGuardar) btnGuardar.innerText = textoOriginal;
-    }
-}
-
 /* =========================================
-   🛡️ GESTOR ONEDRIVE 2.0 (TRANSACTIONAL)
+   🛡️ GESTOR ONEDRIVE 3.0 (COMPLETE & SAFE)
    ========================================= */
 class OneDriveManager {
     constructor() {
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         this.graphScopes = ["User.Read", "Files.ReadWrite"];
         this.fileId = null; 
-        this.tableName = "TablaMovimientos"; // IMPORTANTE: Debes crear esta tabla en tu Excel
+        this.tableName = "TablaMovimientos"; 
     }
 
     async login() {
         const accounts = this.msalInstance.getAllAccounts();
         if (accounts.length > 0) return accounts[0];
-        try {
-            const response = await this.msalInstance.loginPopup({ scopes: this.graphScopes });
-            return response.account;
-        } catch (e) {
-            console.error("Error Login:", e);
-            throw e;
-        }
+        const response = await this.msalInstance.loginPopup({ scopes: this.graphScopes });
+        return response.account;
     }
 
     async getToken() {
@@ -1318,62 +1303,110 @@ class OneDriveManager {
         return response.accessToken;
     }
 
-    async loadFile(fileName) {
+    // 1. INICIALIZACIÓN Y BÚSQUEDA
+    async initialize() {
         const token = await this.getToken();
-        // Intentar buscar por ID si no lo tenemos
-        if (!this.fileId) {
-            try {
-                const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${fileName}')`;
-                const searchRes = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
-                const searchData = await searchRes.json();
-                if (searchData.value && searchData.value.length > 0) {
-                    this.fileId = searchData.value[0].id;
-                } else {
-                    // Fallback: Buscar en raíz directamente si la búsqueda falla
-                    const rootUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}`;
-                    const rootRes = await fetch(rootUrl, { headers: { Authorization: `Bearer ${token}` } });
-                    if(rootRes.ok) {
-                        const rootData = await rootRes.json();
-                        this.fileId = rootData.id;
-                    }
-                }
-            } catch (e) { console.warn("Error buscando archivo:", e); }
+        const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')`;
+        const res = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        
+        if (data.value && data.value.length > 0) {
+            this.fileId = data.value[0].id;
+        } else {
+            // Si no existe, lanzamos error (o podríamos crearlo aquí)
+            throw new Error("Archivo aidanai.xlsx no encontrado. Usa 'Exportar' primero para crearlo.");
         }
-
-        if(!this.fileId) throw new Error("No se pudo localizar el archivo Excel en OneDrive");
-
-        // Descargar contenido
-        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/content`;
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        return await res.arrayBuffer();
     }
 
-    // CAMBIO: Ahora aceptamos 'nombreTabla' como parámetro opcional
-    async addRowToTable(datosFila, nombreTabla = null) {
-        const token = await this.getToken();
-        const tableTarget = nombreTabla || this.tableName; // Si no especificas, usa la de Movimientos
+    // 2. LECTURA DE ARCHIVO COMPLETO (Para cargar al inicio)
+    async loadFile(fileName) {
+        // Aseguramos tener el fileId primero
+        if (!this.fileId) await this.initialize();
         
-        // La API espera un array de arrays [[col1, col2, ...]]
-        const values = [datosFila];
+        const token = await this.getToken();
+        const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/content`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error("Error descargando archivo");
+        return await response.arrayBuffer(); 
+    }
 
-        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/${tableTarget}/rows`;
+    // 3. AÑADIR FILA (Transaccional) - Renombrado para coincidir con tu código
+    async addRowToTable(datosFila, tablaDestino = null) {
+        // datosFila debe ser array: [UUID, FECHA, CUENTA, CONCEPTO, IMPORTE, DETALLE, BENEFICIARIO]
+        const token = await this.getToken();
+        const targetTable = tablaDestino || this.tableName;
+        
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/${targetTable}/rows`;
         
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 
-                'Authorization': `Bearer ${token}`, 
-                'Content-Type': 'application/json' 
-            },
-            body: JSON.stringify({ index: null, values: values }) 
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index: null, values: [datosFila] }) 
         });
 
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.error?.message || "Error escribiendo en Excel");
+            console.error("Error Graph API:", err);
+            throw new Error("Error escribiendo en Excel Cloud");
         }
-        return true;
+    }
+
+    // 4. BORRAR FILA POR ID (Quirúrgico)
+    async deleteRowById(uuid) {
+        const token = await this.getToken();
+        
+        // A. Buscar en la columna de IDs (Índice 0)
+        const colUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/${this.tableName}/columns/itemAt(index=0)/range`;
+        const colRes = await fetch(colUrl, { headers: { Authorization: `Bearer ${token}` } });
+        
+        if (!colRes.ok) throw new Error("No se pudo leer la columna de IDs");
+        
+        const colData = await colRes.json();
+        // values[i][0] es el valor de la celda
+        const rowIndex = colData.values.findIndex(row => row[0] === uuid);
+
+        if (rowIndex === -1) {
+            console.warn("Movimiento no encontrado (ya borrado o ID incorrecto).");
+            return;
+        }
+        
+        // B. Calcular índice relativo (RowIndex - 1 cabecera)
+        const tableRowIndex = rowIndex - 1; 
+        if (tableRowIndex < 0) return; // Es la cabecera, no tocar
+
+        // C. Borrar
+        const deleteUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/${this.tableName}/rows/itemAt(index=${tableRowIndex})`;
+        await fetch(deleteUrl, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    // 5. CREAR/SOBRESCRIBIR ARCHIVO (Para crear inicial o backups)
+    async createFile(fileName, blob) {
+        const token = await this.getToken();
+        const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}:/content`;
+        
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            },
+            body: blob
+        });
+        
+        if (!response.ok) throw new Error("Error creando archivo en nube");
+        const data = await response.json();
+        this.fileId = data.id; // Actualizamos el ID inmediatamente
+    }
+    
+    // Alias para compatibilidad con código antiguo
+    async saveFile(blob) {
+        return this.createFile('aidanai.xlsx', blob);
     }
 }
+
+
 // Instancia global
 const oneDrive = new OneDriveManager();
 
@@ -1482,12 +1515,10 @@ const Security = {
     document.getElementById('btn-load-cloud').style.display = modoNube ? 'flex' : 'none';
     
     if (modoNube) {
-        mostrarEstado('Conectando...', 'normal');
-        iniciarPolling(); // <--- ACTIVAR RELOJ
-    } else {
-        mostrarEstado('Modo Local: Elige archivo', 'normal');
-        detenerPolling(); // <--- PARAR RELOJ
-    }
+    document.getElementById('btn-guardar').style.display = 'none'; 
+	} else {
+     document.getElementById('btn-guardar').style.display = 'flex';
+	}
     
     datos = [];
     renderizar();
@@ -2264,76 +2295,7 @@ function procesarDatosLocalmente() {
     actualizarPatrimonio();
 }
 
- 
-    async function borrarMovimiento() {
-    // 1. Validación de seguridad: Si no hay ID cargado, no hacemos nada
-    if (idEnEdicion === null || idEnEdicion === undefined) return;
-
-    // 2. Confirmación de seguridad
-    if (!confirm("⚠️ ¿Estás SEGURO de eliminar este movimiento?\n\nEsta acción actualizará tu Excel y no se puede deshacer.")) return;
-
-    // 3. Buscar el movimiento en la memoria local
-    const indice = datos.findIndex(d => d.id === idEnEdicion);
-
-    if (indice !== -1) {
-        // --- PASO CLAVE: Borrar del array en memoria ---
-        datos.splice(indice, 1); 
-        
-        // 4. Feedback visual inmediato (UX)
-        cerrarModal();
-        mostrarEstado('🗑️ Eliminando y recalculando...', 'normal');
-        
-        // 5. RECALCULAR Y PINTAR (IMPORTANTE: Hacer esto SIEMPRE, sea local o nube)
-        // Ordenamos por fecha para que los saldos se calculen bien
-        datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
-
-        // Recalculamos la columna "Saldo" de todos los movimientos restantes
-        const ac = {};
-        datos.forEach(m => {
-            if(!ac[m.cuenta]) ac[m.cuenta] = 0;
-            ac[m.cuenta] += m.importe;
-            m.saldo = ac[m.cuenta];
-        });
-        
-        // Actualizamos todas las gráficas y tablas visualmente AHORA
-        renderizar();
-        actualizarDashboard();
-        actualizarPatrimonio();
-        
-        // Si el gráfico de distribución (Treemap) está abierto, lo actualizamos también
-        const cardDist = document.querySelector('.analysis-card');
-        if (cardDist && cardDist.classList.contains('open') && typeof renderizarDistribucion === 'function') {
-            renderizarDistribucion();
-        }
-
-        try {
-            if (modoNube) { 
-                // 6a. Modo Nube: Guardar el archivo actualizado (que ya no tiene la fila borrada)
-                await guardarCambiosEnFichero(true); 
-                mostrarEstado('✅ Registro eliminado de la nube.', 'ok');
-            } else {
-                // 6b. Modo Local: Avisar que hay cambios pendientes de exportar
-                mostrarEstado('Eliminado. Recuerda EXPORTAR el Excel.', 'normal');
-                revisarBotonExportar();
-            }
-            
-            vibrar('borrar');
-            
-        } catch (e) {
-            console.error(e);
-            alert("Error al eliminar en la nube: " + e.message);
-            // Si falla la sincronización, recargamos los datos de la nube para no mostrar información falsa
-            if(modoNube) await cargarDesdeNube();
-        } finally {
-            // Liberamos la variable de edición
-            idEnEdicion = null;
-        }
-    } else {
-        alert("Error: No se encontró el movimiento original en memoria.");
-        cerrarModal();
-    }
-}
-	
+     	
 	function clonarMovimiento() {
     vibrar('clonar');
     
@@ -2407,22 +2369,72 @@ function getFechasDashboard() {
         }
         window.requestAnimationFrame(paso);
     }
+ 
+// ==========================================
+// 🎢 MOTOR DE ANIMACIÓN DE NÚMEROS (CountUp)
+// ==========================================
+const cacheValores = {}; // Memoria para recordar el valor anterior
 
-    function togglePrivacy() {
-        document.body.classList.toggle('privacy-mode');
-        const btn = document.getElementById('btn-privacy');
-        const icon = btn.querySelector('.material-icons');
-        if (document.body.classList.contains('privacy-mode')) {
-            btn.classList.add('active');
-            icon.innerText = 'visibility_off';
-            mostrarEstado('Modo Privacidad Activado', 'normal');
+function animarCifra(id, valorFinal, tipo = 'moneda') {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+
+    // 1. Determinar punto de partida (para que no empiece siempre de 0)
+    const valorInicial = cacheValores[id] || 0;
+    const variacion = valorFinal - valorInicial;
+    
+    // Si el cambio es minúsculo, no animamos
+    if (Math.abs(variacion) < 0.01) {
+        elemento.innerText = formatear(valorFinal, tipo);
+        return;
+    }
+
+    // 2. Configuración de la animación
+    const duracion = 1500; // 1.5 segundos (muy elegante)
+    const startTime = performance.now();
+
+    // Función de Easing (Ease Out Expo): Empieza rápido, frena suave al final
+    const easeOutExpo = (x) => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+
+    function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duracion, 1);
+        
+        // Calcular valor actual basado en la curva de aceleración
+        const valorActual = valorInicial + (variacion * easeOutExpo(progress));
+
+        // Pintar en pantalla
+        elemento.innerText = formatear(valorActual, tipo);
+
+        // Continuar o terminar
+        if (progress < 1) {
+            requestAnimationFrame(step);
         } else {
-            btn.classList.remove('active');
-            icon.innerText = 'visibility';
-            mostrarEstado('Modo Privacidad Desactivado', 'normal');
+            cacheValores[id] = valorFinal; // Guardamos el valor final para la próxima
         }
     }
 
+    // Arrancar
+    requestAnimationFrame(step);
+}
+
+// Ayudante de formato interno
+function formatear(val, tipo) {
+    if (tipo === 'moneda') {
+        return new Intl.NumberFormat('es-ES', { 
+            style: 'currency', 
+            currency: 'EUR', 
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2 
+        }).format(val);
+    } else if (tipo === 'porcentaje') {
+        return val.toFixed(2) + '%';
+    } else if (tipo === 'numero') {
+        return val.toFixed(1); // Para los "Meses" de cobertura
+    }
+    return val;
+}
+ 
 // ==========================================
 // 📊 LÓGICA DEL DASHBOARD (Restaurada)
 // ==========================================
@@ -2602,30 +2614,31 @@ function animarCifra(id, valorFinal) {
     }
 
 
-    function generarLibroExcel() {
-        // 1. Preparamos los Movimientos (tu código original)
-        const filasExcel = Array(0).fill([]); 
-        filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
-        datos.forEach(m => { filasExcel.push([new Date(m.ts), m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario]); });
-        
-        // 2. Creamos el libro nuevo
-        const wb = XLSX.utils.book_new();
-        
-        // 3. Añadimos la hoja de Movimientos
-        const ws = XLSX.utils.aoa_to_sheet(filasExcel);
-        ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
-        XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-        
-        // === NUEVO: RESTAURAMOS LA HOJA CONFIG SI EXISTE ===
-        if (globalConfigData && globalConfigData.length > 0) {
-            // Convertimos la matriz guardada de vuelta a una Hoja de Excel
-            const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-            // La añadimos al libro con el nombre exacto "Config"
-            XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
-            console.log("Sistema: Hoja Config restaurada correctamente.");
-        }
-        return wb;
+   function generarLibroExcel() {
+    const filasExcel = []; 
+    // Cabecera actualizada con 7 columnas
+    filasExcel.push(["ID", "FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
+    
+    datos.forEach(m => { 
+        const fechaStr = new Date(m.ts).toISOString().split('T')[0];
+        // Nos aseguramos de guardar el ID. Si es un dato antiguo sin ID, generamos uno ahora mismo.
+        const idFinal = m.id || generateUUID(); 
+        filasExcel.push([idFinal, fechaStr, m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario]); 
+    });
+    
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(filasExcel);
+    // Ajuste de anchos (Columna ID oculta o estrecha, el resto normal)
+    ws['!cols'] = [{ wch: 0 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }]; // wch:0 intenta ocultarla visualmente
+    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+    
+    // ... (Resto de lógica de Configuración igual) ...
+    if (globalConfigData && globalConfigData.length > 0) {
+        const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
+        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
     }
+    return wb;
+}
 
     function generarYDescargarExcel() {
         const wb = generarLibroExcel();
@@ -3383,70 +3396,6 @@ function leerExcelDesdeBuffer(wb) {
     procesarDatos(jsonMovs);
 }
 
-// ==========================================
-// 5. FUNCIONES DE GUARDADO Y EXPORTACIÓN (FALTABAN ESTAS)
-// ==========================================
-
-async function guardarCambiosEnFichero() {
-    mostrarEstado('Sincronizando con la nube...', 'normal');
-    const btnGuardar = document.getElementById('btn-guardar');
-    if(btnGuardar) btnGuardar.innerText = "Subiendo...";
-
-    try {
-        const wb = generarLibroExcel();
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/octet-stream' });
-
-        await oneDrive.saveFile(blob);
-        mostrarEstado('✅ Sincronizado correctamente', 'ok');
-        if(navigator.vibrate) navigator.vibrate(200);
-
-    } catch (error) {
-        if (error.message === "CONFLICTO_DE_VERSIONES") {
-            alert("⚠️ CONFLICTO: Alguien modificó el archivo mientras trabajabas. Se recargarán los datos.");
-            await cargarDesdeNube(); 
-        } else {
-            mostrarEstado('Error al guardar: ' + error.message, 'err');
-        }
-    } finally {
-        if(btnGuardar) btnGuardar.innerText = "GUARDAR";
-    }
-}
-
-function generarLibroExcel() {
-    // 1. Preparamos la hoja de Movimientos
-    const filasExcel = []; 
-    // Encabezados exactos
-    filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
-    
-    // Convertimos datos de memoria a filas de Excel
-    datos.forEach(m => { 
-        // Convertimos fecha a string YYYY-MM-DD para máxima compatibilidad con CSV/Excel
-        const fechaStr = new Date(m.ts).toISOString().split('T')[0];
-        filasExcel.push([fechaStr, m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario]); 
-    });
-    
-    // 2. Creamos el libro nuevo
-    const wb = XLSX.utils.book_new();
-    
-    // 3. Añadimos la hoja de Movimientos
-    const ws = XLSX.utils.aoa_to_sheet(filasExcel);
-    // Ajuste de ancho de columnas para que se vea bonito al abrir
-    ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-    
-    // 4. RESTAURAMOS LA HOJA DE CONFIGURACIÓN
-    // (Vital para que no se pierdan tus categorías e inversiones al guardar)
-    if (globalConfigData && globalConfigData.length > 0) {
-        const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion"); // Nombre exacto que tenías
-        console.log("Sistema: Hoja Configuracion restaurada.");
-    } else {
-        console.warn("Advertencia: No hay datos de configuración global para restaurar.");
-    }
-    
-    return wb;
-}
 
 function guardarUniversal() {
     vibrar('clonar'); // Feedback táctil
@@ -3515,55 +3464,6 @@ function exportarExcel() {
         alert(mensaje + "\n\nConsejo: Cierra otras pestañas o reinicia el navegador si persiste.");
         mostrarEstado('Error al exportar', 'err');
     }
-}
-/* =========================================
-   🔄 CAMBIO DE USUARIO (TOGGLE OWNER)
-   ========================================= */
-function toggleOwner() {
-    // 1. Lógica de cambio (0: Todos, 1: Dani, 2: Norma)
-    estadoPropietario = (estadoPropietario + 1) % 3;
-
-    // 2. Persistencia (Guardar preferencia)
-    localStorage.setItem('aidanai_estado_propietario', estadoPropietario);
-
-    // 3. Actualizar Botón Visual
-    const btn = document.getElementById('btn-owner');
-    if (btn) {
-        btn.className = 'btn-owner'; // Resetear clases
-        if (estadoPropietario === 0) { 
-            btn.classList.add('owner-all'); 
-            btn.innerText = 'D&N'; 
-        } else if (estadoPropietario === 1) { 
-            btn.classList.add('owner-dani'); 
-            btn.innerText = 'Dani'; 
-        } else { 
-            btn.classList.add('owner-norma'); 
-            btn.innerText = 'Norma'; 
-        }
-    }
-
-    // 4. Actualizar Vistas y Listados
-    renderizar();          // Lista de movimientos (Diario)
-    actualizarDashboard(); // Tarjetas de Inicio (Patrimonio, Gastos...)
-    actualizarPatrimonio(); // Lista de cuentas (Análisis)
-
-    // 5. Actualizar Gráficos Avanzados (CORRECCIÓN IMPORTANTE)
-    // Usamos un pequeño timeout para no bloquear la UI durante la transición
-    setTimeout(() => {
-        // Redibujar el Rayos X (Sunburst) con los datos del nuevo usuario
-        if (typeof renderizarSunburstPatrimonio === 'function') {
-            renderizarSunburstPatrimonio();
-        }
-        
-        // Redibujar el Radar de Salud con los datos del nuevo usuario
-        if (typeof renderizarRadarSalud === 'function') {
-            renderizarRadarSalud();
-        }
-    }, 50);
-
-    // 6. Feedback al usuario
-    const nombre = estadoPropietario === 0 ? 'Todos' : (estadoPropietario === 1 ? 'Dani' : 'Norma');
-    mostrarEstado('Visualizando: ' + nombre, 'normal');
 }
 
 /* =========================================
@@ -3985,382 +3885,525 @@ function filtrarTabla(termino) {
     if(noResult) noResult.style.display = visibles === 0 ? 'block' : 'none';
 }
 
-//** 💎 aiDANaI - SISTEMA DE RECUPERACIÓN TOTAL DE MÉTRICAS//
-//* Repara: Ingresos, Gastos, Liquidez, Inversión, Cobertura y Libertad.//
-
-window.actualizarDashboard = function() {
-    console.log("⚡ [REPARACIÓN] Recalculando TODO el Dashboard...");
-
-    if (!datos || datos.length === 0) return;
-
-    // 1. FILTRAR POR PROPIETARIO
-    const movsUsuario = (typeof pasaFiltroPropietario === 'function') 
-        ? datos.filter(m => pasaFiltroPropietario(m)) 
-        : datos;
-
-    // ======================================================
-    // PARTE A: TARJETAS DE MENSUALIDAD (Ingresos/Gastos)
-    // ======================================================
-    // Forzamos fecha a Febrero 2026 (donde están tus datos)
-    const targetMonth = 1; // Febrero
-    const targetYear = 2026;
-    window.fechaReferenciaGlobal = new Date(targetYear, targetMonth, 1);
-
-    const movsMes = movsUsuario.filter(m => {
-        const d = new Date(m.ts);
-        return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
-    });
-
-    let ingMes = 0, gasMes = 0;
-    movsMes.forEach(m => {
-        const c = String(m.concepto||'').toLowerCase();
-        if (m.tipo === 'ingreso' && !c.includes('inicial')) ingMes += m.importe;
-        if (m.tipo === 'gasto') gasMes += Math.abs(m.importe);
-    });
-
-    const netoMes = ingMes - gasMes;
-    const tasaAhorro = ingMes > 0 ? ((ingMes - gasMes) / ingMes) * 100 : 0;
-
-    // ACTUALIZAR DOM (Inicio)
-    const setTxt = (id, val, isMoney=true) => {
-        const el = document.getElementById(id);
-        if(el) {
-            if(isMoney) el.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
-            else el.innerText = val.toFixed(1) + '%';
-        }
-    };
-
-    setTxt('d-ing', ingMes);
-    setTxt('d-gas', gasMes);
-    setTxt('d-net', netoMes);
-    setTxt('d-aho', tasaAhorro, false);
-    
-    // Colorear Neto
-    const elNeto = document.getElementById('d-net');
-    if(elNeto) elNeto.style.color = netoMes >= 0 ? '#39FF14' : '#FF2E4D';
-
-    // ======================================================
-    // PARTE B: TARJETAS DE PATRIMONIO (Liquidez vs Inversión)
-    // ======================================================
-    let totalLiquidez = 0;
-    let totalInversion = 0;
-    let totalPatrimonio = 0;
-    const saldos = {};
-
-    // Calculamos saldo acumulado histórico de cada cuenta
-    movsUsuario.forEach(m => {
-        const cta = m.cuenta.trim().toUpperCase();
-        saldos[cta] = (saldos[cta] || 0) + m.importe;
-    });
-
-    // Clasificamos según mapaCuentas
-    Object.keys(saldos).forEach(cta => {
-        const saldo = saldos[cta];
-        totalPatrimonio += saldo;
-
-        // Leemos configuración
-        const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) 
-            ? mapaCuentas[cta] 
-            : { esInversion: false }; // Por defecto liquidez
-
-        if (config.esInversion) {
-            totalInversion += saldo;
-        } else {
-            totalLiquidez += saldo;
-        }
-    });
-
-    // ACTUALIZAR DOM (Patrimonio)
-    // Nota: d-patri-liq y d-patri-inv son los IDs que vimos en el código original
-    setTxt('d-patri-liq', totalLiquidez);
-    setTxt('d-patri-inv', totalInversion);
-    
-    // Si existe el total global
-    setTxt('d-patri-total', totalPatrimonio); 
-
-    // ======================================================
-    // PARTE C: COBERTURA Y LIBERTAD (Runway & FIRE)
-    // ======================================================
-    
-    // 1. Calcular Gasto Mensual Promedio (Histórico)
-    // Necesitamos saber cuántos meses llevas registrando datos
-    const fechas = movsUsuario.map(m => m.ts);
-    const minF = Math.min(...fechas);
-    const maxF = Math.max(...fechas);
-    // Evitamos división por cero (mínimo 1 mes)
-    const mesesActivo = Math.max(1, (maxF - minF) / (1000 * 60 * 60 * 24 * 30.44));
-
-    const gastosTotalesHistoricos = movsUsuario
-        .filter(m => m.tipo === 'gasto')
-        .reduce((a, b) => a + Math.abs(b.importe), 0);
-    
-    const gastoMedioMensual = gastosTotalesHistoricos / mesesActivo;
-
-    // 2. Calcular Métricas
-    // Cobertura = Liquidez / GastoMensual
-    const coberturaMeses = gastoMedioMensual > 0 ? (totalLiquidez / gastoMedioMensual) : 0;
-    
-    // Libertad = Patrimonio / (GastoMensual * 300) -> Regla del 4%
-    const objetivoFire = gastoMedioMensual * 300;
-    const pctLibertad = objetivoFire > 0 ? (totalPatrimonio / objetivoFire) * 100 : 0;
-
-    // ACTUALIZAR DOM (Salud Financiera)
-    const elCob = document.getElementById('d-cobertura');
-    if(elCob) {
-        elCob.innerText = coberturaMeses.toFixed(1) + " Meses";
-        // Semáforo
-        if(coberturaMeses < 3) elCob.style.color = '#FF2E4D'; // Rojo
-        else if(coberturaMeses < 6) elCob.style.color = '#FFD60A'; // Amarillo
-        else elCob.style.color = '#39FF14'; // Verde
-    }
-
-    const elLib = document.getElementById('d-libertad');
-    if(elLib) {
-        elLib.innerText = pctLibertad.toFixed(1) + "%";
-        // Semáforo
-        elLib.style.color = pctLibertad > 10 ? '#39FF14' : '#FFFFFF';
-    }
-
-    // Aviso visual
-    if(typeof mostrarEstado === 'function' && !window.avisoLanzado) {
-        mostrarEstado("📊 Métricas de Liquidez y Cobertura recalculadas", "normal");
-        window.avisoLanzado = true;
-    }
-};
-
-// --- RESTO DE UTILIDADES NECESARIAS (Configuración y Fechas) ---
-
-window.procesarLibroLeido = function(wb) {
-    console.log("⚡ Leyendo configuración manual...");
-    mapaCuentas = {};
-    const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
-    if (wsConfigName) {
-        const mat = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName], { header: 1 });
-        globalConfigData = mat;
-        for(let i=1; i<mat.length; i++) {
-            const r = mat[i];
-            if(!r || !r[0]) continue;
-            const cta = String(r[0]).trim().toUpperCase();
-            const tipo = String(r[1]||'').trim();
-            // LECTURA MANUAL DE "SI" EN COLUMNA 2
-            const esInv = String(r[2]||'').toUpperCase() === 'SI';
-            mapaCuentas[cta] = { tipo, esInversion: esInv };
-        }
-    }
-    let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
-    const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
-    procesarDatos(jsonMovs);
-};
-
-window.getFechasDashboard = function() {
-    return { start: new Date(2026, 1, 1).getTime(), end: new Date(2026, 2, 0).getTime() };
-};
-
-window.verDetalleKPI = function(tipo) {
-    const f = getFechasDashboard();
-    if(document.getElementById('f-desde')) document.getElementById('f-desde').valueAsDate = new Date(f.start);
-    if(document.getElementById('f-hasta')) document.getElementById('f-hasta').valueAsDate = new Date(f.end);
-    if(typeof filtros !== 'undefined') { filtros.tipo = tipo; filtros.desde = document.getElementById('f-desde').value; filtros.hasta = document.getElementById('f-hasta').value; }
-    if(typeof aplicarFiltros === 'function') aplicarFiltros();
-    if(typeof irPestana === 'function') irPestana('movs');
-};
-
-// Forzar actualización inmediata
-setTimeout(() => { if(typeof datos !== 'undefined' && datos.length > 0) actualizarDashboard(); }, 1000);
 
 /**
- * 🎯 PARCHE DE PRECISIÓN - aiDANaI
- * Corrige: Error "No encontrado" al borrar y Saldo Incorrecto al añadir.
+ * 🏛️ NÚCLEO FINANCIERO aiDANaI - VERSIÓN GOLDEN MASTER
+ * Consolidación definitiva de lógica: CRUD, Saldos y Sincronización.
  */
 
-// 1. MOTOR DE CÁLCULO DE SALDOS (Se asegura de que siempre estén bien)
+// ==========================================
+// 1. MOTOR DE CÁLCULO Y PROCESAMIENTO
+// ==========================================
+
+// Función auxiliar para recalcular saldos en tiempo real
 const recalcularSaldosGlobal = function() {
-    // A. Ordenar cronológicamente (Vital)
+    // 1. Ordenar cronológicamente (Vital para la coherencia financiera)
     datos.sort((a, b) => a.ts - b.ts);
 
-    // B. Recalcular saldo acumulado línea a línea
+    // 2. Recalcular saldo acumulado línea a línea
     const acumulados = {};
     datos.forEach(m => {
         const cta = m.cuenta;
         if (!acumulados[cta]) acumulados[cta] = 0;
         acumulados[cta] += m.importe;
-        m.saldo = acumulados[cta]; // Aquí se fija el saldo correcto
+        m.saldo = acumulados[cta]; // Fijamos el saldo correcto
     });
 
-    // C. Refrescar pantalla
+    // 3. Refrescar toda la interfaz
     if(typeof renderizar === 'function') renderizar();
     if(typeof actualizarDashboard === 'function') actualizarDashboard();
     if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
 };
 
-// 2. FUNCIÓN DE BORRADO (Tolerante a Texto/Número)
-window.borrarMovimiento = async function(idRecibido) {
-    if (!idRecibido && idRecibido !== 0) return;
+// ==========================================
+// 1. MOTOR DE CÁLCULO (ADAPTADO A COLUMNA ID)
+// ==========================================
+window.procesarDatos = function(filas) {
+    const temp = [];
+    
+    // Saltamos encabezados (i=1)
+    for (let i = 1; i < filas.length; i++) {
+        const row = filas[i];
+        
+        // Validación: Si la fila está vacía o no tiene cuenta (ahora en índice 2), saltar
+        if (!row || (!row[2] && row[4] === undefined)) continue;
 
-    // A. Búsqueda Inteligente (Convierte todo a String para comparar)
-    // Esto soluciona el error de "No tiene el movimiento en memoria"
-    const mov = datos.find(d => String(d.id) === String(idRecibido) || String(d.localId) === String(idRecibido));
+        // --- MAPEO DE COLUMNAS (DESPLAZAMIENTO +1) ---
+        // Estructura Excel: [0:ID, 1:FECHA, 2:CUENTA, 3:CONCEPTO, 4:IMPORTE, 5:DETALLE, 6:BENEFICIARIO]
+        
+        const idSeguro = String(row[0] || generateUUID()); // Leemos el ID (o generamos uno si es un dato antiguo sin ID)
+        
+        let rawFecha = row[1]; // Antes row[0] -> Ahora row[1]
+        let ts = Date.now();
+        if (rawFecha instanceof Date) ts = rawFecha.getTime();
+        else if (typeof rawFecha === 'string') ts = Date.parse(rawFecha) || ts;
+        else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
 
-    if (!mov) {
-        console.error("ID Buscado:", idRecibido, "IDs Disponibles:", datos.map(d => d.id));
-        alert("Error técnico: ID no coincide. Recarga la página (F5).");
-        return;
+        let imp = row[4]; // Antes row[3] -> Ahora row[4]
+        if (typeof imp !== 'number') {
+            imp = parseFloat(String(imp).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+        }
+
+        const cta = String(row[2] || '').trim(); // Antes row[1] -> Ahora row[2]
+        const con = String(row[3] || '').trim(); // Antes row[2] -> Ahora row[3]
+        const desc = String(row[5] || '').trim(); // Antes row[4] -> Ahora row[5]
+        const ben = String(row[6] || '').trim(); // Antes row[5] -> Ahora row[6]
+        
+        // Detección de tipo
+        let tipo = 'gasto';
+        if ((con + desc).toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
+        else if (imp >= 0) tipo = 'ingreso';
+
+        temp.push({
+            // PROPIEDAD CLAVE: Este 'id' es el que usaremos para borrar/editar
+            id: idSeguro, 
+            ts: ts,
+            importe: imp,
+            cuenta: cta,
+            concepto: con,
+            detalle: desc,
+            beneficiario: ben,
+            tipo: tipo,
+            saldo: 0,
+            
+            // Guardamos localId solo para animaciones de UI, no para base de datos
+            localId: Math.random() 
+        });
     }
 
-    if(!confirm(`¿Borrar movimiento de ${mov.importe}€?`)) return;
+    datos = temp;
+    recalcularSaldosGlobal(); // (Asegúrate de tener definida esta función auxiliar como vimos antes)
+};
+
+// ==========================================
+// 2. SISTEMA DE BORRADO SEGURO
+// ==========================================
+window.borrarMovimiento = async function(idRecibido) {
+    // 1. Identificar qué queremos borrar
+    // El idRecibido puede venir como número o string, aseguramos la búsqueda
+    const mov = datos.find(d => String(d.id) === String(idRecibido) || String(d.localId) === String(idRecibido));
+
+    if (!mov) return;
+
+    // 2. Confirmación de seguridad
+    if(!confirm(`⚠️ ¿Estás SEGURO de eliminar?\n\nConcepto: ${mov.concepto}\nImporte: ${mov.importe}€\n\nEsta acción es irreversible.`)) return;
 
     try {
         if (modoNube) {
-            // Verificar si tenemos la herramienta de borrado
-            if (typeof oneDrive !== 'undefined' && typeof oneDrive.deleteRow !== 'function') {
-                // Inyectamos la función si falta
-                oneDrive.deleteRow = async function(idx) {
-                    const token = await this.getToken();
-                    const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/Movimientos/rows/itemAt(index=${idx})`;
-                    await fetch(url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-                };
-            }
-
-            if (mov._rowIndex === undefined || mov._rowIndex === null) {
-                alert("Este movimiento es nuevo. Recarga (F5) para sincronizar índices con Excel antes de borrar.");
+            // --- MODO NUBE: USAMOS EL NUEVO deleteRowById ---
+            
+            // Validación vital: ¿Tiene este movimiento un ID real de nube?
+            // Si es un movimiento antiguo sin ID (legacy), no podemos borrarlo por ID.
+            if (!mov.id || mov.id.toString().length < 5) {
+                alert("⚠️ Error de Integridad: Este movimiento es antiguo y no tiene ID seguro.\n\nSolución: Edítalo primero para que se le asigne un ID, o bórralo manualmente del Excel.");
                 return;
             }
 
-            mostrarEstado(`☁️ Borrando fila ${mov._rowIndex + 2}...`, 'normal');
-            await oneDrive.deleteRow(mov._rowIndex);
+            mostrarEstado('☁️ Localizando y borrando en la nube...', 'normal');
             
-            mostrarEstado('✅ Borrado. Sincronizando...', 'ok');
-            await cargarDesdeNube(); // Recarga obligatoria
+            // LLAMADA AL NUEVO MÉTODO
+            await oneDrive.deleteRowById(mov.id);
+            
+            mostrarEstado('✅ Eliminado. Sincronizando...', 'ok');
+            await cargarDesdeNube(); // Recargamos para ver el resultado real
 
         } else {
-            // Modo Local
+            // --- MODO LOCAL ---
             datos = datos.filter(d => d !== mov);
-            recalcularSaldosGlobal(); // Actualiza saldos y tabla
-            mostrarEstado('🗑️ Borrado local', 'ok');
+            recalcularSaldosGlobal();
+            mostrarEstado('🗑️ Borrado de la memoria local', 'ok');
+            cerrarModal(); // Cerramos el modal aquí si es local
         }
 
     } catch (e) {
-        alert("Error al borrar: " + e.message);
+        console.error(e);
+        alert("❌ Error al borrar: " + e.message);
+        mostrarEstado('Error al borrar', 'err');
     }
 };
 
-// 3. AÑADIR MOVIMIENTO (Con Saldo Visible)
-window.isSaving = false;
+
+// ==========================================
+// 3. SISTEMA DE AÑADIDO (CON GENERACIÓN DE UUID)
+// ==========================================
+window.isSaving = false; // Semáforo de seguridad
 
 window.guardarManual = async function() {
-    if (window.isSaving) return;
+    if (window.isSaving) return; 
 
     const btn = document.getElementById('btn-modal-action');
-    const txt = btn.innerText;
+    const txtOriginal = btn.innerText;
     const inputCant = document.getElementById('m-cantidad');
     const cant = parseFloat(inputCant.value);
 
-    if (!cant) return alert("Importe incorrecto.");
+    if (!cant) return alert("El importe no puede ser 0.");
 
     window.isSaving = true;
-    btn.innerText = "⏳...";
+    btn.innerText = "⏳ GUARDANDO...";
     btn.disabled = true;
 
     try {
+        // ... (Recogida de valores del formulario: cta, con, det, ben... igual que antes) ...
         const cta = document.getElementById('m-cuenta').value;
         const con = document.getElementById('m-concepto').value || 'Varios';
         const det = document.getElementById('m-desc').value || '';
         const ben = document.getElementById('m-beneficiario').value || 'Yo';
-        
         let fechaIso = new Date().toISOString().split('T')[0];
         try { if(document.getElementById('m-fecha').value) fechaIso = document.getElementById('m-fecha').value; } catch(e){}
 
         const imp = Math.abs(cant);
         const modo = window.modoTransaccionActual || 'gasto';
+        
+        // --- AQUÍ ESTÁ EL CAMBIO CRÍTICO ---
         const filas = [];
 
-        if (modo === 'gasto' || modo === 'pago') filas.push([fechaIso, cta, con, -imp, det, ben]);
-        else if (modo === 'ingreso') filas.push([fechaIso, cta, con, imp, det, ben]);
+        if (modo === 'gasto' || modo === 'pago') {
+            // [UUID, FECHA, CUENTA, CONCEPTO, IMPORTE, DETALLE, BENEFICIARIO]
+            filas.push([generateUUID(), fechaIso, cta, con, -imp, det, ben]); 
+        } 
+        else if (modo === 'ingreso') {
+            filas.push([generateUUID(), fechaIso, cta, con, imp, det, ben]);
+        } 
         else if (modo === 'traspaso') {
             const dest = document.getElementById('m-cuenta-destino').value;
             const conT = con.toUpperCase().includes('TRASPASO') ? con : "TRASPASO - " + con;
-            filas.push([fechaIso, cta, conT, -imp, `>> A: ${dest} | ${det}`, 'Mí mismo']);
-            filas.push([fechaIso, dest, conT, imp, `<< DE: ${cta} | ${det}`, 'Mí mismo']);
+            
+            // Generamos DOS UUIDs diferentes, uno para cada línea del traspaso
+            filas.push([generateUUID(), fechaIso, cta, conT, -imp, `>> A: ${dest} | ${det}`, 'Mí mismo']);
+            filas.push([generateUUID(), fechaIso, dest, conT, imp, `<< DE: ${cta} | ${det}`, 'Mí mismo']);
         }
 
         if (modoNube) {
-            mostrarEstado('☁️ Guardando...', 'normal');
-            for (const f of filas) await oneDrive.addRowToTable(f);
+            mostrarEstado('☁️ Escribiendo en Excel...', 'normal');
+            // La función addRowToTable ahora recibe un array con 7 columnas
+            for (const f of filas) await oneDrive.addRowToTable(f); // O usa oneDrive.addRow(f) si actualizaste la clase
             
-            mostrarEstado('✅ Sincronizando...', 'ok');
-            await cargarDesdeNube(); // Al cargar de la nube, se recalcula todo
+            mostrarEstado('✅ Guardado. Sincronizando...', 'ok');
+            await cargarDesdeNube(); 
             
         } else {
-            // MODO LOCAL: Insertar y Recalcular
+            // MODO LOCAL: Simulamos lo mismo
             filas.forEach(f => {
                 datos.push({
-                    ts: new Date(f[0]).getTime(),
-                    cuenta: f[1], concepto: f[2], importe: f[3], detalle: f[4], beneficiario: f[5],
-                    id: Math.random(), // ID numérico
-                    localId: Math.random(),
+                    // Mapeamos manualmente el array que acabamos de crear arriba
+                    id: f[0], // El UUID generado
+                    ts: new Date(f[1]).getTime(),
+                    cuenta: f[2], 
+                    concepto: f[3], 
+                    importe: f[4], 
+                    detalle: f[5], 
+                    beneficiario: f[6],
                     tipo: modo === 'pago' ? 'gasto' : modo,
                     saldo: 0
                 });
             });
             
-            // LA CLAVE: Recalcular saldos inmediatamente
             recalcularSaldosGlobal();
-            mostrarEstado('💾 Guardado', 'ok');
+            mostrarEstado('💾 Guardado localmente', 'ok');
         }
 
         cerrarModal();
         if(typeof vibrar === 'function') vibrar('ingreso');
 
     } catch (e) {
-        alert("Error: " + e.message);
+        alert("Error crítico: " + e.message);
     } finally {
         window.isSaving = false;
-        btn.innerText = txt;
+        btn.innerText = txtOriginal;
         btn.disabled = false;
     }
 };
 
-// 4. MEJORA DE LECTURA (Para que los IDs coincidan desde el principio)
-const procesarDatosBackup = window.procesarDatos;
-window.procesarDatos = function(filas) {
-    const temp = [];
-    for (let i = 1; i < filas.length; i++) {
-        const row = filas[i];
-        if (!row || (!row[1] && row[3] === undefined)) continue;
-        
-        let imp = row[3];
-        if (typeof imp !== 'number') imp = parseFloat(String(imp).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+// ==========================================
+// 4. DUPLICADO INTELIGENTE
+// ==========================================
+window.clonarMovimiento = function(id) {
+    const mov = datos.find(d => String(d.id) === String(id) || String(d.localId) === String(id));
+    if (!mov) return;
 
-        let rawFecha = row[0];
-        let ts = Date.now();
-        if (rawFecha instanceof Date) ts = rawFecha.getTime();
-        else if (typeof rawFecha === 'string') ts = Date.parse(rawFecha) || ts;
-        else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
+    window.modoTransaccionActual = mov.importe >= 0 ? 'ingreso' : 'pago';
+    if(mov.tipo === 'traspaso') window.modoTransaccionActual = 'traspaso';
 
-        const con = String(row[2] || '').trim();
-        const desc = String(row[4] || '').trim();
-        let tipo = 'gasto';
-        if ((con + desc).toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
-        else if (imp >= 0) tipo = 'ingreso';
-
-        temp.push({
-            id: i - 1, // ID Numérico basado en fila Excel
-            localId: Math.random(),
-            ts: ts,
-            importe: imp,
-            cuenta: String(row[1] || '').trim(),
-            concepto: con,
-            detalle: desc,
-            beneficiario: String(row[5] || '').trim(),
-            tipo: tipo,
-            _rowIndex: i - 1,
-            saldo: 0
-        });
-    }
-    datos = temp;
-    recalcularSaldosGlobal(); // Ordena y calcula saldos al inicio
+    idEnEdicion = null; // IMPORTANTE: Desvinculamos del ID original para crear uno nuevo
+    abrirModal(false);
+    
+    // Relleno de datos
+    document.getElementById('m-cantidad').value = Math.abs(mov.importe);
+    document.getElementById('m-cuenta').value = mov.cuenta;
+    document.getElementById('m-concepto').value = mov.concepto;
+    document.getElementById('m-desc').value = mov.detalle;
+    document.getElementById('m-beneficiario').value = mov.beneficiario;
+    
+    // Fecha a HOY (por defecto en clonación)
+    document.getElementById('m-fecha').valueAsDate = new Date();
+    
+    document.getElementById('btn-modal-action').innerText = "GUARDAR COPIA";
+    mostrarEstado('📋 Datos copiados. Pulsa Guardar.', 'normal');
 };
 
-    </script>
+// ==========================================
+// 🎢 MOTOR DE ANIMACIÓN DE NÚMEROS (CountUp)
+// ==========================================
+const cacheValores = {}; // Memoria para recordar el valor anterior
+
+window.animarCifra = function(id, valorFinal, tipo = 'moneda') {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+
+    // 1. Determinar punto de partida
+    const valorInicial = cacheValores[id] || 0;
+    const variacion = valorFinal - valorInicial;
+    
+    // Si el cambio es minúsculo, pintamos directo y salimos
+    if (Math.abs(variacion) < 0.01) {
+        elemento.innerText = formatearAnimacion(valorFinal, tipo);
+        cacheValores[id] = valorFinal;
+        return;
+    }
+
+    // 2. Configuración de la animación
+    const duracion = 1500; // 1.5 segundos
+    const startTime = performance.now();
+
+    // Función de Easing (Ease Out Expo)
+    const easeOutExpo = (x) => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+
+    function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duracion, 1);
+        
+        // Calcular valor actual
+        const valorActual = valorInicial + (variacion * easeOutExpo(progress));
+
+        // Pintar
+        elemento.innerText = formatearAnimacion(valorActual, tipo);
+
+        // Continuar o terminar
+        if (progress < 1) {
+            requestAnimationFrame(step);
+        } else {
+            cacheValores[id] = valorFinal; // Guardamos valor final
+            elemento.innerText = formatearAnimacion(valorFinal, tipo); // Asegurar precisión final
+        }
+    }
+
+    requestAnimationFrame(step);
+};
+
+// Ayudante de formato interno para la animación
+function formatearAnimacion(val, tipo) {
+    if (tipo === 'moneda') {
+        return new Intl.NumberFormat('es-ES', { 
+            style: 'currency', 
+            currency: 'EUR', 
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2 
+        }).format(val);
+    } else if (tipo === 'porcentaje') {
+        return val.toFixed(2) + '%';
+    } else if (tipo === 'numero') {
+        return val.toFixed(1); 
+    }
+    return val;
+}
+
+// ==========================================
+// 📊 DASHBOARD ANIMADO (PROFESIONAL)
+// ==========================================
+window.actualizarDashboard = function() {
+    if (!datos || datos.length === 0) return;
+
+    // --- A. PREPARACIÓN DE DATOS ---
+    const movsUsuario = (typeof pasaFiltroPropietario === 'function') 
+        ? datos.filter(m => pasaFiltroPropietario(m)) 
+        : datos;
+
+    // =========================================================
+    // PARTE 1: TARJETAS DE FLUJO (Ingresos / Gastos / Ahorro)
+    // =========================================================
+    const selector = document.getElementById('dash-period');
+    const periodo = selector ? selector.value : 'month';
+    const now = new Date();
+    let tStart = 0, tEnd = 9999999999999;
+
+    if (periodo === 'month') {
+        tStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        tEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    } else if (periodo === 'year') {
+        tStart = new Date(now.getFullYear(), 0, 1).getTime();
+        tEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999).getTime();
+    } else if (periodo === 'custom') {
+        const rs = document.getElementById('d-start').value;
+        const re = document.getElementById('d-end').value;
+        if (rs) tStart = new Date(rs).getTime();
+        if (re) {
+            const endObj = new Date(re);
+            endObj.setHours(23, 59, 59, 999);
+            tEnd = endObj.getTime();
+        }
+    }
+
+    let ingresos = 0, gastos = 0;
+    movsUsuario.filter(m => m.ts >= tStart && m.ts <= tEnd).forEach(m => {
+        const esInicial = String(m.concepto||'').toUpperCase().includes('INICIAL');
+        if (m.tipo === 'ingreso' && !esInicial) ingresos += m.importe;
+        if (m.tipo === 'gasto') gastos += Math.abs(m.importe);
+    });
+
+    const neto = ingresos - gastos;
+    const tasaAhorro = ingresos > 0 ? ((neto / ingresos) * 100) : 0;
+
+    // --- AQUÍ APLICAMOS LA MAGIA DE LA ANIMACIÓN ---
+    animarCifra('d-ing', ingresos, 'moneda');
+    animarCifra('d-gas', gastos, 'moneda');
+    animarCifra('d-net', neto, 'moneda');
+    
+    // Gestión de color del Neto (esto sí es instantáneo)
+    const elNeto = document.getElementById('d-net');
+    if(elNeto) elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
+
+    animarCifra('d-aho', tasaAhorro, 'porcentaje');
+
+    // Gestión de color Ahorro
+    const elAho = document.getElementById('d-aho');
+    if(elAho) {
+        if (tasaAhorro > 20) elAho.className = 'kpi-value val-std-pos';
+        else if (tasaAhorro > 0) elAho.className = 'kpi-value val-std-neu';
+        else elAho.className = 'kpi-value val-std-neg';
+    }
+
+    // =========================================================
+    // PARTE 2: PATRIMONIO (Siempre Total)
+    // =========================================================
+    let totalLiquidez = 0, totalInversion = 0, totalPatrimonio = 0;
+    let gastoTotalHist = 0, fechaPrimerGasto = now.getTime(), fechaUltimoGasto = 0, hayGastos = false;
+
+    // Cálculo de saldos
+    const saldos = {};
+    movsUsuario.forEach(m => {
+        const cta = m.cuenta.trim();
+        saldos[cta] = (saldos[cta] || 0) + m.importe;
+
+        if (m.tipo === 'gasto') {
+            gastoTotalHist += Math.abs(m.importe);
+            if (m.ts < fechaPrimerGasto) fechaPrimerGasto = m.ts;
+            if (m.ts > fechaUltimoGasto) fechaUltimoGasto = m.ts;
+            hayGastos = true;
+        }
+    });
+
+    Object.keys(saldos).forEach(cta => {
+        const saldo = saldos[cta];
+        const config = (typeof mapaCuentas !== 'undefined') ? mapaCuentas[cta.toUpperCase()] : null;
+        const esInversion = config ? config.esInversion : false;
+
+        totalPatrimonio += saldo;
+        if (esInversion) totalInversion += saldo;
+        else totalLiquidez += saldo;
+    });
+
+    let gastoMensualMedio = 1;
+    if (hayGastos) {
+        const diffDias = Math.max(1, (fechaUltimoGasto - fechaPrimerGasto) / (1000 * 60 * 60 * 24));
+        const diffMeses = Math.max(1, diffDias / 30.44);
+        gastoMensualMedio = gastoTotalHist / diffMeses;
+    }
+    if (gastoMensualMedio < 1) gastoMensualMedio = 1;
+
+    const cobertura = totalLiquidez / gastoMensualMedio; 
+    const objetivoFIRE = gastoMensualMedio * 300; 
+    const libertad = (totalPatrimonio / objetivoFIRE) * 100;
+
+    // --- ANIMACIONES DE PATRIMONIO ---
+    animarCifra('d-patri-liq', totalLiquidez, 'moneda');
+    animarCifra('d-patri-inv', totalInversion, 'moneda');
+    animarCifra('d-patri-total', totalPatrimonio, 'moneda');
+    
+    // Cobertura con sufijo manual
+    const elCob = document.getElementById('d-cobertura');
+    if(elCob) {
+        // Truco: Animamos el número y luego le pegamos " Meses" visualmente
+        // Para simplificar, aquí usaremos animarCifra tipo 'numero' y añadiremos ' Meses' en CSS o estático
+        // Pero lo más fácil es animarlo y añadir el texto después en cada frame, 
+        // Para no complicar el motor, lo haremos directo con texto por ahora o usamos el tipo 'numero' modificado:
+        
+        // Opción simple: Animamos solo el número
+        animarCifra('d-cobertura', cobertura, 'numero'); 
+        // Nota: Esto borrará " Meses". 
+        // MEJORA: Modificar animarCifra para aceptar sufijos, o añadirlo via CSS ::after
+        
+        if(cobertura < 3) elCob.style.color = 'var(--c-danger)'; 
+        else if(cobertura < 6) elCob.style.color = 'var(--c-warning)'; 
+        else elCob.style.color = 'var(--c-success)'; 
+    }
+
+    animarCifra('d-libertad', libertad, 'porcentaje');
+    const elLib = document.getElementById('d-libertad');
+    if(elLib) elLib.style.color = libertad >= 100 ? '#BF5AF2' : 'var(--c-success)'; 
+};
+
+// Variable global para saber quién está activo
+var filtroUsuarioActual = 'todos'; 
+
+window.toggleUsuario = function() {
+    const title = document.getElementById('app-title');
+    const root = document.documentElement;
+    const btn = document.getElementById('btn-user-filter');
+
+    if (filtroUsuarioActual === 'todos') {
+        // -> CAMBIO A DANI
+        filtroUsuarioActual = 'Dani';
+        if(title) title.innerText = 'Dani';
+        root.style.setProperty('--current-theme', 'var(--theme-dani)'); // Azul
+        if(btn) btn.style.color = 'var(--theme-dani)';
+        
+    } else if (filtroUsuarioActual === 'Dani') {
+        // -> CAMBIO A NORMA
+        filtroUsuarioActual = 'Norma';
+        if(title) title.innerText = 'Norma';
+        root.style.setProperty('--current-theme', 'var(--theme-norma)'); // Rojo
+        if(btn) btn.style.color = 'var(--theme-norma)';
+
+    } else {
+        // -> VUELTA A D & N
+        filtroUsuarioActual = 'todos';
+        if(title) title.innerText = 'D & N';
+        root.style.setProperty('--current-theme', 'var(--theme-dn)'); // Verde
+        if(btn) btn.style.color = 'inherit';
+    }
+
+    if(typeof mostrarEstado === 'function') mostrarEstado(`Usuario: ${title.innerText}`, 'normal');
+
+    // Recargar pantallas
+    if(typeof renderizar === 'function') renderizar();
+    if(typeof actualizarDashboard === 'function') actualizarDashboard();
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+};
+
+// IMPRESCINDIBLE: El filtro que usa el Dashboard para sumar
+window.pasaFiltroPropietario = function(movimiento) {
+    if (filtroUsuarioActual === 'todos') return true;
+
+    const ben = String(movimiento.beneficiario || '').toUpperCase();
+    const cta = String(movimiento.cuenta || '').toUpperCase();
+    
+    if (filtroUsuarioActual === 'Dani') {
+        return (ben === 'DANI' || cta.startsWith('D-'));
+    }
+    if (filtroUsuarioActual === 'Norma') {
+        return (ben === 'NORMA' || cta.startsWith('N-'));
+    }
+    return true;
+};
+
+// --- AUTO-ARRANQUE VISUAL ---
+// Forzamos que empiece en D & N y Verde
+window.addEventListener('DOMContentLoaded', () => {
+    const title = document.getElementById('app-title');
+    if(title) title.innerText = 'D & N';
+    document.documentElement.style.setProperty('--current-theme', 'var(--theme-dn)');
+});
+
+</script>
 </body>
 </html>
