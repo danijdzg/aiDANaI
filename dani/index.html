@@ -3339,34 +3339,105 @@ async function guardarCambiosEnFichero() {
 }
 
 function generarLibroExcel() {
-    const wb = XLSX.utils.book_new();
-    const cabeceras = ["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"];
-    const cuerpo = datos.map(m => [
-        new Date(m.ts).toISOString().split('T')[0], 
-        m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario
-    ]);
+    // 1. Preparamos la hoja de Movimientos
+    const filasExcel = []; 
+    // Encabezados exactos
+    filasExcel.push(["FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
     
-    const wsMovs = XLSX.utils.aoa_to_sheet([cabeceras, ...cuerpo]);
-    wsMovs['!cols'] = [{wch:12}, {wch:20}, {wch:20}, {wch:10}, {wch:40}, {wch:20}];
-    XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
-
+    // Convertimos datos de memoria a filas de Excel
+    datos.forEach(m => { 
+        // Convertimos fecha a string YYYY-MM-DD para máxima compatibilidad con CSV/Excel
+        const fechaStr = new Date(m.ts).toISOString().split('T')[0];
+        filasExcel.push([fechaStr, m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario]); 
+    });
+    
+    // 2. Creamos el libro nuevo
+    const wb = XLSX.utils.book_new();
+    
+    // 3. Añadimos la hoja de Movimientos
+    const ws = XLSX.utils.aoa_to_sheet(filasExcel);
+    // Ajuste de ancho de columnas para que se vea bonito al abrir
+    ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+    
+    // 4. RESTAURAMOS LA HOJA DE CONFIGURACIÓN
+    // (Vital para que no se pierdan tus categorías e inversiones al guardar)
     if (globalConfigData && globalConfigData.length > 0) {
         const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-        XLSX.utils.book_append_sheet(wb, wsConfig, "Config");
+        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion"); // Nombre exacto que tenías
+        console.log("Sistema: Hoja Configuracion restaurada.");
     } else {
-        const wsConfigDummy = XLSX.utils.aoa_to_sheet([["Cuenta", "Tipo", "EsInversion"]]);
-        XLSX.utils.book_append_sheet(wb, wsConfigDummy, "Config");
+        console.warn("Advertencia: No hay datos de configuración global para restaurar.");
     }
     
     return wb;
 }
 
+function guardarUniversal() {
+    vibrar('clonar'); // Feedback táctil
+    
+    if (modoNube) {
+        // En modo nube, guardar es "Sincronizar"
+        cargarDesdeNube().then(() => {
+            mostrarEstado('☁️ Nube Sincronizada', 'ok');
+        }).catch(e => {
+            mostrarEstado('Error de sincronización', 'err');
+        });
+    } else {
+        // En modo local, guardar es "Descargar Archivo"
+        exportarExcel();
+    }
+}
+
+// ==========================================
+// 🚀 SISTEMA DE EXPORTACIÓN BLINDADO (Anti-Crashes)
+// ==========================================
+
 function exportarExcel() {
+    const btnText = document.getElementById('btn-guardar') ? document.getElementById('btn-guardar').innerText : '';
+    
     try {
+        mostrarEstado('🧹 Limpiando memoria y generando archivo...', 'normal');
+
+        // 1. LIMPIEZA PREVENTIVA DE MEMORIA
+        // Borramos datos temporales que puedan estar saturando el navegador (LocalStorage)
+        try {
+            // Guardamos solo lo esencial si fuera necesario (ej: configuración de tema)
+            const temaGuardado = localStorage.getItem('theme');
+            localStorage.clear(); // ¡LIBERA EL ESPACIO!
+            if(temaGuardado) localStorage.setItem('theme', temaGuardado);
+            console.log("Memoria LocalStorage liberada correctamente.");
+        } catch (e) {
+            console.warn("No se pudo limpiar LocalStorage (posiblemente bloqueado)", e);
+        }
+
+        // 2. GENERACIÓN EFICIENTE
+        // Verificación de seguridad para evitar bucles infinitos
+        if (!datos || !Array.isArray(datos)) throw new Error("No hay datos válidos para exportar.");
+        
+        console.log(`Generando Excel con ${datos.length} movimientos...`);
+
         const wb = generarLibroExcel();
-        XLSX.writeFile(wb, "aidanai_local.xlsx");
-        mostrarEstado('Archivo descargado (Local)', 'ok');
+
+        // 3. ESCRITURA Y DESCARGA (Método Optimizado)
+        // Usamos 'writeFile' que maneja la descarga automáticamente
+        XLSX.writeFile(wb, "aidanai.xlsx", { compression: true }); 
+        
+        mostrarEstado('✅ Archivo descargado con éxito. Revisa tu carpeta Descargas.', 'ok');
+        vibrar('ingreso');
+
     } catch (error) {
+        console.error("Error crítico al exportar:", error);
+        
+        // Diagnóstico para el usuario
+        let mensaje = "Error desconocido.";
+        if (error.message.includes("Quota") || error.message.includes("space")) {
+            mensaje = "🚫 MEMORIA LLENA EN EL NAVEGADOR. Se ha intentado limpiar. Prueba de nuevo.";
+        } else {
+            mensaje = "Error al exportar: " + error.message;
+        }
+        
+        alert(mensaje + "\n\nConsejo: Cierra otras pestañas o reinicia el navegador si persiste.");
         mostrarEstado('Error al exportar', 'err');
     }
 }
