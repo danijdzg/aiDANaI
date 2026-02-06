@@ -4169,254 +4169,196 @@ window.verDetalleKPI = function(tipo) {
 setTimeout(() => { if(typeof datos !== 'undefined' && datos.length > 0) actualizarDashboard(); }, 1000);
 
 /**
- * ⚡ NÚCLEO TRANSACCIONAL BLINDADO v4.0 - aiDANaI
- * Corrige: Añadir, Borrar, Clonar, Traspasos y Bloqueos de UI.
+ * 🎯 PARCHE DE PRECISIÓN - aiDANaI
+ * Corrige: Error "No encontrado" al borrar y Saldo Incorrecto al añadir.
  */
 
-// 1. VARIABLE DE SEGURIDAD GLOBAL (Reset forzado al inicio)
+// 1. MOTOR DE CÁLCULO DE SALDOS (Se asegura de que siempre estén bien)
+const recalcularSaldosGlobal = function() {
+    // A. Ordenar cronológicamente (Vital)
+    datos.sort((a, b) => a.ts - b.ts);
+
+    // B. Recalcular saldo acumulado línea a línea
+    const acumulados = {};
+    datos.forEach(m => {
+        const cta = m.cuenta;
+        if (!acumulados[cta]) acumulados[cta] = 0;
+        acumulados[cta] += m.importe;
+        m.saldo = acumulados[cta]; // Aquí se fija el saldo correcto
+    });
+
+    // C. Refrescar pantalla
+    if(typeof renderizar === 'function') renderizar();
+    if(typeof actualizarDashboard === 'function') actualizarDashboard();
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+};
+
+// 2. FUNCIÓN DE BORRADO (Tolerante a Texto/Número)
+window.borrarMovimiento = async function(idRecibido) {
+    if (!idRecibido && idRecibido !== 0) return;
+
+    // A. Búsqueda Inteligente (Convierte todo a String para comparar)
+    // Esto soluciona el error de "No tiene el movimiento en memoria"
+    const mov = datos.find(d => String(d.id) === String(idRecibido) || String(d.localId) === String(idRecibido));
+
+    if (!mov) {
+        console.error("ID Buscado:", idRecibido, "IDs Disponibles:", datos.map(d => d.id));
+        alert("Error técnico: ID no coincide. Recarga la página (F5).");
+        return;
+    }
+
+    if(!confirm(`¿Borrar movimiento de ${mov.importe}€?`)) return;
+
+    try {
+        if (modoNube) {
+            // Verificar si tenemos la herramienta de borrado
+            if (typeof oneDrive !== 'undefined' && typeof oneDrive.deleteRow !== 'function') {
+                // Inyectamos la función si falta
+                oneDrive.deleteRow = async function(idx) {
+                    const token = await this.getToken();
+                    const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/tables/Movimientos/rows/itemAt(index=${idx})`;
+                    await fetch(url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                };
+            }
+
+            if (mov._rowIndex === undefined || mov._rowIndex === null) {
+                alert("Este movimiento es nuevo. Recarga (F5) para sincronizar índices con Excel antes de borrar.");
+                return;
+            }
+
+            mostrarEstado(`☁️ Borrando fila ${mov._rowIndex + 2}...`, 'normal');
+            await oneDrive.deleteRow(mov._rowIndex);
+            
+            mostrarEstado('✅ Borrado. Sincronizando...', 'ok');
+            await cargarDesdeNube(); // Recarga obligatoria
+
+        } else {
+            // Modo Local
+            datos = datos.filter(d => d !== mov);
+            recalcularSaldosGlobal(); // Actualiza saldos y tabla
+            mostrarEstado('🗑️ Borrado local', 'ok');
+        }
+
+    } catch (e) {
+        alert("Error al borrar: " + e.message);
+    }
+};
+
+// 3. AÑADIR MOVIMIENTO (Con Saldo Visible)
 window.isSaving = false;
 
-// 2. FUNCIÓN GUARDAR (AÑADIR/EDITAR)
 window.guardarManual = async function() {
-    // A. PROTECCIÓN ANTI-REPETICIÓN
-    if (window.isSaving) {
-        console.warn("⛔ Acción bloqueada: Ya hay un guardado en curso.");
-        return;
-    }
+    if (window.isSaving) return;
 
-    const btnAction = document.getElementById('btn-modal-action');
-    const txtOriginal = btnAction.innerText;
-
-    // B. VALIDACIÓN DE DATOS (Estricta)
+    const btn = document.getElementById('btn-modal-action');
+    const txt = btn.innerText;
     const inputCant = document.getElementById('m-cantidad');
-    let imp = parseFloat(inputCant.value);
-    
-    if (isNaN(imp) || imp === 0) {
-        alert("⚠️ Por favor, introduce un importe válido distinto de cero.");
-        return;
-    }
-    imp = Math.abs(imp); // Trabajamos siempre en positivo y asignamos signo después
+    const cant = parseFloat(inputCant.value);
 
-    // Recogida de valores del formulario
-    const ctaOrigen = document.getElementById('m-cuenta').value;
-    const concepto = document.getElementById('m-concepto').value || 'Varios';
-    const detalle = document.getElementById('m-desc').value || '';
-    const benef = document.getElementById('m-beneficiario').value || 'Yo';
-    
-    // Gestión de fechas robusta
-    let fechaTs = Date.now();
-    let fechaExcelStr = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
-    
-    try {
-        const inputFecha = document.getElementById('m-fecha');
-        if (inputFecha.valueAsDate) {
-            fechaTs = inputFecha.valueAsDate.getTime();
-            fechaExcelStr = inputFecha.valueAsDate.toISOString().split('T')[0];
-        }
-    } catch(e) { console.warn("Usando fecha actual por error en input"); }
+    if (!cant) return alert("Importe incorrecto.");
 
-    // C. BLOQUEO DE UI (Feedback visual)
     window.isSaving = true;
-    btnAction.innerText = "⏳ GUARDANDO...";
-    btnAction.style.opacity = "0.6";
-    btnAction.disabled = true;
+    btn.innerText = "⏳...";
+    btn.disabled = true;
 
     try {
-        const filasParaProcesar = [];
+        const cta = document.getElementById('m-cuenta').value;
+        const con = document.getElementById('m-concepto').value || 'Varios';
+        const det = document.getElementById('m-desc').value || '';
+        const ben = document.getElementById('m-beneficiario').value || 'Yo';
         
-        // Detectamos el modo (Gasto, Ingreso o Traspaso)
-        // Usamos la variable global o deducimos por clases si no existe
+        let fechaIso = new Date().toISOString().split('T')[0];
+        try { if(document.getElementById('m-fecha').value) fechaIso = document.getElementById('m-fecha').value; } catch(e){}
+
+        const imp = Math.abs(cant);
         const modo = window.modoTransaccionActual || 'gasto';
+        const filas = [];
 
-        if (modo === 'pago' || modo === 'gasto') {
-            // GASTO: Importe Negativo
-            filasParaProcesar.push({
-                ts: fechaTs,
-                dateStr: fechaExcelStr,
-                cta: ctaOrigen,
-                con: concepto,
-                imp: -imp,
-                det: detalle,
-                ben: benef,
-                tipo: 'gasto'
-            });
-        } 
-        else if (modo === 'ingreso') {
-            // INGRESO: Importe Positivo
-            filasParaProcesar.push({
-                ts: fechaTs,
-                dateStr: fechaExcelStr,
-                cta: ctaOrigen,
-                con: concepto,
-                imp: imp,
-                det: detalle,
-                ben: benef,
-                tipo: 'ingreso'
-            });
-        } 
+        if (modo === 'gasto' || modo === 'pago') filas.push([fechaIso, cta, con, -imp, det, ben]);
+        else if (modo === 'ingreso') filas.push([fechaIso, cta, con, imp, det, ben]);
         else if (modo === 'traspaso') {
-            // TRASPASO: Crea DOS movimientos (Salida y Entrada)
-            const ctaDestino = document.getElementById('m-cuenta-destino').value;
-            if (ctaOrigen === ctaDestino) throw new Error("La cuenta origen y destino no pueden ser la misma.");
-            
-            let conTraspaso = concepto.toUpperCase().includes('TRASPASO') ? concepto : "TRASPASO - " + concepto;
-
-            // 1. Salida de Origen
-            filasParaProcesar.push({
-                ts: fechaTs,
-                dateStr: fechaExcelStr,
-                cta: ctaOrigen,
-                con: conTraspaso,
-                imp: -imp,
-                det: `>> A: ${ctaDestino} | ${detalle}`,
-                ben: 'Mí mismo',
-                tipo: 'traspaso'
-            });
-
-            // 2. Entrada en Destino
-            filasParaProcesar.push({
-                ts: fechaTs,
-                dateStr: fechaExcelStr,
-                cta: ctaDestino,
-                con: conTraspaso,
-                imp: imp,
-                det: `<< DE: ${ctaOrigen} | ${detalle}`,
-                ben: 'Mí mismo',
-                tipo: 'traspaso'
-            });
+            const dest = document.getElementById('m-cuenta-destino').value;
+            const conT = con.toUpperCase().includes('TRASPASO') ? con : "TRASPASO - " + con;
+            filas.push([fechaIso, cta, conT, -imp, `>> A: ${dest} | ${det}`, 'Mí mismo']);
+            filas.push([fechaIso, dest, conT, imp, `<< DE: ${cta} | ${det}`, 'Mí mismo']);
         }
 
-        // D. GUARDADO (Ramificación Nube vs Local)
         if (modoNube) {
-            mostrarEstado('☁️ Enviando a Excel...', 'normal');
+            mostrarEstado('☁️ Guardando...', 'normal');
+            for (const f of filas) await oneDrive.addRowToTable(f);
             
-            for (const item of filasParaProcesar) {
-                // ESTRUCTURA EXACTA PARA EXCEL (Array de valores)
-                // Col A (Fecha), Col B (Cuenta), Col C (Concepto), Col D (Importe), Col E (Detalle), Col F (Benef)
-                const filaExcel = [
-                    item.dateStr, 
-                    item.cta, 
-                    item.con, 
-                    item.imp, 
-                    item.det, 
-                    item.ben
-                ];
-                
-                await oneDrive.addRowToTable(filaExcel);
-            }
-            
-            mostrarEstado('✅ Guardado en Nube. Sincronizando...', 'ok');
-            // Recargamos datos para obtener los IDs reales del servidor
-            await cargarDesdeNube();
+            mostrarEstado('✅ Sincronizando...', 'ok');
+            await cargarDesdeNube(); // Al cargar de la nube, se recalcula todo
             
         } else {
-            // MODO LOCAL
-            for (const item of filasParaProcesar) {
+            // MODO LOCAL: Insertar y Recalcular
+            filas.forEach(f => {
                 datos.push({
-                    id: Date.now() + Math.random(), // ID Temporal
-                    ts: item.ts,
-                    fecha: item.dateStr,
-                    cuenta: item.cta,
-                    concepto: item.con,
-                    importe: item.imp,
-                    detalle: item.det,
-                    beneficiario: item.ben,
-                    tipo: item.tipo
+                    ts: new Date(f[0]).getTime(),
+                    cuenta: f[1], concepto: f[2], importe: f[3], detalle: f[4], beneficiario: f[5],
+                    id: Math.random(), // ID numérico
+                    localId: Math.random(),
+                    tipo: modo === 'pago' ? 'gasto' : modo,
+                    saldo: 0
                 });
-            }
-            // Actualizamos UI inmediatamente
-            if(typeof actualizarDashboard === 'function') actualizarDashboard();
-            if(typeof renderizar === 'function') renderizar();
-            mostrarEstado('💾 Guardado localmente', 'ok');
+            });
+            
+            // LA CLAVE: Recalcular saldos inmediatamente
+            recalcularSaldosGlobal();
+            mostrarEstado('💾 Guardado', 'ok');
         }
 
         cerrarModal();
         if(typeof vibrar === 'function') vibrar('ingreso');
 
     } catch (e) {
-        console.error("Error Guardar:", e);
-        alert("❌ Error al guardar: " + e.message);
+        alert("Error: " + e.message);
     } finally {
-        // E. LIBERACIÓN DEL SEMÁFORO (CRÍTICO)
         window.isSaving = false;
-        btnAction.innerText = txtOriginal;
-        btnAction.style.opacity = "1";
-        btnAction.disabled = false;
+        btn.innerText = txt;
+        btn.disabled = false;
+    }
+};
+
+// 4. MEJORA DE LECTURA (Para que los IDs coincidan desde el principio)
+const procesarDatosBackup = window.procesarDatos;
+window.procesarDatos = function(filas) {
+    const temp = [];
+    for (let i = 1; i < filas.length; i++) {
+        const row = filas[i];
+        if (!row || (!row[1] && row[3] === undefined)) continue;
         
-        // Limpiamos estado de edición
-        idEnEdicion = null;
+        let imp = row[3];
+        if (typeof imp !== 'number') imp = parseFloat(String(imp).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+
+        let rawFecha = row[0];
+        let ts = Date.now();
+        if (rawFecha instanceof Date) ts = rawFecha.getTime();
+        else if (typeof rawFecha === 'string') ts = Date.parse(rawFecha) || ts;
+        else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
+
+        const con = String(row[2] || '').trim();
+        const desc = String(row[4] || '').trim();
+        let tipo = 'gasto';
+        if ((con + desc).toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
+        else if (imp >= 0) tipo = 'ingreso';
+
+        temp.push({
+            id: i - 1, // ID Numérico basado en fila Excel
+            localId: Math.random(),
+            ts: ts,
+            importe: imp,
+            cuenta: String(row[1] || '').trim(),
+            concepto: con,
+            detalle: desc,
+            beneficiario: String(row[5] || '').trim(),
+            tipo: tipo,
+            _rowIndex: i - 1,
+            saldo: 0
+        });
     }
-};
-
-// 3. FUNCIÓN BORRAR (REVISADA)
-window.borrarMovimiento = async function(id) {
-    if(!confirm("¿Estás seguro de eliminar este movimiento?")) return;
-
-    try {
-        if (modoNube) {
-            // En Nube es complejo borrar sin el índice exacto.
-            // Verificamos si es un ID local temporal (largo) o de Excel
-            if (String(id).length > 15) {
-                alert("⚠️ Este movimiento es local y no se ha sincronizado aún. Recarga la página.");
-                return;
-            }
-            
-            mostrarEstado('☁️ Solicitando borrado a Excel...', 'normal');
-            // Intentamos borrar usando la API (si está implementada la función deleteRow)
-            // Si no, mostramos aviso.
-            if (typeof oneDrive.deleteRow === 'function') {
-                await oneDrive.deleteRow(id);
-                mostrarEstado('✅ Eliminado. Recargando...', 'ok');
-                await cargarDesdeNube();
-            } else {
-                // Fallback seguro: Borrar localmente y avisar
-                 datos = datos.filter(d => d.id !== id);
-                 if(typeof renderizar === 'function') renderizar();
-                 alert("ℹ️ Se ha ocultado de la vista. Para borrarlo permanentemente del Excel, hazlo desde OneDrive o implementa deleteRow en la API.");
-            }
-
-        } else {
-            // MODO LOCAL: Borrado directo del array
-            datos = datos.filter(d => d.id !== id);
-            
-            if(typeof actualizarDashboard === 'function') actualizarDashboard();
-            if(typeof renderizar === 'function') renderizar();
-            mostrarEstado('🗑️ Movimiento eliminado', 'ok');
-        }
-    } catch (e) {
-        alert("Error al borrar: " + e.message);
-    }
-};
-
-// 4. FUNCIÓN CLONAR (REPARADA)
-window.clonarMovimiento = function(id) {
-    const mov = datos.find(d => d.id === id);
-    if (!mov) return;
-
-    // Detectar tipo basado en signo
-    window.modoTransaccionActual = (mov.importe >= 0) ? 'ingreso' : 'pago';
-    
-    // Preparamos el modal como "Nuevo" (idEnEdicion null)
-    idEnEdicion = null;
-    
-    // Abrimos modal
-    abrirModal(false); // false indica que no es edición, es nuevo
-    
-    // Rellenamos datos
-    document.getElementById('m-cantidad').value = Math.abs(mov.importe);
-    document.getElementById('m-cuenta').value = mov.cuenta;
-    document.getElementById('m-concepto').value = mov.concepto;
-    document.getElementById('m-desc').value = mov.detalle;
-    document.getElementById('m-beneficiario').value = mov.beneficiario;
-    
-    // Ponemos fecha de HOY (Al clonar, suele ser para repetir hoy)
-    document.getElementById('m-fecha').valueAsDate = new Date();
-    
-    // Actualizamos UI del botón
-    const btn = document.getElementById('btn-modal-action');
-    if(btn) btn.innerText = "GUARDAR COPIA";
-    
-    mostrarEstado('📋 Datos copiados. Pulsa Guardar.', 'normal');
+    datos = temp;
+    recalcularSaldosGlobal(); // Ordena y calcula saldos al inicio
 };
 
     </script>
