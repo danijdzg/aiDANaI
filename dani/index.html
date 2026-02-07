@@ -942,7 +942,7 @@
     </div>
 
     <div style="position: relative; height: 400px; width: 100%; overflow: hidden;">
-        <div id="chartSunburst" style="width: 100%; height: 100%;"></div>
+        <div id="chart-Sunburst" style="width: 100%; height: 100%;"></div>
         
         <div id="sunburst-center-info" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
             <div style="font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px;">TOTAL</div>
@@ -1266,6 +1266,8 @@ function generateUUID() {
 // ==========================================
 	var modoNube = false;      // <--- ESTA ES LA QUE TE FALTABA
     var datos = [];            // Almacén de movimientos
+	var datosResumen = []; // <--- AÑADE ESTO con las variables globales
+	var datosPropietario = []; // <--- AÑADE ESTA LÍNEA
     var mapaCuentas = {};      // Almacén de configuración de cuentas
     var idEnEdicion = null;    // Para saber qué estamos editando
     var filtroUsuarioActual = 'todos'; // Para el filtro D&N
@@ -2181,71 +2183,110 @@ window.getFechasDashboard = function() {
         }
     }
 	
-    function cargarParaEditar(id) {
-        const mov = datos.find(d => d.id === id);
-        if (!mov) return;
-        idEnEdicion = id;
-        
-        // --- CORRECCIÓN CLAVE: LIMPIEZA DE UI ---
-        // 1. Ocultar elementos de Traspaso
-        const bloqueDestino = document.getElementById('bloque-destino');
-        if(bloqueDestino) bloqueDestino.style.display = 'none';
-        
-        // 2. Restaurar elementos de Gasto/Ingreso normal
-        const inputConcepto = document.getElementById('m-concepto');
-        if(inputConcepto) {
-            inputConcepto.style.display = 'block';
-            if(inputConcepto.previousElementSibling) inputConcepto.previousElementSibling.style.display = 'block';
-        }
-        
-        // 3. Restaurar etiqueta original
-        const lblOrigen = document.getElementById('lbl-cuenta-origen');
-        if(lblOrigen) lblOrigen.innerText = "CUENTA";
-        // ----------------------------------------
+// ==========================================
+// ✏️ CARGAR EDICIÓN (Soporte Inteligente de Traspasos)
+// ==========================================
+window.cargarParaEditar = function(id) {
+    const mov = datos.find(m => m.id === id);
+    if (!mov) return;
 
-        abrirModal(true); 
-        
-        const campoImporteEdit = document.getElementById('m-cantidad');
-        if(campoImporteEdit) {
-            campoImporteEdit.setAttribute('readonly', true);
-            campoImporteEdit.style.cursor = 'pointer';
-            campoImporteEdit.onclick = () => abrirCalculadora('m-cantidad');
-            campoImporteEdit.value = Math.abs(mov.importe);
-        }
-        
-        document.getElementById('m-cuenta').value = mov.cuenta;
-        document.getElementById('m-concepto').value = mov.concepto;
-        document.getElementById('m-desc').value = mov.detalle;
-        
-        // Manejo seguro de fecha
-        try {
-            const fechaObj = new Date(mov.ts);
-            const dia = ("0" + fechaObj.getDate()).slice(-2);
-            const mes = ("0" + (fechaObj.getMonth() + 1)).slice(-2);
-            const anio = fechaObj.getFullYear();
-            document.getElementById('m-fecha').value = `${anio}-${mes}-${dia}`;
-        } catch(e) {
-            document.getElementById('m-fecha').valueAsDate = new Date();
+    idEnEdicion = id; 
+    
+    // 1. DETECCIÓN INTELIGENTE DE TIPO
+    // Es traspaso si el tipo es 'traspaso' O si el concepto lo dice explícitamente
+    const esTraspaso = (mov.tipo === 'traspaso') || 
+                       (mov.concepto && mov.concepto.toUpperCase().includes('TRASPASO'));
+
+    abrirModal(true); // Abrimos en modo edición
+
+    // Referencias a elementos
+    const modalBox = document.querySelector('.modal-box');
+    const titulo = document.querySelector('#modal-manual h3');
+    const inputCant = document.getElementById('m-cantidad');
+    const bloqueDestino = document.getElementById('bloque-destino');
+    const lblOrigen = document.getElementById('lbl-cuenta-origen');
+    const inputConcepto = document.getElementById('m-concepto');
+    const lblConcepto = inputConcepto.previousElementSibling;
+
+    // Rellenar datos básicos
+    if(mov.ts) document.getElementById('m-fecha').value = new Date(mov.ts).toISOString().split('T')[0];
+    document.getElementById('m-cuenta').value = mov.cuenta;
+    document.getElementById('m-beneficiario').value = mov.beneficiario || '';
+
+    // --- LÓGICA SEGÚN TIPO ---
+    if (esTraspaso) {
+        window.modoTransaccionActual = 'traspaso';
+
+        // Estética AZUL
+        modalBox.style.borderColor = 'var(--c-transfer)';
+        modalBox.style.boxShadow = '0 0 30px rgba(0, 184, 255, 0.3)';
+        inputCant.style.color = 'var(--c-transfer)';
+        titulo.innerText = "EDITAR TRASPASO";
+        titulo.style.color = 'var(--c-transfer)';
+
+        // Mostrar Destino / Ocultar Concepto
+        bloqueDestino.style.display = 'block';
+        lblOrigen.innerText = "DESDE CUENTA";
+        inputConcepto.style.display = 'none';
+        lblConcepto.style.display = 'none';
+
+        // RECUPERAR DESTINO DESDE EL TEXTO DEL DETALLE
+        // Formato esperado: ">> A: Bankinter | Cena" o "<< DE: Bankinter | Cena"
+        let detalleLimpio = mov.detalle || '';
+        let otraCuenta = '';
+
+        if (detalleLimpio.includes('>> A:')) {
+            // Editamos la SALIDA
+            const partes = detalleLimpio.split('|');
+            otraCuenta = partes[0].replace('>> A:', '').trim();
+            detalleLimpio = partes.slice(1).join('|').trim();
+        } else if (detalleLimpio.includes('<< DE:')) {
+            // Editamos la ENTRADA (el origen real es la 'otra cuenta')
+            const partes = detalleLimpio.split('|');
+            otraCuenta = partes[0].replace('<< DE:', '').trim();
+            detalleLimpio = partes.slice(1).join('|').trim();
         }
 
-        document.getElementById('m-beneficiario').value = mov.beneficiario;
+        // Rellenamos el selector de destino
+        const selectDestino = document.getElementById('m-cuenta-destino');
+        // Copiamos las opciones del origen para asegurar que están todas
+        selectDestino.innerHTML = document.getElementById('m-cuenta').innerHTML; 
+        selectDestino.value = otraCuenta; 
         
-        // Forzamos el modo correcto (Nunca traspaso al editar)
-        if (mov.tipo === 'traspaso') {
-    modoTransaccionActual = 'traspaso';
-} else {
-    modoTransaccionActual = mov.importe >= 0 ? 'ingreso' : 'pago';
-} 
-        
-        const titulo = document.querySelector('#modal-manual h3');
-        const btn = document.querySelector('#btn-modal-action');
-        
-        if(titulo) {
-            titulo.innerText = "EDITAR MOVIMIENTO";
-            titulo.style.color = modoTransaccionActual === 'ingreso' ? 'var(--c-success)' : 'var(--c-danger)';
+        document.getElementById('m-desc').value = detalleLimpio;
+
+    } else {
+        // GASTO O INGRESO NORMAL
+        bloqueDestino.style.display = 'none';
+        lblOrigen.innerText = "CUENTA";
+        inputConcepto.style.display = 'block';
+        lblConcepto.style.display = 'block';
+        inputConcepto.value = mov.concepto;
+        document.getElementById('m-desc').value = mov.detalle || '';
+
+        // Color según signo
+        if (mov.importe >= 0) {
+            window.modoTransaccionActual = 'ingreso';
+            modalBox.style.borderColor = 'var(--c-success)';
+            inputCant.style.color = 'var(--c-success)';
+            titulo.innerText = "EDITAR INGRESO";
+            titulo.style.color = 'var(--c-success)';
+        } else {
+            window.modoTransaccionActual = 'pago';
+            modalBox.style.borderColor = 'var(--c-danger)';
+            inputCant.style.color = 'var(--c-danger)';
+            titulo.innerText = "EDITAR GASTO";
+            titulo.style.color = 'var(--c-danger)';
         }
-        if(btn) btn.innerText = "ACTUALIZAR CAMBIOS";
     }
+
+    // Importe siempre positivo visualmente
+    inputCant.value = Math.abs(mov.importe);
+    
+    // Mostrar botones Extra (Borrar/Clonar)
+    const extra = document.getElementById('extra-actions');
+    if(extra) extra.style.display = 'grid';
+};
 	
    function abrirModal(esEdicion = false) { 
         document.getElementById('modal-manual').classList.add('active');
@@ -2302,132 +2343,24 @@ window.getFechasDashboard = function() {
 // --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
-
-// --- FUNCIÓN DE GUARDADO MODIFICADA ---
-async function guardarManual() {
-    
-    // 1. CHEQUEO DE SEMÁFORO (ZONA CRÍTICA)
-    // Si el semáforo está en rojo (ya está guardando), cancelamos el nuevo clic.
-    if (isSaving) {
-        console.warn("Intento de doble guardado bloqueado.");
-        return; 
-    }
-
-    const btnAction = document.getElementById('btn-modal-action');
-    const inputCant = document.getElementById('m-cantidad');
-    let imp = parseFloat(inputCant.value);
-    
-    // Validaciones básicas (Aquí el semáforo sigue en verde porque aún no empezamos a procesar)
-    if (isNaN(imp) || imp === 0) return alert("Por favor, introduce un importe válido diferente de cero.");
-    
-    // 2. BLOQUEO (PONEMOS EL SEMÁFORO EN ROJO)
-    isSaving = true; 
-
-    // 3. FEEDBACK VISUAL (Para que el usuario sepa que está pasando algo)
-    const textoOriginal = btnAction.innerText;
-    btnAction.innerText = "⏳ PROCESANDO..."; // Cambiamos texto
-    btnAction.style.opacity = "0.6";          // Hacemos el botón medio transparente
-    btnAction.disabled = true;                // Desactivamos el clic físico del botón
-    
-    // Preparación de datos...
-    imp = Math.abs(imp); 
-    const cuentaOrigen = document.getElementById('m-cuenta').value;
-    const cuentaDestino = document.getElementById('m-cuenta-destino').value;
-    let concepto = document.getElementById('m-concepto').value || 'Varios';
-    let detalle = document.getElementById('m-desc').value || '';
-    const beneficiario = document.getElementById('m-beneficiario').value || 'Yo';
-    const rawFecha = document.getElementById('m-fecha').valueAsDate || new Date();
-    const fechaTs = rawFecha.getTime();
-
-    try {
-        const movimientosAGuardar = [];
-
-        // Lógica de tipos (Gasto/Ingreso/Traspaso) - IGUAL QUE ANTES
-        if (modoTransaccionActual === 'pago') {
-            movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'gasto' });
-        } else if (modoTransaccionActual === 'ingreso') {
-            movimientosAGuardar.push({ ts: fechaTs, importe: imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'ingreso' });
-        } else if (modoTransaccionActual === 'traspaso') {
-            if (!concepto.toUpperCase().includes('TRASPASO')) concepto = "TRASPASO - " + concepto;
-            if (cuentaDestino && cuentaDestino !== cuentaOrigen) {
-                movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: `>> A: ${cuentaDestino} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
-                movimientosAGuardar.push({ ts: fechaTs, importe: imp, cuenta: cuentaDestino, concepto: concepto, detalle: `<< DE: ${cuentaOrigen} | ${detalle}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
-            } else {
-                movimientosAGuardar.push({ ts: fechaTs, importe: -imp, cuenta: cuentaOrigen, concepto: concepto, detalle: detalle, beneficiario: beneficiario, tipo: 'traspaso' });
-            }
-        }
-
-        if (modoNube) {
-            mostrarEstado('☁️ Conectando con Excel...', 'normal');
-            
-            // Ciclo de guardado en la nube
-            for (const mov of movimientosAGuardar) {
-                const fechaExcel = new Date(mov.ts).toISOString().split('T')[0];
-                const filaExcel = [
-                    fechaExcel,         
-                    mov.cuenta,         
-                    mov.concepto,       
-                    mov.importe,        
-                    mov.detalle,        
-                    mov.beneficiario    
-                ];
-                // Esta es la parte lenta donde el usuario solía hacer doble clic
-                await oneDrive.addRowToTable(filaExcel);
-            }
-            
-            mostrarEstado('✅ Guardado en Nube. Sincronizando...', 'ok');
-            await cargarDesdeNube();
-            
-        } else {
-            // Modo Local
-            for (const mov of movimientosAGuardar) {
-                if (idEnEdicion && movimientosAGuardar.length === 1) {
-                    const indice = datos.findIndex(d => d.id === idEnEdicion);
-                    if (indice !== -1) datos[indice] = { ...mov, id: idEnEdicion, saldo: 0 };
-                } else {
-                    datos.push({ ...mov, id: Date.now() + Math.random(), saldo: 0 });
-                }
-            }
-            procesarDatosLocalmente(); 
-            mostrarEstado('💾 Guardado localmente', 'ok');
-        }
-        
-        cerrarModal();
-        vibrar('ingreso');
-
-    } catch (e) {
-        console.error("Error al guardar:", e);
-        alert("ERROR DE ESCRITURA: " + e.message);
-        mostrarEstado('Error al guardar', 'err');
-    } finally {
-        // 4. DESBLOQUEO (ZONA DE SEGURIDAD FINAL)
-        // Ocurra lo que ocurra (éxito o error), SIEMPRE debemos liberar el semáforo
-        // para que el usuario pueda volver a intentar guardar después.
-        
-        isSaving = false; // 🟢 Semáforo Verde
-        
-        // Restauramos el botón a su estado normal
-        btnAction.innerText = textoOriginal;
-        btnAction.style.opacity = "1";
-        btnAction.disabled = false;
-        idEnEdicion = null;
-    }
-
-
-// Función auxiliar necesaria si no existe (para modo local sin recarga completa)
-function procesarDatosLocalmente() {
+// ==========================================
+// 🧮 CÁLCULOS LOCALES (Motor de Saldos)
+// ==========================================
+window.recalcularSaldosGlobal = function() {
+    // 1. Ordenar por fecha (Vital si has cambiado la fecha de un movimiento)
     datos.sort((a, b) => a.ts - b.ts);
-    // Recalcular saldos
+
+    // 2. Recalcular saldos acumulados cuenta por cuenta
     const ac = {};
     datos.forEach(m => {
         if (!ac[m.cuenta]) ac[m.cuenta] = 0;
         ac[m.cuenta] += m.importe;
-        m.saldo = ac[m.cuenta];
+        m.saldo = ac[m.cuenta]; // Actualizamos el saldo de esta línea
     });
-    renderizar();
-    actualizarDashboard();
-    actualizarPatrimonio();
-}
+    
+    // NOTA: No llamamos a 'renderizar()' aquí porque ya lo hace 'guardarManual'
+    // justo después. Así evitamos pintar la pantalla dos veces seguidas.
+};
 
      	
 	function clonarMovimiento() {
@@ -2745,7 +2678,6 @@ function animarCifra(id, valorFinal) {
         renderizarGraficoEvolucion(datosPropietario);
         generarAnalisisIA(datos);
 		renderizarRadarSalud();
-    }
 
 
    function generarLibroExcel() {
@@ -3420,78 +3352,87 @@ if(btnIgual) {
         }
     }
 
-    function accionFab(tipo) {
-        toggleFab(); // Cerramos el abanico
-        
-        const modalBox = document.querySelector('.modal-box');
-        const inputCant = document.getElementById('m-cantidad');
-        const titulo = document.querySelector('#modal-manual h3');
-        
-        // Elementos a manipular
-        const bloqueDestino = document.getElementById('bloque-destino');
-        const lblOrigen = document.getElementById('lbl-cuenta-origen');
-        const inputConcepto = document.getElementById('m-concepto');
-        const lblConcepto = inputConcepto.previousElementSibling; // La etiqueta "CONCEPTO"
-        
-        // Reset visual (Limpieza)
-        modalBox.style.transition = "all 0.3s ease";
-        bloqueDestino.style.display = 'none'; // Ocultar destino por defecto
-        inputConcepto.style.display = 'block'; // Mostrar concepto por defecto
-        lblConcepto.style.display = 'block';
-        lblOrigen.innerText = "CUENTA";
-        inputConcepto.value = ""; 
-        document.getElementById('m-desc').value = ""; // Limpiar descripción
+// ==========================================
+// 🔘 BOTÓN FLOTANTE (FAB) - ESTILOS FORZADOS
+// ==========================================
+function accionFab(tipo) {
+    toggleFab(); // Cerrar menú
+    abrirModal(); // Limpiar formulario
 
-        if (tipo === 'pagos') {
-            vibrar('gasto');
-            modoTransaccionActual = 'pago';
-            modalBox.style.borderColor = 'var(--c-danger)';
-            modalBox.style.boxShadow = '0 0 30px rgba(255, 46, 77, 0.3)';
-            inputCant.style.color = 'var(--c-danger)';
-            titulo.innerText = "NUEVO GASTO";
-            titulo.style.color = 'var(--c-danger)';
-            abrirModal();
-            
-        } else if (tipo === 'ingresos') {
-            vibrar('ingreso');
-            modoTransaccionActual = 'ingreso';
-            modalBox.style.borderColor = 'var(--c-success)';
-            modalBox.style.boxShadow = '0 0 30px rgba(57, 255, 20, 0.3)';
-            inputCant.style.color = 'var(--c-success)';
-            titulo.innerText = "NUEVO INGRESO";
-            titulo.style.color = 'var(--c-success)';
-            abrirModal();
+    const modalBox = document.querySelector('.modal-box');
+    const inputCant = document.getElementById('m-cantidad');
+    const titulo = document.querySelector('#modal-manual h3');
+    
+    // Elementos condicionales
+    const bloqueDestino = document.getElementById('bloque-destino');
+    const lblOrigen = document.getElementById('lbl-cuenta-origen');
+    const inputConcepto = document.getElementById('m-concepto');
+    const lblConcepto = inputConcepto.previousElementSibling;
 
-        } else if (tipo === 'traspasos') {
-            vibrar('clonar');
-            modoTransaccionActual = 'traspaso';
-            
-            // Estética AZUL
-            modalBox.style.borderColor = 'var(--c-transfer)';
-            modalBox.style.boxShadow = '0 0 30px rgba(0, 184, 255, 0.3)';
-            inputCant.style.color = 'var(--c-transfer)';
-            titulo.innerText = "NUEVO TRASPASO";
-            titulo.style.color = 'var(--c-transfer)';
-            
-            // LOGICA ESPECIFICA DE TRASPASO
-            bloqueDestino.style.display = 'block'; // Mostramos el segundo selector
-            lblOrigen.innerText = "DESDE CUENTA (ORIGEN)"; // Cambiamos etiqueta
-            
-            // Ocultamos Concepto (Será fijo)
-            inputConcepto.style.display = 'none';
-            lblConcepto.style.display = 'none';
-            
-            // Pre-rellenamos descripción
-            document.getElementById('m-desc').value = "Traspaso";
-            
-            // Rellenamos el selector de destino con las mismas cuentas
-            const selectOrigen = document.getElementById('m-cuenta');
-            const selectDestino = document.getElementById('m-cuenta-destino');
-            selectDestino.innerHTML = selectOrigen.innerHTML; // Copiamos opciones
+    // --- 1. RESET TOTAL (Limpieza agresiva) ---
+    // Quitamos cualquier color previo para empezar de cero
+    modalBox.style.borderColor = ''; 
+    modalBox.style.boxShadow = '';
+    inputCant.style.color = '';
+    titulo.style.color = '';
+    
+    // Restaurar visibilidad estándar
+    bloqueDestino.style.display = 'none';
+    inputConcepto.style.display = 'block';
+    lblConcepto.style.display = 'block';
+    lblOrigen.innerText = "CUENTA";
+    document.getElementById('m-desc').value = ""; 
 
-            abrirModal();
-        }
+    // --- 2. APLICAR ESTILO SEGÚN TIPO ---
+    
+    if (tipo === 'pagos') {
+        // MODO GASTO -> ROJO
+        window.modoTransaccionActual = 'pago';
+        titulo.innerText = "NUEVO GASTO";
+        
+        // Forzamos los colores directamente
+        modalBox.style.borderColor = 'var(--c-danger)';
+        modalBox.style.boxShadow = '0 0 30px rgba(255, 46, 77, 0.3)';
+        inputCant.style.color = 'var(--c-danger)';
+        titulo.style.color = 'var(--c-danger)';
+        vibrar('gasto');
+        
+    } else if (tipo === 'ingresos') {
+        // MODO INGRESO -> VERDE
+        window.modoTransaccionActual = 'ingreso';
+        titulo.innerText = "NUEVO INGRESO";
+        
+        modalBox.style.borderColor = 'var(--c-success)';
+        modalBox.style.boxShadow = '0 0 30px rgba(57, 255, 20, 0.3)';
+        inputCant.style.color = 'var(--c-success)';
+        titulo.style.color = 'var(--c-success)';
+        vibrar('ingreso');
+
+    } else if (tipo === 'traspasos') {
+        // MODO TRASPASO -> AZUL
+        window.modoTransaccionActual = 'traspaso';
+        titulo.innerText = "NUEVO TRASPASO";
+        
+        modalBox.style.borderColor = 'var(--c-transfer)';
+        modalBox.style.boxShadow = '0 0 30px rgba(0, 184, 255, 0.3)';
+        inputCant.style.color = 'var(--c-transfer)';
+        titulo.style.color = 'var(--c-transfer)';
+        
+        // Ajustes específicos de traspaso
+        bloqueDestino.style.display = 'block';
+        lblOrigen.innerText = "DESDE CUENTA";
+        inputConcepto.style.display = 'none';
+        lblConcepto.style.display = 'none';
+        document.getElementById('m-desc').value = "Traspaso";
+        
+        // Copiar cuentas
+        const selectOrigen = document.getElementById('m-cuenta');
+        const selectDestino = document.getElementById('m-cuenta-destino');
+        selectDestino.innerHTML = selectOrigen.innerHTML;
+        
+        vibrar('clonar');
     }
+}
 	
 
     // NUEVA FUNCIÓN PARA CREAR EL ARCHIVO DESDE CERO
@@ -3635,48 +3576,64 @@ function exportarExcel() {
     }
 }
 
-/* =========================================
-   🌞 NUEVO MOTOR GRÁFICO: SUNBURST ECHARTS
-   ========================================= */
+// ==========================================
+// ☀️ RAYO X PATRIMONIAL (SUNBURST) - ID CORREGIDO
+// ==========================================
+window.renderizarSunburstPatrimonio = function() {
+    // 1. CORRECCIÓN DEL ID (Aquí estaba el fallo)
+    // Buscamos 'chartSunburst' que es como se llama en tu HTML
+    const container = document.getElementById('chartSunburst'); 
+    
+    if (!container) return; // Si sigue fallando, es que borraste el div del HTML
 
-let echartInstance = null;
+    // Limpieza de instancia previa para evitar "fantasmas"
+    if (window.echartSunburst) {
+        window.echartSunburst.clear();
+    } else {
+        window.echartSunburst = echarts.init(container);
+    }
+    const chart = window.echartSunburst;
 
-function renderizarSunburstPatrimonio() {
-    const container = document.getElementById('chartSunburst');
-    if (!container || !datos || datos.length === 0) return;
+    // Si no hay datos, paramos aquí
+    if (!window.datos || window.datos.length === 0) return;
 
-    if (echartInstance) { echartInstance.dispose(); }
-    echartInstance = echarts.init(container);
-
+    // 2. FILTRADO Y CÁLCULO
     const saldos = {};
-    const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+    // Filtramos por el usuario activo (Dani/Norma/D&N)
+    const datosFiltrados = window.datos.filter(m => pasaFiltroPropietario(m));
 
     datosFiltrados.forEach(m => {
+        if (!m.cuenta) return;
         const cta = m.cuenta.trim().toUpperCase();
         saldos[cta] = (saldos[cta] || 0) + m.importe;
     });
 
+    // 3. CONSTRUCCIÓN DE JERARQUÍA
     let patrimonioNetoReal = 0;
     let activosBrutos = 0;
     let totalLiquidez = 0;
     let totalInversion = 0;
-    const childrenLiquidez = [];
-    const childrenInversion = [];
+    
     const mapTiposLiq = {};
     const mapTiposInv = {};
 
     Object.keys(saldos).forEach(cta => {
         const valor = saldos[cta];
-        
-        // Sumamos TODO al neto (incluyendo deudas)
-        patrimonioNetoReal += valor;
+        patrimonioNetoReal += valor; 
 
-        // Para el gráfico visual, solo mostramos lo positivo
-        if (valor < 0.01) return; 
+        // IMPORTANTE: Este gráfico solo muestra ACTIVOS (Dinero positivo)
+        // Si una cuenta está en negativo (ej: tarjeta de crédito), no sale en el rosco,
+        // pero sí resta en el total del centro.
+        if (valor < 1) return; 
 
         activosBrutos += valor;
-        const config = (mapaCuentas && mapaCuentas[cta]) ? mapaCuentas[cta] : { tipo: 'OTROS', esInversion: false };
-        const tipo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
+
+        // Buscamos configuración (con seguridad anti-fallos)
+        let config = (window.mapaCuentas && window.mapaCuentas[cta]) 
+                     ? window.mapaCuentas[cta] 
+                     : { tipo: 'SIN CLASIFICAR', esInversion: false };
+
+        const tipo = (config.tipo || 'OTROS').toUpperCase();
         const nodo = { name: cta, value: Number(valor.toFixed(2)) };
 
         if (config.esInversion) {
@@ -3690,40 +3647,75 @@ function renderizarSunburstPatrimonio() {
         }
     });
 
-    Object.values(mapTiposLiq).forEach(g => childrenLiquidez.push(g));
-    Object.values(mapTiposInv).forEach(g => childrenInversion.push(g));
+    // 4. PREPARAR DATOS VISUALES
+    const childrenLiquidez = Object.values(mapTiposLiq);
+    const childrenInversion = Object.values(mapTiposInv);
 
     const dataTree = [{
         name: 'ACTIVOS',
         children: [
-            { name: 'LIQUIDEZ', children: childrenLiquidez, itemStyle: { color: '#00B8FF' } },
-            { name: 'INVERSIÓN', children: childrenInversion, itemStyle: { color: '#BF5AF2' } }
+            { 
+                name: 'LIQUIDEZ', 
+                children: childrenLiquidez, 
+                itemStyle: { color: '#00B8FF' }, 
+                label: { color: '#fff', fontWeight: 'bold' }
+            },
+            { 
+                name: 'INVERSIÓN', 
+                children: childrenInversion, 
+                itemStyle: { color: '#BF5AF2' }, 
+                label: { color: '#fff', fontWeight: 'bold' }
+            }
         ]
     }];
 
-    // Actualización del Texto Central (Neto Real)
-    document.getElementById('sb-total-val').innerText = new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(patrimonioNetoReal) + '€';
-    document.getElementById('sb-total-val').style.color = patrimonioNetoReal >= 0 ? '#fff' : '#FF2E4D';
+    // 5. ACTUALIZAR KPIS (Textos de la pantalla)
+    const elTotal = document.getElementById('sb-total-val');
+    if(elTotal) {
+        // Formato moneda bonito
+        elTotal.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(patrimonioNetoReal);
+        // Rojo si debemos dinero, Blanco si tenemos
+        elTotal.style.color = patrimonioNetoReal >= 0 ? '#fff' : '#FF2E4D';
+    }
 
-    // KPIs
-    const ratioLiq = activosBrutos > 0 ? ((totalLiquidez / activosBrutos) * 100).toFixed(0) : 0;
-    const ratioInv = activosBrutos > 0 ? ((totalInversion / activosBrutos) * 100).toFixed(0) : 0;
-    document.getElementById('kpi-ratio-liq').innerText = ratioLiq + '%';
-    document.getElementById('kpi-ratio-inv').innerText = ratioInv + '%';
+    const elRatioLiq = document.getElementById('kpi-ratio-liq');
+    const elRatioInv = document.getElementById('kpi-ratio-inv');
+    
+    if (activosBrutos > 0) {
+        if(elRatioLiq) elRatioLiq.innerText = ((totalLiquidez / activosBrutos) * 100).toFixed(0) + '%';
+        if(elRatioInv) elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(0) + '%';
+    }
 
+    // 6. PINTAR (RENDER)
     const option = {
         backgroundColor: 'transparent',
+        tooltip: { trigger: 'item', formatter: '{b}: {c} € ({d}%)' },
         series: {
             type: 'sunburst',
             data: dataTree,
-            radius: ['15%', '90%'],
-            label: { rotate: 'tangential' },
-            itemStyle: { borderRadius: 4, borderColor: '#000', borderWidth: 2 }
+            radius: ['20%', '90%'],
+            label: { 
+                rotate: 'tangential', 
+                color: '#fff',
+                fontSize: 10,
+                formatter: function (param) {
+                    // Ocultar etiquetas de sectores minúsculos para que no se amontonen
+                    return param.data.value > (activosBrutos * 0.02) ? param.name : ''; 
+                }
+            },
+            itemStyle: {
+                borderRadius: 4,
+                borderColor: '#121212', 
+                borderWidth: 2
+            }
         }
     };
-    echartInstance.setOption(option);
-    window.addEventListener('resize', () => echartInstance && echartInstance.resize());
-}
+
+    chart.setOption(option);
+    
+    // Resize automático al girar el móvil o cambiar tamaño
+    window.addEventListener('resize', () => chart.resize());
+};
 
 	// ==========================================
     // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
@@ -4192,94 +4184,112 @@ window.borrarMovimiento = async function(idRecibido) {
 };
 
 
-// ==========================================
-// 3. SISTEMA DE AÑADIDO (CON GENERACIÓN DE UUID)
-// ==========================================
-window.isSaving = false; // Semáforo de seguridad
-
+// --- FUNCIÓN DE GUARDADO CORRECTA (V 5.0) ---
 window.guardarManual = async function() {
-    if (window.isSaving) return; 
-
+    if (window.isSaving) return;
+    
     const btn = document.getElementById('btn-modal-action');
     const txtOriginal = btn.innerText;
     const inputCant = document.getElementById('m-cantidad');
     const cant = parseFloat(inputCant.value);
 
-    if (!cant) return alert("El importe no puede ser 0.");
+    if (!cant || isNaN(cant)) return alert("El importe no puede ser 0.");
 
     window.isSaving = true;
-    btn.innerText = "⏳ GUARDANDO...";
+    btn.innerText = "⏳ PROCESANDO...";
     btn.disabled = true;
 
     try {
-        // ... (Recogida de valores del formulario: cta, con, det, ben... igual que antes) ...
         const cta = document.getElementById('m-cuenta').value;
         const con = document.getElementById('m-concepto').value || 'Varios';
         const det = document.getElementById('m-desc').value || '';
         const ben = document.getElementById('m-beneficiario').value || 'Yo';
-        let fechaIso = new Date().toISOString().split('T')[0];
-        try { if(document.getElementById('m-fecha').value) fechaIso = document.getElementById('m-fecha').value; } catch(e){}
+        const dest = document.getElementById('m-cuenta-destino').value;
+
+        // Fecha local corregida
+        let fechaObj = new Date();
+        const inputFecha = document.getElementById('m-fecha').value;
+        if(inputFecha) {
+            fechaObj = new Date(inputFecha);
+        }
+        const offset = fechaObj.getTimezoneOffset();
+        const fechaLocal = new Date(fechaObj.getTime() - (offset*60*1000));
+        const fechaIso = fechaLocal.toISOString().split('T')[0];
 
         const imp = Math.abs(cant);
-        const modo = window.modoTransaccionActual || 'gasto';
         
-        // --- AQUÍ ESTÁ EL CAMBIO CRÍTICO ---
-        const filas = [];
+        // --- 🛡️ CORRECCIÓN DE MODO (SEGURIDAD) ---
+        // Leemos la variable global, pero si falla, miramos el título de la ventana
+        let modo = window.modoTransaccionActual || 'gasto';
+        const tituloVentana = document.querySelector('#modal-manual h3').innerText.toUpperCase();
+        
+        // Si la ventana dice "INGRESO", forzamos modo ingreso (manda lo visual)
+        if (tituloVentana.includes('INGRESO')) modo = 'ingreso';
+        if (tituloVentana.includes('TRASPASO')) modo = 'traspaso';
+        if (tituloVentana.includes('GASTO')) modo = 'gasto'; // o 'pago'
 
-        if (modo === 'gasto' || modo === 'pago') {
-            // [UUID, FECHA, CUENTA, CONCEPTO, IMPORTE, DETALLE, BENEFICIARIO]
-            filas.push([generateUUID(), fechaIso, cta, con, -imp, det, ben]); 
-        } 
-        else if (modo === 'ingreso') {
-            filas.push([generateUUID(), fechaIso, cta, con, imp, det, ben]);
-        } 
-        else if (modo === 'traspaso') {
-            const dest = document.getElementById('m-cuenta-destino').value;
+        // Preparar filas
+        let filasAInsertar = [];
+        
+        if (modo === 'traspaso') {
             const conT = con.toUpperCase().includes('TRASPASO') ? con : "TRASPASO - " + con;
+            // Salida
+            filasAInsertar.push({ id: generateUUID(), fecha: fechaIso, cuenta: cta, concepto: conT, importe: -imp, detalle: `>> A: ${dest} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
+            // Entrada
+            filasAInsertar.push({ id: generateUUID(), fecha: fechaIso, cuenta: dest, concepto: conT, importe: imp, detalle: `<< DE: ${cta} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
+        } else {
+            // Gasto o Ingreso
+            // Si es Ingreso -> Positivo. Si es Gasto/Pago -> Negativo.
+            let importeFinal = (modo === 'ingreso') ? imp : -imp;
             
-            // Generamos DOS UUIDs diferentes, uno para cada línea del traspaso
-            filas.push([generateUUID(), fechaIso, cta, conT, -imp, `>> A: ${dest} | ${det}`, 'Mí mismo']);
-            filas.push([generateUUID(), fechaIso, dest, conT, imp, `<< DE: ${cta} | ${det}`, 'Mí mismo']);
+            filasAInsertar.push({
+                id: generateUUID(),
+                fecha: fechaIso,
+                cuenta: cta,
+                concepto: con,
+                importe: importeFinal,
+                detalle: det,
+                beneficiario: ben,
+                tipo: modo
+            });
         }
 
+        // --- GUARDADO (NUBE / LOCAL) ---
         if (modoNube) {
-            mostrarEstado('☁️ Escribiendo en Excel...', 'normal');
-            // La función addRowToTable ahora recibe un array con 7 columnas
-            for (const f of filas) await oneDrive.addRowToTable(f); // O usa oneDrive.addRow(f) si actualizaste la clase
-            
-            mostrarEstado('✅ Guardado. Sincronizando...', 'ok');
+            mostrarEstado('☁️ Sincronizando...', 'normal');
+            if (idEnEdicion) await oneDrive.deleteRowById(idEnEdicion);
+
+            for (let f of filasAInsertar) {
+                const filaExcel = [f.id, f.fecha, f.cuenta, f.concepto, f.importe, f.detalle, f.beneficiario];
+                await oneDrive.addRowToTable(filaExcel);
+            }
+            mostrarEstado('✅ Sincronizado', 'ok');
             await cargarDesdeNube(); 
-            
         } else {
-            // MODO LOCAL: Simulamos lo mismo
-            filas.forEach(f => {
-                datos.push({
-                    // Mapeamos manualmente el array que acabamos de crear arriba
-                    id: f[0], // El UUID generado
-                    ts: new Date(f[1]).getTime(),
-                    cuenta: f[2], 
-                    concepto: f[3], 
-                    importe: f[4], 
-                    detalle: f[5], 
-                    beneficiario: f[6],
-                    tipo: modo === 'pago' ? 'gasto' : modo,
-                    saldo: 0
-                });
-            });
-            
+            if (idEnEdicion) {
+                const index = datos.findIndex(d => d.id === idEnEdicion);
+                if (index !== -1) datos.splice(index, 1);
+            }
+            for (let f of filasAInsertar) {
+                datos.push({ ...f, ts: new Date(f.fecha).getTime(), saldo: 0 });
+            }
             recalcularSaldosGlobal();
             mostrarEstado('💾 Guardado localmente', 'ok');
+            renderizar();
+            actualizarDashboard();
         }
 
         cerrarModal();
         if(typeof vibrar === 'function') vibrar('ingreso');
 
     } catch (e) {
-        alert("Error crítico: " + e.message);
+        console.error(e);
+        alert("Error al guardar: " + e.message);
     } finally {
         window.isSaving = false;
         btn.innerText = txtOriginal;
         btn.disabled = false;
+        idEnEdicion = null; 
     }
 };
 
@@ -4310,54 +4320,6 @@ window.clonarMovimiento = function(id) {
     mostrarEstado('📋 Datos copiados. Pulsa Guardar.', 'normal');
 };
 
-// ==========================================
-// 🎢 MOTOR DE ANIMACIÓN DE NÚMEROS (CountUp)
-// ==========================================
-const cacheValores = {}; // Memoria para recordar el valor anterior
-
-window.animarCifra = function(id, valorFinal, tipo = 'moneda') {
-    const elemento = document.getElementById(id);
-    if (!elemento) return;
-
-    // 1. Determinar punto de partida
-    const valorInicial = cacheValores[id] || 0;
-    const variacion = valorFinal - valorInicial;
-    
-    // Si el cambio es minúsculo, pintamos directo y salimos
-    if (Math.abs(variacion) < 0.01) {
-        elemento.innerText = formatearAnimacion(valorFinal, tipo);
-        cacheValores[id] = valorFinal;
-        return;
-    }
-
-    // 2. Configuración de la animación
-    const duracion = 1500; // 1.5 segundos
-    const startTime = performance.now();
-
-    // Función de Easing (Ease Out Expo)
-    const easeOutExpo = (x) => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
-
-    function step(currentTime) {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duracion, 1);
-        
-        // Calcular valor actual
-        const valorActual = valorInicial + (variacion * easeOutExpo(progress));
-
-        // Pintar
-        elemento.innerText = formatearAnimacion(valorActual, tipo);
-
-        // Continuar o terminar
-        if (progress < 1) {
-            requestAnimationFrame(step);
-        } else {
-            cacheValores[id] = valorFinal; // Guardamos valor final
-            elemento.innerText = formatearAnimacion(valorFinal, tipo); // Asegurar precisión final
-        }
-    }
-
-    requestAnimationFrame(step);
-};
 
 // Ayudante de formato interno para la animación
 function formatearAnimacion(val, tipo) {
@@ -4386,7 +4348,7 @@ window.actualizarDashboard = function() {
     const movsUsuario = (typeof pasaFiltroPropietario === 'function') 
         ? datos.filter(m => pasaFiltroPropietario(m)) 
         : datos;
-
+	window.datosPropietario = movsUsuario;
     // =========================================================
     // PARTE 1: TARJETAS DE FLUJO (Ingresos / Gastos / Ahorro)
     // =========================================================
@@ -4509,41 +4471,72 @@ window.actualizarDashboard = function() {
     animarCifra('d-libertad', libertad, 'porcentaje');
     const elLib = document.getElementById('d-libertad');
     if(elLib) elLib.style.color = libertad >= 100 ? '#BF5AF2' : 'var(--c-success)'; 
+	// Agrupamos los gastos por concepto para que el gráfico de sectores funcione
+    const mapGastos = {};
+    
+    // Usamos los mismos filtros de fecha que ya calculaste arriba (movsUsuario, tStart, tEnd)
+    movsUsuario
+        .filter(m => m.ts >= tStart && m.ts <= tEnd && m.tipo === 'gasto')
+        .forEach(m => {
+            const cat = m.concepto || 'Otros';
+            mapGastos[cat] = (mapGastos[cat] || 0) + Math.abs(m.importe);
+        });
+
+    // Guardamos el resultado en la variable global que ECharts está buscando
+    window.datosResumen = Object.keys(mapGastos)
+        .map(k => ({ name: k, value: mapGastos[k] }))
+        .sort((a, b) => b.value - a.value); // Ordenamos de mayor gasto a menor
+
+    // Si tienes una función que pinta el gráfico, la llamamos para refrescar
+    if(typeof renderizarDistribucion === 'function') renderizarDistribucion();
+    
 };
 
 // Variable global para saber quién está activo
 var filtroUsuarioActual = 'todos'; 
 
+// ==========================================
+// 👤 CAMBIO DE USUARIO (Con actualización de Gráficos)
+// ==========================================
 window.toggleUsuario = function() {
-    // AHORA APUNTAMOS AL NUEVO BOTÓN
     const btnName = document.getElementById('btn-identity-toggle'); 
     const root = document.documentElement;
 
-    // Lógica de rotación
+    // 1. ROTACIÓN DE USUARIO
     if (filtroUsuarioActual === 'todos') {
-        // -> DANI
         filtroUsuarioActual = 'Dani';
-        if(btnName) btnName.innerText = 'DANI'; // Texto en mayúsculas queda mejor
+        if(btnName) btnName.innerText = 'DANI';
         root.style.setProperty('--current-theme', 'var(--theme-dani)');
         
     } else if (filtroUsuarioActual === 'Dani') {
-        // -> NORMA
         filtroUsuarioActual = 'Norma';
         if(btnName) btnName.innerText = 'NORMA';
         root.style.setProperty('--current-theme', 'var(--theme-norma)');
 
     } else {
-        // -> D&N
         filtroUsuarioActual = 'todos';
         if(btnName) btnName.innerText = 'D&N';
         root.style.setProperty('--current-theme', 'var(--theme-dn)');
     }
 
-    // Recargar pantallas
-    if(typeof renderizar === 'function') renderizar();
-    if(typeof actualizarDashboard === 'function') actualizarDashboard();
-    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+    // 2. ACTUALIZACIÓN DE VARIABLES GLOBALES
+    // Esto es crucial: recalcular los datos filtrados antes de pintar nada
+    if (window.datos && window.datos.length > 0) {
+        window.datosPropietario = window.datos.filter(m => pasaFiltroPropietario(m));
+    }
+
+    // 3. REFRESCO DE TODA LA INTERFAZ
+    // Llamamos a todas las funciones de renderizado que puedan existir
+    if(typeof renderizar === 'function') renderizar();                   // Lista principal
+    if(typeof actualizarDashboard === 'function') actualizarDashboard(); // KPIs Home
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio(); // Pestaña Patrimonio
     
+    // --- AQUÍ ESTÁ LA SOLUCIÓN PARA ANÁLISIS ---
+    // Forzamos el redibujado de los gráficos de análisis
+    if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion();
+    if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
+    if(typeof renderizarDistribucion === 'function') renderizarDistribucion();
+	if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
     if(typeof vibrar === 'function') vibrar('tecla');
 };
 
