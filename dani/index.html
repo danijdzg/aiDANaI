@@ -3476,7 +3476,7 @@ function leerExcelDesdeBuffer(wb) {
 
 
 // ==========================================
-// 💾 GUARDADO MAESTRO (Local y Nube)
+// 💾 GUARDADO MAESTRO (Versión "Creación Forzada")
 // ==========================================
 window.guardarUniversal = async function() {
     const btn = document.getElementById('btn-guardar');
@@ -3484,28 +3484,32 @@ window.guardarUniversal = async function() {
     const txtOriginal = btn ? btn.innerHTML : '';
 
     try {
-        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> ...';
+        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Creando...';
 
-        // 1. Generar el Excel con los datos actuales de la pantalla
-        const wb = generarLibroExcel(); // Asegúrate de que esta función existe (la arreglamos antes)
+        // 1. Empaquetamos los datos de la pantalla en un Excel
+        const wb = generarLibroExcel(); 
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 
         if (modoNube) {
-            // --- MODO NUBE: SUBIDA COMPLETA ---
-            mostrarEstado('☁️ Subiendo archivo a OneDrive...', 'normal');
+            // --- MODO NUBE ---
+            mostrarEstado('☁️ Creando archivo en OneDrive...', 'normal');
             
-            // Usamos saveFile que hace un PUT (crea o sobrescribe)
+            // IMPORTANTE: Llamamos directamente a saveFile (que hace un PUT/Sobrescribir)
+            // NO llamamos a cargarDesdeNube() aquí, para evitar el error.
             await oneDrive.saveFile(blob);
             
-            mostrarEstado('✅ Archivo creado/actualizado en la nube', 'ok');
-            alert("¡ÉXITO!\n\nSe ha creado el archivo 'aidanai.xlsx' en tu OneDrive.\n\nA partir de ahora, la app lo leerá automáticamente al entrar.");
+            mostrarEstado('✅ Archivo creado con éxito', 'ok');
+            alert("¡ARREGLADO!\n\nSe ha creado el archivo 'aidanai.xlsx' en tu OneDrive.\n\nYa puedes usar la aplicación con normalidad.");
             
-            // Ocultamos el botón de guardar manual porque en la nube guardamos fila a fila (automático)
+            // Ocultamos el botón manual porque ya está todo sincronizado
             if(btn) btn.style.display = 'none';
+            
+            // Opcional: Recargamos ahora que SÍ existe el archivo
+            // await cargarDesdeNube(); 
 
         } else {
-            // --- MODO LOCAL: DESCARGA CLÁSICA ---
+            // --- MODO LOCAL ---
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
