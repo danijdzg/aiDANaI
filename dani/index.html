@@ -2285,6 +2285,113 @@ window.cargarParaEditar = function(id) {
 // --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
+window.guardarManual = async function() {
+    if (window.isSaving) return;
+    
+    // 1. RECOGIDA DE DATOS
+    const btn = document.getElementById('btn-modal-action');
+    const txtOriginal = btn.innerText;
+    const inputCant = document.getElementById('m-cantidad');
+    const cant = parseFloat(inputCant.value);
+
+    if (!cant || isNaN(cant)) return alert("El importe no puede ser 0.");
+
+    window.isSaving = true;
+    btn.innerText = "⏳ GUARDANDO...";
+    btn.disabled = true;
+
+    try {
+        const cta = document.getElementById('m-cuenta').value;
+        const con = document.getElementById('m-concepto').value || 'Varios';
+        const det = document.getElementById('m-desc').value || '';
+        const ben = document.getElementById('m-beneficiario').value || 'Yo';
+        const dest = document.getElementById('m-cuenta-destino').value;
+
+        // Fecha
+        let fechaObj = new Date();
+        const inputFecha = document.getElementById('m-fecha').value;
+        if(inputFecha) fechaObj = new Date(inputFecha);
+        const offset = fechaObj.getTimezoneOffset();
+        const fechaLocal = new Date(fechaObj.getTime() - (offset*60*1000));
+        const fechaIso = fechaLocal.toISOString().split('T')[0];
+        const fechaTs = fechaLocal.getTime();
+
+        const imp = Math.abs(cant);
+        
+        let modo = window.modoTransaccionActual || 'gasto';
+        const tituloVentana = document.querySelector('#modal-manual h3').innerText.toUpperCase();
+        if (tituloVentana.includes('INGRESO')) modo = 'ingreso';
+        if (tituloVentana.includes('TRASPASO')) modo = 'traspaso';
+        if (tituloVentana.includes('GASTO')) modo = 'pago';
+
+        // 2. PREPARAR NUEVAS FILAS
+        let filasNuevas = [];
+        
+        if (modo === 'traspaso') {
+            const conT = con.toUpperCase().includes('TRASPASO') ? con : "TRASPASO - " + con;
+            filasNuevas.push({ 
+                id: generateUUID(), fecha: fechaIso, ts: fechaTs, 
+                cuenta: cta, concepto: conT, importe: -imp, 
+                detalle: `>> A: ${dest} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' 
+            });
+            filasNuevas.push({ 
+                id: generateUUID(), fecha: fechaIso, ts: fechaTs,
+                cuenta: dest, concepto: conT, importe: imp, 
+                detalle: `<< DE: ${cta} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' 
+            });
+        } else {
+            let importeFinal = (modo === 'ingreso') ? imp : -imp;
+            filasNuevas.push({
+                id: generateUUID(), fecha: fechaIso, ts: fechaTs,
+                cuenta: cta, concepto: con, importe: importeFinal, 
+                detalle: det, beneficiario: ben, tipo: (modo === 'pago' ? 'gasto' : modo)
+            });
+        }
+
+        // 3. ACTUALIZACIÓN OPTIMISTA (LOCAL)
+        if (idEnEdicion) {
+            const index = datos.findIndex(d => d.id === idEnEdicion);
+            if (index !== -1) datos.splice(index, 1);
+        }
+
+        for (let f of filasNuevas) {
+            datos.push({ 
+                id: f.id, ts: f.ts, cuenta: f.cuenta, 
+                concepto: f.concepto, importe: f.importe, 
+                detalle: f.detalle, beneficiario: f.beneficiario, 
+                tipo: f.tipo, saldo: 0 
+            });
+        }
+
+        // ¡ACTUALIZAR UI YA!
+        recalcularSaldosGlobal();
+        renderizar();
+        actualizarDashboard();
+        if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+
+        // 4. SINCRONIZACIÓN CON LA NUBE (FONDO)
+        if (modoNube) {
+            mostrarEstado('☁️ Subiendo cambios...', 'normal');
+            await generarYSubirExcelCompleto();
+            mostrarEstado('✅ Nube Sincronizada', 'ok');
+        } else {
+            mostrarEstado('💾 Guardado localmente', 'ok');
+        }
+
+        cerrarModal();
+        if(typeof vibrar === 'function') vibrar('ingreso');
+
+    } catch (e) {
+        console.error(e);
+        alert("Error: " + e.message);
+    } finally {
+        window.isSaving = false;
+        btn.innerText = txtOriginal;
+        btn.disabled = false;
+        idEnEdicion = null; 
+    }
+};
+
 // ==========================================
 // 🧮 CÁLCULOS LOCALES (Motor de Saldos)
 // ==========================================
