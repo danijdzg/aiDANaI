@@ -1361,22 +1361,43 @@ class OneDriveManager {
         }
     }
 
-    // 3. INICIALIZACIÓN Y BÚSQUEDA
+    // 3. INICIALIZACIÓN (DOBLE ESTRATEGIA: DIRECTA + BÚSQUEDA)
     async initialize() {
         const token = await this.getToken();
+        console.log("🔍 Intentando localizar aidanai.xlsx...");
+
+        // --- ESTRATEGIA A: ACCESO DIRECTO (Infalible si está en la raíz) ---
+        // Le pedimos a Microsoft el archivo exacto por su nombre.
+        // Esto NO depende del buscador ni de indexaciones.
+        const directUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx`;
         
-        // Búsqueda robusta del archivo
+        try {
+            const resDirect = await fetch(directUrl, { headers: { Authorization: `Bearer ${token}` } });
+            
+            if (resDirect.ok) {
+                const data = await resDirect.json();
+                this.fileId = data.id;
+                console.log("✅ Archivo localizado por Ruta Directa. ID:", this.fileId);
+                return; // ¡Éxito! Salimos de la función.
+            }
+        } catch (e) {
+            console.warn("Fallo en acceso directo:", e);
+        }
+
+        // --- ESTRATEGIA B: BÚSQUEDA (Plan B) ---
+        // Si lo de arriba falla (quizás el archivo está dentro de una carpeta), usamos el buscador.
+        console.warn("⚠️ No está en la raíz, buscando en todo el OneDrive...");
+        
         const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')`;
-        const res = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const resSearch = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const dataSearch = await resSearch.json();
         
-        if (!res.ok) throw new Error("Error conectando con OneDrive API");
-        
-        const data = await res.json();
-        
-        if (data.value && data.value.length > 0) {
-            this.fileId = data.value[0].id;
+        if (dataSearch.value && dataSearch.value.length > 0) {
+            this.fileId = dataSearch.value[0].id;
+            console.log("✅ Archivo localizado por Búsqueda. ID:", this.fileId);
         } else {
-            throw new Error("Archivo aidanai.xlsx no encontrado. Usa 'Exportar' primero para crearlo.");
+            // Si fallan la A y la B, entonces es que de verdad no somos capaces de verlo
+            throw new Error("Archivo aidanai.xlsx no encontrado (ni en raíz ni por búsqueda).");
         }
     }
 
