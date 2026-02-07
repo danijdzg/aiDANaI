@@ -1291,21 +1291,25 @@ const MSAL_CONFIG = {
         asyncPopups: false
     }
 };
-/* =========================================
-   🛡️ GESTOR ONEDRIVE 5.0 (ATÓMICO & TRANSACCIONAL)
-   ========================================= */
+// =========================================
+// 🛡️ GESTOR ONEDRIVE CORREGIDO (Compatible con .login)
+// =========================================
 class OneDriveManager {
     constructor() {
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         this.graphScopes = ["User.Read", "Files.ReadWrite", "Files.ReadWrite.All"];
         this.fileId = null;
-        this.driveId = null; // Para soporte futuro de Sharepoint/Grupos
         this.tableName = "TablaMovimientos"; 
         this.sheetName = "Movimientos";
         this.account = null;
     }
 
-    // --- 1. AUTENTICACIÓN ---
+    // --- FIX: AÑADIDO ESTE MÉTODO PARA COMPATIBILIDAD ---
+    async login() {
+        return await this.ensureSession();
+    }
+    // ----------------------------------------------------
+
     async ensureSession() {
         const accounts = this.msalInstance.getAllAccounts();
         if (accounts.length > 0) {
@@ -1318,7 +1322,6 @@ class OneDriveManager {
             this.account = resp.account;
         }
         
-        // Obtener token silencioso o interactivo
         try {
             const resp = await this.msalInstance.acquireTokenSilent({ 
                 scopes: this.graphScopes, 
@@ -1331,110 +1334,68 @@ class OneDriveManager {
         }
     }
 
-    // --- 2. LOCALIZACIÓN DEL ARCHIVO ---
     async getFileId() {
         if (this.fileId) return this.fileId;
+        const token = await this.ensureSession(); // Usa ensureSession internamente
         
-        const token = await this.ensureSession();
-        console.log("🔍 Buscando aidanai.xlsx...");
-
-        // Búsqueda directa en raíz
+        // Búsqueda del archivo
         const url = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
 
         if (data.value && data.value.length > 0) {
             this.fileId = data.value[0].id;
-            // Asegurar que la estructura de Tabla existe
-            await this.ensureTableExists(token); 
+            await this.ensureTableExists(token);
             return this.fileId;
         } else {
-            throw new Error("❌ Archivo aidanai.xlsx no encontrado. Créalo y guárdalo primero.");
+            throw new Error("❌ Archivo aidanai.xlsx no encontrado en OneDrive.");
         }
     }
 
-    // --- 3. AUTOCURACIÓN: CREAR TABLA SI NO EXISTE ---
     async ensureTableExists(token) {
         try {
-            // Intentamos acceder a la tabla
             const url = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/worksheets/${this.sheetName}/tables/${this.tableName}`;
             const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) return; 
             
-            if (res.ok) return; // ✅ La tabla existe, todo correcto.
-
-            console.warn("⚠️ Tabla no encontrada. Creándola automáticamente...");
-
-            // Si no existe, la creamos sobre el rango usado
-            // Paso A: Obtener rango usado
+            console.warn("⚠️ Tabla no encontrada. Intentando crear...");
             const rangeUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/worksheets/${this.sheetName}/usedRange`;
             const rangeRes = await fetch(rangeUrl, { headers: { Authorization: `Bearer ${token}` } });
             const rangeData = await rangeRes.json();
             
-            if (!rangeData.address) throw new Error("La hoja está vacía, no puedo crear tabla.");
-
-            // Paso B: Convertir rango a Tabla
-            const createUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/worksheets/${this.sheetName}/tables/add`;
-            await fetch(createUrl, {
-                method: 'POST',
-                headers: { 
-                    Authorization: `Bearer ${token}`, 
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({
-                    address: rangeData.address,
-                    hasHeaders: true
-                })
-            });
-            
-            // Paso C: Renombrar la tabla para futuros usos
-            // (La tabla creada tendrá un nombre genérico como Table1)
-            // Nota: Simplificación para este script, asumiremos que si falló el GET inicial, 
-            // ahora trabajaremos con la tabla recién creada o por ID, pero lo ideal es renombrarla.
-            
-            // Para asegurar consistencia, intentamos renombrar la tabla recién creada a "TablaMovimientos"
-            // Requeriría listar tablas y renombrar la última. 
-            // POR SEGURIDAD: Si falla la detección, el usuario debería abrir el Excel y dar formato de tabla manualmente una vez.
-            
-        } catch (e) {
-            console.error("Error verificando tabla:", e);
-            // No bloqueamos, intentaremos insertar igual, aunque podría fallar.
-        }
+            if (rangeData.address) {
+                const createUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${this.fileId}/workbook/worksheets/${this.sheetName}/tables/add`;
+                await fetch(createUrl, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: rangeData.address, hasHeaders: true })
+                });
+            }
+        } catch (e) { console.error("Error verificando tabla:", e); }
     }
 
-    // --- 4. ESCRITURA ATÓMICA (LA SOLUCIÓN) ---
+    // --- ESCRITURA ATÓMICA ---
     async addRows(rowsArray) {
         const id = await this.getFileId();
         const token = await this.ensureSession();
-
-        // Endpoint mágico: Añade filas AL FINAL de la tabla, gestionando concurrencia
-        // Si Norma está escribiendo, Microsoft pone tu petición en cola y la ejecuta milisegundos después.
         const url = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/tables/${this.tableName}/rows`;
 
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                values: rowsArray, // Array de Arrays [[val1, val2...], [val1, val2...]]
-                index: null // null = Añadir al final
-            })
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: rowsArray, index: null })
         });
 
         if (!response.ok) {
             const err = await response.json();
-            // Si el error es "ItemNotFound", es probable que la tabla no se llame "TablaMovimientos"
             if (err.error && err.error.code === "ItemNotFound") {
-                throw new Error("⚠️ El Excel no tiene formato de Tabla oficial. Abre el Excel, selecciona los datos, Insertar > Tabla y llámala 'TablaMovimientos'.");
+                throw new Error("⚠️ El Excel no tiene formato de Tabla oficial 'TablaMovimientos'. Configúralo en Excel Online.");
             }
             throw new Error("Error API: " + JSON.stringify(err));
         }
-
         return await response.json();
     }
     
-    // --- 5. LECTURA COMPLETA (Para refrescar) ---
     async loadFile() {
         const id = await this.getFileId();
         const token = await this.ensureSession();
@@ -1445,7 +1406,6 @@ class OneDriveManager {
         return await response.arrayBuffer();
     }
 }
-
 // Instancia global
 const oneDrive = new OneDriveManager();
 
