@@ -1646,20 +1646,71 @@ function detenerPolling() {
 // ==========================================
 
 // 1. INICIAR CARGA DESDE LA NUBE (Conectar al botón HTML)
-async function iniciarCargaNube() {
+window.iniciarCargaNube = async function() {
+    const btn = document.getElementById('btn-load-cloud');
+    if(!btn) return;
+    const txtOriginal = btn.innerHTML;
+    
     try {
-        mostrarEstado('Iniciando sesión...', 'normal');
+        btn.innerHTML = '<span class="material-icons spin">sync</span> Conectando...';
+        
+        // 1. Login (Si ya estamos logueados, esto es rápido)
         await oneDrive.login();
         
-        // Una vez logueado, activamos el modo nube y el polling
-        cambiarModo('cloud'); 
+        // 2. Intentar cargar
+        // Si el archivo no existe o la búsqueda falla, esto lanzará un error y saltaremos al catch
         await cargarDesdeNube();
-        mostrarEstado('✅ Conectado a OneDrive', 'ok');
-    } catch (error) {
-        console.error("Error en iniciarCargaNube:", error);
-        mostrarEstado('Error: ' + error.message, 'err');
+        
+        // 3. Si llega aquí, es que todo ha ido bien
+        cambiarModo('cloud');
+        mostrarEstado('☁️ Sincronizado correctamente', 'ok');
+        
+    } catch (e) {
+        console.warn("Aviso de conexión:", e.message);
+
+        // --- GESTIÓN DEL ERROR "NO ENCONTRADO" ---
+        // Si OneDrive dice que no encuentra el archivo (o es la primera vez),
+        // activamos el botón GUARDAR para que puedas crearlo tú.
+        const esErrorNoEncontrado = e.message && (
+            e.message.includes("no encontrado") || 
+            e.message.includes("Exportar") ||
+            e.message.includes("itemNotFound")
+        );
+
+        if (esErrorNoEncontrado) {
+            alert("⚠️ AVISO DE SINCRONIZACIÓN\n\nNo se ha podido leer 'aidanai.xlsx' en tu nube (quizás es la primera vez).\n\nSe ha activado el botón GUARDAR (💾). Púlsalo para subir tus datos locales y crear el archivo.");
+            
+            // 1. Forzamos visualmente el modo nube
+            window.modoNube = true; 
+            const btnLocal = document.getElementById('mode-local');
+            const btnCloud = document.getElementById('mode-cloud');
+            if(btnLocal) btnLocal.classList.remove('active');
+            if(btnCloud) btnCloud.classList.add('active');
+            
+            // 2. HACEMOS APARECER EL BOTÓN DE GUARDAR
+            const btnGuardar = document.getElementById('btn-guardar');
+            if(btnGuardar) {
+                btnGuardar.style.display = 'flex'; // ¡Aparece!
+                // Efecto visual para destacar el botón
+                btnGuardar.style.backgroundColor = 'var(--theme-dn)'; 
+                btnGuardar.style.color = '#000';
+                setTimeout(() => {
+                    btnGuardar.style.backgroundColor = ''; 
+                    btnGuardar.style.color = '';
+                }, 2000);
+            }
+            
+            mostrarEstado('⚠️ Pulsa el DISQUETE para crear el archivo', 'normal');
+            
+        } else {
+            // Si es otro error (ej: contraseña mal, bloqueo de popups), avisamos
+            alert("❌ Error de conexión: " + e.message);
+            cambiarModo('local');
+        }
+    } finally {
+        btn.innerHTML = txtOriginal;
     }
-}
+};
 
 // 2. LÓGICA DE DESCARGA DE ONEDRIVE
 async function cargarDesdeNube() {
