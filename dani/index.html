@@ -3475,22 +3475,59 @@ function leerExcelDesdeBuffer(wb) {
 }
 
 
-function guardarUniversal() {
-    vibrar('clonar'); // Feedback táctil
-    
-    if (modoNube) {
-        // En modo nube, guardar es "Sincronizar"
-        cargarDesdeNube().then(() => {
-            mostrarEstado('☁️ Nube Sincronizada', 'ok');
-        }).catch(e => {
-            mostrarEstado('Error de sincronización', 'err');
-        });
-    } else {
-        // En modo local, guardar es "Descargar Archivo"
-        exportarExcel();
-    }
-}
+// ==========================================
+// 💾 GUARDADO MAESTRO (Local y Nube)
+// ==========================================
+window.guardarUniversal = async function() {
+    const btn = document.getElementById('btn-guardar');
+    if(btn) btn.disabled = true;
+    const txtOriginal = btn ? btn.innerHTML : '';
 
+    try {
+        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> ...';
+
+        // 1. Generar el Excel con los datos actuales de la pantalla
+        const wb = generarLibroExcel(); // Asegúrate de que esta función existe (la arreglamos antes)
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+        if (modoNube) {
+            // --- MODO NUBE: SUBIDA COMPLETA ---
+            mostrarEstado('☁️ Subiendo archivo a OneDrive...', 'normal');
+            
+            // Usamos saveFile que hace un PUT (crea o sobrescribe)
+            await oneDrive.saveFile(blob);
+            
+            mostrarEstado('✅ Archivo creado/actualizado en la nube', 'ok');
+            alert("¡ÉXITO!\n\nSe ha creado el archivo 'aidanai.xlsx' en tu OneDrive.\n\nA partir de ahora, la app lo leerá automáticamente al entrar.");
+            
+            // Ocultamos el botón de guardar manual porque en la nube guardamos fila a fila (automático)
+            if(btn) btn.style.display = 'none';
+
+        } else {
+            // --- MODO LOCAL: DESCARGA CLÁSICA ---
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "aidanai.xlsx";
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            mostrarEstado('⬇️ Archivo descargado', 'ok');
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert("Error al guardar: " + e.message);
+        mostrarEstado('Error al guardar', 'err');
+    } finally {
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = txtOriginal;
+        }
+    }
+};
 // ==========================================
 // 🚀 SISTEMA DE EXPORTACIÓN BLINDADO (Anti-Crashes)
 // ==========================================
