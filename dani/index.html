@@ -3577,16 +3577,14 @@ function exportarExcel() {
 }
 
 // ==========================================
-// ☀️ RAYO X PATRIMONIAL (SUNBURST) - ID CORREGIDO
+// ☀️ RAYO X PATRIMONIAL (EDICIÓN PREMIUM NEÓN)
 // ==========================================
 window.renderizarSunburstPatrimonio = function() {
-    // 1. CORRECCIÓN DEL ID (Aquí estaba el fallo)
-    // Buscamos 'chartSunburst' que es como se llama en tu HTML
-    const container = document.getElementById('chartSunburst'); 
-    
-    if (!container) return; // Si sigue fallando, es que borraste el div del HTML
+    // 1. OBTENER CONTENEDOR
+    const container = document.getElementById('chart-Sunburst'); 
+    if (!container) return; 
 
-    // Limpieza de instancia previa para evitar "fantasmas"
+    // Limpieza de instancia
     if (window.echartSunburst) {
         window.echartSunburst.clear();
     } else {
@@ -3594,12 +3592,11 @@ window.renderizarSunburstPatrimonio = function() {
     }
     const chart = window.echartSunburst;
 
-    // Si no hay datos, paramos aquí
+    // Si no hay datos, salimos
     if (!window.datos || window.datos.length === 0) return;
 
-    // 2. FILTRADO Y CÁLCULO
+    // 2. PROCESAMIENTO DE DATOS
     const saldos = {};
-    // Filtramos por el usuario activo (Dani/Norma/D&N)
     const datosFiltrados = window.datos.filter(m => pasaFiltroPropietario(m));
 
     datosFiltrados.forEach(m => {
@@ -3608,115 +3605,189 @@ window.renderizarSunburstPatrimonio = function() {
         saldos[cta] = (saldos[cta] || 0) + m.importe;
     });
 
-    // 3. CONSTRUCCIÓN DE JERARQUÍA
-    let patrimonioNetoReal = 0;
-    let activosBrutos = 0;
+    // Variables maestras
+    let patrimonioNetoReal = 0; // Suma todo (positivo y negativo)
+    let activosBrutos = 0;      // Solo suma lo positivo (Base del gráfico 100%)
+    
+    // Arrays para hijos
+    const childrenLiquidez = [];
+    const childrenInversion = [];
+
+    // Colores para las cuentas (Gradientes simulados con paleta)
+    // Azules para Liquidez
+    const paletaLiq = ['#00B8FF', '#0099DD', '#0077BB', '#005599', '#44CCFF', '#88DDFF'];
+    // Violetas/Rosas para Inversión
+    const paletaInv = ['#BF5AF2', '#AF4AE2', '#9F3AD2', '#D989FF', '#E5A5FF', '#8F2AB2'];
+
+    let idxLiq = 0;
+    let idxInv = 0;
     let totalLiquidez = 0;
     let totalInversion = 0;
-    
-    const mapTiposLiq = {};
-    const mapTiposInv = {};
 
     Object.keys(saldos).forEach(cta => {
         const valor = saldos[cta];
         patrimonioNetoReal += valor; 
 
-        // IMPORTANTE: Este gráfico solo muestra ACTIVOS (Dinero positivo)
-        // Si una cuenta está en negativo (ej: tarjeta de crédito), no sale en el rosco,
-        // pero sí resta en el total del centro.
+        // EL FILTRO MÁGICO: Solo Activos (> 1€)
         if (valor < 1) return; 
 
         activosBrutos += valor;
 
-        // Buscamos configuración (con seguridad anti-fallos)
         let config = (window.mapaCuentas && window.mapaCuentas[cta]) 
                      ? window.mapaCuentas[cta] 
                      : { tipo: 'SIN CLASIFICAR', esInversion: false };
 
         const tipo = (config.tipo || 'OTROS').toUpperCase();
-        const nodo = { name: cta, value: Number(valor.toFixed(2)) };
+        
+        // Asignamos color rotativo para que no sea monótono
+        let colorNodo;
+        if (config.esInversion) {
+            colorNodo = paletaInv[idxInv % paletaInv.length];
+            idxInv++;
+        } else {
+            colorNodo = paletaLiq[idxLiq % paletaLiq.length];
+            idxLiq++;
+        }
+
+        const nodo = { 
+            name: cta.replace('D-', '').replace('N-', ''), // Nombre limpio
+            value: valor,
+            itemStyle: { color: colorNodo }
+        };
 
         if (config.esInversion) {
             totalInversion += valor;
-            if (!mapTiposInv[tipo]) mapTiposInv[tipo] = { name: tipo, children: [] };
-            mapTiposInv[tipo].children.push(nodo);
+            childrenInversion.push(nodo);
         } else {
             totalLiquidez += valor;
-            if (!mapTiposLiq[tipo]) mapTiposLiq[tipo] = { name: tipo, children: [] };
-            mapTiposLiq[tipo].children.push(nodo);
+            childrenLiquidez.push(nodo);
         }
     });
 
-    // 4. PREPARAR DATOS VISUALES
-    const childrenLiquidez = Object.values(mapTiposLiq);
-    const childrenInversion = Object.values(mapTiposInv);
+    // Ordenamos de mayor a menor para que el gráfico quede ordenado visualmente
+    childrenLiquidez.sort((a, b) => b.value - a.value);
+    childrenInversion.sort((a, b) => b.value - a.value);
 
+    // Estructura del Árbol
     const dataTree = [{
-        name: 'ACTIVOS',
+        name: 'TOTAL',
+        itemStyle: { color: 'transparent' }, // Centro invisible (para el texto HTML)
         children: [
             { 
                 name: 'LIQUIDEZ', 
                 children: childrenLiquidez, 
-                itemStyle: { color: '#00B8FF' }, 
-                label: { color: '#fff', fontWeight: 'bold' }
+                itemStyle: { 
+                    color: '#00B8FF',
+                    shadowBlur: 20, shadowColor: 'rgba(0, 184, 255, 0.5)' // Glow Azul
+                }
             },
             { 
                 name: 'INVERSIÓN', 
                 children: childrenInversion, 
-                itemStyle: { color: '#BF5AF2' }, 
-                label: { color: '#fff', fontWeight: 'bold' }
+                itemStyle: { 
+                    color: '#BF5AF2',
+                    shadowBlur: 20, shadowColor: 'rgba(191, 90, 242, 0.5)' // Glow Violeta
+                }
             }
         ]
     }];
 
-    // 5. ACTUALIZAR KPIS (Textos de la pantalla)
+    // 3. ACTUALIZAR INTERFAZ (KPIs y Textos)
     const elTotal = document.getElementById('sb-total-val');
     if(elTotal) {
-        // Formato moneda bonito
-        elTotal.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(patrimonioNetoReal);
-        // Rojo si debemos dinero, Blanco si tenemos
+        elTotal.innerText = new Intl.NumberFormat('es-ES', { 
+            style: 'currency', currency: 'EUR', minimumFractionDigits: 2 
+        }).format(patrimonioNetoReal);
         elTotal.style.color = patrimonioNetoReal >= 0 ? '#fff' : '#FF2E4D';
+        // Añadimos sombra al texto también
+        elTotal.style.textShadow = patrimonioNetoReal >= 0 ? '0 0 15px rgba(255,255,255,0.4)' : '0 0 15px rgba(255,46,77,0.4)';
     }
 
     const elRatioLiq = document.getElementById('kpi-ratio-liq');
     const elRatioInv = document.getElementById('kpi-ratio-inv');
-    
     if (activosBrutos > 0) {
-        if(elRatioLiq) elRatioLiq.innerText = ((totalLiquidez / activosBrutos) * 100).toFixed(0) + '%';
-        if(elRatioInv) elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(0) + '%';
+        elRatioLiq.innerText = ((totalLiquidez / activosBrutos) * 100).toFixed(2) + '%';
+        elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(2) + '%';
     }
 
-    // 6. PINTAR (RENDER)
+    // 4. CONFIGURACIÓN ECHARTS "PREMIUM"
     const option = {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'item', formatter: '{b}: {c} € ({d}%)' },
+        
+        // Tooltip enriquecido con HTML
+        tooltip: {
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            borderColor: '#333',
+            textStyle: { color: '#fff' },
+            padding: 10,
+            formatter: function(params) {
+                if (params.name === 'TOTAL') return '';
+                const valStr = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(params.value);
+                // Calculamos porcentaje real relativo al total de activos
+                const percent = ((params.value / activosBrutos) * 100).toFixed(2);
+                
+                return `<div style="text-align:center; min-width:120px;">
+                            <div style="font-weight:bold; color:${params.color}; font-size:14px; margin-bottom:4px;">${params.name}</div>
+                            <div style="font-size:16px; font-weight:800; color:#fff;">${valStr} €</div>
+                            <div style="font-size:12px; color:#aaa; margin-top:2px;">${percent}% del Patrimonio</div>
+                        </div>`;
+            }
+        },
+
         series: {
             type: 'sunburst',
             data: dataTree,
-            radius: ['20%', '90%'],
-            label: { 
-                rotate: 'tangential', 
-                color: '#fff',
-                fontSize: 10,
-                formatter: function (param) {
-                    // Ocultar etiquetas de sectores minúsculos para que no se amontonen
-                    return param.data.value > (activosBrutos * 0.02) ? param.name : ''; 
-                }
+            radius: ['35%', '90%'], // Donut ancho
+            sort: undefined, // Respetar nuestro orden manual
+            
+            emphasis: {
+                focus: 'ancestor', // Al pasar el ratón, atenúa lo que no es familia
+                scale: false       // No ampliar tamaño para no desencajar
             },
-            itemStyle: {
-                borderRadius: 4,
-                borderColor: '#121212', 
-                borderWidth: 2
-            }
+
+            // NIVELES: Aquí definimos el estilo por capas
+            levels: [
+                // Nivel 0: Centro (Invisible)
+                {}, 
+                // Nivel 1: Grupos (Liquidez/Inversión)
+                {
+                    r0: '35%', r: '60%', // Anillo interior
+                    itemStyle: { borderWidth: 2, borderColor: '#121212' },
+                    label: { rotate: 'tangential', fontWeight: 'bold', color: '#fff', fontSize: 10 }
+                },
+                // Nivel 2: Cuentas
+                {
+                    r0: '60%', r: '90%', // Anillo exterior
+                    itemStyle: { borderWidth: 1, borderColor: '#121212', borderRadius: 4 },
+                    label: { 
+                        rotate: 'radial', 
+                        color: '#eee',
+                        minAngle: 5, // No mostrar etiquetas en quesitos muy finos
+                        formatter: function(params) {
+                             // Si es muy pequeño, nada
+                            if (params.data.value < (activosBrutos * 0.03)) return '';
+                            // Nombre + Salto + Porcentaje
+                            const percent = ((params.value / activosBrutos) * 100).toFixed(1);
+                            // Acortar nombres largos
+                            let name = params.name.length > 10 ? params.name.substring(0,9)+'..' : params.name;
+                            return `{name|${name}}\n{val|${percent}%}`;
+                        },
+                        rich: {
+                            name: { fontSize: 9, color: '#fff', fontWeight: 'bold' },
+                            val: { fontSize: 8, color: '#ccc', padding: [2, 0, 0, 0] }
+                        }
+                    }
+                }
+            ]
         }
     };
 
     chart.setOption(option);
-    
-    // Resize automático al girar el móvil o cambiar tamaño
+
+    // 5. REDIMENSIONADO FINAL
+    setTimeout(() => chart.resize(), 100);
     window.addEventListener('resize', () => chart.resize());
 };
-
 	// ==========================================
     // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
     // ==========================================
@@ -4183,8 +4254,9 @@ window.borrarMovimiento = async function(idRecibido) {
     }
 };
 
-
-// --- FUNCIÓN DE GUARDADO CORRECTA (V 5.0) ---
+// ==========================================
+// 💾 GUARDAR MANUAL (OPTIMIZADO / ULTRA-RÁPIDO)
+// ==========================================
 window.guardarManual = async function() {
     if (window.isSaving) return;
     
@@ -4196,7 +4268,7 @@ window.guardarManual = async function() {
     if (!cant || isNaN(cant)) return alert("El importe no puede ser 0.");
 
     window.isSaving = true;
-    btn.innerText = "⏳ PROCESANDO...";
+    btn.innerText = "⏳ GUARDANDO...";
     btn.disabled = true;
 
     try {
@@ -4206,77 +4278,101 @@ window.guardarManual = async function() {
         const ben = document.getElementById('m-beneficiario').value || 'Yo';
         const dest = document.getElementById('m-cuenta-destino').value;
 
-        // Fecha local corregida
+        // Fecha
         let fechaObj = new Date();
         const inputFecha = document.getElementById('m-fecha').value;
-        if(inputFecha) {
-            fechaObj = new Date(inputFecha);
-        }
+        if(inputFecha) fechaObj = new Date(inputFecha);
+        
+        // Ajuste zona horaria para guardar YYYY-MM-DD correcto
         const offset = fechaObj.getTimezoneOffset();
         const fechaLocal = new Date(fechaObj.getTime() - (offset*60*1000));
         const fechaIso = fechaLocal.toISOString().split('T')[0];
+        const fechaTs = fechaLocal.getTime(); // Timestamp para uso interno
 
         const imp = Math.abs(cant);
         
-        // --- 🛡️ CORRECCIÓN DE MODO (SEGURIDAD) ---
-        // Leemos la variable global, pero si falla, miramos el título de la ventana
+        // Detección de Modo (Ingreso/Gasto/Traspaso)
         let modo = window.modoTransaccionActual || 'gasto';
         const tituloVentana = document.querySelector('#modal-manual h3').innerText.toUpperCase();
-        
-        // Si la ventana dice "INGRESO", forzamos modo ingreso (manda lo visual)
         if (tituloVentana.includes('INGRESO')) modo = 'ingreso';
         if (tituloVentana.includes('TRASPASO')) modo = 'traspaso';
-        if (tituloVentana.includes('GASTO')) modo = 'gasto'; // o 'pago'
+        if (tituloVentana.includes('GASTO') || tituloVentana.includes('PAGO')) modo = 'pago';
 
-        // Preparar filas
-        let filasAInsertar = [];
+        // Preparar Objetos (Filas)
+        let filasNuevas = [];
         
         if (modo === 'traspaso') {
             const conT = con.toUpperCase().includes('TRASPASO') ? con : "TRASPASO - " + con;
             // Salida
-            filasAInsertar.push({ id: generateUUID(), fecha: fechaIso, cuenta: cta, concepto: conT, importe: -imp, detalle: `>> A: ${dest} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
+            filasNuevas.push({ 
+                id: generateUUID(), fecha: fechaIso, ts: fechaTs, 
+                cuenta: cta, concepto: conT, importe: -imp, 
+                detalle: `>> A: ${dest} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' 
+            });
             // Entrada
-            filasAInsertar.push({ id: generateUUID(), fecha: fechaIso, cuenta: dest, concepto: conT, importe: imp, detalle: `<< DE: ${cta} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' });
+            filasNuevas.push({ 
+                id: generateUUID(), fecha: fechaIso, ts: fechaTs,
+                cuenta: dest, concepto: conT, importe: imp, 
+                detalle: `<< DE: ${cta} | ${det}`, beneficiario: 'Mí mismo', tipo: 'traspaso' 
+            });
         } else {
-            // Gasto o Ingreso
-            // Si es Ingreso -> Positivo. Si es Gasto/Pago -> Negativo.
             let importeFinal = (modo === 'ingreso') ? imp : -imp;
-            
-            filasAInsertar.push({
-                id: generateUUID(),
-                fecha: fechaIso,
-                cuenta: cta,
-                concepto: con,
-                importe: importeFinal,
-                detalle: det,
-                beneficiario: ben,
-                tipo: modo
+            filasNuevas.push({
+                id: generateUUID(), fecha: fechaIso, ts: fechaTs,
+                cuenta: cta, concepto: con, importe: importeFinal, 
+                detalle: det, beneficiario: ben, tipo: (modo === 'pago' ? 'gasto' : modo)
             });
         }
 
-        // --- GUARDADO (NUBE / LOCAL) ---
-        if (modoNube) {
-            mostrarEstado('☁️ Sincronizando...', 'normal');
-            if (idEnEdicion) await oneDrive.deleteRowById(idEnEdicion);
+        // --- 1. ACTUALIZACIÓN VISUAL INMEDIATA (OPTIMISTIC UI) ---
+        // Borramos el anterior si estamos editando
+        if (idEnEdicion) {
+            const index = datos.findIndex(d => d.id === idEnEdicion);
+            if (index !== -1) datos.splice(index, 1);
+            // Si es traspaso editado, la otra parte quedará "huérfana" o la borramos si la encontramos (complejo)
+            // Por ahora asumimos edición simple.
+        }
 
-            for (let f of filasAInsertar) {
+        // Añadimos los nuevos a la memoria local
+        for (let f of filasNuevas) {
+            datos.push({ 
+                id: f.id, ts: f.ts, cuenta: f.cuenta, 
+                concepto: f.concepto, importe: f.importe, 
+                detalle: f.detalle, beneficiario: f.beneficiario, 
+                tipo: f.tipo, saldo: 0 
+            });
+        }
+
+        // Recalculamos y pintamos YA (El usuario ve que ha terminado)
+        recalcularSaldosGlobal();
+        renderizar();
+        actualizarDashboard(); 
+        // Si hay gráficos de patrimonio, actualízalos también
+        if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+
+        // --- 2. GUARDADO EN NUBE (EN SEGUNDO PLANO) ---
+        if (modoNube) {
+            // No bloqueamos la UI, dejamos que esto corra
+            // Si estamos editando, borramos el viejo en la nube
+            if (idEnEdicion) {
+                console.log("Nube: Borrando anterior...");
+                await oneDrive.deleteRowById(idEnEdicion);
+            }
+
+            // Insertamos los nuevos
+            for (let f of filasNuevas) {
                 const filaExcel = [f.id, f.fecha, f.cuenta, f.concepto, f.importe, f.detalle, f.beneficiario];
                 await oneDrive.addRowToTable(filaExcel);
             }
-            mostrarEstado('✅ Sincronizado', 'ok');
-            await cargarDesdeNube(); 
+            
+            // ¡¡AQUÍ ESTÁ LA CLAVE!!
+            // NO LLAMAMOS A cargardesdeNube()
+            // Ya hemos actualizado 'datos' manualmente arriba.
+            // Solo mostramos un toast discreto.
+            mostrarEstado('✅ Sincronizado en Nube', 'ok');
+            
         } else {
-            if (idEnEdicion) {
-                const index = datos.findIndex(d => d.id === idEnEdicion);
-                if (index !== -1) datos.splice(index, 1);
-            }
-            for (let f of filasAInsertar) {
-                datos.push({ ...f, ts: new Date(f.fecha).getTime(), saldo: 0 });
-            }
-            recalcularSaldosGlobal();
             mostrarEstado('💾 Guardado localmente', 'ok');
-            renderizar();
-            actualizarDashboard();
         }
 
         cerrarModal();
@@ -4285,6 +4381,8 @@ window.guardarManual = async function() {
     } catch (e) {
         console.error(e);
         alert("Error al guardar: " + e.message);
+        // Si falla la nube, quizás deberíamos recargar para asegurar consistencia
+        if(modoNube) cargarDesdeNube(); 
     } finally {
         window.isSaving = false;
         btn.innerText = txtOriginal;
