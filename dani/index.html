@@ -808,7 +808,7 @@
     <div class="header-row-top">
         <div class="brand-area" style="display: flex; align-items: center;">
     <button id="btn-user-filter" class="btn-avatar-glow" onclick="toggleUsuario()">
-        <span class="material-icons">person</span>
+        <span class="material-icons">switch_account</span>
     </button>
 
     <h1 class="logo" id="app-title" style="margin: 0; font-size: 24px; font-weight: 800;">D & N</h1>
@@ -1608,30 +1608,33 @@ window.mostrarEstado = function(txt, tipo) {
 let pollingInterval = null;
 const TIEMPO_POLLING = 60000; // 60 segundos
 
-function iniciarPolling() {
-    if (pollingInterval) return; // Evitar duplicados
-
+// ==========================================
+// 🔄 SISTEMA DE SINCRONIZACIÓN AUTOMÁTICA (Silencioso)
+// ==========================================
+window.iniciarPolling = function() {
     console.log("🔄 Sistema de Polling Activado (60s)");
     
-    pollingInterval = setInterval(async () => {
-        const modalActivo = document.getElementById('modal-manual').classList.contains('active');
-        
-        // REGLAS DE SEGURIDAD:
-        // 1. Solo si estamos en modo nube.
-        // 2. NO pollear si el usuario está editando o creando un movimiento (modal abierto).
-        // 3. NO pollear si no hay una sesión activa de OneDrive.
-        if (modoNube && !modalActivo && !idEnEdicion) {
+    // Limpiamos cualquier intervalo anterior para no duplicar
+    if (window.pollingInterval) clearInterval(window.pollingInterval);
+
+    window.pollingInterval = setInterval(async () => {
+        // Solo sincronizamos si estamos en modo nube y NO estamos editando nada
+        if (modoNube && !idEnEdicion) {
             try {
                 console.log("🕒 Sincronizando datos automáticamente...");
                 await cargarDesdeNube();
-                // Opcional: mostrar un mensaje fugaz en el estado
-                mostrarEstado('Actualizado automáticamente', 'ok');
-            } catch (error) {
-                console.warn("Error en sincronización automática:", error);
+            } catch (e) {
+                // AQUÍ ESTÁ EL CAMBIO:
+                // Si el error es que no existe el archivo, NO hacemos ruido.
+                if (e.message && (e.message.includes("no encontrado") || e.message.includes("itemNotFound"))) {
+                    console.warn("⏳ Esperando creación del archivo aidanai.xlsx...");
+                } else {
+                    console.error("Error en sincronización automática:", e);
+                }
             }
         }
-    }, TIEMPO_POLLING);
-}
+    }, 60000); // 60 segundos
+};
 
 function detenerPolling() {
     if (pollingInterval) {
@@ -3486,7 +3489,7 @@ window.guardarUniversal = async function() {
     try {
         if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Creando...';
 
-        // 1. Empaquetamos los datos de la pantalla en un Excel
+        // 1. Empaquetamos los datos de la pantalla
         const wb = generarLibroExcel(); 
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -3495,18 +3498,14 @@ window.guardarUniversal = async function() {
             // --- MODO NUBE ---
             mostrarEstado('☁️ Creando archivo en OneDrive...', 'normal');
             
-            // IMPORTANTE: Llamamos directamente a saveFile (que hace un PUT/Sobrescribir)
-            // NO llamamos a cargarDesdeNube() aquí, para evitar el error.
+            // IMPORTANTE: Guardamos DIRECTAMENTE sin leer antes.
             await oneDrive.saveFile(blob);
             
             mostrarEstado('✅ Archivo creado con éxito', 'ok');
-            alert("¡ARREGLADO!\n\nSe ha creado el archivo 'aidanai.xlsx' en tu OneDrive.\n\nYa puedes usar la aplicación con normalidad.");
+            alert("¡ÉXITO TOTAL!\n\nSe ha creado 'aidanai.xlsx' en tu OneDrive.\n\nEl error de 'no encontrado' desaparecerá para siempre.");
             
-            // Ocultamos el botón manual porque ya está todo sincronizado
+            // Ocultamos el botón manual
             if(btn) btn.style.display = 'none';
-            
-            // Opcional: Recargamos ahora que SÍ existe el archivo
-            // await cargarDesdeNube(); 
 
         } else {
             // --- MODO LOCAL ---
@@ -3518,13 +3517,11 @@ window.guardarUniversal = async function() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-            mostrarEstado('⬇️ Archivo descargado', 'ok');
         }
 
     } catch (e) {
         console.error(e);
         alert("Error al guardar: " + e.message);
-        mostrarEstado('Error al guardar', 'err');
     } finally {
         if(btn) {
             btn.disabled = false;
