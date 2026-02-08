@@ -1297,140 +1297,109 @@ function generateUUID() {
 	
 
 // ==========================================
-// MOTOR ONEDRIVE TURBO (CON CACHÉ INTELIGENTE)
+// MOTOR ONEDRIVE "RAYOS X" (API VALUE READ)
 // ==========================================
 class OneDriveManager {
     constructor() {
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-        // Intentamos recuperar el ID de la memoria local para ir rápido
-        this.fileId = localStorage.getItem("aidanai_file_id"); 
+        this.fileId = localStorage.getItem("aidanai_file_id");
     }
 
     // --- 1. GESTIÓN DE TOKEN ---
     async getToken() {
         const request = { scopes: ["User.Read", "Files.ReadWrite.All"] };
         const accounts = this.msalInstance.getAllAccounts();
-        
         if (accounts.length > 0) {
             try {
                 const resp = await this.msalInstance.acquireTokenSilent({ ...request, account: accounts[0] });
                 return resp.accessToken;
-            } catch (e) {
-                console.warn("Token caducado, se requiere interacción.");
-                throw e; 
-            }
-        } else {
-            throw new Error("No hay sesión activa.");
-        }
+            } catch (e) { console.warn("Token caducado."); throw e; }
+        } else { throw new Error("No hay sesión."); }
     }
 
     async login() {
         try {
-            // Limpiamos cualquier interacción previa bloqueada
-            await this.msalInstance.handleRedirectPromise().catch(() => {});
-
-            const request = { 
-                scopes: ["User.Read", "Files.ReadWrite.All"],
-                prompt: "select_account"
-            };
-            
-            // Usamos loginPopup estándar
-            const resp = await this.msalInstance.loginPopup(request);
-            console.log("Login exitoso:", resp.account.username);
+            await this.msalInstance.handleRedirectPromise().catch(()=>{});
+            const resp = await this.msalInstance.loginPopup({ scopes: ["User.Read", "Files.ReadWrite.All"], prompt: "select_account" });
             return resp.accessToken;
-            
         } catch (e) {
-            console.error("Error en Login:", e);
-            // Si falla el popup, sugerimos usar Redirect (Plan B)
-            if (e.name === "BrowserAuthError" && e.message.includes("popup")) {
-               alert("El navegador bloqueó la ventana. Por favor, desactiva el bloqueador de popups para este sitio.");
-            }
+            if (e.message && e.message.includes("popup")) alert("Desbloquea los popups para conectar.");
             throw e;
         }
     }
 
-    // --- 2. LOCALIZADOR DE ARCHIVO (OPTIMIZADO) ---
+    // --- 2. LOCALIZADOR (OPTIMIZADO RAÍZ) ---
     async getFileId() {
-        // 1. Si ya lo tenemos en memoria, devolvemos al instante
         if (this.fileId) return this.fileId;
-        
-        // 2. Si ya lo buscamos ayer, lo recuperamos del "disco duro" del navegador
-        const cachedId = localStorage.getItem("aidanai_file_id");
-        if (cachedId) {
-            this.fileId = cachedId;
-            return cachedId;
-        }
+        const cached = localStorage.getItem("aidanai_file_id");
+        if(cached) { this.fileId = cached; return cached; }
 
         const token = await this.getToken();
-        console.log("🚀 Accediendo directamente a la Raíz de OneDrive...");
-
-        // 3. TIRO FIJO: Buscamos directamente en la raíz (root)
-        // Eliminamos la búsqueda lenta (/search)
-        const response = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
+        // Búsqueda directa en raíz
+        const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
             headers: { Authorization: `Bearer ${token}` }
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            // ¡ÉXITO! Guardamos el ID para que la próxima vez sea 0 segundos
+        if (res.ok) {
+            const data = await res.json();
             this.fileId = data.id;
             localStorage.setItem("aidanai_file_id", data.id);
-            return this.fileId;
+            return data.id;
         } else {
-            // Si falla aquí, es que NO está en la raíz. No buscamos más.
-            console.error("Error: Archivo no encontrado en raíz.");
-            throw new Error("⚠️ El archivo 'aidanai.xlsx' NO está en la carpeta principal de tu OneDrive. Por favor, muévelo allí.");
+            throw new Error("❌ 'aidanai.xlsx' no está en la raíz de tu OneDrive.");
         }
     }
 
-    guardarIdEnCache(id) {
-        this.fileId = id;
-        localStorage.setItem("aidanai_file_id", id);
-        console.log("⚡ ID guardado en memoria para inicio rápido la próxima vez.");
-    }
-
-    // --- 3. DESCARGA (CON GESTIÓN DE ERRORES DE CACHÉ) ---
-    async loadFile() { // Mantenemos el nombre loadFile por compatibilidad
-        return await this.descargarExcel();
-    }
-
-    async descargarExcel() {
-        if(window.mostrarEstado) window.mostrarEstado("☁️ Conectando...", "normal");
+    // --- 3. LECTURA TURBO (JSON DIRECTO) ---
+    // Esta función ya no devuelve un archivo binario, devuelve un objeto Workbook falso pero compatible
+    async descargarDatosJSON() {
+        if(window.mostrarEstado) window.mostrarEstado("🚀 Leyendo datos (Modo Turbo)...", "normal");
         
-        let token = await this.getToken();
-        let id = await this.getFileId();
+        const token = await this.getToken();
+        const id = await this.getFileId();
 
-        // Intentamos descargar
-        let response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+        // Lanzamos dos peticiones en paralelo (Mucho más rápido)
+        const pMovs = fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const pConf = fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Configuracion/usedRange`, {
             headers: { Authorization: `Bearer ${token}` }
         });
 
-        // CRÍTICO: Si falla (404) es posible que el ID antiguo de la caché ya no sirva.
-        // Solución: Borramos caché y reintentamos buscando de nuevo.
-        if (response.status === 404) {
-            console.warn("⚠️ El ID cacheado falló. Buscando de nuevo...");
-            localStorage.removeItem("aidanai_file_id");
-            this.fileId = null;
-            id = await this.getFileId(); // Busca de nuevo
-            response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-        }
+        const [resMovs, resConf] = await Promise.all([pMovs, pConf]);
 
-        if (!response.ok) throw new Error("Error en descarga: " + response.statusText);
+        if (!resMovs.ok) throw new Error("Error leyendo Movimientos: " + resMovs.statusText);
         
-        return await response.arrayBuffer();
+        const jsonMovs = await resMovs.json();
+        const jsonConf = resConf.ok ? await resConf.json() : { values: [] };
+
+        // CONVERTIMOS EL JSON DE MICROSOFT A FORMATO SHEETJS
+        // Para que el resto de tu app no se rompa, creamos un "Workbook Virtual"
+        const wb = {
+            Sheets: {
+                "Movimientos": XLSX.utils.aoa_to_sheet(jsonMovs.values || []),
+                "Configuracion": XLSX.utils.aoa_to_sheet(jsonConf.values || [])
+            },
+            SheetNames: ["Movimientos", "Configuracion"]
+        };
+
+        return wb;
     }
 
-    // --- 4. GUARDADO RÁPIDO ---
+    // Mantenemos compatibilidad con tu código antiguo que llama a loadFile
+    async loadFile() { return await this.descargarDatosJSON(); }
+
+    // --- 4. ESCRITURA ---
     async agregarFila(nuevaFilaArray) {
         const id = await this.getFileId();
         const token = await this.getToken();
         
+        // 1. Leer rango usado
         const urlRange = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`;
         const resRange = await fetch(urlRange, { headers: { Authorization: `Bearer ${token}` } });
         const dataRange = await resRange.json();
         
+        // 2. Escribir al final (Append)
         let filaDestino = dataRange.rowIndex + dataRange.rowCount; 
         const urlWrite = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/range(address='A${filaDestino + 1}')`;
         
@@ -1441,12 +1410,12 @@ class OneDriveManager {
         });
     }
 
-    // --- 5. BORRADO ---
     async borrarFilaPorID(idMovimiento) {
-        const idFile = await this.getFileId();
+        const id = await this.getFileId();
         const token = await this.getToken();
         
-        const urlData = `https://graph.microsoft.com/v1.0/me/drive/items/${idFile}/workbook/worksheets/Movimientos/usedRange`;
+        // Leemos solo los valores para buscar rápido
+        const urlData = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`;
         const resData = await fetch(urlData, { headers: { Authorization: `Bearer ${token}` } });
         const jsonRange = await resData.json();
         
@@ -1462,7 +1431,7 @@ class OneDriveManager {
 
         if (filaEncontrada === -1) throw new Error("Movimiento no encontrado.");
 
-        const urlDelete = `https://graph.microsoft.com/v1.0/me/drive/items/${idFile}/workbook/worksheets/Movimientos/range(address='${filaEncontrada}:${filaEncontrada}')/delete`;
+        const urlDelete = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/range(address='${filaEncontrada}:${filaEncontrada}')/delete`;
         await fetch(urlDelete, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -1475,34 +1444,32 @@ const oneDrive = new OneDriveManager();
     // ==========================================
     // 4. LÓGICA DE ARRANQUE AUTOMÁTICO
     // ==========================================
-    async function iniciarSistema() {
-        const barraEstado = document.getElementById('status-text'); 
-        const btnLogin = document.getElementById('login-btn');
+    // BUSCA Y REEMPLAZA:
 
-        try {
-            if(barraEstado) barraEstado.innerText = "🔄 Conectando...";
-            
-            // Intentamos cargar (esto llamará a getToken silencioso)
-            const datosBuffer = await oneDrive.loadFile();
-            
-            if(barraEstado) barraEstado.innerText = "📂 Leyendo Excel...";
-            const workbook = XLSX.read(datosBuffer, { type: 'array' });
-            procesarDatos(workbook);
+async function iniciarSistema() {
+    const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
+    
+    try {
+        if(barra) barra.innerText = "🔄 Conectando...";
+        
+        // 1. Carga Turbo (Ya devuelve el objeto Workbook)
+        const wb = await oneDrive.loadFile();
+        
+        if(barra) barra.innerText = "⚡ Procesando datos...";
+        
+        // 2. Procesar
+        procesarLibroLeido(wb);
+        
+        // 3. Activar modo nube visualmente
+        modoNube = true;
+        cambiarModo('cloud'); // Si tienes esta función visual
+        if(window.iniciarPolling) window.iniciarPolling();
 
-        } catch (error) {
-            console.log("No se pudo iniciar automático (normal si no has logueado):", error.message);
-            
-            // AQUÍ ESTÁ LA SOLUCIÓN:
-            // Si falla, no mostramos error rojo, mostramos el botón para que TÚ hagas clic.
-            if(barraEstado) barraEstado.innerText = "🔒 Conexión requerida";
-            
-            // Asegúrate de que tu botón de login en el HTML llame a iniciarSesionManual()
-            if(btnLogin) {
-                btnLogin.style.display = "inline-block";
-                btnLogin.onclick = iniciarSesionManual; // Vinculamos la acción
-            }
-        }
+    } catch (error) {
+        console.log("Inicio automático no posible:", error.message);
+        if(barra) barra.innerText = "🔒 Requiere Conexión";
     }
+}
 	// Función auxiliar para el botón
     async function iniciarSesionManual() {
         try {
@@ -1759,12 +1726,15 @@ window.iniciarCargaNube = async function() {
 async function cargarDesdeNube() {
     if (!modoNube) return;
     try {
-        const arrayBuffer = await oneDrive.loadFile('aidanai.xlsx');
-        const data = new Uint8Array(arrayBuffer);
-        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        // AHORA: oneDrive.loadFile devuelve el Workbook YA PROCESADO (Rápido)
+        // Antes devolvía un arrayBuffer y había que hacer XLSX.read (Lento)
+        const wb = await oneDrive.loadFile(); 
+        
+        // Pasamos el libro directamente a tu procesador
         procesarLibroLeido(wb); 
+        
     } catch (error) {
-        console.error("Error en cargarDesdeNube:", error);
+        console.error("Error nube:", error);
         throw error;
     }
 }
