@@ -3907,7 +3907,17 @@ function cargarDesdeCache() {
    document.addEventListener('DOMContentLoaded', async () => {
     // 1. Configuración input local (igual que antes)
     const fileInput = document.getElementById('file-input');
-    if (fileInput) { /* ... código input ... */ }
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                // Aquí llamamos a la función que ya tenías creada
+                leerExcel(e.target.files[0]);
+                
+                // Limpiamos el input para que puedas volver a cargar el mismo archivo si quieres
+                e.target.value = ''; 
+            }
+        });
+    }
 
     // 2. Inicializar componentes
     if(typeof App !== 'undefined') App.init();
@@ -3946,152 +3956,151 @@ function cargarDesdeCache() {
         if (!hayDatosCache) cambiarModo('local');
     }
 });
-/* =========================================
-   GRAFICO RADAR DE SALUD (CORREGIDO)
-   ========================================= */
-let radarInstance = null;
-
+// ==========================================
+// 🕸️ SCORING LIBERTAD FINANCIERA (4 PILARES)
+// ==========================================
 function renderizarRadarSalud() {
-    const container = document.getElementById('chartRadar');
-    if (!container || !datos || datos.length === 0) return;
+    const dom = document.getElementById('chartRadar');
+    if (!dom) return;
 
-    // Filtramos por usuario activo (Dani/Norma/Todos)
-    const misMovimientos = datos.filter(m => pasaFiltroPropietario(m));
-    if (misMovimientos.length === 0) { if (radarInstance) radarInstance.clear(); return; }
+    // 1. OBTENER USUARIO (Para el título)
+    let nombreUsuario = "GLOBAL";
+    if (typeof filtroUsuarioActual !== 'undefined') {
+        nombreUsuario = filtroUsuarioActual.toUpperCase();
+    }
 
-    if (radarInstance) { radarInstance.dispose(); }
-    radarInstance = echarts.init(container);
+    // 2. OBTENER DATOS
+    let misDatos = window.datos; 
+    if (typeof window.datosPropietario !== 'undefined' && window.datosPropietario.length > 0) {
+        misDatos = window.datosPropietario;
+    }
 
-    // 1. SEPARACIÓN DE FLUJOS VS STOCK (LA CLAVE DEL FIX)
-    // Para calcular INGRESOS y GASTOS medios, ignoramos los saldos iniciales
-    const movimientosFlujo = misMovimientos.filter(m => 
-        !m.concepto.toLowerCase().includes('inicial') && 
-        !m.detalle.toLowerCase().includes('existencia inicial')
-    );
+    // 3. LIMPIEZA NUCLEAR (Para asegurar que se actualiza)
+    const chartExistente = echarts.getInstanceByDom(dom);
+    if (chartExistente) chartExistente.dispose();
+    dom.removeAttribute('_echarts_instance_');
+    dom.innerHTML = ''; 
 
-    // 2. CÁLCULO TEMPORAL PRECISO
-    // Usamos todos los movimientos para definir el rango de fechas real de la cuenta
-    const timestamps = misMovimientos.map(m => m.ts);
-    const minTs = Math.min(...timestamps);
-    const maxTs = Math.max(...timestamps);
-    
-    // Cálculo exacto de meses (con decimales)
-    const diffTime = Math.abs(maxTs - minTs);
-    const diffDays = diffTime / (1000 * 60 * 60 * 24); 
-    
-    // Normalizamos a mínimo 1 mes para evitar divisiones por cero o proyecciones locas
-    // si acabas de empezar (ej: gastar 100€ en 1 día no significa 3000€/mes)
-    const mesesData = Math.max(1, diffDays / 30.44);
+    if (!misDatos || misDatos.length === 0) {
+        dom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;">SIN DATOS</div>';
+        return;
+    }
 
-    // 3. MEDIAS MENSUALES REALES (Sin saldos iniciales)
-    const totalGastos = movimientosFlujo.filter(m => m.tipo === 'gasto').reduce((a,b) => a + Math.abs(b.importe), 0);
-    const totalIngresos = movimientosFlujo.filter(m => m.tipo === 'ingreso').reduce((a,b) => a + b.importe, 0);
-    
-    const gastoMensual = totalGastos / mesesData;
-    const ingresoMensual = totalIngresos / mesesData;
+    // 4. CÁLCULOS DE LOS 4 PILARES
+    let flujoIngresos = 0;
+    let flujoGastos = 0;
+    let patrimonioInversion = 0;
+    let patrimonioLiquidez = 0;
 
-    // 4. PATRIMONIO ACTUAL (Aquí SÍ incluimos los saldos iniciales)
-    let liqActual = 0;
-    let invActual = 0;
-    const saldos = {};
-    
-    misMovimientos.forEach(m => {
-        const ctaKey = m.cuenta.trim().toUpperCase(); 
-        saldos[ctaKey] = (saldos[ctaKey] || 0) + m.importe;
-    });
+    misDatos.forEach(m => {
+        const imp = parseFloat(m.importe);
+        const concepto = String(m.concepto || '').toLowerCase();
+        const esInv = String(m.esInversion || '').toLowerCase() === 'si';
 
-    Object.keys(saldos).forEach(ctaKey => {
-        const saldo = saldos[ctaKey];
-        const esInv = (mapaCuentas && mapaCuentas[ctaKey] && mapaCuentas[ctaKey].esInversion);
-        if (esInv) invActual += saldo;
-        else liqActual += saldo;
-    });
-    
-    const patrimonioTotal = liqActual + invActual;
-
-    // --- CÁLCULO DE PUNTUACIONES (SCORING) ---
-
-    // A. AHORRO (Objetivo: Ahorrar 30% de lo ganado)
-    // Si no hay ingresos de flujo, el ahorro es 0 (evita NaN)
-    let tasaAhorro = ingresoMensual > 0 ? ((ingresoMensual - gastoMensual) / ingresoMensual) * 100 : 0;
-    let scoreAhorro = Math.max(0, Math.min(100, (tasaAhorro / 30) * 100)); 
-
-    // B. COBERTURA (Runway - Objetivo: 6 meses de gastos)
-    // Usamos la Liquidez Real acumulada dividida por el Gasto Medio Real
-    let mesesRunway = (gastoMensual > 0 && liqActual > 0) ? liqActual / gastoMensual : 0;
-    let scoreCobertura = Math.max(0, Math.min(100, (mesesRunway / 6) * 100)); 
-
-    // C. LIBERTAD (Inversión - Objetivo: 60% del patrimonio invertido)
-    let ratioInv = (patrimonioTotal > 0 && invActual > 0) ? (invActual / patrimonioTotal) * 100 : 0;
-    let scoreLibertad = Math.max(0, Math.min(100, (ratioInv / 60) * 100));
-    
-    // Penalización: Si inviertes mucho pero te quedas sin caja (<3 meses), baja la nota
-    if (ratioInv > 70 && mesesRunway < 3) scoreLibertad -= 20;
-
-    // D. ESTABILIDAD (Equilibrio Ingresos vs Gastos)
-    let scoreEstabilidad = 0;
-    if (ingresoMensual > 0 && gastoMensual > 0) {
-        if (ingresoMensual >= gastoMensual) {
-            scoreEstabilidad = 100; // Vives dentro de tus posibilidades
-        } else {
-            // Penaliza proporcionalmente si gastas más de lo que ingresas
-            scoreEstabilidad = (ingresoMensual / gastoMensual) * 100;
+        // A) Flujo de Caja (Sin traspasos ni saldos iniciales)
+        if (!concepto.includes('traspaso') && !concepto.includes('inicial')) {
+            if (imp > 0) flujoIngresos += imp;
+            if (imp < 0) flujoGastos += Math.abs(imp);
         }
+
+        // B) Patrimonio Total (Todo suma)
+        if (esInv) {
+            patrimonioInversion += imp;
+        } else {
+            // Asumimos que lo NO invertido es Liquidez
+            patrimonioLiquidez += imp;
+        }
+    });
+
+    // --- FÓRMULAS MAESTRAS (0 a 10) ---
+
+    // 1. AHORRO: ¿Qué % de tus ingresos retienes? (Meta: 50%)
+    const ahorroNeto = flujoIngresos - flujoGastos;
+    const tasaAhorro = flujoIngresos > 0 ? (ahorroNeto / flujoIngresos) * 100 : 0;
+    const vAhorro = Math.min(10, Math.max(0, (tasaAhorro / 50) * 10));
+
+    // 2. LIQUIDEZ: Meses de gastos cubiertos en cash (Meta: 12 meses para seguridad total)
+    // Calculamos gasto mensual promedio estimado
+    const gastoMensual = flujoGastos > 0 ? (flujoGastos / 12) : 1; 
+    const mesesLiquidez = patrimonioLiquidez / gastoMensual;
+    const vLiquidez = Math.min(10, Math.max(0, (mesesLiquidez / 12) * 10));
+
+    // 3. INVERSIÓN: % del Patrimonio que está trabajando (Meta: 90%)
+    const patrimonioTotal = patrimonioInversion + patrimonioLiquidez;
+    const ratioInv = patrimonioTotal > 0 ? (patrimonioInversion / patrimonioTotal) * 100 : 0;
+    const vInversion = Math.min(10, Math.max(0, (ratioInv / 90) * 10));
+
+    // 4. LIBERTAD: Años de gastos cubiertos por inversiones (Meta: 25 años / Regla 4%)
+    // Usamos el gasto anual proyectado (flujoGastos)
+    const gastoAnual = flujoGastos > 0 ? flujoGastos : 1;
+    const aniosLibertad = patrimonioInversion / gastoAnual;
+    const vLibertad = Math.min(10, Math.max(0, (aniosLibertad / 25) * 10));
+
+    const valores = [vAhorro, vLiquidez, vInversion, vLibertad].map(n => Number(n.toFixed(1)));
+
+    // 5. MARCADOR CENTRAL
+    const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
+    const notaGlobal = Math.round(promedio * 10);
+    
+    const divScore = document.getElementById('score-total');
+    if (divScore) {
+        divScore.innerHTML = `
+            <div style="font-size:9px; letter-spacing:1px; color:#888; text-transform:uppercase; margin-bottom:-5px;">${nombreUsuario}</div>
+            <div style="font-size:26px; font-weight:900;">${notaGlobal}</div>
+        `;
+        const color = notaGlobal >= 50 ? '#39ff14' : '#ff4444';
+        divScore.style.color = color;
+        divScore.style.textShadow = `0 0 20px ${color}60`;
     }
 
-    const scoreTotal = Math.round((scoreAhorro + scoreCobertura + scoreLibertad + scoreEstabilidad) / 4);
-
-    // Visualización
-    const elScore = document.getElementById('score-total');
-    if(elScore) {
-        elScore.innerText = scoreTotal;
-        let color = scoreTotal >= 75 ? '#39FF14' : (scoreTotal >= 50 ? '#FFD60A' : '#FF2E4D');
-        elScore.style.color = color;
-        elScore.style.textShadow = `0 0 15px ${color}66`;
-    }
-
+    // 6. PINTAR GRÁFICO (4 EJES)
+    const myChart = echarts.init(dom);
     const option = {
-        backgroundColor: 'transparent',
+        color: ['#39ff14'],
         radar: {
             indicator: [
-                { name: 'AHORRO', max: 100 },
-                { name: 'COBERTURA', max: 100 },
-                { name: 'LIBERTAD', max: 100 },
-                { name: 'ESTABILIDAD', max: 100 }
+                { name: 'AHORRO', max: 10 },
+                { name: 'LIQUIDEZ', max: 10 },
+                { name: 'INVERSIÓN', max: 10 },
+                { name: 'LIBERTAD', max: 10 }
             ],
+            center: ['50%', '55%'],
             radius: '65%',
             splitNumber: 4,
-            axisName: { color: '#888', fontWeight: 'bold', fontSize: 10 },
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-            splitArea: { show: false }
+            axisName: { 
+                color: '#fff', 
+                fontSize: 10,
+                fontWeight: 'bold',
+                backgroundColor: '#111',
+                borderRadius: 4,
+                padding: [4, 6]
+            },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+            splitArea: { show: false },
+            axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
         },
         series: [{
             type: 'radar',
             data: [{
-                value: [scoreAhorro, scoreCobertura, scoreLibertad, scoreEstabilidad],
-                name: 'Financial Score',
+                value: valores,
+                name: 'Financial Freedom Score',
                 symbol: 'circle',
                 symbolSize: 6,
-                itemStyle: { color: '#39FF14' },
-                lineStyle: { width: 2, color: '#39FF14' },
-                areaStyle: { color: 'rgba(57, 255, 20, 0.2)' },
-                tooltip: {
-                    trigger: 'item',
-                    formatter: function () {
-                        return `
-                        AHORRO: ${tasaAhorro.toFixed(1)}%<br>
-                        COBERTURA: ${mesesRunway.toFixed(1)} Meses<br>
-                        LIBERTAD: ${ratioInv.toFixed(1)}% Inv.<br>
-                        NOTA FINAL: ${scoreTotal}/100
-                        `;
-                    }
-                }
+                lineStyle: { width: 3, color: '#39ff14', shadowBlur: 10, shadowColor: '#39ff14' },
+                areaStyle: { 
+                    color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
+                        { color: 'rgba(57, 255, 20, 0.1)', offset: 0 },
+                        { color: 'rgba(57, 255, 20, 0.5)', offset: 1 }
+                    ])
+                },
+                itemStyle: { color: '#000', borderColor: '#39ff14', borderWidth: 2 }
             }]
         }]
     };
 
-    radarInstance.setOption(option);
-    window.addEventListener('resize', () => { if(radarInstance) radarInstance.resize(); });
+    myChart.setOption(option);
+    setTimeout(() => { myChart.resize(); }, 50);
+    window.addEventListener('resize', () => myChart.resize());
 }
 /* =========================================
    ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
@@ -4609,13 +4618,13 @@ window.actualizarDashboard = function() {
 var filtroUsuarioActual = 'todos'; 
 
 // ==========================================
-// 👤 CAMBIO DE USUARIO (Con actualización de Gráficos)
+// 👤 CAMBIO DE USUARIO (CON RETARDO TÁCTICO)
 // ==========================================
 window.toggleUsuario = function() {
     const btnName = document.getElementById('btn-identity-toggle'); 
     const root = document.documentElement;
 
-    // 1. ROTACIÓN DE USUARIO
+    // 1. Lógica de cambio de nombre y tema
     if (filtroUsuarioActual === 'todos') {
         filtroUsuarioActual = 'Dani';
         if(btnName) btnName.innerText = 'DANI';
@@ -4630,32 +4639,31 @@ window.toggleUsuario = function() {
         root.style.setProperty('--current-theme', 'var(--theme-dn)');
     }
 
-    // 2. ACTUALIZACIÓN DE DATOS GLOBALES
+    // 2. Filtrado de datos
     if (window.datos && window.datos.length > 0) {
         window.datosPropietario = window.datos.filter(m => pasaFiltroPropietario(m));
     }
 
-    // 3. FORZAR REFRESCO DE TODO
-    if(typeof renderizar === 'function') renderizar();
-    if(typeof actualizarDashboard === 'function') actualizarDashboard();
+    // 3. ACTUALIZACIÓN INMEDIATA (Listas y Textos)
+    if(typeof renderizar === 'function') renderizar(); 
+    if(typeof actualizarDashboard === 'function') actualizarDashboard(); 
     
-    // TRUCO: Si estamos en la pestaña de Análisis (patri), forzamos el redibujado inmediato.
-    // Si no, dejamos que 'irPestana' lo haga cuando entres.
-    const tabPatri = document.getElementById('tab-patri');
-    if (tabPatri && tabPatri.classList.contains('active')) {
-        setTimeout(() => {
-            if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-            if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
-            if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud(); // <--- ESTE ES EL CRÍTICO
-        }, 50);
-    } else {
-        // Actualizamos patrimonio en segundo plano por si acaso
-        if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-    }
+    // 4. ACTUALIZACIÓN DE GRÁFICOS (CON RETARDO)
+    // Este setTimeout es el secreto para que no se bloqueen
+    setTimeout(() => {
+        console.log("🎨 Repintando gráficos para: " + filtroUsuarioActual);
+        
+        if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion();
+        if(typeof renderizarDistribucion === 'function') renderizarDistribucion();
+        if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+        
+        // El gráfico problemático:
+        if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
+        
+    }, 50); // 50ms de espera
 
     if(typeof vibrar === 'function') vibrar('tecla');
 };
-
 // IMPRESCINDIBLE: El filtro que usa el Dashboard para sumar
 window.pasaFiltroPropietario = function(movimiento) {
     if (filtroUsuarioActual === 'todos') return true;
