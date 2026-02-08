@@ -986,8 +986,8 @@
             <div class="card-header"><span class="card-title">NUEVA CUENTA</span></div>
             <div style="padding: 15px;">
                 <label class="input-label">NOMBRE DE LA CUENTA</label>
-                <input type="text" id="new-cta-nombre" class="filter-input form-field" placeholder="Ej: Revolut Metal" list="dl-cuentas-maestras" autocomplete="off">
-<datalist id="dl-cuentas-maestras"></datalist>
+<input type="text" id="new-cta-nombre" class="filter-input form-field" placeholder="Ej: Revolut Metal" list="lista-cuentas-auto" autocomplete="off">
+<datalist id="lista-cuentas-auto"></datalist>
                 
                 <div style="display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:end;">
                     <div>
@@ -1017,8 +1017,8 @@
             <div class="master-card" style="margin:0; border-color: #333;">
                 <div class="card-header"><span class="card-title" style="font-size:11px">NUEVO CONCEPTO</span></div>
                 <div style="padding: 10px;">
-                    <input type="text" id="new-concepto" class="filter-input form-field" placeholder="Ej: Gimnasio" list="dl-conceptos-maestros" autocomplete="off">
-<datalist id="dl-conceptos-maestros"></datalist>
+                    <input type="text" id="new-concepto" class="filter-input form-field" placeholder="Ej: Gimnasio" list="lista-conceptos-auto" autocomplete="off">
+<datalist id="lista-conceptos-auto"></datalist>
                     <button class="full-btn btn-gray" onclick="guardarAjuste('concepto')" style="margin-top:10px; font-size:10px;">GUARDAR</button>
                 </div>
             </div>
@@ -1026,8 +1026,8 @@
             <div class="master-card" style="margin:0; border-color: #333;">
                 <div class="card-header"><span class="card-title" style="font-size:11px">NUEVO BENEFICIARIO</span></div>
                 <div style="padding: 10px;">
-                    <input type="text" id="new-benef" class="filter-input form-field" placeholder="Ej: Amazon" list="dl-beneficiarios-maestros" autocomplete="off">
-<datalist id="dl-beneficiarios-maestros"></datalist>
+                    <input type="text" id="new-benef" class="filter-input form-field" placeholder="Ej: Amazon" list="lista-benef-auto" autocomplete="off">
+<datalist id="lista-benef-auto"></datalist>
                     <button class="full-btn btn-gray" onclick="guardarAjuste('beneficiario')" style="margin-top:10px; font-size:10px;">GUARDAR</button>
                 </div>
             </div>
@@ -1893,8 +1893,7 @@ function procesarDatos(filas) {
     datos = temp;
     
     actualizarFiltrosUI(cuentas, conceptos, benefs);
-	actualizarListasMaestras();
-    renderizar();
+	renderizar();
     actualizarDashboard();
     actualizarPatrimonio();
     revisarBotonExportar();
@@ -2021,6 +2020,9 @@ function finalizarGuardado(esTraspaso) {
             renderizarSunburstPatrimonio(); 
 			renderizarRadarSalud();
         }, 100); 
+	if (p === 'ajustes') {
+        setTimeout(rellenarAutocompletado, 100); // Pequeña pausa para asegurar carga
+    }
     }
 }
     
@@ -3853,47 +3855,6 @@ window.renderizarSunburstPatrimonio = function() {
     window.addEventListener('resize', () => chart.resize());
 };
 
-// --- FUNCIÓN PARA RELLENAR AUTOCOMPLETADO EN AJUSTES ---
-function actualizarListasMaestras() {
-    // 1. Recopilar datos únicos (Usamos Sets para evitar duplicados)
-    const setCuentas = new Set();
-    const setConceptos = new Set();
-    const setBeneficiarios = new Set();
-
-    // A. Añadimos las cuentas configuradas (importante para las nuevas que aun no tienen movs)
-    if (typeof mapaCuentas !== 'undefined') {
-        Object.keys(mapaCuentas).forEach(k => setCuentas.add(k));
-    }
-
-    // B. Añadimos todo lo que haya en el historial de movimientos
-    if (typeof datos !== 'undefined') {
-        datos.forEach(d => {
-            if (d.cuenta) setCuentas.add(d.cuenta);
-            if (d.concepto) setConceptos.add(d.concepto);
-            if (d.beneficiario) setBeneficiarios.add(d.beneficiario);
-        });
-    }
-
-    // 2. Función auxiliar para llenar el HTML
-    const llenarDatalist = (idLista, setDatos) => {
-        const datalist = document.getElementById(idLista);
-        if (!datalist) return;
-        
-        datalist.innerHTML = ''; // Limpiar anterior
-        // Ordenamos alfabéticamente y creamos las opciones
-        Array.from(setDatos).sort().forEach(valor => {
-            const option = document.createElement('option');
-            option.value = valor; // El valor real
-            datalist.appendChild(option);
-        });
-    };
-
-    // 3. Ejecutar llenado
-    llenarDatalist('dl-cuentas-maestras', setCuentas);
-    llenarDatalist('dl-conceptos-maestros', setConceptos);
-    llenarDatalist('dl-beneficiarios-maestros', setBeneficiarios);
-}
-
 	// ==========================================
     // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
     // ==========================================
@@ -4681,5 +4642,52 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 </script>
+
+// ==========================================
+// 🧠 AUTOCOMPLETADO INTELIGENTE (Corrección)
+// ==========================================
+function rellenarAutocompletado() {
+    // 1. Preparamos almacenes vacíos (Sets para evitar repetidos)
+    const cuentas = new Set();
+    const conceptos = new Set();
+    const beneficiarios = new Set();
+
+    // 2. Leemos de la Configuración (Cuentas que existen pero quizás no tienen movimientos)
+    if (typeof mapaCuentas !== 'undefined') {
+        Object.keys(mapaCuentas).forEach(c => cuentas.add(c));
+    }
+
+    // 3. Leemos de los Movimientos (Historial)
+    if (typeof datos !== 'undefined' && datos.length > 0) {
+        datos.forEach(m => {
+            if (m.cuenta) cuentas.add(m.cuenta);
+            if (m.concepto) conceptos.add(m.concepto);
+            if (m.beneficiario) beneficiarios.add(m.beneficiario);
+        });
+    }
+
+    // 4. Función auxiliar para pintar las opciones en el HTML
+    const pintar = (idLista, conjunto) => {
+        const lista = document.getElementById(idLista);
+        if (!lista) return; // Si no encuentra el elemento, no hace nada
+        
+        lista.innerHTML = ''; // Limpiamos lo viejo
+        
+        // Convertimos a lista, ordenamos y creamos las opciones
+        Array.from(conjunto).sort().forEach(valor => {
+            const op = document.createElement('option');
+            op.value = valor;
+            lista.appendChild(op);
+        });
+    };
+
+    // 5. Pintamos las 3 listas
+    pintar('lista-cuentas-auto', cuentas);
+    pintar('lista-conceptos-auto', conceptos);
+    pintar('lista-benef-auto', beneficiarios);
+
+    console.log("Autocompletado actualizado: " + cuentas.size + " cuentas.");
+}
+
 </body>
 </html>
