@@ -1286,19 +1286,12 @@ function generateUUID() {
         auth: {
             clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
             authority: "https://login.microsoftonline.com/common",
-            redirectUri: window.location.href, // Debe coincidir con Azure
-            navigateToLoginRequestUrl: false // IMPORTANTE: Evita bucles de redirección
+            redirectUri: window.location.href.split('?')[0], // Limpia la URL base
+            navigateToLoginRequestUrl: false
         },
         cache: {
-            cacheLocation: "localStorage", // Más estable que sessionStorage
+            cacheLocation: "localStorage",
             storeAuthStateInCookie: false
-        },
-        system: {
-            // Ajustes para evitar bloqueos de popup
-            windowHashTimeout: 60000,
-            iframeHashTimeout: 6000,
-            loadFrameTimeout: 0,
-            asyncPopups: false
         }
     };
 	
@@ -1333,12 +1326,24 @@ class OneDriveManager {
 
     async login() {
         try {
-            const request = { scopes: ["User.Read", "Files.ReadWrite.All"], prompt: "select_account" };
+            // Limpiamos cualquier interacción previa bloqueada
+            await this.msalInstance.handleRedirectPromise().catch(() => {});
+
+            const request = { 
+                scopes: ["User.Read", "Files.ReadWrite.All"],
+                prompt: "select_account"
+            };
+            
+            // Usamos loginPopup estándar
             const resp = await this.msalInstance.loginPopup(request);
+            console.log("Login exitoso:", resp.account.username);
             return resp.accessToken;
+            
         } catch (e) {
-            if (e.message && e.message.includes("popup")) {
-                alert("Por favor, permite las ventanas emergentes para iniciar sesión.");
+            console.error("Error en Login:", e);
+            // Si falla el popup, sugerimos usar Redirect (Plan B)
+            if (e.name === "BrowserAuthError" && e.message.includes("popup")) {
+               alert("El navegador bloqueó la ventana. Por favor, desactiva el bloqueador de popups para este sitio.");
             }
             throw e;
         }
@@ -1728,24 +1733,24 @@ function detenerPolling() {
 
 // 1. INICIAR CARGA DESDE LA NUBE (Conectar al botón HTML)
 window.iniciarCargaNube = async function() {
-    const btn = document.getElementById('mode-cloud'); // O el botón que uses
-    
     try {
         if(window.mostrarEstado) window.mostrarEstado("Conectando con Microsoft...", "normal");
         
-        // 1. Login explícito (esto abrirá el popup)
+        // 1. Intentamos obtener el token (Login)
         await oneDrive.login();
         
-        // 2. Si el login pasa, cargamos el archivo
+        // 2. Si pasa el login, procedemos a la descarga
         if(window.mostrarEstado) window.mostrarEstado("Descargando Excel...", "normal");
-        await cargarDesdeNube(); // Esta función ya la tienes definida
         
-        // 3. Éxito
+        // Llamamos a cargarDesdeNube (que a su vez llama a loadFile)
+        await cargarDesdeNube();
+        
+        // 3. Todo OK
         cambiarModo('cloud');
         if(window.mostrarEstado) window.mostrarEstado("✅ Conectado a la Nube", "ok");
         
     } catch (e) {
-        console.error("Error en carga nube:", e);
+        console.error("Fallo al iniciar carga nube:", e);
         if(window.mostrarEstado) window.mostrarEstado("❌ Error de conexión", "err");
     }
 };
