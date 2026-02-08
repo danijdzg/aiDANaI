@@ -1305,23 +1305,37 @@ class OneDriveManager {
     // --- 1. GESTIÓN DE TOKEN ---
     async getToken() {
         const request = { scopes: ["User.Read", "Files.ReadWrite.All"] };
-        try {
-            const accounts = this.msalInstance.getAllAccounts();
-            if (accounts.length > 0) {
+        const accounts = this.msalInstance.getAllAccounts();
+        
+        if (accounts.length > 0) {
+            try {
+                // Intentamos renovar token en segundo plano
                 const resp = await this.msalInstance.acquireTokenSilent({ ...request, account: accounts[0] });
                 return resp.accessToken;
-            } else {
-                const resp = await this.msalInstance.acquireTokenPopup(request);
-                return resp.accessToken;
+            } catch (e) {
+                // Si falla el silencioso (ej: sesión caducada), NO abrimos popup aquí.
+                // Lanzamos error para que la UI pida al usuario hacer clic.
+                console.warn("Token silencioso falló, se requiere interacción.");
+                throw e; 
             }
-        } catch (e) {
-            console.error("Error token:", e);
-            throw e;
+        } else {
+            throw new Error("No hay usuario activo.");
         }
     }
 
-    // --- 2. COMPATIBILIDAD CON TU CÓDIGO (NO BORRAR) ---
-    async login() { return await this.getToken(); }
+    // 2. Login Interactivo (ESTE SÍ ABRE POPUP)
+    // Se llamará SOLO cuando pulses el botón
+    async login() {
+        try {
+            const request = { scopes: ["User.Read", "Files.ReadWrite.All"] };
+            await this.msalInstance.loginPopup(request);
+            // Tras login exitoso, devolvemos el token
+            return await this.getToken();
+        } catch (e) {
+            console.error("Login cancelado o bloqueado:", e);
+            throw e;
+        }
+    }
     async loadFile() { return await this.descargarExcel(); }
 
     // --- 3. FUNCIONES CORE ---
@@ -1410,33 +1424,45 @@ class OneDriveManager {
 const oneDrive = new OneDriveManager();
 
     // ==========================================
-    // 4. NUEVO: LÓGICA DE ARRANQUE AUTOMÁTICO
+    // 4. LÓGICA DE ARRANQUE AUTOMÁTICO
     // ==========================================
     async function iniciarSistema() {
-        const barraEstado = document.getElementById('status-text'); // Asegúrate de haber puesto el HTML del paso 1
+        const barraEstado = document.getElementById('status-text'); 
         const btnLogin = document.getElementById('login-btn');
 
         try {
-            if(barraEstado) barraEstado.innerText = "🔄 Conectando con OneDrive...";
+            if(barraEstado) barraEstado.innerText = "🔄 Conectando...";
             
-            // 1. Intentamos cargar el archivo
+            // Intentamos cargar (esto llamará a getToken silencioso)
             const datosBuffer = await oneDrive.loadFile();
             
             if(barraEstado) barraEstado.innerText = "📂 Leyendo Excel...";
-            
-            // 2. Leemos con SheetJS
             const workbook = XLSX.read(datosBuffer, { type: 'array' });
-            
-            // 3. Procesamos los datos
             procesarDatos(workbook);
 
         } catch (error) {
-            console.error(error);
-            if(barraEstado) barraEstado.innerText = "⚠️ Se requiere acceso.";
-            if(btnLogin) btnLogin.style.display = "inline-block";
+            console.log("No se pudo iniciar automático (normal si no has logueado):", error.message);
+            
+            // AQUÍ ESTÁ LA SOLUCIÓN:
+            // Si falla, no mostramos error rojo, mostramos el botón para que TÚ hagas clic.
+            if(barraEstado) barraEstado.innerText = "🔒 Conexión requerida";
+            
+            // Asegúrate de que tu botón de login en el HTML llame a iniciarSesionManual()
+            if(btnLogin) {
+                btnLogin.style.display = "inline-block";
+                btnLogin.onclick = iniciarSesionManual; // Vinculamos la acción
+            }
         }
     }
-
+	// Función auxiliar para el botón
+    async function iniciarSesionManual() {
+        try {
+            await oneDrive.login(); // Esto ahora sí abrirá el popup porque viene de un clic
+            await iniciarSistema(); // Reintentamos la carga
+        } catch (e) {
+            alert("No se pudo conectar: " + e.message);
+        }
+    }
     // Función principal de procesamiento (La que faltaba en tu código)
     function procesarDatos(workbook) {
         // Leer hoja Movimientos
@@ -2317,76 +2343,88 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 async function guardarManual() {
-    // 1. RECOGIDA DE DATOS (Con tus IDs reales del HTML)
+    // 1. RECOGIDA DE DATOS
     const fecha = document.getElementById('m-fecha').value;
-    const cantidadStr = document.getElementById('m-cantidad').value; // Ej: "-50.00"
+    const cantidadStr = document.getElementById('m-cantidad').value; 
     const cuenta = document.getElementById('m-cuenta').value;
     const concepto = document.getElementById('m-concepto').value;
-    const desc = document.getElementById('m-desc').value || ""; // Descripción
-    const ben = document.getElementById('m-beneficiario').value || ""; // Beneficiario
+    // Aseguramos que desc y ben sean cadenas vacías si no hay nada, nunca null
+    const desc = (document.getElementById('m-desc').value || "").trim(); 
+    const ben = (document.getElementById('m-beneficiario').value || "").trim(); 
 
-    // Validación básica
     if (!fecha || !cantidadStr || !cuenta || !concepto) {
         alert("⚠️ Faltan datos: Fecha, Cantidad, Cuenta o Concepto.");
         return;
     }
 
     // 2. PREPARAR DATOS
-    // Si estamos editando, usamos el ID viejo. Si es nuevo, generamos uno aleatorio.
     const idFinal = idEnEdicion ? idEnEdicion : (Date.now() + Math.floor(Math.random() * 1000));
-    
-    // Limpiamos la cantidad (quitar comas si las hubiera y asegurar número)
     const importe = parseFloat(cantidadStr.replace(',', '.'));
 
-    // Estructura EXACTA de tu Excel: [ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO]
+    // --- PARA LA NUBE (Array ordenado estricto) ---
+    // Orden: ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO
     const filaExcel = [idFinal, fecha, cuenta, concepto, importe, desc, ben];
 
-    // 3. GUARDADO
+    // --- PARA LOCAL (Objeto con alias defensivos) ---
+    // Añadimos variantes por si tu dashboard usa nombres distintos
+    const objetoLocal = {
+        ID: idFinal,
+        FECHA: fecha,
+        CUENTA: cuenta,
+        CONCEPTO: concepto,
+        IMPORTE: importe,
+        "DESCRIPCIÓN": desc,   // Nombre oficial Excel
+        "BENEFICIARIO": ben,   // Nombre oficial Excel
+        // ALIAS DE SEGURIDAD (Por si el dashboard busca sin tildes o en minúsculas)
+        "DESCRIPCION": desc,
+        "Descripción": desc,
+        "Beneficiario": ben,
+        "Concepto": concepto,
+        "Cuenta": cuenta
+    };
+
     try {
         if (modoNube) {
-            mostrarEstado("⏳ Guardando en la nube...", "normal");
+            if(window.mostrarEstado) window.mostrarEstado("⏳ Guardando en la nube...", "normal");
             
-            // Si es edición, primero borramos el antiguo para no duplicar
-            if (idEnEdicion) {
-                await oneDrive.borrarFilaPorID(idEnEdicion);
-            }
-
-            // Insertamos la nueva fila al final (Seguro para multiusuario)
-            await oneDrive.agregarFila(filaExcel);
-
-            mostrarEstado("✅ Guardado", "ok");
+            if (idEnEdicion) await oneDrive.borrarFilaPorID(idEnEdicion);
             
-            // Refrescar datos
+            await oneDrive.agregarFila(filaExcel); // Guardado seguro
+            
+            if(window.mostrarEstado) window.mostrarEstado("✅ Guardado", "ok");
+            
+            // Recargar datos de la nube
             if(window.iniciarCargaNube) await window.iniciarCargaNube();
             
         } else {
-            // MODO LOCAL (Tu lógica antigua)
+            // MODO LOCAL
             if (idEnEdicion) {
+                // Si editamos, buscamos y reemplazamos
                 const idx = datos.findIndex(d => d.ID == idEnEdicion);
-                if (idx !== -1) datos[idx] = { 
-                    ID: idFinal, FECHA: fecha, CUENTA: cuenta, CONCEPTO: concepto, 
-                    IMPORTE: importe, "DESCRIPCIÓN": desc, BENEFICIARIO: ben 
-                };
+                if (idx !== -1) {
+                    // Mantenemos propiedades extra que pudiera tener el original
+                    datos[idx] = { ...datos[idx], ...objetoLocal };
+                }
             } else {
-                datos.push({ 
-                    ID: idFinal, FECHA: fecha, CUENTA: cuenta, CONCEPTO: concepto, 
-                    IMPORTE: importe, "DESCRIPCIÓN": desc, BENEFICIARIO: ben 
-                });
+                // Si es nuevo, añadimos
+                datos.push(objetoLocal);
             }
-            renderizar();
-            actualizarDashboard();
-            mostrarEstado("💾 Guardado en memoria local", "ok");
+            
+            // Actualizamos pantallas
+            if(window.renderizar) window.renderizar();
+            if(window.actualizarDashboard) window.actualizarDashboard();
+            
+            if(window.mostrarEstado) window.mostrarEstado("💾 Guardado en memoria local", "ok");
         }
 
         // 4. LIMPIEZA
-        cerrarModal(); // Tu función existente
+        if(window.cerrarModal) window.cerrarModal();
         idEnEdicion = null;
-        if(window.vibrar) vibrar('ingreso');
+        if(window.vibrar) window.vibrar('ingreso');
 
     } catch (e) {
         console.error(e);
         alert("Error al guardar: " + e.message);
-        mostrarEstado("❌ Error", "err");
     }
 }
 // ==========================================
