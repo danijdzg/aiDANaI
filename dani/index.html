@@ -1284,17 +1284,17 @@ function generateUUID() {
     // ==========================================
     const MSAL_CONFIG = {
         auth: {
-            clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb", // TU ID CORRECTO
+            clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
             authority: "https://login.microsoftonline.com/common",
-            redirectUri: window.location.href, 
-            navigateToLoginRequestUrl: false
+            redirectUri: window.location.href, // Debe coincidir con Azure
+            navigateToLoginRequestUrl: false // IMPORTANTE: Evita bucles de redirección
         },
         cache: {
-            cacheLocation: "localStorage",
+            cacheLocation: "localStorage", // Más estable que sessionStorage
             storeAuthStateInCookie: false
         },
         system: {
-            // Configuración para evitar errores de popup bloqueados/time-out
+            // Ajustes para evitar bloqueos de popup
             windowHashTimeout: 60000,
             iframeHashTimeout: 6000,
             loadFrameTimeout: 0,
@@ -1303,10 +1303,14 @@ function generateUUID() {
     };
 	
 
+// ==========================================
+// MOTOR ONEDRIVE TURBO (CON CACHÉ INTELIGENTE)
+// ==========================================
 class OneDriveManager {
     constructor() {
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-        this.fileId = null;
+        // Intentamos recuperar el ID de la memoria local para ir rápido
+        this.fileId = localStorage.getItem("aidanai_file_id"); 
     }
 
     // --- 1. GESTIÓN DE TOKEN ---
@@ -1316,71 +1320,104 @@ class OneDriveManager {
         
         if (accounts.length > 0) {
             try {
-                // Intentamos renovar token en segundo plano
                 const resp = await this.msalInstance.acquireTokenSilent({ ...request, account: accounts[0] });
                 return resp.accessToken;
             } catch (e) {
-                // Si falla el silencioso (ej: sesión caducada), NO abrimos popup aquí.
-                // Lanzamos error para que la UI pida al usuario hacer clic.
-                console.warn("Token silencioso falló, se requiere interacción.");
+                console.warn("Token caducado, se requiere interacción.");
                 throw e; 
             }
         } else {
-            throw new Error("No hay usuario activo.");
+            throw new Error("No hay sesión activa.");
         }
     }
 
-    // 2. Login Interactivo (ESTE SÍ ABRE POPUP)
-    // Se llamará SOLO cuando pulses el botón
     async login() {
         try {
-            const request = { scopes: ["User.Read", "Files.ReadWrite.All"] };
-            await this.msalInstance.loginPopup(request);
-            // Tras login exitoso, devolvemos el token
-            return await this.getToken();
+            const request = { scopes: ["User.Read", "Files.ReadWrite.All"], prompt: "select_account" };
+            const resp = await this.msalInstance.loginPopup(request);
+            return resp.accessToken;
         } catch (e) {
-            console.error("Login cancelado o bloqueado:", e);
+            if (e.message && e.message.includes("popup")) {
+                alert("Por favor, permite las ventanas emergentes para iniciar sesión.");
+            }
             throw e;
         }
     }
-    async loadFile() { return await this.descargarExcel(); }
 
-    // --- 3. FUNCIONES CORE ---
+    // --- 2. LOCALIZADOR DE ARCHIVO (OPTIMIZADO) ---
     async getFileId() {
+        // A) Si ya tenemos el ID en memoria, lo usamos DIRECTAMENTE (0 segundos)
         if (this.fileId) return this.fileId;
-        const token = await this.getToken();
         
+        const token = await this.getToken();
+        console.log("🔍 Buscando archivo en la nube...");
+
+        // B) Intento Rápido: Ruta directa predecible
         try {
             const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
-                this.fileId = data.id;
-                return this.fileId;
+                this.guardarIdEnCache(data.id);
+                return data.id;
             }
         } catch(e) {}
 
-        const resSearch = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')", {
+        // C) Intento Lento: Búsqueda (Solo ocurre la primera vez)
+        // Optimizamos pidiendo solo el campo 'id' para que la respuesta sea ligera
+        const resSearch = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')?select=id,name", {
             headers: { Authorization: `Bearer ${token}` }
         });
         const dataSearch = await resSearch.json();
-        if (!dataSearch.value || dataSearch.value.length === 0) throw new Error("No encuentro 'aidanai.xlsx'");
-        this.fileId = dataSearch.value[0].id;
+        
+        if (!dataSearch.value || dataSearch.value.length === 0) throw new Error("No encuentro 'aidanai.xlsx' en tu OneDrive");
+        
+        // Guardamos el ID para el futuro
+        this.guardarIdEnCache(dataSearch.value[0].id);
         return this.fileId;
     }
 
+    guardarIdEnCache(id) {
+        this.fileId = id;
+        localStorage.setItem("aidanai_file_id", id);
+        console.log("⚡ ID guardado en memoria para inicio rápido la próxima vez.");
+    }
+
+    // --- 3. DESCARGA (CON GESTIÓN DE ERRORES DE CACHÉ) ---
+    async loadFile() { // Mantenemos el nombre loadFile por compatibilidad
+        return await this.descargarExcel();
+    }
+
     async descargarExcel() {
-        if(window.mostrarEstado) window.mostrarEstado("☁️ Sincronizando...", "normal");
-        const id = await this.getFileId();
-        const token = await this.getToken();
-        const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+        if(window.mostrarEstado) window.mostrarEstado("☁️ Conectando...", "normal");
+        
+        let token = await this.getToken();
+        let id = await this.getFileId();
+
+        // Intentamos descargar
+        let response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
             headers: { Authorization: `Bearer ${token}` }
         });
+
+        // CRÍTICO: Si falla (404) es posible que el ID antiguo de la caché ya no sirva.
+        // Solución: Borramos caché y reintentamos buscando de nuevo.
+        if (response.status === 404) {
+            console.warn("⚠️ El ID cacheado falló. Buscando de nuevo...");
+            localStorage.removeItem("aidanai_file_id");
+            this.fileId = null;
+            id = await this.getFileId(); // Busca de nuevo
+            response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        }
+
+        if (!response.ok) throw new Error("Error en descarga: " + response.statusText);
+        
         return await response.arrayBuffer();
     }
 
-    // --- 4. GUARDADO SEGURO (NUEVO) ---
+    // --- 4. GUARDADO RÁPIDO ---
     async agregarFila(nuevaFilaArray) {
         const id = await this.getFileId();
         const token = await this.getToken();
@@ -1399,7 +1436,7 @@ class OneDriveManager {
         });
     }
 
-    // --- 5. BORRADO SEGURO (NUEVO) ---
+    // --- 5. BORRADO ---
     async borrarFilaPorID(idMovimiento) {
         const idFile = await this.getFileId();
         const token = await this.getToken();
@@ -1418,7 +1455,7 @@ class OneDriveManager {
             }
         }
 
-        if (filaEncontrada === -1) throw new Error("Movimiento no encontrado en nube (¿ya borrado?)");
+        if (filaEncontrada === -1) throw new Error("Movimiento no encontrado.");
 
         const urlDelete = `https://graph.microsoft.com/v1.0/me/drive/items/${idFile}/workbook/worksheets/Movimientos/range(address='${filaEncontrada}:${filaEncontrada}')/delete`;
         await fetch(urlDelete, {
@@ -1691,68 +1728,25 @@ function detenerPolling() {
 
 // 1. INICIAR CARGA DESDE LA NUBE (Conectar al botón HTML)
 window.iniciarCargaNube = async function() {
-    const btn = document.getElementById('btn-load-cloud');
-    if(!btn) return;
-    const txtOriginal = btn.innerHTML;
+    const btn = document.getElementById('mode-cloud'); // O el botón que uses
     
     try {
-        btn.innerHTML = '<span class="material-icons spin">sync</span> Conectando...';
+        if(window.mostrarEstado) window.mostrarEstado("Conectando con Microsoft...", "normal");
         
-        // 1. Login (Si ya estamos logueados, esto es rápido)
+        // 1. Login explícito (esto abrirá el popup)
         await oneDrive.login();
         
-        // 2. Intentar cargar
-        // Si el archivo no existe o la búsqueda falla, esto lanzará un error y saltaremos al catch
-        await cargarDesdeNube();
+        // 2. Si el login pasa, cargamos el archivo
+        if(window.mostrarEstado) window.mostrarEstado("Descargando Excel...", "normal");
+        await cargarDesdeNube(); // Esta función ya la tienes definida
         
-        // 3. Si llega aquí, es que todo ha ido bien
+        // 3. Éxito
         cambiarModo('cloud');
-        mostrarEstado('☁️ Sincronizado correctamente', 'ok');
+        if(window.mostrarEstado) window.mostrarEstado("✅ Conectado a la Nube", "ok");
         
     } catch (e) {
-        console.warn("Aviso de conexión:", e.message);
-
-        // --- GESTIÓN DEL ERROR "NO ENCONTRADO" ---
-        // Si OneDrive dice que no encuentra el archivo (o es la primera vez),
-        // activamos el botón GUARDAR para que puedas crearlo tú.
-        const esErrorNoEncontrado = e.message && (
-            e.message.includes("no encontrado") || 
-            e.message.includes("Exportar") ||
-            e.message.includes("itemNotFound")
-        );
-
-        if (esErrorNoEncontrado) {
-            alert("⚠️ AVISO DE SINCRONIZACIÓN\n\nNo se ha podido leer 'aidanai.xlsx' en tu nube (quizás es la primera vez).\n\nSe ha activado el botón GUARDAR (💾). Púlsalo para subir tus datos locales y crear el archivo.");
-            
-            // 1. Forzamos visualmente el modo nube
-            window.modoNube = true; 
-            const btnLocal = document.getElementById('mode-local');
-            const btnCloud = document.getElementById('mode-cloud');
-            if(btnLocal) btnLocal.classList.remove('active');
-            if(btnCloud) btnCloud.classList.add('active');
-            
-            // 2. HACEMOS APARECER EL BOTÓN DE GUARDAR
-            const btnGuardar = document.getElementById('btn-guardar');
-            if(btnGuardar) {
-                btnGuardar.style.display = 'flex'; // ¡Aparece!
-                // Efecto visual para destacar el botón
-                btnGuardar.style.backgroundColor = 'var(--theme-dn)'; 
-                btnGuardar.style.color = '#000';
-                setTimeout(() => {
-                    btnGuardar.style.backgroundColor = ''; 
-                    btnGuardar.style.color = '';
-                }, 2000);
-            }
-            
-            mostrarEstado('⚠️ Pulsa el DISQUETE para crear el archivo', 'normal');
-            
-        } else {
-            // Si es otro error (ej: contraseña mal, bloqueo de popups), avisamos
-            alert("❌ Error de conexión: " + e.message);
-            cambiarModo('local');
-        }
-    } finally {
-        btn.innerHTML = txtOriginal;
+        console.error("Error en carga nube:", e);
+        if(window.mostrarEstado) window.mostrarEstado("❌ Error de conexión", "err");
     }
 };
 
