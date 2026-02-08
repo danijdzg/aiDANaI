@@ -1346,36 +1346,36 @@ class OneDriveManager {
 
     // --- 2. LOCALIZADOR DE ARCHIVO (OPTIMIZADO) ---
     async getFileId() {
-        // A) Si ya tenemos el ID en memoria, lo usamos DIRECTAMENTE (0 segundos)
+        // 1. Si ya lo tenemos en memoria, devolvemos al instante
         if (this.fileId) return this.fileId;
         
+        // 2. Si ya lo buscamos ayer, lo recuperamos del "disco duro" del navegador
+        const cachedId = localStorage.getItem("aidanai_file_id");
+        if (cachedId) {
+            this.fileId = cachedId;
+            return cachedId;
+        }
+
         const token = await this.getToken();
-        console.log("🔍 Buscando archivo en la nube...");
+        console.log("🚀 Accediendo directamente a la Raíz de OneDrive...");
 
-        // B) Intento Rápido: Ruta directa predecible
-        try {
-            const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                this.guardarIdEnCache(data.id);
-                return data.id;
-            }
-        } catch(e) {}
-
-        // C) Intento Lento: Búsqueda (Solo ocurre la primera vez)
-        // Optimizamos pidiendo solo el campo 'id' para que la respuesta sea ligera
-        const resSearch = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')?select=id,name", {
+        // 3. TIRO FIJO: Buscamos directamente en la raíz (root)
+        // Eliminamos la búsqueda lenta (/search)
+        const response = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
             headers: { Authorization: `Bearer ${token}` }
         });
-        const dataSearch = await resSearch.json();
-        
-        if (!dataSearch.value || dataSearch.value.length === 0) throw new Error("No encuentro 'aidanai.xlsx' en tu OneDrive");
-        
-        // Guardamos el ID para el futuro
-        this.guardarIdEnCache(dataSearch.value[0].id);
-        return this.fileId;
+
+        if (response.ok) {
+            const data = await response.json();
+            // ¡ÉXITO! Guardamos el ID para que la próxima vez sea 0 segundos
+            this.fileId = data.id;
+            localStorage.setItem("aidanai_file_id", data.id);
+            return this.fileId;
+        } else {
+            // Si falla aquí, es que NO está en la raíz. No buscamos más.
+            console.error("Error: Archivo no encontrado en raíz.");
+            throw new Error("⚠️ El archivo 'aidanai.xlsx' NO está en la carpeta principal de tu OneDrive. Por favor, muévelo allí.");
+        }
     }
 
     guardarIdEnCache(id) {
