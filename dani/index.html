@@ -1074,9 +1074,9 @@
     <button class="nav-item" id="nav-patri" onclick="irPestana('patri')">
         <span class="material-icons">pie_chart</span> Análisis
     </button>
-    <button class="nav-item" id="nav-ajustes" onclick="irPestana('ajustes')">
-        <span class="material-icons">tune</span> Ajustes
-    </button>
+    <button class="nav-item" id="nav-ajustes" onclick="irPestana('ajustes'); cargarSugerenciasAjustes()">
+    <span class="material-icons">tune</span> Ajustes
+</button>
 </nav>
         </div>
 
@@ -2020,11 +2020,8 @@ function finalizarGuardado(esTraspaso) {
             renderizarSunburstPatrimonio(); 
 			renderizarRadarSalud();
         }, 100); 
-	if (p === 'ajustes') {
-        setTimeout(rellenarAutocompletado, 100); // Pequeña pausa para asegurar carga
-    }
-    }
-}
+	   }
+	}
     
     function toggleCustomDates() {
         const isCustom = document.getElementById('dash-period').value === 'custom';
@@ -4642,49 +4639,65 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==========================================
-// 🧠 AUTOCOMPLETADO INTELIGENTE (Corrección)
+// 🧠 SISTEMA DE SUGERENCIAS (ADAPTADO A TU HTML)
 // ==========================================
-function rellenarAutocompletado() {
-    // 1. Preparamos almacenes vacíos (Sets para evitar repetidos)
-    const cuentas = new Set();
-    const conceptos = new Set();
-    const beneficiarios = new Set();
+function cargarSugerenciasAjustes() {
+    console.log("🔄 Cargando sugerencias...");
 
-    // 2. Leemos de la Configuración (Cuentas que existen pero quizás no tienen movimientos)
-    if (typeof mapaCuentas !== 'undefined') {
-        Object.keys(mapaCuentas).forEach(c => cuentas.add(c));
+    // 1. BUSCAMOS TUS ELEMENTOS HTML EXACTOS
+    const dlCuentas = document.getElementById('lista-cuentas-auto');
+    const dlConceptos = document.getElementById('lista-conceptos-auto');
+    const dlBenef = document.getElementById('lista-benef-auto');
+    
+    // Si no existen, salimos suavemente para no congelar la app
+    if (!dlCuentas || !dlConceptos || !dlBenef) {
+        console.warn("No se encontraron las listas de autocompletado en el HTML.");
+        return;
     }
 
-    // 3. Leemos de los Movimientos (Historial)
-    if (typeof datos !== 'undefined' && datos.length > 0) {
-        datos.forEach(m => {
-            if (m.cuenta) cuentas.add(m.cuenta);
-            if (m.concepto) conceptos.add(m.concepto);
-            if (m.beneficiario) beneficiarios.add(m.beneficiario);
-        });
+    // 2. RECOPILACIÓN DE DATOS (Sets para evitar duplicados)
+    const setCuentas = new Set();
+    const setConceptos = new Set();
+    const setBenef = new Set();
+
+    try {
+        // A) Leer desde la Configuración
+        if (typeof mapaCuentas !== 'undefined') {
+            Object.keys(mapaCuentas).forEach(c => setCuentas.add(c));
+        }
+
+        // B) Leer desde el Historial
+        if (typeof datos !== 'undefined' && Array.isArray(datos)) {
+            datos.forEach(m => {
+                if (m.cuenta) setCuentas.add(m.cuenta);
+                if (m.concepto) setConceptos.add(m.concepto);
+                if (m.beneficiario) setBenef.add(m.beneficiario);
+            });
+        }
+    } catch (e) {
+        console.warn("Error leyendo datos (no crítico):", e);
     }
 
-    // 4. Función auxiliar para pintar las opciones en el HTML
-    const pintar = (idLista, conjunto) => {
-        const lista = document.getElementById(idLista);
-        if (!lista) return; // Si no encuentra el elemento, no hace nada
+    // 3. FUNCIÓN DE PINTADO
+    const llenar = (datalist, setDatos) => {
+        datalist.innerHTML = ''; // Limpiar lista anterior
+        const ordenados = Array.from(setDatos).sort();
         
-        lista.innerHTML = ''; // Limpiamos lo viejo
-        
-        // Convertimos a lista, ordenamos y creamos las opciones
-        Array.from(conjunto).sort().forEach(valor => {
-            const op = document.createElement('option');
-            op.value = valor;
-            lista.appendChild(op);
+        const fragment = document.createDocumentFragment();
+        ordenados.forEach(valor => {
+            if(valor) { 
+                const option = document.createElement('option');
+                option.value = valor;
+                fragment.appendChild(option);
+            }
         });
+        datalist.appendChild(fragment);
     };
 
-    // 5. Pintamos las 3 listas
-    pintar('lista-cuentas-auto', cuentas);
-    pintar('lista-conceptos-auto', conceptos);
-    pintar('lista-benef-auto', beneficiarios);
-
-    console.log("Autocompletado actualizado: " + cuentas.size + " cuentas.");
+    // 4. EJECUTAR EL LLENADO
+    llenar(dlCuentas, setCuentas);
+    llenar(dlConceptos, setConceptos);
+    llenar(dlBenef, setBenef);
 }
 
 </script>
