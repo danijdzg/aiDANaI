@@ -4593,13 +4593,13 @@ window.actualizarDashboard = function() {
 var filtroUsuarioActual = 'todos'; 
 
 // ==========================================
-// 👤 CAMBIO DE USUARIO (CON TODOS LOS GRÁFICOS)
+// 👤 CAMBIO DE USUARIO (Con actualización de Gráficos)
 // ==========================================
 window.toggleUsuario = function() {
     const btnName = document.getElementById('btn-identity-toggle'); 
     const root = document.documentElement;
 
-    // 1. ROTACIÓN DE USUARIO (Lógica de cambio)
+    // 1. ROTACIÓN DE USUARIO
     if (filtroUsuarioActual === 'todos') {
         filtroUsuarioActual = 'Dani';
         if(btnName) btnName.innerText = 'DANI';
@@ -4616,40 +4616,41 @@ window.toggleUsuario = function() {
         root.style.setProperty('--current-theme', 'var(--theme-dn)');
     }
 
-    // 2. ACTUALIZACIÓN DE DATOS FILTRADOS
-    // Recalculamos la variable global de "datos del propietario actual"
+    // 2. ACTUALIZACIÓN DE VARIABLES GLOBALES
+    // Esto es crucial: recalcular los datos filtrados antes de pintar nada
     if (window.datos && window.datos.length > 0) {
         window.datosPropietario = window.datos.filter(m => pasaFiltroPropietario(m));
     }
 
-    // 3. REFRESCO TOTAL DE LA INTERFAZ (Aquí añadimos lo que faltaba)
-    console.log("🔄 Actualizando interfaz para: " + filtroUsuarioActual);
-
-    // Listas y Dashboard principal
-    if(typeof renderizar === 'function') renderizar();                   
-    if(typeof actualizarDashboard === 'function') actualizarDashboard(); 
+    // 3. REFRESCO DE TODA LA INTERFAZ
+    // Llamamos a todas las funciones de renderizado que puedan existir
+    if(typeof renderizar === 'function') renderizar();                   // Lista principal
+    if(typeof actualizarDashboard === 'function') actualizarDashboard(); // KPIs Home
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio(); // Pestaña Patrimonio
     
-    // Pestaña Análisis (Patrimonio)
-    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio(); 
-
-    // GRÁFICOS AVANZADOS (Aseguramos que se repinten TODOS)
-    // A. El gráfico de evolución (Línea)
-    if(typeof renderizarGraficoEvolucion === 'function') {
-        renderizarGraficoEvolucion(window.datosPropietario);
-    }
-    
-    // B. El gráfico de Rayos X (Sunburst/Anillos)
-    if(typeof renderizarSunburstPatrimonio === 'function') {
-        renderizarSunburstPatrimonio();
-    }
-
-    // C. El gráfico de Scoring (Radar) <-- ¡ESTE ES EL QUE FALTABA O FALLABA!
-    if(typeof renderizarRadarSalud === 'function') {
-        renderizarRadarSalud();
-    }
-
-    // Feedback táctil
+    // --- AQUÍ ESTÁ LA SOLUCIÓN PARA ANÁLISIS ---
+    // Forzamos el redibujado de los gráficos de análisis
+    if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion();
+    if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
+    if(typeof renderizarDistribucion === 'function') renderizarDistribucion();
+	if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
     if(typeof vibrar === 'function') vibrar('tecla');
+};
+
+// IMPRESCINDIBLE: El filtro que usa el Dashboard para sumar
+window.pasaFiltroPropietario = function(movimiento) {
+    if (filtroUsuarioActual === 'todos') return true;
+
+    const ben = String(movimiento.beneficiario || '').toUpperCase();
+    const cta = String(movimiento.cuenta || '').toUpperCase();
+    
+    if (filtroUsuarioActual === 'Dani') {
+        return (ben === 'DANI' || cta.startsWith('D-'));
+    }
+    if (filtroUsuarioActual === 'Norma') {
+        return (ben === 'NORMA' || cta.startsWith('N-'));
+    }
+    return true;
 };
 
 // --- AUTO-ARRANQUE VISUAL ---
