@@ -971,9 +971,7 @@
             <div id="score-total" style="font-size: 24px; font-weight: 900; color: #fff; text-shadow: 0 0 15px rgba(57, 255, 20, 0.5);">---</div>
         </div>
     </div>
-    <div style="padding: 10px; text-align: center; border-top: 1px solid #222;">
-        <span style="font-size: 10px; color: #888;">PUNTUACIÓN GLOBAL SOBRE 100</span>
-    </div>
+    
 </div>
                 </div>
                 
@@ -3957,36 +3955,31 @@ function cargarDesdeCache() {
     }
 });
 // ==========================================
-// 🕸️ SCORING LIBERTAD FINANCIERA (4 PILARES)
+// 🕸️ SCORING FINANCIERO (CONECTADO A CONFIGURACIÓN)
 // ==========================================
 function renderizarRadarSalud() {
     const dom = document.getElementById('chartRadar');
     if (!dom) return;
 
-    // 1. OBTENER USUARIO (Para el título)
-    let nombreUsuario = "GLOBAL";
-    if (typeof filtroUsuarioActual !== 'undefined') {
-        nombreUsuario = filtroUsuarioActual.toUpperCase();
-    }
-
-    // 2. OBTENER DATOS
-    let misDatos = window.datos; 
-    if (typeof window.datosPropietario !== 'undefined' && window.datosPropietario.length > 0) {
-        misDatos = window.datosPropietario;
-    }
-
-    // 3. LIMPIEZA NUCLEAR (Para asegurar que se actualiza)
+    // 1. LIMPIEZA NUCLEAR
     const chartExistente = echarts.getInstanceByDom(dom);
     if (chartExistente) chartExistente.dispose();
     dom.removeAttribute('_echarts_instance_');
     dom.innerHTML = ''; 
+
+    // 2. DATOS
+    let nombreUsuario = (typeof filtroUsuarioActual !== 'undefined') ? filtroUsuarioActual.toUpperCase() : "GLOBAL";
+    let misDatos = window.datos; 
+    if (typeof window.datosPropietario !== 'undefined' && window.datosPropietario.length > 0) {
+        misDatos = window.datosPropietario;
+    }
 
     if (!misDatos || misDatos.length === 0) {
         dom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;">SIN DATOS</div>';
         return;
     }
 
-    // 4. CÁLCULOS DE LOS 4 PILARES
+    // 3. CÁLCULOS (Aquí estaba el fallo anterior)
     let flujoIngresos = 0;
     let flujoGastos = 0;
     let patrimonioInversion = 0;
@@ -3995,87 +3988,87 @@ function renderizarRadarSalud() {
     misDatos.forEach(m => {
         const imp = parseFloat(m.importe);
         const concepto = String(m.concepto || '').toLowerCase();
-        const esInv = String(m.esInversion || '').toLowerCase() === 'si';
+        
+        // --- CORRECCIÓN CRÍTICA ---
+        // Buscamos en la configuración si esta cuenta es inversión
+        // Si no existe mapaCuentas, asumimos falso por seguridad
+        let esInv = false;
+        if (typeof mapaCuentas !== 'undefined' && mapaCuentas[m.cuenta]) {
+            esInv = mapaCuentas[m.cuenta].esInversion; // Esto es true/false
+        } else {
+            // Plan B: Si falla la config, miramos si la columna ES_INVERSION vino en el excel (raro pero posible)
+            esInv = String(m.esInversion || '').toLowerCase().trim() === 'si';
+        }
 
-        // A) Flujo de Caja (Sin traspasos ni saldos iniciales)
-        if (!concepto.includes('traspaso') && !concepto.includes('inicial')) {
+        // A) FLUJO (Solo movimientos reales)
+        if (!concepto.includes('inicial') && !concepto.includes('traspaso')) {
             if (imp > 0) flujoIngresos += imp;
             if (imp < 0) flujoGastos += Math.abs(imp);
         }
 
-        // B) Patrimonio Total (Todo suma)
+        // B) PATRIMONIO (Aquí sumamos todo)
         if (esInv) {
             patrimonioInversion += imp;
         } else {
-            // Asumimos que lo NO invertido es Liquidez
             patrimonioLiquidez += imp;
         }
     });
 
-    // --- FÓRMULAS MAESTRAS (0 a 10) ---
+    // --- FÓRMULAS DE PUNTUACIÓN (0 a 10) ---
 
-    // 1. AHORRO: ¿Qué % de tus ingresos retienes? (Meta: 50%)
+    // 1. AHORRO (Meta: 40%)
     const ahorroNeto = flujoIngresos - flujoGastos;
     const tasaAhorro = flujoIngresos > 0 ? (ahorroNeto / flujoIngresos) * 100 : 0;
-    const vAhorro = Math.min(10, Math.max(0, (tasaAhorro / 50) * 10));
+    const vAhorro = Math.min(10, Math.max(0, tasaAhorro / 4));
 
-    // 2. LIQUIDEZ: Meses de gastos cubiertos en cash (Meta: 12 meses para seguridad total)
-    // Calculamos gasto mensual promedio estimado
+    // 2. LIQUIDEZ (Meta: 12 meses gastos)
     const gastoMensual = flujoGastos > 0 ? (flujoGastos / 12) : 1; 
-    const mesesLiquidez = patrimonioLiquidez / gastoMensual;
-    const vLiquidez = Math.min(10, Math.max(0, (mesesLiquidez / 12) * 10));
+    const mesesCubiertos = patrimonioLiquidez / gastoMensual;
+    const vLiquidez = Math.min(10, Math.max(0, (mesesCubiertos / 12) * 10));
 
-    // 3. INVERSIÓN: % del Patrimonio que está trabajando (Meta: 90%)
+    // 3. INVERSIÓN (Meta: 80% del patrimonio invertido)
     const patrimonioTotal = patrimonioInversion + patrimonioLiquidez;
     const ratioInv = patrimonioTotal > 0 ? (patrimonioInversion / patrimonioTotal) * 100 : 0;
-    const vInversion = Math.min(10, Math.max(0, (ratioInv / 90) * 10));
+    const vInversion = Math.min(10, Math.max(0, (ratioInv / 80) * 10));
 
-    // 4. LIBERTAD: Años de gastos cubiertos por inversiones (Meta: 25 años / Regla 4%)
-    // Usamos el gasto anual proyectado (flujoGastos)
+    // 4. LIBERTAD (Meta: 25 años gastos)
     const gastoAnual = flujoGastos > 0 ? flujoGastos : 1;
-    const aniosLibertad = patrimonioInversion / gastoAnual;
-    const vLibertad = Math.min(10, Math.max(0, (aniosLibertad / 25) * 10));
+    const aniosLibertad = patrimonioTotal / gastoAnual;
+    const vLibertad = Math.min(10, Math.max(0, aniosLibertad / 2.5));
 
+    // Valores para gráfico
     const valores = [vAhorro, vLiquidez, vInversion, vLibertad].map(n => Number(n.toFixed(1)));
 
-    // 5. MARCADOR CENTRAL
+    // 5. MARCADOR
     const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
     const notaGlobal = Math.round(promedio * 10);
     
     const divScore = document.getElementById('score-total');
     if (divScore) {
+        const colorScore = notaGlobal >= 70 ? '#39ff14' : (notaGlobal >= 50 ? '#ffeb3b' : '#ff4444');
         divScore.innerHTML = `
-            <div style="font-size:9px; letter-spacing:1px; color:#888; text-transform:uppercase; margin-bottom:-5px;">${nombreUsuario}</div>
-            <div style="font-size:26px; font-weight:900;">${notaGlobal}</div>
+            <div style="font-size:10px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:-5px;">${nombreUsuario}</div>
+            <div style="font-size:28px; font-weight:900; color:${colorScore}; text-shadow: 0 0 20px ${colorScore}60;">${notaGlobal}</div>
         `;
-        const color = notaGlobal >= 50 ? '#39ff14' : '#ff4444';
-        divScore.style.color = color;
-        divScore.style.textShadow = `0 0 20px ${color}60`;
     }
 
-    // 6. PINTAR GRÁFICO (4 EJES)
+    // 6. PINTAR
     const myChart = echarts.init(dom);
     const option = {
         color: ['#39ff14'],
+        tooltip: { trigger: 'item' },
         radar: {
             indicator: [
-                { name: 'AHORRO', max: 10 },
-                { name: 'LIQUIDEZ', max: 10 },
-                { name: 'INVERSIÓN', max: 10 },
-                { name: 'LIBERTAD', max: 10 }
+                { name: 'AHORRO\n(' + Math.round(tasaAhorro) + '%)', max: 10 },
+                { name: 'LIQUIDEZ\n(' + mesesCubiertos.toFixed(1) + ' m)', max: 10 },
+                { name: 'INVERSIÓN\n(' + Math.round(ratioInv) + '%)', max: 10 },
+                { name: 'LIBERTAD\n(' + aniosLibertad.toFixed(1) + ' a)', max: 10 }
             ],
             center: ['50%', '55%'],
-            radius: '65%',
+            radius: '60%',
             splitNumber: 4,
-            axisName: { 
-                color: '#fff', 
-                fontSize: 10,
-                fontWeight: 'bold',
-                backgroundColor: '#111',
-                borderRadius: 4,
-                padding: [4, 6]
-            },
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+            axisName: { color: '#fff', fontSize: 9, fontWeight: 'bold', backgroundColor: '#111', borderRadius: 4, padding: [3, 4] },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
             splitArea: { show: false },
             axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
         },
@@ -4083,16 +4076,11 @@ function renderizarRadarSalud() {
             type: 'radar',
             data: [{
                 value: valores,
-                name: 'Financial Freedom Score',
+                name: 'Scoring',
                 symbol: 'circle',
                 symbolSize: 6,
                 lineStyle: { width: 3, color: '#39ff14', shadowBlur: 10, shadowColor: '#39ff14' },
-                areaStyle: { 
-                    color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
-                        { color: 'rgba(57, 255, 20, 0.1)', offset: 0 },
-                        { color: 'rgba(57, 255, 20, 0.5)', offset: 1 }
-                    ])
-                },
+                areaStyle: { color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [{ color: 'rgba(57, 255, 20, 0.1)', offset: 0 }, { color: 'rgba(57, 255, 20, 0.5)', offset: 1 }]) },
                 itemStyle: { color: '#000', borderColor: '#39ff14', borderWidth: 2 }
             }]
         }]
