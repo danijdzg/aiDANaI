@@ -2319,7 +2319,11 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 async function guardarManual() {
-    // 1. RECOGIDA DE DATOS
+    // --- 1. REFERENCIAS A LA PANTALLA ---
+    const btnGuardar = document.getElementById('btn-modal-action');
+    const textoOriginal = btnGuardar.innerText;
+    
+    // --- 2. RECOGIDA DE DATOS ---
     const fecha = document.getElementById('m-fecha').value;
     const cantidadStr = document.getElementById('m-cantidad').value; 
     const cuenta = document.getElementById('m-cuenta').value;
@@ -2327,80 +2331,117 @@ async function guardarManual() {
     // Aseguramos que desc y ben sean cadenas vacías si no hay nada, nunca null
     const desc = (document.getElementById('m-desc').value || "").trim(); 
     const ben = (document.getElementById('m-beneficiario').value || "").trim(); 
+    const ctaDestino = document.getElementById('m-cuenta-destino').value; // Para traspasos
 
-    if (!fecha || !cantidadStr || !cuenta || !concepto) {
-        alert("⚠️ Faltan datos: Fecha, Cantidad, Cuenta o Concepto.");
+    // VALIDACIÓN BÁSICA
+    if (!fecha || !cantidadStr || !cuenta || (window.modoTransaccionActual !== 'traspaso' && !concepto)) {
+        alert("⚠️ Faltan datos obligatorios (Fecha, Importe, Cuenta o Concepto).");
         return;
     }
 
-    // 2. PREPARAR DATOS
-    const idFinal = idEnEdicion ? idEnEdicion : (Date.now() + Math.floor(Math.random() * 1000));
-    const importe = parseFloat(cantidadStr.replace(',', '.'));
-
-    // --- PARA LA NUBE (Array ordenado estricto) ---
-    // Orden: ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO
-    const filaExcel = [idFinal, fecha, cuenta, concepto, importe, desc, ben];
-
-    // --- PARA LOCAL (Objeto con alias defensivos) ---
-    // Añadimos variantes por si tu dashboard usa nombres distintos
-    const objetoLocal = {
-        ID: idFinal,
-        FECHA: fecha,
-        CUENTA: cuenta,
-        CONCEPTO: concepto,
-        IMPORTE: importe,
-        "DESCRIPCIÓN": desc,   // Nombre oficial Excel
-        "BENEFICIARIO": ben,   // Nombre oficial Excel
-        // ALIAS DE SEGURIDAD (Por si el dashboard busca sin tildes o en minúsculas)
-        "DESCRIPCION": desc,
-        "Descripción": desc,
-        "Beneficiario": ben,
-        "Concepto": concepto,
-        "Cuenta": cuenta
-    };
+    // --- 3. ACTIVAR MODO SEGURO (BLOQUEO DE BOTÓN) ---
+    if (isSaving) return; // Si ya está guardando, ignorar clics extra
+    isSaving = true;
+    btnGuardar.disabled = true;
+    btnGuardar.innerText = "⏳ GUARDANDO...";
+    btnGuardar.style.opacity = "0.7";
 
     try {
+        // PREPARAR DATOS
+        // Si estamos editando, mantenemos el ID. Si es nuevo, creamos uno.
+        const idFinal = idEnEdicion ? idEnEdicion : generateUUID();
+        const importe = parseFloat(cantidadStr.replace(',', '.'));
+        
+        // LÓGICA DE SIGNOS SEGÚN EL MODO (IMPIDE ERRORES HUMANOS)
+        let importeFinal = Math.abs(importe);
+        if (window.modoTransaccionActual === 'pago') importeFinal = -importeFinal;
+        if (window.modoTransaccionActual === 'ingreso') importeFinal = importeFinal;
+        if (window.modoTransaccionActual === 'traspaso') importeFinal = -importeFinal; // Salida de dinero
+
+        // DETECCIÓN DE TRASPASO AUTOMÁTICO
+        let conceptoFinal = concepto;
+        let descFinal = desc;
+        
+        if (window.modoTransaccionActual === 'traspaso') {
+            if (!ctaDestino) throw new Error("Debes elegir una Cuenta Destino para el traspaso.");
+            conceptoFinal = "TRASPASO";
+            // Formato especial para que el sistema reconozca el destino: ">> A: CuentaDestino | Nota"
+            descFinal = `>> A: ${ctaDestino} | ${desc}`;
+        }
+
+        // --- PARA LA NUBE (Array ordenado estricto) ---
+        // Orden: ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO
+        const filaExcel = [idFinal, fecha, cuenta, conceptoFinal, importeFinal, descFinal, ben];
+
+        // --- PARA LOCAL (Objeto con alias defensivos) ---
+        const objetoLocal = {
+            ID: idFinal, FECHA: fecha, CUENTA: cuenta, CONCEPTO: conceptoFinal,
+            IMPORTE: importeFinal, DESCRIPCION: descFinal, BENEFICIARIO: ben,
+            // Alias para compatibilidad
+            "DESCRIPCIÓN": descFinal, "BENEFICIARIO": ben, "Concepto": conceptoFinal, "Cuenta": cuenta
+        };
+
         if (modoNube) {
-            if(window.mostrarEstado) window.mostrarEstado("⏳ Guardando en la nube...", "normal");
+            if(window.mostrarEstado) window.mostrarEstado("☁️ Conectando con OneDrive...", "normal");
             
-            if (idEnEdicion) await oneDrive.borrarFilaPorID(idEnEdicion);
+            // OPERACIÓN CRÍTICA EN NUBE
+            if (idEnEdicion) {
+                // Si editamos, primero borramos la fila antigua con seguridad
+                await oneDrive.borrarFilaPorID(idEnEdicion);
+            }
+            // Insertamos la nueva (siempre al final, es más seguro en Excel)
+            await oneDrive.agregarFila(filaExcel);
             
-            await oneDrive.agregarFila(filaExcel); // Guardado seguro
+            // Si es TRASPASO, creamos automáticamente la entrada en la otra cuenta
+            if (window.modoTransaccionActual === 'traspaso') {
+                const idDestino = generateUUID();
+                const descEntrada = `<< DE: ${cuenta} | ${desc}`;
+                const filaDestino = [idDestino, fecha, ctaDestino, "TRASPASO", Math.abs(importeFinal), descEntrada, ben];
+                await oneDrive.agregarFila(filaDestino);
+            }
+
+            if(window.mostrarEstado) window.mostrarEstado("✅ Guardado seguro en Nube", "ok");
             
-            if(window.mostrarEstado) window.mostrarEstado("✅ Guardado", "ok");
-            
-            // Recargar datos de la nube
-            if(window.iniciarCargaNube) await window.iniciarCargaNube();
+            // Recargar datos para ver los cambios reflejados
+            await window.iniciarCargaNube();
             
         } else {
-            // MODO LOCAL
+            // MODO LOCAL (Memoria del navegador)
             if (idEnEdicion) {
-                // Si editamos, buscamos y reemplazamos
-                const idx = datos.findIndex(d => d.ID == idEnEdicion);
-                if (idx !== -1) {
-                    // Mantenemos propiedades extra que pudiera tener el original
-                    datos[idx] = { ...datos[idx], ...objetoLocal };
-                }
+                const idx = datos.findIndex(d => d.ID == idEnEdicion || d.id == idEnEdicion);
+                if (idx !== -1) datos[idx] = { ...datos[idx], ...objetoLocal };
             } else {
-                // Si es nuevo, añadimos
                 datos.push(objetoLocal);
             }
+
+            // Lógica Local de Traspaso
+            if (window.modoTransaccionActual === 'traspaso') {
+                const idDestino = generateUUID();
+                const descEntrada = `<< DE: ${cuenta} | ${desc}`;
+                const objDestino = { ...objetoLocal, ID: idDestino, CUENTA: ctaDestino, IMPORTE: Math.abs(importeFinal), DESCRIPCION: descEntrada };
+                datos.push(objDestino);
+            }
             
-            // Actualizamos pantallas
-            if(window.renderizar) window.renderizar();
-            if(window.actualizarDashboard) window.actualizarDashboard();
-            
+            // Actualizar pantallas
+            recalcularSaldosGlobal();
             if(window.mostrarEstado) window.mostrarEstado("💾 Guardado en memoria local", "ok");
         }
 
-        // 4. LIMPIEZA
-        if(window.cerrarModal) window.cerrarModal();
+        // 4. LIMPIEZA Y CIERRE (SOLO SI TODO FUE BIEN)
+        cerrarModal();
         idEnEdicion = null;
         if(window.vibrar) window.vibrar('ingreso');
 
     } catch (e) {
         console.error(e);
-        alert("Error al guardar: " + e.message);
+        alert("❌ ERROR AL GUARDAR:\n" + e.message + "\n\nNo se han guardado los cambios. Inténtalo de nuevo.");
+        if(window.mostrarEstado) window.mostrarEstado("Error al guardar", "err");
+    } finally {
+        // 5. RESTAURAR BOTÓN (SIEMPRE)
+        isSaving = false;
+        btnGuardar.disabled = false;
+        btnGuardar.innerText = textoOriginal;
+        btnGuardar.style.opacity = "1";
     }
 }
 // ==========================================
@@ -3531,54 +3572,55 @@ function leerExcelDesdeBuffer(wb) {
 // ==========================================
 // 💾 GUARDADO MAESTRO (Versión "Creación Forzada")
 // ==========================================
-window.guardarUniversal = async function() {
+async function guardarUniversal() {
     const btn = document.getElementById('btn-guardar');
     if(btn) btn.disabled = true;
     const txtOriginal = btn ? btn.innerHTML : '';
 
     try {
-        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Creando...';
+        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> ...';
 
-        // 1. Empaquetamos los datos de la pantalla
+        // Generamos el libro de Excel con los datos actuales
         const wb = generarLibroExcel(); 
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 
         if (modoNube) {
-            // --- MODO NUBE ---
-            mostrarEstado('☁️ Creando archivo en OneDrive...', 'normal');
+            // MODO NUBE: PRECAUCIÓN
+            // En lugar de sobrescribir a lo loco, avisamos al usuario.
+            const confirmar = confirm("⚠️ ATENCIÓN ⚠️\n\nEstás en MODO NUBE. \n\nLos datos se guardan automáticamente al añadir/editar movimientos.\n\n¿Quieres forzar una sobrescritura completa del archivo 'aidanai.xlsx'? Esto podría borrar cambios hechos por otro usuario en este momento.");
             
-            // IMPORTANTE: Guardamos DIRECTAMENTE sin leer antes.
-            await oneDrive.saveFile(blob);
-            
-            mostrarEstado('✅ Archivo creado con éxito', 'ok');
-            alert("¡ÉXITO TOTAL!\n\nSe ha creado 'aidanai.xlsx' en tu OneDrive.\n\nEl error de 'no encontrado' desaparecerá para siempre.");
-            
-            // Ocultamos el botón manual
-            if(btn) btn.style.display = 'none';
+            if (confirmar) {
+                mostrarEstado('☁️ Sobrescribiendo archivo en OneDrive...', 'normal');
+                await oneDrive.saveFile(blob);
+                mostrarEstado('✅ Archivo actualizado completamente', 'ok');
+            } else {
+                mostrarEstado('Operación cancelada', 'normal');
+            }
 
         } else {
-            // --- MODO LOCAL ---
+            // MODO LOCAL: Descarga normal
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "aidanai.xlsx";
+            a.download = "aidanai_copia_seguridad.xlsx"; // Nombre más claro
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            mostrarEstado('⬇️ Copia descargada', 'ok');
         }
 
     } catch (e) {
         console.error(e);
-        alert("Error al guardar: " + e.message);
+        alert("Error: " + e.message);
     } finally {
         if(btn) {
             btn.disabled = false;
             btn.innerHTML = txtOriginal;
         }
     }
-};
+}
 // ==========================================
 // 🚀 SISTEMA DE EXPORTACIÓN BLINDADO (Anti-Crashes)
 // ==========================================
