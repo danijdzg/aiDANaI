@@ -1339,19 +1339,42 @@ class OneDriveManager {
 
     async getFileId() {
         if (this.fileId) return this.fileId;
-        const token = await this.ensureSession(); // Usa ensureSession internamente
+        const token = await this.ensureSession();
         
-        // Búsqueda del archivo
-        const url = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')`;
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
+        // INTENTO 1: ACCESO DIRECTO (Rápido y sin esperas)
+        // Busca el archivo directamente en la carpeta Raíz (Inicio)
+        try {
+            console.log("📂 Intentando acceso directo a aidanai.xlsx...");
+            const urlDirect = `https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx`;
+            const resDirect = await fetch(urlDirect, { headers: { Authorization: `Bearer ${token}` } });
+            
+            if (resDirect.ok) {
+                const dataDirect = await resDirect.json();
+                this.fileId = dataDirect.id;
+                console.log("✅ Archivo encontrado directamente.");
+                await this.ensureTableExists(token);
+                return this.fileId;
+            }
+        } catch (e) {
+            console.warn("Acceso directo falló, pasando a búsqueda...", e);
+        }
 
-        if (data.value && data.value.length > 0) {
-            this.fileId = data.value[0].id;
+        // INTENTO 2: BÚSQUEDA (Plan B)
+        // Por si lo has metido dentro de alguna carpeta
+        console.log("🔍 Buscando en todo el OneDrive...");
+        const urlSearch = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')`;
+        const resSearch = await fetch(urlSearch, { headers: { Authorization: `Bearer ${token}` } });
+        const dataSearch = await resSearch.json();
+
+        if (dataSearch.value && dataSearch.value.length > 0) {
+            // Buscamos coincidencia exacta por si acaso
+            const exacto = dataSearch.value.find(f => f.name.toLowerCase() === 'aidanai.xlsx');
+            this.fileId = exacto ? exacto.id : dataSearch.value[0].id;
+            
             await this.ensureTableExists(token);
             return this.fileId;
         } else {
-            throw new Error("❌ Archivo aidanai.xlsx no encontrado en OneDrive.");
+            throw new Error("❌ NO SE ENCUENTRA 'aidanai.xlsx'.\n\nPor favor, asegúrate de que el archivo está en tu OneDrive (preferiblemente en la carpeta principal) y que el nombre es exacto.");
         }
     }
 
