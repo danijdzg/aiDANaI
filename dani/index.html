@@ -3875,73 +3875,67 @@ window.renderizarSunburstPatrimonio = function() {
     window.addEventListener('resize', () => chart.resize());
 };
 
-	// ==========================================
-    // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
-    // ==========================================
+// ==========================================
+   // 🚀 ARRANQUE DE LA APLICACIÓN (MODIFICADO PARA LOGIN FORZOSO)
+   // ==========================================
    document.addEventListener('DOMContentLoaded', async () => {
-    // ----------------------------------------------------
-    // 1. CONFIGURACIÓN DEL INPUT LOCAL (ESTO ES LO QUE FALTABA)
-    // ----------------------------------------------------
+    // 1. CONFIGURACIÓN DEL INPUT LOCAL
     const fileInput = document.getElementById('file-input');
     if (fileInput) {
-        // Eliminamos listeners anteriores para evitar duplicados (buena práctica)
         const newFileInput = fileInput.cloneNode(true);
         fileInput.parentNode.replaceChild(newFileInput, fileInput);
-        
         newFileInput.addEventListener('change', (e) => {
-            console.log("📂 Evento de archivo local detectado");
             if (e.target.files && e.target.files[0]) {
-                // Forzamos modo local visualmente
                 cambiarModo('local'); 
-                // Leemos el archivo
                 leerExcel(e.target.files[0]);
-                // Limpiamos el input para permitir cargar el mismo archivo dos veces si se necesita
                 e.target.value = ''; 
             }
         });
     }
 
-    // ----------------------------------------------------
-    // 2. INICIALIZAR COMPONENTES (Calculadora, Audio, etc.)
-    // ----------------------------------------------------
+    // 2. INICIALIZAR COMPONENTES
     if(typeof App !== 'undefined') App.init();
 
-    // ----------------------------------------------------
-    // 3. LÓGICA DE AUTO-LOGIN (NUBE)
-    // ----------------------------------------------------
-    // Solo intentamos conectar si NO estamos cargando un archivo local explícitamente
-    // (Aunque al inicio siempre está vacío)
-    
+    // 3. AUTO-ARRANQUE CON LOGIN FORZADO
     mostrarEstado('🔒 INICIANDO SISTEMA...', 'normal');
 
     try {
-        // Intentamos conexión silenciosa primero
+        // A. Comprobamos si ya hay una sesión activa en caché
         const accounts = oneDrive.msalInstance.getAllAccounts();
+        
         if (accounts.length > 0) {
-            mostrarEstado('☁️ Conectando a la nube...', 'normal');
-            await oneDrive.login(); // Refresca token si es necesario
+            // CASO 1: YA ESTABAS LOGUEADO (Refresco silencioso)
+            mostrarEstado('☁️ Sesión detectada. Sincronizando...', 'normal');
+            await oneDrive.login(); // Refresca el token sin pedir clave
             
-            // UI: Activar modo nube
+            // Activar UI modo nube
             document.getElementById('mode-local').className = 'source-option';
             document.getElementById('mode-cloud').className = 'source-option active cloud';
             document.getElementById('btn-load-local').style.display = 'none';
             document.getElementById('btn-load-cloud').style.display = 'flex';
             
             await cargarDesdeNube();
-			iniciarPolling(); // <--- ASEGURAR ARRANQUE AQUÍ
-            mostrarEstado('✅ CONECTADO A ONEDRIVE', 'ok');
+            iniciarPolling();
+            mostrarEstado('✅ DATOS CARGADOS', 'ok');
+            
         } else {
-            // Si no hay cuentas previas, nos quedamos en local esperando acción
-            cambiarModo('local'); 
-            mostrarEstado('Modo Local: Carga un archivo o Conecta', 'normal');
+            // CASO 2: NO HAY SESIÓN -> FORZAMOS EL LOGIN INMEDIATAMENTE
+            console.log("⚠️ Sin sesión previa. Iniciando login forzoso...");
+            mostrarEstado('🔑 Solicitando identificación...', 'warn');
+            
+            // Simplemente llamamos a la función que ya hace todo el trabajo:
+            // 1. Pide usuario/clave
+            // 2. Busca aidanai.xlsx
+            // 3. Carga los datos
+            await iniciarCargaNube();
         }
     } catch (error) {
-        console.warn("Auto-login no posible:", error);
+        console.error("Error en arranque:", error);
+        // Si el usuario cierra la ventana de login o hay error, volvemos a local
         cambiarModo('local');
-        mostrarEstado('Modo Local Listo', 'normal');
+        mostrarEstado('❌ Inicio cancelado. Modo Local.', 'err');
     }
 });
-
 /* =========================================
    GRAFICO RADAR DE SALUD (CORREGIDO)
    ========================================= */
