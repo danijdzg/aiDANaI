@@ -986,7 +986,8 @@
             <div class="card-header"><span class="card-title">NUEVA CUENTA</span></div>
             <div style="padding: 15px;">
                 <label class="input-label">NOMBRE DE LA CUENTA</label>
-                <input type="text" id="new-cta-nombre" class="filter-input form-field" placeholder="Ej: Revolut Metal">
+                <input type="text" id="new-cta-nombre" class="filter-input form-field" placeholder="Ej: Revolut Metal" list="dl-cuentas-maestras" autocomplete="off">
+<datalist id="dl-cuentas-maestras"></datalist>
                 
                 <div style="display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:end;">
                     <div>
@@ -1016,7 +1017,8 @@
             <div class="master-card" style="margin:0; border-color: #333;">
                 <div class="card-header"><span class="card-title" style="font-size:11px">NUEVO CONCEPTO</span></div>
                 <div style="padding: 10px;">
-                    <input type="text" id="new-concepto" class="filter-input form-field" placeholder="Ej: Gimnasio">
+                    <input type="text" id="new-concepto" class="filter-input form-field" placeholder="Ej: Gimnasio" list="dl-conceptos-maestros" autocomplete="off">
+<datalist id="dl-conceptos-maestros"></datalist>
                     <button class="full-btn btn-gray" onclick="guardarAjuste('concepto')" style="margin-top:10px; font-size:10px;">GUARDAR</button>
                 </div>
             </div>
@@ -1024,7 +1026,8 @@
             <div class="master-card" style="margin:0; border-color: #333;">
                 <div class="card-header"><span class="card-title" style="font-size:11px">NUEVO BENEFICIARIO</span></div>
                 <div style="padding: 10px;">
-                    <input type="text" id="new-benef" class="filter-input form-field" placeholder="Ej: Amazon">
+                    <input type="text" id="new-benef" class="filter-input form-field" placeholder="Ej: Amazon" list="dl-beneficiarios-maestros" autocomplete="off">
+<datalist id="dl-beneficiarios-maestros"></datalist>
                     <button class="full-btn btn-gray" onclick="guardarAjuste('beneficiario')" style="margin-top:10px; font-size:10px;">GUARDAR</button>
                 </div>
             </div>
@@ -1890,6 +1893,7 @@ function procesarDatos(filas) {
     datos = temp;
     
     actualizarFiltrosUI(cuentas, conceptos, benefs);
+	actualizarListasMaestras();
     renderizar();
     actualizarDashboard();
     actualizarPatrimonio();
@@ -3848,6 +3852,48 @@ window.renderizarSunburstPatrimonio = function() {
     setTimeout(() => chart.resize(), 100);
     window.addEventListener('resize', () => chart.resize());
 };
+
+// --- FUNCIÓN PARA RELLENAR AUTOCOMPLETADO EN AJUSTES ---
+function actualizarListasMaestras() {
+    // 1. Recopilar datos únicos (Usamos Sets para evitar duplicados)
+    const setCuentas = new Set();
+    const setConceptos = new Set();
+    const setBeneficiarios = new Set();
+
+    // A. Añadimos las cuentas configuradas (importante para las nuevas que aun no tienen movs)
+    if (typeof mapaCuentas !== 'undefined') {
+        Object.keys(mapaCuentas).forEach(k => setCuentas.add(k));
+    }
+
+    // B. Añadimos todo lo que haya en el historial de movimientos
+    if (typeof datos !== 'undefined') {
+        datos.forEach(d => {
+            if (d.cuenta) setCuentas.add(d.cuenta);
+            if (d.concepto) setConceptos.add(d.concepto);
+            if (d.beneficiario) setBeneficiarios.add(d.beneficiario);
+        });
+    }
+
+    // 2. Función auxiliar para llenar el HTML
+    const llenarDatalist = (idLista, setDatos) => {
+        const datalist = document.getElementById(idLista);
+        if (!datalist) return;
+        
+        datalist.innerHTML = ''; // Limpiar anterior
+        // Ordenamos alfabéticamente y creamos las opciones
+        Array.from(setDatos).sort().forEach(valor => {
+            const option = document.createElement('option');
+            option.value = valor; // El valor real
+            datalist.appendChild(option);
+        });
+    };
+
+    // 3. Ejecutar llenado
+    llenarDatalist('dl-cuentas-maestras', setCuentas);
+    llenarDatalist('dl-conceptos-maestros', setConceptos);
+    llenarDatalist('dl-beneficiarios-maestros', setBeneficiarios);
+}
+
 	// ==========================================
     // 🚀 ARRANQUE DE LA APLICACIÓN (AL FINAL)
     // ==========================================
