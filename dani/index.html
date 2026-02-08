@@ -1501,7 +1501,15 @@ const Security = {
     
     const fmt = (v) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
-    
+    // --- NUEVA FUNCIÓN: Normalizar texto a formato "D-Myinvestor" ---
+	function normalizarTexto(texto) {
+    if (!texto) return '';
+    // 1. Pasa todo a minúsculas
+    // 2. Busca la primera letra del texto O la letra después de un guión/espacio y la pone mayúscula
+    return texto.toLowerCase().replace(/(?:^|\s|-)\S/g, function(a) { 
+        return a.toUpperCase(); 
+    });
+	}
 
     function cambiarModo(modo) {
     modoNube = (modo === 'cloud');
@@ -1778,7 +1786,7 @@ function procesarLibroLeido(wb) {
                 const row = matConfig[i];
                 if (!row || !row[colCuenta]) continue;
                 
-                const cuentaKey = String(row[colCuenta]).trim().toUpperCase();
+                const cuentaKey = normalizarTexto(String(row[colCuenta]).trim());
                 const tipoVal = (colTipo !== -1 && row[colTipo]) ? String(row[colTipo]).trim() : 'OTROS';
                 
                 // Lectura robusta del valor SI/NO
@@ -1831,7 +1839,7 @@ function procesarDatos(filas) {
             imp = parseFloat(s) || 0;
         }
 
-        const cta = String(row[1] || '').trim();
+        const cta = normalizarTexto(String(row[1] || '').trim());
         const con = String(row[2] || '').trim();
         const desc = String(row[4] || '').trim(); 
         const ben = String(row[5] || '').trim(); 
@@ -2824,7 +2832,7 @@ function animarCifra(id, valorFinal) {
         Object.keys(saldos).forEach(cta => {
             const saldo = saldos[cta];
             if (Math.abs(saldo) < 0.01) return;
-            const ctaKey = cta.trim().toUpperCase();
+            const ctaKey = normalizarTexto(cta.trim());
             const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[ctaKey]) ? mapaCuentas[ctaKey] : { tipo: 'OTROS', esInversion: false };
             const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
             if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
@@ -3642,7 +3650,7 @@ window.renderizarSunburstPatrimonio = function() {
 
     datosFiltrados.forEach(m => {
         if (!m.cuenta) return;
-        const cta = m.cuenta.trim().toUpperCase();
+        const cta = normalizarTexto(m.cuenta.trim());
         saldos[cta] = (saldos[cta] || 0) + m.importe;
     });
 
@@ -4066,7 +4074,7 @@ async function guardarAjuste(tipo) {
 
     try {
         if (tipo === 'cuenta') {
-            const nombre = document.getElementById('new-cta-nombre').value.trim().toUpperCase();
+            const nombre = normalizarTexto(document.getElementById('new-cta-nombre').value.trim());
             const categoria = document.getElementById('new-cta-tipo').value;
             const esInv = document.getElementById('new-cta-inv').checked ? "SI" : "NO";
             
