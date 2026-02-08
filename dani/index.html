@@ -1292,6 +1292,13 @@ function generateUUID() {
         cache: {
             cacheLocation: "localStorage",
             storeAuthStateInCookie: false
+        },
+        system: {
+            // Configuración para evitar errores de popup bloqueados/time-out
+            windowHashTimeout: 60000,
+            iframeHashTimeout: 6000,
+            loadFrameTimeout: 0,
+            asyncPopups: false
         }
     };
 	
@@ -4446,16 +4453,38 @@ function formatearAnimacion(val, tipo) {
 }
 
 // ==========================================
-// 📊 DASHBOARD ANIMADO (PROFESIONAL)
+// 📊 DASHBOARD ANIMADO (PROFESIONAL & BLINDADO)
 // ==========================================
 window.actualizarDashboard = function() {
+    // 1. Validación inicial: Si no hay datos, no hacemos nada
     if (!datos || datos.length === 0) return;
 
-    // --- A. PREPARACIÓN DE DATOS ---
+    // --- A. PREPARACIÓN Y SANITIZACIÓN DE DATOS ---
+    // Esto arregla el problema de fechas y nombres vacíos
+    const datosProcesados = datos.map(m => {
+        // Aseguramos que tenga timestamp (ts) para los filtros de fecha
+        let timestamp = m.ts;
+        if (!timestamp && m.FECHA) {
+            timestamp = new Date(m.FECHA).getTime();
+        }
+        
+        return {
+            ...m,
+            ts: timestamp || 0,
+            cuenta: String(m.CUENTA || m.cuenta || '').trim(), // Evita el error .trim()
+            concepto: String(m.CONCEPTO || m.concepto || 'Varios'),
+            importe: parseFloat(m.IMPORTE || m.importe || 0),
+            tipo: (parseFloat(m.IMPORTE || 0) >= 0) ? 'ingreso' : 'gasto'
+        };
+    });
+
+    // Filtro de Propietario (Si existe la función)
     const movsUsuario = (typeof pasaFiltroPropietario === 'function') 
-        ? datos.filter(m => pasaFiltroPropietario(m)) 
-        : datos;
-	window.datosPropietario = movsUsuario;
+        ? datosProcesados.filter(m => pasaFiltroPropietario(m)) 
+        : datosProcesados;
+
+    window.datosPropietario = movsUsuario;
+
     // =========================================================
     // PARTE 1: TARJETAS DE FLUJO (Ingresos / Gastos / Ahorro)
     // =========================================================
@@ -4464,6 +4493,7 @@ window.actualizarDashboard = function() {
     const now = new Date();
     let tStart = 0, tEnd = 9999999999999;
 
+    // Configuración de fechas
     if (periodo === 'month') {
         tStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
         tEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
@@ -4482,27 +4512,29 @@ window.actualizarDashboard = function() {
     }
 
     let ingresos = 0, gastos = 0;
+    
     movsUsuario.filter(m => m.ts >= tStart && m.ts <= tEnd).forEach(m => {
-        const esInicial = String(m.concepto||'').toUpperCase().includes('INICIAL');
-        if (m.tipo === 'ingreso' && !esInicial) ingresos += m.importe;
-        if (m.tipo === 'gasto') gastos += Math.abs(m.importe);
+        const esInicial = String(m.concepto).toUpperCase().includes('INICIAL');
+        // Sumamos según el signo real del importe
+        if (m.importe >= 0 && !esInicial) ingresos += m.importe;
+        if (m.importe < 0) gastos += Math.abs(m.importe);
     });
 
     const neto = ingresos - gastos;
     const tasaAhorro = ingresos > 0 ? ((neto / ingresos) * 100) : 0;
 
-    // --- AQUÍ APLICAMOS LA MAGIA DE LA ANIMACIÓN ---
-    animarCifra('d-ing', ingresos, 'moneda');
-    animarCifra('d-gas', gastos, 'moneda');
-    animarCifra('d-net', neto, 'moneda');
-    
-    // Gestión de color del Neto (esto sí es instantáneo)
+    // --- ANIMACIONES KPI ---
+    if(window.animarCifra) {
+        animarCifra('d-ing', ingresos, 'moneda');
+        animarCifra('d-gas', gastos, 'moneda');
+        animarCifra('d-net', neto, 'moneda');
+        animarCifra('d-aho', tasaAhorro, 'porcentaje');
+    }
+
+    // Colores dinámicos
     const elNeto = document.getElementById('d-net');
     if(elNeto) elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
 
-    animarCifra('d-aho', tasaAhorro, 'porcentaje');
-
-    // Gestión de color Ahorro
     const elAho = document.getElementById('d-aho');
     if(elAho) {
         if (tasaAhorro > 20) elAho.className = 'kpi-value val-std-pos';
@@ -4511,18 +4543,18 @@ window.actualizarDashboard = function() {
     }
 
     // =========================================================
-    // PARTE 2: PATRIMONIO (Siempre Total)
+    // PARTE 2: PATRIMONIO (Siempre Total Histórico)
     // =========================================================
     let totalLiquidez = 0, totalInversion = 0, totalPatrimonio = 0;
     let gastoTotalHist = 0, fechaPrimerGasto = now.getTime(), fechaUltimoGasto = 0, hayGastos = false;
 
-    // Cálculo de saldos
+    // Cálculo de saldos acumulados por cuenta
     const saldos = {};
     movsUsuario.forEach(m => {
-        const cta = m.cuenta.trim();
+        const cta = m.cuenta; // Ya viene con trim() gracias al paso A
         saldos[cta] = (saldos[cta] || 0) + m.importe;
 
-        if (m.tipo === 'gasto') {
+        if (m.importe < 0) { // Es gasto
             gastoTotalHist += Math.abs(m.importe);
             if (m.ts < fechaPrimerGasto) fechaPrimerGasto = m.ts;
             if (m.ts > fechaUltimoGasto) fechaUltimoGasto = m.ts;
@@ -4530,18 +4562,23 @@ window.actualizarDashboard = function() {
         }
     });
 
+    // Clasificación Liquidez vs Inversión
     Object.keys(saldos).forEach(cta => {
         const saldo = saldos[cta];
+        // Buscamos configuración insensible a mayúsculas
         const config = (typeof mapaCuentas !== 'undefined') ? mapaCuentas[cta.toUpperCase()] : null;
-        const esInversion = config ? config.esInversion : false;
+        
+        // CORRECCIÓN: Si no hay config, asumimos NO es inversión por defecto
+        const esInversion = config ? (config.esInversion === true || String(config.esInversion).toUpperCase() === 'SI') : false;
 
         totalPatrimonio += saldo;
         if (esInversion) totalInversion += saldo;
         else totalLiquidez += saldo;
     });
 
+    // Métricas FIRE (Libertad Financiera)
     let gastoMensualMedio = 1;
-    if (hayGastos) {
+    if (hayGastos && fechaUltimoGasto > fechaPrimerGasto) {
         const diffDias = Math.max(1, (fechaUltimoGasto - fechaPrimerGasto) / (1000 * 60 * 60 * 24));
         const diffMeses = Math.max(1, diffDias / 30.44);
         gastoMensualMedio = gastoTotalHist / diffMeses;
@@ -4552,56 +4589,52 @@ window.actualizarDashboard = function() {
     const objetivoFIRE = gastoMensualMedio * 300; 
     const libertad = (totalPatrimonio / objetivoFIRE) * 100;
 
-    // --- ANIMACIONES DE PATRIMONIO ---
-    animarCifra('d-patri-liq', totalLiquidez, 'moneda');
-    animarCifra('d-patri-inv', totalInversion, 'moneda');
-    animarCifra('d-patri-total', totalPatrimonio, 'moneda');
-    
-    // Cobertura con sufijo manual
+    // Animaciones Patrimonio
+    if(window.animarCifra) {
+        animarCifra('d-patri-liq', totalLiquidez, 'moneda');
+        animarCifra('d-patri-inv', totalInversion, 'moneda');
+        animarCifra('d-patri-total', totalPatrimonio, 'moneda');
+        animarCifra('d-cobertura', cobertura, 'numero'); 
+        animarCifra('d-libertad', libertad, 'porcentaje');
+    }
+
+    // Color Cobertura
     const elCob = document.getElementById('d-cobertura');
     if(elCob) {
-        // Truco: Animamos el número y luego le pegamos " Meses" visualmente
-        // Para simplificar, aquí usaremos animarCifra tipo 'numero' y añadiremos ' Meses' en CSS o estático
-        // Pero lo más fácil es animarlo y añadir el texto después en cada frame, 
-        // Para no complicar el motor, lo haremos directo con texto por ahora o usamos el tipo 'numero' modificado:
-        
-        // Opción simple: Animamos solo el número
-        animarCifra('d-cobertura', cobertura, 'numero'); 
-        // Nota: Esto borrará " Meses". 
-        // MEJORA: Modificar animarCifra para aceptar sufijos, o añadirlo via CSS ::after
-        
         if(cobertura < 3) elCob.style.color = 'var(--c-danger)'; 
         else if(cobertura < 6) elCob.style.color = 'var(--c-warning)'; 
         else elCob.style.color = 'var(--c-success)'; 
     }
 
-    animarCifra('d-libertad', libertad, 'porcentaje');
+    // Color Libertad
     const elLib = document.getElementById('d-libertad');
     if(elLib) elLib.style.color = libertad >= 100 ? '#BF5AF2' : 'var(--c-success)'; 
-	// Agrupamos los gastos por concepto para que el gráfico de sectores funcione
+
+    // =========================================================
+    // PARTE 3: DATOS PARA GRÁFICOS
+    // =========================================================
     const mapGastos = {};
     
-    // Usamos los mismos filtros de fecha que ya calculaste arriba (movsUsuario, tStart, tEnd)
+    // Filtramos gastos del periodo seleccionado
     movsUsuario
-        .filter(m => m.ts >= tStart && m.ts <= tEnd && m.tipo === 'gasto')
+        .filter(m => m.ts >= tStart && m.ts <= tEnd && m.importe < 0)
         .forEach(m => {
-            const cat = m.concepto || 'Otros';
+            const cat = m.concepto || 'Otros'; // Usamos concepto como categoría si no hay otra
             mapGastos[cat] = (mapGastos[cat] || 0) + Math.abs(m.importe);
         });
 
-    // Guardamos el resultado en la variable global que ECharts está buscando
     window.datosResumen = Object.keys(mapGastos)
         .map(k => ({ name: k, value: mapGastos[k] }))
-        .sort((a, b) => b.value - a.value); // Ordenamos de mayor gasto a menor
+        .sort((a, b) => b.value - a.value);
 
-    // Si tienes una función que pinta el gráfico, la llamamos para refrescar
+    // Refrescar gráfico si existe la función
     if(typeof renderizarDistribucion === 'function') renderizarDistribucion();
     
+    console.log("🎨 Dashboard actualizado correctamente.");
 };
 
-// Variable global para saber quién está activo
-var filtroUsuarioActual = 'todos'; 
-
+// Variable global
+var filtroUsuarioActual = 'todos';
 // ==========================================
 // 👤 CAMBIO DE USUARIO (CON RETARDO TÁCTICO)
 // ==========================================
