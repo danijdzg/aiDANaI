@@ -1295,10 +1295,9 @@ function generateUUID() {
         }
     };
 	
-    // ==========================================
-    // 3. CLASE GESTOR ONEDRIVE (Tu motor)
-    // ==========================================
-  
+// ==========================================
+// CLASE ONEDRIVE MANAGER (VERSIÓN HÍBRIDA COMPATIBLE)
+// ==========================================
 class OneDriveManager {
     constructor() {
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
@@ -1306,6 +1305,7 @@ class OneDriveManager {
         this.account = null;
     }
 
+    // --- 1. GESTIÓN DE TOKEN (NUEVO) ---
     async getToken() {
         const request = { scopes: ["User.Read", "Files.ReadWrite.All"] };
         try {
@@ -1323,11 +1323,23 @@ class OneDriveManager {
         }
     }
 
+    // --- 2. COMPATIBILIDAD CON TU CÓDIGO ANTIGUO ---
+    // Tu código llama a .login(), así que lo añadimos para que no falle
+    async login() {
+        return await this.getToken();
+    }
+
+    // Tu código llama a .loadFile(), así que lo redirigimos a la descarga segura
+    async loadFile() {
+        return await this.descargarExcel();
+    }
+
+    // --- 3. FUNCIONES DE CORE (BUSCAR Y DESCARGAR) ---
     async getFileId() {
         if (this.fileId) return this.fileId;
         const token = await this.getToken();
         
-        // 1. Búsqueda directa (Rápida)
+        // Intento 1: Raíz
         try {
             const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
                 headers: { Authorization: `Bearer ${token}` }
@@ -1339,44 +1351,41 @@ class OneDriveManager {
             }
         } catch(e) {}
 
-        // 2. Búsqueda profunda (Lenta)
+        // Intento 2: Búsqueda
         const resSearch = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')", {
             headers: { Authorization: `Bearer ${token}` }
         });
         const dataSearch = await resSearch.json();
-        if (!dataSearch.value || dataSearch.value.length === 0) throw new Error("No encuentro 'aidanai.xlsx'");
+        if (!dataSearch.value || dataSearch.value.length === 0) throw new Error("No encuentro 'aidanai.xlsx' en OneDrive");
         this.fileId = dataSearch.value[0].id;
         return this.fileId;
     }
 
-    // LECTURA
     async descargarExcel() {
-        // Usa tu función visual existente para mostrar estado
         if(window.mostrarEstado) window.mostrarEstado("☁️ Sincronizando...", "normal");
-        
         const id = await this.getFileId();
         const token = await this.getToken();
         const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        const buffer = await response.arrayBuffer();
-        return buffer; // Retorna el buffer para que tu código lo procese con SheetJS
+        // IMPORTANTE: Devolvemos ArrayBuffer porque es lo que espera tu función 'procesarLibroLeido'
+        return await response.arrayBuffer();
     }
 
-    // ESCRITURA SEGURA (MULTIUSUARIO)
+    // --- 4. ESCRITURA SEGURA MULTIUSUARIO (PATCH) ---
     async agregarFila(nuevaFilaArray) {
         const id = await this.getFileId();
         const token = await this.getToken();
         
-        // 1. Detectar última fila usada
+        // Buscar dónde termina el Excel actualmente
         const urlRange = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`;
         const resRange = await fetch(urlRange, { headers: { Authorization: `Bearer ${token}` } });
         const dataRange = await resRange.json();
         
-        // 2. Calcular fila destino (Append)
+        // Calcular la fila siguiente
         let filaDestino = dataRange.rowIndex + dataRange.rowCount; 
 
-        // 3. Escribir (PATCH)
+        // Escribir solo esa línea
         const urlWrite = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/range(address='A${filaDestino + 1}')`;
         
         await fetch(urlWrite, {
@@ -1386,12 +1395,12 @@ class OneDriveManager {
         });
     }
 
-    // BORRADO SEGURO (Por ID)
+    // --- 5. BORRADO SEGURO POR ID ---
     async borrarFilaPorID(idMovimiento) {
         const idFile = await this.getFileId();
         const token = await this.getToken();
         
-        // 1. Buscar fila exacta
+        // Buscar la fila exacta actual
         const urlData = `https://graph.microsoft.com/v1.0/me/drive/items/${idFile}/workbook/worksheets/Movimientos/usedRange`;
         const resData = await fetch(urlData, { headers: { Authorization: `Bearer ${token}` } });
         const jsonRange = await resData.json();
@@ -1399,17 +1408,17 @@ class OneDriveManager {
         const valores = jsonRange.values;
         let filaEncontrada = -1;
         
-        // Buscar ID en columna A (índice 0)
+        // Buscar ID en columna A
         for (let i = 1; i < valores.length; i++) {
             if (String(valores[i][0]) === String(idMovimiento)) {
-                filaEncontrada = jsonRange.rowIndex + i + 1; // +1 por base 1 de Excel
+                filaEncontrada = jsonRange.rowIndex + i + 1;
                 break;
             }
         }
 
-        if (filaEncontrada === -1) throw new Error("El movimiento ya no existe en la nube.");
+        if (filaEncontrada === -1) throw new Error("El movimiento ya no existe (¿quizás ya se borró?)");
 
-        // 2. Borrar fila
+        // Borrar fila
         const urlDelete = `https://graph.microsoft.com/v1.0/me/drive/items/${idFile}/workbook/worksheets/Movimientos/range(address='${filaEncontrada}:${filaEncontrada}')/delete`;
         await fetch(urlDelete, {
             method: 'POST',
@@ -1418,7 +1427,7 @@ class OneDriveManager {
         });
     }
 }
-const oneDrive = new OneDriveManager(); // Instancia global
+const oneDrive = new OneDriveManager();
 
     // ==========================================
     // 4. NUEVO: LÓGICA DE ARRANQUE AUTOMÁTICO
@@ -2360,21 +2369,21 @@ async function guardarManual() {
 
     try {
         if (modoNube) {
-            // --- CAMBIO CLAVE: MODO NUBE SEGURO ---
             mostrarEstado("⏳ Guardando en nube...", "normal");
             
+            // Si es edición, borramos el viejo primero
             if (idEnEdicion) {
-                // Si es edición, primero borramos el viejo
                 await oneDrive.borrarFilaPorID(idEnEdicion);
             }
             
-            // Insertamos el nuevo (Append)
+            // AQUI ESTA LA MAGIA: Usamos agregarFila en vez de subir todo el archivo
             await oneDrive.agregarFila(filaExcel);
             
-            mostrarEstado("✅ Guardado en Nube", "ok");
+            mostrarEstado("✅ Guardado", "ok");
             
-            // Recargamos datos para ver cambios de otros usuarios
-            await iniciarCargaNube(); 
+            // Forzamos recarga para ver lo tuyo y lo de otros
+            // Nota: Usamos tu función existente 'iniciarCargaNube'
+            if(window.iniciarCargaNube) await window.iniciarCargaNube(); 
             
         } else {
             // --- MODO LOCAL (Tu código antiguo simplificado) ---
