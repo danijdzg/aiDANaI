@@ -1295,17 +1295,14 @@ function generateUUID() {
         }
     };
 	
-// ==========================================
-// CLASE ONEDRIVE MANAGER (VERSIÓN HÍBRIDA COMPATIBLE)
-// ==========================================
+
 class OneDriveManager {
     constructor() {
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         this.fileId = null;
-        this.account = null;
     }
 
-    // --- 1. GESTIÓN DE TOKEN (NUEVO) ---
+    // --- 1. GESTIÓN DE TOKEN ---
     async getToken() {
         const request = { scopes: ["User.Read", "Files.ReadWrite.All"] };
         try {
@@ -1318,28 +1315,20 @@ class OneDriveManager {
                 return resp.accessToken;
             }
         } catch (e) {
-            console.error("Error obteniendo token:", e);
+            console.error("Error token:", e);
             throw e;
         }
     }
 
-    // --- 2. COMPATIBILIDAD CON TU CÓDIGO ANTIGUO ---
-    // Tu código llama a .login(), así que lo añadimos para que no falle
-    async login() {
-        return await this.getToken();
-    }
+    // --- 2. COMPATIBILIDAD CON TU CÓDIGO (NO BORRAR) ---
+    async login() { return await this.getToken(); }
+    async loadFile() { return await this.descargarExcel(); }
 
-    // Tu código llama a .loadFile(), así que lo redirigimos a la descarga segura
-    async loadFile() {
-        return await this.descargarExcel();
-    }
-
-    // --- 3. FUNCIONES DE CORE (BUSCAR Y DESCARGAR) ---
+    // --- 3. FUNCIONES CORE ---
     async getFileId() {
         if (this.fileId) return this.fileId;
         const token = await this.getToken();
         
-        // Intento 1: Raíz
         try {
             const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
                 headers: { Authorization: `Bearer ${token}` }
@@ -1351,12 +1340,11 @@ class OneDriveManager {
             }
         } catch(e) {}
 
-        // Intento 2: Búsqueda
         const resSearch = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/search(q='aidanai.xlsx')", {
             headers: { Authorization: `Bearer ${token}` }
         });
         const dataSearch = await resSearch.json();
-        if (!dataSearch.value || dataSearch.value.length === 0) throw new Error("No encuentro 'aidanai.xlsx' en OneDrive");
+        if (!dataSearch.value || dataSearch.value.length === 0) throw new Error("No encuentro 'aidanai.xlsx'");
         this.fileId = dataSearch.value[0].id;
         return this.fileId;
     }
@@ -1368,24 +1356,19 @@ class OneDriveManager {
         const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        // IMPORTANTE: Devolvemos ArrayBuffer porque es lo que espera tu función 'procesarLibroLeido'
         return await response.arrayBuffer();
     }
 
-    // --- 4. ESCRITURA SEGURA MULTIUSUARIO (PATCH) ---
+    // --- 4. GUARDADO SEGURO (NUEVO) ---
     async agregarFila(nuevaFilaArray) {
         const id = await this.getFileId();
         const token = await this.getToken();
         
-        // Buscar dónde termina el Excel actualmente
         const urlRange = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`;
         const resRange = await fetch(urlRange, { headers: { Authorization: `Bearer ${token}` } });
         const dataRange = await resRange.json();
         
-        // Calcular la fila siguiente
         let filaDestino = dataRange.rowIndex + dataRange.rowCount; 
-
-        // Escribir solo esa línea
         const urlWrite = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/range(address='A${filaDestino + 1}')`;
         
         await fetch(urlWrite, {
@@ -1395,12 +1378,11 @@ class OneDriveManager {
         });
     }
 
-    // --- 5. BORRADO SEGURO POR ID ---
+    // --- 5. BORRADO SEGURO (NUEVO) ---
     async borrarFilaPorID(idMovimiento) {
         const idFile = await this.getFileId();
         const token = await this.getToken();
         
-        // Buscar la fila exacta actual
         const urlData = `https://graph.microsoft.com/v1.0/me/drive/items/${idFile}/workbook/worksheets/Movimientos/usedRange`;
         const resData = await fetch(urlData, { headers: { Authorization: `Bearer ${token}` } });
         const jsonRange = await resData.json();
@@ -1408,7 +1390,6 @@ class OneDriveManager {
         const valores = jsonRange.values;
         let filaEncontrada = -1;
         
-        // Buscar ID en columna A
         for (let i = 1; i < valores.length; i++) {
             if (String(valores[i][0]) === String(idMovimiento)) {
                 filaEncontrada = jsonRange.rowIndex + i + 1;
@@ -1416,9 +1397,8 @@ class OneDriveManager {
             }
         }
 
-        if (filaEncontrada === -1) throw new Error("El movimiento ya no existe (¿quizás ya se borró?)");
+        if (filaEncontrada === -1) throw new Error("Movimiento no encontrado en nube (¿ya borrado?)");
 
-        // Borrar fila
         const urlDelete = `https://graph.microsoft.com/v1.0/me/drive/items/${idFile}/workbook/worksheets/Movimientos/range(address='${filaEncontrada}:${filaEncontrada}')/delete`;
         await fetch(urlDelete, {
             method: 'POST',
@@ -2336,78 +2316,77 @@ window.cargarParaEditar = function(id) {
 // --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
-// BUSCA: async function guardarManual() { ... } y SUSTITÚYELA:
-
 async function guardarManual() {
-    // 1. Recoger datos (Mantenemos tus IDs de input)
-    const fecha = document.getElementById('inp-fecha').value;
-    const importeVal = document.getElementById('inp-importe').value;
-    const concepto = document.getElementById('inp-concepto').value;
-    const cuenta = document.getElementById('inp-cuenta').value;
-    const categoria = document.getElementById('inp-categoria').value || ""; 
-    const beneficiario = document.getElementById('inp-beneficiario').value || "";
+    // 1. RECOGIDA DE DATOS (Con tus IDs reales del HTML)
+    const fecha = document.getElementById('m-fecha').value;
+    const cantidadStr = document.getElementById('m-cantidad').value; // Ej: "-50.00"
+    const cuenta = document.getElementById('m-cuenta').value;
+    const concepto = document.getElementById('m-concepto').value;
+    const desc = document.getElementById('m-desc').value || ""; // Descripción
+    const ben = document.getElementById('m-beneficiario').value || ""; // Beneficiario
 
-    if (!fecha || !importeVal || !concepto || !cuenta) {
-        alert("Faltan datos obligatorios.");
+    // Validación básica
+    if (!fecha || !cantidadStr || !cuenta || !concepto) {
+        alert("⚠️ Faltan datos: Fecha, Cantidad, Cuenta o Concepto.");
         return;
     }
 
-    // 2. Determinar ID
-    // Si estamos editando (idEnEdicion tiene valor), mantenemos ese ID. Si es nuevo, generamos uno.
-    // NOTA: Para edición segura en nube, lo ideal es borrar el viejo y crear uno nuevo, 
-    // pero para simplificar ahora, asumiremos que es CREACIÓN nueva si no hay ID.
+    // 2. PREPARAR DATOS
+    // Si estamos editando, usamos el ID viejo. Si es nuevo, generamos uno aleatorio.
     const idFinal = idEnEdicion ? idEnEdicion : (Date.now() + Math.floor(Math.random() * 1000));
+    
+    // Limpiamos la cantidad (quitar comas si las hubiera y asegurar número)
+    const importe = parseFloat(cantidadStr.replace(',', '.'));
 
-    // 3. Determinar Signo (Logica básica, ajusta si tienes botones de Gasto/Ingreso externos)
-    // Asumimos que el usuario pone el signo o que se gestiona antes. 
-    // Si quieres forzar gasto negativo: let importe = -Math.abs(parseFloat(importeVal));
-    let importe = parseFloat(importeVal);
+    // Estructura EXACTA de tu Excel: [ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO]
+    const filaExcel = [idFinal, fecha, cuenta, concepto, importe, desc, ben];
 
-    // 4. Crear Array para Excel (Orden de columnas ESTRICTO)
-    // ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO
-    const filaExcel = [idFinal, fecha, cuenta, concepto, importe, categoria, beneficiario];
-
+    // 3. GUARDADO
     try {
         if (modoNube) {
-            mostrarEstado("⏳ Guardando en nube...", "normal");
+            mostrarEstado("⏳ Guardando en la nube...", "normal");
             
-            // Si es edición, borramos el viejo primero
+            // Si es edición, primero borramos el antiguo para no duplicar
             if (idEnEdicion) {
                 await oneDrive.borrarFilaPorID(idEnEdicion);
             }
-            
-            // AQUI ESTA LA MAGIA: Usamos agregarFila en vez de subir todo el archivo
+
+            // Insertamos la nueva fila al final (Seguro para multiusuario)
             await oneDrive.agregarFila(filaExcel);
-            
+
             mostrarEstado("✅ Guardado", "ok");
             
-            // Forzamos recarga para ver lo tuyo y lo de otros
-            // Nota: Usamos tu función existente 'iniciarCargaNube'
-            if(window.iniciarCargaNube) await window.iniciarCargaNube(); 
+            // Refrescar datos
+            if(window.iniciarCargaNube) await window.iniciarCargaNube();
             
         } else {
-            // --- MODO LOCAL (Tu código antiguo simplificado) ---
-            // Aquí mantienes tu lógica de push a 'datos' y guardado de archivo local
-            // Si ya tenías código aquí, MANTENLO. Si no, avísame.
-            alert("Modo local: Los datos se guardan en memoria. Pulsa el disquete para descargar el Excel.");
-            
-            // Actualización visual local
-            datos.push({
-                ID: idFinal, FECHA: fecha, CUENTA: cuenta, CONCEPTO: concepto, 
-                IMPORTE: importe, DESCRIPCIÓN: categoria, BENEFICIARIO: beneficiario
-            });
-            renderizar(); // Tu función de pintar
+            // MODO LOCAL (Tu lógica antigua)
+            if (idEnEdicion) {
+                const idx = datos.findIndex(d => d.ID == idEnEdicion);
+                if (idx !== -1) datos[idx] = { 
+                    ID: idFinal, FECHA: fecha, CUENTA: cuenta, CONCEPTO: concepto, 
+                    IMPORTE: importe, "DESCRIPCIÓN": desc, BENEFICIARIO: ben 
+                };
+            } else {
+                datos.push({ 
+                    ID: idFinal, FECHA: fecha, CUENTA: cuenta, CONCEPTO: concepto, 
+                    IMPORTE: importe, "DESCRIPCIÓN": desc, BENEFICIARIO: ben 
+                });
+            }
+            renderizar();
+            actualizarDashboard();
+            mostrarEstado("💾 Guardado en memoria local", "ok");
         }
 
-        // Limpieza
-        limpiarFormulario(); // Tu función de limpiar
+        // 4. LIMPIEZA
+        cerrarModal(); // Tu función existente
         idEnEdicion = null;
         if(window.vibrar) vibrar('ingreso');
 
     } catch (e) {
         console.error(e);
         alert("Error al guardar: " + e.message);
-        mostrarEstado("❌ Error al guardar", "err");
+        mostrarEstado("❌ Error", "err");
     }
 }
 // ==========================================
@@ -4300,28 +4279,37 @@ window.procesarDatos = function(filas) {
 // ==========================================
 // 2. SISTEMA DE BORRADO SEGURO
 // ==========================================
-async function borrarMovimiento(id) {
-    if (!confirm("¿Seguro que deseas eliminar este movimiento?")) return;
+async function borrarMovimiento() {
+    // Si no hay ID editándose, no podemos borrar nada
+    if (!idEnEdicion) return; 
+
+    if (!confirm("¿Seguro que quieres eliminar este movimiento permanentemente?")) return;
 
     try {
         if (modoNube) {
-            // --- CAMBIO CLAVE: BORRADO SEGURO NUBE ---
             mostrarEstado("🗑️ Borrando de la nube...", "normal");
-            await oneDrive.borrarFilaPorID(id);
+            await oneDrive.borrarFilaPorID(idEnEdicion);
             mostrarEstado("✅ Eliminado", "ok");
-            await iniciarCargaNube(); // Recargar todo
+            
+            // Refrescar
+            if(window.iniciarCargaNube) await window.iniciarCargaNube();
             
         } else {
-            // --- MODO LOCAL ---
-            datos = datos.filter(m => m.ID != id);
-            renderizar(); // Tu función de pintar
+            // MODO LOCAL
+            datos = datos.filter(d => d.ID != idEnEdicion);
+            renderizar();
+            actualizarDashboard();
             mostrarEstado("🗑️ Eliminado (Local)", "ok");
         }
-        
-        if(window.vibrar) vibrar('clonar');
-        
+
+        cerrarModal();
+        idEnEdicion = null;
+        if(window.vibrar) vibrar('clonar'); // Vibración de confirmación
+
     } catch (e) {
-        alert("No se pudo borrar: " + e.message);
+        console.error(e);
+        alert("Error al borrar: " + e.message);
+        mostrarEstado("❌ Error al borrar", "err");
     }
 }
 
