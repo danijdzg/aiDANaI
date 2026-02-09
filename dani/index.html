@@ -2396,19 +2396,32 @@ async function guardarManual() {
         const idMov = document.getElementById('m-id').value; 
         const fecha = document.getElementById('m-fecha').value;
         const cuenta = document.getElementById('m-cuenta').value;
-        const concepto = document.getElementById('m-concepto').value;
+        
+        // Leemos el concepto tal cual está
+        let concepto = document.getElementById('m-concepto').value;
+        
         let importe = parseFloat(document.getElementById('m-cantidad').value) || 0;
         const descripcion = document.getElementById('m-desc').value;
         const beneficiario = document.getElementById('m-beneficiario').value;
         const cuentaDestino = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
 
-        // Validación
-        if (!fecha || !cuenta || !concepto) {
-            alert("Faltan datos obligatorios (Fecha, Cuenta o Concepto)");
-            return;
+        // --- VALIDACIÓN INTELIGENTE (AQUÍ ESTÁ EL ARREGLO) ---
+        if (window.modoTransaccionActual === 'traspaso') {
+            // En TRASPASO: Ignoramos el concepto (lo ponemos nosotros) pero exigimos DESTINO
+            if (!fecha || !cuenta || !cuentaDestino) {
+                alert("⚠️ Para un traspaso faltan datos:\n- Fecha\n- Cuenta Origen\n- Cuenta Destino");
+                return;
+            }
+            concepto = "Traspaso"; // Lo rellenamos automático
+        } else {
+            // En GASTO/INGRESO: Exigimos concepto
+            if (!fecha || !cuenta || !concepto) {
+                alert("⚠️ Faltan datos obligatorios:\n- Fecha\n- Cuenta\n- Concepto");
+                return;
+            }
         }
 
-        // Ajuste de signos
+        // Ajuste de signos automático
         if (window.modoTransaccionActual === 'pago' && importe > 0) importe = -importe;
         if (window.modoTransaccionActual === 'traspaso' && importe > 0) importe = -importe;
 
@@ -2416,22 +2429,16 @@ async function guardarManual() {
         if(btnGuardar) btnGuardar.innerText = "⏳ Guardando...";
         
         try {
+            // 2. MODO ATÓMICO: GESTIÓN DE NUBE
             let datosNube = []; 
-            
-            // 2. MODO ATÓMICO (CORREGIDO AQUÍ)
             if (modoNube) {
                 try {
                     console.log("Modo Atómico: Verificando nube...");
-                    // --- CORRECCIÓN: Usamos 'oneDrive' (la instancia), no 'OneDriveManager' (la clase) ---
                     const arrayBuffer = await oneDrive.loadFile(); 
                     if (arrayBuffer) {
-                        // Procesamos el Excel que baja de la nube
-                        // Detectamos si es un objeto workbook procesado o un buffer crudo
                         if (arrayBuffer.Sheets) {
-                             // Si oneDrive.loadFile ya devolvió el libro (versión turbo)
                              datosNube = XLSX.utils.sheet_to_json(arrayBuffer.Sheets['Movimientos']);
                         } else {
-                             // Si devolvió bytes
                              const workbook = XLSX.read(arrayBuffer, {type: 'array'});
                              datosNube = XLSX.utils.sheet_to_json(workbook.Sheets['Movimientos']);
                         }
@@ -2452,7 +2459,6 @@ async function guardarManual() {
             };
 
             const fusionar = (lista, mov) => {
-                // Buscamos por ID (comparando como texto para evitar errores)
                 const idx = lista.findIndex(m => String(m.ID) === String(mov.ID));
                 if (idx >= 0) lista[idx] = mov; 
                 else lista.push(mov);
@@ -2460,7 +2466,7 @@ async function guardarManual() {
 
             fusionar(datosNube, nuevoMov);
 
-            // Traspaso destino
+            // GESTIÓN DE LA CONTRAPARTIDA (EL DESTINO)
             if (window.modoTransaccionActual === 'traspaso' && cuentaDestino) {
                 const idDestino = crypto.randomUUID(); 
                 const movDestino = {
@@ -2468,11 +2474,14 @@ async function guardarManual() {
                     "CONCEPTO": "Traspaso Recibido", "IMPORTE": Math.abs(importe),
                     "DESCRIPCION": `<< DE: ${cuenta} | ${descripcion}`, "BENEFICIARIO": beneficiario || "Mí mismo"
                 };
+                // Actualizamos descripción del origen
                 nuevoMov.DESCRIPCION = `>> A: ${cuentaDestino} | ${descripcion}`;
+                
+                // Añadimos el destino a la lista
                 datosNube.push(movDestino);
             }
 
-            // 4. ACTUALIZAR ENTORNO
+            // 4. ACTUALIZAR TODO
             window.datos = datosNube.map(m => ({
                 id: m.ID,
                 ts: new Date(m.FECHA).getTime(),
@@ -2485,10 +2494,7 @@ async function guardarManual() {
                 tipo: (String(m.CONCEPTO)+String(m.DESCRIPCION)).toUpperCase().includes('TRASPASO') ? 'traspaso' : (parseFloat(m.IMPORTE) >= 0 ? 'ingreso' : 'gasto')
             }));
 
-            // Esto recalcula saldos y actualiza la UI
             recalcularSaldosGlobal(); 
-            
-            // Subida física
             await guardarUniversal(false); 
             
             cerrarModal();
