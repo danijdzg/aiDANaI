@@ -1984,6 +1984,8 @@ function finalizarGuardado(esTraspaso) {
     function renderizar() {
         const tbody = document.getElementById('lista-movimientos');
         if(!tbody) return;
+        
+        // 1. FILTRADO (Igual que antes)
         let lista = datos.filter(m => {
             if (!pasaFiltroPropietario(m)) return false;
             if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
@@ -1998,6 +2000,8 @@ function finalizarGuardado(esTraspaso) {
             if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
             return true;
         });
+
+        // 2. ORDENACIÓN (Igual que antes)
         lista.sort((a, b) => {
             let campo = window.ordenActivo.campo;
             let valA = a[campo]; let valB = b[campo];
@@ -2007,24 +2011,32 @@ function finalizarGuardado(esTraspaso) {
             if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
             return 0;
         });
+
+        // 3. OPTIMIZACIÓN DE VELOCIDAD (NUEVO)
+        // Solo "pintamos" los primeros 50 para que el móvil/PC no se congele
+        const totalResultados = lista.length;
+        const LIMITE_VISUAL = 50; 
+        const listaVisual = lista.slice(0, LIMITE_VISUAL);
+
+        // Actualizamos el contador
         const contador = document.getElementById('contador-filas');
-        if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
+        if(contador) contador.innerText = `Viendo ${listaVisual.length} de ${totalResultados} movs.`;
         
         if (lista.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos disponibles</td></tr>';
             return;
         }
 
-        tbody.innerHTML = lista.map(m => {
-            // Preparar fecha para visualización
+        // 4. GENERACIÓN DE HTML (Solo de los 50 visibles)
+        let htmlFilas = listaVisual.map(m => {
+            // Preparar fecha
             const date = new Date(m.ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
             
-            // Lógica de colores y signos
+            // Colores y signos
             let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
             let signo = m.importe > 0 ? '+' : '';
             
-            // EL CAMBIO IMPORTANTE ESTÁ AQUÍ ABAJO EN EL ONCLICK:
-            // Usamos editarMovimiento y ponemos comillas simples '${m.id}' para proteger el ID
+            // Usamos tu estructura exacta de columnas
             return `
             <tr onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
                 <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${date}</td>
@@ -2042,6 +2054,20 @@ function finalizarGuardado(esTraspaso) {
             </tr>
             `;
         }).join('');
+
+        // 5. AVISO DE DATOS OCULTOS (NUEVO)
+        // Si hay más de 50, avisamos al final de la tabla
+        if (totalResultados > LIMITE_VISUAL) {
+            htmlFilas += `
+            <tr>
+                <td colspan="6" style="text-align:center; padding:15px; color:#888; font-style:italic; font-size:12px; border-top:1px solid #333;">
+                    ... Hay ${totalResultados - LIMITE_VISUAL} movimientos más ocultos para ir rápido.<br>
+                    <span style="color:var(--c-primary)">Usa el buscador o filtros para ver los antiguos.</span>
+                </td>
+            </tr>`;
+        }
+
+        tbody.innerHTML = htmlFilas;
     }
 
     function irPestana(p) {
