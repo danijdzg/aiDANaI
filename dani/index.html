@@ -1277,10 +1277,12 @@ function generateUUID() {
     // 1. VARIABLES GLOBALES
     // ==========================================
     var modoNube = false;      
-    var datos = [];            
+    window.datos = [];            
     var datosResumen = []; 
     var datosPropietario = []; 
-    var mapaCuentas = {};      
+    window.mapaCuentas = {};   
+	window.listaConceptos = [];     
+	window.listaBeneficiarios = [];	
     var idEnEdicion = null;    
     var filtroUsuarioActual = 'todos'; 
 
@@ -1479,25 +1481,41 @@ const oneDrive = new OneDriveManager();
 async function iniciarSistema() {
     const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
     
+    // --- PASO 0: CARGA INMEDIATA (La solución a tus errores) ---
+    // Intentamos cargar lo que haya en el navegador antes de llamar a Internet.
+    // Esto asegura que window.datos NO esté vacío nunca.
+    const hayDatosLocales = cargarDesdeCache(); 
+    
+    if(hayDatosLocales && barra) {
+        barra.innerText = "⚡ Datos locales listos...";
+    }
+
     try {
-        if(barra) barra.innerText = "🔄 Conectando...";
+        if(barra) barra.innerText = "🔄 Conectando nube...";
         
-        // 1. Carga Turbo (Ya devuelve el objeto Workbook)
+        // 1. Carga Turbo de OneDrive
+        // (Nota: Si tu variable se llama oneDriveManager en vez de oneDrive, cámbialo aquí)
         const wb = await oneDrive.loadFile();
         
-        if(barra) barra.innerText = "⚡ Procesando datos...";
+        if(barra) barra.innerText = "⚡ Procesando nube...";
         
-        // 2. Procesar
+        // 2. Procesar: Esto actualizará window.datos con la versión de la nube
         procesarLibroLeido(wb);
         
         // 3. Activar modo nube visualmente
-        modoNube = true;
-        cambiarModo('cloud'); // Si tienes esta función visual
+        window.modoNube = true;
+        if(typeof cambiarModo === 'function') cambiarModo('cloud'); 
         if(window.iniciarPolling) window.iniciarPolling();
 
+        if(barra) barra.innerText = "✅ Sincronizado con OneDrive";
+
     } catch (error) {
-        console.log("Inicio automático no posible:", error.message);
-        if(barra) barra.innerText = "🔒 Requiere Conexión";
+        console.log("Inicio nube no posible:", error.message);
+        
+        // Si falla la nube, no pasa nada grave porque ya cargamos los locales en el Paso 0
+        if(barra) {
+            barra.innerText = hayDatosLocales ? "⚠️ Modo Offline (Usando copia local)" : "🔒 Sin conexión y sin datos";
+        }
     }
 }
 	// Función auxiliar para el botón
@@ -1511,108 +1529,153 @@ async function iniciarSistema() {
     }
  
  function procesarDatos(workbook) {
-        console.log("--- Iniciando procesado inteligente de aiDANaI ---");
+        console.log("--- 1. INICIANDO PROCESADO (Sincronizado) ---");
 
-        // 1. LEER CONFIGURACIÓN (Vital para saber cuentas de inversión)
+        // A. LEER CONFIGURACIÓN
         const hojaConfig = workbook.Sheets["Configuracion"];
         if (hojaConfig) {
             const configRaw = XLSX.utils.sheet_to_json(hojaConfig);
-            // Reiniciamos el mapa de cuentas global
-            if (typeof mapaCuentas !== 'undefined') {
-                 // Limpiamos el objeto manteniendo la referencia si es necesario, o reasignamos
-                 Object.keys(mapaCuentas).forEach(key => delete mapaCuentas[key]);
-            } else {
-                 window.mapaCuentas = {};
-            }
-
+            window.mapaCuentas = {}; 
             configRaw.forEach(fila => {
                 if (fila.CUENTA) {
-                    mapaCuentas[fila.CUENTA] = {
+                    window.mapaCuentas[fila.CUENTA] = {
                         tipo: fila.TIPO,
                         esInversion: fila.ES_INVERSION
                     };
                 }
             });
-            console.log("Configuración cargada:", Object.keys(mapaCuentas).length, "cuentas.");
+            // Sincronizamos variable global por si acaso
+            mapaCuentas = window.mapaCuentas; 
         }
 
-        // 2. LEER MOVIMIENTOS
+        // B. LEER MOVIMIENTOS
         const hojaMovs = workbook.Sheets["Movimientos"];
         if (!hojaMovs) {
             console.error("¡No encuentro la hoja Movimientos!");
             return;
         }
 
-        // Convertimos a objetos usando las cabeceras del Excel
         const rawMovs = XLSX.utils.sheet_to_json(hojaMovs); 
         
-        // 3. PROCESADO DE FILA A FILA (Fusión de lógica + Seguridad IDs)
-        datos = rawMovs.map((fila, index) => {
-            
-            // A) Seguridad ID (Si no existe, creamos uno)
+        // C. GUARDAR EN WINDOW.DATOS (LA CAJA FUERTE)
+        window.datos = rawMovs.map((fila) => {
+            // Seguridad ID
             let idSeguro = fila['Id'] || fila['ID'];
             if (!idSeguro || String(idSeguro).trim() === '') {
                 idSeguro = crypto.randomUUID();
             }
 
-            // B) Limpieza de Importe (Quitar símbolo € y convertir a número)
+            // Limpieza de Importe
             let importe = fila['Importe'] || fila['IMPORTE'] || 0;
             if (typeof importe === 'string') {
                 importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
             }
 
-            // C) Concepto y Descripción
-            const concepto = (fila['Concepto'] || fila['CONCEPTO'] || '').trim();
-            const descripcion = (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim();
-            const beneficiario = (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim();
-            const cuenta = (fila['Cuenta'] || fila['CUENTA'] || '').trim();
-
-            // D) Clasificación Automática (Gasto / Ingreso / Traspaso)
-            let tipo = 'gasto'; // Por defecto
-            if (importe >= 0) tipo = 'ingreso';
-            if ((concepto + ' ' + descripcion).toUpperCase().includes('TRASPASO')) {
-                tipo = 'traspaso';
-            }
-
-            // E) Gestión de Fechas Robusta
-            let fecha = fila['Fecha'] || fila['FECHA'];
-            // Si Excel devuelve un número (días desde 1900), sheet_to_json suele gestionarlo si está bien configurado,
-            // pero si llega como string o fecha JS, lo dejamos pasar. 
-            // La visualización se encargará de formatearlo.
-
             return {
                 id: idSeguro,
-                fecha: fecha,
-                cuenta: cuenta,
-                concepto: concepto,
+                fecha: fila['Fecha'] || fila['FECHA'],
+                cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
+                concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
                 importe: importe,
-                descripcion: descripcion,
-                beneficiario: beneficiario,
-                tipo: tipo,
-                saldo: 0 // Se calculará después
+                descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
+                beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
+                tipo: (importe >= 0) ? 'ingreso' : 'gasto',
+                saldo: 0
             };
         });
 
-        // 4. ORDENAR Y FINALIZAR
-        // Ordenamos por fecha (más reciente primero)
-        // Intentamos convertir a timestamp para ordenar correctamente
-        datos.sort((a, b) => {
-            const dateA = new Date(a.fecha);
-            const dateB = new Date(b.fecha);
-            return dateB - dateA; 
+        // D. ORDENAR
+        window.datos.sort((a, b) => {
+            const da = new Date(a.fecha);
+            const db = new Date(b.fecha);
+            return db - da; 
         });
 
-        console.log("Movimientos procesados:", datos.length);
+        // E. TRUCO DE MAGIA (Sincronización Total)
+        // Esto hace que si en algún sitio usas 'datos' sin 'window.', funcione igual.
+        datos = window.datos; 
 
-        // Disparar cálculos y actualizaciones visuales
+        console.log("--- DATOS GUARDADOS EN WINDOW.DATOS: " + window.datos.length + " ---");
+
+        // F. ACTUALIZAR INTERFAZ
         if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         if(typeof cargarInterfaz === 'function') cargarInterfaz();
         if(typeof renderDashboard === 'function') renderDashboard();
+    }
 
-        // Actualizar texto de estado
-        if(document.getElementById('status-text')) {
-            document.getElementById('status-text').innerText = "✅ Datos actualizados: " + datos.length + " movs.";
+// === NUEVA FUNCIÓN MAESTRA CON NOMBRE ÚNICO ===
+    function procesarDatosMaestro(workbook) {
+        console.log("🚀 EJECUTANDO PROCESADO MAESTRO (Seguridad Activada)");
+
+        // 1. LEER CONFIGURACIÓN
+        const hojaConfig = workbook.Sheets["Configuracion"];
+        if (hojaConfig) {
+            const configRaw = XLSX.utils.sheet_to_json(hojaConfig);
+            window.mapaCuentas = {}; 
+            configRaw.forEach(fila => {
+                if (fila.CUENTA) {
+                    window.mapaCuentas[fila.CUENTA] = {
+                        tipo: fila.TIPO,
+                        esInversion: fila.ES_INVERSION
+                    };
+                }
+            });
+            // Sincronizar variable corta por si el dashboard la usa
+            mapaCuentas = window.mapaCuentas;
         }
+
+        // 2. LEER MOVIMIENTOS
+        const hojaMovs = workbook.Sheets["Movimientos"];
+        if (!hojaMovs) {
+            console.error("❌ ERROR CRÍTICO: No encuentro la hoja Movimientos");
+            return;
+        }
+
+        const rawMovs = XLSX.utils.sheet_to_json(hojaMovs); 
+        
+        // 3. GUARDAR EN LA CAJA FUERTE (window.datos)
+        window.datos = rawMovs.map((fila) => {
+            // Generar ID si falta
+            let idSeguro = fila['Id'] || fila['ID'];
+            if (!idSeguro || String(idSeguro).trim() === '') {
+                idSeguro = crypto.randomUUID();
+            }
+
+            // Limpiar Importe
+            let importe = fila['Importe'] || fila['IMPORTE'] || 0;
+            if (typeof importe === 'string') {
+                importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+            }
+
+            return {
+                id: idSeguro,
+                fecha: fila['Fecha'] || fila['FECHA'],
+                cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
+                concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
+                importe: importe,
+                descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
+                beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
+                tipo: (importe >= 0) ? 'ingreso' : 'gasto',
+                saldo: 0
+            };
+        });
+
+        // 4. ORDENAR
+        window.datos.sort((a, b) => {
+            const da = new Date(a.fecha);
+            const db = new Date(b.fecha);
+            return db - da; 
+        });
+
+        // 5. SINCRONIZACIÓN TOTAL (Esto arregla el dashboard)
+        datos = window.datos; 
+
+        console.log("✅ ÉXITO: " + window.datos.length + " movimientos guardados en window.datos");
+
+        // 6. ACTUALIZAR PANTALLA
+        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if(typeof cargarInterfaz === 'function') cargarInterfaz();
+        if(typeof renderDashboard === 'function') renderDashboard();
     }
 
     // ARRANQUE AL CARGAR LA PÁGINA
@@ -1874,10 +1937,14 @@ function leerExcel(blob) {
 
     reader.readAsArrayBuffer(blob);
 }
-// 4. EL CEREBRO: PROCESA EL EXCEL (SEA LOCAL O NUBE)
+// 4. EL CEREBRO: PROCESA EL EXCEL (VERSIÓN DEFINITIVA V2)
 function procesarLibroLeido(wb) {
-    // 1. CARGA DE CONFIGURACIÓN
-    mapaCuentas = {}; 
+    console.log("📖 Procesando archivo con SISTEMA COMPLETO (Cuentas + Tablas)...");
+
+    // --- 1. CARGA DE CONFIGURACIÓN (Cuentas, Conceptos y Beneficiarios) ---
+    window.mapaCuentas = {}; 
+    window.listaConceptos = [];      // Reiniciamos listas
+    window.listaBeneficiarios = [];
     
     const wsConfigName = wb.SheetNames.find(n => 
         n.trim().toUpperCase() === "TABLACONFIG" || 
@@ -1886,61 +1953,112 @@ function procesarLibroLeido(wb) {
     
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
+        // Leemos todo como una matriz (filas y columnas)
         const matConfig = XLSX.utils.sheet_to_json(wsConfig, { header: 1 });
-        globalConfigData = matConfig; 
 
-        // Escaneo de encabezados INTELIGENTE
+        // Índices de columnas
         let filaEncabezados = -1;
-        let colCuenta = -1;
-        let colTipo = -1;
-        let colInv = -1;
+        let colCuenta = -1, colTipo = -1, colInv = -1;
+        let colConcepto = -1, colBeneficiario = -1;
 
+        // Escaneo inteligente de encabezados
         for (let i = 0; i < Math.min(matConfig.length, 20); i++) {
             const row = matConfig[i];
             if (!row) continue;
             
-            // Buscamos las columnas clave
-            const idxC = row.findIndex(val => val && String(val).trim().toUpperCase() === 'CUENTA');
+            // Buscamos columnas clave
+            const rowUpper = row.map(c => String(c || '').trim().toUpperCase());
             
-            // CORRECCIÓN AQUÍ: Ahora buscamos 'ES_INVERSION' O 'ESINVERSION' para que no falle nunca
-            const idxI = row.findIndex(val => {
-                if (!val) return false;
-                const v = String(val).trim().toUpperCase();
-                return v === 'ESINVERSION' || v === 'ES_INVERSION' || v === 'ES INVERSION';
-            });
-
+            const idxC = rowUpper.indexOf('CUENTA');
+            
             if (idxC !== -1) {
                 filaEncabezados = i;
                 colCuenta = idxC;
-                colTipo = row.findIndex(val => val && String(val).trim().toUpperCase() === 'TIPO');
-                colInv = idxI; // Guardamos el índice correcto de la columna inversión
+                colTipo = rowUpper.indexOf('TIPO');
+                // Buscamos ES_INVERSION con variantes
+                colInv = rowUpper.findIndex(v => v === 'ESINVERSION' || v === 'ES_INVERSION' || v === 'ES INVERSION');
+                
+                // NUEVO: Buscamos CONCEPTO y BENEFICIARIO
+                colConcepto = rowUpper.indexOf('CONCEPTO');
+                colBeneficiario = rowUpper.indexOf('BENEFICIARIO');
                 break;
             }
         }
 
         if (filaEncabezados !== -1) {
+            // Leemos los datos fila a fila
             for (let i = filaEncabezados + 1; i < matConfig.length; i++) {
                 const row = matConfig[i];
-                if (!row || !row[colCuenta]) continue;
+                if (!row) continue;
                 
-                const cuentaKey = normalizarTexto(String(row[colCuenta]).trim());
-                const tipoVal = (colTipo !== -1 && row[colTipo]) ? String(row[colTipo]).trim() : 'OTROS';
-                
-                // Lectura robusta del valor SI/NO
-                const esInv = (colInv !== -1 && row[colInv]) ? String(row[colInv]).trim().toUpperCase() === 'SI' : false;
+                // 1. Leer Cuenta
+                if (row[colCuenta]) {
+                    const cuentaKey = String(row[colCuenta]).trim();
+                    const tipoVal = (colTipo !== -1 && row[colTipo]) ? String(row[colTipo]).trim() : 'OTROS';
+                    const esInv = (colInv !== -1 && row[colInv]) ? String(row[colInv]).trim().toUpperCase() === 'SI' : false;
+                    window.mapaCuentas[cuentaKey] = { tipo: tipoVal, esInversion: esInv };
+                }
 
-                mapaCuentas[cuentaKey] = { tipo: tipoVal, esInversion: esInv };
+                // 2. Leer Concepto (Si existe en esta fila)
+                if (colConcepto !== -1 && row[colConcepto]) {
+                    const val = String(row[colConcepto]).trim();
+                    if(val && !window.listaConceptos.includes(val)) window.listaConceptos.push(val);
+                }
+
+                // 3. Leer Beneficiario (Si existe en esta fila)
+                if (colBeneficiario !== -1 && row[colBeneficiario]) {
+                    const val = String(row[colBeneficiario]).trim();
+                    if(val && !window.listaBeneficiarios.includes(val)) window.listaBeneficiarios.push(val);
+                }
             }
-            mostrarEstado('Configuración cargada: ' + Object.keys(mapaCuentas).length + ' cuentas.', 'ok');
+            console.log(`✅ Configuración: ${Object.keys(window.mapaCuentas).length} Cuentas, ${window.listaConceptos.length} Conceptos, ${window.listaBeneficiarios.length} Beneficiarios.`);
         }
     }
-
-    // 2. CARGA DE MOVIMIENTOS
-    let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
-    const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
     
-    // 3. Procesamos todo
-    procesarDatos(jsonMovs);
+    // Sincronizamos variables cortas
+    mapaCuentas = window.mapaCuentas;
+
+    // --- 2. CARGA DE MOVIMIENTOS ---
+    let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
+    const hojaMovs = wb.Sheets[wsName];
+    const rawMovs = XLSX.utils.sheet_to_json(hojaMovs);
+
+    window.datos = rawMovs.map((fila) => {
+        let idSeguro = fila['Id'] || fila['ID'];
+        if (!idSeguro || String(idSeguro).trim() === '') idSeguro = crypto.randomUUID();
+
+        let importe = fila['Importe'] || fila['IMPORTE'] || 0;
+        if (typeof importe === 'string') {
+            importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+        }
+
+        return {
+            id: idSeguro,
+            fecha: fila['Fecha'] || fila['FECHA'],
+            cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
+            concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
+            importe: importe,
+            descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
+            beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
+            tipo: (importe >= 0) ? 'ingreso' : 'gasto',
+            saldo: 0
+        };
+    });
+
+    window.datos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    
+    // Sincronización final y caché
+    datos = window.datos;
+    try { localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos)); } catch (e) {}
+
+    // --- 3. ACTUALIZAR PANTALLA ---
+    if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+    if(typeof cargarInterfaz === 'function') cargarInterfaz();
+    if(typeof renderDashboard === 'function') renderDashboard();
+    
+    if(document.getElementById('status-text')) {
+        document.getElementById('status-text').innerText = "✅ Datos cargados correctamente";
+    }
 }
  
 // ==========================================
@@ -3650,58 +3768,88 @@ async function guardarUniversal() {
         if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
 
         try {
-            // 1. PREPARAR DATOS PARA EXCEL (Mapeo Estricto)
-            // Esto asegura que la columna A sea siempre el ID, la B la Fecha, etc.
-            const datosParaExcel = datos.map(m => {
-                return {
-                    "Id": m.id,  // Columna A (La más importante ahora)
-                    "Fecha": m.fecha,
-                    "Cuenta": m.cuenta,
-                    "Concepto": m.concepto,
-                    "Importe": m.importe,
-                    "Descripcion": m.descripcion, // Ojo: en memoria a veces se llama 'detalle', aquí forzamos 'Descripcion'
-                    "Beneficiario": m.beneficiario
-                };
-            });
+            console.log("💾 Iniciando guardado completo...");
 
-            // 2. CREAR EL LIBRO EXCEL
-            const wb = XLSX.utils.book_new();
-            
-            // Forzamos el orden de las columnas con la opción 'header'
-            const wsMovs = XLSX.utils.json_to_sheet(datosParaExcel, { 
-                header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"] 
-            });
-            
-            XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
-
-            // Si tenemos configuración cargada, la guardamos también para no perderla
-            if (window.mapaCuentas) {
-                // Convertimos el mapa de cuentas de vuelta a una lista para el Excel
-                const listaConfig = Object.entries(window.mapaCuentas).map(([k, v]) => ({
-                    "CUENTA": k,
-                    "TIPO": v.tipo,
-                    "ES_INVERSION": v.esInversion
-                }));
-                const wsConfig = XLSX.utils.json_to_sheet(listaConfig, { header: ["CUENTA", "TIPO", "ES_INVERSION"] });
-                XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
+            // --- 1. RESCATE DE DATOS (Si la memoria falla) ---
+            if (!window.datos || window.datos.length === 0) {
+                const cacheRescate = localStorage.getItem('aidanai_datos_cache');
+                if (cacheRescate) {
+                    window.datos = JSON.parse(cacheRescate);
+                    window.datos = window.datos.map(m => ({
+                        ...m,
+                        id: m.id || m.ID || crypto.randomUUID(),
+                        fecha: new Date(m.fecha)
+                    }));
+                }
             }
 
-            // 3. DECIDIR DÓNDE GUARDAR (Nube o Local)
-            // Si estamos logueados en OneDrive (tenemos token), intentamos subirlo
+            if (!window.datos || window.datos.length === 0) {
+                throw new Error("⛔ NO SE PUEDE GUARDAR: No hay datos.");
+            }
+
+            // --- 2. GENERAR HOJA MOVIMIENTOS ---
+            const filasMovimientos = window.datos.map(mov => ({
+                "Id": mov.id || crypto.randomUUID(), 
+                "Fecha": mov.fecha,
+                "Cuenta": mov.cuenta,
+                "Concepto": mov.concepto,
+                "Importe": mov.importe,
+                "Descripcion": mov.descripcion || mov.detalle || "", 
+                "Beneficiario": mov.beneficiario
+            }));
+
+            const wb = XLSX.utils.book_new();
+            const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
+                header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
+            });
+            XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+            // --- 3. GENERAR HOJA CONFIGURACIÓN (TABLA COMPLETA) ---
+            // Recuperamos datos de las 3 tablas
+            const listaCuentas = Object.entries(window.mapaCuentas || {});
+            const listaConceptos = window.listaConceptos || [];
+            const listaBeneficiarios = window.listaBeneficiarios || [];
+
+            // Calculamos cuántas filas necesitamos (la lista más larga)
+            const maxFilas = Math.max(listaCuentas.length, listaConceptos.length, listaBeneficiarios.length);
+            
+            // Creamos la matriz de datos (Array de Arrays)
+            const datosConfig = [];
+            // Encabezados exactos
+            datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "", "CONCEPTO", "", "BENEFICIARIO"]);
+
+            for (let i = 0; i < maxFilas; i++) {
+                const cuenta = listaCuentas[i]; // [Nombre, Objeto]
+                const concepto = listaConceptos[i];
+                const beneficiario = listaBeneficiarios[i];
+
+                datosConfig.push([
+                    cuenta ? cuenta[0] : "",                // Col A: Cuenta
+                    cuenta ? cuenta[1].tipo : "",           // Col B: Tipo
+                    cuenta ? (cuenta[1].esInversion ? "Si" : "No") : "", // Col C: Inversion
+                    "",                                     // Col D: (Vacía)
+                    concepto || "",                         // Col E: Concepto
+                    "",                                     // Col F: (Vacía)
+                    beneficiario || ""                      // Col G: Beneficiario
+                ]);
+            }
+
+            const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
+            XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
+
+            // --- 4. ESCRITURA ---
             if (typeof oneDriveManager !== 'undefined' && oneDriveManager.accessToken) {
-                // Generar binario para subir
                 const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
                 await oneDriveManager.saveFile(wbout);
-                alert("✅ Guardado correctamente en OneDrive");
+                alert("✅ Guardado en OneDrive (Tablas actualizadas)");
             } else {
-                // Si no, descarga local al ordenador
-                XLSX.writeFile(wb, "aidanai_guardado.xlsx");
-                alert("✅ Archivo descargado en tu ordenador (Modo Local)");
+                XLSX.writeFile(wb, "aidanai.xlsx");
+                alert("✅ Guardado en Local (Tablas actualizadas)");
             }
 
         } catch (error) {
             console.error(error);
-            alert("❌ Error al guardar: " + error.message);
+            alert("❌ ERROR: " + error.message);
         } finally {
             if(btn) btn.innerHTML = originalText;
         }
@@ -3983,7 +4131,7 @@ window.renderizarSunburstPatrimonio = function() {
     window.addEventListener('resize', () => chart.resize());
 };
 
-// --- NUEVA FUNCIÓN DE CARGA RÁPIDA ---
+// --- NUEVA FUNCIÓN DE CARGA RÁPIDA (CORREGIDA) ---
 function cargarDesdeCache() {
     try {
         const cacheDatos = localStorage.getItem('aidanai_datos_cache');
@@ -3991,20 +4139,38 @@ function cargarDesdeCache() {
 
         if (cacheDatos) {
             console.log("⚡ Cargando desde memoria local...");
-            datos = JSON.parse(cacheDatos);
             
-            // Reparar configuración si existe
-            if (cacheConfig) mapaCuentas = JSON.parse(cacheConfig);
+            // 1. Cargar en la CAJA FUERTE GLOBAL (window.datos)
+            window.datos = JSON.parse(cacheDatos);
+            
+            // 2. Cargar Configuración Global
+            if (cacheConfig) {
+                window.mapaCuentas = JSON.parse(cacheConfig);
+            } else {
+                window.mapaCuentas = {};
+            }
 
-            // IMPORTANTE: Restaurar tipos de datos (las fechas vienen como texto del JSON)
-            /* No es necesario re-parsear todo, pero nos aseguramos de que el Dashboard funcione */
+            // 3. REPARACIÓN OBLIGATORIA (IDs y Fechas)
+            // Recorremos cada dato para asegurarnos de que es válido
+            window.datos = window.datos.map(m => {
+                return {
+                    ...m, // Mantenemos el resto de info
+                    id: m.id || m.ID || crypto.randomUUID(), // ¡Si falta ID, lo creamos ya!
+                    fecha: new Date(m.fecha) // Convertimos el texto "2025-01-01" en una Fecha real
+                };
+            });
+
+            console.log("✅ Datos restaurados en window.datos:", window.datos.length);
+            datos = window.datos;
+            // 4. Refrescar la pantalla
+            if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+            if(typeof mostrarEstado === 'function') mostrarEstado('⚡ Datos listos (Versión Local)', 'ok');
             
-            recalcularSaldosGlobal(); // Esto refresca toda la pantalla al instante
-            mostrarEstado('⚡ Datos cargados de memoria (Buscando actualizaciones...)', 'ok');
             return true; // Indicamos que había datos
         }
     } catch (e) {
         console.error("Error leyendo caché:", e);
+        window.datos = []; // Si falla, aseguramos que esté vacío pero definido
     }
     return false;
 }
