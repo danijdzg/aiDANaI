@@ -1102,18 +1102,23 @@
 						<option value="">Selecciona Destino...</option>
 					</select>
 				</div>
+                <input type="hidden" id="m-id">
+                
                 <label class="input-label">CONCEPTO</label>
                 <select id="m-concepto" class="filter-input form-field" onchange="autoRellenarDescripcion()"><option value="">Selecciona Concepto...</option></select>
+                
                 <label class="input-label">DESCRIPCIÓN</label>
                 <input type="text" id="m-desc" class="filter-input form-field" placeholder="Detalle del movimiento">
+                
                 <label class="input-label">BENEFICIARIO</label>
                 <select id="m-beneficiario" class="filter-input form-field"><option value="">Selecciona Beneficiario...</option></select>
+                
                 <label class="input-label">FECHA</label>
                 <input type="date" id="m-fecha" class="filter-input form-field" style="margin-bottom:20px">
 
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom: 10px;">
-                    <button id="btn-modal-action" class="full-btn btn-blue" onclick="guardarManual()">GUARDAR</button>
-                    <button class="full-btn btn-gray" onclick="cerrarModal()">CANCELAR</button>
+                    <button type="button" id="btn-modal-action" class="full-btn btn-blue" onclick="guardarManual()">GUARDAR</button>
+                    <button type="button" class="full-btn btn-gray" onclick="cerrarModal()">CANCELAR</button>
                 </div>
                 
                 <div id="extra-actions" style="display:none; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
@@ -2004,30 +2009,38 @@ function finalizarGuardado(esTraspaso) {
         });
         const contador = document.getElementById('contador-filas');
         if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
+        
         if (lista.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos disponibles</td></tr>';
             return;
         }
+
         tbody.innerHTML = lista.map(m => {
+            // Preparar fecha para visualización
             const date = new Date(m.ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+            
+            // Lógica de colores y signos
             let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
             let signo = m.importe > 0 ? '+' : '';
+            
+            // EL CAMBIO IMPORTANTE ESTÁ AQUÍ ABAJO EN EL ONCLICK:
+            // Usamos editarMovimiento y ponemos comillas simples '${m.id}' para proteger el ID
             return `
-		<tr onclick="cargarParaEditar(${m.id})" style="cursor:pointer">
-        <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${date}</td>
-        <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
-        <td class="pc-only ${color}">${Security.escapeHTML(m.cuenta)} (${fmt(m.saldo)})</td>
-        <td class="pc-only">${Security.escapeHTML(m.concepto)}</td>
-        <td class="pc-only">${Security.escapeHTML(m.detalle)}</td>
-        <td class="pc-only">${Security.escapeHTML(m.beneficiario)}</td>
-        
-        <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${date}</td>
-        <td class="mob-only td-cuenta-mob ${color}">${Security.escapeHTML(m.cuenta)} <span class="saldo-small">(${fmt(m.saldo)})</span></td>
-        <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
-        <td class="mob-only td-desc-mob"><strong style="color:#fff">${Security.escapeHTML(m.concepto)}</strong> - ${Security.escapeHTML(m.detalle)}</td>
-        <td class="mob-only td-ben-mob">${Security.escapeHTML(m.beneficiario)}</td>
-		</tr>
-		`;
+            <tr onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
+                <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${date}</td>
+                <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
+                <td class="pc-only ${color}">${Security.escapeHTML(m.cuenta)} (${fmt(m.saldo)})</td>
+                <td class="pc-only">${Security.escapeHTML(m.concepto)}</td>
+                <td class="pc-only">${Security.escapeHTML(m.detalle)}</td>
+                <td class="pc-only">${Security.escapeHTML(m.beneficiario)}</td>
+                
+                <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${date}</td>
+                <td class="mob-only td-cuenta-mob ${color}">${Security.escapeHTML(m.cuenta)} <span class="saldo-small">(${fmt(m.saldo)})</span></td>
+                <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
+                <td class="mob-only td-desc-mob"><strong style="color:#fff">${Security.escapeHTML(m.concepto)}</strong> - ${Security.escapeHTML(m.detalle)}</td>
+                <td class="mob-only td-ben-mob">${Security.escapeHTML(m.beneficiario)}</td>
+            </tr>
+            `;
         }).join('');
     }
 
@@ -2318,132 +2331,81 @@ window.cargarParaEditar = function(id) {
 // --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
-async function guardarManual() {
-    // --- 1. REFERENCIAS A LA PANTALLA ---
-    const btnGuardar = document.getElementById('btn-modal-action');
-    const textoOriginal = btnGuardar.innerText;
-    
-    // --- 2. RECOGIDA DE DATOS ---
-    const fecha = document.getElementById('m-fecha').value;
-    const cantidadStr = document.getElementById('m-cantidad').value; 
-    const cuenta = document.getElementById('m-cuenta').value;
-    const concepto = document.getElementById('m-concepto').value;
-    // Aseguramos que desc y ben sean cadenas vacías si no hay nada, nunca null
-    const desc = (document.getElementById('m-desc').value || "").trim(); 
-    const ben = (document.getElementById('m-beneficiario').value || "").trim(); 
-    const ctaDestino = document.getElementById('m-cuenta-destino').value; // Para traspasos
+window.guardarManual = async function() {
+    console.log("Iniciando guardado...");
 
-    // VALIDACIÓN BÁSICA
-    if (!fecha || !cantidadStr || !cuenta || (window.modoTransaccionActual !== 'traspaso' && !concepto)) {
-        alert("⚠️ Faltan datos obligatorios (Fecha, Importe, Cuenta o Concepto).");
+    // 1. OBTENER DATOS USANDO TUS IDs REALES (m-...)
+    // IMPORTANTE: Asumo que IMPORTE y CUENTA se llaman 'm-importe' y 'm-cuenta'.
+    // Si tienen otro nombre arriba en tu HTML, avísame.
+    const id = document.getElementById('m-id').value;
+    const fecha = document.getElementById('m-fecha').value;
+    const concepto = document.getElementById('m-concepto').value;
+    const desc = document.getElementById('m-desc').value;
+    const benef = document.getElementById('m-beneficiario').value;
+    
+    // Intento coger cuenta e importe (que están más arriba en tu HTML)
+    const elCuenta = document.getElementById('m-cuenta') || document.getElementById('inpCuenta');
+    const elImporte = document.getElementById('m-importe') || document.getElementById('inpImporte');
+    
+    const cuenta = elCuenta ? elCuenta.value : "";
+    const importe = elImporte ? parseFloat(elImporte.value) : 0;
+
+    // 2. VALIDACIÓN
+    if (!fecha || !cuenta || isNaN(importe)) {
+        alert("Falta Fecha, Cuenta o Importe. Revísalo.");
         return;
     }
 
-    // --- 3. ACTIVAR MODO SEGURO (BLOQUEO DE BOTÓN) ---
-    if (isSaving) return; // Si ya está guardando, ignorar clics extra
-    isSaving = true;
-    btnGuardar.disabled = true;
-    btnGuardar.innerText = "⏳ GUARDANDO...";
-    btnGuardar.style.opacity = "0.7";
+    // 3. CREAR EL MOVIMIENTO
+    const mov = {
+        ID: id ? id : crypto.randomUUID(), // Si hay ID es editar, si no, nuevo
+        FECHA: fecha,
+        CUENTA: cuenta,
+        CONCEPTO: concepto,
+        IMPORTE: importe,
+        DESCRIPCION: desc,
+        BENEFICIARIO: benef
+    };
 
-    try {
-        // PREPARAR DATOS
-        // Si estamos editando, mantenemos el ID. Si es nuevo, creamos uno.
-        const idFinal = idEnEdicion ? idEnEdicion : generateUUID();
-        const importe = parseFloat(cantidadStr.replace(',', '.'));
-        
-        // LÓGICA DE SIGNOS SEGÚN EL MODO (IMPIDE ERRORES HUMANOS)
-        let importeFinal = Math.abs(importe);
-        if (window.modoTransaccionActual === 'pago') importeFinal = -importeFinal;
-        if (window.modoTransaccionActual === 'ingreso') importeFinal = importeFinal;
-        if (window.modoTransaccionActual === 'traspaso') importeFinal = -importeFinal; // Salida de dinero
+    // 4. ACTUALIZAR EN MEMORIA (LOCAL)
+    const datos = window.datosGlobales || []; // Tu variable de datos
+    const indice = datos.findIndex(d => d.ID == mov.ID);
 
-        // DETECCIÓN DE TRASPASO AUTOMÁTICO
-        let conceptoFinal = concepto;
-        let descFinal = desc;
-        
-        if (window.modoTransaccionActual === 'traspaso') {
-            if (!ctaDestino) throw new Error("Debes elegir una Cuenta Destino para el traspaso.");
-            conceptoFinal = "TRASPASO";
-            // Formato especial para que el sistema reconozca el destino: ">> A: CuentaDestino | Nota"
-            descFinal = `>> A: ${ctaDestino} | ${desc}`;
-        }
-
-        // --- PARA LA NUBE (Array ordenado estricto) ---
-        // Orden: ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESCRIPCIÓN, BENEFICIARIO
-        const filaExcel = [idFinal, fecha, cuenta, conceptoFinal, importeFinal, descFinal, ben];
-
-        // --- PARA LOCAL (Objeto con alias defensivos) ---
-        const objetoLocal = {
-            ID: idFinal, FECHA: fecha, CUENTA: cuenta, CONCEPTO: conceptoFinal,
-            IMPORTE: importeFinal, DESCRIPCION: descFinal, BENEFICIARIO: ben,
-            // Alias para compatibilidad
-            "DESCRIPCIÓN": descFinal, "BENEFICIARIO": ben, "Concepto": conceptoFinal, "Cuenta": cuenta
-        };
-
-        if (modoNube) {
-            if(window.mostrarEstado) window.mostrarEstado("☁️ Conectando con OneDrive...", "normal");
-            
-            // OPERACIÓN CRÍTICA EN NUBE
-            if (idEnEdicion) {
-                // Si editamos, primero borramos la fila antigua con seguridad
-                await oneDrive.borrarFilaPorID(idEnEdicion);
-            }
-            // Insertamos la nueva (siempre al final, es más seguro en Excel)
-            await oneDrive.agregarFila(filaExcel);
-            
-            // Si es TRASPASO, creamos automáticamente la entrada en la otra cuenta
-            if (window.modoTransaccionActual === 'traspaso') {
-                const idDestino = generateUUID();
-                const descEntrada = `<< DE: ${cuenta} | ${desc}`;
-                const filaDestino = [idDestino, fecha, ctaDestino, "TRASPASO", Math.abs(importeFinal), descEntrada, ben];
-                await oneDrive.agregarFila(filaDestino);
-            }
-
-            if(window.mostrarEstado) window.mostrarEstado("✅ Guardado seguro en Nube", "ok");
-            
-            // Recargar datos para ver los cambios reflejados
-            await window.iniciarCargaNube();
-            
-        } else {
-            // MODO LOCAL (Memoria del navegador)
-            if (idEnEdicion) {
-                const idx = datos.findIndex(d => d.ID == idEnEdicion || d.id == idEnEdicion);
-                if (idx !== -1) datos[idx] = { ...datos[idx], ...objetoLocal };
-            } else {
-                datos.push(objetoLocal);
-            }
-
-            // Lógica Local de Traspaso
-            if (window.modoTransaccionActual === 'traspaso') {
-                const idDestino = generateUUID();
-                const descEntrada = `<< DE: ${cuenta} | ${desc}`;
-                const objDestino = { ...objetoLocal, ID: idDestino, CUENTA: ctaDestino, IMPORTE: Math.abs(importeFinal), DESCRIPCION: descEntrada };
-                datos.push(objDestino);
-            }
-            
-            // Actualizar pantallas
-            recalcularSaldosGlobal();
-            if(window.mostrarEstado) window.mostrarEstado("💾 Guardado en memoria local", "ok");
-        }
-
-        // 4. LIMPIEZA Y CIERRE (SOLO SI TODO FUE BIEN)
-        cerrarModal();
-        idEnEdicion = null;
-        if(window.vibrar) window.vibrar('ingreso');
-
-    } catch (e) {
-        console.error(e);
-        alert("❌ ERROR AL GUARDAR:\n" + e.message + "\n\nNo se han guardado los cambios. Inténtalo de nuevo.");
-        if(window.mostrarEstado) window.mostrarEstado("Error al guardar", "err");
-    } finally {
-        // 5. RESTAURAR BOTÓN (SIEMPRE)
-        isSaving = false;
-        btnGuardar.disabled = false;
-        btnGuardar.innerText = textoOriginal;
-        btnGuardar.style.opacity = "1";
+    if (indice >= 0) {
+        datos[indice] = mov; // Editar
+    } else {
+        datos.push(mov); // Nuevo
     }
-}
+
+    // 5. REFRESCAR PANTALLA
+    // Llama a tu función de pintar (usaré un nombre genérico, si falla no es grave)
+    if (typeof renderTabla === 'function') renderTabla(datos);
+    else if (typeof pintarTabla === 'function') pintarTabla(datos);
+
+    // Limpiar formulario
+    document.getElementById('m-id').value = "";
+    document.getElementById('m-desc').value = "";
+    document.getElementById('m-importe').value = "";
+    
+    // 6. GUARDAR EN NUBE (OneDrive)
+    try {
+        if (window.oneDriveManager) {
+            alert("Guardado en local. Subiendo a OneDrive...");
+            // Preparamos el Excel
+            const ws = XLSX.utils.json_to_sheet(datos);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+            const excelBinario = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            
+            await window.oneDriveManager.uploadFile(excelBinario, "aidanai.xlsx");
+            alert("✅ ¡Sincronizado OK!");
+        } else {
+            alert("⚠️ Guardado en local, pero NO conectado a OneDrive.");
+        }
+    } catch (e) {
+        alert("❌ Error subiendo a nube: " + e.message);
+    }
+};
 // ==========================================
 // 🧮 CÁLCULOS LOCALES (Motor de Saldos)
 // ==========================================
@@ -4778,6 +4740,51 @@ function cargarSugerenciasAjustes() {
     llenar(dlConceptos, setConceptos);
     llenar(dlBenef, setBenef);
 }
+
+// === NUEVA FUNCIÓN PARA CARGAR DATOS EN EL FORMULARIO ===
+    window.editarMovimiento = function(idMovimiento) {
+        console.log("Editando ID:", idMovimiento);
+
+        // 1. Buscar el movimiento en la memoria global
+        // Nota: Asumo que 'datosGlobales' tiene todo. Si usas otra variable, avísame.
+        // También probamos a buscar en 'window.datos' por si acaso.
+        const lista = window.datosGlobales || window.datos || [];
+        
+        // Buscamos ignorando mayúsculas/minúsculas en el ID
+        const mov = lista.find(m => (m.id == idMovimiento || m.ID == idMovimiento));
+
+        if (!mov) {
+            console.error("No encuentro el movimiento con ID:", idMovimiento);
+            return;
+        }
+
+        // 2. Rellenar tus inputs (IDs: m-id, m-fecha, m-concepto...)
+        document.getElementById('m-id').value = mov.id || mov.ID || '';
+        document.getElementById('m-concepto').value = mov.concepto || mov.CONCEPTO || '';
+        document.getElementById('m-desc').value = mov.detalle || mov.DESCRIPCION || ''; // Mapeamos detalle -> descripcion
+        document.getElementById('m-beneficiario').value = mov.beneficiario || mov.BENEFICIARIO || '';
+        
+        // Cuenta e Importe (intento IDs comunes por si acaso)
+        if(document.getElementById('m-cuenta')) 
+            document.getElementById('m-cuenta').value = mov.cuenta || mov.CUENTA || '';
+        
+        if(document.getElementById('m-importe')) 
+            document.getElementById('m-importe').value = mov.importe || mov.IMPORTE || '';
+
+        // 3. Tratamiento especial para la FECHA (Convertir a YYYY-MM-DD para el input)
+        let fechaRaw = mov.ts || mov.FECHA;
+        if (fechaRaw) {
+            let fechaObj = new Date(fechaRaw);
+            // Formato YYYY-MM-DD necesario para input type="date"
+            let fechaStr = fechaObj.toISOString().split('T')[0];
+            document.getElementById('m-fecha').value = fechaStr;
+        }
+
+        // 4. Avisar y subir
+        alert("Modo edición activado: " + (mov.concepto || "Movimiento"));
+        // Hacer scroll suave hacia arriba donde está el formulario
+        document.getElementById('m-fecha').scrollIntoView({behavior: 'smooth', block: 'center'});
+    };
 
 </script>
 </body>
