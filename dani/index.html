@@ -2321,7 +2321,23 @@ window.cargarParaEditar = function(id) {
         llenar('m-concepto', sConceptos);
         llenar('m-beneficiario', sBeneficiarios);
     }
-    function cerrarModal() { document.getElementById('modal-manual').classList.remove('active'); }
+    function cerrarModal() {
+        // 1. Ocultar la ventana
+        document.getElementById('modal-manual').classList.remove('active');
+        
+        // 2. LIMPIEZA DE SEGURIDAD (Vital)
+        document.getElementById('m-id').value = ""; // Borramos el ID para no sobrescribir nada luego
+        
+        // Ocultar los botones de eliminar/clonar para la próxima vez
+        const accionesExtra = document.getElementById('extra-actions');
+        if (accionesExtra) {
+            accionesExtra.style.display = 'none';
+        }
+        
+        // Opcional: Limpiar los campos de texto
+        document.getElementById('m-desc').value = "";
+        document.getElementById('m-importe').value = "";
+    }
     function autoRellenarDescripcion() {
         const c = document.getElementById('m-concepto').value;
         const d = document.getElementById('m-desc');
@@ -4741,50 +4757,88 @@ function cargarSugerenciasAjustes() {
     llenar(dlBenef, setBenef);
 }
 
-// === NUEVA FUNCIÓN PARA CARGAR DATOS EN EL FORMULARIO ===
+// === FUNCIÓN DE EDICIÓN (VERSIÓN BLINDADA) ===
     window.editarMovimiento = function(idMovimiento) {
-        console.log("Editando ID:", idMovimiento);
+        console.log("Solicitado editar ID:", idMovimiento);
 
-        // 1. Buscar el movimiento en la memoria global
-        // Nota: Asumo que 'datosGlobales' tiene todo. Si usas otra variable, avísame.
-        // También probamos a buscar en 'window.datos' por si acaso.
+        // 1. Buscar el movimiento
         const lista = window.datosGlobales || window.datos || [];
-        
         // Buscamos ignorando mayúsculas/minúsculas en el ID
         const mov = lista.find(m => (m.id == idMovimiento || m.ID == idMovimiento));
 
         if (!mov) {
-            console.error("No encuentro el movimiento con ID:", idMovimiento);
+            alert("Error: No encuentro los datos de este movimiento en memoria.");
             return;
         }
 
-        // 2. Rellenar tus inputs (IDs: m-id, m-fecha, m-concepto...)
-        document.getElementById('m-id').value = mov.id || mov.ID || '';
-        document.getElementById('m-concepto').value = mov.concepto || mov.CONCEPTO || '';
-        document.getElementById('m-desc').value = mov.detalle || mov.DESCRIPCION || ''; // Mapeamos detalle -> descripcion
-        document.getElementById('m-beneficiario').value = mov.beneficiario || mov.BENEFICIARIO || '';
+        // 2. ABRIR LA VENTANA PRIMERO
+        // (Así aseguramos que los campos son visibles y escribibles)
+        document.getElementById('modal-manual').classList.add('active');
         
-        // Cuenta e Importe (intento IDs comunes por si acaso)
-        if(document.getElementById('m-cuenta')) 
-            document.getElementById('m-cuenta').value = mov.cuenta || mov.CUENTA || '';
-        
-        if(document.getElementById('m-importe')) 
-            document.getElementById('m-importe').value = mov.importe || mov.IMPORTE || '';
+        // Mostramos botones extra
+        const accionesExtra = document.getElementById('extra-actions');
+        if (accionesExtra) accionesExtra.style.display = 'grid';
 
-        // 3. Tratamiento especial para la FECHA (Convertir a YYYY-MM-DD para el input)
-        let fechaRaw = mov.ts || mov.FECHA;
-        if (fechaRaw) {
-            let fechaObj = new Date(fechaRaw);
-            // Formato YYYY-MM-DD necesario para input type="date"
-            let fechaStr = fechaObj.toISOString().split('T')[0];
-            document.getElementById('m-fecha').value = fechaStr;
-        }
+        // 3. RELLENAR DATOS (Con un pequeño retraso de seguridad)
+        setTimeout(() => {
+            console.log("Rellenando datos para:", mov.CONCEPTO || mov.concepto);
 
-        // 4. Avisar y subir
-        alert("Modo edición activado: " + (mov.concepto || "Movimiento"));
-        // Hacer scroll suave hacia arriba donde está el formulario
-        document.getElementById('m-fecha').scrollIntoView({behavior: 'smooth', block: 'center'});
+            // A) ID Oculto (Vital)
+            setValue('m-id', mov.id || mov.ID);
+
+            // B) Fecha (Formato YYYY-MM-DD)
+            let fechaRaw = mov.ts || mov.FECHA;
+            if (fechaRaw) {
+                let f = new Date(fechaRaw);
+                if(!isNaN(f)) setValue('m-fecha', f.toISOString().split('T')[0]);
+            }
+
+            // C) Textos simples
+            setValue('m-desc', mov.detalle || mov.DESCRIPCION);
+            
+            // D) Importe (Buscamos varios nombres posibles por si acaso)
+            // Intenta buscar 'm-importe' (tu posible ID) o 'inpImporte'
+            let valImporte = mov.importe || mov.IMPORTE;
+            if(document.getElementById('m-importe')) setValue('m-importe', valImporte);
+            else if(document.getElementById('inpImporte')) setValue('inpImporte', valImporte);
+
+            // E) Desplegables (Cuenta, Concepto, Beneficiario)
+            // Usamos una función especial que fuerza el valor aunque no exista en la lista
+            setSelect('m-concepto', mov.concepto || mov.CONCEPTO);
+            setSelect('m-beneficiario', mov.beneficiario || mov.BENEFICIARIO);
+            
+            // Cuenta (puede llamarse m-cuenta o inpCuenta)
+            let valCuenta = mov.cuenta || mov.CUENTA;
+            if(document.getElementById('m-cuenta')) setSelect('m-cuenta', valCuenta);
+            else if(document.getElementById('inpCuenta')) setSelect('inpCuenta', valCuenta);
+
+        }, 50); // 50 milisegundos de espera
     };
+
+    // --- Funciones Ayudantes (PÉGALAS TAMBIÉN) ---
+    
+    // Ayudante para escribir en inputs sin que de error si no existen
+    function setValue(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.value = (val === undefined || val === null) ? '' : val;
+    }
+
+    // Ayudante inteligente para Selects
+    function setSelect(id, val) {
+        const el = document.getElementById(id);
+        if (!el || !val) return;
+        
+        el.value = val;
+        // Truco: Si el valor no se ha quedado puesto (porque no existía en la lista),
+        // creamos una opción temporal para que se vea.
+        if (el.value != val) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.text = val + " (Original)";
+            el.add(opt);
+            el.value = val;
+        }
+    }
 
 </script>
 </body>
