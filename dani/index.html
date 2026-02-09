@@ -2678,25 +2678,54 @@ async function guardarManual() {
             if(btnGuardar) btnGuardar.innerText = "Reintentar";
         }
     }
-// ==========================================
-// 🧮 CÁLCULOS LOCALES (Motor de Saldos)
-// ==========================================
-window.recalcularSaldosGlobal = function() {
-    // 1. Ordenar por fecha (Vital si has cambiado la fecha de un movimiento)
-    datos.sort((a, b) => a.ts - b.ts);
+// --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
+function recalcularSaldosGlobal() {
+    if (!window.datos || window.datos.length === 0) return;
 
-    // 2. Recalcular saldos acumulados cuenta por cuenta
-    const ac = {};
-    datos.forEach(m => {
-        if (!ac[m.cuenta]) ac[m.cuenta] = 0;
-        ac[m.cuenta] += m.importe;
-        m.saldo = ac[m.cuenta]; // Actualizamos el saldo de esta línea
+    // 1. Ordenamos cronológicamente (Vital para que el saldo tenga sentido histórico)
+    window.datos.sort((a, b) => a.ts - b.ts);
+
+    // 2. Reiniciamos los saldos en la configuración
+    let saldosTemporales = {};
+    if (window.mapaCuentas) {
+        Object.keys(window.mapaCuentas).forEach(k => {
+            saldosTemporales[k] = 0;
+            if(window.mapaCuentas[k]) window.mapaCuentas[k].saldoActual = 0;
+        });
+    }
+
+    // 3. Recorremos TODOS los movimientos para calcular saldo línea a línea
+    window.datos.forEach(m => {
+        const cta = m.cuenta;
+        const imp = parseFloat(m.importe) || 0;
+
+        // Si la cuenta no existe en el mapa temporal, la iniciamos
+        if (saldosTemporales[cta] === undefined) saldosTemporales[cta] = 0;
+
+        // Sumamos (o restamos) el importe
+        saldosTemporales[cta] += imp;
+
+        // Guardamos el saldo resultante EN EL MOVIMIENTO (para verlo en el Diario)
+        m.saldo = saldosTemporales[cta];
     });
-    
-    // NOTA: No llamamos a 'renderizar()' aquí porque ya lo hace 'guardarManual'
-    // justo después. Así evitamos pintar la pantalla dos veces seguidas.
-};
 
+    // 4. Guardamos los saldos finales en la Configuración Global (Para el Patrimonio)
+    Object.keys(saldosTemporales).forEach(cta => {
+        if (!window.mapaCuentas[cta]) {
+            window.mapaCuentas[cta] = { tipo: 'OTROS', esInversion: false };
+        }
+        window.mapaCuentas[cta].saldoActual = saldosTemporales[cta];
+    });
+
+    console.log("🧮 Saldos recalculados correctamente.");
+
+    // 5. ACTUALIZAR PANTALLA (Lo que le faltaba a tu función original)
+    if(typeof renderizar === 'function') renderizar();
+    if(typeof actualizarDashboard === 'function') actualizarDashboard();
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+    // Actualizamos también el gráfico de rayos X
+    if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+}
      	
 	function clonarMovimiento() {
     vibrar('clonar');
@@ -4551,30 +4580,6 @@ function filtrarTabla(termino) {
  * 🏛️ NÚCLEO FINANCIERO aiDANaI - VERSIÓN GOLDEN MASTER
  * Consolidación definitiva de lógica: CRUD, Saldos y Sincronización.
  */
-
-// ==========================================
-// 1. MOTOR DE CÁLCULO Y PROCESAMIENTO
-// ==========================================
-
-// Función auxiliar para recalcular saldos en tiempo real
-const recalcularSaldosGlobal = function() {
-    // 1. Ordenar cronológicamente (Vital para la coherencia financiera)
-    datos.sort((a, b) => a.ts - b.ts);
-
-    // 2. Recalcular saldo acumulado línea a línea
-    const acumulados = {};
-    datos.forEach(m => {
-        const cta = m.cuenta;
-        if (!acumulados[cta]) acumulados[cta] = 0;
-        acumulados[cta] += m.importe;
-        m.saldo = acumulados[cta]; // Fijamos el saldo correcto
-    });
-
-    // 3. Refrescar toda la interfaz
-    if(typeof renderizar === 'function') renderizar();
-    if(typeof actualizarDashboard === 'function') actualizarDashboard();
-    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-};
 
 // ==========================================
 // 🧠 LÓGICA DE NEGOCIO (Con Guardado en Caché)
