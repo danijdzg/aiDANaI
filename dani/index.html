@@ -1875,19 +1875,18 @@ function procesarLibroLeido(wb) {
 function procesarDatos(filas) {
         const temp = [];
         
-        // Empezamos en i=1 para saltar la cabecera (títulos)
+        // Empezamos en i=1 para saltar la cabecera del Excel
         for (let i = 1; i < filas.length; i++) {
             const row = filas[i];
-            // Si la fila está vacía, la saltamos
             if (!row || row.length === 0) continue;
 
-            // --- MAPEO DE COLUMNAS (CORREGIDO A 7 COLUMNAS) ---
-            // 0:ID | 1:FECHA | 2:CUENTA | 3:CONCEPTO | 4:IMPORTE | 5:DESCRIPCION | 6:BENEFICIARIO
+            // --- MAPEO EXACTO DE 7 COLUMNAS ---
+            // [0] ID | [1] FECHA | [2] CUENTA | [3] CONCEPTO | [4] IMPORTE | [5] DESCRIPCION | [6] BENEFICIARIO
 
             // 0. ID
             const idSeguro = String(row[0] || generateUUID()); 
             
-            // 1. FECHA
+            // 1. FECHA (Gestión robusta de fechas Excel)
             let rawFecha = row[1];
             let ts = Date.now();
             if (rawFecha instanceof Date) ts = rawFecha.getTime();
@@ -1903,20 +1902,24 @@ function procesarDatos(filas) {
             // 4. IMPORTE
             let imp = row[4];
             if (typeof imp !== 'number') {
-                // Limpieza de símbolos de moneda o textos raros
                 imp = parseFloat(String(imp).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
             }
 
-            // 5. DESCRIPCIÓN (¡AQUÍ ESTABA EL ERROR, ANTES LEÍA LA 4!)
+            // 5. DESCRIPCIÓN (La clave del fallo estaba aquí)
             const desc = String(row[5] || '').trim(); 
             
             // 6. BENEFICIARIO
             const ben = String(row[6] || '').trim();
 
             // Clasificación automática
-            let tipo = 'gasto';
-            if ((con + desc).toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
-            else if (imp >= 0) tipo = 'ingreso';
+            let tipo = 'gasto'; // Por defecto
+            const textoAnalisis = (con + ' ' + desc).toUpperCase();
+            
+            if (textoAnalisis.includes('TRASPASO')) {
+                tipo = 'traspaso';
+            } else if (imp >= 0) {
+                tipo = 'ingreso';
+            }
 
             temp.push({
                 id: idSeguro,
@@ -1924,23 +1927,23 @@ function procesarDatos(filas) {
                 importe: imp,
                 cuenta: cta,
                 concepto: con,
-                detalle: desc, // Ahora lee correctamente la columna 5
+                detalle: desc, // 'detalle' es el nombre interno que usa la tabla para la descripción
                 beneficiario: ben,
                 tipo: tipo,
                 saldo: 0
             });
         }
 
+        // Ordenamos por fecha (más reciente primero)
+        temp.sort((a, b) => b.ts - a.ts);
+
         datos = temp;
         recalcularSaldosGlobal();
         
-        // Guardar en caché local para que la próxima vez cargue rápido
+        // Guardamos copia rápida
         try {
             localStorage.setItem('aidanai_datos_cache', JSON.stringify(datos));
-            localStorage.setItem('aidanai_config_cache', JSON.stringify(mapaCuentas));
-        } catch (e) {
-            console.warn("Memoria llena, no se pudo cachear datos.");
-        }
+        } catch (e) { console.warn("Cache llena"); }
     }
 
  
@@ -4421,40 +4424,79 @@ window.procesarDatos = function(filas) {
 // ==========================================
 // 2. SISTEMA DE BORRADO SEGURO
 // ==========================================
-async function borrarMovimiento() {
-    // Si no hay ID editándose, no podemos borrar nada
-    if (!idEnEdicion) return; 
+window.borrarMovimiento = async function(id) {
+        if (!confirm("¿Seguro que quieres eliminar este movimiento? Esta acción no se puede deshacer.")) return;
 
-    if (!confirm("¿Seguro que quieres eliminar este movimiento permanentemente?")) return;
+        mostrarEstado("⏳ Eliminando de forma segura...", "normal");
 
-    try {
-        if (modoNube) {
-            mostrarEstado("🗑️ Borrando de la nube...", "normal");
-            await oneDrive.borrarFilaPorID(idEnEdicion);
-            mostrarEstado("✅ Eliminado", "ok");
-            
-            // Refrescar
-            if(window.iniciarCargaNube) await window.iniciarCargaNube();
-            
-        } else {
-            // MODO LOCAL
-            datos = datos.filter(d => d.ID != idEnEdicion);
-            renderizar();
-            actualizarDashboard();
-            mostrarEstado("🗑️ Eliminado (Local)", "ok");
+        try {
+            let datosNube = [];
+
+            // 1. MODO ATÓMICO: Bajamos la versión más reciente de la nube
+            if (modoNube) {
+                try {
+                    console.log("Atomic Delete: Bajando nube...");
+                    const arrayBuffer = await oneDrive.loadFile();
+                    if (arrayBuffer) {
+                        if (arrayBuffer.Sheets) {
+                             datosNube = XLSX.utils.sheet_to_json(arrayBuffer.Sheets['Movimientos']);
+                        } else {
+                             const workbook = XLSX.read(arrayBuffer, {type: 'array'});
+                             datosNube = XLSX.utils.sheet_to_json(workbook.Sheets['Movimientos']);
+                        }
+                    }
+                } catch (error) {
+                    console.warn("Fallo al bajar nube para borrar. Abortando por seguridad.", error);
+                    alert("⚠️ No se puede borrar: No hay conexión estable con la nube para verificar la integridad.");
+                    mostrarEstado("Error de conexión", "error");
+                    return; // IMPORTANTE: Si no podemos verificar la nube, mejor no borrar para no romper nada.
+                }
+            } else {
+                // Modo local
+                datosNube = [...window.datos];
+            }
+
+            // 2. FILTRADO (EL BORRADO REAL)
+            // Filtramos la lista de la NUBE, quitando el ID que queremos borrar
+            const datosFiltrados = datosNube.filter(m => String(m.ID) !== String(id));
+
+            // Verificación: ¿Realmente se borró algo?
+            if (datosFiltrados.length === datosNube.length) {
+                alert("El movimiento ya no existía en la nube (quizás alguien más lo borró). Actualizando pantalla...");
+            }
+
+            // 3. ACTUALIZAR ENTORNO
+            // Convertimos al formato interno para actualizar la pantalla
+            window.datos = datosFiltrados.map(m => ({
+                id: m.ID,
+                ts: new Date(m.FECHA).getTime(),
+                fecha: m.FECHA,
+                cuenta: m.CUENTA,
+                concepto: m.CONCEPTO,
+                importe: parseFloat(m.IMPORTE),
+                detalle: m.DESCRIPCION,
+                beneficiario: m.BENEFICIARIO,
+                tipo: (String(m.CONCEPTO)+String(m.DESCRIPCION)).toUpperCase().includes('TRASPASO') ? 'traspaso' : (parseFloat(m.IMPORTE) >= 0 ? 'ingreso' : 'gasto')
+            }));
+
+            recalcularSaldosGlobal();
+
+            // 4. SUBIDA (Solo si estamos en nube)
+            if (modoNube) {
+                await guardarUniversal(false); // false = subir a nube
+            } else {
+                mostrarEstado("Borrado en memoria local", "ok");
+            }
+
+            cerrarModal(); // Si estaba abierto el modal de edición
+            mostrarEstado("🗑️ Movimiento eliminado", "ok");
+
+        } catch (error) {
+            console.error(error);
+            alert("Error al borrar: " + error.message);
+            mostrarEstado("Error al borrar", "error");
         }
-
-        cerrarModal();
-        idEnEdicion = null;
-        if(window.vibrar) vibrar('clonar'); // Vibración de confirmación
-
-    } catch (e) {
-        console.error(e);
-        alert("Error al borrar: " + e.message);
-        mostrarEstado("❌ Error al borrar", "err");
-    }
-}
-
+    };
 // ==========================================
 // 3. GUARDADO MAESTRO (Rápido y Seguro)
 // ==========================================
