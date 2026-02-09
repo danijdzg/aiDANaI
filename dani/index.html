@@ -2322,21 +2322,21 @@ window.cargarParaEditar = function(id) {
         llenar('m-beneficiario', sBeneficiarios);
     }
     function cerrarModal() {
-        // 1. Ocultar la ventana
-        document.getElementById('modal-manual').classList.remove('active');
+        // 1. Ocultar ventana
+        const modal = document.getElementById('modal-manual');
+        if (modal) modal.classList.remove('active');
         
-        // 2. LIMPIEZA DE SEGURIDAD (Vital)
-        document.getElementById('m-id').value = ""; // Borramos el ID para no sobrescribir nada luego
+        // 2. Limpieza SEGURA (Si no encuentra la caja, no se rompe)
+        const idsALimpiar = ['m-id', 'm-desc', 'm-importe', 'inpImporte', 'm-concepto', 'm-beneficiario'];
         
-        // Ocultar los botones de eliminar/clonar para la próxima vez
-        const accionesExtra = document.getElementById('extra-actions');
-        if (accionesExtra) {
-            accionesExtra.style.display = 'none';
-        }
-        
-        // Opcional: Limpiar los campos de texto
-        document.getElementById('m-desc').value = "";
-        document.getElementById('m-importe').value = "";
+        idsALimpiar.forEach(id => {
+            const elemento = document.getElementById(id);
+            if (elemento) elemento.value = "";
+        });
+
+        // 3. Ocultar botones extra
+        const acciones = document.getElementById('extra-actions');
+        if (acciones) acciones.style.display = 'none';
     }
     function autoRellenarDescripcion() {
         const c = document.getElementById('m-concepto').value;
@@ -2348,80 +2348,80 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("Iniciando guardado...");
+        console.log("Iniciando guardado...");
 
-    // 1. OBTENER DATOS USANDO TUS IDs REALES (m-...)
-    // IMPORTANTE: Asumo que IMPORTE y CUENTA se llaman 'm-importe' y 'm-cuenta'.
-    // Si tienen otro nombre arriba en tu HTML, avísame.
-    const id = document.getElementById('m-id').value;
-    const fecha = document.getElementById('m-fecha').value;
-    const concepto = document.getElementById('m-concepto').value;
-    const desc = document.getElementById('m-desc').value;
-    const benef = document.getElementById('m-beneficiario').value;
-    
-    // Intento coger cuenta e importe (que están más arriba en tu HTML)
-    const elCuenta = document.getElementById('m-cuenta') || document.getElementById('inpCuenta');
-    const elImporte = document.getElementById('m-importe') || document.getElementById('inpImporte');
-    
-    const cuenta = elCuenta ? elCuenta.value : "";
-    const importe = elImporte ? parseFloat(elImporte.value) : 0;
+        // 1. OBTENER DATOS (Con seguridad)
+        const getVal = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.value : "";
+        };
 
-    // 2. VALIDACIÓN
-    if (!fecha || !cuenta || isNaN(importe)) {
-        alert("Falta Fecha, Cuenta o Importe. Revísalo.");
-        return;
-    }
+        const id = getVal('m-id');
+        const fecha = getVal('m-fecha');
+        const concepto = getVal('m-concepto');
+        const desc = getVal('m-desc');
+        const benef = getVal('m-beneficiario');
+        
+        // Buscamos Importe y Cuenta en varios sitios posibles
+        let valImporte = getVal('m-importe') || getVal('inpImporte');
+        let valCuenta = getVal('m-cuenta') || getVal('inpCuenta');
+        
+        const importe = parseFloat(valImporte);
 
-    // 3. CREAR EL MOVIMIENTO
-    const mov = {
-        ID: id ? id : crypto.randomUUID(), // Si hay ID es editar, si no, nuevo
-        FECHA: fecha,
-        CUENTA: cuenta,
-        CONCEPTO: concepto,
-        IMPORTE: importe,
-        DESCRIPCION: desc,
-        BENEFICIARIO: benef
-    };
-
-    // 4. ACTUALIZAR EN MEMORIA (LOCAL)
-    const datos = window.datosGlobales || []; // Tu variable de datos
-    const indice = datos.findIndex(d => d.ID == mov.ID);
-
-    if (indice >= 0) {
-        datos[indice] = mov; // Editar
-    } else {
-        datos.push(mov); // Nuevo
-    }
-
-    // 5. REFRESCAR PANTALLA
-    // Llama a tu función de pintar (usaré un nombre genérico, si falla no es grave)
-    if (typeof renderTabla === 'function') renderTabla(datos);
-    else if (typeof pintarTabla === 'function') pintarTabla(datos);
-
-    // Limpiar formulario
-    document.getElementById('m-id').value = "";
-    document.getElementById('m-desc').value = "";
-    document.getElementById('m-importe').value = "";
-    
-    // 6. GUARDAR EN NUBE (OneDrive)
-    try {
-        if (window.oneDriveManager) {
-            alert("Guardado en local. Subiendo a OneDrive...");
-            // Preparamos el Excel
-            const ws = XLSX.utils.json_to_sheet(datos);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-            const excelBinario = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            
-            await window.oneDriveManager.uploadFile(excelBinario, "aidanai.xlsx");
-            alert("✅ ¡Sincronizado OK!");
-        } else {
-            alert("⚠️ Guardado en local, pero NO conectado a OneDrive.");
+        // 2. VALIDACIÓN
+        if (!fecha || !valCuenta || isNaN(importe)) {
+            alert("Faltan datos: Revisa Fecha, Cuenta e Importe.");
+            return;
         }
-    } catch (e) {
-        alert("❌ Error subiendo a nube: " + e.message);
-    }
-};
+
+        // 3. CREAR OBJETO
+        const mov = {
+            ID: id ? id : crypto.randomUUID(),
+            FECHA: fecha,
+            CUENTA: valCuenta,
+            CONCEPTO: concepto,
+            IMPORTE: importe,
+            DESCRIPCION: desc,
+            BENEFICIARIO: benef
+        };
+
+        // 4. ACTUALIZAR MEMORIA LOCAL
+        const datos = window.datosGlobales || window.datos || [];
+        const indice = datos.findIndex(d => d.ID == mov.ID);
+
+        if (indice >= 0) {
+            datos[indice] = mov; // Editar
+        } else {
+            datos.push(mov); // Nuevo
+        }
+
+        // 5. REFRESCAR PANTALLA
+        if (typeof renderTabla === 'function') renderTabla(datos);
+        else if (typeof pintarTabla === 'function') pintarTabla(datos);
+
+        // 6. LIMPIEZA SEGURA (Aquí era donde fallaba antes)
+        cerrarModal(); // Usamos la función segura que acabamos de crear
+
+        alert("Guardado en local. Subiendo a Nube...");
+
+        // 7. SUBIR A ONEDRIVE
+        try {
+            if (window.oneDriveManager) {
+                const ws = XLSX.utils.json_to_sheet(datos);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+                const excelBinario = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                
+                await window.oneDriveManager.uploadFile(excelBinario, "aidanai.xlsx");
+                alert("✅ Sincronizado OK con OneDrive");
+            } else {
+                alert("⚠️ Guardado localmente (Sin conexión OneDrive)");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("❌ Error subiendo a nube: " + e.message);
+        }
+    };
 // ==========================================
 // 🧮 CÁLCULOS LOCALES (Motor de Saldos)
 // ==========================================
