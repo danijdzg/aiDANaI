@@ -1393,7 +1393,32 @@ class OneDriveManager {
 
     // Mantenemos compatibilidad con tu código antiguo que llama a loadFile
     async loadFile() { return await this.descargarDatosJSON(); }
+	async saveFile(blob) {
+        // 1. Obtenemos ID del archivo y Token de seguridad
+        const id = await this.getFileId();
+        const token = await this.getToken();
+        
+        console.log("📤 Subiendo archivo a OneDrive...");
+        
+        // 2. Enviamos el archivo a Microsoft (PUT = Sobrescribir)
+        const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                // Indicamos que es un archivo Excel
+                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            },
+            body: blob
+        });
 
+        // 3. Comprobamos si salió bien
+        if (!response.ok) {
+            const errorTexto = await response.text();
+            throw new Error("Error al guardar en nube: " + errorTexto);
+        }
+        
+        console.log("✅ Archivo sobrescrito con éxito en la nube.");
+    }
     // --- 4. ESCRITURA ---
     async agregarFila(nuevaFilaArray) {
         const id = await this.getFileId();
