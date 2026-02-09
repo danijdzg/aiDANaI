@@ -1937,13 +1937,13 @@ function leerExcel(blob) {
 
     reader.readAsArrayBuffer(blob);
 }
-// 4. EL CEREBRO: PROCESA EL EXCEL (VERSIÓN DEFINITIVA V2)
+// 4. EL CEREBRO: PROCESA EL EXCEL (VERSIÓN CORREGIDA FECHAS)
 function procesarLibroLeido(wb) {
-    console.log("📖 Procesando archivo con SISTEMA COMPLETO (Cuentas + Tablas)...");
+    console.log("📖 Procesando archivo con CORRECCIÓN DE FECHAS...");
 
-    // --- 1. CARGA DE CONFIGURACIÓN (Cuentas, Conceptos y Beneficiarios) ---
+    // --- 1. CARGA DE CONFIGURACIÓN ---
     window.mapaCuentas = {}; 
-    window.listaConceptos = [];      // Reiniciamos listas
+    window.listaConceptos = [];
     window.listaBeneficiarios = [];
     
     const wsConfigName = wb.SheetNames.find(n => 
@@ -1953,7 +1953,6 @@ function procesarLibroLeido(wb) {
     
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
-        // Leemos todo como una matriz (filas y columnas)
         const matConfig = XLSX.utils.sheet_to_json(wsConfig, { header: 1 });
 
         // Índices de columnas
@@ -1961,24 +1960,19 @@ function procesarLibroLeido(wb) {
         let colCuenta = -1, colTipo = -1, colInv = -1;
         let colConcepto = -1, colBeneficiario = -1;
 
-        // Escaneo inteligente de encabezados
+        // Escaneo inteligente
         for (let i = 0; i < Math.min(matConfig.length, 20); i++) {
             const row = matConfig[i];
             if (!row) continue;
             
-            // Buscamos columnas clave
             const rowUpper = row.map(c => String(c || '').trim().toUpperCase());
-            
             const idxC = rowUpper.indexOf('CUENTA');
             
             if (idxC !== -1) {
                 filaEncabezados = i;
                 colCuenta = idxC;
                 colTipo = rowUpper.indexOf('TIPO');
-                // Buscamos ES_INVERSION con variantes
-                colInv = rowUpper.findIndex(v => v === 'ESINVERSION' || v === 'ES_INVERSION' || v === 'ES INVERSION');
-                
-                // NUEVO: Buscamos CONCEPTO y BENEFICIARIO
+                colInv = rowUpper.findIndex(v => v === 'ESINVERSION' || v === 'ES_INVERSION');
                 colConcepto = rowUpper.indexOf('CONCEPTO');
                 colBeneficiario = rowUpper.indexOf('BENEFICIARIO');
                 break;
@@ -1986,73 +1980,99 @@ function procesarLibroLeido(wb) {
         }
 
         if (filaEncabezados !== -1) {
-            // Leemos los datos fila a fila
             for (let i = filaEncabezados + 1; i < matConfig.length; i++) {
                 const row = matConfig[i];
                 if (!row) continue;
                 
-                // 1. Leer Cuenta
                 if (row[colCuenta]) {
                     const cuentaKey = String(row[colCuenta]).trim();
                     const tipoVal = (colTipo !== -1 && row[colTipo]) ? String(row[colTipo]).trim() : 'OTROS';
                     const esInv = (colInv !== -1 && row[colInv]) ? String(row[colInv]).trim().toUpperCase() === 'SI' : false;
                     window.mapaCuentas[cuentaKey] = { tipo: tipoVal, esInversion: esInv };
                 }
-
-                // 2. Leer Concepto (Si existe en esta fila)
                 if (colConcepto !== -1 && row[colConcepto]) {
                     const val = String(row[colConcepto]).trim();
                     if(val && !window.listaConceptos.includes(val)) window.listaConceptos.push(val);
                 }
-
-                // 3. Leer Beneficiario (Si existe en esta fila)
                 if (colBeneficiario !== -1 && row[colBeneficiario]) {
                     const val = String(row[colBeneficiario]).trim();
                     if(val && !window.listaBeneficiarios.includes(val)) window.listaBeneficiarios.push(val);
                 }
             }
-            console.log(`✅ Configuración: ${Object.keys(window.mapaCuentas).length} Cuentas, ${window.listaConceptos.length} Conceptos, ${window.listaBeneficiarios.length} Beneficiarios.`);
+            console.log(`✅ Configuración cargada: ${Object.keys(window.mapaCuentas).length} cuentas.`);
         }
     }
     
-    // Sincronizamos variables cortas
     mapaCuentas = window.mapaCuentas;
 
-    // --- 2. CARGA DE MOVIMIENTOS ---
+    // --- 2. CARGA DE MOVIMIENTOS (AQUÍ ESTÁ EL ARREGLO) ---
     let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
     const hojaMovs = wb.Sheets[wsName];
-    const rawMovs = XLSX.utils.sheet_to_json(hojaMovs);
+    
+    // IMPORTANTE: { cellDates: true } convierte los números de Excel a Fechas JS automáticamente
+    const rawMovs = XLSX.utils.sheet_to_json(hojaMovs, { cellDates: true });
 
     window.datos = rawMovs.map((fila) => {
         let idSeguro = fila['Id'] || fila['ID'];
         if (!idSeguro || String(idSeguro).trim() === '') idSeguro = crypto.randomUUID();
 
+        // -- LIMPIEZA DE IMPORTE --
         let importe = fila['Importe'] || fila['IMPORTE'] || 0;
         if (typeof importe === 'string') {
             importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
         }
 
+        // -- LIMPIEZA DE FECHA (CRÍTICO) --
+        let fechaRaw = fila['Fecha'] || fila['FECHA'];
+        let fechaLimpia;
+
+        if (fechaRaw instanceof Date && !isNaN(fechaRaw)) {
+            // Caso 1: Ya es una fecha válida (gracias a cellDates: true)
+            fechaLimpia = fechaRaw;
+        } else if (typeof fechaRaw === 'string') {
+            // Caso 2: Es texto (ej: "2025-01-01")
+            fechaLimpia = new Date(fechaRaw);
+        } else {
+            // Caso 3: Fallo o vacío -> ponemos hoy para no romper la app
+            fechaLimpia = new Date(); 
+        }
+        
+        // Si después de todo sigue siendo inválida, ponemos hoy
+        if (isNaN(fechaLimpia.getTime())) {
+            fechaLimpia = new Date(); 
+        }
+
         return {
             id: idSeguro,
-            fecha: fila['Fecha'] || fila['FECHA'],
+            fecha: fechaLimpia,
+            // Guardamos el timestamp numérico para ordenar y filtrar rápido
+            ts: fechaLimpia.getTime(), 
             cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
             concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
             importe: importe,
+            // Guardamos en AMBOS campos para evitar fallos
             descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
+            detalle: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
             beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
-            tipo: (importe >= 0) ? 'ingreso' : 'gasto',
-            saldo: 0
+            
+            // Detección robusta de tipo TRASPASO
+            tipo: ((fila['Concepto']||'') + (fila['Descripcion']||'')).toUpperCase().includes('TRASPASO') 
+                  ? 'traspaso' 
+                  : (importe >= 0 ? 'ingreso' : 'gasto'),
+            
+            saldo: 0 // Se calculará en recalcularSaldosGlobal()
         };
     });
 
-    window.datos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    // Ordenar por fecha (descendente)
+    window.datos.sort((a, b) => b.fecha - a.fecha);
     
-    // Sincronización final y caché
     datos = window.datos;
+	 if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     try { localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos)); } catch (e) {}
 
     // --- 3. ACTUALIZAR PANTALLA ---
-    if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+   
     if(typeof cargarInterfaz === 'function') cargarInterfaz();
     if(typeof renderDashboard === 'function') renderDashboard();
     
@@ -2111,7 +2131,7 @@ function finalizarGuardado(esTraspaso) {
         const tbody = document.getElementById('lista-movimientos');
         if(!tbody) return;
         
-        // 1. FILTRADO
+        // 1. FILTRADO (Tu lógica actual, mantenida)
         let lista = datos.filter(m => {
             if (!pasaFiltroPropietario(m)) return false;
             if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
@@ -2119,9 +2139,14 @@ function finalizarGuardado(esTraspaso) {
             if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
             if (filtros.concepto && m.concepto !== filtros.concepto) return false;
             if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
-            if (filtros.texto && !(m.detalle+' '+m.beneficiario).toLowerCase().includes(filtros.texto)) return false;
+            const textoBusqueda = (filtros.texto || '').toLowerCase();
+            const textoFila = ((m.concepto||'') + ' ' + (m.descripcion||m.detalle||'') + ' ' + (m.beneficiario||'')).toLowerCase();
+            if (filtros.texto && !textoFila.includes(textoBusqueda)) return false;
+            
+            // Filtros de fecha seguros
             if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
             if (filtros.hasta && m.ts > new Date(filtros.hasta).getTime()) return false;
+            
             if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
             if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
             return true;
@@ -2130,15 +2155,21 @@ function finalizarGuardado(esTraspaso) {
         // 2. ORDENACIÓN
         lista.sort((a, b) => {
             let campo = window.ordenActivo.campo;
-            let valA = a[campo]; let valB = b[campo];
+            // Mapeo de campos si usamos nombres diferentes en la vista
+            if(campo === 'detalle') campo = 'descripcion'; 
+            
+            let valA = a[campo] || (campo === 'descripcion' ? a.detalle : '') || '';
+            let valB = b[campo] || (campo === 'descripcion' ? b.detalle : '') || '';
+            
             if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+            
             if (valA === valB) return window.ordenActivo.asc ? (a.id - b.id) : (b.id - a.id);
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             if (valA > valB) return window.ordenActivo.asc ? 1 : -1;
             return 0;
         });
 
-        // 3. OPTIMIZACIÓN DE VELOCIDAD
+        // 3. OPTIMIZACIÓN VISUAL
         const totalResultados = lista.length;
         const LIMITE_VISUAL = 50; 
         const listaVisual = lista.slice(0, LIMITE_VISUAL);
@@ -2147,29 +2178,69 @@ function finalizarGuardado(esTraspaso) {
         if(contador) contador.innerText = `Viendo ${listaVisual.length} de ${totalResultados} movs.`;
         
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666">Sin datos disponibles</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay movimientos que coincidan con los filtros</td></tr>';
             return;
         }
 
-        // 4. GENERACIÓN DE HTML
+        // 4. GENERACIÓN HTML CORREGIDA
         let htmlFilas = listaVisual.map(m => {
-            const date = new Date(m.ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-            let color = m.tipo==='gasto'?'val-neg':(m.tipo==='ingreso'?'val-pos':'val-tra');
-            let signo = m.importe > 0 ? '+' : '';
+            // A) FECHA SEGURA
+            let dateStr = "---";
+            try {
+                // Intentamos usar el timestamp (ts) o el objeto fecha
+                let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
+                if (!isNaN(d.getTime())) {
+                    dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                }
+            } catch(e) { console.warn("Error fecha", m); }
+
+            // B) COLOR SEGÚN TIPO
+            let colorClass = 'val-neg'; // Por defecto gasto (rojo)
+            let signo = '';
             
+            // Detectamos tipo TRASPASO de forma robusta
+            const esTraspaso = m.tipo === 'traspaso' || 
+                             (m.concepto && m.concepto.toUpperCase().includes('TRASPASO')) ||
+                             (m.descripcion && m.descripcion.toUpperCase().includes('TRASPASO'));
+
+            if (esTraspaso) {
+                colorClass = 'val-tra'; // Azul
+                // En traspasos no solemos poner signo, o ponemos neutral
+            } else if (m.importe >= 0) {
+                colorClass = 'val-pos'; // Verde
+                signo = '+';
+            }
+
+            // C) DESCRIPCIÓN UNIFICADA
+            // Usamos descripcion O detalle O vacío
+            const descripcionFinal = m.descripcion || m.detalle || '';
+            
+            // D) SALDO ENTRE PARÉNTESIS
+            // Si el saldo no está calculado, mostramos guión
+            const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
+
             return `
             <tr onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
-                <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${date}</td>
-                <td class="pc-only ${color}" style="text-align:right">${signo}${fmt(m.importe)}</td>
-                <td class="pc-only ${color}">${Security.escapeHTML(m.cuenta)} (${fmt(m.saldo)})</td>
+                <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${dateStr}</td>
+                <td class="pc-only ${colorClass}" style="text-align:right; font-weight:bold">${signo}${fmt(m.importe)}</td>
+                <td class="pc-only" style="color:#ddd">
+                    ${Security.escapeHTML(m.cuenta)} 
+                    <span style="font-size:11px; color:#888; margin-left:5px">(${saldoStr})</span>
+                </td>
                 <td class="pc-only">${Security.escapeHTML(m.concepto)}</td>
-                <td class="pc-only">${Security.escapeHTML(m.detalle)}</td>
+                <td class="pc-only" style="color:#aaa; font-style:italic">${Security.escapeHTML(descripcionFinal)}</td>
                 <td class="pc-only">${Security.escapeHTML(m.beneficiario)}</td>
                 
-                <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${date}</td>
-                <td class="mob-only td-cuenta-mob ${color}">${Security.escapeHTML(m.cuenta)} <span class="saldo-small">(${fmt(m.saldo)})</span></td>
-                <td class="mob-only td-amount ${color}">${signo}${fmt(m.importe)}</td>
-                <td class="mob-only td-desc-mob"><strong style="color:#fff">${Security.escapeHTML(m.concepto)}</strong> - ${Security.escapeHTML(m.detalle)}</td>
+                <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${dateStr}</td>
+                <td class="mob-only td-cuenta-mob">
+                    ${Security.escapeHTML(m.cuenta)} 
+                    <span class="saldo-small" style="color:#888">(${saldoStr})</span>
+                </td>
+                <td class="mob-only td-amount ${colorClass}">${signo}${fmt(m.importe)}</td>
+                <td class="mob-only td-desc-mob">
+                    <strong style="color:#fff">${Security.escapeHTML(m.concepto)}</strong>
+                    ${descripcionFinal ? ' - ' + Security.escapeHTML(descripcionFinal) : ''}
+                </td>
                 <td class="mob-only td-ben-mob">${Security.escapeHTML(m.beneficiario)}</td>
             </tr>
             `;
@@ -2179,13 +2250,11 @@ function finalizarGuardado(esTraspaso) {
             htmlFilas += `
             <tr>
                 <td colspan="6" style="text-align:center; padding:15px; color:#888; font-style:italic; font-size:12px; border-top:1px solid #333;">
-                    ... Hay ${totalResultados - LIMITE_VISUAL} movimientos más ocultos para ir rápido.<br>
-                    <span style="color:var(--c-primary)">Usa el buscador o filtros para ver los antiguos.</span>
+                    ... y ${totalResultados - LIMITE_VISUAL} movimientos más. Usa el buscador para verlos.
                 </td>
             </tr>`;
         }
 
-        // --- ESTA ES LA LÍNEA QUE FALTABA ---
         tbody.innerHTML = htmlFilas; 
     }
 
