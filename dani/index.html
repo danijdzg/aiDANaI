@@ -1873,91 +1873,75 @@ function procesarLibroLeido(wb) {
 // ==========================================
 
 function procesarDatos(filas) {
-    const temp = [];
-    const cuentas = new Set(), conceptos = new Set(), benefs = new Set();
-    
-    // Saltamos la cabecera (i=1)
-    for (let i = 1; i < filas.length; i++) {
-        const row = filas[i];
-        if (!row || (!row[1] && row[3] === undefined)) continue; 
+        const temp = [];
+        
+        // Empezamos en i=1 para saltar la cabecera (títulos)
+        for (let i = 1; i < filas.length; i++) {
+            const row = filas[i];
+            // Si la fila está vacía, la saltamos
+            if (!row || row.length === 0) continue;
 
-        // --- BLOQUE FECHAS (Mantener igual que tenías) ---
-        let rawFecha = row[0];
-        let ts;
-        if (rawFecha instanceof Date) ts = rawFecha.getTime();
-        else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
-        else if (typeof rawFecha === 'string') {
-            let parsed = Date.parse(rawFecha);
-            ts = !isNaN(parsed) ? parsed : Date.now();
-        } else ts = Date.now();
-        // -------------------------------------------------
+            // --- MAPEO DE COLUMNAS (CORREGIDO A 7 COLUMNAS) ---
+            // 0:ID | 1:FECHA | 2:CUENTA | 3:CONCEPTO | 4:IMPORTE | 5:DESCRIPCION | 6:BENEFICIARIO
 
-        // Limpieza de Importe
-        let imp = 0;
-        if (typeof row[3] === 'number') imp = row[3];
-        else {
-            let s = String(row[3]).replace(/[^\d.,-]/g, '');
-            if (s.includes(',') && s.indexOf('.') < s.indexOf(',')) s = s.replace(/\./g, '').replace(',', '.'); 
-            else if (s.includes(',')) s = s.replace(',', '.'); 
-            imp = parseFloat(s) || 0;
+            // 0. ID
+            const idSeguro = String(row[0] || generateUUID()); 
+            
+            // 1. FECHA
+            let rawFecha = row[1];
+            let ts = Date.now();
+            if (rawFecha instanceof Date) ts = rawFecha.getTime();
+            else if (typeof rawFecha === 'string') ts = Date.parse(rawFecha) || ts;
+            else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
+
+            // 2. CUENTA
+            const cta = String(row[2] || '').trim();
+            
+            // 3. CONCEPTO
+            const con = String(row[3] || '').trim();
+            
+            // 4. IMPORTE
+            let imp = row[4];
+            if (typeof imp !== 'number') {
+                // Limpieza de símbolos de moneda o textos raros
+                imp = parseFloat(String(imp).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+            }
+
+            // 5. DESCRIPCIÓN (¡AQUÍ ESTABA EL ERROR, ANTES LEÍA LA 4!)
+            const desc = String(row[5] || '').trim(); 
+            
+            // 6. BENEFICIARIO
+            const ben = String(row[6] || '').trim();
+
+            // Clasificación automática
+            let tipo = 'gasto';
+            if ((con + desc).toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
+            else if (imp >= 0) tipo = 'ingreso';
+
+            temp.push({
+                id: idSeguro,
+                ts: ts,
+                importe: imp,
+                cuenta: cta,
+                concepto: con,
+                detalle: desc, // Ahora lee correctamente la columna 5
+                beneficiario: ben,
+                tipo: tipo,
+                saldo: 0
+            });
         }
 
-        const cta = normalizarTexto(String(row[1] || '').trim());
-        const con = String(row[2] || '').trim();
-        const desc = String(row[4] || '').trim(); 
-        const ben = String(row[5] || '').trim(); 
+        datos = temp;
+        recalcularSaldosGlobal();
         
-        if(cta) cuentas.add(cta);
-        if(con) conceptos.add(con);
-        if(ben) benefs.add(ben);
-
-        // --- CLASIFICACIÓN ESTRICTA (CORRECCIÓN) ---
-        let tipo = 'gasto'; // Por defecto
-        const textoFull = (con + ' ' + desc).toUpperCase();
-        
-        // 1. Prioridad: ¿Dice explícitamente TRASPASO? -> AZUL
-        if (textoFull.includes('TRASPASO')) {
-            tipo = 'traspaso';
-        } 
-        // 2. Si no es traspaso, miramos el signo estricto
-        else if (imp >= 0) {
-            tipo = 'ingreso'; // VERDE
-        } else {
-            tipo = 'gasto';   // ROJO
+        // Guardar en caché local para que la próxima vez cargue rápido
+        try {
+            localStorage.setItem('aidanai_datos_cache', JSON.stringify(datos));
+            localStorage.setItem('aidanai_config_cache', JSON.stringify(mapaCuentas));
+        } catch (e) {
+            console.warn("Memoria llena, no se pudo cachear datos.");
         }
-        // -------------------------------------------
-
-        temp.push({ 
-            id: i, 
-            ts: ts, 
-            importe: imp, 
-            cuenta: cta, 
-            concepto: con, 
-            detalle: desc, 
-            beneficiario: ben, 
-            tipo: tipo, 
-            saldo: 0 
-        });
     }
-
-    // Ordenar y guardar
-    temp.sort((a, b) => a.ts - b.ts || a.id - b.id);
-
-    const ac = {};
-    temp.forEach(m => {
-        if (!ac[m.cuenta]) ac[m.cuenta] = 0;
-        ac[m.cuenta] += m.importe;
-        m.saldo = ac[m.cuenta]; 
-    });
-
-    datos = temp;
-    
-    actualizarFiltrosUI(cuentas, conceptos, benefs);
-	renderizar();
-    actualizarDashboard();
-    actualizarPatrimonio();
-    revisarBotonExportar();
-}
 
  
 // ==========================================
