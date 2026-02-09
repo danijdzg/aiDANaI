@@ -3940,58 +3940,71 @@ function cargarDesdeCache() {
 }
 
 // ==========================================
-   // 🚀 ARRANQUE DE LA APLICACIÓN (MODIFICADO PARA LOGIN FORZOSO)
-   // ==========================================
-   document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Configuración input local (igual que antes)
+// 🚀 ARRANQUE DE LA APLICACIÓN (CORREGIDO BLOQUEO POPUP)
+// ==========================================
+document.addEventListener('DOMContentLoaded', async () => {
+    // 1. Configuración input local
     const fileInput = document.getElementById('file-input');
     if (fileInput) {
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
-                // Aquí llamamos a la función que ya tenías creada
                 leerExcel(e.target.files[0]);
-                
-                // Limpiamos el input para que puedas volver a cargar el mismo archivo si quieres
                 e.target.value = ''; 
             }
         });
     }
 
-    // 2. Inicializar componentes
+    // 2. Inicializar componentes (Calculadora, etc)
     if(typeof App !== 'undefined') App.init();
 
-    // 3. AUTO-ARRANQUE HÍBRIDO (CACHÉ + NUBE)
+    // 3. AUTO-ARRANQUE HÍBRIDO SEGURO
     mostrarEstado('🚀 Iniciando...', 'normal');
 
-    // A) INTENTO CARGAR CACHÉ INMEDIATAMENTE
+    // A) INTENTO CARGAR CACHÉ INMEDIATAMENTE (Para que veas datos ya)
     const hayDatosCache = cargarDesdeCache();
 
-    // B) LUEGO CONECTO CON LA NUBE EN SEGUNDO PLANO
-    try {
-        const accounts = oneDrive.msalInstance.getAllAccounts();
-        if (accounts.length > 0) {
-            if (!hayDatosCache) mostrarEstado('☁️ Conectando a la nube...', 'normal');
+    // B) INTENTO DE CONEXIÓN SILENCIOSA A LA NUBE
+    // Comprobamos si hay cuentas recordadas por MSAL
+    const accounts = oneDrive.msalInstance.getAllAccounts();
+    
+    if (accounts.length > 0) {
+        try {
+            if (!hayDatosCache) mostrarEstado('☁️ Verificando nube...', 'normal');
+
+            // --- CAMBIO CLAVE AQUÍ ---
+            // En lugar de llamar a login() (que abre popup), llamamos a getToken()
+            // getToken intenta renovar la sesión silenciosamente.
+            await oneDrive.getToken(); 
             
-            // Login silencioso
-            await oneDrive.login(); 
-            
-            // Configurar UI
+            // Si llegamos aquí, es que el token es válido SIN popup.
+            // Activamos la UI de nube
             document.getElementById('mode-local').className = 'source-option';
             document.getElementById('mode-cloud').className = 'source-option active cloud';
             document.getElementById('btn-load-local').style.display = 'none';
             document.getElementById('btn-load-cloud').style.display = 'flex';
-            
-            // Cargar datos frescos (esto actualizará la pantalla cuando termine)
+            modoNube = true;
+
+            // Cargamos datos frescos
             await cargarDesdeNube();
             iniciarPolling();
             
             mostrarEstado('✅ Sincronizado con OneDrive', 'ok');
-        } else {
-            if (!hayDatosCache) mostrarEstado('Modo Local: Carga un archivo o Conecta', 'normal');
+
+        } catch (error) {
+            // Si falla el token silencioso, NO abrimos popup automático.
+            // Dejamos que el usuario pulse el botón si quiere.
+            console.warn("Sesión caducada o requiere interacción:", error);
+            if (!hayDatosCache) {
+                mostrarEstado('⚠️ Requiere reconexión manual', 'normal');
+            } else {
+                mostrarEstado('Modo Local (Nube desconectada)', 'normal');
+            }
+            // Nos aseguramos de estar en modo local visualmente
+            cambiarModo('local');
         }
-    } catch (error) {
-        console.warn("Auto-login no posible:", error);
-        if (!hayDatosCache) cambiarModo('local');
+    } else {
+        // No hay cuentas previas
+        if (!hayDatosCache) mostrarEstado('Bienvenido. Carga un archivo o Conecta.', 'normal');
     }
 });
 // ==========================================
