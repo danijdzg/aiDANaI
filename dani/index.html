@@ -2367,157 +2367,113 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 async function guardarManual() {
-        // 1. OBTENER DATOS DEL FORMULARIO (IDs CORREGIDOS)
-        // ------------------------------------------
-        // Usamos los IDs que realmente tienes en tu HTML (m-...)
+        // 1. OBTENER DATOS
         const idMov = document.getElementById('m-id').value; 
         const fecha = document.getElementById('m-fecha').value;
         const cuenta = document.getElementById('m-cuenta').value;
         const concepto = document.getElementById('m-concepto').value;
-        
-        // ¡OJO! En tu HTML el importe es 'm-cantidad', no 'mov-importe'
         let importe = parseFloat(document.getElementById('m-cantidad').value) || 0;
-        
         const descripcion = document.getElementById('m-desc').value;
         const beneficiario = document.getElementById('m-beneficiario').value;
-        
-        // Gestión de cuenta destino para traspasos
         const cuentaDestino = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
 
-        // Validación básica
+        // Validación
         if (!fecha || !cuenta || !concepto) {
-            alert("Por favor, rellena fecha, cuenta y concepto.");
+            alert("Faltan datos obligatorios (Fecha, Cuenta o Concepto)");
             return;
         }
 
-        // LÓGICA DE SIGNO AUTOMÁTICO (Mejora de UX)
-        // Si el usuario eligió "GASTO" (rojo) pero puso el número positivo, lo volvemos negativo automáticamente.
-        if (window.modoTransaccionActual === 'pago' && importe > 0) {
-            importe = -importe;
-        }
-        // Si es traspaso, el importe suele ser negativo en la cuenta origen
-        if (window.modoTransaccionActual === 'traspaso' && importe > 0) {
-             importe = -importe;
-        }
+        // Ajuste de signos
+        if (window.modoTransaccionActual === 'pago' && importe > 0) importe = -importe;
+        if (window.modoTransaccionActual === 'traspaso' && importe > 0) importe = -importe;
 
-        // Feedback visual
         const btnGuardar = document.getElementById('btn-modal-action');
         if(btnGuardar) btnGuardar.innerText = "⏳ Guardando...";
         
         try {
-            // 2. MODO ATÓMICO: SEGURIDAD DE DATOS
-            // ------------------------------------------
             let datosNube = []; 
             
-            // Si estamos en modo nube, intentamos bajar la última versión antes de guardar
+            // 2. MODO ATÓMICO (CORREGIDO AQUÍ)
             if (modoNube) {
                 try {
-                    console.log("Modo Atómico: Verificando cambios en la nube...");
-                    const arrayBuffer = await OneDriveManager.loadFile(); // Usamos la instancia global
+                    console.log("Modo Atómico: Verificando nube...");
+                    // --- CORRECCIÓN: Usamos 'oneDrive' (la instancia), no 'OneDriveManager' (la clase) ---
+                    const arrayBuffer = await oneDrive.loadFile(); 
                     if (arrayBuffer) {
-                        const workbook = XLSX.read(arrayBuffer, {type: 'array'});
-                        const hoja = workbook.Sheets['Movimientos'];
-                        datosNube = XLSX.utils.sheet_to_json(hoja);
+                        // Procesamos el Excel que baja de la nube
+                        // Detectamos si es un objeto workbook procesado o un buffer crudo
+                        if (arrayBuffer.Sheets) {
+                             // Si oneDrive.loadFile ya devolvió el libro (versión turbo)
+                             datosNube = XLSX.utils.sheet_to_json(arrayBuffer.Sheets['Movimientos']);
+                        } else {
+                             // Si devolvió bytes
+                             const workbook = XLSX.read(arrayBuffer, {type: 'array'});
+                             datosNube = XLSX.utils.sheet_to_json(workbook.Sheets['Movimientos']);
+                        }
                     }
                 } catch (error) {
-                    console.warn("No se pudo sincronizar previo al guardado. Usando caché local.", error);
+                    console.warn("No se pudo descargar nube, usando local.", error);
                     datosNube = [...window.datos]; 
                 }
             } else {
-                // Modo local: usamos lo que hay en memoria
                 datosNube = [...window.datos];
             }
 
-            // 3. FUSIONAR EL CAMBIO
-            // ------------------------------------------
+            // 3. FUSIÓN
             const nuevoID = idMov || crypto.randomUUID();
-            
-            // Objeto del movimiento principal
             const nuevoMov = {
-                "ID": nuevoID,
-                "FECHA": fecha, // Se guarda como string YYYY-MM-DD
-                "CUENTA": cuenta,
-                "CONCEPTO": concepto,
-                "IMPORTE": importe,
-                "DESCRIPCION": descripcion,
-                "BENEFICIARIO": beneficiario
+                "ID": nuevoID, "FECHA": fecha, "CUENTA": cuenta, "CONCEPTO": concepto,
+                "IMPORTE": importe, "DESCRIPCION": descripcion, "BENEFICIARIO": beneficiario
             };
 
-            // Función auxiliar para actualizar/insertar en la lista
             const fusionar = (lista, mov) => {
+                // Buscamos por ID (comparando como texto para evitar errores)
                 const idx = lista.findIndex(m => String(m.ID) === String(mov.ID));
-                if (idx >= 0) lista[idx] = mov; // Editar
-                else lista.push(mov);           // Nuevo
+                if (idx >= 0) lista[idx] = mov; 
+                else lista.push(mov);
             };
 
             fusionar(datosNube, nuevoMov);
 
-            // GESTIÓN DE TRASPASOS (Doble movimiento)
+            // Traspaso destino
             if (window.modoTransaccionActual === 'traspaso' && cuentaDestino) {
-                // Creamos la contrapartida (entrada de dinero en la otra cuenta)
-                // Usamos el mismo ID con un sufijo o uno nuevo vinculado, para simplificar usamos nuevo.
-                // Truco: Para no complicar la BD, creamos un segundo movimiento independiente.
                 const idDestino = crypto.randomUUID(); 
                 const movDestino = {
-                    "ID": idDestino,
-                    "FECHA": fecha,
-                    "CUENTA": cuentaDestino,
-                    "CONCEPTO": "Traspaso Recibido",
-                    "IMPORTE": Math.abs(importe), // Positivo
-                    "DESCRIPCION": `<< DE: ${cuenta} | ${descripcion}`,
-                    "BENEFICIARIO": beneficiario || "Mí mismo"
+                    "ID": idDestino, "FECHA": fecha, "CUENTA": cuentaDestino,
+                    "CONCEPTO": "Traspaso Recibido", "IMPORTE": Math.abs(importe),
+                    "DESCRIPCION": `<< DE: ${cuenta} | ${descripcion}`, "BENEFICIARIO": beneficiario || "Mí mismo"
                 };
-                // Actualizamos la descripción del origen también para que quede claro
                 nuevoMov.DESCRIPCION = `>> A: ${cuentaDestino} | ${descripcion}`;
-                
-                // Insertamos el destino
                 datosNube.push(movDestino);
             }
 
-            // 4. ACTUALIZAR TODO
-            // ------------------------------------------
-            window.datos = datosNube;
-            
-            // Recalculamos todo (esto actualiza la pantalla)
-            // IMPORTANTE: Convertimos el JSON crudo a tu formato interno si es necesario,
-            // pero 'procesarDatos' ya sabe leer arrays. Lo más seguro es recargar.
-            // Para ser rápidos, inyectamos directamente:
-            
-            // Truco: Convertimos fechas de string a timestamp para la memoria local
-            window.datos = datosNube.map(m => {
-                // Si ya viene procesado genial, si no, lo adaptamos
-                return {
-                    id: m.ID,
-                    ts: new Date(m.FECHA).getTime(),
-                    fecha: m.FECHA,
-                    cuenta: m.CUENTA,
-                    concepto: m.CONCEPTO,
-                    importe: parseFloat(m.IMPORTE),
-                    detalle: m.DESCRIPCION,
-                    beneficiario: m.BENEFICIARIO,
-                    tipo: parseFloat(m.IMPORTE) >= 0 ? 'ingreso' : 'gasto',
-                    // Detectamos traspaso
-                    tipo: (String(m.CONCEPTO)+String(m.DESCRIPCION)).toUpperCase().includes('TRASPASO') ? 'traspaso' : (parseFloat(m.IMPORTE) >= 0 ? 'ingreso' : 'gasto')
-                };
-            });
+            // 4. ACTUALIZAR ENTORNO
+            window.datos = datosNube.map(m => ({
+                id: m.ID,
+                ts: new Date(m.FECHA).getTime(),
+                fecha: m.FECHA,
+                cuenta: m.CUENTA,
+                concepto: m.CONCEPTO,
+                importe: parseFloat(m.IMPORTE),
+                detalle: m.DESCRIPCION,
+                beneficiario: m.BENEFICIARIO,
+                tipo: (String(m.CONCEPTO)+String(m.DESCRIPCION)).toUpperCase().includes('TRASPASO') ? 'traspaso' : (parseFloat(m.IMPORTE) >= 0 ? 'ingreso' : 'gasto')
+            }));
 
-            recalcularSaldosGlobal(); // Actualiza saldos y gráficos
+            // Esto recalcula saldos y actualiza la UI
+            recalcularSaldosGlobal(); 
             
-            // Guardamos el archivo físico
-            await guardarUniversal(false); // false = no descargar, solo guardar nube si aplica
+            // Subida física
+            await guardarUniversal(false); 
             
-            // 5. LIMPIEZA
             cerrarModal();
             if(btnGuardar) btnGuardar.innerText = "GUARDAR";
-            
-            // Feedback
-            const msgExito = idMov ? "✅ Movimiento actualizado" : "✅ Movimiento creado";
-            mostrarEstado(msgExito, 'ok');
+            mostrarEstado(idMov ? "✅ Editado" : "✅ Guardado", 'ok');
             if(window.vibrar) vibrar('ingreso');
 
         } catch (error) {
             console.error(error);
-            alert("❌ Error al guardar: " + error.message);
+            alert("Error crítico: " + error.message);
             if(btnGuardar) btnGuardar.innerText = "Reintentar";
         }
     }
@@ -2937,46 +2893,71 @@ function animarCifra(id, valorFinal) {
         const contenedorLista = document.getElementById('lista-cuentas-patri');
         const elTotalDetalle = document.getElementById('total-patri-valor');
         const elTotalHome = document.getElementById('d-patri-total');
+        
         if (!datos || datos.length === 0) {
-            if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF; font-weight:bold;">ESPERANDO DATOS...</div>';
-            const cero = fmt(0) + ' €';
-            if(elTotalDetalle) elTotalDetalle.innerText = cero;
-            if(elTotalHome) elTotalHome.innerText = cero;
+            if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF;">ESPERANDO DATOS...</div>';
             return;
         }
+        
         const saldos = {};
         const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+        
         datosFiltrados.forEach(m => {
-            const cta = m.cuenta.trim();
+            // PROTECCIÓN CONTRA ERRORES:
+            // Si la cuenta es null/undefined, usamos cadena vacía para que no falle el trim
+            const cta = String(m.cuenta || '').trim();
+            if (!cta) return; // Si no hay cuenta, saltamos esta línea
+
             const val = parseFloat(m.importe) || 0;
             saldos[cta] = (saldos[cta] || 0) + val;
         });
+
         const grupos = {};
         let sumaTotal = 0;
-        Object.keys(saldos).forEach(cta => { if (Math.abs(saldos[cta]) >= 0.01) sumaTotal += saldos[cta]; });
+        
+        // Sumamos solo cuentas con saldo relevante
+        Object.keys(saldos).forEach(cta => { 
+            if (Math.abs(saldos[cta]) >= 0.01) sumaTotal += saldos[cta]; 
+        });
+
         Object.keys(saldos).forEach(cta => {
             const saldo = saldos[cta];
             if (Math.abs(saldo) < 0.01) return;
-            const ctaKey = normalizarTexto(cta.trim());
-            const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[ctaKey]) ? mapaCuentas[ctaKey] : { tipo: 'OTROS', esInversion: false };
+            
+            const ctaKey = normalizarTexto(cta);
+            // PROTECCIÓN EXTRA: Si mapaCuentas no existe, creamos uno vacío
+            const mapa = window.mapaCuentas || {};
+            const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'OTROS', esInversion: false };
+            
             const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
+            
             if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
             grupos[nombreGrupo].total += saldo;
             grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
         });
+
         const textoTotal = fmt(sumaTotal) + ' €';
         const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg'; 
+        
         if (elTotalDetalle) { elTotalDetalle.innerText = textoTotal; elTotalDetalle.className = 'kpi-value ' + claseColor; }
         if (elTotalHome) { elTotalHome.innerText = textoTotal; elTotalHome.className = 'kpi-value ' + claseColor; }
+        
         if (contenedorLista) {
             contenedorLista.innerHTML = '';
-            if (Object.keys(grupos).length === 0) { contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#FFFFFF; font-weight:bold;">SIN CUENTAS ACTIVAS</div>'; return; }
+            if (Object.keys(grupos).length === 0) { 
+                contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>'; 
+                return; 
+            }
+            
             Object.keys(grupos).sort().forEach(nombreGrupo => {
                 const grupo = grupos[nombreGrupo];
                 const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF'; 
                 const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #FFFFFF;';
+                
+                // Evitar división por cero
                 const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
                 const groupId = nombreGrupo.replace(/[^a-zA-Z0-9]/g, '');
+                
                 let htmlCuentas = '';
                 grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
                     const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
