@@ -1509,36 +1509,110 @@ async function iniciarSistema() {
             alert("No se pudo conectar: " + e.message);
         }
     }
-    // Función principal de procesamiento (La que faltaba en tu código)
-    function procesarDatos(workbook) {
-        // Leer hoja Movimientos
-        const hojaMovs = workbook.Sheets["Movimientos"];
-        if(hojaMovs) {
-            datos = XLSX.utils.sheet_to_json(hojaMovs);
-            console.log("Movimientos cargados:", datos.length);
-        }
+ 
+ function procesarDatos(workbook) {
+        console.log("--- Iniciando procesado inteligente de aiDANaI ---");
 
-        // Leer hoja Configuracion
+        // 1. LEER CONFIGURACIÓN (Vital para saber cuentas de inversión)
         const hojaConfig = workbook.Sheets["Configuracion"];
-        if(hojaConfig) {
+        if (hojaConfig) {
             const configRaw = XLSX.utils.sheet_to_json(hojaConfig);
-            // Convertimos la lista de configuración en un mapa útil
+            // Reiniciamos el mapa de cuentas global
+            if (typeof mapaCuentas !== 'undefined') {
+                 // Limpiamos el objeto manteniendo la referencia si es necesario, o reasignamos
+                 Object.keys(mapaCuentas).forEach(key => delete mapaCuentas[key]);
+            } else {
+                 window.mapaCuentas = {};
+            }
+
             configRaw.forEach(fila => {
-                if(fila.CUENTA) {
+                if (fila.CUENTA) {
                     mapaCuentas[fila.CUENTA] = {
                         tipo: fila.TIPO,
                         esInversion: fila.ES_INVERSION
                     };
                 }
             });
+            console.log("Configuración cargada:", Object.keys(mapaCuentas).length, "cuentas.");
         }
 
-        if(document.getElementById('status-text')) {
-            document.getElementById('status-text').innerText = "✅ Sistema Operativo. " + datos.length + " movimientos.";
+        // 2. LEER MOVIMIENTOS
+        const hojaMovs = workbook.Sheets["Movimientos"];
+        if (!hojaMovs) {
+            console.error("¡No encuentro la hoja Movimientos!");
+            return;
         }
+
+        // Convertimos a objetos usando las cabeceras del Excel
+        const rawMovs = XLSX.utils.sheet_to_json(hojaMovs); 
         
-        // AQUÍ DISPARAMOS TU CÓDIGO VISUAL (SI LO TIENES)
-        // cargarInterfaz(); 
+        // 3. PROCESADO DE FILA A FILA (Fusión de lógica + Seguridad IDs)
+        datos = rawMovs.map((fila, index) => {
+            
+            // A) Seguridad ID (Si no existe, creamos uno)
+            let idSeguro = fila['Id'] || fila['ID'];
+            if (!idSeguro || String(idSeguro).trim() === '') {
+                idSeguro = crypto.randomUUID();
+            }
+
+            // B) Limpieza de Importe (Quitar símbolo € y convertir a número)
+            let importe = fila['Importe'] || fila['IMPORTE'] || 0;
+            if (typeof importe === 'string') {
+                importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+            }
+
+            // C) Concepto y Descripción
+            const concepto = (fila['Concepto'] || fila['CONCEPTO'] || '').trim();
+            const descripcion = (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim();
+            const beneficiario = (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim();
+            const cuenta = (fila['Cuenta'] || fila['CUENTA'] || '').trim();
+
+            // D) Clasificación Automática (Gasto / Ingreso / Traspaso)
+            let tipo = 'gasto'; // Por defecto
+            if (importe >= 0) tipo = 'ingreso';
+            if ((concepto + ' ' + descripcion).toUpperCase().includes('TRASPASO')) {
+                tipo = 'traspaso';
+            }
+
+            // E) Gestión de Fechas Robusta
+            let fecha = fila['Fecha'] || fila['FECHA'];
+            // Si Excel devuelve un número (días desde 1900), sheet_to_json suele gestionarlo si está bien configurado,
+            // pero si llega como string o fecha JS, lo dejamos pasar. 
+            // La visualización se encargará de formatearlo.
+
+            return {
+                id: idSeguro,
+                fecha: fecha,
+                cuenta: cuenta,
+                concepto: concepto,
+                importe: importe,
+                descripcion: descripcion,
+                beneficiario: beneficiario,
+                tipo: tipo,
+                saldo: 0 // Se calculará después
+            };
+        });
+
+        // 4. ORDENAR Y FINALIZAR
+        // Ordenamos por fecha (más reciente primero)
+        // Intentamos convertir a timestamp para ordenar correctamente
+        datos.sort((a, b) => {
+            const dateA = new Date(a.fecha);
+            const dateB = new Date(b.fecha);
+            return dateB - dateA; 
+        });
+
+        console.log("Movimientos procesados:", datos.length);
+
+        // Disparar cálculos y actualizaciones visuales
+        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if(typeof cargarInterfaz === 'function') cargarInterfaz();
+        if(typeof renderDashboard === 'function') renderDashboard();
+
+        // Actualizar texto de estado
+        if(document.getElementById('status-text')) {
+            document.getElementById('status-text').innerText = "✅ Datos actualizados: " + datos.length + " movs.";
+        }
     }
 
     // ARRANQUE AL CARGAR LA PÁGINA
@@ -1868,84 +1942,6 @@ function procesarLibroLeido(wb) {
     // 3. Procesamos todo
     procesarDatos(jsonMovs);
 }
-    // ==========================================
-// 🧠 LÓGICA DE NEGOCIO (Procesamiento y Fechas)
-// ==========================================
-
-function procesarDatos(filas) {
-        const temp = [];
-        
-        // Empezamos en i=1 para saltar la cabecera del Excel
-        for (let i = 1; i < filas.length; i++) {
-            const row = filas[i];
-            if (!row || row.length === 0) continue;
-
-            // --- MAPEO EXACTO DE 7 COLUMNAS ---
-            // [0] ID | [1] FECHA | [2] CUENTA | [3] CONCEPTO | [4] IMPORTE | [5] DESCRIPCION | [6] BENEFICIARIO
-
-            // 0. ID
-            const idSeguro = String(row[0] || generateUUID()); 
-            
-            // 1. FECHA (Gestión robusta de fechas Excel)
-            let rawFecha = row[1];
-            let ts = Date.now();
-            if (rawFecha instanceof Date) ts = rawFecha.getTime();
-            else if (typeof rawFecha === 'string') ts = Date.parse(rawFecha) || ts;
-            else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
-
-            // 2. CUENTA
-            const cta = String(row[2] || '').trim();
-            
-            // 3. CONCEPTO
-            const con = String(row[3] || '').trim();
-            
-            // 4. IMPORTE
-            let imp = row[4];
-            if (typeof imp !== 'number') {
-                imp = parseFloat(String(imp).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-            }
-
-            // 5. DESCRIPCIÓN (La clave del fallo estaba aquí)
-            const desc = String(row[5] || '').trim(); 
-            
-            // 6. BENEFICIARIO
-            const ben = String(row[6] || '').trim();
-
-            // Clasificación automática
-            let tipo = 'gasto'; // Por defecto
-            const textoAnalisis = (con + ' ' + desc).toUpperCase();
-            
-            if (textoAnalisis.includes('TRASPASO')) {
-                tipo = 'traspaso';
-            } else if (imp >= 0) {
-                tipo = 'ingreso';
-            }
-
-            temp.push({
-                id: idSeguro,
-                ts: ts,
-                importe: imp,
-                cuenta: cta,
-                concepto: con,
-                detalle: desc, // 'detalle' es el nombre interno que usa la tabla para la descripción
-                beneficiario: ben,
-                tipo: tipo,
-                saldo: 0
-            });
-        }
-
-        // Ordenamos por fecha (más reciente primero)
-        temp.sort((a, b) => b.ts - a.ts);
-
-        datos = temp;
-        recalcularSaldosGlobal();
-        
-        // Guardamos copia rápida
-        try {
-            localStorage.setItem('aidanai_datos_cache', JSON.stringify(datos));
-        } catch (e) { console.warn("Cache llena"); }
-    }
-
  
 // ==========================================
 // 💾 FINALIZAR GUARDADO (Conexión con el nuevo sistema)
@@ -3649,54 +3645,67 @@ function leerExcelDesdeBuffer(wb) {
 // 💾 GUARDADO MAESTRO (Versión "Creación Forzada")
 // ==========================================
 async function guardarUniversal() {
-    const btn = document.getElementById('btn-guardar');
-    if(btn) btn.disabled = true;
-    const txtOriginal = btn ? btn.innerHTML : '';
+        const btn = document.getElementById('btn-guardar');
+        const originalText = btn ? btn.innerHTML : '';
+        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
 
-    try {
-        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> ...';
+        try {
+            // 1. PREPARAR DATOS PARA EXCEL (Mapeo Estricto)
+            // Esto asegura que la columna A sea siempre el ID, la B la Fecha, etc.
+            const datosParaExcel = datos.map(m => {
+                return {
+                    "Id": m.id,  // Columna A (La más importante ahora)
+                    "Fecha": m.fecha,
+                    "Cuenta": m.cuenta,
+                    "Concepto": m.concepto,
+                    "Importe": m.importe,
+                    "Descripcion": m.descripcion, // Ojo: en memoria a veces se llama 'detalle', aquí forzamos 'Descripcion'
+                    "Beneficiario": m.beneficiario
+                };
+            });
 
-        // Generamos el libro de Excel con los datos actuales
-        const wb = generarLibroExcel(); 
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-
-        if (modoNube) {
-            // MODO NUBE: PRECAUCIÓN
-            // En lugar de sobrescribir a lo loco, avisamos al usuario.
-            const confirmar = confirm("⚠️ ATENCIÓN ⚠️\n\nEstás en MODO NUBE. \n\nLos datos se guardan automáticamente al añadir/editar movimientos.\n\n¿Quieres forzar una sobrescritura completa del archivo 'aidanai.xlsx'? Esto podría borrar cambios hechos por otro usuario en este momento.");
+            // 2. CREAR EL LIBRO EXCEL
+            const wb = XLSX.utils.book_new();
             
-            if (confirmar) {
-                mostrarEstado('☁️ Sobrescribiendo archivo en OneDrive...', 'normal');
-                await oneDrive.saveFile(blob);
-                mostrarEstado('✅ Archivo actualizado completamente', 'ok');
-            } else {
-                mostrarEstado('Operación cancelada', 'normal');
+            // Forzamos el orden de las columnas con la opción 'header'
+            const wsMovs = XLSX.utils.json_to_sheet(datosParaExcel, { 
+                header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"] 
+            });
+            
+            XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+            // Si tenemos configuración cargada, la guardamos también para no perderla
+            if (window.mapaCuentas) {
+                // Convertimos el mapa de cuentas de vuelta a una lista para el Excel
+                const listaConfig = Object.entries(window.mapaCuentas).map(([k, v]) => ({
+                    "CUENTA": k,
+                    "TIPO": v.tipo,
+                    "ES_INVERSION": v.esInversion
+                }));
+                const wsConfig = XLSX.utils.json_to_sheet(listaConfig, { header: ["CUENTA", "TIPO", "ES_INVERSION"] });
+                XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
             }
 
-        } else {
-            // MODO LOCAL: Descarga normal
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "aidanai_copia_seguridad.xlsx"; // Nombre más claro
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            mostrarEstado('⬇️ Copia descargada', 'ok');
-        }
+            // 3. DECIDIR DÓNDE GUARDAR (Nube o Local)
+            // Si estamos logueados en OneDrive (tenemos token), intentamos subirlo
+            if (typeof oneDriveManager !== 'undefined' && oneDriveManager.accessToken) {
+                // Generar binario para subir
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                await oneDriveManager.saveFile(wbout);
+                alert("✅ Guardado correctamente en OneDrive");
+            } else {
+                // Si no, descarga local al ordenador
+                XLSX.writeFile(wb, "aidanai_guardado.xlsx");
+                alert("✅ Archivo descargado en tu ordenador (Modo Local)");
+            }
 
-    } catch (e) {
-        console.error(e);
-        alert("Error: " + e.message);
-    } finally {
-        if(btn) {
-            btn.disabled = false;
-            btn.innerHTML = txtOriginal;
+        } catch (error) {
+            console.error(error);
+            alert("❌ Error al guardar: " + error.message);
+        } finally {
+            if(btn) btn.innerHTML = originalText;
         }
     }
-}
 // ==========================================
 // 🚀 SISTEMA DE EXPORTACIÓN BLINDADO (Anti-Crashes)
 // ==========================================
