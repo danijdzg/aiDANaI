@@ -2347,81 +2347,99 @@ window.cargarParaEditar = function(id) {
 // --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
-window.guardarManual = async function() {
-        console.log("Iniciando guardado...");
+async function guardarManual() {
+        // 1. OBTENER DATOS DEL FORMULARIO
+        // ------------------------------------------
+        const idMov = document.getElementById('mov-id').value; // Si tiene ID, es edición
+        const fecha = document.getElementById('mov-fecha').value;
+        const cuenta = document.getElementById('mov-cuenta').value;
+        const concepto = document.getElementById('mov-concepto').value;
+        const importe = parseFloat(document.getElementById('mov-importe').value) || 0;
+        const descripcion = document.getElementById('mov-desc').value;
+        const beneficiario = document.getElementById('mov-beneficiario').value;
 
-        // 1. OBTENER DATOS (Con seguridad)
-        const getVal = (id) => {
-            const el = document.getElementById(id);
-            return el ? el.value : "";
-        };
-
-        const id = getVal('m-id');
-        const fecha = getVal('m-fecha');
-        const concepto = getVal('m-concepto');
-        const desc = getVal('m-desc');
-        const benef = getVal('m-beneficiario');
-        
-        // Buscamos Importe y Cuenta en varios sitios posibles
-        let valImporte = getVal('m-importe') || getVal('inpImporte');
-        let valCuenta = getVal('m-cuenta') || getVal('inpCuenta');
-        
-        const importe = parseFloat(valImporte);
-
-        // 2. VALIDACIÓN
-        if (!fecha || !valCuenta || isNaN(importe)) {
-            alert("Faltan datos: Revisa Fecha, Cuenta e Importe.");
+        if (!fecha || !cuenta || !concepto) {
+            alert("Por favor, rellena fecha, cuenta y concepto.");
             return;
         }
 
-        // 3. CREAR OBJETO
-        const mov = {
-            ID: id ? id : crypto.randomUUID(),
-            FECHA: fecha,
-            CUENTA: valCuenta,
-            CONCEPTO: concepto,
-            IMPORTE: importe,
-            DESCRIPCION: desc,
-            BENEFICIARIO: benef
-        };
-
-        // 4. ACTUALIZAR MEMORIA LOCAL
-        const datos = window.datosGlobales || window.datos || [];
-        const indice = datos.findIndex(d => d.ID == mov.ID);
-
-        if (indice >= 0) {
-            datos[indice] = mov; // Editar
-        } else {
-            datos.push(mov); // Nuevo
-        }
-
-        // 5. REFRESCAR PANTALLA
-        if (typeof renderTabla === 'function') renderTabla(datos);
-        else if (typeof pintarTabla === 'function') pintarTabla(datos);
-
-        // 6. LIMPIEZA SEGURA (Aquí era donde fallaba antes)
-        cerrarModal(); // Usamos la función segura que acabamos de crear
-
-        alert("Guardado en local. Subiendo a Nube...");
-
-        // 7. SUBIR A ONEDRIVE
+        // Bloqueamos la pantalla para que el usuario sepa que estamos trabajando
+        const btnGuardar = document.querySelector("button[onclick='guardarManual()']");
+        if(btnGuardar) btnGuardar.innerText = "⏳ Sincronizando y Guardando...";
+        
         try {
-            if (window.oneDriveManager) {
-                const ws = XLSX.utils.json_to_sheet(datos);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-                const excelBinario = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                
-                await window.oneDriveManager.uploadFile(excelBinario, "aidanai.xlsx");
-                alert("✅ Sincronizado OK con OneDrive");
-            } else {
-                alert("⚠️ Guardado localmente (Sin conexión OneDrive)");
+            // 2. MODO ATÓMICO: DESCARGAR ANTES DE GUARDAR
+            // ------------------------------------------
+            // Antes de tocar nada, bajamos la ÚLTIMA versión de la nube
+            // para asegurarnos de no borrar datos de otra persona.
+            console.log("Modo Atómico: Descargando última versión de la nube...");
+            
+            let datosNube = []; 
+            
+            // Intentamos bajar el archivo actual
+            try {
+                const arrayBuffer = await OneDriveManager.loadFile();
+                if (arrayBuffer) {
+                    // Leemos el Excel fresco de la nube
+                    const workbook = XLSX.read(arrayBuffer, {type: 'array'});
+                    const hoja = workbook.Sheets['Movimientos'];
+                    // Convertimos a JSON usando la misma lógica que al inicio
+                    datosNube = XLSX.utils.sheet_to_json(hoja);
+                }
+            } catch (error) {
+                console.warn("No se pudo descargar nube o es el primer uso. Usaremos datos locales.", error);
+                // Si falla la descarga (ej. sin internet), usamos lo que tenemos en memoria
+                datosNube = [...window.datos]; 
             }
-        } catch (e) {
-            console.error(e);
-            alert("❌ Error subiendo a nube: " + e.message);
+
+            // 3. FUSIONAR EL CAMBIO (MERGE)
+            // ------------------------------------------
+            // Creamos el objeto del nuevo movimiento
+            const nuevoMov = {
+                "ID": idMov || crypto.randomUUID(), // Si no hay ID, generamos uno nuevo
+                "FECHA": fecha,
+                "CUENTA": cuenta,
+                "CONCEPTO": concepto,
+                "IMPORTE": importe,
+                "DESCRIPCION": descripcion,
+                "BENEFICIARIO": beneficiario
+            };
+
+            // Buscamos si este movimiento ya existía en los datos de la NUBE
+            const indiceEnNube = datosNube.findIndex(m => m.ID === nuevoMov.ID);
+
+            if (indiceEnNube >= 0) {
+                // Si existe, lo actualizamos (Edición)
+                datosNube[indiceEnNube] = nuevoMov;
+            } else {
+                // Si no existe, lo añadimos al final (Nuevo)
+                datosNube.push(nuevoMov);
+            }
+
+            // 4. ACTUALIZAR ENTORNO LOCAL Y SUBIR
+            // ------------------------------------------
+            // Actualizamos la variable global 'datos' con la fusión perfecta
+            window.datos = datosNube;
+            
+            // Recalculamos saldos y gráficos con la información completa
+            procesarDatos(window.datos); 
+
+            // Guardamos el archivo fusionado en la nube
+            await guardarUniversal(false); // false = guardar en nube (no descargar fichero)
+            
+            // 5. LIMPIEZA
+            // ------------------------------------------
+            cerrarModal();
+            // Restaurar texto del botón
+            if(btnGuardar) btnGuardar.innerText = "Guardar";
+            alert("✅ Movimiento sincronizado y guardado con seguridad.");
+
+        } catch (error) {
+            console.error(error);
+            alert("❌ Error de seguridad al guardar: " + error.message);
+            if(btnGuardar) btnGuardar.innerText = "Reintentar Guardar";
         }
-    };
+    }
 // ==========================================
 // 🧮 CÁLCULOS LOCALES (Motor de Saldos)
 // ==========================================
