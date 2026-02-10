@@ -795,6 +795,46 @@
     transform: scale(0.95);
 }
  
+ /* --- INICIO BLOQUE NOTIFICACIONES (Seguridad Opción B) --- */
+    #toast-container {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none; /* Para poder hacer clic detrás si es necesario */
+    }
+    .toast-msg {
+        background: rgba(20, 20, 20, 0.95);
+        color: #fff;
+        padding: 14px 24px;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        border: 1px solid rgba(255,255,255,0.1);
+        backdrop-filter: blur(10px);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        opacity: 0;
+        animation: toastIn 0.3s forwards;
+    }
+    .toast-icon { font-size: 18px; }
+    .toast-success { border-left: 4px solid #34C759; } /* Verde Apple */
+    .toast-error { border-left: 4px solid #FF3B30; }   /* Rojo Apple */
+    .toast-loading { border-left: 4px solid #FF9500; } /* Naranja Apple */
+
+    @keyframes toastIn {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    /* --- FIN BLOQUE NOTIFICACIONES --- */
+ 
    </style>
 </head>
 <body>
@@ -1769,11 +1809,42 @@ const Security = {
     actualizarDashboard();
 }
 
-    function mostrarEstado(txt, tipo) {
-        const el = document.getElementById('msg-estado');
-        if(el) {
-            el.innerText = txt;
-            el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
+    // --- FUNCIÓN MEJORADA: mostrarEstado (Notificaciones Toast) ---
+    function mostrarEstado(texto, tipo = 'normal') {
+        // 1. Buscar o crear el contenedor
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+        }
+
+        // 2. Definir icono y clase según el tipo
+        let icon = 'ℹ️';
+        let claseExtra = '';
+        
+        if (tipo === 'success') { icon = '✅'; claseExtra = 'toast-success'; }
+        if (tipo === 'error')   { icon = '⚠️'; claseExtra = 'toast-error'; }
+        if (tipo === 'loading') { icon = '⏳'; claseExtra = 'toast-loading'; }
+
+        // 3. Crear el elemento HTML
+        const toast = document.createElement('div');
+        toast.className = `toast-msg ${claseExtra}`;
+        toast.innerHTML = `<span class="toast-icon">${icon}</span><span>${texto}</span>`;
+
+        container.appendChild(toast);
+
+        // 4. Lógica de desaparición
+        if (tipo !== 'loading') {
+            // Mensajes normales: se van solos a los 3.5 segundos
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-10px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        } else {
+            // Mensajes de carga: devolvemos el elemento para poder borrarlo manualmente cuando acabe la carga
+            return toast;
         }
     }
 
@@ -2592,16 +2663,16 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("--- Iniciando Guardado Inteligente (Alta/Edición) ---");
+    console.log("--- Iniciando Guardado Seguro (Opción B) ---");
 
-    // 1. OBTENER DATOS DEL FORMULARIO
-    const elId = document.getElementById('m-id'); // ID oculto (si tiene valor, es EDICIÓN)
+    // 1. OBTENER DATOS DEL FORMULARIO (Tus IDs originales)
+    const elId = document.getElementById('m-id'); 
     const elFecha = document.getElementById('m-fecha');
-    const elCuenta = document.getElementById('m-cuenta'); // Input inteligente
-    const elConcepto = document.getElementById('m-concepto'); // Input inteligente
+    const elCuenta = document.getElementById('m-cuenta'); 
+    const elConcepto = document.getElementById('m-concepto'); 
     const elImporte = document.getElementById('m-cantidad'); 
     const elDesc = document.getElementById('m-desc');
-    const elBenef = document.getElementById('m-beneficiario'); // Input inteligente
+    const elBenef = document.getElementById('m-beneficiario'); 
     const elDestino = document.getElementById('m-cuenta-destino');
     const btnGuardar = document.getElementById('btn-modal-action');
 
@@ -2618,36 +2689,39 @@ window.guardarManual = async function() {
     let esEdicion = elId.value && elId.value.trim() !== "";
     let idOriginal = elId.value;
 
-    // 2. VALIDACIÓN DE NEGOCIO
+    // 2. VALIDACIÓN DE NEGOCIO (Con Notificaciones Toast en vez de Alert)
     if (window.modoTransaccionActual === 'traspaso') {
         if (!valFecha || !valCuenta || !valDestino) {
-            alert("⚠️ Faltan datos para traspaso (Origen, Destino o Fecha).");
+            mostrarEstado("⚠️ Faltan datos para traspaso (Origen, Destino o Fecha).", "error");
             return;
         }
         valConcepto = "Traspaso";
         if (valImporte > 0) valImporte = -valImporte; // Salida siempre negativa
     } else {
         if (!valFecha || !valCuenta || !valConcepto) {
-            alert("⚠️ Faltan datos obligatorios: Fecha, Cuenta o Concepto.");
+            mostrarEstado("⚠️ Faltan datos obligatorios: Fecha, Cuenta o Concepto.", "error");
             return;
         }
-        // Ajuste de signo según modo (Pago = negativo, Ingreso = positivo)
+        // Ajuste de signo según modo
         if (window.modoTransaccionActual === 'pago' && valImporte > 0) valImporte = -valImporte;
         if (window.modoTransaccionActual === 'ingreso' && valImporte < 0) valImporte = Math.abs(valImporte);
     }
 
-    // 3. UI: BLOQUEO
+    // 3. UI: BLOQUEO DE SEGURIDAD
     let textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
     if(btnGuardar) {
-        btnGuardar.innerText = esEdicion ? "🔄 Actualizando..." : "⏳ Guardando...";
-        btnGuardar.disabled = true;
+        btnGuardar.innerText = esEdicion ? "Actualizando..." : "Guardando...";
+        btnGuardar.disabled = true; // IMPIDE DOBLE CLICK
         btnGuardar.style.opacity = "0.7";
+        btnGuardar.style.cursor = "wait";
     }
 
+    // Feedback visual de carga
+    let loadingToast = mostrarEstado("Sincronizando con la nube...", "loading");
+
     try {
-        // 4. PREPARAR FILAS (Formato Excel)
+        // 4. PREPARAR FILAS (Tu lógica original intacta)
         const filasParaGuardar = [];
-        // Si es edición, mantenemos el ID original. Si es nuevo, generamos uno.
         const uuidPrincipal = esEdicion ? idOriginal : crypto.randomUUID();
 
         // Movimiento Principal
@@ -2661,12 +2735,11 @@ window.guardarManual = async function() {
             BENEFICIARIO: valBenef
         };
 
-        // Lógica de Traspaso (Genera movimiento espejo)
+        // Lógica de Traspaso
         if (window.modoTransaccionActual === 'traspaso' && valDestino) {
             mov1.DESCRIPCION = `>> A: ${valDestino} | ${valDesc}`;
-
             let mov2 = {
-                ID: crypto.randomUUID(), // El destino siempre es un registro nuevo/distinto
+                ID: crypto.randomUUID(),
                 FECHA: valFecha,
                 CUENTA: valDestino,
                 CONCEPTO: "Traspaso Recibido",
@@ -2685,55 +2758,72 @@ window.guardarManual = async function() {
             // A) SI ES EDICIÓN: PRIMERO BORRAMOS EL VIEJO
             if (esEdicion) {
                 console.log("✏️ Modo Edición: Borrando anterior ID " + idOriginal);
-                // Usamos la función optimizada de borrado (sin descargar todo el excel)
-                await oneDrive.borrarFilaPorID(idOriginal);
+                // Intentamos usar tu función de borrado si existe
+                if(typeof oneDrive !== 'undefined' && oneDrive.borrarFilaPorID) {
+                     await oneDrive.borrarFilaPorID(idOriginal);
+                }
             }
 
-            // B) INSERTAMOS EL NUEVO (Siempre Append, es lo más seguro y rápido)
+            // B) INSERTAMOS EL NUEVO
             await OneDriveManager.addRows('Movimientos', filasParaGuardar);
             console.log("✅ Nube actualizada correctamente.");
             
         } else {
             // Modo Local (Fallback)
+            // Quitamos el loading toast antes del confirm para que se vea limpio
+            if(loadingToast) loadingToast.remove(); 
             if(!confirm("⚠️ Estás Offline. ¿Guardar solo en local?")) throw new Error("Cancelado por usuario.");
+            // Si dice que sí, volvemos a mostrar loading
+            loadingToast = mostrarEstado("Guardando en local...", "loading");
         }
 
         // 6. ACTUALIZAR PANTALLA (Memoria Local)
         // Si era edición, borramos el viejo de la memoria primero
-        if (esEdicion) {
-            window.datos = window.datos.filter(d => d.id !== idOriginal);
-        }
-        
-        // Añadimos los nuevos a la memoria
-        filasParaGuardar.forEach(nuevo => {
-            window.datos.push({
-                id: nuevo.ID,
-                ts: new Date(nuevo.FECHA).getTime(),
-                fecha: new Date(nuevo.FECHA),
-                cuenta: nuevo.CUENTA,
-                concepto: nuevo.CONCEPTO,
-                importe: parseFloat(nuevo.IMPORTE),
-                detalle: nuevo.DESCRIPCION,
-                beneficiario: nuevo.BENEFICIARIO,
-                tipo: (String(nuevo.CONCEPTO).toUpperCase().includes('TRASPASO')) ? 'traspaso' : (nuevo.IMPORTE >= 0 ? 'ingreso' : 'gasto'),
-                saldo: 0 // Se recalcula luego
+        if (window.datos) {
+            if (esEdicion) {
+                window.datos = window.datos.filter(d => d.id !== idOriginal);
+            }
+            
+            // Añadimos los nuevos a la memoria
+            filasParaGuardar.forEach(nuevo => {
+                window.datos.push({
+                    id: nuevo.ID,
+                    ts: new Date(nuevo.FECHA).getTime(),
+                    fecha: new Date(nuevo.FECHA),
+                    cuenta: nuevo.CUENTA,
+                    concepto: nuevo.CONCEPTO,
+                    importe: parseFloat(nuevo.IMPORTE),
+                    detalle: nuevo.DESCRIPCION,
+                    beneficiario: nuevo.BENEFICIARIO,
+                    tipo: (String(nuevo.CONCEPTO).toUpperCase().includes('TRASPASO')) ? 'traspaso' : (nuevo.IMPORTE >= 0 ? 'ingreso' : 'gasto'),
+                    saldo: 0 // Se recalcula luego
+                });
             });
-        });
+        }
 
         // Refrescar todo
-        recalcularSaldosGlobal();
-        cerrarModal();
-        mostrarEstado(esEdicion ? "✅ Editado con éxito" : "✅ Guardado con éxito", "ok");
-        if(window.vibrar) vibrar('ingreso');
+        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if(typeof cerrarModal === 'function') cerrarModal();
+        
+        // MENSAJE DE ÉXITO FINAL
+        if(loadingToast) loadingToast.remove();
+        mostrarEstado(esEdicion ? "Movimiento editado correctamente" : "Movimiento guardado", "success");
+        
+        if(window.vibrar) try { vibrar('ingreso'); } catch(e){}
 
     } catch (error) {
         console.error("Error crítico:", error);
-        alert("❌ Error: " + error.message);
+        // MENSAJE DE ERROR ELEGANTE
+        if(loadingToast) loadingToast.remove();
+        mostrarEstado("Error: " + error.message, "error");
+        // Nota: NO cerramos el modal para que puedas corregir y reintentar
     } finally {
+        // SIEMPRE DESBLOQUEAMOS EL BOTÓN AL FINAL
         if(btnGuardar) {
             btnGuardar.innerText = textoOriginal;
             btnGuardar.disabled = false;
             btnGuardar.style.opacity = "1";
+            btnGuardar.style.cursor = "pointer";
         }
     }
 };
