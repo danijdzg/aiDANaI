@@ -1021,6 +1021,19 @@
                 </div>
                 
                 <div id="tab-ajustes" class="view-section">
+				<div style="padding: 20px 20px 0 20px;">
+    <h3 style="color:var(--c-success); margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">Caja Fuerte (Backups)</h3>
+    <div class="master-card" style="margin-top:0; border-color: var(--c-success); background: linear-gradient(180deg, #051005 0%, #000 100%);">
+        <div class="card-header"><span class="card-title">COPIA DE SEGURIDAD</span></div>
+        <div style="padding: 15px; text-align:center;">
+            <p style="font-size:11px; color:#aaa; margin-bottom:15px;">Guarda una copia exacta de tus datos en la carpeta <b>AIDANAI_SEGURIDAD</b> de tu OneDrive.</p>
+            <button class="full-btn" onclick="crearBackupNube(true)" style="background:var(--c-success); color:#000; font-weight:800; border:none; box-shadow: 0 0 15px rgba(57, 255, 20, 0.3);">
+                <span class="material-icons" style="vertical-align:middle; margin-right:5px">lock</span> CREAR BACKUP AHORA
+            </button>
+            <div id="info-ultimo-backup" style="font-size:10px; color:#666; margin-top:10px; font-style:italic;">No se ha hecho backup hoy</div>
+        </div>
+    </div>
+</div>
     <div style="padding: 20px; padding-bottom: 100px;">
         
         <h3 style="color:var(--c-primary); margin-bottom:20px; text-transform:uppercase; letter-spacing:1px;">Gestión de Datos Maestros</h3>
@@ -1938,6 +1951,105 @@ function detenerPolling() {
 }
 
 // ==========================================
+// 🛡️ MOTOR DE SEGURIDAD (BACKUPS)
+// ==========================================
+window.crearBackupNube = async function(forzarManual = false) {
+    if (!modoNube) {
+        if(forzarManual) alert("⚠️ Debes estar conectado a la Nube para hacer backups.");
+        return;
+    }
+
+    // 1. Control de frecuencia (Solo uno automático al día)
+    const hoy = new Date().toISOString().split('T')[0];
+    const ultimoBackup = localStorage.getItem('aidanai_last_backup');
+    
+    if (!forzarManual && ultimoBackup === hoy) {
+        console.log("🛡️ Backup diario ya realizado hoy.");
+        actualizarInfoBackup(true);
+        return;
+    }
+
+    try {
+        if(forzarManual) mostrarEstado("🛡️ Iniciando Protocolo de Seguridad...", "loading");
+        
+        const token = await oneDrive.getToken();
+        const fileId = await oneDrive.getFileId(); // ID del archivo original
+
+        // 2. Buscar o Crear carpeta 'AIDANAI_SEGURIDAD'
+        let folderId = "";
+        const urlChildren = "https://graph.microsoft.com/v1.0/me/drive/root/children";
+        
+        // Intentamos crearla. Si existe, dará error 409 (Conflict), lo aprovechamos.
+        const reqFolder = await fetch(urlChildren, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ "name": "AIDANAI_SEGURIDAD", "folder": { }, "@microsoft.graph.conflictBehavior": "fail" })
+        });
+
+        if (reqFolder.ok) {
+            const res = await reqFolder.json();
+            folderId = res.id;
+        } else if (reqFolder.status === 409) {
+            // Ya existe, la buscamos
+            const reqSearch = await fetch(urlChildren + "?$filter=name eq 'AIDANAI_SEGURIDAD'", {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const resSearch = await reqSearch.json();
+            if(resSearch.value && resSearch.value.length > 0) {
+                folderId = resSearch.value[0].id;
+            } else {
+                throw new Error("No pude acceder a la carpeta de seguridad.");
+            }
+        } else {
+            throw new Error("Error creando carpeta de seguridad.");
+        }
+
+        // 3. Crear la copia con fecha y hora
+        const ahora = new Date();
+        const fechaHora = ahora.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const nuevoNombre = `aidanai_backup_${fechaHora}.xlsx`;
+
+        const urlCopy = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/copy`;
+        const reqCopy = await fetch(urlCopy, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                "name": nuevoNombre, 
+                "parentReference": { "id": folderId } 
+            })
+        });
+
+        if (!reqCopy.ok) throw new Error("Fallo al copiar el archivo.");
+
+        // 4. Éxito
+        localStorage.setItem('aidanai_last_backup', hoy);
+        actualizarInfoBackup(true);
+        
+        if (forzarManual) {
+            mostrarEstado("✅ Copia de seguridad creada con éxito", "success");
+            vibrar('ingreso');
+        } else {
+            console.log("✅ Backup automático completado en silencio.");
+        }
+
+    } catch (e) {
+        console.error("Error Backup:", e);
+        if(forzarManual) alert("Error al crear backup: " + e.message);
+    }
+};
+
+function actualizarInfoBackup(hechoHoy) {
+    const el = document.getElementById('info-ultimo-backup');
+    if(el) {
+        if(hechoHoy) {
+            el.innerHTML = "<span style='color:var(--c-success)'>✅ Backup de hoy realizado y seguro.</span>";
+        } else {
+            el.innerHTML = "<span style='color:var(--c-warning)'>⚠️ Aún no has hecho copia hoy.</span>";
+        }
+    }
+}
+
+// ==========================================
 // 🔄 GESTIÓN DE DATOS UNIFICADA (LOCAL Y NUBE)
 // ==========================================
 
@@ -1952,12 +2064,19 @@ window.iniciarCargaNube = async function() {
         // 2. Si pasa el login, procedemos a la descarga
         if(window.mostrarEstado) window.mostrarEstado("Descargando Excel...", "normal");
         
-        // Llamamos a cargarDesdeNube (que a su vez llama a loadFile)
+        // Llamamos a cargarDesdeNube
         await cargarDesdeNube();
         
         // 3. Todo OK
         cambiarModo('cloud');
         if(window.mostrarEstado) window.mostrarEstado("✅ Conectado a la Nube", "ok");
+        
+        // --- NUEVO: TRIGGER DE BACKUP AUTOMÁTICO ---
+        // Esperamos 3 segundos para no saturar el arranque y lanzamos el backup silencioso
+        setTimeout(() => {
+            if(window.crearBackupNube) window.crearBackupNube(false); // false = modo silencioso
+        }, 3000);
+        // -------------------------------------------
         
     } catch (e) {
         console.error("Fallo al iniciar carga nube:", e);
