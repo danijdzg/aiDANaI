@@ -1162,7 +1162,7 @@
                 </div>
                 
                 <div id="extra-actions" style="display:none; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
-                    <button type="button" class="full-btn" onclick="window.clonarMovimiento(document.getElementById('input-id').value)" style="background:rgba(255, 214, 10, 0.1); border:1px solid #ffc107; color:#ffc107; font-weight:800; padding: 12px; margin-bottom: 10px; border-radius: 8px; width: 100%; display: flex; align-items: center; justify-content: center;">
+                    <button type="button" class="full-btn" onclick="window.clonarMovimiento(document.getElementById('m-id').value)" style="background:rgba(255, 214, 10, 0.1); border:1px solid #ffc107; color:#ffc107; font-weight:800; padding: 12px; margin-bottom: 10px; border-radius: 8px; width: 100%; display: flex; align-items: center; justify-content: center;">
     <span class="material-icons" style="font-size:20px; margin-right:8px">content_copy</span> DUPLICAR
 </button>
                     
@@ -2668,60 +2668,60 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("--- Iniciando Guardado Seguro (Versión Adaptada) ---");
+    console.log("--- 🛡️ Iniciando Guardado Blindado (IDs Corregidos) ---");
 
-    // 1. OBTENER DATOS DEL FORMULARIO (Con los IDs REALES de tu HTML)
-    const elId = document.getElementById('input-id'); 
-    const elFecha = document.getElementById('input-fecha');
-    const elCuenta = document.getElementById('input-cuenta'); 
-    const elConcepto = document.getElementById('input-concepto'); 
-    const elImporte = document.getElementById('input-importe'); 
-    const elDesc = document.getElementById('input-descripcion');
-    const elBenef = document.getElementById('input-beneficiario'); 
-    // Intenta buscar destino, si no existe no pasa nada
-    const elDestino = document.getElementById('input-cuenta-destino'); 
+    // 1. OBTENER DATOS (Con los IDs REALES de tu HTML)
+    const elId = document.getElementById('m-id');
+    const elFecha = document.getElementById('m-fecha');
+    const elCuenta = document.getElementById('m-cuenta');
+    const elConcepto = document.getElementById('m-concepto');
+    const elImporte = document.getElementById('m-cantidad'); // Tu HTML usa m-cantidad
+    const elDesc = document.getElementById('m-desc');
+    const elBenef = document.getElementById('m-beneficiario');
+    const elDestino = document.getElementById('m-cuenta-destino');
     const btnGuardar = document.getElementById('btn-modal-action');
 
-    // Limpieza de valores
-    let valFecha = elFecha.value;
-    let valCuenta = elCuenta.value.trim();
-    let valConcepto = elConcepto.value.trim();
-    let valImporte = parseFloat(elImporte.value) || 0;
-    let valDesc = elDesc.value ? elDesc.value.trim() : "";
-    let valBenef = elBenef.value ? elBenef.value.trim() : "";
-    let valDestino = elDestino ? elDestino.value.trim() : '';
-    
-    // DETECCIÓN: ¿Es edición?
-    // Si el botón dice "COPIA", forzamos que NO sea edición
-    const esCopia = btnGuardar && btnGuardar.innerText.toUpperCase().includes("COPIA");
-    let esEdicion = elId.value && elId.value.trim() !== "" && !esCopia;
-    let idOriginal = elId.value;
+    // 2. EXTRAER VALORES (Protección contra vacíos)
+    let valFecha = elFecha ? elFecha.value : new Date().toISOString().split('T')[0];
+    let valCuenta = elCuenta ? elCuenta.value.trim() : "";
+    let valConcepto = elConcepto ? elConcepto.value.trim() : "";
+    let valImporte = elImporte ? (parseFloat(elImporte.value) || 0) : 0;
+    let valDesc = elDesc ? elDesc.value.trim() : "";
+    let valBenef = elBenef ? elBenef.value.trim() : "";
+    let valDestino = elDestino ? elDestino.value.trim() : "";
 
-    // 2. VALIDACIÓN
-    if (!valFecha || !valCuenta || valConcepto === "") {
-        if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Faltan datos obligatorios.", "error");
+    // 3. DETECCIÓN: ¿Es edición o copia?
+    // Si el botón dice "COPIA", ignoramos el ID viejo y creamos uno nuevo
+    const esCopia = btnGuardar && btnGuardar.innerText.toUpperCase().includes("COPIA");
+    let esEdicion = elId && elId.value && elId.value.trim() !== "" && !esCopia;
+    let idOriginal = elId ? elId.value : "";
+
+    // 4. VALIDACIÓN BÁSICA
+    if (!valFecha || !valCuenta) {
+        if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Faltan datos: Fecha o Cuenta", "error");
         else alert("Faltan datos obligatorios");
         return;
     }
 
-    // 3. UI: BLOQUEO DE SEGURIDAD
+    // Ajuste de signo inteligente según el modo (Gasto/Ingreso)
+    if (window.modoTransaccionActual === 'pago' && valImporte > 0) valImporte = -valImporte;
+    if (window.modoTransaccionActual === 'ingreso' && valImporte < 0) valImporte = Math.abs(valImporte);
+    // En traspasos, la salida es negativa
+    if (window.modoTransaccionActual === 'traspaso' && valImporte > 0) valImporte = -valImporte;
+
+    // 5. BLOQUEO VISUAL (Para que no pulses 2 veces)
     let textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
     if(btnGuardar) {
-        btnGuardar.innerText = esEdicion ? "Actualizando..." : "Guardando...";
+        btnGuardar.innerText = "⏳ Guardando...";
         btnGuardar.disabled = true;
-        btnGuardar.style.opacity = "0.7";
-        btnGuardar.style.cursor = "wait";
     }
-
-    // Feedback visual
-    if(typeof mostrarEstado === 'function') mostrarEstado("Sincronizando con la nube...", "loading");
+    if(typeof mostrarEstado === 'function') mostrarEstado("Sincronizando...", "loading");
 
     try {
-        // 4. PREPARAR DATOS
-        // Generamos ID nuevo si no es edición
+        // --- GENERADOR DE IDs (Matrícula única) ---
         const generarID = () => {
             if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
                 var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
                 return v.toString(16);
             });
@@ -2729,75 +2729,88 @@ window.guardarManual = async function() {
 
         const uuidPrincipal = esEdicion ? idOriginal : generarID();
 
-        // Creamos el objeto movimiento principal
+        // 6. PREPARAR EL MOVIMIENTO
+        const filasNuevas = [];
+
+        // Movimiento A (Principal)
         let mov1 = {
-            ID: uuidPrincipal,
-            FECHA: valFecha,
-            CUENTA: valCuenta,
-            CONCEPTO: valConcepto,
-            IMPORTE: valImporte,
-            DESCRIPCION: valDesc,
-            BENEFICIARIO: valBenef
+            id: uuidPrincipal, // Usamos minúscula para consistencia interna
+            ts: new Date(valFecha).getTime(),
+            fecha: new Date(valFecha),
+            cuenta: valCuenta,
+            concepto: valConcepto || "Varios",
+            importe: valImporte,
+            descripcion: valDesc,
+            detalle: valDesc, // Alias para compatibilidad
+            beneficiario: valBenef,
+            tipo: (valImporte >= 0) ? 'ingreso' : 'gasto'
         };
 
-        // Lógica de TRASPASO (Solo si existe modoTransaccionActual y es 'traspaso')
-        let mov2 = null;
+        // Lógica de TRASPASO (Crea 2 movimientos: Salida y Entrada)
         if (window.modoTransaccionActual === 'traspaso' && valDestino) {
             // Ajustamos Mov1 (Salida)
-            mov1.IMPORTE = -Math.abs(valImporte); // Siempre negativo
-            mov1.DESCRIPCION = `>> A: ${valDestino} | ${valDesc}`;
-            
+            mov1.tipo = 'traspaso';
+            mov1.descripcion = `>> A: ${valDestino} | ${valDesc}`;
+            mov1.detalle = mov1.descripcion;
+            filasNuevas.push(mov1);
+
             // Creamos Mov2 (Entrada)
-            mov2 = {
-                ID: generarID(),
-                FECHA: valFecha,
-                CUENTA: valDestino,
-                CONCEPTO: "Traspaso Recibido",
-                IMPORTE: Math.abs(valImporte), // Siempre positivo
-                DESCRIPCION: `<< DE: ${valCuenta} | ${valDesc}`,
-                BENEFICIARIO: valBenef || "Mí mismo"
+            let mov2 = {
+                id: generarID(),
+                ts: new Date(valFecha).getTime(),
+                fecha: new Date(valFecha),
+                cuenta: valDestino,
+                concepto: "Traspaso Recibido",
+                importe: Math.abs(valImporte), // Positivo
+                descripcion: `<< DE: ${valCuenta} | ${valDesc}`,
+                detalle: `<< DE: ${valCuenta} | ${valDesc}`,
+                beneficiario: valBenef || "Mí mismo",
+                tipo: 'traspaso'
             };
-        }
-
-        // 5. ACTUALIZAR MEMORIA (window.movimientos)
-        if (!window.movimientos) window.movimientos = [];
-
-        // A) Si es edición, quitamos el viejo primero
-        if (esEdicion) {
-            const idx = window.movimientos.findIndex(m => m.ID === idOriginal);
-            if (idx >= 0) window.movimientos.splice(idx, 1);
-        }
-
-        // B) Añadimos el/los nuevos al principio
-        if (mov2) window.movimientos.unshift(mov2); // Segundo mov
-        window.movimientos.unshift(mov1);           // Primer mov
-
-        // 6. GUARDAR EN NUBE (Usando la infraestructura existente)
-        if (typeof guardarUniversal === 'function') {
-            await guardarUniversal(); // Esto guarda TODO el array actualizado en Excel
-            if(typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado correctamente", "success");
+            filasNuevas.push(mov2);
         } else {
-            // Fallback si no existe guardarUniversal
-            console.warn("No existe guardarUniversal, guardando solo en memoria local.");
-            alert("Guardado solo en memoria (no se encontró función de nube).");
+            // Gasto o Ingreso normal
+            filasNuevas.push(mov1);
         }
 
-        // 7. LIMPIEZA FINAL
+        // 7. ACTUALIZAR MEMORIA LOCAL (window.datos)
+        if (!window.datos) window.datos = [];
+
+        // Si es edición, borramos el viejo primero
+        if (esEdicion) {
+            const idx = window.datos.findIndex(m => m.id === idOriginal);
+            if (idx >= 0) window.datos.splice(idx, 1);
+        }
+
+        // Añadimos los nuevos al principio
+        filasNuevas.forEach(m => window.datos.unshift(m));
+
+        // 8. GUARDAR EN LA NUBE (LA CLAVE DEL BLINDAJE)
+        // Usamos guardarUniversal() porque sobreescribe el Excel con lo que hay en memoria.
+        // Es la forma más segura de que no haya discrepancias.
+        if (typeof guardarUniversal === 'function') {
+            await guardarUniversal(); // Esto sube el archivo actualizado
+        } else {
+            alert("⚠️ Guardado solo en local (No se encontró función de nube)");
+        }
+
+        // 9. LIMPIEZA FINAL
         if(typeof cerrarModal === 'function') cerrarModal();
-        if(typeof procesarDatos === 'function') procesarDatos(); // Recalcula saldos
-        if(typeof renderTabla === 'function') renderTabla();     // Repinta tabla
+        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal(); // Actualiza saldos
         
+        // Mensaje de éxito
+        if(typeof mostrarEstado === 'function') mostrarEstado("✅ Datos blindados en la nube", "success");
+        if(typeof vibrar === 'function') vibrar('ingreso');
+
     } catch (error) {
-        console.error("Error crítico:", error);
-        if(typeof mostrarEstado === 'function') mostrarEstado("Error: " + error.message, "error");
-        else alert("Error: " + error.message);
+        console.error("Error al guardar:", error);
+        alert("Error: " + error.message);
+        if(typeof mostrarEstado === 'function') mostrarEstado("Error crítico", "error");
     } finally {
         // Restaurar botón
         if(btnGuardar) {
             btnGuardar.innerText = textoOriginal;
             btnGuardar.disabled = false;
-            btnGuardar.style.opacity = "1";
-            btnGuardar.style.cursor = "pointer";
         }
     }
 };
