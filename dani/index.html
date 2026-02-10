@@ -1933,15 +1933,15 @@ function leerExcel(blob) {
 }
 // 4. EL CEREBRO: PROCESA EL EXCEL (VERSIÓN CORREGIDA FECHAS)
 function procesarLibroLeido(wb) {
-    console.log("📖 Procesando archivo con CORRECCIÓN DE FECHAS...");
+    console.log("📖 Procesando archivo (Versión Compatible Nube/Local)...");
 
     // --- 1. CARGA DE CONFIGURACIÓN ---
     window.mapaCuentas = {}; 
     window.listaConceptos = [];
     window.listaBeneficiarios = [];
     
+    // Buscamos la hoja de configuración (puede llamarse Configuración, Config, TablaConfig...)
     const wsConfigName = wb.SheetNames.find(n => 
-        n.trim().toUpperCase() === "TABLACONFIG" || 
         n.trim().toUpperCase().includes("CONFIG")
     );
     
@@ -1954,17 +1954,15 @@ function procesarLibroLeido(wb) {
         let colCuenta = -1, colTipo = -1, colInv = -1;
         let colConcepto = -1, colBeneficiario = -1;
 
-        // Escaneo inteligente
+        // Escaneo inteligente de encabezados
         for (let i = 0; i < Math.min(matConfig.length, 20); i++) {
             const row = matConfig[i];
             if (!row) continue;
-            
             const rowUpper = row.map(c => String(c || '').trim().toUpperCase());
-            const idxC = rowUpper.indexOf('CUENTA');
             
-            if (idxC !== -1) {
+            if (rowUpper.includes('CUENTA')) {
                 filaEncabezados = i;
-                colCuenta = idxC;
+                colCuenta = rowUpper.indexOf('CUENTA');
                 colTipo = rowUpper.indexOf('TIPO');
                 colInv = rowUpper.findIndex(v => v === 'ESINVERSION' || v === 'ES_INVERSION');
                 colConcepto = rowUpper.indexOf('CONCEPTO');
@@ -1993,86 +1991,77 @@ function procesarLibroLeido(wb) {
                     if(val && !window.listaBeneficiarios.includes(val)) window.listaBeneficiarios.push(val);
                 }
             }
-            console.log(`✅ Configuración cargada: ${Object.keys(window.mapaCuentas).length} cuentas.`);
         }
     }
-    
-    mapaCuentas = window.mapaCuentas;
+    mapaCuentas = window.mapaCuentas; // Sincronizar global
 
-    // --- 2. CARGA DE MOVIMIENTOS (AQUÍ ESTÁ EL ARREGLO) ---
+    // --- 2. CARGA DE MOVIMIENTOS ---
     let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
     const hojaMovs = wb.Sheets[wsName];
     
-    // IMPORTANTE: { cellDates: true } convierte los números de Excel a Fechas JS automáticamente
+    // Leemos los datos. { cellDates: true } ayuda en local, pero en nube necesitamos ayuda extra.
     const rawMovs = XLSX.utils.sheet_to_json(hojaMovs, { cellDates: true });
 
     window.datos = rawMovs.map((fila) => {
         let idSeguro = fila['Id'] || fila['ID'];
         if (!idSeguro || String(idSeguro).trim() === '') idSeguro = crypto.randomUUID();
 
-        // -- LIMPIEZA DE IMPORTE --
+        // A) LIMPIEZA DE IMPORTE
         let importe = fila['Importe'] || fila['IMPORTE'] || 0;
         if (typeof importe === 'string') {
             importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
         }
 
-        // -- LIMPIEZA DE FECHA (CRÍTICO) --
+        // B) LIMPIEZA DE FECHA (AQUÍ ESTÁ LA MAGIA PARA LA NUBE)
         let fechaRaw = fila['Fecha'] || fila['FECHA'];
         let fechaLimpia;
 
         if (fechaRaw instanceof Date && !isNaN(fechaRaw)) {
-            // Caso 1: Ya es una fecha válida (gracias a cellDates: true)
+            // Caso 1: Local (ya es fecha)
             fechaLimpia = fechaRaw;
-        } else if (typeof fechaRaw === 'string') {
-            // Caso 2: Es texto (ej: "2025-01-01")
+        } 
+        else if (typeof fechaRaw === 'number') {
+            // Caso 2: Nube (viene como número de serie Excel, ej: 45324)
+            // Fórmula: (Serie - 25569) * 86400 * 1000 da los milisegundos JS
+            fechaLimpia = new Date((fechaRaw - 25569) * 86400 * 1000);
+        } 
+        else if (typeof fechaRaw === 'string') {
+            // Caso 3: Texto (ej: "2025-01-01")
             fechaLimpia = new Date(fechaRaw);
-        } else {
-            // Caso 3: Fallo o vacío -> ponemos hoy para no romper la app
+        } 
+        else {
+            // Caso 4: Emergencia
             fechaLimpia = new Date(); 
         }
-        
-        // Si después de todo sigue siendo inválida, ponemos hoy
-        if (isNaN(fechaLimpia.getTime())) {
-            fechaLimpia = new Date(); 
-        }
+
+        // Asegurar que sea válida
+        if (isNaN(fechaLimpia.getTime())) fechaLimpia = new Date();
 
         return {
             id: idSeguro,
             fecha: fechaLimpia,
-            // Guardamos el timestamp numérico para ordenar y filtrar rápido
-            ts: fechaLimpia.getTime(), 
+            ts: fechaLimpia.getTime(), // Timestamp real para ordenar
             cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
             concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
             importe: importe,
-            // Guardamos en AMBOS campos para evitar fallos
             descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
-            detalle: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
+            detalle: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(), // Alias
             beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
-            
-            // Detección robusta de tipo TRASPASO
-            tipo: ((fila['Concepto']||'') + (fila['Descripcion']||'')).toUpperCase().includes('TRASPASO') 
-                  ? 'traspaso' 
-                  : (importe >= 0 ? 'ingreso' : 'gasto'),
-            
-            saldo: 0 // Se calculará en recalcularSaldosGlobal()
+            tipo: (importe >= 0) ? 'ingreso' : 'gasto'
         };
     });
 
-    // Ordenar por fecha (descendente)
-    window.datos.sort((a, b) => b.fecha - a.fecha);
-    
-    datos = window.datos;
-	 if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-    try { localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos)); } catch (e) {}
+    // Ordenar por fecha descendente (lo más nuevo arriba)
+    window.datos.sort((a, b) => b.ts - a.ts);
+    datos = window.datos; // Sincronizar global corta
 
-    // --- 3. ACTUALIZAR PANTALLA ---
-   
+    console.log(`✅ ${window.datos.length} movimientos procesados.`);
+
+    // Actualizar toda la interfaz
+    if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if(typeof cargarInterfaz === 'function') cargarInterfaz();
-    if(typeof renderDashboard === 'function') renderDashboard();
-    
-    if(document.getElementById('status-text')) {
-        document.getElementById('status-text').innerText = "✅ Datos cargados correctamente";
-    }
+    if(typeof actualizarDashboard === 'function') actualizarDashboard();
+    if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
 }
  
 // ==========================================
