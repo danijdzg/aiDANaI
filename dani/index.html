@@ -4948,41 +4948,62 @@ window.procesarDatos = function(filas) {
 // ==========================================
 // 2. SISTEMA DE BORRADO SEGURO
 // ==========================================
-async function borrarMovimiento() {
-        const id = document.getElementById('input-id').value;
-        if (!id) return;
+window.borrarMovimiento = async function(idDirecto) {
+    console.log("🗑️ Iniciando protocolo de borrado...");
 
-        // Confirmación de seguridad
-        if (!confirm("¿Seguro que quieres borrar este movimiento? Se actualizará en OneDrive inmediatamente.")) return;
-
-        // 1. Borrar de la memoria local
-        const idx = window.movimientos.findIndex(m => m.Id === id);
-        if (idx > -1) {
-            window.movimientos.splice(idx, 1);
-        }
-
-        // 2. Cerrar y limpiar visualmente
-        cerrarModal();
-        renderTabla();
-        actualizarDashboard();
-
-        // 3. FORZAR GUARDADO EN NUBE (Cloud First)
-        if (typeof guardarUniversal === 'function') {
-            // Mostramos aviso de que está trabajando
-            const estadoDiv = document.getElementById('estado-nube') || document.body;
-            // Si tienes una función mostrarEstado úsala, si no, improvisamos un aviso
-            if (typeof mostrarEstado === 'function') {
-                mostrarEstado("Borrando en OneDrive...", "spin");
-            }
-            
-            try {
-                await guardarUniversal(); // Esto sube el Excel actualizado
-                if (typeof mostrarEstado === 'function') mostrarEstado("Borrado y sincronizado OK", "success");
-            } catch (e) {
-                alert("¡OJO! Se borró de la pantalla pero falló la nube. Revisa tu conexión.");
-            }
-        }
+    // 1. OBTENER ID (CORRECCIÓN CRÍTICA AQUÍ)
+    // Primero miramos si nos pasan el ID directamente, si no, lo buscamos en el formulario oculto 'm-id'
+    let idParaBorrar = idDirecto;
+    if (!idParaBorrar) {
+        const elementoId = document.getElementById('m-id');
+        if (elementoId) idParaBorrar = elementoId.value;
     }
+
+    if (!idParaBorrar) {
+        alert("Error: No se ha identificado qué movimiento borrar.");
+        return;
+    }
+
+    // 2. CONFIRMACIÓN DE SEGURIDAD
+    if (!confirm("⚠️ ¿Estás seguro de que quieres ELIMINAR este movimiento permanentemente?")) {
+        return; // Si cancela, no hacemos nada
+    }
+
+    try {
+        // 3. BORRAR DE MEMORIA LOCAL (window.datos)
+        // Usamos String() para asegurar que comparamos texto con texto
+        const indice = window.datos.findIndex(m => String(m.id) === String(idParaBorrar));
+        
+        if (indice > -1) {
+            window.datos.splice(indice, 1); // Lo quitamos del array
+            console.log("✅ Eliminado de memoria local.");
+        } else {
+            console.warn("No encontrado en memoria, intentando sincronizar...");
+        }
+
+        // 4. ACTUALIZAR PANTALLA (Inmediato)
+        if(typeof cerrarModal === 'function') cerrarModal();
+        if(typeof renderizar === 'function') renderizar();
+        if(typeof actualizarDashboard === 'function') actualizarDashboard();
+        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+
+        // 5. SINCRONIZAR CON LA NUBE (CRÍTICO)
+        if (typeof guardarUniversal === 'function') {
+            if(typeof mostrarEstado === 'function') mostrarEstado("🗑️ Borrando en OneDrive...", "loading");
+            
+            await guardarUniversal(); // Esto sube el Excel actualizado SIN la fila borrada
+            
+            if(typeof mostrarEstado === 'function') mostrarEstado("✅ Eliminado correctamente de la nube", "success");
+            if(typeof vibrar === 'function') vibrar('error'); // Vibración distinta para confirmar borrado
+        } else {
+            alert("⚠️ Se borró de la pantalla, pero no estoy conectado a la nube para guardar el cambio.");
+        }
+
+    } catch (error) {
+        console.error("Error al borrar:", error);
+        alert("Hubo un error al intentar guardar el borrado en la nube: " + error.message);
+    }
+};
 // ==========================================
 // 3. GUARDADO MAESTRO (Rápido y Seguro)
 // ==========================================
