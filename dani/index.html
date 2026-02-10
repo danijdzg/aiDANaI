@@ -1099,7 +1099,8 @@
                 <input type="hidden" id="m-id">
                 
                 <label class="input-label">CONCEPTO</label>
-                <select id="m-concepto" class="filter-input form-field" onchange="autoRellenarDescripcion()"><option value="">Selecciona Concepto...</option></select>
+                <input type="text" id="m-concepto" list="lista-conceptos-memoria" class="filter-input form-field" onchange="autoRellenarDescripcion()" placeholder="Escribe o selecciona concepto...">
+				<datalist id="lista-conceptos-memoria"></datalist>
                 
                 <label class="input-label">DESCRIPCIÓN</label>
                 <input type="text" id="m-desc" class="filter-input form-field" placeholder="Detalle del movimiento">
@@ -1994,7 +1995,36 @@ function procesarLibroLeido(wb) {
         }
     }
     mapaCuentas = window.mapaCuentas; // Sincronizar global
+	// --- MEJORA: INYECCIÓN DE INTELIGENCIA (AUTOCOMPLETADO) ---
+    // 1. Rellenar Conceptos
+    // Buscamos el elemento datalist que creamos en el HTML
+    const dlConceptos = document.getElementById('lista-conceptos-memoria');
+    
+    // Si existe el datalist y tenemos conceptos leídos del Excel
+    if (dlConceptos && window.listaConceptos && window.listaConceptos.length > 0) {
+        dlConceptos.innerHTML = ''; // Limpiamos sugerencias viejas para no duplicar
+        
+        // Ordenamos alfabéticamente para que sea más fácil buscar visualmente
+        window.listaConceptos.sort().forEach(item => {
+            // Creamos una opción invisible por cada concepto
+            const opt = document.createElement('option');
+            opt.value = item; // El valor es el texto (ej: "Supermercado")
+            dlConceptos.appendChild(opt); // Lo metemos en la lista
+        });
+        
+        console.log(`✅ Autocompletado listo: ${window.listaConceptos.length} conceptos cargados.`);
+    }
 
+    // 2. Rellenar Beneficiarios (Opcional, si hiciste lo mismo con el campo beneficiario)
+    const dlBenef = document.getElementById('lista-benef-memoria');
+    if (dlBenef && window.listaBeneficiarios && window.listaBeneficiarios.length > 0) {
+        dlBenef.innerHTML = '';
+        window.listaBeneficiarios.sort().forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item;
+            dlBenef.appendChild(opt);
+        });
+    }
     // --- 2. CARGA DE MOVIMIENTOS ---
     let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
     const hojaMovs = wb.Sheets[wsName];
@@ -2012,29 +2042,43 @@ function procesarLibroLeido(wb) {
             importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
         }
 
-        // B) LIMPIEZA DE FECHA (AQUÍ ESTÁ LA MAGIA PARA LA NUBE)
+        // B) LIMPIEZA DE FECHA (BLINDAJE ESPAÑA/INTERNACIONAL)
         let fechaRaw = fila['Fecha'] || fila['FECHA'];
         let fechaLimpia;
 
         if (fechaRaw instanceof Date && !isNaN(fechaRaw)) {
-            // Caso 1: Local (ya es fecha)
+            // Caso 1: Excel local (ya es Objeto Fecha)
             fechaLimpia = fechaRaw;
         } 
         else if (typeof fechaRaw === 'number') {
-            // Caso 2: Nube (viene como número de serie Excel, ej: 45324)
-            // Fórmula: (Serie - 25569) * 86400 * 1000 da los milisegundos JS
+            // Caso 2: Excel Nube numérico (ej: 45324)
             fechaLimpia = new Date((fechaRaw - 25569) * 86400 * 1000);
         } 
         else if (typeof fechaRaw === 'string') {
-            // Caso 3: Texto (ej: "2025-01-01")
-            fechaLimpia = new Date(fechaRaw);
+            // Caso 3: Texto. Aquí está el BUG corregido.
+            // Si viene como "dd/mm/yyyy", lo forzamos.
+            if (fechaRaw.includes('/')) {
+                const partes = fechaRaw.split('/');
+                if (partes.length === 3) {
+                    // Asumimos DIA/MES/AÑO (Formato Español/Europeo)
+                    // JS necesita AÑO-MES-DIA o MES/DIA/AÑO
+                    const dia = parseInt(partes[0], 10);
+                    const mes = parseInt(partes[1], 10) - 1; // JS cuenta meses de 0 a 11
+                    let anio = parseInt(partes[2], 10);
+                    if (anio < 100) anio += 2000; // Por si viene "25" en vez de "2025"
+                    fechaLimpia = new Date(anio, mes, dia);
+                } else {
+                    fechaLimpia = new Date(fechaRaw);
+                }
+            } else {
+                fechaLimpia = new Date(fechaRaw);
+            }
         } 
         else {
-            // Caso 4: Emergencia
             fechaLimpia = new Date(); 
         }
 
-        // Asegurar que sea válida
+        // Validación final de seguridad
         if (isNaN(fechaLimpia.getTime())) fechaLimpia = new Date();
 
         return {
