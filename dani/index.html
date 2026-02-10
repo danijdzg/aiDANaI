@@ -2158,19 +2158,19 @@ function finalizarGuardado(esTraspaso) {
         const tbody = document.getElementById('lista-movimientos');
         if(!tbody) return;
         
-        // 1. FILTRADO (Tu lógica actual, mantenida)
+        // 1. FILTRADO
         let lista = datos.filter(m => {
-            if (!pasaFiltroPropietario(m)) return false;
+            if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return false;
             if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
             if (filtros.tipo === 'neto' && m.tipo === 'traspaso') return false;
             if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
             if (filtros.concepto && m.concepto !== filtros.concepto) return false;
             if (filtros.beneficiario && m.beneficiario !== filtros.beneficiario) return false;
+            
             const textoBusqueda = (filtros.texto || '').toLowerCase();
             const textoFila = ((m.concepto||'') + ' ' + (m.descripcion||m.detalle||'') + ' ' + (m.beneficiario||'')).toLowerCase();
             if (filtros.texto && !textoFila.includes(textoBusqueda)) return false;
             
-            // Filtros de fecha seguros
             if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
             if (filtros.hasta && m.ts > new Date(filtros.hasta).getTime()) return false;
             
@@ -2204,12 +2204,11 @@ function finalizarGuardado(esTraspaso) {
         if(contador) contador.innerText = `Viendo ${listaVisual.length} de ${totalResultados} movs.`;
         
         if (lista.length === 0) {
-            // CAMBIO: Texto blanco puro en lugar de gris
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#FFFFFF; font-weight:bold;">No hay movimientos que coincidan con los filtros</td></tr>';
             return;
         }
 
-        // 4. GENERACIÓN HTML (SIN GRISES)
+        // 4. GENERACIÓN HTML
         let htmlFilas = listaVisual.map(m => {
             // A) FECHA
             let dateStr = "---";
@@ -2220,7 +2219,7 @@ function finalizarGuardado(esTraspaso) {
                 }
             } catch(e) { console.warn("Error fecha", m); }
 
-            // B) COLOR SEGÚN TIPO (Rojo, Verde, Azul Traspaso)
+            // B) COLOR UNIFICADO (Importe, Cuenta y Saldo)
             let colorClass = 'val-neg'; // Por defecto gasto (rojo)
             let signo = '';
             
@@ -2235,10 +2234,8 @@ function finalizarGuardado(esTraspaso) {
                 signo = '+';
             }
 
-            // C) DESCRIPCIÓN 
+            // D) FORMATOS DE TEXTO
             const descripcionFinal = m.descripcion || m.detalle || '';
-            
-            // D) SALDO ENTRE PARÉNTESIS
             const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
 
             return `
@@ -2249,20 +2246,18 @@ function finalizarGuardado(esTraspaso) {
                 
                 <td class="pc-only ${colorClass}" style="font-weight:bold;">
                     ${Security.escapeHTML(m.cuenta)} 
-                    <span style="font-size:11px; color:#FFFFFF; margin-left:5px; opacity:0.8">(${saldoStr})</span>
+                    <span style="font-size:11px; margin-left:5px; opacity:0.9; color:inherit">(${saldoStr})</span>
                 </td>
                 
                 <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.concepto)}</td>
-                
                 <td class="pc-only" style="color:#FFFFFF; font-style:normal; opacity:0.9;">${Security.escapeHTML(descripcionFinal)}</td>
-                
                 <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.beneficiario)}</td>
                 
                 <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${dateStr}</td>
                 
                 <td class="mob-only td-cuenta-mob ${colorClass}">
                     ${Security.escapeHTML(m.cuenta)} 
-                    <span class="saldo-small" style="color:#FFFFFF; opacity:0.8">(${saldoStr})</span>
+                    <span class="saldo-small" style="color:inherit !important; opacity:0.9">(${saldoStr})</span>
                 </td>
                 
                 <td class="mob-only td-amount ${colorClass}">${signo}${fmt(m.importe)}</td>
