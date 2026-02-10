@@ -2668,17 +2668,18 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("--- Iniciando Guardado Seguro (Opción B) ---");
+    console.log("--- Iniciando Guardado Seguro (Versión Adaptada) ---");
 
-    // 1. OBTENER DATOS DEL FORMULARIO (Tus IDs originales)
-    const elId = document.getElementById('m-id'); 
-    const elFecha = document.getElementById('m-fecha');
-    const elCuenta = document.getElementById('m-cuenta'); 
-    const elConcepto = document.getElementById('m-concepto'); 
-    const elImporte = document.getElementById('m-cantidad'); 
-    const elDesc = document.getElementById('m-desc');
-    const elBenef = document.getElementById('m-beneficiario'); 
-    const elDestino = document.getElementById('m-cuenta-destino');
+    // 1. OBTENER DATOS DEL FORMULARIO (Con los IDs REALES de tu HTML)
+    const elId = document.getElementById('input-id'); 
+    const elFecha = document.getElementById('input-fecha');
+    const elCuenta = document.getElementById('input-cuenta'); 
+    const elConcepto = document.getElementById('input-concepto'); 
+    const elImporte = document.getElementById('input-importe'); 
+    const elDesc = document.getElementById('input-descripcion');
+    const elBenef = document.getElementById('input-beneficiario'); 
+    // Intenta buscar destino, si no existe no pasa nada
+    const elDestino = document.getElementById('input-cuenta-destino'); 
     const btnGuardar = document.getElementById('btn-modal-action');
 
     // Limpieza de valores
@@ -2686,50 +2687,49 @@ window.guardarManual = async function() {
     let valCuenta = elCuenta.value.trim();
     let valConcepto = elConcepto.value.trim();
     let valImporte = parseFloat(elImporte.value) || 0;
-    let valDesc = elDesc.value.trim();
-    let valBenef = elBenef.value.trim();
+    let valDesc = elDesc.value ? elDesc.value.trim() : "";
+    let valBenef = elBenef.value ? elBenef.value.trim() : "";
     let valDestino = elDestino ? elDestino.value.trim() : '';
     
     // DETECCIÓN: ¿Es edición?
-    let esEdicion = elId.value && elId.value.trim() !== "";
+    // Si el botón dice "COPIA", forzamos que NO sea edición
+    const esCopia = btnGuardar && btnGuardar.innerText.toUpperCase().includes("COPIA");
+    let esEdicion = elId.value && elId.value.trim() !== "" && !esCopia;
     let idOriginal = elId.value;
 
-    // 2. VALIDACIÓN DE NEGOCIO (Con Notificaciones Toast en vez de Alert)
-    if (window.modoTransaccionActual === 'traspaso') {
-        if (!valFecha || !valCuenta || !valDestino) {
-            mostrarEstado("⚠️ Faltan datos para traspaso (Origen, Destino o Fecha).", "error");
-            return;
-        }
-        valConcepto = "Traspaso";
-        if (valImporte > 0) valImporte = -valImporte; // Salida siempre negativa
-    } else {
-        if (!valFecha || !valCuenta || !valConcepto) {
-            mostrarEstado("⚠️ Faltan datos obligatorios: Fecha, Cuenta o Concepto.", "error");
-            return;
-        }
-        // Ajuste de signo según modo
-        if (window.modoTransaccionActual === 'pago' && valImporte > 0) valImporte = -valImporte;
-        if (window.modoTransaccionActual === 'ingreso' && valImporte < 0) valImporte = Math.abs(valImporte);
+    // 2. VALIDACIÓN
+    if (!valFecha || !valCuenta || valConcepto === "") {
+        if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Faltan datos obligatorios.", "error");
+        else alert("Faltan datos obligatorios");
+        return;
     }
 
     // 3. UI: BLOQUEO DE SEGURIDAD
     let textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
     if(btnGuardar) {
         btnGuardar.innerText = esEdicion ? "Actualizando..." : "Guardando...";
-        btnGuardar.disabled = true; // IMPIDE DOBLE CLICK
+        btnGuardar.disabled = true;
         btnGuardar.style.opacity = "0.7";
         btnGuardar.style.cursor = "wait";
     }
 
-    // Feedback visual de carga
-    let loadingToast = mostrarEstado("Sincronizando con la nube...", "loading");
+    // Feedback visual
+    if(typeof mostrarEstado === 'function') mostrarEstado("Sincronizando con la nube...", "loading");
 
     try {
-        // 4. PREPARAR FILAS (Tu lógica original intacta)
-        const filasParaGuardar = [];
-        const uuidPrincipal = esEdicion ? idOriginal : crypto.randomUUID();
+        // 4. PREPARAR DATOS
+        // Generamos ID nuevo si no es edición
+        const generarID = () => {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        };
 
-        // Movimiento Principal
+        const uuidPrincipal = esEdicion ? idOriginal : generarID();
+
+        // Creamos el objeto movimiento principal
         let mov1 = {
             ID: uuidPrincipal,
             FECHA: valFecha,
@@ -2740,90 +2740,59 @@ window.guardarManual = async function() {
             BENEFICIARIO: valBenef
         };
 
-        // Lógica de Traspaso
+        // Lógica de TRASPASO (Solo si existe modoTransaccionActual y es 'traspaso')
+        let mov2 = null;
         if (window.modoTransaccionActual === 'traspaso' && valDestino) {
+            // Ajustamos Mov1 (Salida)
+            mov1.IMPORTE = -Math.abs(valImporte); // Siempre negativo
             mov1.DESCRIPCION = `>> A: ${valDestino} | ${valDesc}`;
-            let mov2 = {
-                ID: crypto.randomUUID(),
+            
+            // Creamos Mov2 (Entrada)
+            mov2 = {
+                ID: generarID(),
                 FECHA: valFecha,
                 CUENTA: valDestino,
                 CONCEPTO: "Traspaso Recibido",
-                IMPORTE: Math.abs(valImporte),
+                IMPORTE: Math.abs(valImporte), // Siempre positivo
                 DESCRIPCION: `<< DE: ${valCuenta} | ${valDesc}`,
                 BENEFICIARIO: valBenef || "Mí mismo"
             };
-            filasParaGuardar.push(mov1, mov2);
+        }
+
+        // 5. ACTUALIZAR MEMORIA (window.movimientos)
+        if (!window.movimientos) window.movimientos = [];
+
+        // A) Si es edición, quitamos el viejo primero
+        if (esEdicion) {
+            const idx = window.movimientos.findIndex(m => m.ID === idOriginal);
+            if (idx >= 0) window.movimientos.splice(idx, 1);
+        }
+
+        // B) Añadimos el/los nuevos al principio
+        if (mov2) window.movimientos.unshift(mov2); // Segundo mov
+        window.movimientos.unshift(mov1);           // Primer mov
+
+        // 6. GUARDAR EN NUBE (Usando la infraestructura existente)
+        if (typeof guardarUniversal === 'function') {
+            await guardarUniversal(); // Esto guarda TODO el array actualizado en Excel
+            if(typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado correctamente", "success");
         } else {
-            filasParaGuardar.push(mov1);
+            // Fallback si no existe guardarUniversal
+            console.warn("No existe guardarUniversal, guardando solo en memoria local.");
+            alert("Guardado solo en memoria (no se encontró función de nube).");
         }
 
-        // 5. OPERACIÓN EN NUBE (CRÍTICO)
-        if (typeof OneDriveManager !== 'undefined' && OneDriveManager.accessToken) {
-            
-            // A) SI ES EDICIÓN: PRIMERO BORRAMOS EL VIEJO
-            if (esEdicion) {
-                console.log("✏️ Modo Edición: Borrando anterior ID " + idOriginal);
-                // Intentamos usar tu función de borrado si existe
-                if(typeof oneDrive !== 'undefined' && oneDrive.borrarFilaPorID) {
-                     await oneDrive.borrarFilaPorID(idOriginal);
-                }
-            }
-
-            // B) INSERTAMOS EL NUEVO
-            await OneDriveManager.addRows('Movimientos', filasParaGuardar);
-            console.log("✅ Nube actualizada correctamente.");
-            
-        } else {
-            // Modo Local (Fallback)
-            // Quitamos el loading toast antes del confirm para que se vea limpio
-            if(loadingToast) loadingToast.remove(); 
-            if(!confirm("⚠️ Estás Offline. ¿Guardar solo en local?")) throw new Error("Cancelado por usuario.");
-            // Si dice que sí, volvemos a mostrar loading
-            loadingToast = mostrarEstado("Guardando en local...", "loading");
-        }
-
-        // 6. ACTUALIZAR PANTALLA (Memoria Local)
-        // Si era edición, borramos el viejo de la memoria primero
-        if (window.datos) {
-            if (esEdicion) {
-                window.datos = window.datos.filter(d => d.id !== idOriginal);
-            }
-            
-            // Añadimos los nuevos a la memoria
-            filasParaGuardar.forEach(nuevo => {
-                window.datos.push({
-                    id: nuevo.ID,
-                    ts: new Date(nuevo.FECHA).getTime(),
-                    fecha: new Date(nuevo.FECHA),
-                    cuenta: nuevo.CUENTA,
-                    concepto: nuevo.CONCEPTO,
-                    importe: parseFloat(nuevo.IMPORTE),
-                    detalle: nuevo.DESCRIPCION,
-                    beneficiario: nuevo.BENEFICIARIO,
-                    tipo: (String(nuevo.CONCEPTO).toUpperCase().includes('TRASPASO')) ? 'traspaso' : (nuevo.IMPORTE >= 0 ? 'ingreso' : 'gasto'),
-                    saldo: 0 // Se recalcula luego
-                });
-            });
-        }
-
-        // Refrescar todo
-        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        // 7. LIMPIEZA FINAL
         if(typeof cerrarModal === 'function') cerrarModal();
+        if(typeof procesarDatos === 'function') procesarDatos(); // Recalcula saldos
+        if(typeof renderTabla === 'function') renderTabla();     // Repinta tabla
         
-        // MENSAJE DE ÉXITO FINAL
-        if(loadingToast) loadingToast.remove();
-        mostrarEstado(esEdicion ? "Movimiento editado correctamente" : "Movimiento guardado", "success");
-        
-        if(window.vibrar) try { vibrar('ingreso'); } catch(e){}
-
     } catch (error) {
         console.error("Error crítico:", error);
-        // MENSAJE DE ERROR ELEGANTE
-        if(loadingToast) loadingToast.remove();
-        mostrarEstado("Error: " + error.message, "error");
-        // Nota: NO cerramos el modal para que puedas corregir y reintentar
+        if(typeof mostrarEstado === 'function') mostrarEstado("Error: " + error.message, "error");
+        else alert("Error: " + error.message);
     } finally {
-        // SIEMPRE DESBLOQUEAMOS EL BOTÓN AL FINAL
+        // Restaurar botón
         if(btnGuardar) {
             btnGuardar.innerText = textoOriginal;
             btnGuardar.disabled = false;
