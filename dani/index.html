@@ -1117,8 +1117,13 @@
                 </div>
                 
                 <div id="extra-actions" style="display:none; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
-                    <button class="full-btn" onclick="clonarMovimiento()" style="background:transparent; border:1px solid var(--c-warning); color:var(--c-warning);"><span class="material-icons" style="vertical-align:middle; font-size:16px">content_copy</span> CLONAR</button>
-                    <button class="full-btn" onclick="borrarMovimiento()" style="background:transparent; border:1px solid var(--c-danger); color:var(--c-danger);"><span class="material-icons" style="vertical-align:middle; font-size:16px">delete</span> ELIMINAR</button>
+                    <button type="button" class="full-btn" onclick="window.clonarMovimiento(document.getElementById('m-id').value)" style="background:rgba(255, 214, 10, 0.1); border:1px solid var(--c-warning); color:var(--c-warning); font-weight:800;">
+                        <span class="material-icons" style="vertical-align:middle; font-size:18px; margin-right:5px">content_copy</span> DUPLICAR
+                    </button>
+                    
+                    <button type="button" id="btn-borrar-modal" class="full-btn" onclick="window.borrarMovimiento(document.getElementById('m-id').value)" style="background:rgba(255, 69, 58, 0.1); border:1px solid var(--c-danger); color:var(--c-danger); font-weight:800;">
+                        <span class="material-icons" style="vertical-align:middle; font-size:18px; margin-right:5px">delete</span> ELIMINAR
+                    </button>
                 </div>
             </div>
         </div>
@@ -2587,63 +2592,65 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("--- Iniciando Guardado Blindado (Versión Adaptada) ---");
+    console.log("--- Iniciando Guardado Inteligente (Alta/Edición) ---");
 
-    // 1. OBTENER DATOS (Usando tus IDs correctos)
-    const elId = document.getElementById('m-id');
+    // 1. OBTENER DATOS DEL FORMULARIO
+    const elId = document.getElementById('m-id'); // ID oculto (si tiene valor, es EDICIÓN)
     const elFecha = document.getElementById('m-fecha');
-    const elCuenta = document.getElementById('m-cuenta');
-    const elConcepto = document.getElementById('m-concepto');
-    const elImporte = document.getElementById('m-cantidad'); // Tu ID es m-cantidad
+    const elCuenta = document.getElementById('m-cuenta'); // Input inteligente
+    const elConcepto = document.getElementById('m-concepto'); // Input inteligente
+    const elImporte = document.getElementById('m-cantidad'); 
     const elDesc = document.getElementById('m-desc');
-    const elBenef = document.getElementById('m-beneficiario');
+    const elBenef = document.getElementById('m-beneficiario'); // Input inteligente
     const elDestino = document.getElementById('m-cuenta-destino');
     const btnGuardar = document.getElementById('btn-modal-action');
 
-    // Valores limpios
+    // Limpieza de valores
     let valFecha = elFecha.value;
-    let valCuenta = elCuenta.value;
-    let valConcepto = elConcepto.value;
+    let valCuenta = elCuenta.value.trim();
+    let valConcepto = elConcepto.value.trim();
     let valImporte = parseFloat(elImporte.value) || 0;
-    let valDesc = elDesc.value;
-    let valBenef = elBenef.value;
-    let valDestino = elDestino ? elDestino.value : '';
+    let valDesc = elDesc.value.trim();
+    let valBenef = elBenef.value.trim();
+    let valDestino = elDestino ? elDestino.value.trim() : '';
+    
+    // DETECCIÓN: ¿Es edición?
     let esEdicion = elId.value && elId.value.trim() !== "";
+    let idOriginal = elId.value;
 
-    // 2. VALIDACIÓN (Tu lógica original conservada)
+    // 2. VALIDACIÓN DE NEGOCIO
     if (window.modoTransaccionActual === 'traspaso') {
         if (!valFecha || !valCuenta || !valDestino) {
-            alert("⚠️ Para traspaso faltan datos: Fecha, Cuenta Origen o Cuenta Destino.");
+            alert("⚠️ Faltan datos para traspaso (Origen, Destino o Fecha).");
             return;
         }
         valConcepto = "Traspaso";
-        // En traspaso, el origen siempre es negativo (sale dinero)
-        if (valImporte > 0) valImporte = -valImporte;
+        if (valImporte > 0) valImporte = -valImporte; // Salida siempre negativa
     } else {
         if (!valFecha || !valCuenta || !valConcepto) {
             alert("⚠️ Faltan datos obligatorios: Fecha, Cuenta o Concepto.");
             return;
         }
-        // En pago, aseguramos negativo
+        // Ajuste de signo según modo (Pago = negativo, Ingreso = positivo)
         if (window.modoTransaccionActual === 'pago' && valImporte > 0) valImporte = -valImporte;
+        if (window.modoTransaccionActual === 'ingreso' && valImporte < 0) valImporte = Math.abs(valImporte);
     }
 
-    // 3. UI: BLOQUEO VISUAL
-    let textoOriginal = "GUARDAR";
+    // 3. UI: BLOQUEO
+    let textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
     if(btnGuardar) {
-        textoOriginal = btnGuardar.innerText;
-        btnGuardar.innerText = "⏳ Confirmando en Nube...";
+        btnGuardar.innerText = esEdicion ? "🔄 Actualizando..." : "⏳ Guardando...";
         btnGuardar.disabled = true;
         btnGuardar.style.opacity = "0.7";
     }
 
     try {
-        // 4. PREPARAR FILAS PARA EXCEL
-        // Creamos un array porque en traspasos guardaremos 2 filas de golpe
+        // 4. PREPARAR FILAS (Formato Excel)
         const filasParaGuardar = [];
-        const uuidPrincipal = esEdicion ? elId.value : crypto.randomUUID();
+        // Si es edición, mantenemos el ID original. Si es nuevo, generamos uno.
+        const uuidPrincipal = esEdicion ? idOriginal : crypto.randomUUID();
 
-        // Movimiento 1 (Principal)
+        // Movimiento Principal
         let mov1 = {
             ID: uuidPrincipal,
             FECHA: valFecha,
@@ -2654,16 +2661,16 @@ window.guardarManual = async function() {
             BENEFICIARIO: valBenef
         };
 
-        // Lógica de Traspaso (Movimiento 2 - Destino)
+        // Lógica de Traspaso (Genera movimiento espejo)
         if (window.modoTransaccionActual === 'traspaso' && valDestino) {
-            mov1.DESCRIPCION = `>> A: ${valDestino} | ${valDesc}`; // Marcamos salida en origen
+            mov1.DESCRIPCION = `>> A: ${valDestino} | ${valDesc}`;
 
             let mov2 = {
-                ID: crypto.randomUUID(), // Nuevo ID distinto para el destino
+                ID: crypto.randomUUID(), // El destino siempre es un registro nuevo/distinto
                 FECHA: valFecha,
                 CUENTA: valDestino,
                 CONCEPTO: "Traspaso Recibido",
-                IMPORTE: Math.abs(valImporte), // Entra dinero (positivo)
+                IMPORTE: Math.abs(valImporte),
                 DESCRIPCION: `<< DE: ${valCuenta} | ${valDesc}`,
                 BENEFICIARIO: valBenef || "Mí mismo"
             };
@@ -2672,50 +2679,56 @@ window.guardarManual = async function() {
             filasParaGuardar.push(mov1);
         }
 
-        // 5. GUARDADO BLINDADO EN NUBE
-        // Usamos addRows para insertar de forma segura y rápida sin descargar todo el archivo antes
+        // 5. OPERACIÓN EN NUBE (CRÍTICO)
         if (typeof OneDriveManager !== 'undefined' && OneDriveManager.accessToken) {
-            await OneDriveManager.addRows('Movimientos', filasParaGuardar);
-            console.log("✅ Confirmado: Datos recibidos en OneDrive.");
-        } else {
-            // Fallback si no hay conexión detectada pero queremos permitir guardar (opcional)
-            if(!confirm("⚠️ No detecto conexión con OneDrive. ¿Guardar solo en local? (Peligroso: exporta backup luego).")) {
-                throw new Error("Cancelado por falta de conexión.");
+            
+            // A) SI ES EDICIÓN: PRIMERO BORRAMOS EL VIEJO
+            if (esEdicion) {
+                console.log("✏️ Modo Edición: Borrando anterior ID " + idOriginal);
+                // Usamos la función optimizada de borrado (sin descargar todo el excel)
+                await oneDrive.borrarFilaPorID(idOriginal);
             }
+
+            // B) INSERTAMOS EL NUEVO (Siempre Append, es lo más seguro y rápido)
+            await OneDriveManager.addRows('Movimientos', filasParaGuardar);
+            console.log("✅ Nube actualizada correctamente.");
+            
+        } else {
+            // Modo Local (Fallback)
+            if(!confirm("⚠️ Estás Offline. ¿Guardar solo en local?")) throw new Error("Cancelado por usuario.");
         }
 
-        // 6. ACTUALIZAR PANTALLA (Solo si la nube dio OK)
-        if (typeof window.datos !== 'undefined') {
-             filasParaGuardar.forEach(nuevo => {
-                // Convertimos formato Excel (Mayus) a formato App (Internal)
-                const formatoApp = {
-                    id: nuevo.ID,
-                    ts: new Date(nuevo.FECHA).getTime(),
-                    fecha: nuevo.FECHA,
-                    cuenta: nuevo.CUENTA,
-                    concepto: nuevo.CONCEPTO,
-                    importe: parseFloat(nuevo.IMPORTE),
-                    detalle: nuevo.DESCRIPCION,
-                    beneficiario: nuevo.BENEFICIARIO,
-                    tipo: (String(nuevo.CONCEPTO).toUpperCase().includes('TRASPASO')) ? 'traspaso' : (nuevo.IMPORTE >= 0 ? 'ingreso' : 'gasto')
-                };
-
-                // Actualizar array en memoria
-                const idx = window.datos.findIndex(d => d.id === nuevo.ID);
-                if (idx >= 0) window.datos[idx] = formatoApp; // Editar
-                else window.datos.push(formatoApp); // Nuevo
-             });
+        // 6. ACTUALIZAR PANTALLA (Memoria Local)
+        // Si era edición, borramos el viejo de la memoria primero
+        if (esEdicion) {
+            window.datos = window.datos.filter(d => d.id !== idOriginal);
         }
+        
+        // Añadimos los nuevos a la memoria
+        filasParaGuardar.forEach(nuevo => {
+            window.datos.push({
+                id: nuevo.ID,
+                ts: new Date(nuevo.FECHA).getTime(),
+                fecha: new Date(nuevo.FECHA),
+                cuenta: nuevo.CUENTA,
+                concepto: nuevo.CONCEPTO,
+                importe: parseFloat(nuevo.IMPORTE),
+                detalle: nuevo.DESCRIPCION,
+                beneficiario: nuevo.BENEFICIARIO,
+                tipo: (String(nuevo.CONCEPTO).toUpperCase().includes('TRASPASO')) ? 'traspaso' : (nuevo.IMPORTE >= 0 ? 'ingreso' : 'gasto'),
+                saldo: 0 // Se recalcula luego
+            });
+        });
 
-        // Refrescar cálculos y cerrar
-        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-        if (typeof cerrarModal === 'function') cerrarModal();
-        if (typeof mostrarEstado === 'function') mostrarEstado(esEdicion ? "✅ Editado OK" : "✅ Guardado OK", "ok");
-        if (typeof vibrar === 'function' && window.vibrar) vibrar('ingreso');
+        // Refrescar todo
+        recalcularSaldosGlobal();
+        cerrarModal();
+        mostrarEstado(esEdicion ? "✅ Editado con éxito" : "✅ Guardado con éxito", "ok");
+        if(window.vibrar) vibrar('ingreso');
 
     } catch (error) {
-        console.error("Error crítico guardando:", error);
-        alert("❌ ERROR DE GUARDADO:\n" + error.message + "\n\nNo se ha modificado nada para proteger los datos.");
+        console.error("Error crítico:", error);
+        alert("❌ Error: " + error.message);
     } finally {
         if(btnGuardar) {
             btnGuardar.innerText = textoOriginal;
@@ -4720,78 +4733,35 @@ window.procesarDatos = function(filas) {
 // 2. SISTEMA DE BORRADO SEGURO
 // ==========================================
 window.borrarMovimiento = async function(id) {
-        if (!confirm("¿Seguro que quieres eliminar este movimiento? Esta acción no se puede deshacer.")) return;
+    if (!confirm("¿Seguro que quieres eliminar este movimiento para siempre?")) return;
 
-        mostrarEstado("⏳ Eliminando de forma segura...", "normal");
+    mostrarEstado("⏳ Eliminando...", "normal");
 
-        try {
-            let datosNube = [];
-
-            // 1. MODO ATÓMICO: Bajamos la versión más reciente de la nube
-            if (modoNube) {
-                try {
-                    console.log("Atomic Delete: Bajando nube...");
-                    const arrayBuffer = await oneDrive.loadFile();
-                    if (arrayBuffer) {
-                        if (arrayBuffer.Sheets) {
-                             datosNube = XLSX.utils.sheet_to_json(arrayBuffer.Sheets['Movimientos']);
-                        } else {
-                             const workbook = XLSX.read(arrayBuffer, {type: 'array'});
-                             datosNube = XLSX.utils.sheet_to_json(workbook.Sheets['Movimientos']);
-                        }
-                    }
-                } catch (error) {
-                    console.warn("Fallo al bajar nube para borrar. Abortando por seguridad.", error);
-                    alert("⚠️ No se puede borrar: No hay conexión estable con la nube para verificar la integridad.");
-                    mostrarEstado("Error de conexión", "error");
-                    return; // IMPORTANTE: Si no podemos verificar la nube, mejor no borrar para no romper nada.
-                }
-            } else {
-                // Modo local
-                datosNube = [...window.datos];
-            }
-
-            // 2. FILTRADO (EL BORRADO REAL)
-            // Filtramos la lista de la NUBE, quitando el ID que queremos borrar
-            const datosFiltrados = datosNube.filter(m => String(m.ID) !== String(id));
-
-            // Verificación: ¿Realmente se borró algo?
-            if (datosFiltrados.length === datosNube.length) {
-                alert("El movimiento ya no existía en la nube (quizás alguien más lo borró). Actualizando pantalla...");
-            }
-
-            // 3. ACTUALIZAR ENTORNO
-            // Convertimos al formato interno para actualizar la pantalla
-            window.datos = datosFiltrados.map(m => ({
-                id: m.ID,
-                ts: new Date(m.FECHA).getTime(),
-                fecha: m.FECHA,
-                cuenta: m.CUENTA,
-                concepto: m.CONCEPTO,
-                importe: parseFloat(m.IMPORTE),
-                detalle: m.DESCRIPCION,
-                beneficiario: m.BENEFICIARIO,
-                tipo: (String(m.CONCEPTO)+String(m.DESCRIPCION)).toUpperCase().includes('TRASPASO') ? 'traspaso' : (parseFloat(m.IMPORTE) >= 0 ? 'ingreso' : 'gasto')
-            }));
-
-            recalcularSaldosGlobal();
-
-            // 4. SUBIDA (Solo si estamos en nube)
-            if (modoNube) {
-                await guardarUniversal(false); // false = subir a nube
-            } else {
-                mostrarEstado("Borrado en memoria local", "ok");
-            }
-
-            cerrarModal(); // Si estaba abierto el modal de edición
-            mostrarEstado("🗑️ Movimiento eliminado", "ok");
-
-        } catch (error) {
-            console.error(error);
-            alert("Error al borrar: " + error.message);
-            mostrarEstado("Error al borrar", "error");
+    try {
+        // 1. BORRADO EN NUBE (Si hay conexión)
+        if (modoNube && typeof oneDrive !== 'undefined') {
+            // Esta función busca el ID en el Excel y borra SOLO esa fila
+            await oneDrive.borrarFilaPorID(id);
+            console.log("✅ Eliminado de OneDrive.");
+        } else {
+            console.warn("⚠️ Borrando solo en local (Offline)");
         }
-    };
+
+        // 2. BORRADO EN MEMORIA LOCAL (Instantáneo)
+        window.datos = window.datos.filter(m => String(m.id) !== String(id));
+
+        // 3. REFRESCAR
+        recalcularSaldosGlobal();
+        if(typeof cerrarModal === 'function') cerrarModal(); // Por si se llamó desde edición
+        mostrarEstado("🗑️ Movimiento eliminado", "ok");
+        if(window.vibrar) vibrar('error'); // Vibración distinta para borrado
+
+    } catch (error) {
+        console.error("Error al borrar:", error);
+        alert("❌ No se pudo borrar de la nube: " + error.message);
+        mostrarEstado("Error al borrar", "err");
+    }
+};
 // ==========================================
 // 3. GUARDADO MAESTRO (Rápido y Seguro)
 // ==========================================
@@ -5240,62 +5210,85 @@ function cargarSugerenciasAjustes() {
 }
 
 // === FUNCIÓN DE EDICIÓN (VERSIÓN BLINDADA) ===
-    window.editarMovimiento = function(idMovimiento) {
-        console.log("Solicitado editar ID:", idMovimiento);
+    window.editarMovimiento = function(idMov) {
+    console.log("✏️ Editando ID:", idMov);
+    const mov = datos.find(m => m.id === idMov);
+    if (!mov) return alert("Error: Movimiento no encontrado en memoria.");
 
-        // 1. Buscar el movimiento
-        const lista = window.datosGlobales || window.datos || [];
-        // Buscamos ignorando mayúsculas/minúsculas en el ID
-        const mov = lista.find(m => (m.id == idMovimiento || m.ID == idMovimiento));
+    // Detectar tipo para configurar el formulario (Colores, campos, etc.)
+    let tipo = 'gasto'; // Por defecto
+    if (mov.tipo === 'traspaso' || mov.concepto.toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
+    else if (mov.importe >= 0) tipo = 'ingreso';
+    
+    // Llamamos a la función que abre el modal y configura los colores
+    // (Asegúrate de tener la función abrirModal que acepta tipo, si no, usa tu lógica actual)
+    if(typeof abrirModal === 'function') abrirModal(tipo);
+    
+    // RELLENADO DE CAMPOS (Con retardo mínimo para asegurar que el DOM existe)
+    setTimeout(() => {
+        // ID (Vital para saber que es edición)
+        document.getElementById('m-id').value = mov.id; 
+        
+        // Fecha (Formato YYYY-MM-DD para input date)
+        let fechaISO = new Date().toISOString().split('T')[0];
+        try {
+            if(mov.fecha instanceof Date) fechaISO = mov.fecha.toISOString().split('T')[0];
+            else fechaISO = new Date(mov.ts).toISOString().split('T')[0];
+        } catch(e) {}
+        document.getElementById('m-fecha').value = fechaISO;
 
-        if (!mov) {
-            alert("Error: No encuentro los datos de este movimiento en memoria.");
-            return;
+        // Campos de texto e importe
+        document.getElementById('m-cuenta').value = mov.cuenta;
+        document.getElementById('m-concepto').value = mov.concepto;
+        document.getElementById('m-cantidad').value = Math.abs(mov.importe); // Siempre positivo en el input
+        document.getElementById('m-desc').value = mov.detalle || mov.descripcion || '';
+        document.getElementById('m-beneficiario').value = mov.beneficiario || '';
+
+        // Botón
+        const btn = document.getElementById('btn-modal-action');
+        if(btn) btn.innerText = "ACTUALIZAR MOVIMIENTO";
+        
+        // Mostrar botón de borrar (solo en edición)
+        const btnBorrar = document.getElementById('btn-borrar-modal');
+        if(btnBorrar) {
+            btnBorrar.style.display = 'block';
+            btnBorrar.onclick = () => window.borrarMovimiento(mov.id);
         }
 
-        // 2. ABRIR LA VENTANA PRIMERO
-        // (Así aseguramos que los campos son visibles y escribibles)
-        document.getElementById('modal-manual').classList.add('active');
+    }, 50);
+};
+
+// ==========================================
+// 👯 FUNCIÓN DE CLONADO (DUPLICAR)
+// ==========================================
+window.clonarMovimiento = function(idMov) {
+    // 1. Reutilizamos la lógica de Editar para rellenar el formulario
+    window.editarMovimiento(idMov);
+
+    // 2. Modificamos lo necesario para que sea una COPIA NUEVA
+    // Esperamos un poco más (150ms) que la edición para asegurar que sobreescribimos
+    setTimeout(() => {
+        console.log("📋 Convirtiendo edición en clonación...");
+
+        // A) CLAVE: Borrar el ID. Esto le dice a guardarManual que cree uno nuevo.
+        document.getElementById('m-id').value = ""; 
         
-        // Mostramos botones extra
-        const accionesExtra = document.getElementById('extra-actions');
-        if (accionesExtra) accionesExtra.style.display = 'grid';
+        // B) Poner fecha de HOY (habitual al clonar gastos recurrentes)
+        document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
+        
+        // C) Cambiar el texto del botón para que el usuario sepa que es copia
+        const btn = document.getElementById('btn-modal-action');
+        if(btn) btn.innerText = "GUARDAR COPIA";
 
-        // 3. RELLENAR DATOS (Con un pequeño retraso de seguridad)
-        setTimeout(() => {
-            console.log("Rellenando datos para:", mov.CONCEPTO || mov.concepto);
+        // D) Ocultar botón borrar (no puedes borrar una copia que aún no has guardado)
+        const btnBorrar = document.getElementById('btn-borrar-modal');
+        if(btnBorrar) btnBorrar.style.display = 'none';
+        
+        // E) Feedback
+        if(typeof mostrarEstado === 'function') mostrarEstado("Datos copiados a hoy. Revisa y guarda.", "normal");
 
-            // A) ID Oculto (Vital)
-            setValue('m-id', mov.id || mov.ID);
-
-            // B) Fecha (Formato YYYY-MM-DD)
-            let fechaRaw = mov.ts || mov.FECHA;
-            if (fechaRaw) {
-                let f = new Date(fechaRaw);
-                if(!isNaN(f)) setValue('m-fecha', f.toISOString().split('T')[0]);
-            }
-
-            // C) Textos simples
-            setValue('m-desc', mov.detalle || mov.DESCRIPCION);
-            
-            // D) Importe (Buscamos varios nombres posibles por si acaso)
-            // Intenta buscar 'm-importe' (tu posible ID) o 'inpImporte'
-            let valImporte = mov.importe || mov.IMPORTE;
-            if(document.getElementById('m-importe')) setValue('m-importe', valImporte);
-            else if(document.getElementById('inpImporte')) setValue('inpImporte', valImporte);
-
-            // E) Desplegables (Cuenta, Concepto, Beneficiario)
-            // Usamos una función especial que fuerza el valor aunque no exista en la lista
-            setSelect('m-concepto', mov.concepto || mov.CONCEPTO);
-            setSelect('m-beneficiario', mov.beneficiario || mov.BENEFICIARIO);
-            
-            // Cuenta (puede llamarse m-cuenta o inpCuenta)
-            let valCuenta = mov.cuenta || mov.CUENTA;
-            if(document.getElementById('m-cuenta')) setSelect('m-cuenta', valCuenta);
-            else if(document.getElementById('inpCuenta')) setSelect('inpCuenta', valCuenta);
-
-        }, 50); // 50 milisegundos de espera
-    };
+    }, 150); 
+};
 
     // --- Funciones Ayudantes (PÉGALAS TAMBIÉN) ---
     
