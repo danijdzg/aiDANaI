@@ -4909,12 +4909,42 @@ window.animarCifra = function(id, valorFinal, tipo = 'moneda') {
 };
 
 // ==========================================
-// 📊 DASHBOARD FINANCIERO (LÓGICA DE NEGOCIO)
+// 📅 GESTIÓN DE FECHAS (EL INTERRUPTOR)
+// ==========================================
+window.toggleCustomDates = function() {
+    const selector = document.getElementById('dash-period');
+    const panelFechas = document.getElementById('custom-dates');
+    
+    // Si no existen los elementos, no hacemos nada
+    if (!selector || !panelFechas) return;
+
+    // Si elige "Rango...", mostramos las fechas. Si no, las ocultamos.
+    if (selector.value === 'custom') {
+        panelFechas.style.display = 'flex';
+        // Opcional: Si están vacías, poner fechas de hoy para no mostrar "todo el historial"
+        const hoy = new Date().toISOString().split('T')[0];
+        const inputInicio = document.getElementById('d-start');
+        const inputFin = document.getElementById('d-end');
+        if (inputInicio && !inputInicio.value) inputInicio.value = hoy;
+        if (inputFin && !inputFin.value) inputFin.value = hoy;
+    } else {
+        panelFechas.style.display = 'none';
+    }
+    
+    // Forzamos actualización inmediata por seguridad
+    if (typeof window.actualizarDashboard === 'function') {
+        window.actualizarDashboard();
+    }
+};
+
+// ==========================================
+// 📊 DASHBOARD FINANCIERO (LÓGICA PRINCIPAL)
 // ==========================================
 window.actualizarDashboard = function() {
+    // 1. Si no hay datos, salir
     if (!datos || datos.length === 0) return;
 
-    // A. PREPARAR DATOS
+    // 2. Preparar datos (limpieza)
     const movs = datos.map(m => ({
         ...m,
         ts: m.ts || (m.FECHA ? new Date(m.FECHA).getTime() : 0),
@@ -4923,39 +4953,45 @@ window.actualizarDashboard = function() {
         detalle: String(m.detalle || m.descripcion || m.DESCRIPCION || ''),
         importe: parseFloat(m.importe || m.IMPORTE || 0)
     }));
-    
-    // Filtro usuario (si aplica)
+
+    // Filtro de usuario (si usas multiusuario)
     const movsFiltrados = (typeof pasaFiltroPropietario === 'function') 
         ? movs.filter(m => pasaFiltroPropietario(m)) : movs;
 
-    // --- PARTE 1: FLUJO DE CAJA (KPIs) ---
+    // 3. DEFINIR RANGO DE FECHAS
     const selector = document.getElementById('dash-period');
     const periodo = selector ? selector.value : 'month';
     const now = new Date();
-    let tStart = 0, tEnd = 9999999999999;
+    let tStart = 0, tEnd = 9999999999999; // Por defecto: Toda la historia
 
     if (periodo === 'month') {
+        // Desde el día 1 del mes actual hasta el último día
         tStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
         tEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
     } else if (periodo === 'year') {
+        // Todo el año actual
         tStart = new Date(now.getFullYear(), 0, 1).getTime();
         tEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999).getTime();
     } else if (periodo === 'custom') {
-        const rs = document.getElementById('d-start').value;
-        const re = document.getElementById('d-end').value;
-        if (rs) tStart = new Date(rs).getTime();
-        if (re) {
-            const endObj = new Date(re);
-            endObj.setHours(23, 59, 59, 999);
+        // Fechas manuales
+        const elStart = document.getElementById('d-start');
+        const elEnd = document.getElementById('d-end');
+        
+        if (elStart && elStart.value) tStart = new Date(elStart.value).getTime();
+        if (elEnd && elEnd.value) {
+            const endObj = new Date(elEnd.value);
+            endObj.setHours(23, 59, 59, 999); // Final del día seleccionado
             tEnd = endObj.getTime();
         }
     }
 
+    // 4. CÁLCULO DE KPIs (FLUJO DE CAJA)
     let ingresos = 0, gastos = 0;
+
     movsFiltrados.filter(m => m.ts >= tStart && m.ts <= tEnd).forEach(m => {
-        // IGNORAR TRASPASOS EN FLUJO
+        // EXCLUIR TRASPASOS Y SALDOS INICIALES DEL FLUJO
         const txt = (m.concepto + ' ' + m.detalle).toUpperCase();
-        if (txt.includes('TRASPASO') || m.tipo === 'traspaso' || txt.includes('INICIAL')) return;
+        if (txt.includes('TRASPASO') || m.tipo === 'traspaso' || txt.includes('INICIAL') || txt.includes('EXISTENCIA')) return;
 
         if (m.importe >= 0) ingresos += m.importe;
         else gastos += Math.abs(m.importe);
@@ -4964,13 +5000,15 @@ window.actualizarDashboard = function() {
     const neto = ingresos - gastos;
     const tasaAhorro = ingresos > 0 ? ((neto / ingresos) * 100) : 0;
 
-    // ANIMACIÓN 1: FLUJO
-    animarCifra('d-ing', ingresos, 'moneda'); // €
-    animarCifra('d-gas', gastos, 'moneda');   // €
-    animarCifra('d-net', neto, 'moneda');     // €
-    animarCifra('d-aho', tasaAhorro, 'porcentaje'); // % (SIN EUROS)
+    // 5. ANIMAR TARJETAS (RESUMEN)
+    if (typeof animarCifra === 'function') {
+        animarCifra('d-ing', ingresos, 'moneda');      // €
+        animarCifra('d-gas', gastos, 'moneda');        // €
+        animarCifra('d-net', neto, 'moneda');          // €
+        animarCifra('d-aho', tasaAhorro, 'porcentaje'); // % (SIN €)
+    }
 
-    // Colores Ahorro
+    // Colores semánticos
     const elAho = document.getElementById('d-aho');
     if(elAho) {
         if (tasaAhorro >= 20) elAho.className = 'kpi-value val-std-pos';
@@ -4980,14 +5018,17 @@ window.actualizarDashboard = function() {
     const elNeto = document.getElementById('d-net');
     if(elNeto) elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
 
-    // --- PARTE 2: PATRIMONIO ---
+
+    // 6. CÁLCULO DE PATRIMONIO (Siempre histórico completo para ser real)
     let totalLiq = 0, totalInv = 0, totalPatri = 0;
     let gastoHist = 0, fPrimero = now.getTime(), fUltimo = 0;
 
+    // Recorremos TODO (sin filtro de fecha) para el saldo actual real
     const saldos = {};
     movsFiltrados.forEach(m => {
         saldos[m.cuenta] = (saldos[m.cuenta] || 0) + m.importe;
-        // Gasto medio histórico (FIRE)
+        
+        // Gasto Histórico para métrica FIRE
         const txt = (m.concepto + ' ' + m.detalle).toUpperCase();
         if (m.importe < 0 && !txt.includes('TRASPASO')) {
             gastoHist += Math.abs(m.importe);
@@ -4998,6 +5039,7 @@ window.actualizarDashboard = function() {
 
     Object.keys(saldos).forEach(cta => {
         const saldo = saldos[cta];
+        // Detección Inversión
         const config = (typeof mapaCuentas !== 'undefined') ? mapaCuentas[cta] : null;
         const esInv = config ? (config.esInversion === true || String(config.esInversion).toUpperCase() === 'SI') : false;
 
@@ -5006,7 +5048,7 @@ window.actualizarDashboard = function() {
         else totalLiq += saldo;
     });
 
-    // Cálculos FIRE
+    // Métricas FIRE
     let gastoMensual = 1;
     if (fUltimo > fPrimero) {
         const meses = Math.max(1, (fUltimo - fPrimero) / (1000 * 60 * 60 * 24 * 30.44));
@@ -5017,16 +5059,16 @@ window.actualizarDashboard = function() {
     const objetivo = gastoMensual * 300; 
     const libertad = objetivo > 0 ? (totalPatri / objetivo) * 100 : 0;
 
-    // ANIMACIÓN 2: PATRIMONIO
-    animarCifra('d-patri-liq', totalLiq, 'moneda');   // €
-    animarCifra('d-patri-inv', totalInv, 'moneda');   // €
-    animarCifra('d-patri-total', totalPatri, 'moneda'); // €
-    
-    // AQUÍ ESTÁ EL CAMBIO CLAVE:
-    animarCifra('d-cobertura', cobertura, 'meses');       // "X.X Meses"
-    animarCifra('d-libertad', libertad, 'porcentaje');    // "X.XX%" (SIN EUROS)
+    // 7. ANIMAR TARJETAS (PATRIMONIO)
+    if (typeof animarCifra === 'function') {
+        animarCifra('d-patri-liq', totalLiq, 'moneda');
+        animarCifra('d-patri-inv', totalInv, 'moneda');
+        animarCifra('d-patri-total', totalPatri, 'moneda');
+        animarCifra('d-cobertura', cobertura, 'meses');       // Meses
+        animarCifra('d-libertad', libertad, 'porcentaje');    // %
+    }
 
-    // Color Cobertura
+    // Color semáforo cobertura
     const elCob = document.getElementById('d-cobertura');
     if(elCob) {
         if(cobertura < 3) elCob.style.color = 'var(--c-danger)';
