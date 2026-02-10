@@ -1162,9 +1162,9 @@
                 </div>
                 
                 <div id="extra-actions" style="display:none; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
-                    <button type="button" class="full-btn" onclick="window.clonarMovimiento(document.getElementById('m-id').value)" style="background:rgba(255, 214, 10, 0.1); border:1px solid var(--c-warning); color:var(--c-warning); font-weight:800;">
-                        <span class="material-icons" style="vertical-align:middle; font-size:18px; margin-right:5px">content_copy</span> DUPLICAR
-                    </button>
+                    <button type="button" class="full-btn" onclick="window.clonarMovimiento(document.getElementById('input-id').value)" style="background:rgba(255, 214, 10, 0.1); border:1px solid #ffc107; color:#ffc107; font-weight:800; padding: 12px; margin-bottom: 10px; border-radius: 8px; width: 100%; display: flex; align-items: center; justify-content: center;">
+    <span class="material-icons" style="font-size:20px; margin-right:8px">content_copy</span> DUPLICAR
+</button>
                     
                     <button type="button" id="btn-borrar-modal" class="full-btn" onclick="window.borrarMovimiento(document.getElementById('m-id').value)" style="background:rgba(255, 69, 58, 0.1); border:1px solid var(--c-danger); color:var(--c-danger); font-weight:800;">
                         <span class="material-icons" style="vertical-align:middle; font-size:18px; margin-right:5px">delete</span> ELIMINAR
@@ -2832,6 +2832,53 @@ window.guardarManual = async function() {
         }
     }
 };
+
+// ==========================================
+    // NUEVA FUNCIÓN: DUPLICAR MOVIMIENTO (CLOUD READY)
+    // ==========================================
+    window.clonarMovimiento = function(idOrigen) {
+        console.log("Intentando clonar ID:", idOrigen);
+        
+        // 1. Seguridad: Si es un alta nueva, no hay nada que duplicar
+        if (!idOrigen) {
+            alert("Primero selecciona un movimiento existente para duplicarlo.");
+            return;
+        }
+
+        // 2. Buscar los datos originales
+        const movOriginal = window.movimientos.find(m => m.Id === idOrigen);
+        if (!movOriginal) {
+            alert("Error: No encuentro los datos originales.");
+            return;
+        }
+
+        // 3. PREPARAR EL FORMULARIO PARA LA COPIA
+        
+        // A) Generar NUEVO ID único (Vital para que no sobrescriba el antiguo en la nube)
+        const nuevoId = crypto.randomUUID();
+        document.getElementById('input-id').value = nuevoId;
+
+        // B) Poner fecha de HOY automáticamente
+        const hoy = new Date().toISOString().split('T')[0];
+        document.getElementById('input-fecha').value = hoy;
+
+        // C) Feedback visual: Cambiar botón Guardar a "CONFIRMAR COPIA"
+        const btnGuardar = document.getElementById('btn-modal-action');
+        if(btnGuardar) {
+            btnGuardar.innerHTML = "CONFIRMAR COPIA <i class='material-icons' style='font-size:16px; vertical-align:middle'>cloud_upload</i>";
+            btnGuardar.style.backgroundColor = "#ff9800"; // Naranja
+        }
+
+        // D) Ocultar botones que confunden (no puedes borrar ni duplicar lo que aún no has creado)
+        // Ocultamos el propio botón de duplicar usando 'this' no es posible aquí, así que buscamos por clase o ID si tuviera
+        // Ocultamos el botón de borrar
+        const btnBorrar = document.getElementById('btn-borrar-modal');
+        if(btnBorrar) btnBorrar.style.display = 'none';
+
+        // E) Aviso
+        alert("Modo DUPLICAR activado:\n\n1. Se ha copiado el importe y concepto.\n2. La fecha es HOY.\n3. Pulsa 'CONFIRMAR COPIA' para guardar en la nube.");
+    };
+
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
 function recalcularSaldosGlobal() {
     if (!window.datos || window.datos.length === 0) return;
@@ -2881,35 +2928,7 @@ function recalcularSaldosGlobal() {
     if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
 }
      	
-	function clonarMovimiento() {
-    vibrar('clonar');
-    
-    // 1. Desvincular del ID original (CRÍTICO)
-    idEnEdicion = null; 
-    
-    // 2. Actualizar UI del Modal
-    const titulo = document.querySelector('#modal-manual h3');
-    if(titulo) titulo.innerText = "NUEVO (COPIA)";
-    
-    const btn = document.getElementById('btn-modal-action');
-    if(btn) btn.innerText = "GUARDAR COPIA";
-    
-    // 3. Ocultar botones de borrar/clonar (ya no estamos editando)
-    const extraActions = document.getElementById('extra-actions');
-    if(extraActions) extraActions.style.display = 'none';
-    
-    // 4. Establecer fecha a HOY (opcional, pero recomendado al clonar)
-    document.getElementById('m-fecha').valueAsDate = new Date();
-    
-    // 5. Efecto visual para indicar que ahora es un campo editable nuevo
-    const inputCant = document.getElementById('m-cantidad');
-    inputCant.style.transition = 'background 0.3s';
-    inputCant.style.background = '#333';
-    setTimeout(() => inputCant.style.background = '', 300);
-    
-    mostrarEstado('📋 Datos copiados. Ajusta y pulsa GUARDAR.', 'normal');
-}
-
+	
 // ==========================================
 // 🗓️ UTILIDADES DE FECHAS (Faltaba esta función)
 // ==========================================
@@ -4827,36 +4846,41 @@ window.procesarDatos = function(filas) {
 // ==========================================
 // 2. SISTEMA DE BORRADO SEGURO
 // ==========================================
-window.borrarMovimiento = async function(id) {
-    if (!confirm("¿Seguro que quieres eliminar este movimiento para siempre?")) return;
+async function borrarMovimiento() {
+        const id = document.getElementById('input-id').value;
+        if (!id) return;
 
-    mostrarEstado("⏳ Eliminando...", "normal");
+        // Confirmación de seguridad
+        if (!confirm("¿Seguro que quieres borrar este movimiento? Se actualizará en OneDrive inmediatamente.")) return;
 
-    try {
-        // 1. BORRADO EN NUBE (Si hay conexión)
-        if (modoNube && typeof oneDrive !== 'undefined') {
-            // Esta función busca el ID en el Excel y borra SOLO esa fila
-            await oneDrive.borrarFilaPorID(id);
-            console.log("✅ Eliminado de OneDrive.");
-        } else {
-            console.warn("⚠️ Borrando solo en local (Offline)");
+        // 1. Borrar de la memoria local
+        const idx = window.movimientos.findIndex(m => m.Id === id);
+        if (idx > -1) {
+            window.movimientos.splice(idx, 1);
         }
 
-        // 2. BORRADO EN MEMORIA LOCAL (Instantáneo)
-        window.datos = window.datos.filter(m => String(m.id) !== String(id));
+        // 2. Cerrar y limpiar visualmente
+        cerrarModal();
+        renderTabla();
+        actualizarDashboard();
 
-        // 3. REFRESCAR
-        recalcularSaldosGlobal();
-        if(typeof cerrarModal === 'function') cerrarModal(); // Por si se llamó desde edición
-        mostrarEstado("🗑️ Movimiento eliminado", "ok");
-        if(window.vibrar) vibrar('error'); // Vibración distinta para borrado
-
-    } catch (error) {
-        console.error("Error al borrar:", error);
-        alert("❌ No se pudo borrar de la nube: " + error.message);
-        mostrarEstado("Error al borrar", "err");
+        // 3. FORZAR GUARDADO EN NUBE (Cloud First)
+        if (typeof guardarUniversal === 'function') {
+            // Mostramos aviso de que está trabajando
+            const estadoDiv = document.getElementById('estado-nube') || document.body;
+            // Si tienes una función mostrarEstado úsala, si no, improvisamos un aviso
+            if (typeof mostrarEstado === 'function') {
+                mostrarEstado("Borrando en OneDrive...", "spin");
+            }
+            
+            try {
+                await guardarUniversal(); // Esto sube el Excel actualizado
+                if (typeof mostrarEstado === 'function') mostrarEstado("Borrado y sincronizado OK", "success");
+            } catch (e) {
+                alert("¡OJO! Se borró de la pantalla pero falló la nube. Revisa tu conexión.");
+            }
+        }
     }
-};
 // ==========================================
 // 3. GUARDADO MAESTRO (Rápido y Seguro)
 // ==========================================
