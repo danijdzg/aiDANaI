@@ -4016,97 +4016,98 @@ function leerExcelDesdeBuffer(wb) {
 // 💾 GUARDADO MAESTRO (Versión "Creación Forzada")
 // ==========================================
 async function guardarUniversal() {
-        const btn = document.getElementById('btn-guardar');
-        const originalText = btn ? btn.innerHTML : '';
-        if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
+    const btn = document.getElementById('btn-guardar');
+    const originalText = btn ? btn.innerHTML : '';
+    if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
 
-        try {
-            console.log("💾 Iniciando guardado completo...");
+    try {
+        console.log("💾 Iniciando guardado completo...");
 
-            // --- 1. RESCATE DE DATOS (Si la memoria falla) ---
-            if (!window.datos || window.datos.length === 0) {
-                const cacheRescate = localStorage.getItem('aidanai_datos_cache');
-                if (cacheRescate) {
-                    window.datos = JSON.parse(cacheRescate);
-                    window.datos = window.datos.map(m => ({
-                        ...m,
-                        id: m.id || m.ID || crypto.randomUUID(),
-                        fecha: new Date(m.fecha)
-                    }));
-                }
+        // 1. RESCATE DE DATOS (Si la memoria falla)
+        if (!window.datos || window.datos.length === 0) {
+            const cacheRescate = localStorage.getItem('aidanai_datos_cache');
+            if (cacheRescate) {
+                window.datos = JSON.parse(cacheRescate);
+                // Restauramos fechas
+                window.datos = window.datos.map(m => ({
+                    ...m,
+                    id: m.id || m.ID || crypto.randomUUID(),
+                    fecha: new Date(m.fecha)
+                }));
             }
-
-            if (!window.datos || window.datos.length === 0) {
-                throw new Error("⛔ NO SE PUEDE GUARDAR: No hay datos.");
-            }
-
-            // --- 2. GENERAR HOJA MOVIMIENTOS ---
-            const filasMovimientos = window.datos.map(mov => ({
-                "Id": mov.id || crypto.randomUUID(), 
-                "Fecha": mov.fecha,
-                "Cuenta": mov.cuenta,
-                "Concepto": mov.concepto,
-                "Importe": mov.importe,
-                "Descripcion": mov.descripcion || mov.detalle || "", 
-                "Beneficiario": mov.beneficiario
-            }));
-
-            const wb = XLSX.utils.book_new();
-            const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
-                header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
-            });
-            XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
-
-            // --- 3. GENERAR HOJA CONFIGURACIÓN (TABLA COMPLETA) ---
-            // Recuperamos datos de las 3 tablas
-            const listaCuentas = Object.entries(window.mapaCuentas || {});
-            const listaConceptos = window.listaConceptos || [];
-            const listaBeneficiarios = window.listaBeneficiarios || [];
-
-            // Calculamos cuántas filas necesitamos (la lista más larga)
-            const maxFilas = Math.max(listaCuentas.length, listaConceptos.length, listaBeneficiarios.length);
-            
-            // Creamos la matriz de datos (Array de Arrays)
-            const datosConfig = [];
-            // Encabezados exactos
-            datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "", "CONCEPTO", "", "BENEFICIARIO"]);
-
-            for (let i = 0; i < maxFilas; i++) {
-                const cuenta = listaCuentas[i]; // [Nombre, Objeto]
-                const concepto = listaConceptos[i];
-                const beneficiario = listaBeneficiarios[i];
-
-                datosConfig.push([
-                    cuenta ? cuenta[0] : "",                // Col A: Cuenta
-                    cuenta ? cuenta[1].tipo : "",           // Col B: Tipo
-                    cuenta ? (cuenta[1].esInversion ? "Si" : "No") : "", // Col C: Inversion
-                    "",                                     // Col D: (Vacía)
-                    concepto || "",                         // Col E: Concepto
-                    "",                                     // Col F: (Vacía)
-                    beneficiario || ""                      // Col G: Beneficiario
-                ]);
-            }
-
-            const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
-            XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
-
-            // --- 4. ESCRITURA ---
-            if (typeof oneDriveManager !== 'undefined' && oneDriveManager.accessToken) {
-                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                await oneDriveManager.saveFile(wbout);
-                alert("✅ Guardado en OneDrive (Tablas actualizadas)");
-            } else {
-                XLSX.writeFile(wb, "aidanai.xlsx");
-                alert("✅ Guardado en Local (Tablas actualizadas)");
-            }
-
-        } catch (error) {
-            console.error(error);
-            alert("❌ ERROR: " + error.message);
-        } finally {
-            if(btn) btn.innerHTML = originalText;
         }
+
+        if (!window.datos || window.datos.length === 0) {
+            throw new Error("⛔ NO SE PUEDE GUARDAR: No hay datos en memoria.");
+        }
+
+        // 2. GENERAR HOJA MOVIMIENTOS
+        const filasMovimientos = window.datos.map(mov => ({
+            "Id": mov.id || crypto.randomUUID(), 
+            "Fecha": mov.fecha, // SheetJS lo formateará si está configurado, o usamos string
+            "Cuenta": mov.cuenta,
+            "Concepto": mov.concepto,
+            "Importe": mov.importe,
+            "Descripcion": mov.descripcion || mov.detalle || "", 
+            "Beneficiario": mov.beneficiario
+        }));
+
+        const wb = XLSX.utils.book_new();
+        const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
+            header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
+        });
+        XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+        // 3. GENERAR HOJA CONFIGURACIÓN (TABLA COMPLETA)
+        // Recuperamos datos de las tablas de configuración
+        const listaCuentas = Object.entries(window.mapaCuentas || {});
+        const listaConceptos = window.listaConceptos || [];
+        const listaBeneficiarios = window.listaBeneficiarios || [];
+
+        const maxFilas = Math.max(listaCuentas.length, listaConceptos.length, listaBeneficiarios.length);
+        const datosConfig = [];
+        datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "", "CONCEPTO", "", "BENEFICIARIO"]);
+
+        for (let i = 0; i < maxFilas; i++) {
+            const cuenta = listaCuentas[i]; // [Nombre, Objeto]
+            const concepto = listaConceptos[i];
+            const beneficiario = listaBeneficiarios[i];
+
+            datosConfig.push([
+                cuenta ? cuenta[0] : "",                
+                cuenta ? cuenta[1].tipo : "",           
+                cuenta ? (cuenta[1].esInversion ? "Si" : "No") : "", 
+                "",                                     
+                concepto || "",                         
+                "",                                     
+                beneficiario || ""                      
+            ]);
+        }
+
+        const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
+        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
+
+        // --- 4. ESCRITURA (AQUÍ ESTABA EL ERROR) ---
+        // Corregido: Usamos 'modoNube' y la variable 'oneDrive' correcta
+        if (window.modoNube && typeof oneDrive !== 'undefined') {
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            await oneDrive.saveFile(wbout);
+            if(typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado en OneDrive (Nube)", "success");
+            else alert("✅ Guardado en OneDrive");
+        } else {
+            // Modo Local
+            XLSX.writeFile(wb, "aidanai.xlsx");
+            if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado en Local (No conectado)", "info");
+            else alert("⚠️ Guardado en Local");
+        }
+
+    } catch (error) {
+        console.error(error);
+        alert("❌ ERROR AL GUARDAR: " + error.message);
+    } finally {
+        if(btn) btn.innerHTML = originalText;
     }
+}
 // ==========================================
 // 🚀 SISTEMA DE EXPORTACIÓN BLINDADO (Anti-Crashes)
 // ==========================================
