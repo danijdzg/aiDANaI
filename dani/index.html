@@ -203,8 +203,8 @@
             td { display: block; padding: 0; border: none; width: auto; max-width: none; white-space: normal; }
             .td-date-mob { grid-area: 1 / 1 / 2 / 2; font-size: 12px; color: #FFFFFF; font-weight: bold; align-self: center; opacity: 1; }
             .td-cuenta-mob { grid-area: 1 / 2 / 2 / 3; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .saldo-small { font-size: 12px; color: inherit; font-weight: normal; margin-left: 6px; opacity: 1; }
-            .td-amount { grid-area: 1 / 3 / 2 / 4; text-align: right; font-size: 16px; font-weight: 800; }
+            .saldo-small { font-size: 12px; color: #FFFFFF !important; font-weight: normal; margin-left: 6px; opacity: 0.8; }
+			.td-amount { grid-area: 1 / 3 / 2 / 4; text-align: right; font-size: 16px; font-weight: 800; }
             .td-desc-mob { grid-area: 2 / 1 / 3 / 3; font-size: 13px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
             .td-ben-mob { grid-area: 2 / 3 / 3 / 4; text-align: right; font-size: 11px; color: var(--c-warning); font-style: italic; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
             .pc-only { display: none !important; }
@@ -794,13 +794,7 @@
 .btn-identity:active {
     transform: scale(0.95);
 }
- /* Añadir la palabra Meses automáticamente después del número */
-#d-cobertura::after {
-    content: " Meses";
-    font-size: 0.7em; /* Un poco más pequeño queda mejor */
-    opacity: 0.7;
-    margin-left: 4px;
-}  
+ 
    </style>
 </head>
 <body>
@@ -2155,7 +2149,6 @@ function finalizarGuardado(esTraspaso) {
         // 2. ORDENACIÓN
         lista.sort((a, b) => {
             let campo = window.ordenActivo.campo;
-            // Mapeo de campos si usamos nombres diferentes en la vista
             if(campo === 'detalle') campo = 'descripcion'; 
             
             let valA = a[campo] || (campo === 'descripcion' ? a.detalle : '') || '';
@@ -2178,70 +2171,75 @@ function finalizarGuardado(esTraspaso) {
         if(contador) contador.innerText = `Viendo ${listaVisual.length} de ${totalResultados} movs.`;
         
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#666">No hay movimientos que coincidan con los filtros</td></tr>';
+            // CAMBIO: Texto blanco puro en lugar de gris
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#FFFFFF; font-weight:bold;">No hay movimientos que coincidan con los filtros</td></tr>';
             return;
         }
 
-        // 4. GENERACIÓN HTML CORREGIDA
+        // 4. GENERACIÓN HTML (SIN GRISES)
         let htmlFilas = listaVisual.map(m => {
-            // A) FECHA SEGURA
+            // A) FECHA
             let dateStr = "---";
             try {
-                // Intentamos usar el timestamp (ts) o el objeto fecha
                 let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
                 if (!isNaN(d.getTime())) {
                     dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
                 }
             } catch(e) { console.warn("Error fecha", m); }
 
-            // B) COLOR SEGÚN TIPO
+            // B) COLOR SEGÚN TIPO (Rojo, Verde, Azul Traspaso)
             let colorClass = 'val-neg'; // Por defecto gasto (rojo)
             let signo = '';
             
-            // Detectamos tipo TRASPASO de forma robusta
             const esTraspaso = m.tipo === 'traspaso' || 
-                             (m.concepto && m.concepto.toUpperCase().includes('TRASPASO')) ||
-                             (m.descripcion && m.descripcion.toUpperCase().includes('TRASPASO'));
+                             (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO')) ||
+                             (m.descripcion && String(m.descripcion).toUpperCase().includes('TRASPASO'));
 
             if (esTraspaso) {
                 colorClass = 'val-tra'; // Azul
-                // En traspasos no solemos poner signo, o ponemos neutral
             } else if (m.importe >= 0) {
                 colorClass = 'val-pos'; // Verde
                 signo = '+';
             }
 
-            // C) DESCRIPCIÓN UNIFICADA
-            // Usamos descripcion O detalle O vacío
+            // C) DESCRIPCIÓN 
             const descripcionFinal = m.descripcion || m.detalle || '';
             
             // D) SALDO ENTRE PARÉNTESIS
-            // Si el saldo no está calculado, mostramos guión
             const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
 
             return `
             <tr onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
                 <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${dateStr}</td>
+                
                 <td class="pc-only ${colorClass}" style="text-align:right; font-weight:bold">${signo}${fmt(m.importe)}</td>
-                <td class="pc-only" style="color:#ddd">
+                
+                <td class="pc-only ${colorClass}" style="font-weight:bold;">
                     ${Security.escapeHTML(m.cuenta)} 
-                    <span style="font-size:11px; color:#888; margin-left:5px">(${saldoStr})</span>
+                    <span style="font-size:11px; color:#FFFFFF; margin-left:5px; opacity:0.8">(${saldoStr})</span>
                 </td>
-                <td class="pc-only">${Security.escapeHTML(m.concepto)}</td>
-                <td class="pc-only" style="color:#aaa; font-style:italic">${Security.escapeHTML(descripcionFinal)}</td>
-                <td class="pc-only">${Security.escapeHTML(m.beneficiario)}</td>
+                
+                <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.concepto)}</td>
+                
+                <td class="pc-only" style="color:#FFFFFF; font-style:normal; opacity:0.9;">${Security.escapeHTML(descripcionFinal)}</td>
+                
+                <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.beneficiario)}</td>
                 
                 <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${dateStr}</td>
-                <td class="mob-only td-cuenta-mob">
+                
+                <td class="mob-only td-cuenta-mob ${colorClass}">
                     ${Security.escapeHTML(m.cuenta)} 
-                    <span class="saldo-small" style="color:#888">(${saldoStr})</span>
+                    <span class="saldo-small" style="color:#FFFFFF; opacity:0.8">(${saldoStr})</span>
                 </td>
+                
                 <td class="mob-only td-amount ${colorClass}">${signo}${fmt(m.importe)}</td>
+                
                 <td class="mob-only td-desc-mob">
-                    <strong style="color:#fff">${Security.escapeHTML(m.concepto)}</strong>
+                    <strong style="color:#FFFFFF">${Security.escapeHTML(m.concepto)}</strong>
                     ${descripcionFinal ? ' - ' + Security.escapeHTML(descripcionFinal) : ''}
                 </td>
-                <td class="mob-only td-ben-mob">${Security.escapeHTML(m.beneficiario)}</td>
+                
+                <td class="mob-only td-ben-mob" style="color:var(--c-warning)">${Security.escapeHTML(m.beneficiario)}</td>
             </tr>
             `;
         }).join('');
@@ -2249,15 +2247,14 @@ function finalizarGuardado(esTraspaso) {
         if (totalResultados > LIMITE_VISUAL) {
             htmlFilas += `
             <tr>
-                <td colspan="6" style="text-align:center; padding:15px; color:#888; font-style:italic; font-size:12px; border-top:1px solid #333;">
-                    ... y ${totalResultados - LIMITE_VISUAL} movimientos más. Usa el buscador para verlos.
+                <td colspan="6" style="text-align:center; padding:15px; color:#FFFFFF; font-weight:bold; border-top:1px solid #333;">
+                    ... y ${totalResultados - LIMITE_VISUAL} movimientos más.
                 </td>
             </tr>`;
         }
 
         tbody.innerHTML = htmlFilas; 
     }
-
     function irPestana(p) {
     document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
@@ -2561,123 +2558,144 @@ window.cargarParaEditar = function(id) {
 // --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
-async function guardarManual() {
-        // 1. OBTENER DATOS
-        const idMov = document.getElementById('m-id').value; 
-        const fecha = document.getElementById('m-fecha').value;
-        const cuenta = document.getElementById('m-cuenta').value;
-        
-        // Leemos el concepto tal cual está
-        let concepto = document.getElementById('m-concepto').value;
-        
-        let importe = parseFloat(document.getElementById('m-cantidad').value) || 0;
-        const descripcion = document.getElementById('m-desc').value;
-        const beneficiario = document.getElementById('m-beneficiario').value;
-        const cuentaDestino = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
+window.guardarManual = async function() {
+    console.log("--- Iniciando Guardado Blindado (Versión Adaptada) ---");
 
-        // --- VALIDACIÓN INTELIGENTE (AQUÍ ESTÁ EL ARREGLO) ---
-        if (window.modoTransaccionActual === 'traspaso') {
-            // En TRASPASO: Ignoramos el concepto (lo ponemos nosotros) pero exigimos DESTINO
-            if (!fecha || !cuenta || !cuentaDestino) {
-                alert("⚠️ Para un traspaso faltan datos:\n- Fecha\n- Cuenta Origen\n- Cuenta Destino");
-                return;
-            }
-            concepto = "Traspaso"; // Lo rellenamos automático
+    // 1. OBTENER DATOS (Usando tus IDs correctos)
+    const elId = document.getElementById('m-id');
+    const elFecha = document.getElementById('m-fecha');
+    const elCuenta = document.getElementById('m-cuenta');
+    const elConcepto = document.getElementById('m-concepto');
+    const elImporte = document.getElementById('m-cantidad'); // Tu ID es m-cantidad
+    const elDesc = document.getElementById('m-desc');
+    const elBenef = document.getElementById('m-beneficiario');
+    const elDestino = document.getElementById('m-cuenta-destino');
+    const btnGuardar = document.getElementById('btn-modal-action');
+
+    // Valores limpios
+    let valFecha = elFecha.value;
+    let valCuenta = elCuenta.value;
+    let valConcepto = elConcepto.value;
+    let valImporte = parseFloat(elImporte.value) || 0;
+    let valDesc = elDesc.value;
+    let valBenef = elBenef.value;
+    let valDestino = elDestino ? elDestino.value : '';
+    let esEdicion = elId.value && elId.value.trim() !== "";
+
+    // 2. VALIDACIÓN (Tu lógica original conservada)
+    if (window.modoTransaccionActual === 'traspaso') {
+        if (!valFecha || !valCuenta || !valDestino) {
+            alert("⚠️ Para traspaso faltan datos: Fecha, Cuenta Origen o Cuenta Destino.");
+            return;
+        }
+        valConcepto = "Traspaso";
+        // En traspaso, el origen siempre es negativo (sale dinero)
+        if (valImporte > 0) valImporte = -valImporte;
+    } else {
+        if (!valFecha || !valCuenta || !valConcepto) {
+            alert("⚠️ Faltan datos obligatorios: Fecha, Cuenta o Concepto.");
+            return;
+        }
+        // En pago, aseguramos negativo
+        if (window.modoTransaccionActual === 'pago' && valImporte > 0) valImporte = -valImporte;
+    }
+
+    // 3. UI: BLOQUEO VISUAL
+    let textoOriginal = "GUARDAR";
+    if(btnGuardar) {
+        textoOriginal = btnGuardar.innerText;
+        btnGuardar.innerText = "⏳ Confirmando en Nube...";
+        btnGuardar.disabled = true;
+        btnGuardar.style.opacity = "0.7";
+    }
+
+    try {
+        // 4. PREPARAR FILAS PARA EXCEL
+        // Creamos un array porque en traspasos guardaremos 2 filas de golpe
+        const filasParaGuardar = [];
+        const uuidPrincipal = esEdicion ? elId.value : crypto.randomUUID();
+
+        // Movimiento 1 (Principal)
+        let mov1 = {
+            ID: uuidPrincipal,
+            FECHA: valFecha,
+            CUENTA: valCuenta,
+            CONCEPTO: valConcepto,
+            IMPORTE: valImporte,
+            DESCRIPCION: valDesc,
+            BENEFICIARIO: valBenef
+        };
+
+        // Lógica de Traspaso (Movimiento 2 - Destino)
+        if (window.modoTransaccionActual === 'traspaso' && valDestino) {
+            mov1.DESCRIPCION = `>> A: ${valDestino} | ${valDesc}`; // Marcamos salida en origen
+
+            let mov2 = {
+                ID: crypto.randomUUID(), // Nuevo ID distinto para el destino
+                FECHA: valFecha,
+                CUENTA: valDestino,
+                CONCEPTO: "Traspaso Recibido",
+                IMPORTE: Math.abs(valImporte), // Entra dinero (positivo)
+                DESCRIPCION: `<< DE: ${valCuenta} | ${valDesc}`,
+                BENEFICIARIO: valBenef || "Mí mismo"
+            };
+            filasParaGuardar.push(mov1, mov2);
         } else {
-            // En GASTO/INGRESO: Exigimos concepto
-            if (!fecha || !cuenta || !concepto) {
-                alert("⚠️ Faltan datos obligatorios:\n- Fecha\n- Cuenta\n- Concepto");
-                return;
+            filasParaGuardar.push(mov1);
+        }
+
+        // 5. GUARDADO BLINDADO EN NUBE
+        // Usamos addRows para insertar de forma segura y rápida sin descargar todo el archivo antes
+        if (typeof OneDriveManager !== 'undefined' && OneDriveManager.accessToken) {
+            await OneDriveManager.addRows('Movimientos', filasParaGuardar);
+            console.log("✅ Confirmado: Datos recibidos en OneDrive.");
+        } else {
+            // Fallback si no hay conexión detectada pero queremos permitir guardar (opcional)
+            if(!confirm("⚠️ No detecto conexión con OneDrive. ¿Guardar solo en local? (Peligroso: exporta backup luego).")) {
+                throw new Error("Cancelado por falta de conexión.");
             }
         }
 
-        // Ajuste de signos automático
-        if (window.modoTransaccionActual === 'pago' && importe > 0) importe = -importe;
-        if (window.modoTransaccionActual === 'traspaso' && importe > 0) importe = -importe;
-
-        const btnGuardar = document.getElementById('btn-modal-action');
-        if(btnGuardar) btnGuardar.innerText = "⏳ Guardando...";
-        
-        try {
-            // 2. MODO ATÓMICO: GESTIÓN DE NUBE
-            let datosNube = []; 
-            if (modoNube) {
-                try {
-                    console.log("Modo Atómico: Verificando nube...");
-                    const arrayBuffer = await oneDrive.loadFile(); 
-                    if (arrayBuffer) {
-                        if (arrayBuffer.Sheets) {
-                             datosNube = XLSX.utils.sheet_to_json(arrayBuffer.Sheets['Movimientos']);
-                        } else {
-                             const workbook = XLSX.read(arrayBuffer, {type: 'array'});
-                             datosNube = XLSX.utils.sheet_to_json(workbook.Sheets['Movimientos']);
-                        }
-                    }
-                } catch (error) {
-                    console.warn("No se pudo descargar nube, usando local.", error);
-                    datosNube = [...window.datos]; 
-                }
-            } else {
-                datosNube = [...window.datos];
-            }
-
-            // 3. FUSIÓN
-            const nuevoID = idMov || crypto.randomUUID();
-            const nuevoMov = {
-                "ID": nuevoID, "FECHA": fecha, "CUENTA": cuenta, "CONCEPTO": concepto,
-                "IMPORTE": importe, "DESCRIPCION": descripcion, "BENEFICIARIO": beneficiario
-            };
-
-            const fusionar = (lista, mov) => {
-                const idx = lista.findIndex(m => String(m.ID) === String(mov.ID));
-                if (idx >= 0) lista[idx] = mov; 
-                else lista.push(mov);
-            };
-
-            fusionar(datosNube, nuevoMov);
-
-            // GESTIÓN DE LA CONTRAPARTIDA (EL DESTINO)
-            if (window.modoTransaccionActual === 'traspaso' && cuentaDestino) {
-                const idDestino = crypto.randomUUID(); 
-                const movDestino = {
-                    "ID": idDestino, "FECHA": fecha, "CUENTA": cuentaDestino,
-                    "CONCEPTO": "Traspaso Recibido", "IMPORTE": Math.abs(importe),
-                    "DESCRIPCION": `<< DE: ${cuenta} | ${descripcion}`, "BENEFICIARIO": beneficiario || "Mí mismo"
+        // 6. ACTUALIZAR PANTALLA (Solo si la nube dio OK)
+        if (typeof window.datos !== 'undefined') {
+             filasParaGuardar.forEach(nuevo => {
+                // Convertimos formato Excel (Mayus) a formato App (Internal)
+                const formatoApp = {
+                    id: nuevo.ID,
+                    ts: new Date(nuevo.FECHA).getTime(),
+                    fecha: nuevo.FECHA,
+                    cuenta: nuevo.CUENTA,
+                    concepto: nuevo.CONCEPTO,
+                    importe: parseFloat(nuevo.IMPORTE),
+                    detalle: nuevo.DESCRIPCION,
+                    beneficiario: nuevo.BENEFICIARIO,
+                    tipo: (String(nuevo.CONCEPTO).toUpperCase().includes('TRASPASO')) ? 'traspaso' : (nuevo.IMPORTE >= 0 ? 'ingreso' : 'gasto')
                 };
-                // Actualizamos descripción del origen
-                nuevoMov.DESCRIPCION = `>> A: ${cuentaDestino} | ${descripcion}`;
-                
-                // Añadimos el destino a la lista
-                datosNube.push(movDestino);
-            }
 
-            // 4. ACTUALIZAR TODO
-            window.datos = datosNube.map(m => ({
-                id: m.ID,
-                ts: new Date(m.FECHA).getTime(),
-                fecha: m.FECHA,
-                cuenta: m.CUENTA,
-                concepto: m.CONCEPTO,
-                importe: parseFloat(m.IMPORTE),
-                detalle: m.DESCRIPCION,
-                beneficiario: m.BENEFICIARIO,
-                tipo: (String(m.CONCEPTO)+String(m.DESCRIPCION)).toUpperCase().includes('TRASPASO') ? 'traspaso' : (parseFloat(m.IMPORTE) >= 0 ? 'ingreso' : 'gasto')
-            }));
+                // Actualizar array en memoria
+                const idx = window.datos.findIndex(d => d.id === nuevo.ID);
+                if (idx >= 0) window.datos[idx] = formatoApp; // Editar
+                else window.datos.push(formatoApp); // Nuevo
+             });
+        }
 
-            recalcularSaldosGlobal(); 
-            await guardarUniversal(false); 
-            
-            cerrarModal();
-            if(btnGuardar) btnGuardar.innerText = "GUARDAR";
-            mostrarEstado(idMov ? "✅ Editado" : "✅ Guardado", 'ok');
-            if(window.vibrar) vibrar('ingreso');
+        // Refrescar cálculos y cerrar
+        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if (typeof cerrarModal === 'function') cerrarModal();
+        if (typeof mostrarEstado === 'function') mostrarEstado(esEdicion ? "✅ Editado OK" : "✅ Guardado OK", "ok");
+        if (typeof vibrar === 'function' && window.vibrar) vibrar('ingreso');
 
-        } catch (error) {
-            console.error(error);
-            alert("Error crítico: " + error.message);
-            if(btnGuardar) btnGuardar.innerText = "Reintentar";
+    } catch (error) {
+        console.error("Error crítico guardando:", error);
+        alert("❌ ERROR DE GUARDADO:\n" + error.message + "\n\nNo se ha modificado nada para proteger los datos.");
+    } finally {
+        if(btnGuardar) {
+            btnGuardar.innerText = textoOriginal;
+            btnGuardar.disabled = false;
+            btnGuardar.style.opacity = "1";
         }
     }
+};
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
 function recalcularSaldosGlobal() {
     if (!window.datos || window.datos.length === 0) return;
@@ -4823,65 +4841,99 @@ window.clonarMovimiento = function(id) {
 };
 
 
-// Ayudante de formato interno para la animación
-function formatearAnimacion(val, tipo) {
+// ==========================================
+// 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO)
+// ==========================================
+
+// 1. Formateador Estricto (Sin Euros donde no tocan)
+function formatearDatoMaestro(valor, tipo) {
     if (tipo === 'moneda') {
         return new Intl.NumberFormat('es-ES', { 
-            style: 'currency', 
-            currency: 'EUR', 
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2 
-        }).format(val);
-    } else if (tipo === 'porcentaje') {
-        return val.toFixed(2) + '%';
-    } else if (tipo === 'numero') {
-        return val.toFixed(1); 
+            style: 'currency', currency: 'EUR', 
+            minimumFractionDigits: 2 
+        }).format(valor);
+    } 
+    else if (tipo === 'porcentaje') {
+        // EJEMPLO: 35.40% (Sin €)
+        return valor.toFixed(2) + '%';
+    } 
+    else if (tipo === 'meses') {
+        // EJEMPLO: 12.5 Meses (Sin €)
+        return valor.toFixed(1) + ' Meses';
+    } 
+    else {
+        // Número simple
+        return valor.toFixed(2);
     }
-    return val;
 }
 
+// 2. Motor de Animación "Con Vida" (Counting Effect)
+window.animarCifra = function(id, valorFinal, tipo = 'moneda') {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+
+    // Recuperamos valor anterior para animar desde ahí
+    const valorInicial = parseFloat(elemento.getAttribute('data-prev')) || 0;
+    elemento.setAttribute('data-prev', valorFinal);
+
+    // Si el cambio es muy pequeño, pintar directo
+    if (Math.abs(valorFinal - valorInicial) < 0.01) {
+        elemento.innerText = formatearDatoMaestro(valorFinal, tipo);
+        return;
+    }
+
+    // Configuración de la animación
+    const duracion = 1500; // 1.5 segundos
+    const inicio = performance.now();
+
+    function frame(tiempoActual) {
+        const tiempoPasado = tiempoActual - inicio;
+        const progreso = Math.min(tiempoPasado / duracion, 1);
+        
+        // Easing suave (frena al final)
+        const ease = 1 - Math.pow(2, -10 * progreso);
+        
+        const valorActual = valorInicial + (valorFinal - valorInicial) * ease;
+        
+        // Pintamos el frame actual
+        elemento.innerText = formatearDatoMaestro(valorActual, tipo);
+
+        if (progreso < 1) {
+            requestAnimationFrame(frame);
+        } else {
+            // Asegurar valor final exacto
+            elemento.innerText = formatearDatoMaestro(valorFinal, tipo);
+        }
+    }
+    requestAnimationFrame(frame);
+};
+
 // ==========================================
-// 📊 DASHBOARD ANIMADO (PROFESIONAL & BLINDADO)
+// 📊 DASHBOARD FINANCIERO (LÓGICA DE NEGOCIO)
 // ==========================================
 window.actualizarDashboard = function() {
-    // 1. Validación inicial: Si no hay datos, no hacemos nada
     if (!datos || datos.length === 0) return;
 
-    // --- A. PREPARACIÓN Y SANITIZACIÓN DE DATOS ---
-    // Esto arregla el problema de fechas y nombres vacíos
-    const datosProcesados = datos.map(m => {
-        // Aseguramos que tenga timestamp (ts) para los filtros de fecha
-        let timestamp = m.ts;
-        if (!timestamp && m.FECHA) {
-            timestamp = new Date(m.FECHA).getTime();
-        }
-        
-        return {
-            ...m,
-            ts: timestamp || 0,
-            cuenta: String(m.CUENTA || m.cuenta || '').trim(), // Evita el error .trim()
-            concepto: String(m.CONCEPTO || m.concepto || 'Varios'),
-            importe: parseFloat(m.IMPORTE || m.importe || 0),
-            tipo: (parseFloat(m.IMPORTE || 0) >= 0) ? 'ingreso' : 'gasto'
-        };
-    });
+    // A. PREPARAR DATOS
+    const movs = datos.map(m => ({
+        ...m,
+        ts: m.ts || (m.FECHA ? new Date(m.FECHA).getTime() : 0),
+        cuenta: String(m.cuenta || m.CUENTA || '').trim(),
+        concepto: String(m.concepto || m.CONCEPTO || 'Varios'),
+        detalle: String(m.detalle || m.descripcion || m.DESCRIPCION || ''),
+        importe: parseFloat(m.importe || m.IMPORTE || 0)
+    }));
+    
+    // Filtro usuario (si aplica)
+    const movsFiltrados = (typeof pasaFiltroPropietario === 'function') 
+        ? movs.filter(m => pasaFiltroPropietario(m)) : movs;
 
-    // Filtro de Propietario (Si existe la función)
-    const movsUsuario = (typeof pasaFiltroPropietario === 'function') 
-        ? datosProcesados.filter(m => pasaFiltroPropietario(m)) 
-        : datosProcesados;
-
-    window.datosPropietario = movsUsuario;
-
-    // =========================================================
-    // PARTE 1: TARJETAS DE FLUJO (Ingresos / Gastos / Ahorro)
-    // =========================================================
+    // --- PARTE 1: FLUJO DE CAJA (KPIs) ---
     const selector = document.getElementById('dash-period');
     const periodo = selector ? selector.value : 'month';
     const now = new Date();
     let tStart = 0, tEnd = 9999999999999;
 
-    // Configuración de fechas
     if (periodo === 'month') {
         tStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
         tEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
@@ -4900,127 +4952,88 @@ window.actualizarDashboard = function() {
     }
 
     let ingresos = 0, gastos = 0;
-    
-    movsUsuario.filter(m => m.ts >= tStart && m.ts <= tEnd).forEach(m => {
-        const esInicial = String(m.concepto).toUpperCase().includes('INICIAL');
-        // Sumamos según el signo real del importe
-        if (m.importe >= 0 && !esInicial) ingresos += m.importe;
-        if (m.importe < 0) gastos += Math.abs(m.importe);
+    movsFiltrados.filter(m => m.ts >= tStart && m.ts <= tEnd).forEach(m => {
+        // IGNORAR TRASPASOS EN FLUJO
+        const txt = (m.concepto + ' ' + m.detalle).toUpperCase();
+        if (txt.includes('TRASPASO') || m.tipo === 'traspaso' || txt.includes('INICIAL')) return;
+
+        if (m.importe >= 0) ingresos += m.importe;
+        else gastos += Math.abs(m.importe);
     });
 
     const neto = ingresos - gastos;
     const tasaAhorro = ingresos > 0 ? ((neto / ingresos) * 100) : 0;
 
-    // --- ANIMACIONES KPI ---
-    if(window.animarCifra) {
-        animarCifra('d-ing', ingresos, 'moneda');
-        animarCifra('d-gas', gastos, 'moneda');
-        animarCifra('d-net', neto, 'moneda');
-        animarCifra('d-aho', tasaAhorro, 'porcentaje');
-    }
+    // ANIMACIÓN 1: FLUJO
+    animarCifra('d-ing', ingresos, 'moneda'); // €
+    animarCifra('d-gas', gastos, 'moneda');   // €
+    animarCifra('d-net', neto, 'moneda');     // €
+    animarCifra('d-aho', tasaAhorro, 'porcentaje'); // % (SIN EUROS)
 
-    // Colores dinámicos
-    const elNeto = document.getElementById('d-net');
-    if(elNeto) elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
-
+    // Colores Ahorro
     const elAho = document.getElementById('d-aho');
     if(elAho) {
-        if (tasaAhorro > 20) elAho.className = 'kpi-value val-std-pos';
+        if (tasaAhorro >= 20) elAho.className = 'kpi-value val-std-pos';
         else if (tasaAhorro > 0) elAho.className = 'kpi-value val-std-neu';
         else elAho.className = 'kpi-value val-std-neg';
     }
+    const elNeto = document.getElementById('d-net');
+    if(elNeto) elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
 
-    // =========================================================
-    // PARTE 2: PATRIMONIO (Siempre Total Histórico)
-    // =========================================================
-    let totalLiquidez = 0, totalInversion = 0, totalPatrimonio = 0;
-    let gastoTotalHist = 0, fechaPrimerGasto = now.getTime(), fechaUltimoGasto = 0, hayGastos = false;
+    // --- PARTE 2: PATRIMONIO ---
+    let totalLiq = 0, totalInv = 0, totalPatri = 0;
+    let gastoHist = 0, fPrimero = now.getTime(), fUltimo = 0;
 
-    // Cálculo de saldos acumulados por cuenta
     const saldos = {};
-    movsUsuario.forEach(m => {
-        const cta = m.cuenta; // Ya viene con trim() gracias al paso A
-        saldos[cta] = (saldos[cta] || 0) + m.importe;
-
-        if (m.importe < 0) { // Es gasto
-            gastoTotalHist += Math.abs(m.importe);
-            if (m.ts < fechaPrimerGasto) fechaPrimerGasto = m.ts;
-            if (m.ts > fechaUltimoGasto) fechaUltimoGasto = m.ts;
-            hayGastos = true;
+    movsFiltrados.forEach(m => {
+        saldos[m.cuenta] = (saldos[m.cuenta] || 0) + m.importe;
+        // Gasto medio histórico (FIRE)
+        const txt = (m.concepto + ' ' + m.detalle).toUpperCase();
+        if (m.importe < 0 && !txt.includes('TRASPASO')) {
+            gastoHist += Math.abs(m.importe);
+            if (m.ts < fPrimero) fPrimero = m.ts;
+            if (m.ts > fUltimo) fUltimo = m.ts;
         }
     });
 
-    // Clasificación Liquidez vs Inversión
     Object.keys(saldos).forEach(cta => {
         const saldo = saldos[cta];
-        // Buscamos configuración insensible a mayúsculas
-        const config = (typeof mapaCuentas !== 'undefined') ? mapaCuentas[cta.toUpperCase()] : null;
-        
-        // CORRECCIÓN: Si no hay config, asumimos NO es inversión por defecto
-        const esInversion = config ? (config.esInversion === true || String(config.esInversion).toUpperCase() === 'SI') : false;
+        const config = (typeof mapaCuentas !== 'undefined') ? mapaCuentas[cta] : null;
+        const esInv = config ? (config.esInversion === true || String(config.esInversion).toUpperCase() === 'SI') : false;
 
-        totalPatrimonio += saldo;
-        if (esInversion) totalInversion += saldo;
-        else totalLiquidez += saldo;
+        totalPatri += saldo;
+        if (esInv) totalInv += saldo;
+        else totalLiq += saldo;
     });
 
-    // Métricas FIRE (Libertad Financiera)
-    let gastoMensualMedio = 1;
-    if (hayGastos && fechaUltimoGasto > fechaPrimerGasto) {
-        const diffDias = Math.max(1, (fechaUltimoGasto - fechaPrimerGasto) / (1000 * 60 * 60 * 24));
-        const diffMeses = Math.max(1, diffDias / 30.44);
-        gastoMensualMedio = gastoTotalHist / diffMeses;
+    // Cálculos FIRE
+    let gastoMensual = 1;
+    if (fUltimo > fPrimero) {
+        const meses = Math.max(1, (fUltimo - fPrimero) / (1000 * 60 * 60 * 24 * 30.44));
+        gastoMensual = gastoHist / meses;
     }
-    if (gastoMensualMedio < 1) gastoMensualMedio = 1;
+    
+    const cobertura = gastoMensual > 0 ? (totalLiq / gastoMensual) : 0;
+    const objetivo = gastoMensual * 300; 
+    const libertad = objetivo > 0 ? (totalPatri / objetivo) * 100 : 0;
 
-    const cobertura = totalLiquidez / gastoMensualMedio; 
-    const objetivoFIRE = gastoMensualMedio * 300; 
-    const libertad = (totalPatrimonio / objetivoFIRE) * 100;
-
-    // Animaciones Patrimonio
-    if(window.animarCifra) {
-        animarCifra('d-patri-liq', totalLiquidez, 'moneda');
-        animarCifra('d-patri-inv', totalInversion, 'moneda');
-        animarCifra('d-patri-total', totalPatrimonio, 'moneda');
-        animarCifra('d-cobertura', cobertura, 'numero'); 
-        animarCifra('d-libertad', libertad, 'porcentaje');
-    }
+    // ANIMACIÓN 2: PATRIMONIO
+    animarCifra('d-patri-liq', totalLiq, 'moneda');   // €
+    animarCifra('d-patri-inv', totalInv, 'moneda');   // €
+    animarCifra('d-patri-total', totalPatri, 'moneda'); // €
+    
+    // AQUÍ ESTÁ EL CAMBIO CLAVE:
+    animarCifra('d-cobertura', cobertura, 'meses');       // "X.X Meses"
+    animarCifra('d-libertad', libertad, 'porcentaje');    // "X.XX%" (SIN EUROS)
 
     // Color Cobertura
     const elCob = document.getElementById('d-cobertura');
     if(elCob) {
-        if(cobertura < 3) elCob.style.color = 'var(--c-danger)'; 
-        else if(cobertura < 6) elCob.style.color = 'var(--c-warning)'; 
-        else elCob.style.color = 'var(--c-success)'; 
+        if(cobertura < 3) elCob.style.color = 'var(--c-danger)';
+        else if(cobertura < 6) elCob.style.color = 'var(--c-warning)';
+        else elCob.style.color = 'var(--c-success)';
     }
-
-    // Color Libertad
-    const elLib = document.getElementById('d-libertad');
-    if(elLib) elLib.style.color = libertad >= 100 ? '#BF5AF2' : 'var(--c-success)'; 
-
-    // =========================================================
-    // PARTE 3: DATOS PARA GRÁFICOS
-    // =========================================================
-    const mapGastos = {};
-    
-    // Filtramos gastos del periodo seleccionado
-    movsUsuario
-        .filter(m => m.ts >= tStart && m.ts <= tEnd && m.importe < 0)
-        .forEach(m => {
-            const cat = m.concepto || 'Otros'; // Usamos concepto como categoría si no hay otra
-            mapGastos[cat] = (mapGastos[cat] || 0) + Math.abs(m.importe);
-        });
-
-    window.datosResumen = Object.keys(mapGastos)
-        .map(k => ({ name: k, value: mapGastos[k] }))
-        .sort((a, b) => b.value - a.value);
-
-    // Refrescar gráfico si existe la función
-    if(typeof renderizarDistribucion === 'function') renderizarDistribucion();
-    
-    console.log("🎨 Dashboard actualizado correctamente.");
 };
-
 // Variable global
 var filtroUsuarioActual = 'todos';
 // ==========================================
