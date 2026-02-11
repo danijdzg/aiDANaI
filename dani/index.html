@@ -2005,7 +2005,27 @@ function procesarLibroLeido(wb) {
     localStorage.setItem('aidanai_config_cache', JSON.stringify(window.mapaCuentas));
 
     console.log(`✅ ${window.datos.length} movimientos procesados correctamente.`);
+	// --- CORRECCIÓN: RELLENAR FILTROS DESPLEGABLES ---
+    // Recopilamos todas las cuentas, conceptos y beneficiarios únicos
+    const sCuentas = new Set();
+    const sConceptos = new Set();
+    const sBeneficiarios = new Set();
 
+    window.datos.forEach(d => {
+        if(d.cuenta) sCuentas.add(d.cuenta);
+        if(d.concepto) sConceptos.add(d.concepto);
+        if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
+    });
+
+    // Añadimos también las cuentas de la configuración (por si hay alguna sin movimientos)
+    if (window.mapaCuentas) {
+        Object.keys(window.mapaCuentas).forEach(c => sCuentas.add(c));
+    }
+
+    // Llamamos a la función que pinta las opciones en el HTML
+    if (typeof actualizarFiltrosUI === 'function') {
+        actualizarFiltrosUI(sCuentas, sConceptos, sBeneficiarios);
+    }
     // 4. ACTUALIZACIÓN DE INTERFAZ (Orden crítico)
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if (typeof actualizarDashboard === 'function') actualizarDashboard();
