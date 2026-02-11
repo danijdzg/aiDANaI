@@ -3142,12 +3142,6 @@ window.guardarManual = async function() {
             const elDesc = document.getElementById('m-desc');
             const elBenef = document.getElementById('m-beneficiario');
             
-            // Detectar si es Gasto o Ingreso
-            const btnGasto = document.getElementById('tipo-gasto');
-            // Si el botón de gasto existe y tiene la clase active (o es edición de un negativo)
-            // Nota: Aquí simplificamos usando la variable global si existe, o deducción
-            const esGastoVisual = window.modoTransaccionActual === 'pago'; 
-
             // 3. VALIDACIÓN
             const fecha = elFecha ? elFecha.value : "";
             const cuenta = elCuenta ? elCuenta.value : "";
@@ -3158,9 +3152,7 @@ window.guardarManual = async function() {
                 throw new Error("Faltan datos obligatorios (Fecha, Cuenta, Concepto o Importe)");
             }
 
-            // 4. AJUSTE DE SIGNO (CRÍTICO)
-            // Si estamos en modo GASTO, el importe debe ser negativo.
-            // Si estamos en INGRESO, positivo.
+            // 4. AJUSTE DE SIGNO
             if (window.modoTransaccionActual === 'pago' || window.modoTransaccionActual === 'traspaso') {
                  importe = -Math.abs(importe);
             } else {
@@ -3171,7 +3163,7 @@ window.guardarManual = async function() {
             const idMov = elId && elId.value ? elId.value : crypto.randomUUID();
             const nuevoMov = {
                 id: idMov,
-                fecha: new Date(fecha), // Guardamos como objeto Date para evitar problemas
+                fecha: new Date(fecha),
                 ts: new Date(fecha).getTime(),
                 cuenta: cuenta,
                 concepto: concepto,
@@ -3181,36 +3173,32 @@ window.guardarManual = async function() {
                 tipo: (importe >= 0) ? 'ingreso' : (window.modoTransaccionActual === 'traspaso' ? 'traspaso' : 'gasto')
             };
 
-            // 6. ACTUALIZAR MEMORIA (AQUÍ ESTABA EL ERROR)
-            // Primero actualizamos window.datos, y LUEGO llamamos a guardarUniversal
+            // 6. ACTUALIZAR MEMORIA
             if(!window.datos) window.datos = [];
-
             // Si es edición, borramos el viejo primero
             if (elId && elId.value) {
                 const idx = window.datos.findIndex(m => m.id === elId.value);
                 if(idx >= 0) window.datos.splice(idx, 1);
             }
-            
-            // Añadimos el nuevo al principio de la lista
+            // Añadimos el nuevo
             window.datos.unshift(nuevoMov);
-            
-            // Ordenamos por fecha (más reciente primero)
             window.datos.sort((a, b) => b.ts - a.ts);
 
-            // 7. ACTUALIZAR UI INMEDIATAMENTE (Para que el usuario lo vea ya)
+            // 7. ACTUALIZAR PANTALLA
             if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
             
-            // 8. PERSISTIR EN ARCHIVO (Nube o Local)
+            // 8. GUARDAR EN ARCHIVO
             if (typeof window.guardarUniversal === 'function') {
-                // Llamamos SIN argumentos. guardarUniversal cogerá window.datos que acabamos de actualizar.
                 await window.guardarUniversal(); 
             }
 
-            // 9. ÉXITO Y CIERRE
-            if(typeof closeModal === 'function') closeModal();
+            // 9. ÉXITO Y CIERRE (¡AQUÍ ESTÁ LA CORRECCIÓN!)
+            // Usamos cerrarModal() que es como se llama en tu código
+            if(typeof cerrarModal === 'function') cerrarModal();
+            
             if(typeof showToast === 'function') showToast(elId && elId.value ? "Movimiento actualizado" : "Movimiento guardado", "success");
             
-            // Limpieza extra por seguridad
+            // Limpieza extra
             if(elId) elId.value = '';
 
         } catch (error) {
