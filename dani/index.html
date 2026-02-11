@@ -1484,9 +1484,10 @@ body {
                 <input type="hidden" id="m-id">
                 
                 <label class="input-label">CONCEPTO</label>
-                <input type="text" id="m-concepto" list="lista-conceptos-memoria" class="filter-input form-field" onchange="autoRellenarDescripcion()" placeholder="Escribe o selecciona concepto...">
-				<datalist id="lista-conceptos-memoria"></datalist>
-                
+                <select id="m-concepto" class="filter-input form-field">
+                    <option value="">Selecciona Concepto...</option>
+                </select>
+				                
                 <label class="input-label">DESCRIPCIÓN</label>
                 <input type="text" id="m-desc" class="filter-input form-field" placeholder="Detalle del movimiento">
                 
@@ -2987,50 +2988,110 @@ window.cargarParaEditar = function(id) {
     if(extra) extra.style.display = 'grid';
 };
 	
-   function abrirModal(esEdicion = false) { 
+   function abrirModal(esEdicion = false) {
         document.getElementById('modal-manual').classList.add('active');
         const btnAction = document.getElementById('btn-modal-action');
-        const areaExtras = document.getElementById('extra-actions'); 
+        const areaExtras = document.getElementById('extra-actions');
+
+        // 1. LIMPIEZA Y PREPARACIÓN VISUAL
         if (!esEdicion) {
-            idEnEdicion = null;
-            document.getElementById('m-fecha').valueAsDate = new Date();
+            window.idEnEdicion = null;
+            
+            // Poner fecha de hoy
+            const hoy = new Date().toISOString().split('T')[0];
+            const elFecha = document.getElementById('m-fecha');
+            if(elFecha) elFecha.value = hoy;
+
             document.getElementById('m-cantidad').value = '';
+            
+            // Activar calculadora al tocar importe
             const campoImporte = document.getElementById('m-cantidad');
             campoImporte.setAttribute('readonly', true);
             campoImporte.style.cursor = 'pointer';
             campoImporte.onclick = () => abrirCalculadora('m-cantidad');
+
             document.getElementById('m-desc').value = '';
-            document.querySelector('#modal-manual h3').innerText = "NUEVO MOVIMIENTO";
-            btnAction.innerText = "GUARDAR";
-            if(areaExtras) areaExtras.style.display = 'none'; 
+            
+            // Títulos y botones
+            const titulo = document.querySelector('#modal-manual h3');
+            if(titulo) titulo.innerText = "NUEVO MOVIMIENTO";
+            if(btnAction) btnAction.innerText = "GUARDAR";
+            
+            if(areaExtras) areaExtras.style.display = 'none';
         } else {
-            document.querySelector('#modal-manual h3').innerText = "EDITAR MOVIMIENTO";
-            btnAction.innerText = "ACTUALIZAR";
-            if(areaExtras) areaExtras.style.display = 'grid'; 
+            const titulo = document.querySelector('#modal-manual h3');
+            if(titulo) titulo.innerText = "EDITAR MOVIMIENTO";
+            if(btnAction) btnAction.innerText = "ACTUALIZAR";
+            if(areaExtras) areaExtras.style.display = 'grid';
         }
-        const sCuentas = new Set(), sConceptos = new Set(), sBeneficiarios = new Set();
-        datos.forEach(d => {
-            if(d.cuenta) sCuentas.add(d.cuenta);
-            if(d.concepto) sConceptos.add(d.concepto);
-            if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
-        });
-		// 2. --- NUEVO: AÑADIR LO QUE HAY EN LA CONFIGURACIÓN ---
-		// Esto asegura que las cuentas nuevas aparezcan aunque no las hayas usado nunca
-		if (mapaCuentas) {
-			Object.keys(mapaCuentas).forEach(c => sCuentas.add(c));
-		}
-        const llenar = (id, set) => {
+
+        // 2. RECOPILAR DATOS PARA LOS DESPLEGABLES
+        const sCuentas = new Set(); 
+        const sConceptos = new Set(); 
+        const sBeneficiarios = new Set();
+        
+        // A) Buscar en el Historial de movimientos (window.datos)
+        if(window.datos && Array.isArray(window.datos)) {
+            window.datos.forEach(d => {
+                if(d.cuenta) sCuentas.add(d.cuenta);
+                if(d.concepto) sConceptos.add(d.concepto);
+                if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
+            });
+        }
+        
+        // B) Buscar en la Configuración (Excel) para añadir los nuevos
+        if (window.mapaCuentas) {
+            Object.keys(window.mapaCuentas).forEach(c => sCuentas.add(c));
+        }
+        // Aquí añadimos los conceptos de la hoja Configuración
+        if (window.listaConceptos && Array.isArray(window.listaConceptos)) {
+            window.listaConceptos.forEach(c => sConceptos.add(c));
+        }
+        // Y los beneficiarios de la hoja Configuración
+        if (window.listaBeneficiarios && Array.isArray(window.listaBeneficiarios)) {
+            window.listaBeneficiarios.forEach(b => sBeneficiarios.add(b));
+        }
+
+        // 3. FUNCIÓN INTELIGENTE PARA LLENAR MENÚS
+        const llenarSelect = (id, setValores) => {
             const el = document.getElementById(id);
-            const valActual = el.value; 
-            const first = '<option value="">Selecciona...</option>';
-            el.innerHTML = first; 
-            Array.from(set).sort().forEach(val => el.innerHTML += `<option value="${val}">${val}</option>`);
-            if(valActual && esEdicion) el.value = valActual; 
+            if (!el) return;
+            
+            const valActual = el.value; // Guardamos lo que había seleccionado
+            
+            // Reseteamos el menú con la opción por defecto
+            el.innerHTML = '<option value="">Selecciona...</option>';
+            
+            // Ordenamos alfabéticamente y creamos las opciones
+            Array.from(setValores).sort().forEach(val => {
+                // Solo añadimos si tiene texto real
+                if(val && String(val).trim() !== "") {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.text = val;
+                    el.appendChild(opt);
+                }
+            });
+
+            // Si estamos editando, volvemos a marcar lo que estaba seleccionado
+            if(esEdicion && valActual) {
+                el.value = valActual;
+                // Si el valor histórico no está en la lista actual, lo forzamos
+                if (el.value !== valActual) {
+                    const opt = document.createElement('option');
+                    opt.value = valActual;
+                    opt.text = valActual + " (Histórico)";
+                    el.appendChild(opt);
+                    el.value = valActual;
+                }
+            }
         };
-        llenar('m-cuenta', sCuentas);
-		llenar('m-cuenta-destino', sCuentas);
-        llenar('m-concepto', sConceptos);
-        llenar('m-beneficiario', sBeneficiarios);
+
+        // 4. LLENAR LOS 3 MENÚS (Ahora Concepto se comporta igual que los otros)
+        llenarSelect('m-cuenta', sCuentas);
+        llenarSelect('m-cuenta-destino', sCuentas);
+        llenarSelect('m-beneficiario', sBeneficiarios);
+        llenarSelect('m-concepto', sConceptos); 
     }
     function cerrarModal() {
         // 1. Ocultar ventana
