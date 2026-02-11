@@ -1804,86 +1804,46 @@ function detenerPolling() {
 // ==========================================
 window.crearBackupNube = async function(forzarManual = false) {
     if (!modoNube) {
-        if(forzarManual) alert("⚠️ Debes estar conectado a la Nube para hacer backups.");
-        return;
-    }
-
-    // 1. Control de frecuencia (Solo uno automático al día)
-    const hoy = new Date().toISOString().split('T')[0];
-    const ultimoBackup = localStorage.getItem('aidanai_last_backup');
-    
-    if (!forzarManual && ultimoBackup === hoy) {
-        console.log("🛡️ Backup diario ya realizado hoy.");
-        actualizarInfoBackup(true);
+        if(forzarManual) mostrarEstado("⚠️ Conecta la nube para backups", "error");
         return;
     }
 
     try {
-        if(forzarManual) mostrarEstado("🛡️ Iniciando Protocolo de Seguridad...", "loading");
-        
+        if(forzarManual) mostrarEstado("🛡️ Asegurando datos...", "loading");
         const token = await oneDrive.getToken();
-        const fileId = await oneDrive.getFileId(); // ID del archivo original
+        const fileId = await oneDrive.getFileId();
 
-        // 2. Buscar o Crear carpeta 'AIDANAI_SEGURIDAD'
-        let folderId = "";
-        const urlChildren = "https://graph.microsoft.com/v1.0/me/drive/root/children";
-        
-        // Intentamos crearla. Si existe, dará error 409 (Conflict), lo aprovechamos.
-        const reqFolder = await fetch(urlChildren, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ "name": "AIDANAI_SEGURIDAD", "folder": { }, "@microsoft.graph.conflictBehavior": "fail" })
-        });
+        // Buscamos si la carpeta ya existe antes de crearla (evita el error 409)
+        const urlSearch = "https://graph.microsoft.com/v1.0/me/drive/root/children?$filter=name eq 'AIDANAI_SEGURIDAD'";
+        const resSearch = await fetch(urlSearch, { headers: { 'Authorization': `Bearer ${token}` } });
+        const dataSearch = await resSearch.json();
 
-        if (reqFolder.ok) {
-            const res = await reqFolder.json();
-            folderId = res.id;
-        } else if (reqFolder.status === 409) {
-            // Ya existe, la buscamos
-            const reqSearch = await fetch(urlChildren + "?$filter=name eq 'AIDANAI_SEGURIDAD'", {
-                headers: { 'Authorization': `Bearer ${token}` }
+        let folderId;
+        if (dataSearch.value && dataSearch.value.length > 0) {
+            folderId = dataSearch.value[0].id;
+        } else {
+            // Solo si no existe, la creamos
+            const resNew = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/children", {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ "name": "AIDANAI_SEGURIDAD", "folder": {} })
             });
-            const resSearch = await reqSearch.json();
-            if(resSearch.value && resSearch.value.length > 0) {
-                folderId = resSearch.value[0].id;
-            } else {
-                throw new Error("No pude acceder a la carpeta de seguridad.");
-            }
-        } else {
-            throw new Error("Error creando carpeta de seguridad.");
+            const dataNew = await resNew.json();
+            folderId = dataNew.id;
         }
 
-        // 3. Crear la copia con fecha y hora
-        const ahora = new Date();
-        const fechaHora = ahora.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const nuevoNombre = `aidanai_backup_${fechaHora}.xlsx`;
-
+        const fechaHora = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const urlCopy = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/copy`;
-        const reqCopy = await fetch(urlCopy, {
+        
+        await fetch(urlCopy, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                "name": nuevoNombre, 
-                "parentReference": { "id": folderId } 
-            })
+            body: JSON.stringify({ "name": `aidanai_backup_${fechaHora}.xlsx`, "parentReference": { "id": folderId } })
         });
 
-        if (!reqCopy.ok) throw new Error("Fallo al copiar el archivo.");
-
-        // 4. Éxito
-        localStorage.setItem('aidanai_last_backup', hoy);
-        actualizarInfoBackup(true);
-        
-        if (forzarManual) {
-            mostrarEstado("✅ Copia de seguridad creada con éxito", "success");
-            vibrar('ingreso');
-        } else {
-            console.log("✅ Backup automático completado en silencio.");
-        }
-
+        if(forzarManual) mostrarEstado("✅ Backup creado", "success");
     } catch (e) {
-        console.error("Error Backup:", e);
-        if(forzarManual) alert("Error al crear backup: " + e.message);
+        console.error("Backup info:", e.message);
     }
 };
 
@@ -1982,7 +1942,7 @@ function leerExcel(blob) {
     reader.readAsArrayBuffer(blob);
 }
 // ==========================================
-// 🧠 PROCESADOR MAESTRO DE DATOS (VERSIÓN UNIFICADA)
+// 🧠 PROCESADOR MAESTRO DE DATOS (VERSIÓN UNIFICADA FINAL)
 // ==========================================
 function procesarLibroLeido(wb) {
     console.log("📖 Procesando archivo con Motor Unificado...");
@@ -2045,21 +2005,18 @@ function procesarLibroLeido(wb) {
     localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos));
     localStorage.setItem('aidanai_config_cache', JSON.stringify(window.mapaCuentas));
 
-    // 4. Actualizar toda la interfaz
-    recalcularSaldosGlobal();
-    actualizarDashboard();
-    renderizar();
-    if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
-}
     console.log(`✅ ${window.datos.length} movimientos procesados correctamente.`);
 
-    // --- IMPORTANTE: FORZAR REFRESCO VISUAL ---
-    if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-    if(typeof cargarInterfaz === 'function') cargarInterfaz();
-    if(typeof actualizarDashboard === 'function') actualizarDashboard();
-    // Renderizamos la tabla explícitamente por si acaso
-    if(typeof renderizar === 'function') renderizar(); 
-    if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
+    // 4. ACTUALIZACIÓN DE INTERFAZ (Orden crítico)
+    if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+    if (typeof actualizarDashboard === 'function') actualizarDashboard();
+    if (typeof renderizar === 'function') renderizar();
+    
+    // Gráficos opcionales (solo si existen las funciones)
+    if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+    if (typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
+    if (typeof cargarInterfaz === 'function') cargarInterfaz();
+}
  
 // ==========================================
 // 💾 FINALIZAR GUARDADO (Conexión con el nuevo sistema)
