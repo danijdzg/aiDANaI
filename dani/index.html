@@ -3120,108 +3120,105 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-        console.log("--- 🛡️ Iniciando Guardado Pro (con Toasts) ---");
+        console.log("--- 🛡️ Guardando Movimiento (Lógica Corregida) ---");
 
-        // 1. OBTENER REFERENCIAS AL DOM
-        const elId = document.getElementById('m-id');
-        const elFecha = document.getElementById('m-fecha');
-        const elCuenta = document.getElementById('m-cuenta');
-        const elConcepto = document.getElementById('m-concepto');
-        const elImporte = document.getElementById('m-cantidad');
-        const elDesc = document.getElementById('m-desc');
-        const elBenef = document.getElementById('m-beneficiario');
         const btnGuardar = document.getElementById('btn-modal-action');
-
-        // Detectar si es Gasto o Ingreso mirando los botones (más seguro)
-        const btnGasto = document.getElementById('tipo-gasto');
-        const esGasto = btnGasto && btnGasto.classList.contains('active');
-
-        // 2. GUARDAR TEXTO ORIGINAL DEL BOTÓN
-        let textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
+        const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
         try {
-            // 3. BLOQUEO VISUAL (Feedback inmediato)
+            // 1. BLOQUEO VISUAL
             if(btnGuardar) {
                 btnGuardar.innerText = "⏳ Guardando...";
                 btnGuardar.disabled = true;
                 btnGuardar.style.opacity = "0.7";
             }
 
-            // 4. EXTRAER Y LIMPIAR VALORES
-            const idMov = elId ? elId.value : "";
+            // 2. RECOGER DATOS DEL FORMULARIO
+            const elId = document.getElementById('m-id');
+            const elFecha = document.getElementById('m-fecha');
+            const elCuenta = document.getElementById('m-cuenta');
+            const elConcepto = document.getElementById('m-concepto');
+            const elImporte = document.getElementById('m-cantidad');
+            const elDesc = document.getElementById('m-desc');
+            const elBenef = document.getElementById('m-beneficiario');
+            
+            // Detectar si es Gasto o Ingreso
+            const btnGasto = document.getElementById('tipo-gasto');
+            // Si el botón de gasto existe y tiene la clase active (o es edición de un negativo)
+            // Nota: Aquí simplificamos usando la variable global si existe, o deducción
+            const esGastoVisual = window.modoTransaccionActual === 'pago'; 
+
+            // 3. VALIDACIÓN
             const fecha = elFecha ? elFecha.value : "";
             const cuenta = elCuenta ? elCuenta.value : "";
             const concepto = elConcepto ? elConcepto.value : "";
             let importe = elImporte ? (parseFloat(elImporte.value) || 0) : 0;
-            const desc = elDesc ? elDesc.value.trim() : "";
-            const benef = elBenef ? elBenef.value.trim() : "";
-
-            // 5. VALIDACIÓN
-            if (!fecha || !cuenta || !concepto || importe === 0) {
-                // Usamos el Toast del Paso 2
-                if(typeof showToast === 'function') showToast("Faltan datos: Fecha, Cuenta o Importe", "error");
-                else alert("Faltan datos obligatorios");
-                throw new Error("Validación fallida");
-            }
-
-            // 6. AJUSTAR SIGNO (Gasto = Negativo, Ingreso = Positivo)
-            // Nota: Si en el futuro implementas "Traspaso", la lógica iría aquí
-            if (esGasto) {
-                importe = -Math.abs(importe);
-            } else {
-                importe = Math.abs(importe);
-            }
-
-            // 7. PREPARAR EL OBJETO
-            // Si no hay ID, generamos uno nuevo
-            const nuevoId = idMov || crypto.randomUUID();
             
+            if (!fecha || !cuenta || !concepto || importe === 0) {
+                throw new Error("Faltan datos obligatorios (Fecha, Cuenta, Concepto o Importe)");
+            }
+
+            // 4. AJUSTE DE SIGNO (CRÍTICO)
+            // Si estamos en modo GASTO, el importe debe ser negativo.
+            // Si estamos en INGRESO, positivo.
+            if (window.modoTransaccionActual === 'pago' || window.modoTransaccionActual === 'traspaso') {
+                 importe = -Math.abs(importe);
+            } else {
+                 importe = Math.abs(importe);
+            }
+
+            // 5. CONSTRUIR EL OBJETO
+            const idMov = elId && elId.value ? elId.value : crypto.randomUUID();
             const nuevoMov = {
-                id: nuevoId,
-                fecha: fecha,
+                id: idMov,
+                fecha: new Date(fecha), // Guardamos como objeto Date para evitar problemas
+                ts: new Date(fecha).getTime(),
                 cuenta: cuenta,
                 concepto: concepto,
                 importe: importe,
-                descripcion: desc,
-                beneficiario: benef,
-                ts: new Date(fecha).getTime() // Timestamp para ordenación
+                descripcion: elDesc ? elDesc.value.trim() : "",
+                beneficiario: elBenef ? elBenef.value.trim() : "",
+                tipo: (importe >= 0) ? 'ingreso' : (window.modoTransaccionActual === 'traspaso' ? 'traspaso' : 'gasto')
             };
 
-            // 8. GUARDAR EN NUBE/EXCEL (Llamada asíncrona)
-            if (typeof window.guardarUniversal === 'function') {
-                await window.guardarUniversal(nuevoMov);
-            } else {
-                console.warn("Modo local: guardando solo en memoria");
-                if(!window.datos) window.datos = [];
-                // Si es edición, quitamos el viejo
-                if(idMov) {
-                    const idx = window.datos.findIndex(m => m.id === idMov);
-                    if(idx >= 0) window.datos.splice(idx, 1);
-                }
-                window.datos.unshift(nuevoMov);
-            }
+            // 6. ACTUALIZAR MEMORIA (AQUÍ ESTABA EL ERROR)
+            // Primero actualizamos window.datos, y LUEGO llamamos a guardarUniversal
+            if(!window.datos) window.datos = [];
 
-            // 9. FINALIZAR CON ÉXITO
-            if(typeof closeModal === 'function') closeModal();
+            // Si es edición, borramos el viejo primero
+            if (elId && elId.value) {
+                const idx = window.datos.findIndex(m => m.id === elId.value);
+                if(idx >= 0) window.datos.splice(idx, 1);
+            }
             
-            // ¡Aquí sale tu nueva notificación elegante!
-            if(typeof showToast === 'function') {
-                showToast(idMov ? "Movimiento actualizado" : "Guardado con éxito", "success");
-            } else {
-                alert("Guardado correctamente");
+            // Añadimos el nuevo al principio de la lista
+            window.datos.unshift(nuevoMov);
+            
+            // Ordenamos por fecha (más reciente primero)
+            window.datos.sort((a, b) => b.ts - a.ts);
+
+            // 7. ACTUALIZAR UI INMEDIATAMENTE (Para que el usuario lo vea ya)
+            if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+            
+            // 8. PERSISTIR EN ARCHIVO (Nube o Local)
+            if (typeof window.guardarUniversal === 'function') {
+                // Llamamos SIN argumentos. guardarUniversal cogerá window.datos que acabamos de actualizar.
+                await window.guardarUniversal(); 
             }
 
-            // Limpiar ID para el próximo
+            // 9. ÉXITO Y CIERRE
+            if(typeof closeModal === 'function') closeModal();
+            if(typeof showToast === 'function') showToast(elId && elId.value ? "Movimiento actualizado" : "Movimiento guardado", "success");
+            
+            // Limpieza extra por seguridad
             if(elId) elId.value = '';
 
         } catch (error) {
             console.error(error);
-            if (error.message !== "Validación fallida") {
-                if(typeof showToast === 'function') showToast("Error: " + error.message, "error");
-                else alert("Error: " + error.message);
-            }
+            if(typeof showToast === 'function') showToast("Error: " + error.message, "error");
+            else alert("Error: " + error.message);
         } finally {
-            // 10. RESTAURAR BOTÓN SIEMPRE
+            // 10. RESTAURAR BOTÓN
             if(btnGuardar) {
                 btnGuardar.innerText = textoOriginal;
                 btnGuardar.disabled = false;
