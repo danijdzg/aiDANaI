@@ -2134,14 +2134,14 @@ function leerExcel(blob) {
 }
 // 4. EL CEREBRO: PROCESA EL EXCEL (VERSIÓN CORREGIDA FECHAS)
 function procesarLibroLeido(wb) {
-    console.log("📖 Procesando archivo (Versión Compatible Nube/Local)...");
+    console.log("📖 Procesando archivo (Modo Inteligente Todoterreno)...");
 
     // --- 1. CARGA DE CONFIGURACIÓN ---
     window.mapaCuentas = {}; 
     window.listaConceptos = [];
     window.listaBeneficiarios = [];
     
-    // Buscamos la hoja de configuración (puede llamarse Configuración, Config, TablaConfig...)
+    // Buscamos la hoja de configuración ignorando mayúsculas/minúsculas
     const wsConfigName = wb.SheetNames.find(n => 
         n.trim().toUpperCase().includes("CONFIG")
     );
@@ -2155,7 +2155,7 @@ function procesarLibroLeido(wb) {
         let colCuenta = -1, colTipo = -1, colInv = -1;
         let colConcepto = -1, colBeneficiario = -1;
 
-        // Escaneo inteligente de encabezados
+        // Escaneo inteligente de encabezados (Mantenemos tu lógica que funciona bien aquí)
         for (let i = 0; i < Math.min(matConfig.length, 20); i++) {
             const row = matConfig[i];
             if (!row) continue;
@@ -2195,27 +2195,18 @@ function procesarLibroLeido(wb) {
         }
     }
     mapaCuentas = window.mapaCuentas; // Sincronizar global
-	// --- MEJORA: INYECCIÓN DE INTELIGENCIA (AUTOCOMPLETADO) ---
-    // 1. Rellenar Conceptos
-    // Buscamos el elemento datalist que creamos en el HTML
+
+    // --- MEJORA: INYECCIÓN DE INTELIGENCIA (AUTOCOMPLETADO) ---
     const dlConceptos = document.getElementById('lista-conceptos-memoria');
-    
-    // Si existe el datalist y tenemos conceptos leídos del Excel
     if (dlConceptos && window.listaConceptos && window.listaConceptos.length > 0) {
-        dlConceptos.innerHTML = ''; // Limpiamos sugerencias viejas para no duplicar
-        
-        // Ordenamos alfabéticamente para que sea más fácil buscar visualmente
+        dlConceptos.innerHTML = ''; 
         window.listaConceptos.sort().forEach(item => {
-            // Creamos una opción invisible por cada concepto
             const opt = document.createElement('option');
-            opt.value = item; // El valor es el texto (ej: "Supermercado")
-            dlConceptos.appendChild(opt); // Lo metemos en la lista
+            opt.value = item; 
+            dlConceptos.appendChild(opt); 
         });
-        
-        console.log(`✅ Autocompletado listo: ${window.listaConceptos.length} conceptos cargados.`);
     }
 
-    // 2. Rellenar Beneficiarios (Opcional, si hiciste lo mismo con el campo beneficiario)
     const dlBenef = document.getElementById('lista-benef-memoria');
     if (dlBenef && window.listaBeneficiarios && window.listaBeneficiarios.length > 0) {
         dlBenef.innerHTML = '';
@@ -2225,86 +2216,97 @@ function procesarLibroLeido(wb) {
             dlBenef.appendChild(opt);
         });
     }
-    // --- 2. CARGA DE MOVIMIENTOS ---
-    let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
+
+    // --- 2. CARGA DE MOVIMIENTOS (AQUÍ ESTABA EL PROBLEMA) ---
+    let wsName = wb.SheetNames.find(n => n.trim().toUpperCase() === 'MOVIMIENTOS') || wb.SheetNames[0];
     const hojaMovs = wb.Sheets[wsName];
     
-    // Leemos los datos. { cellDates: true } ayuda en local, pero en nube necesitamos ayuda extra.
-    const rawMovs = XLSX.utils.sheet_to_json(hojaMovs, { cellDates: true });
+    // Leemos los datos brutos. Usamos defval para asegurar estructura.
+    const rawMovs = XLSX.utils.sheet_to_json(hojaMovs, { defval: "" });
 
     window.datos = rawMovs.map((fila) => {
-        let idSeguro = fila['Id'] || fila['ID'];
+        // --- FUNCIÓN DE MAPEO INTELIGENTE ---
+        // Esto busca la columna ignorando mayúsculas, minúsculas o espacios extra
+        const keys = Object.keys(fila);
+        const getVal = (posiblesNombres) => {
+            // Busca una clave que coincida (quitando espacios y pasando a mayúsculas)
+            const foundKey = keys.find(k => posiblesNombres.includes(k.trim().toUpperCase()));
+            return foundKey ? fila[foundKey] : "";
+        };
+
+        // 1. ID
+        let idSeguro = getVal(['ID', 'ID.']);
         if (!idSeguro || String(idSeguro).trim() === '') idSeguro = crypto.randomUUID();
 
-        // A) LIMPIEZA DE IMPORTE
-        let importe = fila['Importe'] || fila['IMPORTE'] || 0;
-        if (typeof importe === 'string') {
-            importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-        }
-
-        // B) LIMPIEZA DE FECHA (BLINDAJE ESPAÑA/INTERNACIONAL)
-        let fechaRaw = fila['Fecha'] || fila['FECHA'];
+        // 2. FECHA (Manejo robusto)
+        let fechaRaw = getVal(['FECHA', 'DATE', 'TS']);
         let fechaLimpia;
 
-        if (fechaRaw instanceof Date && !isNaN(fechaRaw)) {
-            // Caso 1: Excel local (ya es Objeto Fecha)
-            fechaLimpia = fechaRaw;
-        } 
-        else if (typeof fechaRaw === 'number') {
-            // Caso 2: Excel Nube numérico (ej: 45324)
-            fechaLimpia = new Date((fechaRaw - 25569) * 86400 * 1000);
-        } 
-        else if (typeof fechaRaw === 'string') {
-            // Caso 3: Texto. Aquí está el BUG corregido.
-            // Si viene como "dd/mm/yyyy", lo forzamos.
+        if (typeof fechaRaw === 'number') {
+            // Caso Excel Serial (ej: 45321) -> Muy común en nube
+            fechaLimpia = new Date(Math.round((fechaRaw - 25569) * 86400 * 1000));
+        } else if (typeof fechaRaw === 'string') {
+            // Caso Texto
             if (fechaRaw.includes('/')) {
                 const partes = fechaRaw.split('/');
-                if (partes.length === 3) {
-                    // Asumimos DIA/MES/AÑO (Formato Español/Europeo)
-                    // JS necesita AÑO-MES-DIA o MES/DIA/AÑO
-                    const dia = parseInt(partes[0], 10);
-                    const mes = parseInt(partes[1], 10) - 1; // JS cuenta meses de 0 a 11
-                    let anio = parseInt(partes[2], 10);
-                    if (anio < 100) anio += 2000; // Por si viene "25" en vez de "2025"
-                    fechaLimpia = new Date(anio, mes, dia);
-                } else {
-                    fechaLimpia = new Date(fechaRaw);
-                }
+                if (partes.length === 3) fechaLimpia = new Date(partes[2], partes[1] - 1, partes[0]);
+                else fechaLimpia = new Date(fechaRaw);
             } else {
                 fechaLimpia = new Date(fechaRaw);
             }
-        } 
-        else {
-            fechaLimpia = new Date(); 
+        } else if (fechaRaw instanceof Date) {
+            fechaLimpia = fechaRaw;
+        } else {
+            fechaLimpia = new Date();
+        }
+        
+        if (isNaN(fechaLimpia.getTime())) fechaLimpia = new Date();
+
+        // 3. IMPORTE
+        let rawImp = getVal(['IMPORTE', 'AMOUNT', 'CANTIDAD']);
+        let importe = 0;
+        if (typeof rawImp === 'number') importe = rawImp;
+        else if (typeof rawImp === 'string') {
+            importe = parseFloat(rawImp.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
         }
 
-        // Validación final de seguridad
-        if (isNaN(fechaLimpia.getTime())) fechaLimpia = new Date();
+        // 4. RESTO DE CAMPOS (Usando el buscador inteligente)
+        const cuenta = String(getVal(['CUENTA', 'BANCO'])).trim();
+        const concepto = String(getVal(['CONCEPTO'])).trim();
+        // Busca DESCRIPCION (sin tilde), DESCRIPCIÓN (con tilde) o DETALLE
+        const desc = String(getVal(['DESCRIPCION', 'DESCRIPCIÓN', 'DETALLE'])).trim();
+        const benef = String(getVal(['BENEFICIARIO'])).trim();
 
         return {
             id: idSeguro,
             fecha: fechaLimpia,
-            ts: fechaLimpia.getTime(), // Timestamp real para ordenar
-            cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
-            concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
+            ts: fechaLimpia.getTime(),
+            cuenta: cuenta,
+            concepto: concepto,
             importe: importe,
-            descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
-            detalle: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(), // Alias
-            beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
-            tipo: (importe >= 0) ? 'ingreso' : 'gasto'
+            descripcion: desc,
+            detalle: desc,
+            beneficiario: benef,
+            tipo: (importe >= 0) ? 'ingreso' : 'gasto',
+            saldo: 0
         };
     });
 
-    // Ordenar por fecha descendente (lo más nuevo arriba)
+    // Filtramos filas vacías fantasma (sin cuenta ni importe)
+    window.datos = window.datos.filter(d => d.cuenta !== "" || d.importe !== 0);
+
+    // Ordenar por fecha descendente
     window.datos.sort((a, b) => b.ts - a.ts);
     datos = window.datos; // Sincronizar global corta
 
-    console.log(`✅ ${window.datos.length} movimientos procesados.`);
+    console.log(`✅ ${window.datos.length} movimientos procesados correctamente.`);
 
-    // Actualizar toda la interfaz
+    // --- IMPORTANTE: FORZAR REFRESCO VISUAL ---
     if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if(typeof cargarInterfaz === 'function') cargarInterfaz();
     if(typeof actualizarDashboard === 'function') actualizarDashboard();
+    // Renderizamos la tabla explícitamente por si acaso
+    if(typeof renderizar === 'function') renderizar(); 
     if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
 }
  
