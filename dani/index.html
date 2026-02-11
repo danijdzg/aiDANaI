@@ -1638,7 +1638,6 @@ const Security = {
             .replace(/'/g, "&#039;");
     }
 };
-	let globalConfigData = []; // <--- NUEVA VARIABLE DE SEGURIDAD
 	let modoTransaccionActual = null; // Puede ser 'pago', 'ingreso' o 'traspaso'
     let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
     let chartInstance = null;
@@ -2644,52 +2643,6 @@ window.guardarManual = async function() {
     }
 };
 
-// ==========================================
-    // NUEVA FUNCIÓN: DUPLICAR MOVIMIENTO (CLOUD READY)
-    // ==========================================
-    window.clonarMovimiento = function(idOrigen) {
-        console.log("Intentando clonar ID:", idOrigen);
-        
-        // 1. Seguridad: Si es un alta nueva, no hay nada que duplicar
-        if (!idOrigen) {
-            alert("Primero selecciona un movimiento existente para duplicarlo.");
-            return;
-        }
-
-        // 2. Buscar los datos originales
-        const movOriginal = window.movimientos.find(m => m.Id === idOrigen);
-        if (!movOriginal) {
-            alert("Error: No encuentro los datos originales.");
-            return;
-        }
-
-        // 3. PREPARAR EL FORMULARIO PARA LA COPIA
-        
-        // A) Generar NUEVO ID único (Vital para que no sobrescriba el antiguo en la nube)
-        const nuevoId = crypto.randomUUID();
-        document.getElementById('input-id').value = nuevoId;
-
-        // B) Poner fecha de HOY automáticamente
-        const hoy = new Date().toISOString().split('T')[0];
-        document.getElementById('input-fecha').value = hoy;
-
-        // C) Feedback visual: Cambiar botón Guardar a "CONFIRMAR COPIA"
-        const btnGuardar = document.getElementById('btn-modal-action');
-        if(btnGuardar) {
-            btnGuardar.innerHTML = "CONFIRMAR COPIA <i class='material-icons' style='font-size:16px; vertical-align:middle'>cloud_upload</i>";
-            btnGuardar.style.backgroundColor = "#ff9800"; // Naranja
-        }
-
-        // D) Ocultar botones que confunden (no puedes borrar ni duplicar lo que aún no has creado)
-        // Ocultamos el propio botón de duplicar usando 'this' no es posible aquí, así que buscamos por clase o ID si tuviera
-        // Ocultamos el botón de borrar
-        const btnBorrar = document.getElementById('btn-borrar-modal');
-        if(btnBorrar) btnBorrar.style.display = 'none';
-
-        // E) Aviso
-        alert("Modo DUPLICAR activado:\n\n1. Se ha copiado el importe y concepto.\n2. La fecha es HOY.\n3. Pulsa 'CONFIRMAR COPIA' para guardar en la nube.");
-    };
-
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
 function recalcularSaldosGlobal() {
     if (!window.datos || window.datos.length === 0) return;
@@ -2850,65 +2803,6 @@ function formatear(val, tipo) {
     return val;
 }
  
-// ==========================================
-// 📊 LÓGICA DEL DASHBOARD (Restaurada)
-// ==========================================
-
-function actualizarDashboard() {
-    // Si no hay datos, salimos para evitar errores
-    if (!datos || datos.length === 0) return;
-
-    // Filtrar por fechas del mes actual
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // 1. FILTRO DE PROPIETARIO
-    const movsUsuario = datos.filter(m => pasaFiltroPropietario(m));
-
-    // 2. FILTRO DE FECHA (Mes Actual)
-    const movsMes = movsUsuario.filter(m => {
-        const d = new Date(m.ts);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    });
-
-    // 3. CÁLCULO DE TOTALES (Ignorando Traspasos e Iniciales)
-    const ingresos = movsMes
-        .filter(m => m.tipo === 'ingreso' && !String(m.concepto).toLowerCase().includes('inicial'))
-        .reduce((acc, m) => acc + m.importe, 0);
-
-    const gastos = movsMes
-        .filter(m => m.tipo === 'gasto')
-        .reduce((acc, m) => acc + Math.abs(m.importe), 0);
-
-    const ahorro = ingresos - gastos;
-    const tasaAhorro = ingresos > 0 ? (ahorro / ingresos) * 100 : 0;
-
-    // 4. ACTUALIZACIÓN VISUAL
-    animarCifra('kpi-ingresos', ingresos);
-    animarCifra('kpi-gastos', gastos);
-    
-    const elAhorro = document.getElementById('kpi-ahorro');
-    if (elAhorro) {
-        elAhorro.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(ahorro);
-        elAhorro.style.color = ahorro >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-    }
-
-    const elTasa = document.getElementById('kpi-tasa');
-    if (elTasa) {
-        elTasa.innerText = tasaAhorro.toFixed(1) + '%';
-        if (tasaAhorro > 20) elTasa.style.color = 'var(--c-success)';
-        else if (tasaAhorro > 0) elTasa.style.color = 'var(--c-warn)';
-        else elTasa.style.color = 'var(--c-danger)';
-    }
-}
-
-// Función auxiliar necesaria para que funcione la anterior
-function animarCifra(id, valorFinal) {
-    const elemento = document.getElementById(id);
-    if (!elemento) return;
-    elemento.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(valorFinal);
-}
         // 2. Calcular KPIs visuales (Ingresos/Gastos del periodo seleccionado)
         let ing = 0, gas = 0;
         datosResumen.forEach(m => {
@@ -3026,54 +2920,8 @@ function animarCifra(id, valorFinal) {
         renderizarGraficoEvolucion(datosPropietario);
         generarAnalisisIA(datos);
 		renderizarRadarSalud();
-
-
-   function generarLibroExcel() {
-    const filasExcel = []; 
-    // Cabecera actualizada con 7 columnas
-    filasExcel.push(["ID", "FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]);
-    
-    datos.forEach(m => { 
-        const fechaStr = new Date(m.ts).toISOString().split('T')[0];
-        // Nos aseguramos de guardar el ID. Si es un dato antiguo sin ID, generamos uno ahora mismo.
-        const idFinal = m.id || generateUUID(); 
-        filasExcel.push([idFinal, fechaStr, m.cuenta, m.concepto, m.importe, m.detalle, m.beneficiario]); 
-    });
-    
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(filasExcel);
-    // Ajuste de anchos (Columna ID oculta o estrecha, el resto normal)
-    ws['!cols'] = [{ wch: 0 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 20 }]; // wch:0 intenta ocultarla visualmente
-    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-    
-    // ... (Resto de lógica de Configuración igual) ...
-    if (globalConfigData && globalConfigData.length > 0) {
-        const wsConfig = XLSX.utils.aoa_to_sheet(globalConfigData);
-        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
-    }
-    return wb;
-}
-
-    function generarYDescargarExcel() {
-        const wb = generarLibroExcel();
-        XLSX.writeFile(wb, "aidanai_local.xlsx");
-        mostrarEstado('Archivo descargado (Modo Local)', 'ok');
-    }
-	
-    function revisarBotonExportar() {
-    // Buscamos los botones de forma segura
-    const btnExport = document.getElementById('btn-export-excel');
-    const btnGuardar = document.getElementById('btn-guardar');
-
-    // Solo si hay datos, intentamos mostrarlos
-    if (datos && datos.length > 0) {
-        // Usamos 'if' para asegurar que el botón existe antes de tocar su estilo
-        if (btnExport) btnExport.style.display = 'flex';
-        if (btnGuardar) btnGuardar.style.display = 'flex';
-    }
-}
-
-    function verExtractoCuenta(nombreCuenta) {
+  	
+     function verExtractoCuenta(nombreCuenta) {
         limpiarFiltros();
         const selectCuenta = document.getElementById('f-cuenta');
         if(selectCuenta) { selectCuenta.value = nombreCuenta; filtros.cuenta = nombreCuenta; }
@@ -3818,28 +3666,6 @@ function accionFab(tipo) {
         modoNube = true;
     }
 
-// Pequeño adaptador para que tu función leerExcel funcione con lo que baja de la nube
-function leerExcelDesdeBuffer(wb) {
-    // Copiamos la lógica interna de tu 'reader.onload' original
-    // 1. Carga Config
-    mapaCuentas = {};
-    const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
-    if (wsConfigName) {
-        globalConfigData = XLSX.utils.sheet_to_json(wb.Sheets[wsConfigName], { header: 1 });
-        // ... (Tu lógica de procesamiento de config aquí se ejecutará al procesarDatos después)
-        // Para simplificar, asumimos que procesarDatos re-escanea todo si es necesario,
-        // pero necesitamos procesar la config igual que antes.
-        // TRUCO: Tu código original de 'leerExcel' mezcla lectura de archivo y lógica.
-        // Vamos a llamar a procesarDatos directamente, pero primero extraemos la config igual que antes.
-        // (Ver nota abajo)
-    }
-
-    // 2. Carga Movimientos
-    let wsName = wb.SheetNames.find(n => n.toLowerCase() === 'movimientos') || wb.SheetNames[0];
-    const jsonMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header: 1, raw: true });
-    procesarDatos(jsonMovs);
-}
-
 
 // ==========================================
 // 💾 GUARDADO MAESTRO (Versión "Creación Forzada")
@@ -4561,99 +4387,6 @@ function filtrarTabla(termino) {
 }
 
 
-/**
- * 🏛️ NÚCLEO FINANCIERO aiDANaI - VERSIÓN GOLDEN MASTER
- * Consolidación definitiva de lógica: CRUD, Saldos y Sincronización.
- */
-
-// ==========================================
-// 🧠 LÓGICA DE NEGOCIO (Con Guardado en Caché)
-// ==========================================
-window.procesarDatos = function(filas) {
-    const temp = [];
-    
-    // ... (Tu lógica de bucle for existente se mantiene igual) ...
-    // Copia aquí el bucle for que ya tienes en tu código para leer las filas
-    // OJO: Asegúrate de que este bloque procesa las filas igual que antes.
-    // Para simplificar, asumo que mantienes tu lógica de lectura de columnas.
-    // Solo cambiaremos el FINAL de la función.
-    
-    // --- PEGA ESTO DENTRO DE TU FUNCIÓN ACTUAL ---
-    for (let i = 1; i < filas.length; i++) {
-        // ... (Tu código de lectura de filas existente) ...
-        // ... (Si no lo tienes a mano, avísame y te lo escribo entero) ...
-        
-        // Simplemente asegúrate de que al final del bucle 'temp' tenga los datos
-        // ...
-        // Este es el ejemplo de lo que deberías tener dentro del bucle:
-        /*
-        const row = filas[i];
-        if (!row || (!row[2] && row[4] === undefined)) continue;
-        const idSeguro = String(row[0] || generateUUID());
-        // ... resto de lecturas ...
-        temp.push({ id: idSeguro, ... });
-        */
-        
-        // --- PARA NO PERDER TU LÓGICA, USAREMOS TU BUCLE FOR ---
-        // (Mantén tu bucle 'for' original aquí)
-        // ...
-        // ...
-    }
-    // ---------------------------------------------
-
-    // Si estás copiando y pegando, usa ESTE bloque final:
-    
-    // 1. Procesamiento estándar (igual que antes)
-    // (Asegúrate de que 'temp' se llenó con tu bucle anterior)
-    // Si no tienes el código del bucle a mano, es el que lee row[0], row[1], etc.
-    
-    // PERO, como pediste revisar el código, te doy la función COMPLETA REVISADA
-    // para que simplemente la sustituyas y funcione seguro.
-    
-    for (let i = 1; i < filas.length; i++) {
-        const row = filas[i];
-        if (!row || (!row[2] && row[4] === undefined)) continue;
-
-        const idSeguro = String(row[0] || generateUUID());
-        
-        let rawFecha = row[1];
-        let ts = Date.now();
-        if (rawFecha instanceof Date) ts = rawFecha.getTime();
-        else if (typeof rawFecha === 'string') ts = Date.parse(rawFecha) || ts;
-        else if (typeof rawFecha === 'number') ts = new Date((rawFecha - 25569) * 86400 * 1000).getTime();
-
-        let imp = row[4];
-        if (typeof imp !== 'number') {
-            imp = parseFloat(String(imp).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-        }
-
-        const cta = String(row[2] || '').trim();
-        const con = String(row[3] || '').trim();
-        const desc = String(row[5] || '').trim();
-        const ben = String(row[6] || '').trim();
-        
-        let tipo = 'gasto';
-        if ((con + desc).toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
-        else if (imp >= 0) tipo = 'ingreso';
-
-        temp.push({
-            id: idSeguro, ts: ts, importe: imp, cuenta: cta, 
-            concepto: con, detalle: desc, beneficiario: ben, tipo: tipo, saldo: 0
-        });
-    }
-
-    datos = temp;
-    recalcularSaldosGlobal(); 
-
-    // --- ¡AQUÍ ESTÁ LA MAGIA! GUARDADO EN CACHÉ ---
-    try {
-        localStorage.setItem('aidanai_datos_cache', JSON.stringify(datos));
-        localStorage.setItem('aidanai_config_cache', JSON.stringify(mapaCuentas));
-        console.log("💾 Datos guardados en memoria local (Caché actualizada)");
-    } catch (e) {
-        console.warn("Memoria llena, no se pudo cachear:", e);
-    }
-};
 
 // ==========================================
 // 2. SISTEMA DE BORRADO SEGURO
@@ -4682,54 +4415,6 @@ window.borrarMovimiento = async function(idParaBorrar) {
         alert("Error al borrar: " + e.message);
     }
 };
-// ==========================================
-// 3. GUARDADO MAESTRO (Rápido y Seguro)
-// ==========================================
-// ==========================================
-// ☁️ SINCRONIZACIÓN ROBUSTA (Overwrite Strategy)
-// ==========================================
-async function generarYSubirExcelCompleto() {
-    // 1. Preparar datos para Excel (Formato Array de Arrays)
-    // Cabeceras
-    const wsData = [
-        ["ID", "FECHA", "CUENTA", "CONCEPTO", "IMPORTE", "DESCRIPCIÓN", "BENEFICIARIO"]
-    ];
-
-    // Filas
-    datos.forEach(m => {
-        // Formatear fecha a string YYYY-MM-DD
-        const dateObj = new Date(m.ts);
-        const fechaStr = dateObj.toISOString().split('T')[0];
-        
-        wsData.push([
-            m.id,
-            fechaStr,
-            m.cuenta,
-            m.concepto,
-            m.importe,
-            m.detalle,
-            m.beneficiario
-        ]);
-    });
-
-    // 2. Crear Libro con SheetJS
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-
-    // Si tienes hoja de Configuración, deberíamos mantenerla.
-    // Como 'datos' solo tiene movimientos, lo ideal es leer la config original y añadirla.
-    if (window.globalConfigData) {
-        const wsConfig = XLSX.utils.aoa_to_sheet(window.globalConfigData);
-        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
-    }
-
-    // 3. Generar Binario
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-
-    // 4. Subir a OneDrive (Reemplazo total)
-    await oneDrive.uploadFile(wbout);
-}
 
 // ==========================================
 // 4. DUPLICADO INTELIGENTE
@@ -5178,37 +4863,6 @@ function cargarSugerenciasAjustes() {
     }, 50);
 };
 
-// ==========================================
-// 👯 FUNCIÓN DE CLONADO (DUPLICAR)
-// ==========================================
-window.clonarMovimiento = function(idMov) {
-    // 1. Reutilizamos la lógica de Editar para rellenar el formulario
-    window.editarMovimiento(idMov);
-
-    // 2. Modificamos lo necesario para que sea una COPIA NUEVA
-    // Esperamos un poco más (150ms) que la edición para asegurar que sobreescribimos
-    setTimeout(() => {
-        console.log("📋 Convirtiendo edición en clonación...");
-
-        // A) CLAVE: Borrar el ID. Esto le dice a guardarManual que cree uno nuevo.
-        document.getElementById('m-id').value = ""; 
-        
-        // B) Poner fecha de HOY (habitual al clonar gastos recurrentes)
-        document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
-        
-        // C) Cambiar el texto del botón para que el usuario sepa que es copia
-        const btn = document.getElementById('btn-modal-action');
-        if(btn) btn.innerText = "GUARDAR COPIA";
-
-        // D) Ocultar botón borrar (no puedes borrar una copia que aún no has guardado)
-        const btnBorrar = document.getElementById('btn-borrar-modal');
-        if(btnBorrar) btnBorrar.style.display = 'none';
-        
-        // E) Feedback
-        if(typeof mostrarEstado === 'function') mostrarEstado("Datos copiados a hoy. Revisa y guarda.", "normal");
-
-    }, 150); 
-};
 
     // --- Funciones Ayudantes (PÉGALAS TAMBIÉN) ---
     
