@@ -1110,7 +1110,44 @@ body {
     outline: none; transform: scale(1.05);
 }
 @keyframes floatUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-  
+ 
+/* --- ESTILOS DE NOTIFICACIÓN PRO (TOAST) --- */
+        .toast-container {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px); /* Empieza escondido abajo */
+            background: rgba(20, 20, 20, 0.95); /* Casi negro */
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Rebote suave */
+            z-index: 10000;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none; /* Para que no moleste si se queda pillado */
+        }
+        .toast-container.visible {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        .toast-success i { color: #4ade80; } /* Verde bonito */
+        .toast-error i { color: #ef4444; }   /* Rojo bonito */
+
+        /* --- MEJORA DE BOTONES (GUMMY EFFECT) --- */
+        button:active {
+            transform: scale(0.96);
+            transition: transform 0.1s;
+        }
+ 
    </style>
 </head>
 <body>
@@ -3022,152 +3059,115 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("--- 🛡️ Iniciando Guardado Blindado (IDs Corregidos) ---");
+        console.log("--- 🛡️ Iniciando Guardado Pro (con Toasts) ---");
 
-    // 1. OBTENER DATOS (Con los IDs REALES de tu HTML)
-    const elId = document.getElementById('m-id');
-    const elFecha = document.getElementById('m-fecha');
-    const elCuenta = document.getElementById('m-cuenta');
-    const elConcepto = document.getElementById('m-concepto');
-    const elImporte = document.getElementById('m-cantidad'); // Tu HTML usa m-cantidad
-    const elDesc = document.getElementById('m-desc');
-    const elBenef = document.getElementById('m-beneficiario');
-    const elDestino = document.getElementById('m-cuenta-destino');
-    const btnGuardar = document.getElementById('btn-modal-action');
+        // 1. OBTENER REFERENCIAS AL DOM
+        const elId = document.getElementById('m-id');
+        const elFecha = document.getElementById('m-fecha');
+        const elCuenta = document.getElementById('m-cuenta');
+        const elConcepto = document.getElementById('m-concepto');
+        const elImporte = document.getElementById('m-cantidad');
+        const elDesc = document.getElementById('m-desc');
+        const elBenef = document.getElementById('m-beneficiario');
+        const btnGuardar = document.getElementById('btn-modal-action');
 
-    // 2. EXTRAER VALORES (Protección contra vacíos)
-    let valFecha = elFecha ? elFecha.value : new Date().toISOString().split('T')[0];
-    let valCuenta = elCuenta ? elCuenta.value.trim() : "";
-    let valConcepto = elConcepto ? elConcepto.value.trim() : "";
-    let valImporte = elImporte ? (parseFloat(elImporte.value) || 0) : 0;
-    let valDesc = elDesc ? elDesc.value.trim() : "";
-    let valBenef = elBenef ? elBenef.value.trim() : "";
-    let valDestino = elDestino ? elDestino.value.trim() : "";
+        // Detectar si es Gasto o Ingreso mirando los botones (más seguro)
+        const btnGasto = document.getElementById('tipo-gasto');
+        const esGasto = btnGasto && btnGasto.classList.contains('active');
 
-    // 3. DETECCIÓN: ¿Es edición o copia?
-    // Si el botón dice "COPIA", ignoramos el ID viejo y creamos uno nuevo
-    const esCopia = btnGuardar && btnGuardar.innerText.toUpperCase().includes("COPIA");
-    let esEdicion = elId && elId.value && elId.value.trim() !== "" && !esCopia;
-    let idOriginal = elId ? elId.value : "";
+        // 2. GUARDAR TEXTO ORIGINAL DEL BOTÓN
+        let textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
-    // 4. VALIDACIÓN BÁSICA
-    if (!valFecha || !valCuenta) {
-        if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Faltan datos: Fecha o Cuenta", "error");
-        else alert("Faltan datos obligatorios");
-        return;
-    }
+        try {
+            // 3. BLOQUEO VISUAL (Feedback inmediato)
+            if(btnGuardar) {
+                btnGuardar.innerText = "⏳ Guardando...";
+                btnGuardar.disabled = true;
+                btnGuardar.style.opacity = "0.7";
+            }
 
-    // Ajuste de signo inteligente según el modo (Gasto/Ingreso)
-    if (window.modoTransaccionActual === 'pago' && valImporte > 0) valImporte = -valImporte;
-    if (window.modoTransaccionActual === 'ingreso' && valImporte < 0) valImporte = Math.abs(valImporte);
-    // En traspasos, la salida es negativa
-    if (window.modoTransaccionActual === 'traspaso' && valImporte > 0) valImporte = -valImporte;
+            // 4. EXTRAER Y LIMPIAR VALORES
+            const idMov = elId ? elId.value : "";
+            const fecha = elFecha ? elFecha.value : "";
+            const cuenta = elCuenta ? elCuenta.value : "";
+            const concepto = elConcepto ? elConcepto.value : "";
+            let importe = elImporte ? (parseFloat(elImporte.value) || 0) : 0;
+            const desc = elDesc ? elDesc.value.trim() : "";
+            const benef = elBenef ? elBenef.value.trim() : "";
 
-    // 5. BLOQUEO VISUAL (Para que no pulses 2 veces)
-    let textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
-    if(btnGuardar) {
-        btnGuardar.innerText = "⏳ Guardando...";
-        btnGuardar.disabled = true;
-    }
-    if(typeof mostrarEstado === 'function') mostrarEstado("Sincronizando...", "loading");
+            // 5. VALIDACIÓN
+            if (!fecha || !cuenta || !concepto || importe === 0) {
+                // Usamos el Toast del Paso 2
+                if(typeof showToast === 'function') showToast("Faltan datos: Fecha, Cuenta o Importe", "error");
+                else alert("Faltan datos obligatorios");
+                throw new Error("Validación fallida");
+            }
 
-    try {
-        // --- GENERADOR DE IDs (Matrícula única) ---
-        const generarID = () => {
-            if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-        };
+            // 6. AJUSTAR SIGNO (Gasto = Negativo, Ingreso = Positivo)
+            // Nota: Si en el futuro implementas "Traspaso", la lógica iría aquí
+            if (esGasto) {
+                importe = -Math.abs(importe);
+            } else {
+                importe = Math.abs(importe);
+            }
 
-        const uuidPrincipal = esEdicion ? idOriginal : generarID();
-
-        // 6. PREPARAR EL MOVIMIENTO
-        const filasNuevas = [];
-
-        // Movimiento A (Principal)
-        let mov1 = {
-            id: uuidPrincipal, // Usamos minúscula para consistencia interna
-            ts: new Date(valFecha).getTime(),
-            fecha: new Date(valFecha),
-            cuenta: valCuenta,
-            concepto: valConcepto || "Varios",
-            importe: valImporte,
-            descripcion: valDesc,
-            detalle: valDesc, // Alias para compatibilidad
-            beneficiario: valBenef,
-            tipo: (valImporte >= 0) ? 'ingreso' : 'gasto'
-        };
-
-        // Lógica de TRASPASO (Crea 2 movimientos: Salida y Entrada)
-        if (window.modoTransaccionActual === 'traspaso' && valDestino) {
-            // Ajustamos Mov1 (Salida)
-            mov1.tipo = 'traspaso';
-            mov1.descripcion = `>> A: ${valDestino} | ${valDesc}`;
-            mov1.detalle = mov1.descripcion;
-            filasNuevas.push(mov1);
-
-            // Creamos Mov2 (Entrada)
-            let mov2 = {
-                id: generarID(),
-                ts: new Date(valFecha).getTime(),
-                fecha: new Date(valFecha),
-                cuenta: valDestino,
-                concepto: "Traspaso Recibido",
-                importe: Math.abs(valImporte), // Positivo
-                descripcion: `<< DE: ${valCuenta} | ${valDesc}`,
-                detalle: `<< DE: ${valCuenta} | ${valDesc}`,
-                beneficiario: valBenef || "Mí mismo",
-                tipo: 'traspaso'
+            // 7. PREPARAR EL OBJETO
+            // Si no hay ID, generamos uno nuevo
+            const nuevoId = idMov || crypto.randomUUID();
+            
+            const nuevoMov = {
+                id: nuevoId,
+                fecha: fecha,
+                cuenta: cuenta,
+                concepto: concepto,
+                importe: importe,
+                descripcion: desc,
+                beneficiario: benef,
+                ts: new Date(fecha).getTime() // Timestamp para ordenación
             };
-            filasNuevas.push(mov2);
-        } else {
-            // Gasto o Ingreso normal
-            filasNuevas.push(mov1);
+
+            // 8. GUARDAR EN NUBE/EXCEL (Llamada asíncrona)
+            if (typeof window.guardarUniversal === 'function') {
+                await window.guardarUniversal(nuevoMov);
+            } else {
+                console.warn("Modo local: guardando solo en memoria");
+                if(!window.datos) window.datos = [];
+                // Si es edición, quitamos el viejo
+                if(idMov) {
+                    const idx = window.datos.findIndex(m => m.id === idMov);
+                    if(idx >= 0) window.datos.splice(idx, 1);
+                }
+                window.datos.unshift(nuevoMov);
+            }
+
+            // 9. FINALIZAR CON ÉXITO
+            if(typeof closeModal === 'function') closeModal();
+            
+            // ¡Aquí sale tu nueva notificación elegante!
+            if(typeof showToast === 'function') {
+                showToast(idMov ? "Movimiento actualizado" : "Guardado con éxito", "success");
+            } else {
+                alert("Guardado correctamente");
+            }
+
+            // Limpiar ID para el próximo
+            if(elId) elId.value = '';
+
+        } catch (error) {
+            console.error(error);
+            if (error.message !== "Validación fallida") {
+                if(typeof showToast === 'function') showToast("Error: " + error.message, "error");
+                else alert("Error: " + error.message);
+            }
+        } finally {
+            // 10. RESTAURAR BOTÓN SIEMPRE
+            if(btnGuardar) {
+                btnGuardar.innerText = textoOriginal;
+                btnGuardar.disabled = false;
+                btnGuardar.style.opacity = "1";
+            }
         }
-
-        // 7. ACTUALIZAR MEMORIA LOCAL (window.datos)
-        if (!window.datos) window.datos = [];
-
-        // Si es edición, borramos el viejo primero
-        if (esEdicion) {
-            const idx = window.datos.findIndex(m => m.id === idOriginal);
-            if (idx >= 0) window.datos.splice(idx, 1);
-        }
-
-        // Añadimos los nuevos al principio
-        filasNuevas.forEach(m => window.datos.unshift(m));
-
-        // 8. GUARDAR EN LA NUBE (LA CLAVE DEL BLINDAJE)
-        // Usamos guardarUniversal() porque sobreescribe el Excel con lo que hay en memoria.
-        // Es la forma más segura de que no haya discrepancias.
-        if (typeof guardarUniversal === 'function') {
-            await guardarUniversal(); // Esto sube el archivo actualizado
-        } else {
-            alert("⚠️ Guardado solo en local (No se encontró función de nube)");
-        }
-
-        // 9. LIMPIEZA FINAL
-        if(typeof cerrarModal === 'function') cerrarModal();
-        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal(); // Actualiza saldos
-        
-        // Mensaje de éxito
-        if(typeof mostrarEstado === 'function') mostrarEstado("✅ Datos blindados en la nube", "success");
-        if(typeof vibrar === 'function') vibrar('ingreso');
-
-    } catch (error) {
-        console.error("Error al guardar:", error);
-        alert("Error: " + error.message);
-        if(typeof mostrarEstado === 'function') mostrarEstado("Error crítico", "error");
-    } finally {
-        // Restaurar botón
-        if(btnGuardar) {
-            btnGuardar.innerText = textoOriginal;
-            btnGuardar.disabled = false;
-        }
-    }
-};
+    };
 
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
 function recalcularSaldosGlobal() {
@@ -5389,9 +5389,34 @@ function cargarSugerenciasAjustes() {
     }, 50);
 };
 
+         // Muestra un mensaje flotante tipo App nativa
+    function showToast(mensaje, tipo = 'success') {
+        // 1. Busca si ya existe el elemento toast, si no, lo crea
+        let toast = document.getElementById('app-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'app-toast';
+            document.body.appendChild(toast);
+        }
 
-    // --- Funciones Ayudantes (PÉGALAS TAMBIÉN) ---
-    
+        // 2. Configura el icono según sea éxito o error
+        const icono = tipo === 'success' ? 'check_circle' : 'error_outline';
+        const claseColor = tipo === 'success' ? 'toast-success' : 'toast-error';
+
+        // 3. Inserta el HTML dentro de la burbuja
+        toast.className = `toast-container ${claseColor}`;
+        toast.innerHTML = `<i class="material-icons">${icono}</i> <span>${mensaje}</span>`;
+
+        // 4. Lo hace visible (con un micro-retraso para que la animación funcione)
+        requestAnimationFrame(() => {
+            toast.classList.add('visible');
+        });
+
+        // 5. Lo oculta automáticamente a los 3 segundos
+        setTimeout(() => {
+            toast.classList.remove('visible');
+        }, 3000);
+    }
     // Ayudante para escribir en inputs sin que de error si no existen
     function setValue(id, val) {
         const el = document.getElementById(id);
