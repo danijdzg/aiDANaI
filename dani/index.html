@@ -1128,8 +1128,8 @@
     </div>
 
     <button class="nav-item" id="nav-patri" onclick="irPestana('patri')">
-        <span class="material-icons">pie_chart</span> Análisis
-    </button>
+    <span class="material-icons">account_balance_wallet</span> Patrimonio
+</button>
     <button class="nav-item" id="nav-ajustes" onclick="irPestana('ajustes'); cargarSugerenciasAjustes()">
     <span class="material-icons">tune</span> Ajustes
 </button>
@@ -1585,160 +1585,9 @@ async function iniciarSistema() {
             alert("No se pudo conectar: " + e.message);
         }
     }
- 
- function procesarDatos(workbook) {
-        console.log("--- 1. INICIANDO PROCESADO (Sincronizado) ---");
-
-        // A. LEER CONFIGURACIÓN
-        const hojaConfig = workbook.Sheets["Configuracion"];
-        if (hojaConfig) {
-            const configRaw = XLSX.utils.sheet_to_json(hojaConfig);
-            window.mapaCuentas = {}; 
-            configRaw.forEach(fila => {
-                if (fila.CUENTA) {
-                    window.mapaCuentas[fila.CUENTA] = {
-                        tipo: fila.TIPO,
-                        esInversion: fila.ES_INVERSION
-                    };
-                }
-            });
-            // Sincronizamos variable global por si acaso
-            mapaCuentas = window.mapaCuentas; 
-        }
-
-        // B. LEER MOVIMIENTOS
-        const hojaMovs = workbook.Sheets["Movimientos"];
-        if (!hojaMovs) {
-            console.error("¡No encuentro la hoja Movimientos!");
-            return;
-        }
-
-        const rawMovs = XLSX.utils.sheet_to_json(hojaMovs); 
-        
-        // C. GUARDAR EN WINDOW.DATOS (LA CAJA FUERTE)
-        window.datos = rawMovs.map((fila) => {
-            // Seguridad ID
-            let idSeguro = fila['Id'] || fila['ID'];
-            if (!idSeguro || String(idSeguro).trim() === '') {
-                idSeguro = crypto.randomUUID();
-            }
-
-            // Limpieza de Importe
-            let importe = fila['Importe'] || fila['IMPORTE'] || 0;
-            if (typeof importe === 'string') {
-                importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-            }
-
-            return {
-                id: idSeguro,
-                fecha: fila['Fecha'] || fila['FECHA'],
-                cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
-                concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
-                importe: importe,
-                descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
-                beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
-                tipo: (importe >= 0) ? 'ingreso' : 'gasto',
-                saldo: 0
-            };
-        });
-
-        // D. ORDENAR
-        window.datos.sort((a, b) => {
-            const da = new Date(a.fecha);
-            const db = new Date(b.fecha);
-            return db - da; 
-        });
-
-        // E. TRUCO DE MAGIA (Sincronización Total)
-        // Esto hace que si en algún sitio usas 'datos' sin 'window.', funcione igual.
-        datos = window.datos; 
-
-        console.log("--- DATOS GUARDADOS EN WINDOW.DATOS: " + window.datos.length + " ---");
-
-        // F. ACTUALIZAR INTERFAZ
-        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-        if(typeof cargarInterfaz === 'function') cargarInterfaz();
-        if(typeof renderDashboard === 'function') renderDashboard();
-    }
-
-// === NUEVA FUNCIÓN MAESTRA CON NOMBRE ÚNICO ===
-    function procesarDatosMaestro(workbook) {
-        console.log("🚀 EJECUTANDO PROCESADO MAESTRO (Seguridad Activada)");
-
-        // 1. LEER CONFIGURACIÓN
-        const hojaConfig = workbook.Sheets["Configuracion"];
-        if (hojaConfig) {
-            const configRaw = XLSX.utils.sheet_to_json(hojaConfig);
-            window.mapaCuentas = {}; 
-            configRaw.forEach(fila => {
-                if (fila.CUENTA) {
-                    window.mapaCuentas[fila.CUENTA] = {
-                        tipo: fila.TIPO,
-                        esInversion: fila.ES_INVERSION
-                    };
-                }
-            });
-            // Sincronizar variable corta por si el dashboard la usa
-            mapaCuentas = window.mapaCuentas;
-        }
-
-        // 2. LEER MOVIMIENTOS
-        const hojaMovs = workbook.Sheets["Movimientos"];
-        if (!hojaMovs) {
-            console.error("❌ ERROR CRÍTICO: No encuentro la hoja Movimientos");
-            return;
-        }
-
-        const rawMovs = XLSX.utils.sheet_to_json(hojaMovs); 
-        
-        // 3. GUARDAR EN LA CAJA FUERTE (window.datos)
-        window.datos = rawMovs.map((fila) => {
-            // Generar ID si falta
-            let idSeguro = fila['Id'] || fila['ID'];
-            if (!idSeguro || String(idSeguro).trim() === '') {
-                idSeguro = crypto.randomUUID();
-            }
-
-            // Limpiar Importe
-            let importe = fila['Importe'] || fila['IMPORTE'] || 0;
-            if (typeof importe === 'string') {
-                importe = parseFloat(importe.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-            }
-
-            return {
-                id: idSeguro,
-                fecha: fila['Fecha'] || fila['FECHA'],
-                cuenta: (fila['Cuenta'] || fila['CUENTA'] || '').trim(),
-                concepto: (fila['Concepto'] || fila['CONCEPTO'] || '').trim(),
-                importe: importe,
-                descripcion: (fila['Descripcion'] || fila['DESCRIPCION'] || '').trim(),
-                beneficiario: (fila['Beneficiario'] || fila['BENEFICIARIO'] || '').trim(),
-                tipo: (importe >= 0) ? 'ingreso' : 'gasto',
-                saldo: 0
-            };
-        });
-
-        // 4. ORDENAR
-        window.datos.sort((a, b) => {
-            const da = new Date(a.fecha);
-            const db = new Date(b.fecha);
-            return db - da; 
-        });
-
-        // 5. SINCRONIZACIÓN TOTAL (Esto arregla el dashboard)
-        datos = window.datos; 
-
-        console.log("✅ ÉXITO: " + window.datos.length + " movimientos guardados en window.datos");
-
-        // 6. ACTUALIZAR PANTALLA
-        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-        if(typeof cargarInterfaz === 'function') cargarInterfaz();
-        if(typeof renderDashboard === 'function') renderDashboard();
-    }
 
     // ARRANQUE AL CARGAR LA PÁGINA
     window.onload = iniciarSistema;
-
 
     // ==========================================
     // 5. CALCULADORA Y VIBRACIÓN (Tu código original)
@@ -2132,173 +1981,76 @@ function leerExcel(blob) {
 
     reader.readAsArrayBuffer(blob);
 }
-// 4. EL CEREBRO: PROCESA EL EXCEL (VERSIÓN CORREGIDA FECHAS)
+// ==========================================
+// 🧠 PROCESADOR MAESTRO DE DATOS (VERSIÓN UNIFICADA)
+// ==========================================
 function procesarLibroLeido(wb) {
-    console.log("📖 Procesando archivo (Modo Inteligente Todoterreno)...");
-
-    // --- 1. CARGA DE CONFIGURACIÓN ---
-    window.mapaCuentas = {}; 
+    console.log("📖 Procesando archivo con Motor Unificado...");
+    
+    // 1. Limpieza y preparación de Configuración
+    window.mapaCuentas = {};
     window.listaConceptos = [];
     window.listaBeneficiarios = [];
-    
-    // Buscamos la hoja de configuración ignorando mayúsculas/minúsculas
-    const wsConfigName = wb.SheetNames.find(n => 
-        n.trim().toUpperCase().includes("CONFIG")
-    );
-    
+
+    const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
-        const matConfig = XLSX.utils.sheet_to_json(wsConfig, { header: 1 });
-
-        // Índices de columnas
-        let filaEncabezados = -1;
-        let colCuenta = -1, colTipo = -1, colInv = -1;
-        let colConcepto = -1, colBeneficiario = -1;
-
-        // Escaneo inteligente de encabezados (Mantenemos tu lógica que funciona bien aquí)
-        for (let i = 0; i < Math.min(matConfig.length, 20); i++) {
-            const row = matConfig[i];
-            if (!row) continue;
-            const rowUpper = row.map(c => String(c || '').trim().toUpperCase());
-            
-            if (rowUpper.includes('CUENTA')) {
-                filaEncabezados = i;
-                colCuenta = rowUpper.indexOf('CUENTA');
-                colTipo = rowUpper.indexOf('TIPO');
-                colInv = rowUpper.findIndex(v => v === 'ESINVERSION' || v === 'ES_INVERSION');
-                colConcepto = rowUpper.indexOf('CONCEPTO');
-                colBeneficiario = rowUpper.indexOf('BENEFICIARIO');
-                break;
+        const rawConfig = XLSX.utils.sheet_to_json(wsConfig);
+        rawConfig.forEach(fila => {
+            const cta = String(fila.CUENTA || '').trim();
+            if (cta) {
+                window.mapaCuentas[cta] = {
+                    tipo: String(fila.TIPO || 'OTROS').toUpperCase(),
+                    esInversion: String(fila.ES_INVERSION || '').toUpperCase() === 'SI'
+                };
             }
-        }
-
-        if (filaEncabezados !== -1) {
-            for (let i = filaEncabezados + 1; i < matConfig.length; i++) {
-                const row = matConfig[i];
-                if (!row) continue;
-                
-                if (row[colCuenta]) {
-                    const cuentaKey = String(row[colCuenta]).trim();
-                    const tipoVal = (colTipo !== -1 && row[colTipo]) ? String(row[colTipo]).trim() : 'OTROS';
-                    const esInv = (colInv !== -1 && row[colInv]) ? String(row[colInv]).trim().toUpperCase() === 'SI' : false;
-                    window.mapaCuentas[cuentaKey] = { tipo: tipoVal, esInversion: esInv };
-                }
-                if (colConcepto !== -1 && row[colConcepto]) {
-                    const val = String(row[colConcepto]).trim();
-                    if(val && !window.listaConceptos.includes(val)) window.listaConceptos.push(val);
-                }
-                if (colBeneficiario !== -1 && row[colBeneficiario]) {
-                    const val = String(row[colBeneficiario]).trim();
-                    if(val && !window.listaBeneficiarios.includes(val)) window.listaBeneficiarios.push(val);
-                }
-            }
-        }
-    }
-    mapaCuentas = window.mapaCuentas; // Sincronizar global
-
-    // --- MEJORA: INYECCIÓN DE INTELIGENCIA (AUTOCOMPLETADO) ---
-    const dlConceptos = document.getElementById('lista-conceptos-memoria');
-    if (dlConceptos && window.listaConceptos && window.listaConceptos.length > 0) {
-        dlConceptos.innerHTML = ''; 
-        window.listaConceptos.sort().forEach(item => {
-            const opt = document.createElement('option');
-            opt.value = item; 
-            dlConceptos.appendChild(opt); 
+            if (fila.CONCEPTO) window.listaConceptos.push(String(fila.CONCEPTO).trim());
+            if (fila.BENEFICIARIO) window.listaBeneficiarios.push(String(fila.BENEFICIARIO).trim());
         });
     }
 
-    const dlBenef = document.getElementById('lista-benef-memoria');
-    if (dlBenef && window.listaBeneficiarios && window.listaBeneficiarios.length > 0) {
-        dlBenef.innerHTML = '';
-        window.listaBeneficiarios.sort().forEach(item => {
-            const opt = document.createElement('option');
-            opt.value = item;
-            dlBenef.appendChild(opt);
-        });
-    }
+    // 2. Procesamiento de Movimientos
+    const wsName = wb.SheetNames.find(n => n.toUpperCase() === 'MOVIMIENTOS') || wb.SheetNames[0];
+    const rawMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName]);
 
-    // --- 2. CARGA DE MOVIMIENTOS (AQUÍ ESTABA EL PROBLEMA) ---
-    let wsName = wb.SheetNames.find(n => n.trim().toUpperCase() === 'MOVIMIENTOS') || wb.SheetNames[0];
-    const hojaMovs = wb.Sheets[wsName];
-    
-    // Leemos los datos brutos. Usamos defval para asegurar estructura.
-    const rawMovs = XLSX.utils.sheet_to_json(hojaMovs, { defval: "" });
+    window.datos = rawMovs.map(fila => {
+        let id = fila.Id || fila.ID || crypto.randomUUID();
+        let f = fila.Fecha || fila.FECHA;
+        let fechaObj = new Date();
 
-    window.datos = rawMovs.map((fila) => {
-        // --- FUNCIÓN DE MAPEO INTELIGENTE ---
-        // Esto busca la columna ignorando mayúsculas, minúsculas o espacios extra
-        const keys = Object.keys(fila);
-        const getVal = (posiblesNombres) => {
-            // Busca una clave que coincida (quitando espacios y pasando a mayúsculas)
-            const foundKey = keys.find(k => posiblesNombres.includes(k.trim().toUpperCase()));
-            return foundKey ? fila[foundKey] : "";
-        };
-
-        // 1. ID
-        let idSeguro = getVal(['ID', 'ID.']);
-        if (!idSeguro || String(idSeguro).trim() === '') idSeguro = crypto.randomUUID();
-
-        // 2. FECHA (Manejo robusto)
-        let fechaRaw = getVal(['FECHA', 'DATE', 'TS']);
-        let fechaLimpia;
-
-        if (typeof fechaRaw === 'number') {
-            // Caso Excel Serial (ej: 45321) -> Muy común en nube
-            fechaLimpia = new Date(Math.round((fechaRaw - 25569) * 86400 * 1000));
-        } else if (typeof fechaRaw === 'string') {
-            // Caso Texto
-            if (fechaRaw.includes('/')) {
-                const partes = fechaRaw.split('/');
-                if (partes.length === 3) fechaLimpia = new Date(partes[2], partes[1] - 1, partes[0]);
-                else fechaLimpia = new Date(fechaRaw);
-            } else {
-                fechaLimpia = new Date(fechaRaw);
-            }
-        } else if (fechaRaw instanceof Date) {
-            fechaLimpia = fechaRaw;
-        } else {
-            fechaLimpia = new Date();
-        }
-        
-        if (isNaN(fechaLimpia.getTime())) fechaLimpia = new Date();
-
-        // 3. IMPORTE
-        let rawImp = getVal(['IMPORTE', 'AMOUNT', 'CANTIDAD']);
-        let importe = 0;
-        if (typeof rawImp === 'number') importe = rawImp;
-        else if (typeof rawImp === 'string') {
-            importe = parseFloat(rawImp.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+        if (typeof f === 'number') {
+            fechaObj = new Date(Math.round((f - 25569) * 86400 * 1000));
+        } else if (f) {
+            fechaObj = new Date(f);
         }
 
-        // 4. RESTO DE CAMPOS (Usando el buscador inteligente)
-        const cuenta = String(getVal(['CUENTA', 'BANCO'])).trim();
-        const concepto = String(getVal(['CONCEPTO'])).trim();
-        // Busca DESCRIPCION (sin tilde), DESCRIPCIÓN (con tilde) o DETALLE
-        const desc = String(getVal(['DESCRIPCION', 'DESCRIPCIÓN', 'DETALLE'])).trim();
-        const benef = String(getVal(['BENEFICIARIO'])).trim();
+        let imp = fila.Importe || fila.IMPORTE || 0;
+        if (typeof imp === 'string') imp = parseFloat(imp.replace(',', '.')) || 0;
 
         return {
-            id: idSeguro,
-            fecha: fechaLimpia,
-            ts: fechaLimpia.getTime(),
-            cuenta: cuenta,
-            concepto: concepto,
-            importe: importe,
-            descripcion: desc,
-            detalle: desc,
-            beneficiario: benef,
-            tipo: (importe >= 0) ? 'ingreso' : 'gasto',
-            saldo: 0
+            id: String(id),
+            ts: fechaObj.getTime(),
+            fecha: fechaObj,
+            cuenta: String(fila.Cuenta || fila.CUENTA || '').trim(),
+            concepto: String(fila.Concepto || fila.CONCEPTO || '').trim(),
+            importe: imp,
+            descripcion: String(fila.Descripcion || fila.DESCRIPCION || fila.Detalle || '').trim(),
+            beneficiario: String(fila.Beneficiario || fila.BENEFICIARIO || '').trim(),
+            tipo: (imp >= 0) ? 'ingreso' : 'gasto'
         };
-    });
+    }).filter(d => d.cuenta !== "");
 
-    // Filtramos filas vacías fantasma (sin cuenta ni importe)
-    window.datos = window.datos.filter(d => d.cuenta !== "" || d.importe !== 0);
-
-    // Ordenar por fecha descendente
+    // 3. Ordenar y guardar en caché
     window.datos.sort((a, b) => b.ts - a.ts);
-    datos = window.datos; // Sincronizar global corta
+    localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos));
+    localStorage.setItem('aidanai_config_cache', JSON.stringify(window.mapaCuentas));
 
+    // 4. Actualizar toda la interfaz
+    recalcularSaldosGlobal();
+    actualizarDashboard();
+    renderizar();
+    if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+}
     console.log(`✅ ${window.datos.length} movimientos procesados correctamente.`);
 
     // --- IMPORTANTE: FORZAR REFRESCO VISUAL ---
@@ -2308,7 +2060,6 @@ function procesarLibroLeido(wb) {
     // Renderizamos la tabla explícitamente por si acaso
     if(typeof renderizar === 'function') renderizar(); 
     if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
-}
  
 // ==========================================
 // 💾 FINALIZAR GUARDADO (Conexión con el nuevo sistema)
@@ -4950,60 +4701,28 @@ window.procesarDatos = function(filas) {
 // ==========================================
 // 2. SISTEMA DE BORRADO SEGURO
 // ==========================================
-window.borrarMovimiento = async function(idDirecto) {
-    console.log("🗑️ Iniciando protocolo de borrado...");
-
-    // 1. OBTENER ID (CORRECCIÓN CRÍTICA AQUÍ)
-    // Primero miramos si nos pasan el ID directamente, si no, lo buscamos en el formulario oculto 'm-id'
-    let idParaBorrar = idDirecto;
-    if (!idParaBorrar) {
-        const elementoId = document.getElementById('m-id');
-        if (elementoId) idParaBorrar = elementoId.value;
-    }
-
-    if (!idParaBorrar) {
-        alert("Error: No se ha identificado qué movimiento borrar.");
-        return;
-    }
-
-    // 2. CONFIRMACIÓN DE SEGURIDAD
-    if (!confirm("⚠️ ¿Estás seguro de que quieres ELIMINAR este movimiento permanentemente?")) {
-        return; // Si cancela, no hacemos nada
-    }
+window.borrarMovimiento = async function(idParaBorrar) {
+    if (!idParaBorrar) idParaBorrar = document.getElementById('m-id').value;
+    if (!idParaBorrar || !confirm("¿Eliminar este movimiento permanentemente?")) return;
 
     try {
-        // 3. BORRAR DE MEMORIA LOCAL (window.datos)
-        // Usamos String() para asegurar que comparamos texto con texto
-        const indice = window.datos.findIndex(m => String(m.id) === String(idParaBorrar));
+        mostrarEstado("🗑️ Borrando...", "loading");
         
-        if (indice > -1) {
-            window.datos.splice(indice, 1); // Lo quitamos del array
-            console.log("✅ Eliminado de memoria local.");
+        // 1. Quitar de la memoria
+        window.datos = window.datos.filter(m => String(m.id) !== String(idParaBorrar));
+        
+        // 2. Guardar cambio
+        if (modoNube) {
+            await guardarUniversal();
         } else {
-            console.warn("No encontrado en memoria, intentando sincronizar...");
+            localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos));
         }
 
-        // 4. ACTUALIZAR PANTALLA (Inmediato)
-        if(typeof cerrarModal === 'function') cerrarModal();
-        if(typeof renderizar === 'function') renderizar();
-        if(typeof actualizarDashboard === 'function') actualizarDashboard();
-        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-
-        // 5. SINCRONIZAR CON LA NUBE (CRÍTICO)
-        if (typeof guardarUniversal === 'function') {
-            if(typeof mostrarEstado === 'function') mostrarEstado("🗑️ Borrando en OneDrive...", "loading");
-            
-            await guardarUniversal(); // Esto sube el Excel actualizado SIN la fila borrada
-            
-            if(typeof mostrarEstado === 'function') mostrarEstado("✅ Eliminado correctamente de la nube", "success");
-            if(typeof vibrar === 'function') vibrar('error'); // Vibración distinta para confirmar borrado
-        } else {
-            alert("⚠️ Se borró de la pantalla, pero no estoy conectado a la nube para guardar el cambio.");
-        }
-
-    } catch (error) {
-        console.error("Error al borrar:", error);
-        alert("Hubo un error al intentar guardar el borrado en la nube: " + error.message);
+        cerrarModal();
+        recalcularSaldosGlobal();
+        mostrarEstado("✅ Eliminado", "success");
+    } catch (e) {
+        alert("Error al borrar: " + e.message);
     }
 };
 // ==========================================
@@ -5548,8 +5267,6 @@ window.clonarMovimiento = function(idMov) {
         if (!el || !val) return;
         
         el.value = val;
-        // Truco: Si el valor no se ha quedado puesto (porque no existía en la lista),
-        // creamos una opción temporal para que se vea.
         if (el.value != val) {
             const opt = document.createElement('option');
             opt.value = val;
