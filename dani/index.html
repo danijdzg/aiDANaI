@@ -1459,6 +1459,27 @@ body {
         </div>
     </div>
 </div>
+	<div style="padding: 0 20px;">
+    <h3 style="color:var(--c-primary); margin: 20px 0 10px 0; text-transform:uppercase; letter-spacing:1px;">Seguridad de Acceso</h3>
+    <div class="master-card blue-card" style="margin-top:0;">
+        <div class="card-header"><span class="card-title">CAMBIAR PIN DE ACCESO</span></div>
+        <div style="padding: 15px;">
+            <p style="font-size:11px; color:#ccc; margin-bottom:15px;">
+                Establece un código de 4 dígitos para proteger tu aplicación.
+            </p>
+            
+            <label class="input-label">PIN ACTUAL (Por defecto: 1234)</label>
+            <input type="tel" id="sec-old-pin" class="filter-input form-field" maxlength="4" placeholder="****" style="text-align:center; letter-spacing:5px; font-size:16px;">
+            
+            <label class="input-label" style="margin-top:10px;">NUEVO PIN</label>
+            <input type="tel" id="sec-new-pin" class="filter-input form-field" maxlength="4" placeholder="****" style="text-align:center; letter-spacing:5px; font-size:16px;">
+            
+            <button class="full-btn btn-blue" onclick="cambiarPinSeguridad()" style="margin-top:15px; box-shadow: 0 0 15px rgba(0, 184, 255, 0.3);">
+                <span class="material-icons" style="vertical-align:middle; margin-right:5px">vpn_key</span> ACTUALIZAR PIN
+            </button>
+        </div>
+    </div>
+</div>
     <div style="padding: 20px; padding-bottom: 100px;">
         
         <h3 style="color:var(--c-primary); margin-bottom:20px; text-transform:uppercase; letter-spacing:1px;">Gestión de Datos Maestros</h3>
@@ -1902,7 +1923,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* === LÓGICA DE PIN === */
-const storedPin = "1973"; // ¡PIN DE PRUEBA! En producción usa localStorage o hash
 
 const setupPinLogic = () => {
     // 1. Referencias seguras a los elementos
@@ -1936,8 +1956,13 @@ const setupPinLogic = () => {
                 } else {
                     // Verificar PIN
                     const enteredPin = Array.from(inputs).map(i => i.value).join('');
-                    if (enteredPin === storedPin) {
-                        
+					// --- NUEVA SEGURIDAD ---
+                    // Buscamos el PIN en la memoria. Si no existe, usamos "0000" por defecto.
+                    const pinReal = localStorage.getItem('aidanai_security_pin') || "1234";
+                    
+                    // Comparamos con el PIN de la memoria, no con una variable fija
+                    if (enteredPin === pinReal) {
+                                           
                         // A) Ocultar Login
                         screen.classList.add('hidden'); 
                         
@@ -3459,23 +3484,32 @@ function getFechasDashboard() {
     };
 }
     
+   // ==========================================
+    // 🎨 PUENTE DE ANIMACIÓN MEJORADO (V2)
     // ==========================================
-    // 🎨 PUENTE DE ANIMACIÓN (Unifica todo a animarCifra)
-    // ==========================================
-    // Esta función reemplaza a la antigua para que todo use el motor moderno
     function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
-        // Redirigimos a la función moderna 'animarCifra'
-        // Detectamos si es porcentaje o moneda basándonos en el sufijo
+        // Corrección de signo: Si el prefijo es un menos, invertimos el valor
+        // para que la animación moderna lo entienda bien.
+        let valorReal = valorFinal;
+        if (prefijo.includes('-')) {
+            valorReal = -Math.abs(valorFinal);
+        }
+
+        // Detectar tipo
         let tipo = 'moneda';
         if (sufijo.includes('%')) tipo = 'porcentaje';
         else if (sufijo.includes('Meses')) tipo = 'meses';
-        else if (sufijo === '') type = 'numero';
+        else if (sufijo === '') tipo = 'numero';
         
-        // Llamamos al motor potente
+        // Ejecutar animación si el motor existe
         if (typeof window.animarCifra === 'function') {
-            window.animarCifra(id, valorFinal, tipo);
+            // Pequeño truco: forzamos que empiece de 0 si no tiene historial
+            const el = document.getElementById(id);
+            if(el && !el.getAttribute('data-prev')) el.innerText = prefijo + "0" + sufijo;
+            
+            window.animarCifra(id, valorReal, tipo);
         } else {
-            // Fallback por si acaso
+            // Fallback de seguridad
             const el = document.getElementById(id);
             if(el) el.innerText = prefijo + new Intl.NumberFormat('es-ES', { minimumFractionDigits: decimales }).format(valorFinal) + sufijo;
         }
@@ -5680,6 +5714,48 @@ function cargarSugerenciasAjustes() {
             mostrarToast("Error al generar el backup local", "error");
         }
     }
+	
+	// ==========================================
+// 🔐 GESTOR DE SEGURIDAD (PIN)
+// ==========================================
+window.cambiarPinSeguridad = function() {
+    const oldPinInput = document.getElementById('sec-old-pin');
+    const newPinInput = document.getElementById('sec-new-pin');
+    
+    const oldVal = oldPinInput.value;
+    const newVal = newPinInput.value;
+    
+    // 1. Recuperar el PIN actual de la memoria (o el de defecto)
+    const pinActual = localStorage.getItem('aidanai_security_pin') || "1973";
+
+    // 2. Validaciones
+    if (oldVal !== pinActual) {
+        mostrarEstado("❌ El PIN actual no es correcto", "error");
+        if(navigator.vibrate) navigator.vibrate([50, 50, 50]);
+        oldPinInput.focus();
+        return;
+    }
+
+    if (newVal.length !== 4 || isNaN(newVal)) {
+        mostrarEstado("⚠️ El nuevo PIN debe tener 4 números", "error");
+        newPinInput.focus();
+        return;
+    }
+
+    // 3. Guardar en memoria segura
+    localStorage.setItem('aidanai_security_pin', newVal);
+    
+    // 4. Feedback y limpieza
+    mostrarEstado("✅ ¡PIN Actualizado con éxito!", "success");
+    if(navigator.vibrate) navigator.vibrate([100, 50, 100]); // Vibración de éxito
+    
+    oldPinInput.value = "";
+    newPinInput.value = "";
+    
+    // Seguridad extra: limpiar foco para cerrar teclado móvil
+    oldPinInput.blur();
+    newPinInput.blur();
+};
 
 </script>
 </body>
