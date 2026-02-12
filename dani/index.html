@@ -1927,55 +1927,58 @@ document.addEventListener('DOMContentLoaded', () => {
 const setupPinLogic = () => {
     // 1. Referencias seguras a los elementos
     const inputs = document.querySelectorAll('.pin-input');
-    const screen = document.getElementById('pin-login-screen'); // Buscamos por ID correcto
+    const screen = document.getElementById('pin-login-screen'); 
     const errorMsg = document.getElementById('pin-error');
     const appViewport = document.getElementById('app-viewport');
 
-    // Validación de seguridad: si no existe la pantalla, paramos para no dar error
-    if (!screen || !appViewport) {
-        console.error("Error crítico: No encuentro la pantalla de login o la app");
-        return;
-    }
+    // Validación: si no existe la pantalla, no hacemos nada
+    if (!screen || !appViewport) return;
 
-    // Enfocar el primero al cargar
+    // Enfocar el primero
     if(inputs[0]) inputs[0].focus();
 
     inputs.forEach((input, index) => {
+        // Borrar al escribir nuevo número
         input.addEventListener('keydown', (e) => {
-            if (e.key >= 0 && e.key <= 9) {
-                input.value = ''; 
-            } else if (e.key === 'Backspace') {
+            if (e.key >= 0 && e.key <= 9) { input.value = ''; } 
+            else if (e.key === 'Backspace') {
                 if (!input.value && index > 0) inputs[index - 1].focus();
             }
         });
 
+        // Al soltar la tecla
         input.addEventListener('input', () => {
             if (input.value.length === 1) {
                 if (index < inputs.length - 1) {
+                    // Saltar al siguiente
                     inputs[index + 1].focus();
                 } else {
-                    // Verificar PIN
+                    // === MOMENTO DE LA VERDAD ===
                     const enteredPin = Array.from(inputs).map(i => i.value).join('');
-					// --- NUEVA SEGURIDAD ---
-                    // Buscamos el PIN en la memoria. Si no existe, usamos "0000" por defecto.
-                    const pinReal = localStorage.getItem('aidanai_security_pin') || "1234";
                     
-                    // Comparamos con el PIN de la memoria, no con una variable fija
+                    // 👀 OJO AQUÍ: Leemos DIRECTAMENTE de la memoria. 
+                    // Si no hay nada guardado, usamos "1973" por defecto.
+                    const pinReal = localStorage.getItem('aidanai_security_pin') || "1973";
+
+                    // Comparamos lo escrito con lo que hay en memoria
                     if (enteredPin === pinReal) {
-                                           
-                        // A) Ocultar Login
+                        
+                        // 1. Ocultar Login
                         screen.classList.add('hidden'); 
                         
-                        // B) Mostrar App
+                        // 2. Mostrar App
                         appViewport.classList.add('visible');
 
-                        // C) Arrancar sistema
-                        iniciarSistema();
+                        // 3. Arrancar sistema con el retardo visual
+                        setTimeout(() => {
+                            if(typeof iniciarSistema === 'function') iniciarSistema();
+                        }, 500);
                         
-                        // Feedback
+                        // Vibración de éxito
                         if(navigator.vibrate) navigator.vibrate([50, 50]);
 
                     } else {
+                        // Error
                         errorMsg.textContent = "PIN Incorrecto";
                         inputs.forEach(i => { i.value = ''; i.classList.add('error'); });
                         inputs[0].focus();
@@ -1987,7 +1990,6 @@ const setupPinLogic = () => {
         });
     });
 };
-
 // Inicializar la lógica del PIN
 document.addEventListener('DOMContentLoaded', setupPinLogic);
 
