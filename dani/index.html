@@ -3126,7 +3126,7 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("--- 🛡️ Guardando Movimiento (Versión Diagnóstico) ---");
+    console.log("--- 🛡️ Guardando Movimiento (Versión Final) ---");
 
     const btnGuardar = document.getElementById('btn-modal-action');
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
@@ -3138,12 +3138,11 @@ window.guardarManual = async function() {
             btnGuardar.disabled = true;
         }
 
-        // 2. RECOGER DATOS CON CUIDADO
-        // Usamos ?.value para que no falle si el campo no existe, devolviendo undefined
+        // 2. RECOGER DATOS
         const elId = document.getElementById('m-id');
         const fecha = document.getElementById('m-fecha')?.value;
         const cuenta = document.getElementById('m-cuenta')?.value;
-        const concepto = document.getElementById('m-concepto')?.value;
+        let concepto = document.getElementById('m-concepto')?.value; // Puede venir vacío si está oculto
         
         // TRUCO: Intentamos leer el importe. Si usan coma, la cambiamos por punto.
         let elImporte = document.getElementById('m-cantidad');
@@ -3153,58 +3152,60 @@ window.guardarManual = async function() {
         const benef = document.getElementById('m-beneficiario')?.value || "";
         const elCuentaDestino = document.getElementById('m-cuenta-destino'); 
 
-        // 3. VALIDACIÓN DETALLADA (Aquí te dirá exactamente qué falla)
-        if (!fecha) throw new Error("❌ Error: El campo FECHA está vacío.");
-        if (!cuenta) throw new Error("❌ Error: El campo CUENTA está vacío.");
-        if (!concepto) throw new Error("❌ Error: El campo CONCEPTO está vacío.");
+        // --- CORRECCIÓN AUTOMÁTICA DE TRASPASO ---
+        // Si estamos en modo traspaso y el concepto está vacío (porque está oculto), lo forzamos.
+        if (window.modoTransaccionActual === 'traspaso' && (!concepto || concepto === "")) {
+             concepto = "Traspaso";
+        }
+
+        // 3. VALIDACIÓN
+        if (!fecha) throw new Error("❌ Error: Falta la FECHA.");
+        if (!cuenta) throw new Error("❌ Error: Falta la CUENTA.");
+        if (!concepto) throw new Error("❌ Error: Falta el CONCEPTO.");
         
-        // Validación del importe más flexible
-        if (!importeRaw) throw new Error("❌ Error: El campo CANTIDAD está vacío o tiene un formato raro.");
+        if (!importeRaw) throw new Error("❌ Error: Falta la CANTIDAD.");
         
-        // Convertimos a número cambiando coma por punto por si acaso
+        // Convertimos a número
         let importeNum = parseFloat(importeRaw.toString().replace(',', '.'));
-        
         if (isNaN(importeNum) || importeNum === 0) {
-             throw new Error("❌ Error: El importe es 0 o no es un número válido.");
+             throw new Error("❌ Error: El importe no es válido (0).");
         }
 
         let filasAGuardar = [];
-        // Normalizamos el concepto a minúsculas para comparar mejor
         const conceptoNorm = concepto.toLowerCase().trim();
         const esTraspaso = (conceptoNorm === 'traspaso');
 
-        // 4. LÓGICA: ¿TRASPASO O MOVIMIENTO NORMAL?
+        // 4. LÓGICA DE CREACIÓN DE FILAS
         if (esTraspaso) {
-            console.log("Modo Traspaso detectado");
-            // --- CASO A: TRASPASO ---
+            // --- CASO A: TRASPASO (2 Movimientos) ---
             if (!elCuentaDestino || !elCuentaDestino.value) {
-                // INTENTO DE RECUPERAR CUENTA DESTINO SI TIENE OTRO ID
-                // A veces el ID cambia, intenta buscar por nombre si falló
-                throw new Error("❌ Para traspaso falta seleccionar la CUENTA DESTINO.");
+                throw new Error("❌ Para traspaso falta la CUENTA DESTINO.");
             }
             if (cuenta === elCuentaDestino.value) {
-                throw new Error("❌ La cuenta origen y destino son la misma.");
+                throw new Error("❌ Origen y Destino son la misma cuenta.");
             }
 
-            // Fila 1: SALIDA
+            const idBase = crypto.randomUUID(); // ID común para rastrear
+
+            // Fila 1: SALIDA (Negativo)
             filasAGuardar.push({
-                ID: crypto.randomUUID(),
+                ID: idBase + "_A",
                 FECHA: fecha,
                 CUENTA: cuenta,
-                CONCEPTO: concepto, // Mantenemos mayúsculas/minúsculas originales
+                CONCEPTO: "Traspaso",
                 IMPORTE: -Math.abs(importeNum),
-                DESCRIPCION: desc + ' (Salida a ' + elCuentaDestino.value + ')',
+                DESCRIPCION: desc + ' >> A: ' + elCuentaDestino.value, // Marca especial para reconocerlo luego
                 BENEFICIARIO: benef || 'Yo'
             });
 
-            // Fila 2: ENTRADA
+            // Fila 2: ENTRADA (Positivo)
             filasAGuardar.push({
-                ID: crypto.randomUUID(),
+                ID: idBase + "_B",
                 FECHA: fecha,
                 CUENTA: elCuentaDestino.value,
-                CONCEPTO: concepto,
+                CONCEPTO: "Traspaso",
                 IMPORTE: Math.abs(importeNum),
-                DESCRIPCION: desc + ' (Entrada desde ' + cuenta + ')',
+                DESCRIPCION: desc + ' << DE: ' + cuenta,
                 BENEFICIARIO: benef || 'Yo'
             });
 
@@ -3213,9 +3214,13 @@ window.guardarManual = async function() {
             let importeFinal = importeNum;
             const esIngreso = ['nomina', 'ingreso', 'venta', 'intereses', 'devolucion', 'dividendo'].includes(conceptoNorm);
             
-            // Si NO es ingreso y es positivo, lo volvemos negativo (Gasto)
-            if (!esIngreso && importeNum > 0) {
+            // Si NO es ingreso explícito y es positivo, lo volvemos negativo (Gasto)
+            if (!esIngreso && importeNum > 0 && window.modoTransaccionActual !== 'ingreso') {
                 importeFinal = -importeNum;
+            }
+            // Si el usuario seleccionó "Ingreso" en el botón flotante, forzamos positivo
+            if (window.modoTransaccionActual === 'ingreso') {
+                importeFinal = Math.abs(importeNum);
             }
 
             filasAGuardar.push({
@@ -3229,30 +3234,29 @@ window.guardarManual = async function() {
             });
         }
 
-        // 5. GUARDAR
+        // 5. ENVIAR A GUARDADO UNIVERSAL
         if (typeof window.guardarUniversal === 'function') {
             await window.guardarUniversal(filasAGuardar); 
         } else {
-            throw new Error("Falta la función guardarUniversal actualizada.");
+            throw new Error("Falla la función de guardado principal.");
         }
 
-        // 6. ÉXITO
+        // 6. LIMPIEZA
         if(typeof cerrarModal === 'function') cerrarModal();
+        
+        // Limpiar formulario
+        if(elImporte) elImporte.value = '';
+        if(elId) elId.value = '';
+        if(document.getElementById('m-desc')) document.getElementById('m-desc').value = '';
+
+        // Feedback
         if(typeof showToast === 'function') {
             showToast(esTraspaso ? "✅ Traspaso realizado" : "✅ Guardado", "success");
-        } else {
-            alert("Guardado correctamente");
         }
-
-        // Limpiar
-        if(elImporte) elImporte.value = '';
-        const elDesc = document.getElementById('m-desc');
-        if(elDesc) elDesc.value = '';
-        if(elId) elId.value = '';
 
     } catch (error) {
         console.error(error);
-        alert(error.message); // Usamos alert para que lo veas seguro en el móvil
+        alert(error.message); 
     } finally {
         if(btnGuardar) {
             btnGuardar.innerText = textoOriginal;
