@@ -3126,7 +3126,7 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-    console.log("--- 🛡️ Guardando Movimiento (Modo Seguro + Traspasos) ---");
+    console.log("--- 🛡️ Guardando Movimiento (Versión Diagnóstico) ---");
 
     const btnGuardar = document.getElementById('btn-modal-action');
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
@@ -3134,76 +3134,86 @@ window.guardarManual = async function() {
     try {
         // 1. BLOQUEO VISUAL
         if(btnGuardar) {
-            btnGuardar.innerHTML = '<i class="material-icons spin">sync</i> Guardando...';
+            btnGuardar.innerHTML = '<i class="material-icons spin">sync</i> ...';
             btnGuardar.disabled = true;
-            btnGuardar.style.opacity = "0.7";
         }
 
-        // 2. RECOGER DATOS DEL FORMULARIO (Tus IDs)
-        const elId = document.getElementById('m-id'); // ID si es edición
-        const fecha = document.getElementById('m-fecha').value;
-        const cuenta = document.getElementById('m-cuenta').value;
-        const concepto = document.getElementById('m-concepto').value; // Ej: "Traspaso"
-        const importeRaw = document.getElementById('m-cantidad').value;
-        const desc = document.getElementById('m-desc').value || "";
-        const benef = document.getElementById('m-beneficiario').value || "";
+        // 2. RECOGER DATOS CON CUIDADO
+        // Usamos ?.value para que no falle si el campo no existe, devolviendo undefined
+        const elId = document.getElementById('m-id');
+        const fecha = document.getElementById('m-fecha')?.value;
+        const cuenta = document.getElementById('m-cuenta')?.value;
+        const concepto = document.getElementById('m-concepto')?.value;
         
-        // ID de la cuenta destino (ASEGÚRATE QUE TU HTML TENGA ESTE ID)
+        // TRUCO: Intentamos leer el importe. Si usan coma, la cambiamos por punto.
+        let elImporte = document.getElementById('m-cantidad');
+        let importeRaw = elImporte ? elImporte.value : "";
+        
+        const desc = document.getElementById('m-desc')?.value || "";
+        const benef = document.getElementById('m-beneficiario')?.value || "";
         const elCuentaDestino = document.getElementById('m-cuenta-destino'); 
 
-        // 3. VALIDACIÓN BÁSICA
-        if (!fecha || !cuenta || !concepto || !importeRaw) {
-            throw new Error("Faltan datos obligatorios (Fecha, Cuenta, Concepto o Importe)");
-        }
+        // 3. VALIDACIÓN DETALLADA (Aquí te dirá exactamente qué falla)
+        if (!fecha) throw new Error("❌ Error: El campo FECHA está vacío.");
+        if (!cuenta) throw new Error("❌ Error: El campo CUENTA está vacío.");
+        if (!concepto) throw new Error("❌ Error: El campo CONCEPTO está vacío.");
         
-        const importeNum = parseFloat(importeRaw);
-        if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
+        // Validación del importe más flexible
+        if (!importeRaw) throw new Error("❌ Error: El campo CANTIDAD está vacío o tiene un formato raro.");
+        
+        // Convertimos a número cambiando coma por punto por si acaso
+        let importeNum = parseFloat(importeRaw.toString().replace(',', '.'));
+        
+        if (isNaN(importeNum) || importeNum === 0) {
+             throw new Error("❌ Error: El importe es 0 o no es un número válido.");
+        }
 
         let filasAGuardar = [];
-        const esTraspaso = (concepto === 'Traspaso' || concepto === 'traspaso');
+        // Normalizamos el concepto a minúsculas para comparar mejor
+        const conceptoNorm = concepto.toLowerCase().trim();
+        const esTraspaso = (conceptoNorm === 'traspaso');
 
         // 4. LÓGICA: ¿TRASPASO O MOVIMIENTO NORMAL?
         if (esTraspaso) {
-            // --- CASO A: TRASPASO (Genera 2 movimientos) ---
+            console.log("Modo Traspaso detectado");
+            // --- CASO A: TRASPASO ---
             if (!elCuentaDestino || !elCuentaDestino.value) {
-                throw new Error("Para un traspaso debes seleccionar la Cuenta Destino.");
+                // INTENTO DE RECUPERAR CUENTA DESTINO SI TIENE OTRO ID
+                // A veces el ID cambia, intenta buscar por nombre si falló
+                throw new Error("❌ Para traspaso falta seleccionar la CUENTA DESTINO.");
             }
             if (cuenta === elCuentaDestino.value) {
-                throw new Error("La cuenta de origen y destino no pueden ser la misma.");
+                throw new Error("❌ La cuenta origen y destino son la misma.");
             }
 
-            // Fila 1: SALIDA (Negativo)
+            // Fila 1: SALIDA
             filasAGuardar.push({
                 ID: crypto.randomUUID(),
                 FECHA: fecha,
                 CUENTA: cuenta,
-                CONCEPTO: concepto,
-                IMPORTE: -Math.abs(importeNum), // Forzamos negativo
+                CONCEPTO: concepto, // Mantenemos mayúsculas/minúsculas originales
+                IMPORTE: -Math.abs(importeNum),
                 DESCRIPCION: desc + ' (Salida a ' + elCuentaDestino.value + ')',
                 BENEFICIARIO: benef || 'Yo'
             });
 
-            // Fila 2: ENTRADA (Positivo)
+            // Fila 2: ENTRADA
             filasAGuardar.push({
                 ID: crypto.randomUUID(),
                 FECHA: fecha,
                 CUENTA: elCuentaDestino.value,
                 CONCEPTO: concepto,
-                IMPORTE: Math.abs(importeNum), // Forzamos positivo
+                IMPORTE: Math.abs(importeNum),
                 DESCRIPCION: desc + ' (Entrada desde ' + cuenta + ')',
                 BENEFICIARIO: benef || 'Yo'
             });
 
         } else {
-            // --- CASO B: MOVIMIENTO NORMAL (1 movimiento) ---
-            
-            // Detectar signo inteligente
+            // --- CASO B: MOVIMIENTO NORMAL ---
             let importeFinal = importeNum;
-            // Si el usuario ya puso un menos, lo respetamos. Si no, decidimos:
-            // Lista simple de ingresos. Todo lo demás será gasto (negativo) por defecto si no tiene signo.
-            const esIngreso = ['Nomina', 'Ingreso', 'Venta', 'Intereses', 'Devolucion'].includes(concepto);
+            const esIngreso = ['nomina', 'ingreso', 'venta', 'intereses', 'devolucion', 'dividendo'].includes(conceptoNorm);
             
-            // Si NO es ingreso y el número es positivo, lo volvemos negativo (Gasto)
+            // Si NO es ingreso y es positivo, lo volvemos negativo (Gasto)
             if (!esIngreso && importeNum > 0) {
                 importeFinal = -importeNum;
             }
@@ -3219,43 +3229,34 @@ window.guardarManual = async function() {
             });
         }
 
-        // 5. GUARDAR EN LA NUBE Y LOCAL (Usamos la función universal corregida)
-        // OJO: Le pasamos el ARRAY de filas, no una sola.
+        // 5. GUARDAR
         if (typeof window.guardarUniversal === 'function') {
             await window.guardarUniversal(filasAGuardar); 
         } else {
-            // Fallback por si no has actualizado guardarUniversal
-            console.warn("Usando guardado legacy...");
-            // Esto es solo un parche, deberías haber actualizado guardarUniversal en el paso anterior
-            if(!window.datos) window.datos = [];
-            filasAGuardar.forEach(f => window.datos.push(f));
-            procesarDatos(window.datos);
+            throw new Error("Falta la función guardarUniversal actualizada.");
         }
 
-        // 6. ÉXITO Y LIMPIEZA
+        // 6. ÉXITO
         if(typeof cerrarModal === 'function') cerrarModal();
-        
         if(typeof showToast === 'function') {
-            showToast(esTraspaso ? "Traspaso realizado con éxito" : "Movimiento guardado", "success");
+            showToast(esTraspaso ? "✅ Traspaso realizado" : "✅ Guardado", "success");
         } else {
             alert("Guardado correctamente");
         }
 
-        // Limpiar formulario
-        document.getElementById('m-cantidad').value = '';
-        document.getElementById('m-desc').value = '';
+        // Limpiar
+        if(elImporte) elImporte.value = '';
+        const elDesc = document.getElementById('m-desc');
+        if(elDesc) elDesc.value = '';
         if(elId) elId.value = '';
 
     } catch (error) {
         console.error(error);
-        if(typeof showToast === 'function') showToast("Error: " + error.message, "error");
-        else alert("Error: " + error.message);
+        alert(error.message); // Usamos alert para que lo veas seguro en el móvil
     } finally {
-        // 7. RESTAURAR BOTÓN
         if(btnGuardar) {
             btnGuardar.innerText = textoOriginal;
             btnGuardar.disabled = false;
-            btnGuardar.style.opacity = "1";
         }
     }
 };
