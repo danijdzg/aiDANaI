@@ -82,8 +82,23 @@
 
         #app-viewport {
             background-color: var(--c-bg);
-            width: 100%; height: 100%; display: flex; flex-direction: column;
-            position: relative; overflow: hidden; max-width: 800px; margin: 0 auto;   
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            flex-direction: column;
+            position: relative; 
+            overflow: hidden; 
+            max-width: 800px; 
+            margin: 0 auto;   
+            
+            /* --- NUEVO: ESTADO INICIAL OCULTO --- */
+            opacity: 0;
+            transition: opacity 1s ease-in-out; /* Aparición suave tipo cine */
+        }
+        
+        /* Clase para hacerlo visible cuando el PIN sea correcto */
+        #app-viewport.visible {
+            opacity: 1;
         }
 
         @media (min-width: 820px) { #app-viewport { width: 800px; } }
@@ -1124,19 +1139,40 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* PANTALLA DE LOGIN */
+/* --- ARREGLO VISUALIDAD LOGIN --- */
 .login-view {
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    display: flex; justify-content: center; align-items: center;
-    z-index: 20000;
-    transition: opacity 0.5s ease;
-    background: rgba(0,0,0,0.4); /* Oscurece un poco el fondo de estrellas */
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%;
+    z-index: 99999 !important; /* Capa superior absoluta */
+    display: flex; 
+    justify-content: center; 
+    align-items: center;
+    background: rgba(0,0,0,0.6); /* Fondo semitransparente para ver estrellas */
     backdrop-filter: blur(5px);
+    transition: opacity 0.5s ease;
+    opacity: 1; /* Visible por defecto */
 }
+
 .login-view.hidden {
     opacity: 0;
-    pointer-events: none;
+    pointer-events: none; /* Para que no moleste al hacer clic */
+    display: none; /* Lo quitamos del todo al terminar */
+}
+
+#app-viewport {
+    opacity: 0; /* App invisible al inicio */
+    transition: opacity 1.5s ease-in-out;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    z-index: 10;
+}
+
+#app-viewport.visible {
+    opacity: 1; /* App visible tras el PIN */
 }
 
 /* TARJETA DE CRISTAL */
@@ -1214,9 +1250,7 @@ body {
 <body>
 <canvas id="deep-space"></canvas>
 
-    <div id="app-viewport">
-	
-<div id="pin-login-screen" class="login-view visible">
+<div id="pin-login-screen" class="login-view">
     <div class="login-card glass-panel">
         <div class="icon-lock">
             <span class="material-icons" style="font-size: 40px; color: var(--c-primary);">lock</span>
@@ -1235,8 +1269,9 @@ body {
     </div>
 </div>
 
-    <div id="app-viewport">
-        <div class="app-layout">
+<div id="app-viewport">
+
+    <div class="app-layout">
             <header>
     <div class="header-row-top">
         <div class="brand-area">
@@ -1870,17 +1905,25 @@ document.addEventListener('DOMContentLoaded', () => {
 const storedPin = "1973"; // ¡PIN DE PRUEBA! En producción usa localStorage o hash
 
 const setupPinLogic = () => {
+    // 1. Referencias seguras a los elementos
     const inputs = document.querySelectorAll('.pin-input');
-    const screen = document.getElementById('pin-login-screen');
+    const screen = document.getElementById('pin-login-screen'); // Buscamos por ID correcto
     const errorMsg = document.getElementById('pin-error');
-    
+    const appViewport = document.getElementById('app-viewport');
+
+    // Validación de seguridad: si no existe la pantalla, paramos para no dar error
+    if (!screen || !appViewport) {
+        console.error("Error crítico: No encuentro la pantalla de login o la app");
+        return;
+    }
+
     // Enfocar el primero al cargar
-    inputs[0].focus();
+    if(inputs[0]) inputs[0].focus();
 
     inputs.forEach((input, index) => {
         input.addEventListener('keydown', (e) => {
             if (e.key >= 0 && e.key <= 9) {
-                input.value = ''; // Limpiar para el nuevo número
+                input.value = ''; 
             } else if (e.key === 'Backspace') {
                 if (!input.value && index > 0) inputs[index - 1].focus();
             }
@@ -1891,16 +1934,27 @@ const setupPinLogic = () => {
                 if (index < inputs.length - 1) {
                     inputs[index + 1].focus();
                 } else {
-                    // Verificar PIN al completar el último dígito
+                    // Verificar PIN
                     const enteredPin = Array.from(inputs).map(i => i.value).join('');
                     if (enteredPin === storedPin) {
-                        screen.classList.add('hidden'); // Ocultar login
-                        // Aquí podrías llamar a una función loadData() si la tienes
+                        
+                        // A) Ocultar Login
+                        screen.classList.add('hidden'); 
+                        
+                        // B) Mostrar App
+                        appViewport.classList.add('visible');
+
+                        // C) Arrancar sistema
+                        iniciarSistema();
+                        
+                        // Feedback
+                        if(navigator.vibrate) navigator.vibrate([50, 50]);
+
                     } else {
                         errorMsg.textContent = "PIN Incorrecto";
-                        // Efecto de vibración/error
                         inputs.forEach(i => { i.value = ''; i.classList.add('error'); });
                         inputs[0].focus();
+                        if(navigator.vibrate) navigator.vibrate(200);
                         setTimeout(() => errorMsg.textContent = "", 2000);
                     }
                 }
@@ -2176,9 +2230,7 @@ async function iniciarSistema() {
         }
     }
 
-    // ARRANQUE AL CARGAR LA PÁGINA
-    window.onload = iniciarSistema;
-
+    
     // ==========================================
     // 5. CALCULADORA Y VIBRACIÓN (Tu código original)
     // ==========================================
@@ -3407,26 +3459,26 @@ function getFechasDashboard() {
     };
 }
     
+    // ==========================================
+    // 🎨 PUENTE DE ANIMACIÓN (Unifica todo a animarCifra)
+    // ==========================================
+    // Esta función reemplaza a la antigua para que todo use el motor moderno
     function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
-        const obj = document.getElementById(id);
-        if (!obj) return;
-        if(isNaN(valorFinal)) { obj.innerText = prefijo + "---" + sufijo; return; }
-        const duracion = 1000; 
-        const inicio = 0; 
-        let tiempoInicio = null;
-        function paso(tiempo) {
-            if (!tiempoInicio) tiempoInicio = tiempo;
-            const progreso = Math.min((tiempo - tiempoInicio) / duracion, 1);
-            const easeOutQuart = 1 - Math.pow(1 - progreso, 4);
-            const valorActual = inicio + (valorFinal - inicio) * easeOutQuart;
-            let texto = new Intl.NumberFormat('es-ES', { minimumFractionDigits: decimales, maximumFractionDigits: decimales }).format(valorActual);
-            obj.innerText = prefijo + texto + sufijo;
-            if (progreso < 1) { window.requestAnimationFrame(paso); } else {
-                let textoFinal = new Intl.NumberFormat('es-ES', { minimumFractionDigits: decimales, maximumFractionDigits: decimales }).format(valorFinal);
-                obj.innerText = prefijo + textoFinal + sufijo;
-            }
+        // Redirigimos a la función moderna 'animarCifra'
+        // Detectamos si es porcentaje o moneda basándonos en el sufijo
+        let tipo = 'moneda';
+        if (sufijo.includes('%')) tipo = 'porcentaje';
+        else if (sufijo.includes('Meses')) tipo = 'meses';
+        else if (sufijo === '') type = 'numero';
+        
+        // Llamamos al motor potente
+        if (typeof window.animarCifra === 'function') {
+            window.animarCifra(id, valorFinal, tipo);
+        } else {
+            // Fallback por si acaso
+            const el = document.getElementById(id);
+            if(el) el.innerText = prefijo + new Intl.NumberFormat('es-ES', { minimumFractionDigits: decimales }).format(valorFinal) + sufijo;
         }
-        window.requestAnimationFrame(paso);
     }
  
 // ==========================================
@@ -4498,58 +4550,6 @@ async function guardarUniversal(nuevasFilas) { // <--- AHORA ACEPTA DATOS
         if(btn) btn.innerHTML = originalText;
     }
 }
-// ==========================================
-// 🚀 SISTEMA DE EXPORTACIÓN BLINDADO (Anti-Crashes)
-// ==========================================
-
-function exportarExcel() {
-    const btnText = document.getElementById('btn-guardar') ? document.getElementById('btn-guardar').innerText : '';
-    
-    try {
-        mostrarEstado('🧹 Limpiando memoria y generando archivo...', 'normal');
-
-        // 1. LIMPIEZA PREVENTIVA DE MEMORIA
-        // Borramos datos temporales que puedan estar saturando el navegador (LocalStorage)
-        try {
-            // Guardamos solo lo esencial si fuera necesario (ej: configuración de tema)
-            const temaGuardado = localStorage.getItem('theme');
-            localStorage.clear(); // ¡LIBERA EL ESPACIO!
-            if(temaGuardado) localStorage.setItem('theme', temaGuardado);
-            console.log("Memoria LocalStorage liberada correctamente.");
-        } catch (e) {
-            console.warn("No se pudo limpiar LocalStorage (posiblemente bloqueado)", e);
-        }
-
-        // 2. GENERACIÓN EFICIENTE
-        // Verificación de seguridad para evitar bucles infinitos
-        if (!datos || !Array.isArray(datos)) throw new Error("No hay datos válidos para exportar.");
-        
-        console.log(`Generando Excel con ${datos.length} movimientos...`);
-
-        const wb = generarLibroExcel();
-
-        // 3. ESCRITURA Y DESCARGA (Método Optimizado)
-        // Usamos 'writeFile' que maneja la descarga automáticamente
-        XLSX.writeFile(wb, "aidanai.xlsx", { compression: true }); 
-        
-        mostrarEstado('✅ Archivo descargado con éxito. Revisa tu carpeta Descargas.', 'ok');
-        vibrar('ingreso');
-
-    } catch (error) {
-        console.error("Error crítico al exportar:", error);
-        
-        // Diagnóstico para el usuario
-        let mensaje = "Error desconocido.";
-        if (error.message.includes("Quota") || error.message.includes("space")) {
-            mensaje = "🚫 MEMORIA LLENA EN EL NAVEGADOR. Se ha intentado limpiar. Prueba de nuevo.";
-        } else {
-            mensaje = "Error al exportar: " + error.message;
-        }
-        
-        alert(mensaje + "\n\nConsejo: Cierra otras pestañas o reinicia el navegador si persiste.");
-        mostrarEstado('Error al exportar', 'err');
-    }
-}
 
 // ==========================================
 // 💎 RAYO X PATRIMONIAL (MODO NEÓN CLEAN)
@@ -5088,40 +5088,6 @@ async function guardarAjuste(tipo) {
         event.target.disabled = false;
     }
 }
-
-// ==========================================
-// 🔍 BUSCADOR OPTIMIZADO (Con seguridad de carga)
-// ==========================================
-let timeoutBuscador;
-
-function filtrarTabla(termino) {
-    // Lógica de filtrado existente...
-    const filas = document.querySelectorAll('#tabla-movimientos tr');
-    let visibles = 0;
-    
-    filas.forEach(fila => {
-        const texto = fila.innerText.toLowerCase();
-        // Optimización: Si no hay término, mostrar todo rápido
-        if (!termino) {
-            fila.style.display = '';
-            visibles++;
-            return;
-        }
-        
-        if (texto.includes(termino)) {
-            fila.style.display = '';
-            visibles++;
-        } else {
-            fila.style.display = 'none';
-        }
-    });
-    
-    // Mostrar mensaje si no hay resultados
-    const noResult = document.getElementById('no-results-msg');
-    if(noResult) noResult.style.display = visibles === 0 ? 'block' : 'none';
-}
-
-
 
 // ==========================================
 // 2. SISTEMA DE BORRADO SEGURO
