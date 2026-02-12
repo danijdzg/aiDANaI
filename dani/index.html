@@ -3126,100 +3126,139 @@ window.cargarParaEditar = function(id) {
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 window.guardarManual = async function() {
-        console.log("--- 🛡️ Guardando Movimiento (Lógica Corregida) ---");
+    console.log("--- 🛡️ Guardando Movimiento (Modo Seguro + Traspasos) ---");
 
-        const btnGuardar = document.getElementById('btn-modal-action');
-        const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
+    const btnGuardar = document.getElementById('btn-modal-action');
+    const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
-        try {
-            // 1. BLOQUEO VISUAL
-            if(btnGuardar) {
-                btnGuardar.innerText = "⏳ Guardando...";
-                btnGuardar.disabled = true;
-                btnGuardar.style.opacity = "0.7";
-            }
-
-            // 2. RECOGER DATOS DEL FORMULARIO
-            const elId = document.getElementById('m-id');
-            const elFecha = document.getElementById('m-fecha');
-            const elCuenta = document.getElementById('m-cuenta');
-            const elConcepto = document.getElementById('m-concepto');
-            const elImporte = document.getElementById('m-cantidad');
-            const elDesc = document.getElementById('m-desc');
-            const elBenef = document.getElementById('m-beneficiario');
-            
-            // 3. VALIDACIÓN
-            const fecha = elFecha ? elFecha.value : "";
-            const cuenta = elCuenta ? elCuenta.value : "";
-            const concepto = elConcepto ? elConcepto.value : "";
-            let importe = elImporte ? (parseFloat(elImporte.value) || 0) : 0;
-            
-            if (!fecha || !cuenta || !concepto || importe === 0) {
-                throw new Error("Faltan datos obligatorios (Fecha, Cuenta, Concepto o Importe)");
-            }
-
-            // 4. AJUSTE DE SIGNO
-            if (window.modoTransaccionActual === 'pago' || window.modoTransaccionActual === 'traspaso') {
-                 importe = -Math.abs(importe);
-            } else {
-                 importe = Math.abs(importe);
-            }
-
-            // 5. CONSTRUIR EL OBJETO
-            const idMov = elId && elId.value ? elId.value : crypto.randomUUID();
-            const nuevoMov = {
-                id: idMov,
-                fecha: new Date(fecha),
-                ts: new Date(fecha).getTime(),
-                cuenta: cuenta,
-                concepto: concepto,
-                importe: importe,
-                descripcion: elDesc ? elDesc.value.trim() : "",
-                beneficiario: elBenef ? elBenef.value.trim() : "",
-                tipo: (importe >= 0) ? 'ingreso' : (window.modoTransaccionActual === 'traspaso' ? 'traspaso' : 'gasto')
-            };
-
-            // 6. ACTUALIZAR MEMORIA
-            if(!window.datos) window.datos = [];
-            // Si es edición, borramos el viejo primero
-            if (elId && elId.value) {
-                const idx = window.datos.findIndex(m => m.id === elId.value);
-                if(idx >= 0) window.datos.splice(idx, 1);
-            }
-            // Añadimos el nuevo
-            window.datos.unshift(nuevoMov);
-            window.datos.sort((a, b) => b.ts - a.ts);
-
-            // 7. ACTUALIZAR PANTALLA
-            if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-            
-            // 8. GUARDAR EN ARCHIVO
-            if (typeof window.guardarUniversal === 'function') {
-                await window.guardarUniversal(); 
-            }
-
-            // 9. ÉXITO Y CIERRE (¡AQUÍ ESTÁ LA CORRECCIÓN!)
-            // Usamos cerrarModal() que es como se llama en tu código
-            if(typeof cerrarModal === 'function') cerrarModal();
-            
-            if(typeof showToast === 'function') showToast(elId && elId.value ? "Movimiento actualizado" : "Movimiento guardado", "success");
-            
-            // Limpieza extra
-            if(elId) elId.value = '';
-
-        } catch (error) {
-            console.error(error);
-            if(typeof showToast === 'function') showToast("Error: " + error.message, "error");
-            else alert("Error: " + error.message);
-        } finally {
-            // 10. RESTAURAR BOTÓN
-            if(btnGuardar) {
-                btnGuardar.innerText = textoOriginal;
-                btnGuardar.disabled = false;
-                btnGuardar.style.opacity = "1";
-            }
+    try {
+        // 1. BLOQUEO VISUAL
+        if(btnGuardar) {
+            btnGuardar.innerHTML = '<i class="material-icons spin">sync</i> Guardando...';
+            btnGuardar.disabled = true;
+            btnGuardar.style.opacity = "0.7";
         }
-    };
+
+        // 2. RECOGER DATOS DEL FORMULARIO (Tus IDs)
+        const elId = document.getElementById('m-id'); // ID si es edición
+        const fecha = document.getElementById('m-fecha').value;
+        const cuenta = document.getElementById('m-cuenta').value;
+        const concepto = document.getElementById('m-concepto').value; // Ej: "Traspaso"
+        const importeRaw = document.getElementById('m-cantidad').value;
+        const desc = document.getElementById('m-desc').value || "";
+        const benef = document.getElementById('m-beneficiario').value || "";
+        
+        // ID de la cuenta destino (ASEGÚRATE QUE TU HTML TENGA ESTE ID)
+        const elCuentaDestino = document.getElementById('m-cuenta-destino'); 
+
+        // 3. VALIDACIÓN BÁSICA
+        if (!fecha || !cuenta || !concepto || !importeRaw) {
+            throw new Error("Faltan datos obligatorios (Fecha, Cuenta, Concepto o Importe)");
+        }
+        
+        const importeNum = parseFloat(importeRaw);
+        if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
+
+        let filasAGuardar = [];
+        const esTraspaso = (concepto === 'Traspaso' || concepto === 'traspaso');
+
+        // 4. LÓGICA: ¿TRASPASO O MOVIMIENTO NORMAL?
+        if (esTraspaso) {
+            // --- CASO A: TRASPASO (Genera 2 movimientos) ---
+            if (!elCuentaDestino || !elCuentaDestino.value) {
+                throw new Error("Para un traspaso debes seleccionar la Cuenta Destino.");
+            }
+            if (cuenta === elCuentaDestino.value) {
+                throw new Error("La cuenta de origen y destino no pueden ser la misma.");
+            }
+
+            // Fila 1: SALIDA (Negativo)
+            filasAGuardar.push({
+                ID: crypto.randomUUID(),
+                FECHA: fecha,
+                CUENTA: cuenta,
+                CONCEPTO: concepto,
+                IMPORTE: -Math.abs(importeNum), // Forzamos negativo
+                DESCRIPCION: desc + ' (Salida a ' + elCuentaDestino.value + ')',
+                BENEFICIARIO: benef || 'Yo'
+            });
+
+            // Fila 2: ENTRADA (Positivo)
+            filasAGuardar.push({
+                ID: crypto.randomUUID(),
+                FECHA: fecha,
+                CUENTA: elCuentaDestino.value,
+                CONCEPTO: concepto,
+                IMPORTE: Math.abs(importeNum), // Forzamos positivo
+                DESCRIPCION: desc + ' (Entrada desde ' + cuenta + ')',
+                BENEFICIARIO: benef || 'Yo'
+            });
+
+        } else {
+            // --- CASO B: MOVIMIENTO NORMAL (1 movimiento) ---
+            
+            // Detectar signo inteligente
+            let importeFinal = importeNum;
+            // Si el usuario ya puso un menos, lo respetamos. Si no, decidimos:
+            // Lista simple de ingresos. Todo lo demás será gasto (negativo) por defecto si no tiene signo.
+            const esIngreso = ['Nomina', 'Ingreso', 'Venta', 'Intereses', 'Devolucion'].includes(concepto);
+            
+            // Si NO es ingreso y el número es positivo, lo volvemos negativo (Gasto)
+            if (!esIngreso && importeNum > 0) {
+                importeFinal = -importeNum;
+            }
+
+            filasAGuardar.push({
+                ID: (elId && elId.value) ? elId.value : crypto.randomUUID(),
+                FECHA: fecha,
+                CUENTA: cuenta,
+                CONCEPTO: concepto,
+                IMPORTE: importeFinal,
+                DESCRIPCION: desc,
+                BENEFICIARIO: benef
+            });
+        }
+
+        // 5. GUARDAR EN LA NUBE Y LOCAL (Usamos la función universal corregida)
+        // OJO: Le pasamos el ARRAY de filas, no una sola.
+        if (typeof window.guardarUniversal === 'function') {
+            await window.guardarUniversal(filasAGuardar); 
+        } else {
+            // Fallback por si no has actualizado guardarUniversal
+            console.warn("Usando guardado legacy...");
+            // Esto es solo un parche, deberías haber actualizado guardarUniversal en el paso anterior
+            if(!window.datos) window.datos = [];
+            filasAGuardar.forEach(f => window.datos.push(f));
+            procesarDatos(window.datos);
+        }
+
+        // 6. ÉXITO Y LIMPIEZA
+        if(typeof cerrarModal === 'function') cerrarModal();
+        
+        if(typeof showToast === 'function') {
+            showToast(esTraspaso ? "Traspaso realizado con éxito" : "Movimiento guardado", "success");
+        } else {
+            alert("Guardado correctamente");
+        }
+
+        // Limpiar formulario
+        document.getElementById('m-cantidad').value = '';
+        document.getElementById('m-desc').value = '';
+        if(elId) elId.value = '';
+
+    } catch (error) {
+        console.error(error);
+        if(typeof showToast === 'function') showToast("Error: " + error.message, "error");
+        else alert("Error: " + error.message);
+    } finally {
+        // 7. RESTAURAR BOTÓN
+        if(btnGuardar) {
+            btnGuardar.innerText = textoOriginal;
+            btnGuardar.disabled = false;
+            btnGuardar.style.opacity = "1";
+        }
+    }
+};
 
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
 function recalcularSaldosGlobal() {
@@ -4246,9 +4285,9 @@ function accionFab(tipo) {
 
 
 // ==========================================
-// 💾 GUARDADO MAESTRO (Versión "Creación Forzada")
+// 💾 GUARDADO MAESTRO (Versión Mejorada para Traspasos)
 // ==========================================
-async function guardarUniversal() {
+async function guardarUniversal(nuevasFilas) { // <--- AHORA ACEPTA DATOS
     const btn = document.getElementById('btn-guardar');
     const originalText = btn ? btn.innerHTML : '';
     if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
@@ -4256,12 +4295,44 @@ async function guardarUniversal() {
     try {
         console.log("💾 Iniciando guardado completo...");
 
-        // 1. RESCATE DE DATOS (Si la memoria falla)
+        // ---------------------------------------------------------
+        // 1. INCORPORAR NUEVOS DATOS (EL CAMBIO CLAVE)
+        // ---------------------------------------------------------
+        // Si vienen filas nuevas desde guardarManual, las añadimos a window.datos
+        if (nuevasFilas) {
+            if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
+            
+            if(!window.datos) window.datos = [];
+
+            nuevasFilas.forEach(filaNueva => {
+                // Convertimos las mayúsculas (de mi código anterior) a minúsculas (de tu código actual)
+                // para que no haya conflicto de datos.
+                const filaNormalizada = {
+                    id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
+                    fecha: filaNueva.FECHA || filaNueva.fecha,
+                    cuenta: filaNueva.CUENTA || filaNueva.cuenta,
+                    concepto: filaNueva.CONCEPTO || filaNueva.concepto,
+                    importe: filaNueva.IMPORTE || filaNueva.importe,
+                    descripcion: filaNueva.DESCRIPCION || filaNueva.descripcion || "",
+                    beneficiario: filaNueva.BENEFICIARIO || filaNueva.beneficiario || "",
+                    // Añadimos campos extra si los usas para filtrado
+                    ts: new Date(filaNueva.FECHA || filaNueva.fecha).getTime()
+                };
+                
+                // Añadimos al principio de la lista
+                window.datos.unshift(filaNormalizada);
+            });
+            
+            // Reordenamos por fecha (opcional, pero recomendado)
+            window.datos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        }
+        // ---------------------------------------------------------
+
+        // 2. RESCATE DE DATOS (Si la memoria falla)
         if (!window.datos || window.datos.length === 0) {
             const cacheRescate = localStorage.getItem('aidanai_datos_cache');
             if (cacheRescate) {
                 window.datos = JSON.parse(cacheRescate);
-                // Restauramos fechas
                 window.datos = window.datos.map(m => ({
                     ...m,
                     id: m.id || m.ID || crypto.randomUUID(),
@@ -4271,13 +4342,14 @@ async function guardarUniversal() {
         }
 
         if (!window.datos || window.datos.length === 0) {
-            throw new Error("⛔ NO SE PUEDE GUARDAR: No hay datos en memoria.");
+            // Si sigue vacío, es un error, pero si estamos guardando un primer dato, permitimos continuar
+            if(!nuevasFilas) throw new Error("⛔ NO SE PUEDE GUARDAR: No hay datos en memoria.");
         }
 
-        // 2. GENERAR HOJA MOVIMIENTOS
+        // 3. GENERAR HOJA MOVIMIENTOS
         const filasMovimientos = window.datos.map(mov => ({
-            "Id": mov.id || crypto.randomUUID(), 
-            "Fecha": mov.fecha, // SheetJS lo formateará si está configurado, o usamos string
+            "Id": mov.id || mov.ID || crypto.randomUUID(), 
+            "Fecha": mov.fecha, 
             "Cuenta": mov.cuenta,
             "Concepto": mov.concepto,
             "Importe": mov.importe,
@@ -4291,8 +4363,7 @@ async function guardarUniversal() {
         });
         XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
-        // 3. GENERAR HOJA CONFIGURACIÓN (TABLA COMPLETA)
-        // Recuperamos datos de las tablas de configuración
+        // 4. GENERAR HOJA CONFIGURACIÓN (TABLA COMPLETA)
         const listaCuentas = Object.entries(window.mapaCuentas || {});
         const listaConceptos = window.listaConceptos || [];
         const listaBeneficiarios = window.listaBeneficiarios || [];
@@ -4302,7 +4373,7 @@ async function guardarUniversal() {
         datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "", "CONCEPTO", "", "BENEFICIARIO"]);
 
         for (let i = 0; i < maxFilas; i++) {
-            const cuenta = listaCuentas[i]; // [Nombre, Objeto]
+            const cuenta = listaCuentas[i]; 
             const concepto = listaConceptos[i];
             const beneficiario = listaBeneficiarios[i];
 
@@ -4320,23 +4391,35 @@ async function guardarUniversal() {
         const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
         XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
 
-        // --- 4. ESCRITURA (AQUÍ ESTABA EL ERROR) ---
-        // Corregido: Usamos 'modoNube' y la variable 'oneDrive' correcta
-        if (window.modoNube && typeof oneDrive !== 'undefined') {
+        // 5. ESCRITURA EN DISCO / NUBE
+        // Comprobamos si existe la librería oneDrive y si estamos logueados
+        // Nota: Adaptado para tu variable 'oneDrive' que usas en tu código
+        const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.usuarioLogueado)); 
+
+        if (usarNube && typeof oneDrive !== 'undefined') {
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            await oneDrive.saveFile(wbout);
+            // Intentamos usar tu método saveFile
+            await oneDrive.saveFile(wbout, "aidanai.xlsx");
+            
             if(typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado en OneDrive (Nube)", "success");
-            else alert("✅ Guardado en OneDrive");
+            else console.log("✅ Guardado en OneDrive");
         } else {
             // Modo Local
             XLSX.writeFile(wb, "aidanai.xlsx");
             if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado en Local (No conectado)", "info");
-            else alert("⚠️ Guardado en Local");
         }
+        
+        // 6. ACTUALIZAR INTERFAZ (IMPORTANTE)
+        // Para que veas los cambios sin recargar la página
+        if(typeof procesarDatos === 'function') procesarDatos(window.datos);
+        if(typeof actualizarDashboard === 'function') actualizarDashboard();
+        if(typeof renderTablaMovimientos === 'function') renderTablaMovimientos();
 
     } catch (error) {
         console.error(error);
-        alert("❌ ERROR AL GUARDAR: " + error.message);
+        // No mostramos alerta si es cancelación de usuario, pero sí error real
+        if(typeof showToast === 'function') showToast("Error al guardar: " + error.message, "error");
+        else alert("❌ ERROR AL GUARDAR: " + error.message);
     } finally {
         if(btn) btn.innerHTML = originalText;
     }
