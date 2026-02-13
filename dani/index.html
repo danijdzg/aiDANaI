@@ -582,22 +582,24 @@ th:active {
 .chart-container { 
     position: relative; 
     width: 100%; 
-    height: 140px; /* <--- CAMBIO AQUÍ */
+    height: 150px; /* Un poco más de altura para que respire */
+    margin-top: 10px;
     margin-bottom: 15px; 
-    background: linear-gradient(180deg, rgba(57, 255, 20, 0.05) 0%, rgba(0,0,0,0) 100%); 
-    border-radius: 12px; 
-    border: 1px solid var(--c-success); 
-    box-shadow: 0 0 15px rgba(57, 255, 20, 0.1); 
+    background: linear-gradient(180deg, rgba(0, 184, 255, 0.05) 0%, rgba(0,0,0,0) 100%);
+    border: 1px solid rgba(0, 184, 255, 0.3); 
+    border-radius: 16px;
+    box-shadow: 0 0 20px rgba(0, 184, 255, 0.1);
     padding: 10px; 
     box-sizing: border-box; 
     display: none; 
+	transition: all 0.3s ease;
 }
 
 .chart-container.visible { display: block; }
 
 /* Ajuste para PC (de 320px a 180px) */
 @media (min-width: 800px) { 
-    .chart-container { height: 180px; } /* <--- CAMBIO AQUÍ */
+    .chart-container { height: 200px; } /* <--- CAMBIO AQUÍ */
 }
 		
         .budget-item { margin-bottom: 15px; }
@@ -3852,99 +3854,117 @@ function renderizarGraficoEvolucion(movimientos) {
     }
     if (container) container.classList.add('visible');
 
-    // 1. Preparar datos
+    // 1. PREPARACIÓN DE DATOS (Suavizado)
+    // Ordenamos cronológicamente
     const movs = [...movimientos].sort((a, b) => a.ts - b.ts);
-    const historia = {};
+    
+    // Mapa para guardar solo el saldo FINAL de cada día (evita dientes de sierra)
+    const historiaMap = new Map();
     let saldoAcumulado = 0;
 
     movs.forEach(m => {
-        const fecha = new Date(m.ts);
-        // Agrupamos por mes para suavizar el gráfico (YYYY-MM)
-        // Si prefieres día a día, usa fecha.toISOString().split('T')[0]
-        const llave = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
         saldoAcumulado += m.importe;
-        historia[llave] = saldoAcumulado;
+        // Creamos una clave de fecha "YYYY-MM-DD"
+        const fechaObj = new Date(m.ts);
+        const fechaKey = fechaObj.toISOString().split('T')[0]; // "2023-10-25"
+        
+        // Sobrescribimos el valor del día con el último saldo acumulado calculado
+        historiaMap.set(fechaKey, saldoAcumulado);
     });
 
-    const labels = Object.keys(historia);
-    const dataPoints = Object.values(historia);
+    const labels = Array.from(historiaMap.keys());
+    const dataPoints = Array.from(historiaMap.values());
 
-    // 2. Destruir instancia anterior si existe
-    if (chartInstance) {
-        chartInstance.destroy();
+    // 2. DESTRUIR GRÁFICO ANTERIOR (Evita superposiciones)
+    if (window.chartInstance) {
+        window.chartInstance.destroy();
     }
 
-    // 3. Crear el Gráfico Profesional
-    chartInstance = new Chart(ctx, {
+    // 3. CREAR GRÁFICO "FINTECH"
+    window.chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [{
                 label: 'Patrimonio',
                 data: dataPoints,
-                borderColor: '#00B8FF', // Azul Cian Neón
-                borderWidth: 3,         // Línea un poco más gruesa
-                pointRadius: 0,         // OCULTAR PUNTOS (Estilo minimalista)
-                pointHoverRadius: 6,    // Mostrar punto al pasar el mouse
-                pointBackgroundColor: '#00B8FF',
-                pointBorderColor: '#FFFFFF',
+                borderColor: '#00B8FF', // Azul Neón (Coherente con var(--c-primary))
+                borderWidth: 2,
+                
+                // Puntos invisibles (salvo hover)
+                pointRadius: 0,         
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#000000', // Centro negro
+                pointBorderColor: '#00B8FF',     // Borde azul
                 pointBorderWidth: 2,
-                fill: true,             // Activar relleno
-                tension: 0.4,           // Curva suave
-                // --- GRADIENTE PROFESIONAL ---
+                
+                fill: true,             // Relleno activado
+                tension: 0.4,           // Curva suave (Bezier)
+                
+                // GRADIENTE DE FONDO PROFESIONAL
                 backgroundColor: (context) => {
                     const chart = context.chart;
                     const { ctx, chartArea } = chart;
-
-                    // Esperamos a que el gráfico tenga dimensiones
                     if (!chartArea) return null;
-
-                    // Gradiente dinámico (Top -> Bottom del área real)
                     const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                    
-                    // Configuración de color: Azul a Transparente
-                    gradient.addColorStop(0, 'rgba(0, 184, 255, 0.5)'); // Arriba: 50% opacidad
-                    gradient.addColorStop(0.5, 'rgba(0, 184, 255, 0.1)'); // Medio: Muy sutil
-                    gradient.addColorStop(1, 'rgba(0, 184, 255, 0)');   // Abajo: Transparente
-                    
+                    gradient.addColorStop(0, 'rgba(0, 184, 255, 0.4)'); // Arriba: Brillante
+                    gradient.addColorStop(1, 'rgba(0, 184, 255, 0.0)'); // Abajo: Transparente
                     return gradient;
                 }
             }]
         },
-        // Dentro de renderizarGraficoEvolucion...
-options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-        legend: { display: false },
-        tooltip: { /* ... tu config actual ... */ }
-    },
-    scales: {
-        x: {
-            display: false, // Oculta TODO el eje X (etiquetas y líneas) para limpieza total
-            grid: {
-                display: false, // Asegura que no haya líneas verticales
-                drawBorder: false
-            }
-        },
-        y: {
-            position: 'right',
-            grid: {
-                display: false, // <--- ESTO ELIMINA LAS LÍNEAS HORIZONTALES
-                drawBorder: false // Elimina la línea del borde del eje
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false, // Muestra tooltip aunque no toques la línea exacta
             },
-            ticks: {
-                color: '#666',
-                font: { size: 10 },
-                callback: function(value) {
-                    if(Math.abs(value) >= 1000) return (value/1000).toFixed(0) + 'k';
-                    return value;
+            plugins: {
+                legend: { display: false }, // Sin leyenda (minimalista)
+                tooltip: {
+                    backgroundColor: 'rgba(20, 20, 20, 0.95)', // Fondo casi negro
+                    titleColor: '#888',
+                    bodyColor: '#fff',
+                    bodyFont: { size: 14, weight: 'bold', family: 'Inter' },
+                    padding: 12,
+                    cornerRadius: 8,
+                    displayColors: false, // Sin cuadradito de color
+                    callbacks: {
+                        label: function(context) {
+                            return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
+                        },
+                        title: function(tooltipItems) {
+                            // Formato fecha amigable: "25 oct"
+                            const date = new Date(tooltipItems[0].label);
+                            return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: false, // Eje X invisible para limpieza total
+                    grid: { display: false }
+                },
+                y: {
+                    position: 'right',
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.03)', // Líneas horizontales muy sutiles
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: '#666',
+                        font: { size: 10, family: 'Inter' },
+                        callback: function(value) {
+                            // Abreviar miles (1k, 2k...)
+                            if(Math.abs(value) >= 1000) return (value/1000).toFixed(0) + 'k';
+                            return value;
+                        }
+                    }
                 }
             }
         }
-    }
-}
     });
 }
 
