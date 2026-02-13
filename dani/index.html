@@ -3331,7 +3331,7 @@ function generarUUID() {
     });
 }
 window.guardarManual = async function() {
-    console.log("--- 🛡️ Guardando Movimiento (Versión Corregida) ---");
+    console.log("--- 🛡️ Guardando Movimiento (Versión Corregida Traspasos) ---");
 
     // 1. BLOQUEO VISUAL
     const btnGuardar = document.getElementById('btn-modal-action') || document.querySelector('button[onclick="guardarManual()"]');
@@ -3343,19 +3343,36 @@ window.guardarManual = async function() {
             btnGuardar.disabled = true;
         }
 
-        // 2. RECOGER DATOS (Con los IDs REALES de tu HTML)
+        // 2. RECOGER DATOS
         const elId = document.getElementById('m-id'); // ID oculto
         const fecha = document.getElementById('m-fecha')?.value;
         const cuenta = document.getElementById('m-cuenta')?.value;
-        const concepto = document.getElementById('m-concepto')?.value;
         
-        // El importe en tu HTML es 'm-cantidad'
+        // Aquí estaba el problema: leemos el concepto y también la cuenta destino
+        let concepto = document.getElementById('m-concepto')?.value;
+        const cuentaDestino = document.getElementById('m-cuenta-destino')?.value;
+        
         const elImporte = document.getElementById('m-cantidad');
         let importeRaw = elImporte ? elImporte.value : "";
         
-        const desc = document.getElementById('m-desc')?.value || "";
+        let desc = document.getElementById('m-desc')?.value || "";
         const benef = document.getElementById('m-beneficiario')?.value || "";
-        const elCuentaDestino = document.getElementById('m-cuenta-destino');
+
+        // --- CORRECCIÓN INTELIGENTE PARA TRASPASOS ---
+        // Si hay una cuenta destino seleccionada, asumimos que es un Traspaso.
+        // 1. Rellenamos el concepto automáticamente para que no de error.
+        // 2. Añadimos la info del destino a la descripción.
+        if (window.modoTransaccionActual === 'traspaso' || (cuentaDestino && cuentaDestino !== "")) {
+            if (!concepto) concepto = "Traspaso";
+            
+            // Si hay destino, lo guardamos en la descripción con el formato especial ">> A:"
+            if (cuentaDestino) {
+                // Evitamos duplicar si ya estaba escrito
+                if (!desc.includes('>> A:')) {
+                    desc = `>> A: ${cuentaDestino} | ${desc}`;
+                }
+            }
+        }
 
         // 3. VALIDACIÓN
         if (!fecha) throw new Error("❌ Error: Falta la FECHA.");
@@ -3363,14 +3380,23 @@ window.guardarManual = async function() {
         if (!concepto) throw new Error("❌ Error: Falta el CONCEPTO.");
         if (!importeRaw) throw new Error("❌ Error: Falta la CANTIDAD.");
 
-        // Convertir importe a número (asegurando punto decimal)
+        // Convertir importe a número
         let importeNum = parseFloat(importeRaw.toString().replace(',', '.'));
         if (isNaN(importeNum) || importeNum === 0) {
              throw new Error("❌ Error: El importe no es válido (0).");
         }
 
+        // --- GESTIÓN DE SIGNOS (+/-) ---
+        // Aseguramos el signo correcto según el tipo de operación
+        if (window.modoTransaccionActual === 'gasto') {
+            importeNum = -Math.abs(importeNum); // Siempre negativo
+        } else if (window.modoTransaccionActual === 'ingreso') {
+            importeNum = Math.abs(importeNum);  // Siempre positivo
+        } else if (window.modoTransaccionActual === 'traspaso') {
+            importeNum = -Math.abs(importeNum); // Salida de dinero de la cuenta origen
+        }
+
         // 4. PREPARAR EL MOVIMIENTO
-        // Detectamos si es edición o nuevo
         const esNuevo = !elId.value;
         const idFinal = elId.value ? elId.value : generarUUID();
 
@@ -3379,53 +3405,51 @@ window.guardarManual = async function() {
             Fecha: fecha,
             Cuenta: cuenta,
             Concepto: concepto,
-            Importe: importeNum, // Guardamos el número tal cual (la lógica de signo la maneja tu app o el usuario)
+            Importe: importeNum,
             Descripcion: desc,
             Beneficiario: benef
         };
 
         // 5. GUARDAR EN LISTA LOCAL
-        // (Simplificamos la lógica de traspasos compleja por ahora para asegurar que guarde bien lo básico)
         if (!esNuevo) {
              // EDICIÓN
-             const index = window.datos.movimientos.findIndex(m => m.Id === idFinal);
+             const index = window.datos.findIndex(m => m.id === idFinal); // Nota: usamos m.id minúscula en local
              if (index !== -1) {
-                 window.datos.movimientos[index] = nuevoMovimiento;
-             } else {
-                 window.datos.movimientos.push(nuevoMovimiento);
+                 // Actualizamos convirtiendo al formato local
+                 window.datos[index] = {
+                    ...nuevoMovimiento,
+                    id: nuevoMovimiento.Id,
+                    ts: new Date(nuevoMovimiento.Fecha).getTime(),
+                    fecha: new Date(nuevoMovimiento.Fecha),
+                    cuenta: nuevoMovimiento.Cuenta,
+                    concepto: nuevoMovimiento.Concepto,
+                    importe: nuevoMovimiento.Importe,
+                    descripcion: nuevoMovimiento.Descripcion,
+                    beneficiario: nuevoMovimiento.Beneficiario,
+                    tipo: (nuevoMovimiento.Importe >= 0) ? 'ingreso' : 'gasto'
+                 };
+                 // Parche para marcar traspaso visualmente
+                 if (concepto.toUpperCase().includes('TRASPASO')) window.datos[index].tipo = 'traspaso';
              }
-        } else {
-             // NUEVO
-             window.datos.movimientos.push(nuevoMovimiento);
-        }
-
-        // 6. GUARDAR EN NUBE Y ACTUALIZAR
-        procesarDatos(window.datos.movimientos); // Actualiza gráficos
+        } 
         
+        // 6. GUARDAR UNIVERSAL (Nube o Local)
+        // Pasamos el objeto "nuevoMovimiento" para que guardarUniversal lo procese
         if (typeof window.guardarUniversal === 'function') {
-            await window.guardarUniversal();
+            await window.guardarUniversal(nuevoMovimiento);
         }
 
         // 7. LIMPIEZA Y CIERRE
-        document.getElementById('form-movimiento')?.reset(); // Si el form tiene ID form-movimiento
         if(elId) elId.value = '';
         if(elImporte) elImporte.value = '';
+        if(document.getElementById('m-desc')) document.getElementById('m-desc').value = '';
 
-        // CERRAR MODAL (Tu modal se llama 'modal-manual')
+        // CERRAR MODAL
         const modalElement = document.getElementById('modal-manual');
-        if (modalElement) {
-            // Intentamos cerrar con Bootstrap
-            const modalInstance = bootstrap.Modal.getInstance(modalElement);
-            if (modalInstance) {
-                modalInstance.hide();
-            } else {
-                // Fallback: clic en cerrar
-                const closeBtn = modalElement.querySelector('.btn-close');
-                if(closeBtn) closeBtn.click();
-            }
-        }
+        if (modalElement) modalElement.classList.remove('active');
 
         console.log("✅ Guardado exitoso");
+        mostrarEstado("✅ Movimiento guardado correctamente", "success");
 
     } catch (error) {
         console.error(error);
@@ -5213,16 +5237,64 @@ async function guardarAjuste(tipo) {
 // 2. SISTEMA DE BORRADO SEGURO
 // ==========================================
 window.borrarMovimiento = async function(id) {
-    if (!confirm("¿Seguro que quieres borrar este movimiento?")) return;
+    if (!confirm("¿Seguro que quieres eliminar este movimiento permanentemente?")) return;
 
-    // Borrar filtrando la lista
-    const antes = window.datos.movimientos.length;
-    window.datos.movimientos = window.datos.movimientos.filter(m => m.Id !== id);
+    // 1. CONTROL VISUAL DEL BOTÓN
+    const btnBorrar = document.getElementById('btn-borrar-modal');
+    const textoOriginal = btnBorrar ? btnBorrar.innerText : "ELIMINAR";
+    
+    if (btnBorrar) {
+        btnBorrar.innerText = "⏳ BORRANDO...";
+        btnBorrar.disabled = true;
+    }
 
-    if (window.datos.movimientos.length < antes) {
-        console.log("🗑️ Borrado ID:", id);
-        procesarDatos(window.datos.movimientos); // Actualizar pantalla
-        await guardarUniversal(); // Guardar en Excel
+    try {
+        console.log("🗑️ Iniciando borrado del ID:", id);
+
+        // 2. VALIDACIÓN DE DATOS
+        if (!window.datos || !Array.isArray(window.datos)) {
+            throw new Error("Error crítico: No hay datos en memoria.");
+        }
+
+        // 3. BORRADO EN MEMORIA (BLINDADO)
+        const longitudAntes = window.datos.length;
+        
+        // Usamos String() en ambos lados para evitar error de Numero vs Texto
+        window.datos = window.datos.filter(m => String(m.id || m.ID) !== String(id));
+
+        // Verificamos si realmente se borró algo
+        if (window.datos.length === longitudAntes) {
+            console.warn("⚠️ No se encontró el ID. Intentando recarga...");
+            // Opcional: Si no lo encuentra, forzamos recarga visual por si era un fantasma
+            throw new Error("No se encontró el movimiento. Puede que ya estuviera borrado.");
+        }
+
+        // 4. GUARDAR CAMBIOS (NUBE O LOCAL)
+        // Al llamar a guardarUniversal sin datos nuevos, simplemente guarda el estado actual (con el borrado)
+        if (typeof guardarUniversal === 'function') {
+            await guardarUniversal();
+        } else {
+            // Fallback por si no existe la función
+            renderizar();
+            actualizarDashboard();
+        }
+
+        // 5. ÉXITO: CERRAR Y AVISAR
+        cerrarModal();
+        mostrarEstado("🗑️ Movimiento eliminado correctamente", "ok");
+        if (typeof vibrar === 'function') vibrar('error');
+
+    } catch (error) {
+        console.error("❌ Error al borrar:", error);
+        alert("No se pudo borrar: " + error.message);
+        
+    } finally {
+        // 6. SEGURIDAD: RESTAURAR BOTÓN SIEMPRE
+        // Esto asegura que el botón nunca se quede "pillado" en gris
+        if (btnBorrar) {
+            btnBorrar.innerText = textoOriginal;
+            btnBorrar.disabled = false;
+        }
     }
 };
 
