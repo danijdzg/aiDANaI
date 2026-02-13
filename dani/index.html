@@ -4449,141 +4449,137 @@ function accionFab(tipo) {
 // ==========================================
 // 💾 GUARDADO MAESTRO (Versión Mejorada para Traspasos)
 // ==========================================
-async function guardarUniversal(nuevasFilas) { // <--- AHORA ACEPTA DATOS
+async function guardarUniversal(nuevasFilas) {
     const btn = document.getElementById('btn-guardar');
     const originalText = btn ? btn.innerHTML : '';
-    if(btn) btn.innerHTML = '<span class="material-icons spin">sync</span> Guardando...';
+    // Indicador visual en el botón manual si existe
+    const btnModal = document.getElementById('btn-modal-action');
+    if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
+
+    // Bloqueamos la interfaz para evitar doble clic
+    window.isSaving = true;
 
     try {
-        console.log("💾 Iniciando guardado completo...");
+        console.log("💾 Iniciando PROTOCOLO DE GUARDADO SEGURO...");
 
-        // ---------------------------------------------------------
-        // 1. INCORPORAR NUEVOS DATOS (EL CAMBIO CLAVE)
-        // ---------------------------------------------------------
-        // Si vienen filas nuevas desde guardarManual, las añadimos a window.datos
+        // 1. PREPARACIÓN DE DATOS (En una copia temporal, no tocamos la oficial aún)
+        let datosCandidatos = [...(window.datos || [])];
+
         if (nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
             
-            if(!window.datos) window.datos = [];
+            // Normalizamos las nuevas filas antes de añadirlas
+            const filasNormalizadas = nuevasFilas.map(filaNueva => ({
+                id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
+                fecha: new Date(filaNueva.FECHA || filaNueva.fecha),
+                cuenta: filaNueva.CUENTA || filaNueva.cuenta,
+                concepto: filaNueva.CONCEPTO || filaNueva.concepto,
+                importe: parseFloat(filaNueva.IMPORTE || filaNueva.importe),
+                descripcion: filaNueva.DESCRIPCION || filaNueva.descripcion || "",
+                beneficiario: filaNueva.BENEFICIARIO || filaNueva.beneficiario || "",
+                ts: new Date(filaNueva.FECHA || filaNueva.fecha).getTime(),
+                // Campos calculados para UI
+                tipo: (parseFloat(filaNueva.IMPORTE || filaNueva.importe) >= 0) ? 'ingreso' : 'gasto'
+            }));
 
-            nuevasFilas.forEach(filaNueva => {
-                // Convertimos las mayúsculas (de mi código anterior) a minúsculas (de tu código actual)
-                // para que no haya conflicto de datos.
-                const filaNormalizada = {
-                    id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
-                    fecha: filaNueva.FECHA || filaNueva.fecha,
-                    cuenta: filaNueva.CUENTA || filaNueva.cuenta,
-                    concepto: filaNueva.CONCEPTO || filaNueva.concepto,
-                    importe: filaNueva.IMPORTE || filaNueva.importe,
-                    descripcion: filaNueva.DESCRIPCION || filaNueva.descripcion || "",
-                    beneficiario: filaNueva.BENEFICIARIO || filaNueva.beneficiario || "",
-                    // Añadimos campos extra si los usas para filtrado
-                    ts: new Date(filaNueva.FECHA || filaNueva.fecha).getTime()
-                };
-                
-                // Añadimos al principio de la lista
-                window.datos.unshift(filaNormalizada);
-            });
-            
-            // Reordenamos por fecha (opcional, pero recomendado)
-            window.datos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-        }
-        // ---------------------------------------------------------
-
-        // 2. RESCATE DE DATOS (Si la memoria falla)
-        if (!window.datos || window.datos.length === 0) {
-            const cacheRescate = localStorage.getItem('aidanai_datos_cache');
-            if (cacheRescate) {
-                window.datos = JSON.parse(cacheRescate);
-                window.datos = window.datos.map(m => ({
-                    ...m,
-                    id: m.id || m.ID || crypto.randomUUID(),
-                    fecha: new Date(m.fecha)
-                }));
-            }
+            // Añadimos al principio de la copia temporal
+            datosCandidatos.unshift(...filasNormalizadas);
+            // Reordenamos por fecha para mantener el Excel limpio
+            datosCandidatos.sort((a, b) => b.ts - a.ts);
         }
 
-        if (!window.datos || window.datos.length === 0) {
-            // Si sigue vacío, es un error, pero si estamos guardando un primer dato, permitimos continuar
-            if(!nuevasFilas) throw new Error("⛔ NO SE PUEDE GUARDAR: No hay datos en memoria.");
-        }
-
-        // 3. GENERAR HOJA MOVIMIENTOS
-        const filasMovimientos = window.datos.map(mov => ({
-            "Id": mov.id || mov.ID || crypto.randomUUID(), 
-            "Fecha": mov.fecha, 
+        // 2. GENERAR HOJA MOVIMIENTOS (Virtual)
+        const filasExcel = datosCandidatos.map(mov => ({
+            "Id": mov.id,
+            "Fecha": mov.fecha,
             "Cuenta": mov.cuenta,
             "Concepto": mov.concepto,
             "Importe": mov.importe,
-            "Descripcion": mov.descripcion || mov.detalle || "", 
+            "Descripcion": mov.descripcion,
             "Beneficiario": mov.beneficiario
         }));
 
         const wb = XLSX.utils.book_new();
-        const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
+        const wsMovs = XLSX.utils.json_to_sheet(filasExcel, {
             header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
         });
         XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
-        // 4. GENERAR HOJA CONFIGURACIÓN (TABLA COMPLETA)
+        // 3. GENERAR HOJA CONFIGURACIÓN (REPARADA CON HUECOS)
         const listaCuentas = Object.entries(window.mapaCuentas || {});
         const listaConceptos = window.listaConceptos || [];
         const listaBeneficiarios = window.listaBeneficiarios || [];
-
         const maxFilas = Math.max(listaCuentas.length, listaConceptos.length, listaBeneficiarios.length);
+        
         const datosConfig = [];
-        datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "", "CONCEPTO", "", "BENEFICIARIO"]);
+        datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "", "CONCEPTO", "", "BENEFICIARIO"]); // Cabecera con huecos D y F
 
         for (let i = 0; i < maxFilas; i++) {
             const cuenta = listaCuentas[i]; 
             const concepto = listaConceptos[i];
             const beneficiario = listaBeneficiarios[i];
-
             datosConfig.push([
                 cuenta ? cuenta[0] : "",                
                 cuenta ? cuenta[1].tipo : "",           
                 cuenta ? (cuenta[1].esInversion ? "Si" : "No") : "", 
-                "",                                     
+                "", // Columna D vacía
                 concepto || "",                         
-                "",                                     
+                "", // Columna F vacía
                 beneficiario || ""                      
             ]);
         }
-
         const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
         XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
 
-        // 5. ESCRITURA EN DISCO / NUBE
-        // Comprobamos si existe la librería oneDrive y si estamos logueados
-        // Nota: Adaptado para tu variable 'oneDrive' que usas en tu código
-        const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.usuarioLogueado)); 
+        // 4. CRUCE DE CAMINOS: ¿NUBE O LOCAL?
+        const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
 
         if (usarNube && typeof oneDrive !== 'undefined') {
+            // --- FASE CRÍTICA: SUBIDA A LA NUBE ---
+            // Primero verificamos conexión básica
+            if (!navigator.onLine) throw new Error("Sin conexión a Internet. No se puede guardar en la nube.");
+
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            // Intentamos usar tu método saveFile
+            
+            // Intentamos subir. Si esto falla, saltará al CATCH y NO se actualizará la pantalla.
             await oneDrive.saveFile(wbout, "aidanai.xlsx");
             
-            if(typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado en OneDrive (Nube)", "success");
-            else console.log("✅ Guardado en OneDrive");
+            // --- ÉXITO ---
+            console.log("✅ Confirmado: Archivo recibido por OneDrive.");
+            if(typeof mostrarEstado === 'function') mostrarEstado("☁️ Guardado seguro en Nube", "success");
         } else {
-            // Modo Local
+            // MODO LOCAL
             XLSX.writeFile(wb, "aidanai.xlsx");
-            if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado en Local (No conectado)", "info");
+            if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado LOCAL (Archivo descargado)", "info");
         }
+
+        // 5. ACTUALIZAR MEMORIA Y PANTALLA (Solo si llegamos aquí)
+        // Ahora sí es seguro hacer oficial la copia temporal
+        window.datos = datosCandidatos;
+
+        // Recalculamos todo
+        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if(typeof renderizar === 'function') renderizar();
         
-        // 6. ACTUALIZAR INTERFAZ (IMPORTANTE)
-        // Para que veas los cambios sin recargar la página
-        if(typeof procesarDatos === 'function') procesarDatos(window.datos);
-        if(typeof actualizarDashboard === 'function') actualizarDashboard();
-        if(typeof renderTablaMovimientos === 'function') renderTablaMovimientos();
+        // Actualizamos filtros dinámicos con los nuevos datos
+        if(typeof cargarSugerenciasAjustes === 'function') cargarSugerenciasAjustes();
 
     } catch (error) {
-        console.error(error);
-        // No mostramos alerta si es cancelación de usuario, pero sí error real
-        if(typeof showToast === 'function') showToast("Error al guardar: " + error.message, "error");
-        else alert("❌ ERROR AL GUARDAR: " + error.message);
+        // --- GESTIÓN DE DESASTRES ---
+        console.error("❌ ERROR CRÍTICO AL GUARDAR:", error);
+        
+        // Avisamos al usuario
+        if(typeof mostrarEstado === 'function') mostrarEstado("❌ FALLO AL GUARDAR: " + error.message, "error");
+        else alert("Error al guardar: " + error.message);
+
+        // RE-LANZAMOS EL ERROR
+        // Esto es vital: le dice a guardarManual que NO cierre el formulario
+        throw error; 
     } finally {
+        // Restaurar botones
         if(btn) btn.innerHTML = originalText;
+        if(btnModal) btnModal.innerHTML = 'GUARDAR';
+        window.isSaving = false;
     }
 }
 
