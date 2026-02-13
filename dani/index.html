@@ -3009,14 +3009,39 @@ window.getFechasDashboard = function() {
 
     function toggleFiltros() { document.getElementById('panel-filtros').classList.toggle('open'); }
     function actualizarFiltrosUI(c, co, b) {
+        console.time("FiltrosUI"); // Cronómetro para ver la mejora
         const fill = (id, set, label) => {
             const el = document.getElementById(id);
-            el.innerHTML = `<option value="">${label}</option>`;
-            Array.from(set).sort().forEach(v => el.innerHTML += `<option value="${v}">${v}</option>`);
+            if (!el) return;
+
+            // 1. Limpiamos y preparamos el fragmento virtual
+            el.innerHTML = ''; 
+            const fragment = document.createDocumentFragment();
+            
+            // 2. Opción por defecto
+            const optDef = document.createElement('option');
+            optDef.value = "";
+            optDef.innerText = label;
+            fragment.appendChild(optDef);
+
+            // 3. Añadimos todas las opciones al fragmento (esto no toca la pantalla)
+            Array.from(set).sort().forEach(v => {
+                if (v && v.trim() !== "") { // Evitamos vacíos
+                    const opt = document.createElement('option');
+                    opt.value = v;
+                    opt.innerText = v;
+                    fragment.appendChild(opt);
+                }
+            });
+
+            // 4. Pegamos todo de golpe (1 sola actualización de pantalla)
+            el.appendChild(fragment);
         };
+
         fill('f-cuenta', c, 'Todas Cuentas');
         fill('f-concepto', co, 'Todos Conceptos');
         fill('f-beneficiario', b, 'Todos Beneficiarios');
+        console.timeEnd("FiltrosUI");
     }
     function aplicarFiltros() {
         filtros.cuenta = document.getElementById('f-cuenta').value;
