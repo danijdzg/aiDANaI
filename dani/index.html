@@ -1359,8 +1359,9 @@ body {
                     <div class="card-header">
                         <span class="card-title" style="color: var(--c-success)!important">SCORING FINANCIERO</span>
                     </div>
-                    <div style="position: relative; height: 280px; width: 100%;">
-                        <div id="chartRadar" style="width: 100%; height: 100%;"></div>
+                    <div style="position: relative; height: 380px; width: 100%;">
+                        <div id="chartRadar" style="width:100%; height:400px;"></div>
+
                         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; margin-top: 15px;">
                             <div id="score-total" style="font-size: 24px; font-weight: 900; color: #fff; text-shadow: 0 0 15px rgba(57, 255, 20, 0.5);">---</div>
                         </div>
@@ -2723,7 +2724,7 @@ function procesarLibroLeido(wb) {
     
     // Gráficos opcionales (solo si existen las funciones)
     if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
-    if (typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
+    if (typeof renderizarRadarSalud === 'function') renderizarRadarScoring();
     if (typeof cargarInterfaz === 'function') cargarInterfaz();
 }
  
@@ -2924,10 +2925,7 @@ function finalizarGuardado(esTraspaso) {
     if (p === 'inicio') {
         setTimeout(() => {
             actualizarDashboard();
-            // renderizarGraficoEvolucion ya se llama en actualizarDashboard normalmente, 
-            // pero forzamos el Radar aquí porque ahora vive en Inicio:
-            if (typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
-        }, 100);
+            }, 100);
     }
 
     // CASO 2: PESTAÑA PATRIMONIO
@@ -3772,7 +3770,7 @@ function formatear(val, tipo) {
         // Renderizado de gráficos
         renderizarGraficoEvolucion(datosPropietario);
         generarAnalisisIA(datos);
-		renderizarRadarSalud();
+		renderizarRadarScoring();
   	
      function verExtractoCuenta(nombreCuenta) {
         limpiarFiltros();
@@ -5023,141 +5021,175 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!hayDatosCache) mostrarEstado('Bienvenido. Carga un archivo o Conecta.', 'normal');
     }
 });
+
 // ==========================================
-// 🕸️ SCORING FINANCIERO (CONECTADO A CONFIGURACIÓN)
+// 📊 SCORING FINANCIERO: PENTÁGONO PRO (DETALLADO)
 // ==========================================
-function renderizarRadarSalud() {
-    const dom = document.getElementById('chartRadar');
-    if (!dom) return;
+function renderizarRadarScoring(kpis) {
+    // 1. ESCUDO DE SEGURIDAD (Valores por defecto)
+    if (!kpis) kpis = { meses: 0, tasaAhorro: 0, inversiones: 0, patrimonio: 1, libertad: 0, eficiencia: 0 };
 
-    // 1. LIMPIEZA NUCLEAR
-    const chartExistente = echarts.getInstanceByDom(dom);
-    if (chartExistente) chartExistente.dispose();
-    dom.removeAttribute('_echarts_instance_');
-    dom.innerHTML = ''; 
+    const chartDom = document.getElementById('chartRadar');
+    if (!chartDom) return;
 
-    // 2. DATOS
-    let nombreUsuario = (typeof filtroUsuarioActual !== 'undefined') ? filtroUsuarioActual.toUpperCase() : "GLOBAL";
-    let misDatos = window.datos; 
-    if (typeof window.datosPropietario !== 'undefined' && window.datosPropietario.length > 0) {
-        misDatos = window.datosPropietario;
-    }
+    // Limpieza previa
+    if (window.radarInstance) window.radarInstance.dispose();
+    chartDom.removeAttribute('_echarts_instance_');
+    window.radarInstance = echarts.init(chartDom);
 
-    if (!misDatos || misDatos.length === 0) {
-        dom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;">SIN DATOS</div>';
-        return;
-    }
+    // --- LÓGICA DE NEGOCIO Y PUNTUACIÓN (0-100) ---
 
-    // 3. CÁLCULOS (Aquí estaba el fallo anterior)
-    let flujoIngresos = 0;
-    let flujoGastos = 0;
-    let patrimonioInversion = 0;
-    let patrimonioLiquidez = 0;
+    // 1. COBERTURA (Fondo de Emergencia)
+    // Meta: Tener 6 meses de gastos cubiertos con liquidez.
+    // Cálculo: (Meses reales / 6) * 100
+    let valCobertura = kpis.meses || 0;
+    let scoreCobertura = Math.min((valCobertura / 6) * 100, 100);
 
-    misDatos.forEach(m => {
-        const imp = parseFloat(m.importe);
-        const concepto = String(m.concepto || '').toLowerCase();
-        
-        // --- CORRECCIÓN CRÍTICA ---
-        // Buscamos en la configuración si esta cuenta es inversión
-        // Si no existe mapaCuentas, asumimos falso por seguridad
-        let esInv = false;
-        if (typeof mapaCuentas !== 'undefined' && mapaCuentas[m.cuenta]) {
-            esInv = mapaCuentas[m.cuenta].esInversion; // Esto es true/false
-        } else {
-            // Plan B: Si falla la config, miramos si la columna ES_INVERSION vino en el excel (raro pero posible)
-            esInv = String(m.esInversion || '').toLowerCase().trim() === 'si';
-        }
+    // 2. AHORRO (Hábito)
+    // Meta: Ahorrar el 20% de los ingresos netos.
+    // Cálculo: (Tasa real / 20) * 100
+    let valAhorro = kpis.tasaAhorro || 0;
+    let scoreAhorro = Math.min((valAhorro / 20) * 100, 100);
+    if (scoreAhorro < 0) scoreAhorro = 0;
 
-        // A) FLUJO (Solo movimientos reales)
-        if (!concepto.includes('inicial') && !concepto.includes('traspaso')) {
-            if (imp > 0) flujoIngresos += imp;
-            if (imp < 0) flujoGastos += Math.abs(imp);
-        }
+    // 3. INVERSIÓN (Motor de Crecimiento)
+    // Meta: Que el 50% de tu patrimonio total esté trabajando (invertido).
+    let valInversion = kpis.inversiones || 0;
+    let patrimonioTotal = kpis.patrimonio || 1;
+    let ratioInv = (patrimonioTotal > 0) ? (valInversion / patrimonioTotal) * 100 : 0;
+    let scoreInversion = Math.min((ratioInv / 50) * 100, 100);
 
-        // B) PATRIMONIO (Aquí sumamos todo)
-        if (esInv) {
-            patrimonioInversion += imp;
-        } else {
-            patrimonioLiquidez += imp;
-        }
-    });
+    // 4. LIBERTAD (Independencia)
+    // Meta: Que tus rentas pasivas (4% del invertido) cubran el 25% de tus gastos.
+    // Es el primer paso hacia la libertad total (100%).
+    let valLibertad = kpis.libertad || 0;
+    let scoreLibertad = Math.min((valLibertad / 25) * 100, 100);
 
-    // --- FÓRMULAS DE PUNTUACIÓN (0 a 10) ---
+    // 5. EFICIENCIA (Retención)
+    // Meta: Quedarte con al menos el 15% de lo que pasa por tus manos.
+    // Es similar al ahorro pero enfocado en "no despilfarrar".
+    let scoreEficiencia = scoreAhorro; // Usamos el ahorro como proxy directo de eficiencia
 
-    // 1. AHORRO (Meta: 40%)
-    const ahorroNeto = flujoIngresos - flujoGastos;
-    const tasaAhorro = flujoIngresos > 0 ? (ahorroNeto / flujoIngresos) * 100 : 0;
-    const vAhorro = Math.min(10, Math.max(0, tasaAhorro / 4));
+    // --- DATOS FINALES PARA ECHARTS ---
+    const scores = [
+        Math.round(scoreCobertura),
+        Math.round(scoreInversion),
+        Math.round(scoreAhorro),
+        Math.round(scoreLibertad),
+        Math.round(scoreEficiencia)
+    ];
 
-    // 2. LIQUIDEZ (Meta: 12 meses gastos)
-    const gastoMensual = flujoGastos > 0 ? (flujoGastos / 12) : 1; 
-    const mesesCubiertos = patrimonioLiquidez / gastoMensual;
-    const vLiquidez = Math.min(10, Math.max(0, (mesesCubiertos / 12) * 10));
-
-    // 3. INVERSIÓN (Meta: 80% del patrimonio invertido)
-    const patrimonioTotal = patrimonioInversion + patrimonioLiquidez;
-    const ratioInv = patrimonioTotal > 0 ? (patrimonioInversion / patrimonioTotal) * 100 : 0;
-    const vInversion = Math.min(10, Math.max(0, (ratioInv / 80) * 10));
-
-    // 4. LIBERTAD (Meta: 25 años gastos)
-    const gastoAnual = flujoGastos > 0 ? flujoGastos : 1;
-    const aniosLibertad = patrimonioTotal / gastoAnual;
-    const vLibertad = Math.min(10, Math.max(0, aniosLibertad / 2.5));
-
-    // Valores para gráfico
-    const valores = [vAhorro, vLiquidez, vInversion, vLibertad].map(n => Number(n.toFixed(1)));
-
-    // 5. MARCADOR
-    const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
-    const notaGlobal = Math.round(promedio * 10);
+    // Nota Global (Promedio)
+    const notaGlobal = Math.round(scores.reduce((a, b) => a + b, 0) / 5);
     
+    // Actualizar marcador central (si existe en HTML)
     const divScore = document.getElementById('score-total');
     if (divScore) {
-        const colorScore = notaGlobal >= 70 ? '#39ff14' : (notaGlobal >= 50 ? '#ffeb3b' : '#ff4444');
-        divScore.innerHTML = `
-            <div style="font-size:10px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:-5px;">${nombreUsuario}</div>
-            <div style="font-size:28px; font-weight:900; color:${colorScore}; text-shadow: 0 0 20px ${colorScore}60;">${notaGlobal}</div>
-        `;
+        let color = notaGlobal >= 80 ? '#39ff14' : (notaGlobal >= 50 ? '#ffeb3b' : '#ff4444');
+        divScore.innerText = notaGlobal;
+        divScore.style.color = color;
+        divScore.style.textShadow = `0 0 20px ${color}60`;
     }
 
-    // 6. PINTAR
-    const myChart = echarts.init(dom);
+    // --- CONFIGURACIÓN VISUAL DEL GRÁFICO ---
     const option = {
-        color: ['#39ff14'],
-        tooltip: { trigger: 'item' },
+        color: ['#00E5FF'],
+        tooltip: {
+            trigger: 'item',
+            backgroundColor: 'rgba(10, 10, 10, 0.95)',
+            borderColor: '#333',
+            padding: 15,
+            textStyle: { color: '#eee', fontSize: 13, lineHeight: 20 },
+            formatter: function(params) {
+                // Función auxiliar para iconos de semáforo
+                const semaforo = (val) => val >= 80 ? '🟢' : (val >= 50 ? '🟡' : '🔴');
+                
+                return `
+                    <div style="font-size:16px; font-weight:bold; color:#00E5FF; margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px;">
+                        TU NOTA FINANCIERA: <span style="color:#fff">${notaGlobal}/100</span>
+                    </div>
+                    
+                    ${semaforo(scores[0])} <b>COBERTURA (${scores[0]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">Tienes liquidez para <b>${valCobertura.toFixed(1)} meses</b> sin ingresos.<br>Meta: 6 meses.</span><br><br>
+
+                    ${semaforo(scores[1])} <b>INVERSIÓN (${scores[1]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">El <b>${ratioInv.toFixed(0)}%</b> de tu patrimonio trabaja por ti.<br>Meta: 50% invertido.</span><br><br>
+
+                    ${semaforo(scores[2])} <b>AHORRO (${scores[2]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">Ahorras el <b>${valAhorro.toFixed(0)}%</b> de lo que ganas.<br>Meta: 20% mensual.</span><br><br>
+
+                    ${semaforo(scores[3])} <b>LIBERTAD (${scores[3]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">Tus inversiones cubren el <b>${valLibertad.toFixed(1)}%</b> de tus gastos.<br>Meta: 25% (Libertad parcial).</span><br><br>
+
+                    ${semaforo(scores[4])} <b>EFICIENCIA (${scores[4]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">Capacidad de retener dinero y optimizar gastos.<br>Meta: Alta retención.</span>
+                `;
+            }
+        },
         radar: {
             indicator: [
-                { name: 'AHORRO\n(' + Math.round(tasaAhorro) + '%)', max: 10 },
-                { name: 'LIQUIDEZ\n(' + mesesCubiertos.toFixed(1) + ' m)', max: 10 },
-                { name: 'INVERSIÓN\n(' + Math.round(ratioInv) + '%)', max: 10 },
-                { name: 'LIBERTAD\n(' + aniosLibertad.toFixed(1) + ' a)', max: 10 }
+                { name: 'COBERTURA\n(Seguridad)', max: 100 },
+                { name: 'INVERSIÓN\n(Crecimiento)', max: 100 },
+                { name: 'AHORRO\n(Hábito)', max: 100 },
+                { name: 'LIBERTAD\n(Futuro)', max: 100 },
+                { name: 'EFICIENCIA\n(Gestión)', max: 100 }
             ],
             center: ['50%', '55%'],
-            radius: '60%',
+            radius: '65%',
+            shape: 'circle',
             splitNumber: 4,
-            axisName: { color: '#fff', fontSize: 9, fontWeight: 'bold', backgroundColor: '#111', borderRadius: 4, padding: [3, 4] },
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+            axisName: {
+                color: '#bbb', 
+                fontSize: 10, 
+                fontWeight: 'bold',
+                backgroundColor: 'rgba(0,0,0,0.8)', 
+                borderRadius: 4, 
+                padding: [4, 6]
+            },
+            splitLine: {
+                lineStyle: {
+                    color: ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.3)'].reverse()
+                }
+            },
             splitArea: { show: false },
             axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
         },
         series: [{
             type: 'radar',
             data: [{
-                value: valores,
-                name: 'Scoring',
+                value: scores,
+                name: 'Financial Score',
                 symbol: 'circle',
-                symbolSize: 6,
-                lineStyle: { width: 3, color: '#39ff14', shadowBlur: 10, shadowColor: '#39ff14' },
-                areaStyle: { color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [{ color: 'rgba(57, 255, 20, 0.1)', offset: 0 }, { color: 'rgba(57, 255, 20, 0.5)', offset: 1 }]) },
-                itemStyle: { color: '#000', borderColor: '#39ff14', borderWidth: 2 }
+                symbolSize: 8,
+                itemStyle: { 
+                    color: '#00E5FF', 
+                    borderColor: '#fff', 
+                    borderWidth: 2,
+                    shadowBlur: 10,
+                    shadowColor: '#00E5FF'
+                },
+                lineStyle: { 
+                    width: 3, 
+                    color: '#00E5FF', 
+                    shadowBlur: 15, 
+                    shadowColor: '#00E5FF' 
+                },
+                areaStyle: {
+                    color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
+                        { offset: 0, color: 'rgba(0, 229, 255, 0.2)' },
+                        { offset: 1, color: 'rgba(0, 229, 255, 0.6)' }
+                    ])
+                }
             }]
         }]
     };
 
-    myChart.setOption(option);
-    setTimeout(() => { myChart.resize(); }, 50);
-    window.addEventListener('resize', () => myChart.resize());
+    window.radarInstance.setOption(option);
+    
+    // Ajuste responsivo
+    window.addEventListener('resize', () => {
+        if(window.radarInstance) window.radarInstance.resize();
+    });
 }
 /* =========================================
    ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
@@ -5304,15 +5336,15 @@ function formatearDatoMaestro(valor, tipo) {
         }).format(valor);
     } 
     else if (tipo === 'porcentaje') {
-        // EJEMPLO: 35.40% (Sin €)
-        return valor.toFixed(2) + '%';
+        // CAMBIO: 0 decimales para limpieza visual
+        return valor.toFixed(0) + '%';
     } 
     else if (tipo === 'meses') {
-        // EJEMPLO: 12.5 Meses (Sin €)
-        return valor.toFixed(1) + ' Meses';
+        // CAMBIO: 0 decimales para limpieza visual
+        return valor.toFixed(0) + ' Meses';
     } 
     else {
-        // Número simple
+        // Número simple (por defecto)
         return valor.toFixed(2);
     }
 }
@@ -5387,191 +5419,237 @@ window.toggleCustomDates = function() {
     }
 };
 
-// ==========================================
-// 📊 DASHBOARD FINANCIERO (LÓGICA PRINCIPAL)
-// ==========================================
+// =========================================================
+// 🚀 1. VARIABLE GLOBAL DE ESTADO
+// =========================================================
+var filtroUsuarioActual = 'todos'; // Valor inicial por defecto
+
+// =========================================================
+// 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (VERSIÓN CORREGIDA)
+// =========================================================
 window.actualizarDashboard = function() {
-    // 1. Si no hay datos, salir
-    if (!datos || datos.length === 0) return;
+    console.log("📊 Recalculando Dashboard...");
 
-    // 2. Preparar datos (limpieza)
-    const movs = datos.map(m => ({
-        ...m,
-        ts: m.ts || (m.FECHA ? new Date(m.FECHA).getTime() : 0),
-        cuenta: String(m.cuenta || m.CUENTA || '').trim(),
-        concepto: String(m.concepto || m.CONCEPTO || 'Varios'),
-        detalle: String(m.detalle || m.descripcion || m.DESCRIPCION || ''),
-        importe: parseFloat(m.importe || m.IMPORTE || 0)
-    }));
-
-    // Filtro de usuario (si usas multiusuario)
-    const movsFiltrados = (typeof pasaFiltroPropietario === 'function') 
-        ? movs.filter(m => pasaFiltroPropietario(m)) : movs;
-
-    // 3. DEFINIR RANGO DE FECHAS
-    const selector = document.getElementById('dash-period');
-    const periodo = selector ? selector.value : 'month';
-    const now = new Date();
-    let tStart = 0, tEnd = 9999999999999; // Por defecto: Toda la historia
-
-    if (periodo === 'month') {
-        // Desde el día 1 del mes actual hasta el último día
-        tStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-        tEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
-    } else if (periodo === 'year') {
-        // Todo el año actual
-        tStart = new Date(now.getFullYear(), 0, 1).getTime();
-        tEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999).getTime();
-    } else if (periodo === 'custom') {
-        // Fechas manuales
-        const elStart = document.getElementById('d-start');
-        const elEnd = document.getElementById('d-end');
-        
-        if (elStart && elStart.value) tStart = new Date(elStart.value).getTime();
-        if (elEnd && elEnd.value) {
-            const endObj = new Date(elEnd.value);
-            endObj.setHours(23, 59, 59, 999); // Final del día seleccionado
-            tEnd = endObj.getTime();
-        }
+    // 1. SEGURIDAD: Si no hay datos, salimos sin romper nada
+    if (!window.datos || window.datos.length === 0) {
+        animarValor('d-ing', 0);
+        animarValor('d-gas', 0);
+        animarValor('d-net', 0);
+        animarValor('d-aho', 0, '', '%');
+        return;
     }
 
-    // 4. CÁLCULO DE KPIs (FLUJO DE CAJA)
-    let ingresos = 0, gastos = 0;
+    // 2. FILTRADO POR USUARIO (GLOBAL)
+    // Primero obtenemos todos los datos del usuario activo
+    let datosUsuario = [...window.datos];
+    if (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos') {
+        datosUsuario = datosUsuario.filter(m => 
+            pasaFiltroPropietario(m) // Usamos tu función auxiliar que ya funciona bien
+        );
+    }
 
-    movsFiltrados.filter(m => m.ts >= tStart && m.ts <= tEnd).forEach(m => {
-        // EXCLUIR TRASPASOS Y SALDOS INICIALES DEL FLUJO
-        const txt = (m.concepto + ' ' + m.detalle).toUpperCase();
-        if (txt.includes('TRASPASO') || m.tipo === 'traspaso' || txt.includes('INICIAL') || txt.includes('EXISTENCIA')) return;
+    // 3. FILTRADO POR FECHA (PARA LA TARJETA DE RESUMEN)
+    // Obtenemos el rango de fechas seleccionado (Mes/Año/Custom)
+    const rango = getFechasDashboard(); 
+    // Filtramos los movimientos que caen dentro de ese rango
+    const datosResumen = datosUsuario.filter(m => m.ts >= rango.start && m.ts <= rango.end);
 
-        if (m.importe >= 0) ingresos += m.importe;
-        else gastos += Math.abs(m.importe);
+    // 4. CÁLCULO DE KPIs DE PERIODO (INGRESOS, GASTOS, AHORRO)
+    let ing = 0;
+    let gas = 0;
+
+    datosResumen.forEach(m => {
+        // Ignoramos movimientos internos o iniciales para no ensuciar la métrica
+        const conc = String(m.concepto || "").toLowerCase();
+        if (conc.includes('inicial') || conc.includes('traspaso')) return;
+
+        if (m.tipo === 'ingreso') {
+            ing += m.importe;
+        } else if (m.tipo === 'gasto') {
+            gas += Math.abs(m.importe);
+        }
     });
 
-    const neto = ingresos - gastos;
-    const tasaAhorro = ingresos > 0 ? ((neto / ingresos) * 100) : 0;
+    const neto = ing - gas;
+    const tasaAhorro = (ing > 0) ? (neto / ing) * 100 : 0;
 
-    // 5. ANIMAR TARJETAS (RESUMEN)
-    if (typeof animarCifra === 'function') {
-        animarCifra('d-ing', ingresos, 'moneda');      // €
-        animarCifra('d-gas', gastos, 'moneda');        // €
-        animarCifra('d-net', neto, 'moneda');          // €
-        animarCifra('d-aho', tasaAhorro, 'porcentaje'); // % (SIN €)
-    }
-
-    // Colores semánticos
-    const elAho = document.getElementById('d-aho');
-    if(elAho) {
-        if (tasaAhorro >= 20) elAho.className = 'kpi-value val-std-pos';
-        else if (tasaAhorro > 0) elAho.className = 'kpi-value val-std-neu';
-        else elAho.className = 'kpi-value val-std-neg';
-    }
+    // 5. ACTUALIZAR TARJETA SUPERIOR (RESUMEN)
+    animarValor('d-ing', ing);
+    animarValor('d-gas', gas, '', ''); // Sin signo negativo visual, solo el número
+    
+    // El Neto tiene color dinámico
     const elNeto = document.getElementById('d-net');
-    if(elNeto) elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
-
-
-    // 6. CÁLCULO DE PATRIMONIO (Siempre histórico completo para ser real)
-    let totalLiq = 0, totalInv = 0, totalPatri = 0;
-    let gastoHist = 0, fPrimero = now.getTime(), fUltimo = 0;
-
-    // Recorremos TODO (sin filtro de fecha) para el saldo actual real
-    const saldos = {};
-    movsFiltrados.forEach(m => {
-        saldos[m.cuenta] = (saldos[m.cuenta] || 0) + m.importe;
-        
-        // Gasto Histórico para métrica FIRE
-        const txt = (m.concepto + ' ' + m.detalle).toUpperCase();
-        if (m.importe < 0 && !txt.includes('TRASPASO')) {
-            gastoHist += Math.abs(m.importe);
-            if (m.ts < fPrimero) fPrimero = m.ts;
-            if (m.ts > fUltimo) fUltimo = m.ts;
-        }
-    });
-
-    Object.keys(saldos).forEach(cta => {
-        const saldo = saldos[cta];
-        // Detección Inversión
-        const config = (typeof mapaCuentas !== 'undefined') ? mapaCuentas[cta] : null;
-        const esInv = config ? (config.esInversion === true || String(config.esInversion).toUpperCase() === 'SI') : false;
-
-        totalPatri += saldo;
-        if (esInv) totalInv += saldo;
-        else totalLiq += saldo;
-    });
-
-    // Métricas FIRE
-    let gastoMensual = 1;
-    if (fUltimo > fPrimero) {
-        const meses = Math.max(1, (fUltimo - fPrimero) / (1000 * 60 * 60 * 24 * 30.44));
-        gastoMensual = gastoHist / meses;
+    if(elNeto) {
+        animarValor('d-net', neto);
+        elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
     }
     
-    const cobertura = gastoMensual > 0 ? (totalLiq / gastoMensual) : 0;
-    const objetivo = gastoMensual * 300; 
-    const libertad = objetivo > 0 ? (totalPatri / objetivo) * 100 : 0;
+    animarValor('d-aho', tasaAhorro, '', '%', 1);
 
-    // 7. ANIMAR TARJETAS (PATRIMONIO)
-    if (typeof animarCifra === 'function') {
-        animarCifra('d-patri-liq', totalLiq, 'moneda');
-        animarCifra('d-patri-inv', totalInv, 'moneda');
-        animarCifra('d-patri-total', totalPatri, 'moneda');
-        animarCifra('d-cobertura', cobertura, 'meses');       // Meses
-        animarCifra('d-libertad', libertad, 'porcentaje');    // %
+    // 6. CÁLCULO DE PATRIMONIO (ESTO ES HISTÓRICO, NO DEPENDE DE FECHAS)
+    let totalPatrimonio = 0;
+    let totalLiquidez = 0;
+    let totalInversion = 0;
+    
+    // Usamos 'datosUsuario' (todo el historial) para calcular saldos actuales reales
+    // Pero es más seguro iterar sobre las CUENTAS y sus saldos actuales
+    if (window.mapaCuentas) {
+        Object.keys(window.mapaCuentas).forEach(k => {
+            // Aplicar filtro de propietario a la cuenta
+            if (filtroUsuarioActual !== 'todos') {
+                const letra = k.charAt(0).toUpperCase();
+                if (filtroUsuarioActual === 'Dani' && letra !== 'D') return;
+                if (filtroUsuarioActual === 'Norma' && letra !== 'N') return;
+            }
+
+            const c = window.mapaCuentas[k];
+            const saldo = c.saldoActual || 0;
+            
+            totalPatrimonio += saldo;
+            if (c.esInversion) {
+                totalInversion += saldo;
+            } else {
+                totalLiquidez += saldo;
+            }
+        });
     }
 
-    // Color semáforo cobertura
+    // Actualizar Tarjeta Patrimonio (Azul)
+    const elPatri = document.getElementById('d-patri-total');
+    if(elPatri) {
+        animarValor('d-patri-total', totalPatrimonio, '', ' €');
+        elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
+    }
+    animarValor('d-patri-liq', totalLiquidez, '', ' €');
+    animarValor('d-patri-inv', totalInversion, '', ' €');
+
+    // 7. CÁLCULO DE KPIs FINANCIEROS AVANZADOS (COBERTURA Y LIBERTAD)
+    // Necesitamos un gasto mensual promedio REAL (no solo de este mes)
+    // Calculamos el promedio de los últimos 12 meses o de todo el historial si es menor
+    let gastoTotalHist = 0;
+    let primerMov = new Date();
+    let ultimoMov = new Date(0);
+    let hayGastos = false;
+
+    datosUsuario.forEach(m => {
+        if (m.tipo === 'gasto' && !String(m.concepto).toLowerCase().includes('traspaso')) {
+            gastoTotalHist += Math.abs(m.importe);
+            if (m.fecha < primerMov) primerMov = m.fecha;
+            if (m.fecha > ultimoMov) ultimoMov = m.fecha;
+            hayGastos = true;
+        }
+    });
+
+    let gastoMensualMedio = 0;
+    if (hayGastos) {
+        const diasDif = Math.max(1, (ultimoMov - primerMov) / (1000 * 60 * 60 * 24));
+        // Gasto diario * 30.44 = Gasto Mensual
+        gastoMensualMedio = (gastoTotalHist / diasDif) * 30.44;
+    }
+    
+    // Evitar división por cero
+    if (gastoMensualMedio < 1) gastoMensualMedio = 1;
+
+    // A) Cobertura: Liquidez / Gasto Mensual
+    let mesesCobertura = totalLiquidez / gastoMensualMedio;
     const elCob = document.getElementById('d-cobertura');
     if(elCob) {
-        if(cobertura < 3) elCob.style.color = 'var(--c-danger)';
-        else if(cobertura < 6) elCob.style.color = 'var(--c-warning)';
-        else elCob.style.color = 'var(--c-success)';
+        animarValor('d-cobertura', mesesCobertura, '', ' Meses', 1);
+        // Color semántico
+        elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
+    }
+
+    // B) Libertad: (Inversión * 4% anual) / (Gasto Mensual * 12)
+    let rentaPasivaAnual = totalInversion * 0.04;
+    let gastoAnual = gastoMensualMedio * 12;
+    let pctLibertad = (rentaPasivaAnual / gastoAnual) * 100;
+    
+    animarValor('d-libertad', pctLibertad, '', '%', 2);
+
+    // 8. RENDERIZADO DE GRÁFICOS
+    // Pasamos el historial completo para el gráfico de evolución
+    if (typeof renderizarGraficoEvolucion === 'function') {
+        renderizarGraficoEvolucion(datosUsuario);
+    }
+    
+    // Pentágono de Scoring
+    if (typeof renderizarRadarScoring === 'function') {
+        renderizarRadarScoring({
+            meses: mesesCobertura,
+            tasaAhorro: tasaAhorro, // Usamos la tasa del periodo seleccionado
+            inversiones: totalInversion,
+            patrimonio: totalPatrimonio || 1,
+            libertad: pctLibertad
+        });
+    }
+
+    // Análisis IA (opcional)
+    if (typeof generarAnalisisIA === 'function') {
+        generarAnalisisIA(datosUsuario);
     }
 };
-// Variable global
-var filtroUsuarioActual = 'todos';
+
 // ==========================================
-// 👤 CAMBIO DE USUARIO (CON RETARDO TÁCTICO)
+// 🚀 3. CAMBIO DE USUARIO (CON RETARDO TÁCTICO)
 // ==========================================
 window.toggleUsuario = function() {
-    const btnName = document.getElementById('btn-identity-toggle'); 
+    // CORRECCIÓN: Buscamos ambos posibles IDs para asegurar que funcione
+    const btnName = document.getElementById('btn-filtro-usuario') || document.getElementById('btn-identity-toggle');
     const root = document.documentElement;
 
     // 1. Lógica de cambio de nombre y tema
+    // Ciclo: TODOS -> DANI -> NORMA -> TODOS
     if (filtroUsuarioActual === 'todos') {
         filtroUsuarioActual = 'Dani';
-        if(btnName) btnName.innerText = 'DANI';
+        if(btnName) btnName.innerText = '👨 DANI';
         root.style.setProperty('--current-theme', 'var(--theme-dani)');
     } else if (filtroUsuarioActual === 'Dani') {
         filtroUsuarioActual = 'Norma';
-        if(btnName) btnName.innerText = 'NORMA';
+        if(btnName) btnName.innerText = '👩 NORMA';
         root.style.setProperty('--current-theme', 'var(--theme-norma)');
     } else {
         filtroUsuarioActual = 'todos';
-        if(btnName) btnName.innerText = 'D&N';
+        if(btnName) btnName.innerText = '👥 D&N'; // O "TODOS"
         root.style.setProperty('--current-theme', 'var(--theme-dn)');
     }
 
-    // 2. Filtrado de datos
+    // 2. Filtrado de la variable global de datos (opcional, para otras vistas)
     if (window.datos && window.datos.length > 0) {
-        window.datosPropietario = window.datos.filter(m => pasaFiltroPropietario(m));
+        // Función auxiliar simple por si no existe pasaFiltroPropietario
+        if (typeof pasaFiltroPropietario === 'function') {
+            window.datosPropietario = window.datos.filter(m => pasaFiltroPropietario(m));
+        } else {
+             window.datosPropietario = window.datos; // Fallback
+        }
     }
 
-    // 3. ACTUALIZACIÓN INMEDIATA (Listas y Textos)
+    // 3. ACTUALIZACIÓN INMEDIATA
     if(typeof renderizar === 'function') renderizar(); 
     if(typeof actualizarDashboard === 'function') actualizarDashboard(); 
-    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio(); // Actualiza la Pestaña Patrimonio (Totales y Lista)
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+
     // 4. ACTUALIZACIÓN DE GRÁFICOS (CON RETARDO)
-    // Este setTimeout es el secreto para que no se bloqueen
+    // El retardo da tiempo a que el navegador procese el cambio de CSS y DOM
     setTimeout(() => {
         console.log("🎨 Repintando gráficos para: " + filtroUsuarioActual);
         
-        if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion();
-        if(typeof renderizarDistribucion === 'function') renderizarDistribucion();
-        if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+        // Actualizamos gráficos específicos
+        if(typeof renderizarGraficoEvolucion === 'function') {
+            // Pasamos datosPropietario si existe, o dejamos que la función filtre
+            let datosParaGrafico = window.datosPropietario || window.datos;
+            renderizarGraficoEvolucion(datosParaGrafico);
+        }
         
-        // El gráfico problemático:
-        if(typeof renderizarRadarSalud === 'function') renderizarRadarSalud();
+        if(typeof renderizarSunburstPatrimonio === 'function') {
+            renderizarSunburstPatrimonio();
+        }
         
-    }, 50); // 50ms de espera
+        // Forzamos Dashboard una vez más para asegurar el Pentágono
+        if(typeof actualizarDashboard === 'function') {
+            actualizarDashboard();
+        }
+
+    }, 50);
 
     if(typeof vibrar === 'function') vibrar('tecla');
 };
