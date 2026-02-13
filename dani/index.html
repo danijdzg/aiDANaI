@@ -2647,9 +2647,18 @@ function procesarLibroLeido(wb) {
         let fechaObj = new Date();
 
         if (typeof f === 'number') {
-            fechaObj = new Date(Math.round((f - 25569) * 86400 * 1000));
-        } else if (f) {
-            fechaObj = new Date(f);
+            // Caso Excel numérico: Convertimos a UTC puro y luego extraemos componentes para crear fecha local
+            // Esto evita que "1 Enero UTC" se convierta en "31 Dic Local"
+            const fechaBase = new Date(Math.round((f - 25569) * 86400 * 1000));
+            fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
+        } else if (typeof f === 'string') {
+            // Caso Texto (YYYY-MM-DD): Forzamos interpretación local (año, mes-1, día)
+            const partes = f.split('-');
+            if (partes.length === 3) {
+                fechaObj = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+            } else {
+                fechaObj = new Date(f); // Fallback por si formato raro
+            }
         }
 
         let imp = fila.Importe || fila.IMPORTE || 0;
@@ -4469,18 +4478,30 @@ async function guardarUniversal(nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
             
             // Normalizamos las nuevas filas antes de añadirlas
-            const filasNormalizadas = nuevasFilas.map(filaNueva => ({
-                id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
-                fecha: new Date(filaNueva.FECHA || filaNueva.fecha),
-                cuenta: filaNueva.CUENTA || filaNueva.cuenta,
-                concepto: filaNueva.CONCEPTO || filaNueva.concepto,
-                importe: parseFloat(filaNueva.IMPORTE || filaNueva.importe),
-                descripcion: filaNueva.DESCRIPCION || filaNueva.descripcion || "",
-                beneficiario: filaNueva.BENEFICIARIO || filaNueva.beneficiario || "",
-                ts: new Date(filaNueva.FECHA || filaNueva.fecha).getTime(),
-                // Campos calculados para UI
-                tipo: (parseFloat(filaNueva.IMPORTE || filaNueva.importe) >= 0) ? 'ingreso' : 'gasto'
-            }));
+            const filasNormalizadas = nuevasFilas.map(filaNueva => {
+                // TRUCO ANTIDESFASE: Parseamos "2023-05-20" manualmente a (2023, 4, 20)
+                let fechaFinal = new Date();
+                const rawFecha = filaNueva.FECHA || filaNueva.fecha;
+                
+                if (typeof rawFecha === 'string' && rawFecha.includes('-')) {
+                    const [y, m, d] = rawFecha.split('-').map(Number);
+                    fechaFinal = new Date(y, m - 1, d); // Mes es base 0 en JS
+                } else {
+                    fechaFinal = new Date(rawFecha);
+                }
+
+                return {
+                    id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
+                    fecha: fechaFinal,
+                    cuenta: filaNueva.CUENTA || filaNueva.cuenta,
+                    concepto: filaNueva.CONCEPTO || filaNueva.concepto,
+                    importe: parseFloat(filaNueva.IMPORTE || filaNueva.importe),
+                    descripcion: filaNueva.DESCRIPCION || filaNueva.descripcion || "",
+                    beneficiario: filaNueva.BENEFICIARIO || filaNueva.beneficiario || "",
+                    ts: fechaFinal.getTime(), // Timestamp seguro
+                    tipo: (parseFloat(filaNueva.IMPORTE || filaNueva.importe) >= 0) ? 'ingreso' : 'gasto'
+                };
+            });
 
             // Añadimos al principio de la copia temporal
             datosCandidatos.unshift(...filasNormalizadas);
@@ -5568,12 +5589,14 @@ function cargarSugerenciasAjustes() {
         document.getElementById('m-id').value = mov.id; 
         
         // Fecha (Formato YYYY-MM-DD para input date)
-        let fechaISO = new Date().toISOString().split('T')[0];
-        try {
-            if(mov.fecha instanceof Date) fechaISO = mov.fecha.toISOString().split('T')[0];
-            else fechaISO = new Date(mov.ts).toISOString().split('T')[0];
-        } catch(e) {}
-        document.getElementById('m-fecha').value = fechaISO;
+        let fechaObj = (mov.fecha instanceof Date) ? mov.fecha : new Date(mov.ts);
+        
+        // Función rápida para formato local YYYY-MM-DD
+        const yyyy = fechaObj.getFullYear();
+        const mm = String(fechaObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(fechaObj.getDate()).padStart(2, '0');
+        
+        document.getElementById('m-fecha').value = `${yyyy}-${mm}-${dd}`;
 
         // Campos de texto e importe
         document.getElementById('m-cuenta').value = mov.cuenta;
