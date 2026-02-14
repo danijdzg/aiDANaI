@@ -1248,6 +1248,32 @@ body {
             transition: transform 0.1s;
         }
  
+ /* === NUEVO ESTILO: MENSAJES DE CABECERA PARPADEANTES === */
+@keyframes parpadeoRojoIntenso {
+    0%, 100% { 
+        opacity: 1; 
+        color: #ff0000; /* Rojo puro brillante */
+        text-shadow: 0 0 15px rgba(255, 0, 0, 0.9); /* Resplandor rojo */
+        transform: scale(1.02);
+    }
+    50% { 
+        opacity: 0.6; 
+        color: #ff5555; /* Rojo un poco más claro */
+        text-shadow: none;
+        transform: scale(1);
+    }
+}
+
+.mensaje-alerta-roja {
+    /* Forzamos que sobrescriba cualquier otro color */
+    color: #ff0000 !important; 
+    font-weight: 900 !important; /* Muy negrita */
+    font-size: 1.1rem !important; /* Un poco más grande */
+    text-transform: uppercase; /* Mayúsculas para más impacto */
+    animation: parpadeoRojoIntenso 0.6s infinite; /* Parpadeo rápido */
+    padding: 5px;
+}
+ 
    </style>
 
 <body>
@@ -2476,17 +2502,42 @@ function lanzarToast(mensaje, tipo) {
     }, 3000);
 }
 
-// SOBRESCRIBIR la función mostrarEstado antigua para usar los nuevos Toasts
-window.mostrarEstado = function(txt, tipo) {
-    const mapTipo = (tipo === 'ok') ? 'success' : ((tipo === 'err') ? 'error' : 'info');
-    // Actualizamos también el badge de la cabecera por si acaso, pero lanzamos el toast
-    const el = document.getElementById('msg-estado');
-    if(el) {
-        el.innerText = txt;
-        el.className = 'status-badge ' + (tipo === 'ok' ? 'status-ok' : (tipo === 'err' ? 'status-err' : ''));
+// Función centralizada para mostrar mensajes en el header
+// MODIFICADA: Fuerza estilo rojo parpadeante en el ID correcto
+window.mostrarEstado = function(mensaje, tipo = 'info') {
+    // AQUÍ ESTABA EL ERROR: El ID en tu HTML es 'msg-estado', no 'status-message'
+    const statusEl = document.getElementById('msg-estado'); 
+    
+    if (!statusEl) {
+        console.error("No encuentro el elemento msg-estado en el HTML");
+        return;
     }
-    // Lanzar el Toast visual
-    lanzarToast(txt, mapTipo);
+
+    // 1. Poner el texto
+    statusEl.textContent = mensaje;
+
+    // 2. APLICAR EL NUEVO ESTILO ROJO PARPADEANTE SIEMPRE
+    // Guardamos las clases originales para no romper el diseño base, pero añadimos la alerta
+    statusEl.className = 'status-badge mensaje-alerta-roja';
+    
+    // Asegurar que es visible
+    statusEl.style.opacity = '1';
+    statusEl.style.display = 'block';
+
+    // 3. Programar que se oculte a los 4 segundos
+    if (window.statusTimeout) clearTimeout(window.statusTimeout);
+    
+    window.statusTimeout = setTimeout(() => {
+        // Efecto desvanecer
+        statusEl.style.opacity = '0';
+        
+        // Cuando termine de desvanecerse (0.5s), restauramos el estado "limpio"
+        setTimeout(() => { 
+            statusEl.className = 'status-badge'; // Quitamos el rojo, dejamos el base
+            statusEl.textContent = 'Listo';      // Texto por defecto
+            statusEl.style.opacity = '1';        // Visible pero discreto
+        }, 500); 
+    }, 4000); // 4 segundos visible parpadeando
 };
 
 // --- NUEVAS VARIABLES PARA POLLING ---
