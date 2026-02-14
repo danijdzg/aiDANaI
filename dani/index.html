@@ -5334,40 +5334,41 @@ function renderizarRadarScoring(kpis) {
     chartDom.removeAttribute('_echarts_instance_');
     window.radarInstance = echarts.init(chartDom);
 
-    // --- LÓGICA DE NEGOCIO Y PUNTUACIÓN (0-100) ---
-
-    // 1. COBERTURA (Fondo de Emergencia)
-    // Meta: Tener 6 meses de gastos cubiertos con liquidez.
-    // Cálculo: (Meses reales / 6) * 100
+    // --- LÓGICA DE NEGOCIO (AJUSTADA: 52 AÑOS -> META 65) ---
+    
+    // 1. COBERTURA (Seguridad inmediata)
+    // Meta: 6 meses de gastos. A los 52 años, la liquidez es vital ante imprevistos.
     let valCobertura = kpis.meses || 0;
     let scoreCobertura = Math.min((valCobertura / 6) * 100, 100);
 
-    // 2. AHORRO (Hábito)
-    // Meta: Ahorrar el 20% de los ingresos netos.
-    // Cálculo: (Tasa real / 20) * 100
+    // 2. AHORRO (Combustible)
+    // Meta: Subimos la exigencia al 25% (vs 20% estándar) para el sprint final de 13 años.
     let valAhorro = kpis.tasaAhorro || 0;
-    let scoreAhorro = Math.min((valAhorro / 20) * 100, 100);
+    let scoreAhorro = Math.min((valAhorro / 25) * 100, 100);
     if (scoreAhorro < 0) scoreAhorro = 0;
 
-    // 3. INVERSIÓN (Motor de Crecimiento)
-    // Meta: Que el 50% de tu patrimonio total esté trabajando (invertido).
+    // 3. INVERSIÓN (Motor)
+    // Meta: A los 52 años, deberías tener ~60% de tu patrimonio trabajando (acciones/fondos).
+    // Si tienes mucho efectivo parado, la inflación te comerá antes de los 65.
     let valInversion = kpis.inversiones || 0;
     let patrimonioTotal = kpis.patrimonio || 1;
     let ratioInv = (patrimonioTotal > 0) ? (valInversion / patrimonioTotal) * 100 : 0;
-    let scoreInversion = Math.min((ratioInv / 50) * 100, 100);
+    let scoreInversion = Math.min((ratioInv / 60) * 100, 100);
 
-    // 4. LIBERTAD (Independencia)
-    // Meta: Que tus rentas pasivas (4% del invertido) cubran el 25% de tus gastos.
-    // Es el primer paso hacia la libertad total (100%).
-    let valLibertad = kpis.libertad || 0;
-    let scoreLibertad = Math.min((valLibertad / 25) * 100, 100);
+    // 4. JUBILACIÓN (El KPI Clave)
+    // Meta Global: Tener 25 veces tus gastos anuales (Regla del 4%).
+    // Meta Realidad 52 años: Deberías tener ya acumulado el 28% de ese total.
+    // (Equivale a tener ahorrados 7 años de gastos hoy).
+    let valLibertad = kpis.libertad || 0; // % del camino total recorrido
+    let metaEdad52 = 28; // % que deberías tener YA para ir tranquilo
+    let scoreLibertad = Math.min((valLibertad / metaEdad52) * 100, 100);
 
-    // 5. EFICIENCIA (Retención)
-    // Meta: Quedarte con al menos el 15% de lo que pasa por tus manos.
-    // Es similar al ahorro pero enfocado en "no despilfarrar".
-    let scoreEficiencia = scoreAhorro; // Usamos el ahorro como proxy directo de eficiencia
+    // 5. EFICIENCIA (Calidad)
+    // Usamos ahorro como base, pero penalizamos si el patrimonio es negativo (deudas malas).
+    let scoreEficiencia = scoreAhorro; 
+    if (patrimonioTotal < 0) scoreEficiencia = 0;
 
-    // --- DATOS FINALES PARA ECHARTS ---
+    // --- CÁLCULO DE NOTA FINAL ---
     const scores = [
         Math.round(scoreCobertura),
         Math.round(scoreInversion),
@@ -5375,11 +5376,9 @@ function renderizarRadarScoring(kpis) {
         Math.round(scoreLibertad),
         Math.round(scoreEficiencia)
     ];
-
-    // Nota Global (Promedio)
     const notaGlobal = Math.round(scores.reduce((a, b) => a + b, 0) / 5);
     
-    // Actualizar marcador central (si existe en HTML)
+    // Actualizar marcador central
     const divScore = document.getElementById('score-total');
     if (divScore) {
         let color = notaGlobal >= 80 ? '#39ff14' : (notaGlobal >= 50 ? '#ffeb3b' : '#ff4444');
@@ -5388,7 +5387,7 @@ function renderizarRadarScoring(kpis) {
         divScore.style.textShadow = `0 0 20px ${color}60`;
     }
 
-    // --- CONFIGURACIÓN VISUAL DEL GRÁFICO ---
+    // --- VISUALIZACIÓN (ECharts) ---
     const option = {
         color: ['#00E5FF'],
         tooltip: {
@@ -5398,28 +5397,26 @@ function renderizarRadarScoring(kpis) {
             padding: 15,
             textStyle: { color: '#eee', fontSize: 13, lineHeight: 20 },
             formatter: function(params) {
-                // Función auxiliar para iconos de semáforo
                 const semaforo = (val) => val >= 80 ? '🟢' : (val >= 50 ? '🟡' : '🔴');
-                
                 return `
                     <div style="font-size:16px; font-weight:bold; color:#00E5FF; margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px;">
-                        TU NOTA FINANCIERA: <span style="color:#fff">${notaGlobal}/100</span>
+                        NOTA FINANCIERA (Edad 52): <span style="color:#fff">${notaGlobal}/100</span>
                     </div>
                     
                     ${semaforo(scores[0])} <b>COBERTURA (${scores[0]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Tienes liquidez para <b>${valCobertura.toFixed(1)} meses</b> sin ingresos.<br>Meta: 6 meses.</span><br><br>
+                    <span style="color:#888; font-size:11px;">Tienes <b>${valCobertura.toFixed(1)} meses</b> cubiertos.<br>Meta: 6 meses de seguridad.</span><br><br>
 
                     ${semaforo(scores[1])} <b>INVERSIÓN (${scores[1]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">El <b>${ratioInv.toFixed(0)}%</b> de tu patrimonio trabaja por ti.<br>Meta: 50% invertido.</span><br><br>
+                    <span style="color:#888; font-size:11px;">El <b>${ratioInv.toFixed(0)}%</b> de tu dinero trabaja.<br>Meta 52 años: >60% invertido.</span><br><br>
 
                     ${semaforo(scores[2])} <b>AHORRO (${scores[2]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Ahorras el <b>${valAhorro.toFixed(0)}%</b> de lo que ganas.<br>Meta: 20% mensual.</span><br><br>
+                    <span style="color:#888; font-size:11px;">Ahorras el <b>${valAhorro.toFixed(0)}%</b> de tus ingresos.<br>Meta Sprint: 25%.</span><br><br>
 
-                    ${semaforo(scores[3])} <b>LIBERTAD (${scores[3]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Tus inversiones cubren el <b>${valLibertad.toFixed(1)}%</b> de tus gastos.<br>Meta: 25% (Libertad parcial).</span><br><br>
+                    ${semaforo(scores[3])} <b>JUBILACIÓN (${scores[3]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">Has recorrido el <b>${valLibertad.toFixed(1)}%</b> del camino total.<br>Para tu edad deberías ir por el <b>${metaEdad52}%</b>.</span><br><br>
 
                     ${semaforo(scores[4])} <b>EFICIENCIA (${scores[4]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Capacidad de retener dinero y optimizar gastos.<br>Meta: Alta retención.</span>
+                    <span style="color:#888; font-size:11px;">Calidad de gestión y ausencia de deudas.</span>
                 `;
             }
         },
@@ -5428,7 +5425,7 @@ function renderizarRadarScoring(kpis) {
                 { name: 'COBERTURA\n(Seguridad)', max: 100 },
                 { name: 'INVERSIÓN\n(Crecimiento)', max: 100 },
                 { name: 'AHORRO\n(Hábito)', max: 100 },
-                { name: 'LIBERTAD\n(Futuro)', max: 100 },
+                { name: 'JUBILACIÓN\n(Meta 65)', max: 100 },
                 { name: 'EFICIENCIA\n(Gestión)', max: 100 }
             ],
             center: ['50%', '55%'],
@@ -5436,18 +5433,10 @@ function renderizarRadarScoring(kpis) {
             shape: 'circle',
             splitNumber: 4,
             axisName: {
-                color: '#bbb', 
-                fontSize: 10, 
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(0,0,0,0.8)', 
-                borderRadius: 4, 
-                padding: [4, 6]
+                color: '#bbb', fontSize: 10, fontWeight: 'bold',
+                backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 4, padding: [4, 6]
             },
-            splitLine: {
-                lineStyle: {
-                    color: ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.3)'].reverse()
-                }
-            },
+            splitLine: { lineStyle: { color: ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.3)'].reverse() } },
             splitArea: { show: false },
             axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
         },
@@ -5458,19 +5447,8 @@ function renderizarRadarScoring(kpis) {
                 name: 'Financial Score',
                 symbol: 'circle',
                 symbolSize: 8,
-                itemStyle: { 
-                    color: '#00E5FF', 
-                    borderColor: '#fff', 
-                    borderWidth: 2,
-                    shadowBlur: 10,
-                    shadowColor: '#00E5FF'
-                },
-                lineStyle: { 
-                    width: 3, 
-                    color: '#00E5FF', 
-                    shadowBlur: 15, 
-                    shadowColor: '#00E5FF' 
-                },
+                itemStyle: { color: '#00E5FF', borderColor: '#fff', borderWidth: 2, shadowBlur: 10, shadowColor: '#00E5FF' },
+                lineStyle: { width: 3, color: '#00E5FF', shadowBlur: 15, shadowColor: '#00E5FF' },
                 areaStyle: {
                     color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
                         { offset: 0, color: 'rgba(0, 229, 255, 0.2)' },
@@ -5483,7 +5461,6 @@ function renderizarRadarScoring(kpis) {
 
     window.radarInstance.setOption(option);
     
-    // Ajuste responsivo
     window.addEventListener('resize', () => {
         if(window.radarInstance) window.radarInstance.resize();
     });
