@@ -5319,141 +5319,67 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+// ==========================================
+// 📊 SCORING FINANCIERO: PENTÁGONO PRO (DETALLADO)
+// ==========================================
 function renderizarRadarScoring(kpis) {
-    // ===============================================
-    // MOTOR FINANCIERO v3 (RIGUROSO 52 AÑOS)
-    // ===============================================
-    
-    // 1. INICIALIZACIÓN DE VARIABLES
-    let ingresosReales = 0;
-    let gastosReales = 0;
-    let patrimonioLiquido = 0;   // Bancos, Efectivo
-    let patrimonioInvertido = 0; // Bolsa, Fondos, Crypto, Inmuebles
-    let deudaTotal = 0;
+    // 1. ESCUDO DE SEGURIDAD (Valores por defecto)
+    if (!kpis) kpis = { meses: 0, tasaAhorro: 0, inversiones: 0, patrimonio: 1, libertad: 0, eficiencia: 0 };
 
-    // Usamos los datos filtrados actuales para calcular flujos del periodo
-    const datosAnalisis = window.datos || [];
-    
-    // Mapa de cuentas para saber qué es inversión y qué no
-    const tipoCuenta = {};
-    if(window.configCuentas) {
-        window.configCuentas.forEach(c => {
-            // Normalizamos: Si dice "Si", "SI", "si" -> Es inversión
-            const esInv = c.ES_INVERSION ? c.ES_INVERSION.toString().toLowerCase().trim() : 'no';
-            tipoCuenta[c.CUENTA] = (esInv === 'si') ? 'INV' : 'LIQ';
-        });
-    }
+    const chartDom = document.getElementById('chartRadar');
+    if (!chartDom) return;
 
-    // 2. CÁLCULO DE FLUJOS (INGRESOS vs GASTOS)
-    if (datosAnalisis.length > 0) {
-        datosAnalisis.forEach(m => {
-            const concepto = m.concepto ? m.concepto.toLowerCase().trim() : '';
-            const importe = m.importe || 0;
+    // Limpieza previa
+    if (window.radarInstance) window.radarInstance.dispose();
+    chartDom.removeAttribute('_echarts_instance_');
+    window.radarInstance = echarts.init(chartDom);
 
-            // FILTRO DE CONCEPTOS:
-            // Ignoramos solo 'inicial' y 'traspaso'. 
-            // "Otros Ingresos", "Nómina", "Alquiler" -> SÍ entran.
-            if (concepto !== 'inicial' && concepto !== 'traspaso') {
-                if (importe > 0) {
-                    ingresosReales += importe;
-                } else {
-                    gastosReales += Math.abs(importe);
-                }
-            }
-        });
-    }
+    // --- LÓGICA DE NEGOCIO Y PUNTUACIÓN (0-100) ---
 
-    // 3. CÁLCULO DE PATRIMONIO (FOTO FIJA)
-    // Usamos los saldos globales calculados (window.saldos)
-    if (window.saldos) {
-        Object.keys(window.saldos).forEach(nombreCuenta => {
-            const saldo = window.saldos[nombreCuenta];
-            // Solo sumamos si la cuenta pertenece al usuario filtrado (si hay filtro activo)
-            // Verificamos si la cuenta aparece en los movimientos filtrados
-            const cuentaActiva = datosAnalisis.some(d => d.cuenta === nombreCuenta);
-            
-            if (cuentaActiva || datosAnalisis.length === 0) { // Si no hay datos, asumimos todo o nada
-                if (saldo < 0) {
-                    deudaTotal += Math.abs(saldo); // Deuda
-                } else {
-                    if (tipoCuenta[nombreCuenta] === 'INV') {
-                        patrimonioInvertido += saldo;
-                    } else {
-                        patrimonioLiquido += saldo;
-                    }
-                }
-            }
-        });
-    }
+    // 1. COBERTURA (Fondo de Emergencia)
+    // Meta: Tener 6 meses de gastos cubiertos con liquidez.
+    // Cálculo: (Meses reales / 6) * 100
+    let valCobertura = kpis.meses || 0;
+    let scoreCobertura = Math.min((valCobertura / 6) * 100, 100);
 
-    const patrimonioTotal = patrimonioLiquido + patrimonioInvertido - deudaTotal;
+    // 2. AHORRO (Hábito)
+    // Meta: Ahorrar el 20% de los ingresos netos.
+    // Cálculo: (Tasa real / 20) * 100
+    let valAhorro = kpis.tasaAhorro || 0;
+    let scoreAhorro = Math.min((valAhorro / 20) * 100, 100);
+    if (scoreAhorro < 0) scoreAhorro = 0;
 
-    // 4. PROYECCIÓN ANUAL (Para métricas de Jubilación)
-    // Calculamos cuántos días abarca el periodo filtrado para anualizar el gasto
-    let diasPeriodo = 30; // Defecto
-    if (datosAnalisis.length > 1) {
-        const fechas = datosAnalisis.map(d => d.ts);
-        const minFecha = Math.min(...fechas);
-        const maxFecha = Math.max(...fechas);
-        const diffDias = (maxFecha - minFecha) / (1000 * 60 * 60 * 24);
-        diasPeriodo = Math.max(1, diffDias);
-    }
-    
-    // Gasto Mensual Promedio Real del periodo seleccionado
-    const gastoMensualReal = gastosReales > 0 ? (gastosReales / diasPeriodo) * 30.44 : 0;
-    const gastoAnualProyectado = gastoMensualReal * 12;
+    // 3. INVERSIÓN (Motor de Crecimiento)
+    // Meta: Que el 50% de tu patrimonio total esté trabajando (invertido).
+    let valInversion = kpis.inversiones || 0;
+    let patrimonioTotal = kpis.patrimonio || 1;
+    let ratioInv = (patrimonioTotal > 0) ? (valInversion / patrimonioTotal) * 100 : 0;
+    let scoreInversion = Math.min((ratioInv / 50) * 100, 100);
 
-    // ===============================================
-    // CÁLCULO DE NOTAS (SCORING)
-    // ===============================================
+    // 4. LIBERTAD (Independencia)
+    // Meta: Que tus rentas pasivas (4% del invertido) cubran el 25% de tus gastos.
+    // Es el primer paso hacia la libertad total (100%).
+    let valLibertad = kpis.libertad || 0;
+    let scoreLibertad = Math.min((valLibertad / 25) * 100, 100);
 
-    // A) HÁBITO DE AHORRO (Meta: 50%)
-    let tasaAhorro = 0;
-    if (ingresosReales > 0) {
-        tasaAhorro = ((ingresosReales - gastosReales) / ingresosReales) * 100;
-    }
-    // Nota: 100 puntos si ahorras el 50%.
-    let scoreAhorro = Math.max(0, Math.min((tasaAhorro / 50) * 100, 100));
+    // 5. EFICIENCIA (Retención)
+    // Meta: Quedarte con al menos el 15% de lo que pasa por tus manos.
+    // Es similar al ahorro pero enfocado en "no despilfarrar".
+    let scoreEficiencia = scoreAhorro; // Usamos el ahorro como proxy directo de eficiencia
 
-    // B) EFICIENCIA / ASSET ALLOCATION (Meta: 70% Invertido)
-    // Penaliza el exceso de efectivo ("Cash drag").
-    let ratioInversion = 0;
-    if (patrimonioTotal > 0) {
-        ratioInversion = (patrimonioInvertido / patrimonioTotal) * 100;
-    }
-    // Nota: 100 puntos si tienes el 70% o más invertido.
-    let scoreEficiencia = Math.max(0, Math.min((ratioInversion / 70) * 100, 100));
-
-    // C) COBERTURA (Seguridad)
-    // Meta: 6 Meses de gastos en liquidez.
-    let mesesCobertura = gastoMensualReal > 0 ? (patrimonioLiquido / gastoMensualReal) : 0;
-    let scoreCobertura = Math.min((mesesCobertura / 6) * 100, 100);
-
-    // D) JUBILACIÓN (Meta Edad 52: 7x Gasto Anual)
-    // Según Fidelity, a los 50 deberías tener 6x y a los 55 unos 8x. Usamos 7x para 52.
-    let metaPatrimonio52 = gastoAnualProyectado * 7; 
-    let scoreJubilacion = 0;
-    if (metaPatrimonio52 > 0) {
-        scoreJubilacion = Math.min((patrimonioTotal / metaPatrimonio52) * 100, 100);
-    }
-
-    // E) SOLVENCIA (Salud de deuda)
-    // Penaliza si la deuda supera al patrimonio. 
-    // Si Deuda es 0 -> Score 100.
-    let ratioDeuda = patrimonioTotal > 0 ? (deudaTotal / patrimonioTotal) : 0;
-    let scoreSolvencia = Math.max(0, (1 - ratioDeuda) * 100);
-
-    // --- NOTA FINAL ---
+    // --- DATOS FINALES PARA ECHARTS ---
     const scores = [
         Math.round(scoreCobertura),
-        Math.round(scoreEficiencia),
+        Math.round(scoreInversion),
         Math.round(scoreAhorro),
-        Math.round(scoreJubilacion),
-        Math.round(scoreSolvencia)
+        Math.round(scoreLibertad),
+        Math.round(scoreEficiencia)
     ];
-    const notaGlobal = Math.round(scores.reduce((a, b) => a + b, 0) / 5);
 
-    // Actualizar UI
+    // Nota Global (Promedio)
+    const notaGlobal = Math.round(scores.reduce((a, b) => a + b, 0) / 5);
+    
+    // Actualizar marcador central (si existe en HTML)
     const divScore = document.getElementById('score-total');
     if (divScore) {
         let color = notaGlobal >= 80 ? '#39ff14' : (notaGlobal >= 50 ? '#ffeb3b' : '#ff4444');
@@ -5462,14 +5388,7 @@ function renderizarRadarScoring(kpis) {
         divScore.style.textShadow = `0 0 20px ${color}60`;
     }
 
-    // --- GRÁFICO ---
-    const chartDom = document.getElementById('chartRadar');
-    if (!chartDom) return;
-
-    if (window.radarInstance) window.radarInstance.dispose();
-    chartDom.removeAttribute('_echarts_instance_');
-    window.radarInstance = echarts.init(chartDom);
-
+    // --- CONFIGURACIÓN VISUAL DEL GRÁFICO ---
     const option = {
         color: ['#00E5FF'],
         tooltip: {
@@ -5479,48 +5398,56 @@ function renderizarRadarScoring(kpis) {
             padding: 15,
             textStyle: { color: '#eee', fontSize: 13, lineHeight: 20 },
             formatter: function(params) {
+                // Función auxiliar para iconos de semáforo
                 const semaforo = (val) => val >= 80 ? '🟢' : (val >= 50 ? '🟡' : '🔴');
-                const fmtDinero = (d) => d.toLocaleString('es-ES', {minimumFractionDigits:0, maximumFractionDigits:0}) + '€';
                 
                 return `
                     <div style="font-size:16px; font-weight:bold; color:#00E5FF; margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px;">
-                        SCORING RIGUROSO (Edad 52): <span style="color:#fff">${notaGlobal}/100</span>
+                        TU NOTA FINANCIERA: <span style="color:#fff">${notaGlobal}/100</span>
                     </div>
                     
                     ${semaforo(scores[0])} <b>COBERTURA (${scores[0]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Tienes <b>${mesesCobertura.toFixed(1)} meses</b> de liquidez.<br>Meta: 6 meses.</span><br><br>
+                    <span style="color:#888; font-size:11px;">Tienes liquidez para <b>${valCobertura.toFixed(1)} meses</b> sin ingresos.<br>Meta: 6 meses.</span><br><br>
 
-                    ${semaforo(scores[1])} <b>EFICIENCIA (${scores[1]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Tienes el <b>${ratioInversion.toFixed(0)}%</b> invertido.<br>Meta: >70% (Evitar exceso efectivo).</span><br><br>
+                    ${semaforo(scores[1])} <b>INVERSIÓN (${scores[1]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">El <b>${ratioInv.toFixed(0)}%</b> de tu patrimonio trabaja por ti.<br>Meta: 50% invertido.</span><br><br>
 
                     ${semaforo(scores[2])} <b>AHORRO (${scores[2]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Ahorras el <b>${tasaAhorro.toFixed(1)}%</b> de tus ingresos.<br>Meta: 50% (Sprint final).</span><br><br>
+                    <span style="color:#888; font-size:11px;">Ahorras el <b>${valAhorro.toFixed(0)}%</b> de lo que ganas.<br>Meta: 20% mensual.</span><br><br>
 
-                    ${semaforo(scores[3])} <b>JUBILACIÓN (${scores[3]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Acumulado: <b>${fmtDinero(patrimonioTotal)}</b><br>Meta 52 años (7x Gasto): <b>${fmtDinero(metaPatrimonio52)}</b></span><br><br>
+                    ${semaforo(scores[3])} <b>LIBERTAD (${scores[3]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">Tus inversiones cubren el <b>${valLibertad.toFixed(1)}%</b> de tus gastos.<br>Meta: 25% (Libertad parcial).</span><br><br>
 
-                    ${semaforo(scores[4])} <b>SOLVENCIA (${scores[4]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Nivel de endeudamiento: <b>${(ratioDeuda*100).toFixed(1)}%</b>.<br>Meta: 0% Deuda mala.</span>
+                    ${semaforo(scores[4])} <b>EFICIENCIA (${scores[4]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">Capacidad de retener dinero y optimizar gastos.<br>Meta: Alta retención.</span>
                 `;
             }
         },
         radar: {
             indicator: [
                 { name: 'COBERTURA\n(Seguridad)', max: 100 },
-                { name: 'EFICIENCIA\n(Inv. >70%)', max: 100 },
-                { name: 'AHORRO\n(Meta 50%)', max: 100 },
-                { name: 'JUBILACIÓN\n(Meta 7x)', max: 100 },
-                { name: 'SOLVENCIA\n(Sin deuda)', max: 100 }
+                { name: 'INVERSIÓN\n(Crecimiento)', max: 100 },
+                { name: 'AHORRO\n(Hábito)', max: 100 },
+                { name: 'LIBERTAD\n(Futuro)', max: 100 },
+                { name: 'EFICIENCIA\n(Gestión)', max: 100 }
             ],
             center: ['50%', '55%'],
             radius: '65%',
             shape: 'circle',
             splitNumber: 4,
             axisName: {
-                color: '#bbb', fontSize: 10, fontWeight: 'bold',
-                backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 4, padding: [4, 6]
+                color: '#bbb', 
+                fontSize: 10, 
+                fontWeight: 'bold',
+                backgroundColor: 'rgba(0,0,0,0.8)', 
+                borderRadius: 4, 
+                padding: [4, 6]
             },
-            splitLine: { lineStyle: { color: ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.3)'].reverse() } },
+            splitLine: {
+                lineStyle: {
+                    color: ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.3)'].reverse()
+                }
+            },
             splitArea: { show: false },
             axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
         },
@@ -5531,8 +5458,19 @@ function renderizarRadarScoring(kpis) {
                 name: 'Financial Score',
                 symbol: 'circle',
                 symbolSize: 8,
-                itemStyle: { color: '#00E5FF', borderColor: '#fff', borderWidth: 2, shadowBlur: 10, shadowColor: '#00E5FF' },
-                lineStyle: { width: 3, color: '#00E5FF', shadowBlur: 15, shadowColor: '#00E5FF' },
+                itemStyle: { 
+                    color: '#00E5FF', 
+                    borderColor: '#fff', 
+                    borderWidth: 2,
+                    shadowBlur: 10,
+                    shadowColor: '#00E5FF'
+                },
+                lineStyle: { 
+                    width: 3, 
+                    color: '#00E5FF', 
+                    shadowBlur: 15, 
+                    shadowColor: '#00E5FF' 
+                },
                 areaStyle: {
                     color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
                         { offset: 0, color: 'rgba(0, 229, 255, 0.2)' },
@@ -5544,7 +5482,11 @@ function renderizarRadarScoring(kpis) {
     };
 
     window.radarInstance.setOption(option);
-    window.addEventListener('resize', () => { if(window.radarInstance) window.radarInstance.resize(); });
+    
+    // Ajuste responsivo
+    window.addEventListener('resize', () => {
+        if(window.radarInstance) window.radarInstance.resize();
+    });
 }
 /* =========================================
    ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
