@@ -2262,86 +2262,125 @@ function generateUUID() {
 }
 
 // ==========================================
-// 🧠 CEREBRO IA FINANCIERO (DEFINICIÓN GLOBAL)
+// 🧠 CEREBRO IA FINANCIERO 3.0 (MODE: PRO)
 // ==========================================
 window.generarAnalisisIA = function(movimientos) {
-    // 1. Buscamos la caja negra del HTML
     const output = document.getElementById('ai-output');
     if (!output) return; 
 
-    // 2. Si no hay datos, mostramos mensaje de espera
     if (!movimientos || movimientos.length === 0) {
         output.innerHTML = '<span class="ai-line">> ESPERANDO DATOS...</span>';
         return;
     }
 
-    // --- PREPARACIÓN DE FECHAS ---
+    // --- 1. CONFIGURACIÓN Y FECHAS ---
     const hoy = new Date();
     const mesActual = hoy.getMonth();
     const anioActual = hoy.getFullYear();
-    
-    // Filtramos gastos de ESTE MES
-    const gastosEsteMes = movimientos.filter(m => 
-        m.tipo === 'gasto' && 
-        new Date(m.ts).getMonth() === mesActual && 
-        new Date(m.ts).getFullYear() === anioActual
-    );
-
-    // Filtramos gastos HISTÓRICOS para comparar
-    const gastosHistoricos = movimientos.filter(m => 
-        m.tipo === 'gasto' && 
-        new Date(m.ts) < new Date(anioActual, mesActual, 1)
-    );
-
     let html = '';
-    const totalGastoMes = gastosEsteMes.reduce((sum, m) => sum + Math.abs(m.importe), 0);
 
-    // --- ANÁLISIS 1: GASTOS HORMIGA ---
-    const hormigas = gastosEsteMes.filter(m => Math.abs(m.importe) < 15);
-    const totalHormiga = hormigas.reduce((sum, m) => sum + Math.abs(m.importe), 0);
-    
-    if (totalHormiga > 50) { 
-        const porcentaje = totalGastoMes > 0 ? ((totalHormiga / totalGastoMes) * 100).toFixed(0) : 0;
-        const dinero = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(totalHormiga);
-        html += `<span class="ai-line">> ALERTA: Los microgastos (<15€) suman <span class="ai-alert">${dinero}</span> (${porcentaje}% de tu mes).</span>`;
-    }
+    // Función auxiliar para detectar inversiones (busca en tu config o adivina)
+    const esInversion = (cta) => {
+        if (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) {
+            // Comprueba si está marcado como inversión (soporta varios formatos)
+            const c = mapaCuentas[cta];
+            return c.esInversion === true || c.esInversion === 'Si' || c.TIPO === 'BOLSA' || c.TIPO === 'CRIPTOMONEDAS';
+        }
+        // Si no hay mapa, adivinamos por nombre
+        return (cta || '').toLowerCase().match(/inver|fondo|bolsa|cripto/);
+    };
 
-    // --- ANÁLISIS 2: MAYOR GASTO (TENDENCIA) ---
-    const mapaConceptos = {};
-    gastosEsteMes.forEach(m => {
-        const c = (m.concepto || "Otros").toUpperCase();
-        mapaConceptos[c] = (mapaConceptos[c] || 0) + Math.abs(m.importe);
+    // --- 2. PROCESAMIENTO DE DATOS ---
+    let gastosMes = 0;
+    let ingresosMes = 0;
+    let liquidezTotal = 0;
+    let patrimonioTotal = 0;
+    let gastosUltimos3Meses = 0;
+
+    // Recorremos TODOS los movimientos para saldos globales
+    movimientos.forEach(m => {
+        const fecha = new Date(m.ts || m.fecha); // Soporte para ambos formatos
+        patrimonioTotal += m.importe;
+
+        // Calculamos liquidez (dinero disponible ya)
+        if (!esInversion(m.cuenta)) {
+            liquidezTotal += m.importe;
+        }
+
+        // Datos de ESTE MES
+        if (fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) {
+            if (m.importe < 0 && m.concepto !== 'Traspaso' && m.concepto !== 'Inicial') {
+                gastosMes += Math.abs(m.importe);
+            } else if (m.importe > 0 && m.concepto !== 'Traspaso' && m.concepto !== 'Inicial') {
+                ingresosMes += m.importe;
+            }
+        }
+
+        // Datos de los ÚLTIMOS 3 MESES (para medias)
+        const tresMesesAtras = new Date();
+        tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
+        if (fecha > tresMesesAtras && fecha < new Date(anioActual, mesActual, 1) && m.importe < 0 && m.concepto !== 'Traspaso') {
+            gastosUltimos3Meses += Math.abs(m.importe);
+        }
     });
 
-    const topConcepto = Object.keys(mapaConceptos).sort((a,b) => mapaConceptos[b] - mapaConceptos[a])[0];
-    
-    if (topConcepto) {
-        // Media histórica
-        const historial = gastosHistoricos.filter(m => (m.concepto || "").toUpperCase() === topConcepto);
-        if (historial.length > 0) {
-            const primerMov = new Date(historial[historial.length-1].ts);
-            const mesesDif = Math.max(1, (hoy - primerMov) / (1000 * 60 * 60 * 24 * 30));
-            const media = (historial.reduce((s, m) => s + Math.abs(m.importe), 0)) / mesesDif;
-            const actual = mapaConceptos[topConcepto];
+    // --- 3. CÁLCULO DE METRICA "RUNWAY" (SUPERVIVENCIA) ---
+    // ¿Cuántos meses aguantas si dejas de ingresar hoy?
+    const mediaGastoMensual = gastosUltimos3Meses / 3;
+    let runway = 0;
+    if (mediaGastoMensual > 0) {
+        runway = (liquidezTotal / mediaGastoMensual).toFixed(1);
+    }
 
-            if (actual > media * 1.3) { 
-                const exceso = media > 0 ? ((actual / media) - 1) * 100 : 100;
-                html += `<span class="ai-line">> TENDENCIA: <span class="ai-info">${topConcepto}</span> se ha disparado un <span class="ai-alert">+${exceso.toFixed(0)}%</span> sobre tu media.</span>`;
-            } else {
-                html += `<span class="ai-line">> CONTROL: <span class="ai-info">${topConcepto}</span> es tu mayor gasto, pero está bajo control.</span>`;
-            }
+    // Formateador de moneda
+    const fmt = (num) => new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(num);
+
+    // --- 4. GENERACIÓN DE INSIGHTS (SALIDA) ---
+
+    // A) SALUD FINANCIERA (RUNWAY)
+    if (runway > 6) {
+        html += `<span class="ai-line">> FORTALEZA: Tienes liquidez para <span class="ai-highlight">${runway} meses</span> de vida sin ingresos. <span class="ai-info">[ROBUSTO]</span></span>`;
+    } else if (runway < 2) {
+        html += `<span class="ai-line">> ALERTA: Tu "Runway" es bajo (${runway} meses). Prioriza fondo de emergencia.</span>`;
+    } else {
+        html += `<span class="ai-line">> ESTADO: Tienes cobertura para ${runway} meses. Objetivo recomendado: 6 meses.</span>`;
+    }
+
+    // B) TASA DE AHORRO DEL MES
+    if (ingresosMes > 0) {
+        const ahorro = ingresosMes - gastosMes;
+        const tasa = ((ahorro / ingresosMes) * 100).toFixed(0);
+        let color = tasa > 20 ? 'ai-highlight' : (tasa > 0 ? 'ai-info' : 'ai-alert');
+        html += `<span class="ai-line">> RENDIMIENTO MES: Ahorro del <span class="${color}">${tasa}%</span> (${fmt(ahorro)}).</span>`;
+    }
+
+    // C) PROYECCIÓN DE GASTO (VELOCIDAD)
+    const diaHoy = hoy.getDate();
+    const diasMes = new Date(anioActual, mesActual + 1, 0).getDate();
+    if (diaHoy > 1) {
+        const proyeccion = (gastosMes / diaHoy) * diasMes;
+        const desviacion = mediaGastoMensual > 0 ? ((proyeccion / mediaGastoMensual) - 1) * 100 : 0;
+        
+        if (desviacion > 10) {
+            html += `<span class="ai-line">> TENDENCIA: Proyectas gastar <span class="ai-alert">${fmt(proyeccion)}</span>. Un ${desviacion.toFixed(0)}% más que tu media. ¡Frena!</span>`;
+        } else {
+            html += `<span class="ai-line">> CONTROL: Gasto proyectado (${fmt(proyeccion)}) dentro de lo normal.</span>`;
         }
     }
 
-    // --- ANÁLISIS 3: PROYECCIÓN FUTURA ---
-    const diaHoy = hoy.getDate();
-    const diasMes = new Date(anioActual, mesActual + 1, 0).getDate();
+    // D) DATO CURIOSO (GASTOS HORMIGA o MAYOR GASTO)
+    // Buscamos el mayor gasto hormiga recurrente
+    const hormigas = movimientos.filter(m => 
+        new Date(m.ts || m.fecha).getMonth() === mesActual && 
+        Math.abs(m.importe) < 10 && m.importe < 0
+    );
+    const totalHormiga = hormigas.reduce((s, m) => s + Math.abs(m.importe), 0);
     
-    if (diaHoy > 1) { 
-        const gastoDiario = totalGastoMes / diaHoy;
-        const proyeccion = gastoDiario * diasMes;
-        const dineroProy = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(proyeccion);
-        html += `<span class="ai-line">> FUTURO: A este ritmo, cerrarás el mes gastando <span class="ai-highlight">-${dineroProy}</span>.</span>`;
+    if (totalHormiga > 30) {
+        html += `<span class="ai-line">> OJO DE HALCÓN: Has gastado <span class="ai-alert">${fmt(totalHormiga)}</span> en compras de <10€.</span>`;
+    } else {
+        // Si no hay hormigas, mostramos patrimonio
+        html += `<span class="ai-line">> PATRIMONIO NETO: <span class="ai-highlight">${fmt(patrimonioTotal)}</span>.</span>`;
     }
 
     html += `<span class="blink-cursor">_</span>`;
