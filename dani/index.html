@@ -5974,66 +5974,78 @@ window.actualizarDashboard = function() {
     animarValor('d-patri-inv', totalInversion, '', ' €');
 
     // 7. CÁLCULO DE KPIs FINANCIEROS AVANZADOS (COBERTURA Y LIBERTAD)
-    // Necesitamos un gasto mensual promedio REAL (no solo de este mes)
-    // Calculamos el promedio de los últimos 12 meses o de todo el historial si es menor
+    // CORRECCIÓN: Usamos métricas ESTRUCTURALES (históricas), no solo del mes actual.
+    // Así el scoring no falla si aún no has cobrado la nómina este mes.
+    
     let gastoTotalHist = 0;
+    let ingresoTotalHist = 0;
     let primerMov = new Date();
     let ultimoMov = new Date(0);
-    let hayGastos = false;
+    let hayDatosHistoricos = false;
 
+    // Recorremos TODO el historial del usuario (no solo lo filtrado por fecha)
     datosUsuario.forEach(m => {
-        if (m.tipo === 'gasto' && !String(m.concepto).toLowerCase().includes('traspaso')) {
+        const conc = String(m.concepto || "").toLowerCase();
+        // Ignoramos traspasos e iniciales para el cálculo real de salud financiera
+        if (conc.includes('inicial') || conc.includes('traspaso')) return;
+
+        if (m.tipo === 'gasto') {
             gastoTotalHist += Math.abs(m.importe);
             if (m.fecha < primerMov) primerMov = m.fecha;
             if (m.fecha > ultimoMov) ultimoMov = m.fecha;
-            hayGastos = true;
+            hayDatosHistoricos = true;
+        } else if (m.tipo === 'ingreso') {
+            ingresoTotalHist += m.importe;
         }
     });
 
+    // A) COBERTURA: Liquidez Actual / Gasto Mensual Promedio
     let gastoMensualMedio = 0;
-    if (hayGastos) {
+    if (hayDatosHistoricos) {
+        // Calculamos cuántos días de historia real tenemos
         const diasDif = Math.max(1, (ultimoMov - primerMov) / (1000 * 60 * 60 * 24));
-        // Gasto diario * 30.44 = Gasto Mensual
-        gastoMensualMedio = (gastoTotalHist / diasDif) * 30.44;
+        gastoMensualMedio = (gastoTotalHist / diasDif) * 30.44; // Convertimos a mes promedio
     }
-    
-    // Evitar división por cero
-    if (gastoMensualMedio < 1) gastoMensualMedio = 1;
+    if (gastoMensualMedio < 1) gastoMensualMedio = 1; // Evitar división por cero
 
-    // A) Cobertura: Liquidez / Gasto Mensual
     let mesesCobertura = totalLiquidez / gastoMensualMedio;
     const elCob = document.getElementById('d-cobertura');
     if(elCob) {
         animarValor('d-cobertura', mesesCobertura, '', ' Meses', 1);
-        // Color semántico
         elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
     }
 
-    // B) Libertad: (Inversión * 4% anual) / (Gasto Mensual * 12)
+    // B) LIBERTAD: (Inversión Total * 4% anual) / Gasto Anual Promedio
     let rentaPasivaAnual = totalInversion * 0.04;
     let gastoAnual = gastoMensualMedio * 12;
     let pctLibertad = (rentaPasivaAnual / gastoAnual) * 100;
     
     animarValor('d-libertad', pctLibertad, '', '%', 2);
 
+    // C) AHORRO ESTRUCTURAL (La clave de la corrección)
+    // Calculamos cuánto ahorra este usuario DE MEDIA en toda su historia.
+    let tasaAhorroEstructural = 0;
+    if (ingresoTotalHist > 0) {
+        tasaAhorroEstructural = ((ingresoTotalHist - gastoTotalHist) / ingresoTotalHist) * 100;
+    }
+
     // 8. RENDERIZADO DE GRÁFICOS
-    // Pasamos el historial completo para el gráfico de evolución
     if (typeof renderizarGraficoEvolucion === 'function') {
         renderizarGraficoEvolucion(datosUsuario);
     }
     
-    // Pentágono de Scoring
+    // Pentágono de Scoring (Ahora usa la tasa estructural estable)
     if (typeof renderizarRadarScoring === 'function') {
         renderizarRadarScoring({
             meses: mesesCobertura,
-            tasaAhorro: tasaAhorro, // Usamos la tasa del periodo seleccionado
+            tasaAhorro: tasaAhorroEstructural, // <--- AQUÍ ESTABA EL ERROR (antes usaba la del mes)
             inversiones: totalInversion,
             patrimonio: totalPatrimonio || 1,
             libertad: pctLibertad
         });
     }
 
-    // Análisis IA (opcional)
+    // Análisis IA (Llamamos al cerebro nuevo)
     if (typeof generarAnalisisIA === 'function') {
         generarAnalisisIA(datosUsuario);
     }
