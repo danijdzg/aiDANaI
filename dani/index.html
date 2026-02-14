@@ -3517,41 +3517,44 @@ window.guardarManual = async function() {
         }
 
         // 4. PREPARAR EL MOVIMIENTO
-        const esNuevo = !elId.value;
-        const idFinal = elId.value ? elId.value : generarUUID();
-
+        // CORRECCIÓN: Usamos nombres en minúscula (cuenta, importe...) para que
+        // la función 'guardarUniversal' reconozca los datos correctamente.
         const nuevoMovimiento = {
-            Id: idFinal,
-            Fecha: fecha,
-            Cuenta: cuenta,
-            Concepto: concepto,
-            Importe: importeNum,
-            Descripcion: desc,
-            Beneficiario: benef
+            id: idFinal,          
+            fecha: fecha,         
+            cuenta: cuenta,       
+            concepto: concepto,   
+            importe: importeNum,  
+            descripcion: desc,    
+            beneficiario: benef   
         };
 
         // 5. GUARDAR EN LISTA LOCAL
         if (!esNuevo) {
              // EDICIÓN
-             const index = window.datos.findIndex(m => m.id === idFinal); // Nota: usamos m.id minúscula en local
+             // Buscamos por 'id' en minúscula
+             const index = window.datos.findIndex(m => m.id === idFinal); 
              if (index !== -1) {
-                 // Actualizamos convirtiendo al formato local
+                 // Actualizamos usando las nuevas propiedades en minúscula
                  window.datos[index] = {
                     ...nuevoMovimiento,
-                    id: nuevoMovimiento.Id,
-                    ts: new Date(nuevoMovimiento.Fecha).getTime(),
-                    fecha: new Date(nuevoMovimiento.Fecha),
-                    cuenta: nuevoMovimiento.Cuenta,
-                    concepto: nuevoMovimiento.Concepto,
-                    importe: nuevoMovimiento.Importe,
-                    descripcion: nuevoMovimiento.Descripcion,
-                    beneficiario: nuevoMovimiento.Beneficiario,
-                    tipo: (nuevoMovimiento.Importe >= 0) ? 'ingreso' : 'gasto'
+                    id: nuevoMovimiento.id,
+                    ts: new Date(nuevoMovimiento.fecha).getTime(),
+                    fecha: new Date(nuevoMovimiento.fecha),
+                    cuenta: nuevoMovimiento.cuenta,
+                    concepto: nuevoMovimiento.concepto,
+                    importe: nuevoMovimiento.importe,
+                    descripcion: nuevoMovimiento.descripcion,
+                    beneficiario: nuevoMovimiento.beneficiario,
+                    tipo: (nuevoMovimiento.importe >= 0) ? 'ingreso' : 'gasto'
                  };
-                 // Parche para marcar traspaso visualmente
-                 if (concepto.toUpperCase().includes('TRASPASO')) window.datos[index].tipo = 'traspaso';
+                 
+                 // Parche visual para traspasos
+                 if (concepto.toUpperCase().includes('TRASPASO')) {
+                     window.datos[index].tipo = 'traspaso';
+                 }
              }
-        } 
+        }
         
         // 6. GUARDAR UNIVERSAL (Nube o Local)
         // Pasamos el objeto "nuevoMovimiento" para que guardarUniversal lo procese
