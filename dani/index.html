@@ -2768,15 +2768,26 @@ function procesarLibroLeido(wb) {
         const wsConfig = wb.Sheets[wsConfigName];
         const rawConfig = XLSX.utils.sheet_to_json(wsConfig);
         rawConfig.forEach(fila => {
-            const cta = String(fila.CUENTA || '').trim();
+            // CORRECCIÓN: Ahora buscamos CUENTA, Cuenta o cuenta para ser más robustos
+            const cta = String(fila.CUENTA || fila.Cuenta || fila.cuenta || '').trim();
+            
             if (cta) {
+                // Hacemos lo mismo con TIPO y ES_INVERSION
+                const tipoRaw = fila.TIPO || fila.Tipo || fila.tipo || 'OTROS';
+                const invRaw = fila.ES_INVERSION || fila.Es_inversion || fila.es_inversion || '';
+                
                 window.mapaCuentas[cta] = {
-                    tipo: String(fila.TIPO || 'OTROS').toUpperCase(),
-                    esInversion: String(fila.ES_INVERSION || '').toUpperCase() === 'SI'
+                    tipo: String(tipoRaw).toUpperCase(),
+                    esInversion: String(invRaw).toUpperCase() === 'SI'
                 };
             }
-            if (fila.CONCEPTO) window.listaConceptos.push(String(fila.CONCEPTO).trim());
-            if (fila.BENEFICIARIO) window.listaBeneficiarios.push(String(fila.BENEFICIARIO).trim());
+            
+            // También protegemos CONCEPTOS y BENEFICIARIOS
+            const concepto = fila.CONCEPTO || fila.Concepto || fila.concepto;
+            if (concepto) window.listaConceptos.push(String(concepto).trim());
+            
+            const beneficiario = fila.BENEFICIARIO || fila.Beneficiario || fila.beneficiario;
+            if (beneficiario) window.listaBeneficiarios.push(String(beneficiario).trim());
         });
     }
 
@@ -3463,20 +3474,18 @@ window.guardarManual = async function() {
             btnGuardar.disabled = true;
         }
 
-        // 2. RECOGER DATOS
-        const elId = document.getElementById('m-id'); // ID oculto
+       // 2. RECOGER DATOS
+        const elId = document.getElementById('m-id'); 
         const fecha = document.getElementById('m-fecha')?.value;
         const cuenta = document.getElementById('m-cuenta')?.value;
-        
-        // Aquí estaba el problema: leemos el concepto y también la cuenta destino
         let concepto = document.getElementById('m-concepto')?.value;
         const cuentaDestino = document.getElementById('m-cuenta-destino')?.value;
-        
         const elImporte = document.getElementById('m-cantidad');
         let importeRaw = elImporte ? elImporte.value : "";
-        
         let desc = document.getElementById('m-desc')?.value || "";
         const benef = document.getElementById('m-beneficiario')?.value || "";
+        const esNuevo = !elId.value;
+        const idFinal = esNuevo ? generarUUID() : elId.value;
 
         // --- CORRECCIÓN INTELIGENTE PARA TRASPASOS ---
         // Si hay una cuenta destino seleccionada, asumimos que es un Traspaso.
