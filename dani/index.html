@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#1e1e1e"> 
     
@@ -2119,16 +2120,45 @@ class OneDriveManager {
         this.fileId = localStorage.getItem("aidanai_file_id");
     }
 
-    // --- 1. GESTIÓN DE TOKEN ---
+// --- 1. GESTIÓN DE TOKEN (CORREGIDO) ---
     async getToken() {
-        const request = { scopes: ["User.Read", "Files.ReadWrite.All"] };
+        // Aseguramos que existe la instancia
+        if (!this.msalInstance) {
+             console.error("MSAL no inicializado, intentando recuperar...");
+             this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+        }
+
         const accounts = this.msalInstance.getAllAccounts();
-        if (accounts.length > 0) {
+        const account = accounts[0];
+        
+        if (!account) {
+            throw new Error("No hay ninguna cuenta activa. Por favor, pulsa CONECTAR.");
+        }
+
+        const request = {
+            scopes: ["User.Read", "Files.ReadWrite.All"],
+            account: account
+        };
+
+        try {
+            // 1. Intentamos obtener el token en silencio (rápido)
+            const response = await this.msalInstance.acquireTokenSilent(request);
+            return response.accessToken;
+        } catch (error) {
+            console.warn("⚠️ El token silencioso falló. Intentando vía Popup...", error);
+            
+            // 2. PLAN B: Si falla el silencio, intentamos con ventana emergente
             try {
-                const resp = await this.msalInstance.acquireTokenSilent({ ...request, account: accounts[0] });
-                return resp.accessToken;
-            } catch (e) { console.warn("Token caducado."); throw e; }
-        } else { throw new Error("No hay sesión."); }
+                const response = await this.msalInstance.acquireTokenPopup(request);
+                return response.accessToken;
+            } catch (popupError) {
+                console.error("❌ Error fatal al obtener token:", popupError);
+                if(typeof mostrarEstado === 'function') {
+                    mostrarEstado("❌ ERROR DE CONEXIÓN: Inicia sesión de nuevo", "error");
+                }
+                throw popupError;
+            }
+        }
     }
 
     async login() {
