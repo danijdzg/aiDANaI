@@ -454,7 +454,14 @@ th:active {
             td { display: block; padding: 0; border: none; width: auto; max-width: none; white-space: normal; }
             .td-date-mob { grid-area: 1 / 1 / 2 / 2; font-size: 12px; color: #FFFFFF; font-weight: bold; align-self: center; opacity: 1; }
             .td-cuenta-mob { grid-area: 1 / 2 / 2 / 3; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .saldo-small { font-size: 12px; color: #FFFFFF !important; font-weight: normal; margin-left: 6px; opacity: 0.8; }
+            .saldo-small { 
+				font-size: 16px !important;    /* Tamaño grande igual que cantidad */
+				font-weight: 800 !important;   /* Letra gruesa */
+				color: inherit !important;     
+				text-shadow: none !important;  /* Sin sombras raras */
+				opacity: 1 !important;         
+				margin-left: 8px;
+			}
 			.td-amount { grid-area: 1 / 3 / 2 / 4; text-align: right; font-size: 16px; font-weight: 800; }
             .td-desc-mob { grid-area: 2 / 1 / 3 / 3; font-size: 13px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
             .td-ben-mob { grid-area: 2 / 3 / 3 / 4; text-align: right; font-size: 11px; color: var(--c-warning); font-style: italic; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
@@ -1423,6 +1430,29 @@ tr.mov-traspaso {
 #contador-filas {
     display: block !important;
     visibility: visible !important;
+}
+ 
+ /* =========================================
+   FORZADO DE COLOR MORADO (HEADERS Y FILTROS)
+   ========================================= */
+
+/* 1. Cabeceras de la tabla (Fecha, Importe, Cuenta...) */
+th { 
+    color: var(--c-accent) !important; /* Color Morado Neón */
+    border-bottom: 1px solid var(--c-accent) !important; /* Línea inferior morada */
+    text-shadow: 0 0 5px rgba(191, 90, 242, 0.4); /* Brillo suave */
+}
+
+/* 2. Botón de Filtros Avanzados */
+.filters-toggle {
+    color: var(--c-accent) !important;
+    border-color: var(--c-accent) !important;
+    background: rgba(191, 90, 242, 0.1) !important; /* Fondo morado muy suave */
+}
+
+/* Asegurar que el icono del filtro también sea morado */
+.filters-toggle span.material-icons {
+    color: var(--c-accent) !important;
 }
  
    </style>
@@ -3167,6 +3197,7 @@ function finalizarGuardado(esTraspaso) {
             const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
 
             // APLICAMOS LA CLASE A LA FILA <TR>
+            // APLICAMOS LA CLASE A LA FILA <TR>
             return `
             <tr class="${claseFila}" onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
                 <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${dateStr}</td>
@@ -3175,7 +3206,7 @@ function finalizarGuardado(esTraspaso) {
                 
                 <td class="pc-only ${colorClass}" style="font-weight:bold;">
                     ${Security.escapeHTML(m.cuenta)} 
-                    <span style="font-size:11px; margin-left:5px; opacity:0.9; color:inherit">(${saldoStr})</span>
+                    <span class="saldo-small">(${saldoStr})</span>
                 </td>
                 
                 <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.concepto)}</td>
@@ -3186,7 +3217,7 @@ function finalizarGuardado(esTraspaso) {
                 
                 <td class="mob-only td-cuenta-mob ${colorClass}">
                     ${Security.escapeHTML(m.cuenta)} 
-                    <span class="saldo-small" style="color:inherit !important; opacity:0.9">(${saldoStr})</span>
+                    <span class="saldo-small">(${saldoStr})</span>
                 </td>
                 
                 <td class="mob-only td-amount ${colorClass}">${signo}${fmt(m.importe)}</td>
@@ -3615,170 +3646,273 @@ function generarUUID() {
         return v.toString(16);
     });
 }
+// ==========================================
+// 🛡️ GUARDAR MOVIMIENTO (Fusión: Manual + Traspasos Inteligentes)
+// ==========================================
 window.guardarManual = async function() {
-    console.log("--- 🛡️ Guardando Movimiento (Versión Corregida Traspasos) ---");
+    console.log("--- 🔄 Ejecutando Guardado Inteligente ---");
 
-    // 1. BLOQUEO VISUAL
-    const btnGuardar = document.getElementById('btn-modal-action') || document.querySelector('button[onclick="guardarManual()"]');
+    // 1. BLOQUEO VISUAL (Evita doble clic compulsivo)
+    const btnGuardar = document.getElementById('btn-modal-action');
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
     try {
-        if(btnGuardar) {
-            btnGuardar.innerHTML = '⏳ Guardando...';
+        if (btnGuardar) {
+            btnGuardar.innerHTML = '<span class="material-icons spin">sync</span> Procesando...';
             btnGuardar.disabled = true;
         }
 
-       // 2. RECOGER DATOS
-        const elId = document.getElementById('m-id'); 
+        // 2. RECOGER DATOS DEL FORMULARIO
+        const elId = document.getElementById('m-id');
         const fecha = document.getElementById('m-fecha')?.value;
-        const cuenta = document.getElementById('m-cuenta')?.value;
-        let concepto = document.getElementById('m-concepto')?.value;
+        const cuentaOrigen = document.getElementById('m-cuenta')?.value;
         const cuentaDestino = document.getElementById('m-cuenta-destino')?.value;
         const elImporte = document.getElementById('m-cantidad');
         let importeRaw = elImporte ? elImporte.value : "";
+        
+        // Concepto y Descripción
+        let concepto = document.getElementById('m-concepto')?.value;
         let desc = document.getElementById('m-desc')?.value || "";
         const benef = document.getElementById('m-beneficiario')?.value || "";
-        const esNuevo = !elId.value;
-        const idFinal = esNuevo ? generarUUID() : elId.value;
 
-        // --- CORRECCIÓN INTELIGENTE PARA TRASPASOS ---
-        // Si hay una cuenta destino seleccionada, asumimos que es un Traspaso.
-        // 1. Rellenamos el concepto automáticamente para que no de error.
-        // 2. Añadimos la info del destino a la descripción.
-        if (window.modoTransaccionActual === 'traspaso' || (cuentaDestino && cuentaDestino !== "")) {
-            if (!concepto) concepto = "Traspaso";
-            
-            // Si hay destino, lo guardamos en la descripción con el formato especial ">> A:"
-            if (cuentaDestino) {
-                // Evitamos duplicar si ya estaba escrito
-                if (!desc.includes('>> A:')) {
-                    desc = `>> A: ${cuentaDestino} | ${desc}`;
-                }
-            }
-        }
-
-        // 3. VALIDACIÓN
-        if (!fecha) throw new Error("❌ Error: Falta la FECHA.");
-        if (!cuenta) throw new Error("❌ Error: Falta la CUENTA.");
-        if (!concepto) throw new Error("❌ Error: Falta el CONCEPTO.");
-        if (!importeRaw) throw new Error("❌ Error: Falta la CANTIDAD.");
+        // 3. VALIDACIONES BÁSICAS
+        if (!fecha) throw new Error("❌ Falta la FECHA");
+        if (!cuentaOrigen) throw new Error("❌ Falta la CUENTA");
+        if (!importeRaw) throw new Error("❌ Falta el IMPORTE");
 
         // Convertir importe a número
         let importeNum = parseFloat(importeRaw.toString().replace(',', '.'));
-        if (isNaN(importeNum) || importeNum === 0) {
-             throw new Error("❌ Error: El importe no es válido (0).");
-        }
+        if (isNaN(importeNum) || importeNum === 0) throw new Error("❌ El importe no es válido");
+        importeNum = Math.abs(importeNum); // Trabajamos siempre con el valor absoluto al principio
 
-        // --- GESTIÓN DE SIGNOS (+/-) ---
-        // Aseguramos el signo correcto según el tipo de operación
-        // CORRECCIÓN: Ahora detecta tanto 'pago' como 'gasto' para poner el negativo
-        if (window.modoTransaccionActual === 'gasto' || window.modoTransaccionActual === 'pago') {
-            importeNum = -Math.abs(importeNum); // Siempre negativo
-        } else if (window.modoTransaccionActual === 'ingreso') {
-            importeNum = Math.abs(importeNum);  // Siempre positivo
-        } else if (window.modoTransaccionActual === 'traspaso') {
-            importeNum = -Math.abs(importeNum); // Salida de dinero de la cuenta origen
-        }
+        // DETECTAR SI ES TRASPASO
+        // Es traspaso si estamos en modo traspaso O si el usuario eligió una cuenta destino
+        const esTraspaso = (window.modoTransaccionActual === 'traspaso') || (cuentaDestino && cuentaDestino !== "");
 
-        // 4. PREPARAR EL MOVIMIENTO
-        // CORRECCIÓN: Usamos nombres en minúscula (cuenta, importe...) para que
-        // la función 'guardarUniversal' reconozca los datos correctamente.
-        const nuevoMovimiento = {
-            id: idFinal,          
-            fecha: fecha,         
-            cuenta: cuenta,       
-            concepto: concepto,   
-            importe: importeNum,  
-            descripcion: desc,    
-            beneficiario: benef   
-        };
+        // =========================================================
+        // 🅰️ CAMINO A: ES UN TRASPASO (Genera 2 Movimientos)
+        // =========================================================
+        if (esTraspaso) {
+            if (!cuentaDestino) throw new Error("❌ Para un traspaso necesitas una CUENTA DESTINO");
+            if (cuentaOrigen === cuentaDestino) throw new Error("❌ La cuenta origen y destino son la misma");
 
-        // 5. GUARDAR EN LISTA LOCAL
-        if (!esNuevo) {
-             // EDICIÓN
-             // Buscamos por 'id' en minúscula
-             const index = window.datos.findIndex(m => m.id === idFinal); 
-             if (index !== -1) {
-                 // Actualizamos usando las nuevas propiedades en minúscula
-                 window.datos[index] = {
-                    ...nuevoMovimiento,
-                    id: nuevoMovimiento.id,
-                    ts: new Date(nuevoMovimiento.fecha).getTime(),
-                    fecha: new Date(nuevoMovimiento.fecha),
-                    cuenta: nuevoMovimiento.cuenta,
-                    concepto: nuevoMovimiento.concepto,
-                    importe: nuevoMovimiento.importe,
-                    descripcion: nuevoMovimiento.descripcion,
-                    beneficiario: nuevoMovimiento.beneficiario,
-                    tipo: (nuevoMovimiento.importe >= 0) ? 'ingreso' : 'gasto'
-                 };
-                 
-                 // Parche visual para traspasos
-                 if (concepto.toUpperCase().includes('TRASPASO')) {
-                     window.datos[index].tipo = 'traspaso';
-                 }
+            // Generamos 2 IDs únicos
+            const idSalida = (typeof generarUUID === 'function') ? generarUUID() : "T-OUT-" + Date.now();
+            const idEntrada = (typeof generarUUID === 'function') ? generarUUID() : "T-IN-" + Date.now();
+
+            // Movimiento 1: SALE dinero de Origen
+            const movSalida = {
+                id: idSalida,
+                fecha: fecha,
+                cuenta: cuentaOrigen,
+                concepto: "Traspaso Enviado",
+                importe: -importeNum, // Negativo
+                descripcion: `>> A: ${cuentaDestino} | ${desc}`,
+                beneficiario: "Transferencia Interna",
+                tipo: 'traspaso',
+                ts: new Date(fecha).getTime()
+            };
+
+            // Movimiento 2: ENTRA dinero en Destino
+            const movEntrada = {
+                id: idEntrada,
+                fecha: fecha,
+                cuenta: cuentaDestino,
+                concepto: "Traspaso Recibido",
+                importe: importeNum, // Positivo
+                descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
+                beneficiario: "Transferencia Interna",
+                tipo: 'traspaso',
+                ts: new Date(fecha).getTime()
+            };
+
+            // GUARDAR AMBOS (Pasamos un array a guardarUniversal)
+            console.log("Generando traspaso doble:", movSalida, movEntrada);
+            if (typeof window.guardarUniversal === 'function') {
+                await window.guardarUniversal([movSalida, movEntrada]);
+            }
+
+        } 
+        // =========================================================
+        // 🅱️ CAMINO B: ES GASTO O INGRESO (Genera 1 Movimiento)
+        // =========================================================
+        else {
+            if (!concepto) throw new Error("❌ Falta el CONCEPTO");
+
+            // Ajustar signo según el modo
+            if (window.modoTransaccionActual === 'gasto' || window.modoTransaccionActual === 'pago') {
+                importeNum = -importeNum;
+            } 
+            // Si es ingreso, se queda positivo.
+
+            // ID: Si existe (edición) lo usamos, si no, uno nuevo
+            const idFinal = elId.value ? elId.value : ((typeof generarUUID === 'function') ? generarUUID() : Date.now().toString());
+            const esEdicion = !!elId.value;
+
+            const nuevoMovimiento = {
+                id: idFinal,
+                fecha: fecha,
+                cuenta: cuentaOrigen,
+                concepto: concepto,
+                importe: importeNum,
+                descripcion: desc,
+                beneficiario: benef,
+                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
+                ts: new Date(fecha).getTime()
+            };
+
+            // Si es edición, primero borramos el antiguo para evitar duplicados raros
+            // (Opcional, pero recomendado si tu guardarUniversal no reemplaza por ID)
+             if (esEdicion && window.datos) {
+                window.datos = window.datos.filter(m => m.id !== idFinal);
              }
+
+            // GUARDAR UNO
+            if (typeof window.guardarUniversal === 'function') {
+                await window.guardarUniversal(nuevoMovimiento);
+            }
         }
+
+        // 4. LIMPIEZA FINAL
+        if (elId) elId.value = '';
+        if (elImporte) elImporte.value = '';
+        if (document.getElementById('m-desc')) document.getElementById('m-desc').value = '';
         
-        // 6. GUARDAR UNIVERSAL (Nube o Local)
-        // Pasamos el objeto "nuevoMovimiento" para que guardarUniversal lo procese
-        if (typeof window.guardarUniversal === 'function') {
-            await window.guardarUniversal(nuevoMovimiento);
-        }
-
-        // 7. LIMPIEZA Y CIERRE
-        if(elId) elId.value = '';
-        if(elImporte) elImporte.value = '';
-        if(document.getElementById('m-desc')) document.getElementById('m-desc').value = '';
-
-        // CERRAR MODAL
+        // Cerrar modal
         const modalElement = document.getElementById('modal-manual');
         if (modalElement) modalElement.classList.remove('active');
 
-        console.log("✅ Guardado exitoso");
-        mostrarEstado("✅ Movimiento guardado correctamente", "success");
+        // Feedback al usuario
+        if (typeof mostrarEstado === 'function') mostrarEstado("✅ Operación guardada con éxito", "success");
+        if (typeof vibrar === 'function') vibrar('ingreso');
 
     } catch (error) {
-        console.error(error);
-        alert(error.message);
+        console.error("Error al guardar:", error);
+        alert(error.message); // Usamos alert para asegurar que lo lees
     } finally {
-        if(btnGuardar) {
-            btnGuardar.innerText = textoOriginal;
+        // Restaurar botón siempre, pase lo que pase
+        if (btnGuardar) {
+            btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
         }
     }
 };
 
-// Función para duplicar un movimiento existente
+// ==========================================
+// ⚡ ACCIONES RÁPIDAS: DUPLICAR Y ELIMINAR (CORREGIDO)
+// ==========================================
+
+// --- FUNCIÓN DUPLICAR: Prepara el formulario como "Nuevo" con datos copiados ---
 window.duplicarMovimiento = function(id) {
     console.log("🐑 Duplicando movimiento ID:", id);
 
-    // 1. Buscar el movimiento original
-    const mov = window.datos.movimientos.find(m => m.Id === id);
+    // 1. Buscar el movimiento original (En la lista plana window.datos)
+    const mov = window.datos.find(m => m.id === id);
+    
     if (!mov) {
-        console.error("No se encontró el movimiento para duplicar");
+        alert("❌ Error: No se encuentra el movimiento original en memoria.");
         return;
     }
 
-    // 2. Rellenar el formulario (Usando tus IDs reales: m-fecha, m-cantidad...)
-    if(document.getElementById('m-fecha')) document.getElementById('m-fecha').value = mov.Fecha;
-    if(document.getElementById('m-cuenta')) document.getElementById('m-cuenta').value = mov.Cuenta;
-    if(document.getElementById('m-concepto')) document.getElementById('m-concepto').value = mov.Concepto;
-    if(document.getElementById('m-cantidad')) document.getElementById('m-cantidad').value = Math.abs(mov.Importe); // Ponemos valor absoluto para evitar doble negativo
-    if(document.getElementById('m-desc')) document.getElementById('m-desc').value = mov.Descripcion;
-    if(document.getElementById('m-beneficiario')) document.getElementById('m-beneficiario').value = mov.Beneficiario;
-
-    // 3. ¡IMPORTANTE! Dejar el ID oculto VACÍO para que se guarde como NUEVO
-    const elId = document.getElementById('m-id');
-    if(elId) elId.value = ""; 
-
-    // 4. Abrir el modal 'modal-manual'
+    // 2. Abrir el modal (Usando tu sistema nativo, sin Bootstrap)
     const modalElement = document.getElementById('modal-manual');
-    if(modalElement){
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
+    if (modalElement) {
+        modalElement.classList.add('active'); // ESTO es lo que usa tu CSS
     } else {
-        alert("No se encuentra la ventana modal 'modal-manual'");
+        console.error("No encuentro el modal-manual");
+        return;
+    }
+
+    // 3. Rellenar el formulario con los datos del original
+    // Usamos 'setValue' o asignación directa con validación de existencia
+    const setVal = (domId, valor) => {
+        const el = document.getElementById(domId);
+        if(el) el.value = valor || "";
+    };
+
+    // Ponemos la fecha de HOY, no la antigua (es lo lógico al duplicar)
+    const hoy = new Date().toISOString().split('T')[0];
+    setVal('m-fecha', hoy);
+
+    setVal('m-cuenta', mov.cuenta);
+    setVal('m-concepto', mov.concepto);
+    setVal('m-desc', mov.descripcion || mov.detalle || ""); // Añadimos marca de copia si quieres
+    setVal('m-beneficiario', mov.beneficiario);
+    
+    // Importe: siempre positivo en el formulario visual
+    setVal('m-cantidad', Math.abs(mov.importe)); 
+
+    // 4. PREPARAR ESTADO VISUAL
+    // Detectamos si era ingreso o gasto para colorear el modal
+    if (mov.importe >= 0) {
+        window.modoTransaccionActual = 'ingreso';
+        modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-success)';
+        document.querySelector('#modal-manual h3').innerText = "NUEVO (DUPLICADO)";
+    } else {
+        window.modoTransaccionActual = 'gasto'; // O 'pago'
+        modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-danger)';
+        document.querySelector('#modal-manual h3').innerText = "NUEVO (DUPLICADO)";
+    }
+
+    // 5. ¡CRÍTICO! VACIAR EL ID
+    // Al dejar esto vacío, cuando pulses "GUARDAR", el sistema creará uno nuevo.
+    setVal('m-id', ""); 
+
+    // Ocultar botones extra (Borrar/Duplicar) porque es un movimiento nuevo
+    const extraActions = document.getElementById('extra-actions');
+    if(extraActions) extraActions.style.display = 'none';
+
+    // Feedback
+    if(typeof vibrar === 'function') vibrar('clonar');
+};
+
+// --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
+window.borrarMovimiento = async function(id) {
+    // 1. Confirmación de seguridad
+    if(!confirm("¿Estás seguro de que quieres eliminar este movimiento permanentemente?")) return;
+
+    // Bloqueo visual del botón borrar si existe
+    const btnBorrar = document.getElementById('btn-borrar-modal');
+    if(btnBorrar) {
+        btnBorrar.innerText = "⏳ Eliminando...";
+        btnBorrar.disabled = true;
+    }
+
+    try {
+        // 2. Filtrar: Nos quedamos con todos EXCEPTO el que tiene ese ID
+        const longitudAntes = window.datos.length;
+        // Filtramos comparando IDs como texto para evitar errores de tipo
+        window.datos = window.datos.filter(m => String(m.id) !== String(id));
+
+        // 3. Verificación
+        if (window.datos.length < longitudAntes) {
+            
+            // 4. GUARDAR CAMBIOS (Usando la función universal que ya tienes)
+            if (typeof window.guardarUniversal === 'function') {
+                await window.guardarUniversal(); 
+                // Nota: guardarUniversal ya se encarga de refrescar pantalla y subir a nube
+            } else {
+                // Fallback si no existiera guardarUniversal
+                renderizar();
+                actualizarDashboard();
+            }
+
+            // 5. Cerrar modal y avisar
+            cerrarModal();
+            mostrarEstado("🗑️ Movimiento eliminado", "ok");
+            if(typeof vibrar === 'function') vibrar('error');
+
+        } else {
+            alert("❌ No se pudo encontrar el movimiento para borrar. Quizás ya no existe.");
+            cerrarModal();
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Error al borrar: " + e.message);
+        if(btnBorrar) {
+            btnBorrar.innerText = "ELIMINAR";
+            btnBorrar.disabled = false;
+        }
     }
 };
 
@@ -5553,72 +5687,6 @@ async function guardarAjuste(tipo) {
         event.target.disabled = false;
     }
 }
-
-// ==========================================
-// 2. SISTEMA DE BORRADO SEGURO
-// ==========================================
-window.borrarMovimiento = async function(id) {
-    if (!confirm("¿Seguro que quieres eliminar este movimiento permanentemente?")) return;
-
-    // 1. CONTROL VISUAL DEL BOTÓN
-    const btnBorrar = document.getElementById('btn-borrar-modal');
-    const textoOriginal = btnBorrar ? btnBorrar.innerText : "ELIMINAR";
-    
-    if (btnBorrar) {
-        btnBorrar.innerText = "⏳ BORRANDO...";
-        btnBorrar.disabled = true;
-    }
-
-    try {
-        console.log("🗑️ Iniciando borrado del ID:", id);
-
-        // 2. VALIDACIÓN DE DATOS
-        if (!window.datos || !Array.isArray(window.datos)) {
-            throw new Error("Error crítico: No hay datos en memoria.");
-        }
-
-        // 3. BORRADO EN MEMORIA (BLINDADO)
-        const longitudAntes = window.datos.length;
-        
-        // Usamos String() en ambos lados para evitar error de Numero vs Texto
-        window.datos = window.datos.filter(m => String(m.id || m.ID) !== String(id));
-
-        // Verificamos si realmente se borró algo
-        if (window.datos.length === longitudAntes) {
-            console.warn("⚠️ No se encontró el ID. Intentando recarga...");
-            // Opcional: Si no lo encuentra, forzamos recarga visual por si era un fantasma
-            throw new Error("No se encontró el movimiento. Puede que ya estuviera borrado.");
-        }
-
-        // 4. GUARDAR CAMBIOS (NUBE O LOCAL)
-        // Al llamar a guardarUniversal sin datos nuevos, simplemente guarda el estado actual (con el borrado)
-        if (typeof guardarUniversal === 'function') {
-            await guardarUniversal();
-        } else {
-            // Fallback por si no existe la función
-            renderizar();
-            actualizarDashboard();
-        }
-
-        // 5. ÉXITO: CERRAR Y AVISAR
-        cerrarModal();
-        mostrarEstado("🗑️ Movimiento eliminado correctamente", "ok");
-        if (typeof vibrar === 'function') vibrar('error');
-
-    } catch (error) {
-        console.error("❌ Error al borrar:", error);
-        alert("No se pudo borrar: " + error.message);
-        
-    } finally {
-        // 6. SEGURIDAD: RESTAURAR BOTÓN SIEMPRE
-        // Esto asegura que el botón nunca se quede "pillado" en gris
-        if (btnBorrar) {
-            btnBorrar.innerText = textoOriginal;
-            btnBorrar.disabled = false;
-        }
-    }
-};
-
 
 // ==========================================
 // 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO)
