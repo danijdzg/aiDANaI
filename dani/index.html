@@ -388,7 +388,16 @@ select.filter-input option { background-color: #000; color: #fff; }
         td { padding: 8px 12px; border-bottom: 1px solid #222; font-size: 13px; vertical-align: middle; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
         tbody tr { transition: all 0.2s ease; }
         tbody tr:nth-child(even) { background-color: #050505; }
-        tbody tr:hover { background-color: #0d0d0d; box-shadow: inset 4px 0 0 var(--c-primary), 0 0 15px rgba(0, 184, 255, 0.15); cursor: default; z-index: 1; position: relative; }
+        tbody tr:hover { 
+			background-color: rgba(191, 90, 242, 0.05) !important; /* Fondo morado muy suave */
+			/* Borde sutil morado alrededor de toda la fila */
+			box-shadow: inset 0 0 0 1px var(--c-accent), 0 0 20px rgba(191, 90, 242, 0.15); 
+			cursor: pointer; 
+			z-index: 5; 
+			position: relative;
+			transform: scale(1.005); /* Micro-zoom para destacar */
+			transition: all 0.1s ease;
+		}
         tr td:nth-child(6) { color: var(--c-warning) !important; font-weight: 600; }
         .td-ben-mob { grid-area: 2 / 3 / 3 / 4; text-align: right; font-size: 11px; color: var(--c-warning); font-style: italic; font-weight: bold; }
         
@@ -1275,6 +1284,65 @@ body {
     padding: 5px;
 }
  
+/* --- BARRAS LATERALES FLOTANTES (75% ALTURA - VERSIÓN FINAL --- */
+tr.mov-ingreso, tr.mov-gasto, tr.mov-traspaso {
+    background-repeat: no-repeat;
+    background-position: left center, right center; /* Centradas verticalmente */
+    /* CAMBIO: 2px de ancho (más fino) y 75% de alto */
+    background-size: 2px 75%, 2px 75%; 
+}
+
+/* 1. Ingresos (Verde) */
+tr.mov-ingreso {
+    background-image: linear-gradient(var(--c-success), var(--c-success)), linear-gradient(var(--c-success), var(--c-success));
+}
+
+/* 2. Gastos (Rojo) */
+tr.mov-gasto {
+    background-image: linear-gradient(var(--c-danger), var(--c-danger)), linear-gradient(var(--c-danger), var(--c-danger));
+}
+
+/* 3. Traspasos (Azul) */
+tr.mov-traspaso {
+    background-image: linear-gradient(var(--c-transfer), var(--c-transfer)), linear-gradient(var(--c-transfer), var(--c-transfer));
+}
+ 
+/* --- FIJACIÓN DE CABECERAS EN DIARIO (STICKY STACK) --- */
+
+/* 1. El botón de Filtros se pega al TECHO (0px) */
+.filters-toggle {
+    position: sticky;
+    top: 0;
+    z-index: 40; 
+    margin-bottom: 0 !important;
+    border-radius: 0 0 12px 12px; 
+    background: rgba(0, 0, 0, 0.95) !important; /* Casi opaco para tapar lo de atrás */
+    backdrop-filter: blur(10px);
+    border-top: none;
+    border-bottom: 1px solid rgba(191, 90, 242, 0.3); /* Línea divisoria sutil */
+    box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+}
+
+/* 2. La cabecera de la tabla se pega DEBAJO del botón (a 38px) */
+th {
+    position: sticky;
+    /* 38px es la altura exacta que ocupa el botón de filtros. Así quedan pegados pero no montados */
+    top: 38px !important; 
+    z-index: 30; 
+    background-color: #000000; 
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5); /* Sombra para separarlo de los movimientos */
+    border-bottom: 2px solid #222; /* Refuerzo visual */
+}
+
+/* Ajuste para el panel desplegable */
+.filters-container {
+    position: relative;
+    z-index: 35; /* Encima de la tabla pero debajo del botón */
+    background: rgba(10, 10, 10, 0.98) !important;
+    border-top: none;
+    margin-bottom: 0 !important;
+}
+ 
    </style>
 
 <body>
@@ -1404,8 +1472,11 @@ body {
                         <input type="text" id="f-texto" class="filter-input" placeholder="Buscar en descripción..." style="margin-bottom:10px; width:100%">
                         <button class="btn-apply" onclick="aplicarFiltros()">Aplicar Filtros</button>
                         <button class="btn-clear" onclick="limpiarFiltros()">Limpiar y Cerrar</button>
-                    </div>
-					<div id="contador-filas" style="font-size:11px; color:#666; margin-bottom:5px; text-align:right; font-style:italic">Esperando datos...</div>
+        
+        <div id="contador-filas" style="font-size:10px; color:var(--c-primary); margin-top:10px; text-align:center; font-weight:bold; border-top:1px solid #333; padding-top:5px;">
+            Esperando datos...
+        </div>
+    </div>
                     <div class="table-wrap">
                         <table>
                             <thead>
@@ -2940,28 +3011,22 @@ function finalizarGuardado(esTraspaso) {
             return true;
         });
 
-        // 2. ORDENACIÓN MEJORADA (SOLUCIÓN IMPORTE)
+        // 2. ORDENACIÓN
         lista.sort((a, b) => {
             let campo = window.ordenActivo.campo;
 
-            // CASO A: SI ES IMPORTE (Números)
             if (campo === 'importe') {
                 const valA = parseFloat(a[campo]) || 0;
                 const valB = parseFloat(b[campo]) || 0;
                 return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
             }
-
-            // CASO B: SI ES FECHA (Tiempo)
             if (campo === 'ts') {
                 const valA = a.ts || 0;
                 const valB = b.ts || 0;
                 return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
             }
-
-            // CASO C: SI ES TEXTO (Cuenta, Concepto, etc.)
             if(campo === 'detalle') campo = 'descripcion'; 
             
-            // Aseguramos que siempre sea texto para evitar errores con null/undefined
             let valA = String(a[campo] || (campo === 'descripcion' ? a.detalle : '') || '').toLowerCase();
             let valB = String(b[campo] || (campo === 'descripcion' ? b.detalle : '') || '').toLowerCase();
             
@@ -2970,10 +3035,8 @@ function finalizarGuardado(esTraspaso) {
             return window.ordenActivo.asc ? 1 : -1;
         });
 
-        // 3. OPTIMIZACIÓN VISUAL (DESACTIVADA: MOSTRAR TODO)
+        // 3. ACTUALIZACIÓN VISUAL
         const totalResultados = lista.length;
-        
-        // --- CAMBIO: Ya no recortamos la lista. Mostramos TODO ---
         const listaVisual = lista; 
 
         const contador = document.getElementById('contador-filas');
@@ -2984,9 +3047,8 @@ function finalizarGuardado(esTraspaso) {
             return;
         }
 
-        // 4. GENERACIÓN HTML
+        // 4. GENERACIÓN HTML CON BARRAS FLOTANTES
         let htmlFilas = listaVisual.map(m => {
-            // A) FECHA
             let dateStr = "---";
             try {
                 let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
@@ -2995,8 +3057,9 @@ function finalizarGuardado(esTraspaso) {
                 }
             } catch(e) { console.warn("Error fecha", m); }
 
-            // B) COLOR UNIFICADO (Importe, Cuenta y Saldo)
-            let colorClass = 'val-neg'; // Por defecto gasto (rojo)
+            // Lógica de colores y clases
+            let colorClass = 'val-neg'; 
+            let claseFila = 'mov-gasto'; // Por defecto Rojo
             let signo = '';
             
             const esTraspaso = m.tipo === 'traspaso' || 
@@ -3004,18 +3067,20 @@ function finalizarGuardado(esTraspaso) {
                              (m.descripcion && String(m.descripcion).toUpperCase().includes('TRASPASO'));
 
             if (esTraspaso) {
-                colorClass = 'val-tra'; // Azul
+                colorClass = 'val-tra'; 
+                claseFila = 'mov-traspaso'; // Clase Azul
             } else if (m.importe >= 0) {
-                colorClass = 'val-pos'; // Verde
+                colorClass = 'val-pos'; 
+                claseFila = 'mov-ingreso'; // Clase Verde
                 signo = '+';
             }
 
-            // D) FORMATOS DE TEXTO
             const descripcionFinal = m.descripcion || m.detalle || '';
             const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
 
+            // APLICAMOS LA CLASE A LA FILA <TR>
             return `
-            <tr onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
+            <tr class="${claseFila}" onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
                 <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${dateStr}</td>
                 
                 <td class="pc-only ${colorClass}" style="text-align:right; font-weight:bold">${signo}${fmt(m.importe)}</td>
@@ -3050,6 +3115,7 @@ function finalizarGuardado(esTraspaso) {
 
         tbody.innerHTML = htmlFilas;
     }
+	
     function irPestana(p) {
     document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
