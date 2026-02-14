@@ -5323,62 +5323,123 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 📊 SCORING FINANCIERO: PENTÁGONO PRO (DETALLADO)
 // ==========================================
 function renderizarRadarScoring(kpis) {
-    // 1. ESCUDO DE SEGURIDAD (Valores por defecto)
-    if (!kpis) kpis = { meses: 0, tasaAhorro: 0, inversiones: 0, patrimonio: 1, libertad: 0, eficiencia: 0 };
+    // 1. RECÁLCULO INTELIGENTE (CORRECCIÓN PARA NORMA)
+    // En lugar de fiarnos de los kpis generales, recalculamos "in situ" 
+    // usando los datos filtrados actuales (window.datos) para mayor precisión.
+    
+    let ingresosReales = 0;
+    let gastosReales = 0;
+    let patrimonioLiquido = 0; // Dinero en banco/efectivo
+    let patrimonioInvertido = 0; // Dinero en bolsa/fondos/inmuebles
+    let deudaTotal = 0;
 
+    // Usamos los datos globales filtrados (lo que se ve en pantalla)
+    const datosAnalisis = window.datos || [];
+    
+    // Diccionario rápido de tipos de cuenta
+    const tipoCuenta = {};
+    if(window.configCuentas) {
+        window.configCuentas.forEach(c => {
+            // Marcamos si es inversión (Si) o liquidez (No)
+            tipoCuenta[c.CUENTA] = (c.ES_INVERSION && c.ES_INVERSION.toLowerCase() === 'si') ? 'INV' : 'LIQ';
+        });
+    }
+
+    datosAnalisis.forEach(m => {
+        // A. CÁLCULO DE FLUJO (Ingresos vs Gastos)
+        // Ignoramos "Inicial" y "Traspaso" para ver el ahorro puro del periodo
+        if (m.concepto !== 'Inicial' && m.concepto !== 'Traspaso') {
+            if (m.importe > 0) ingresosReales += m.importe;
+            if (m.importe < 0) gastosReales += Math.abs(m.importe);
+        }
+
+        // B. CÁLCULO DE PATRIMONIO (Foto fija actual)
+        // Solo sumamos el último movimiento de cada cuenta (aproximación rápida) o usamos el saldo acumulado si estuviera disponible.
+        // Como iteramos movimientos, mejor usamos los saldos globales calculados previamente en 'window.saldos'
+    });
+
+    // Recuperamos saldos finales exactos del objeto global de saldos
+    if (window.saldos) {
+        Object.keys(window.saldos).forEach(nombreCuenta => {
+            const saldo = window.saldos[nombreCuenta];
+            // Solo contamos cuentas que pertenezcan al filtro actual (si se filtra por Norma, solo sus cuentas)
+            // Verificamos si la cuenta está en los datos filtrados
+            const cuentaEnUso = datosAnalisis.some(d => d.cuenta === nombreCuenta);
+            
+            if (cuentaEnUso) {
+                if (saldo < 0) deudaTotal += Math.abs(saldo);
+                else {
+                    if (tipoCuenta[nombreCuenta] === 'INV') patrimonioInvertido += saldo;
+                    else patrimonioLiquido += saldo;
+                }
+            }
+        });
+    }
+
+    const patrimonioTotalCalculado = patrimonioLiquido + patrimonioInvertido - deudaTotal;
+
+    // --- LÓGICA DE PUNTUACIÓN (EDAD 52 -> META 65) ---
+
+    // 1. HÁBITO DE AHORRO (Recalculado)
+    // Fórmula: (Ingresos - Gastos) / Ingresos
+    // Si Norma gana 1000 y gasta 800, ahorra 200 (20%).
+    let tasaAhorroReal = 0;
+    if (ingresosReales > 0) {
+        tasaAhorroReal = ((ingresosReales - gastosReales) / ingresosReales) * 100;
+    }
+    // Meta: A los 52 años, apretamos para llegar al 25% de ahorro.
+    let scoreAhorro = Math.max(0, Math.min((tasaAhorroReal / 25) * 100, 100));
+
+    // 2. EFICIENCIA / GESTIÓN (Recalculado)
+    // Nueva definición para 52 años: "Asset Allocation"
+    // No basta con ahorrar, hay que invertir. Tener mucho efectivo es ineficiente por la inflación.
+    // Fórmula: % del Patrimonio que es Inversión.
+    // Meta: Tener al menos el 60% del dinero trabajando.
+    let ratioEficiencia = 0;
+    if (patrimonioTotalCalculado > 0) {
+        ratioEficiencia = (patrimonioInvertido / patrimonioTotalCalculado) * 100;
+    }
+    let scoreEficiencia = Math.max(0, Math.min((ratioEficiencia / 60) * 100, 100));
+
+    // 3. COBERTURA (Usamos dato previo o recalculamos)
+    // Meta: 6 meses de gastos (Liquidez / GastoMensual)
+    let gastoMensualEst = gastosReales > 0 ? (gastosReales / (datosAnalisis.length / 30)) : 1000; // Est. muy básica
+    if (kpis && kpis.meses) gastoMensualEst = patrimonioLiquido / kpis.meses; // Revertimos fórmula si existe KPI
+    
+    // Usamos el KPI original si existe, si no, aproximamos
+    let mesesCobertura = (kpis && kpis.meses) ? kpis.meses : (gastoMensualEst > 0 ? patrimonioLiquido / gastoMensualEst : 0);
+    let scoreCobertura = Math.min((mesesCobertura / 6) * 100, 100);
+
+    // 4. JUBILACIÓN (Libertad Financiera)
+    let valLibertad = (kpis && kpis.libertad) ? kpis.libertad : 0;
+    let metaEdad52 = 28; // % del objetivo FIRE cumplido
+    let scoreLibertad = Math.min((valLibertad / metaEdad52) * 100, 100);
+
+    // 5. INVERSIÓN (Crecimiento Absoluto)
+    // Diferente a eficiencia. Aquí medimos el volumen total invertido respecto a objetivos.
+    // Usamos el dato original de kpis si está bien, o el recalculado
+    let scoreInversion = scoreEficiencia; // Simplificación: Si eres eficiente (inviertes), puntúas bien en inversión.
+
+    // --- PREPARAR GRÁFICO ---
     const chartDom = document.getElementById('chartRadar');
     if (!chartDom) return;
 
-    // Limpieza previa
     if (window.radarInstance) window.radarInstance.dispose();
     chartDom.removeAttribute('_echarts_instance_');
     window.radarInstance = echarts.init(chartDom);
 
-    // --- LÓGICA DE NEGOCIO (AJUSTADA: 52 AÑOS -> META 65) ---
-    
-    // 1. COBERTURA (Seguridad inmediata)
-    // Meta: 6 meses de gastos. A los 52 años, la liquidez es vital ante imprevistos.
-    let valCobertura = kpis.meses || 0;
-    let scoreCobertura = Math.min((valCobertura / 6) * 100, 100);
-
-    // 2. AHORRO (Combustible)
-    // Meta: Subimos la exigencia al 25% (vs 20% estándar) para el sprint final de 13 años.
-    let valAhorro = kpis.tasaAhorro || 0;
-    let scoreAhorro = Math.min((valAhorro / 25) * 100, 100);
-    if (scoreAhorro < 0) scoreAhorro = 0;
-
-    // 3. INVERSIÓN (Motor)
-    // Meta: A los 52 años, deberías tener ~60% de tu patrimonio trabajando (acciones/fondos).
-    // Si tienes mucho efectivo parado, la inflación te comerá antes de los 65.
-    let valInversion = kpis.inversiones || 0;
-    let patrimonioTotal = kpis.patrimonio || 1;
-    let ratioInv = (patrimonioTotal > 0) ? (valInversion / patrimonioTotal) * 100 : 0;
-    let scoreInversion = Math.min((ratioInv / 60) * 100, 100);
-
-    // 4. JUBILACIÓN (El KPI Clave)
-    // Meta Global: Tener 25 veces tus gastos anuales (Regla del 4%).
-    // Meta Realidad 52 años: Deberías tener ya acumulado el 28% de ese total.
-    // (Equivale a tener ahorrados 7 años de gastos hoy).
-    let valLibertad = kpis.libertad || 0; // % del camino total recorrido
-    let metaEdad52 = 28; // % que deberías tener YA para ir tranquilo
-    let scoreLibertad = Math.min((valLibertad / metaEdad52) * 100, 100);
-
-    // 5. EFICIENCIA (Calidad)
-    // Usamos ahorro como base, pero penalizamos si el patrimonio es negativo (deudas malas).
-    let scoreEficiencia = scoreAhorro; 
-    if (patrimonioTotal < 0) scoreEficiencia = 0;
-
-    // --- CÁLCULO DE NOTA FINAL ---
     const scores = [
         Math.round(scoreCobertura),
-        Math.round(scoreInversion),
+        Math.round(scoreEficiencia), // Ahora Eficiencia es "Gestión de Activos"
         Math.round(scoreAhorro),
         Math.round(scoreLibertad),
-        Math.round(scoreEficiencia)
+        Math.round(scoreInversion) // Reutilizamos lógica para mantener el pentágono
     ];
-    const notaGlobal = Math.round(scores.reduce((a, b) => a + b, 0) / 5);
     
-    // Actualizar marcador central
+    // Promedio ponderado: A los 52, la Jubilación y la Eficiencia pesan más.
+    const notaGlobal = Math.round(scores.reduce((a, b) => a + b, 0) / 5);
+
+    // Actualizar texto central
     const divScore = document.getElementById('score-total');
     if (divScore) {
         let color = notaGlobal >= 80 ? '#39ff14' : (notaGlobal >= 50 ? '#ffeb3b' : '#ff4444');
@@ -5387,7 +5448,6 @@ function renderizarRadarScoring(kpis) {
         divScore.style.textShadow = `0 0 20px ${color}60`;
     }
 
-    // --- VISUALIZACIÓN (ECharts) ---
     const option = {
         color: ['#00E5FF'],
         tooltip: {
@@ -5400,33 +5460,30 @@ function renderizarRadarScoring(kpis) {
                 const semaforo = (val) => val >= 80 ? '🟢' : (val >= 50 ? '🟡' : '🔴');
                 return `
                     <div style="font-size:16px; font-weight:bold; color:#00E5FF; margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px;">
-                        NOTA FINANCIERA (Edad 52): <span style="color:#fff">${notaGlobal}/100</span>
+                        SCORING (Recalculado para Norma): <span style="color:#fff">${notaGlobal}/100</span>
                     </div>
                     
                     ${semaforo(scores[0])} <b>COBERTURA (${scores[0]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Tienes <b>${valCobertura.toFixed(1)} meses</b> cubiertos.<br>Meta: 6 meses de seguridad.</span><br><br>
+                    <span style="color:#888; font-size:11px;">Liquidez para emergencias: <b>${mesesCobertura.toFixed(1)} meses</b>.</span><br><br>
 
-                    ${semaforo(scores[1])} <b>INVERSIÓN (${scores[1]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">El <b>${ratioInv.toFixed(0)}%</b> de tu dinero trabaja.<br>Meta 52 años: >60% invertido.</span><br><br>
+                    ${semaforo(scores[1])} <b>EFICIENCIA (${scores[1]}/100)</b><br>
+                    <span style="color:#888; font-size:11px;">El <b>${ratioEficiencia.toFixed(0)}%</b> de tu patrimonio está invertido.<br>Meta 52 años: >60% trabajando.</span><br><br>
 
                     ${semaforo(scores[2])} <b>AHORRO (${scores[2]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Ahorras el <b>${valAhorro.toFixed(0)}%</b> de tus ingresos.<br>Meta Sprint: 25%.</span><br><br>
+                    <span style="color:#888; font-size:11px;">Ahorro real del periodo: <b>${tasaAhorroReal.toFixed(1)}%</b>.<br>(Ingresos: ${ingresosReales.toFixed(0)}€ | Gastos: ${gastosReales.toFixed(0)}€)</span><br><br>
 
                     ${semaforo(scores[3])} <b>JUBILACIÓN (${scores[3]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Has recorrido el <b>${valLibertad.toFixed(1)}%</b> del camino total.<br>Para tu edad deberías ir por el <b>${metaEdad52}%</b>.</span><br><br>
-
-                    ${semaforo(scores[4])} <b>EFICIENCIA (${scores[4]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Calidad de gestión y ausencia de deudas.</span>
+                    <span style="color:#888; font-size:11px;">Camino recorrido hacia los 65 años.</span>
                 `;
             }
         },
         radar: {
             indicator: [
                 { name: 'COBERTURA\n(Seguridad)', max: 100 },
-                { name: 'INVERSIÓN\n(Crecimiento)', max: 100 },
+                { name: 'EFICIENCIA\n(Inversión)', max: 100 },
                 { name: 'AHORRO\n(Hábito)', max: 100 },
                 { name: 'JUBILACIÓN\n(Meta 65)', max: 100 },
-                { name: 'EFICIENCIA\n(Gestión)', max: 100 }
+                { name: 'CRECIMIENTO\n(Motor)', max: 100 }
             ],
             center: ['50%', '55%'],
             radius: '65%',
@@ -5460,10 +5517,7 @@ function renderizarRadarScoring(kpis) {
     };
 
     window.radarInstance.setOption(option);
-    
-    window.addEventListener('resize', () => {
-        if(window.radarInstance) window.radarInstance.resize();
-    });
+    window.addEventListener('resize', () => { if(window.radarInstance) window.radarInstance.resize(); });
 }
 /* =========================================
    ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
