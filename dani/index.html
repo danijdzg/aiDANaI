@@ -1562,7 +1562,7 @@ th {
                 </div>	
 				<div class="ai-terminal" style="margin-top: 25px; margin-bottom: 30px;">
     <div class="ai-header">
-        <span>> ANALISIS_IA.EXE</span>
+        <span>> ANALISIS IA</span>
         <span style="opacity:0.5; font-size:9px;">V.2.0</span>
     </div>
     
@@ -2260,6 +2260,93 @@ function generateUUID() {
         (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
     );
 }
+
+// ==========================================
+// 🧠 CEREBRO IA FINANCIERO (DEFINICIÓN GLOBAL)
+// ==========================================
+window.generarAnalisisIA = function(movimientos) {
+    // 1. Buscamos la caja negra del HTML
+    const output = document.getElementById('ai-output');
+    if (!output) return; 
+
+    // 2. Si no hay datos, mostramos mensaje de espera
+    if (!movimientos || movimientos.length === 0) {
+        output.innerHTML = '<span class="ai-line">> ESPERANDO DATOS...</span>';
+        return;
+    }
+
+    // --- PREPARACIÓN DE FECHAS ---
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
+    
+    // Filtramos gastos de ESTE MES
+    const gastosEsteMes = movimientos.filter(m => 
+        m.tipo === 'gasto' && 
+        new Date(m.ts).getMonth() === mesActual && 
+        new Date(m.ts).getFullYear() === anioActual
+    );
+
+    // Filtramos gastos HISTÓRICOS para comparar
+    const gastosHistoricos = movimientos.filter(m => 
+        m.tipo === 'gasto' && 
+        new Date(m.ts) < new Date(anioActual, mesActual, 1)
+    );
+
+    let html = '';
+    const totalGastoMes = gastosEsteMes.reduce((sum, m) => sum + Math.abs(m.importe), 0);
+
+    // --- ANÁLISIS 1: GASTOS HORMIGA ---
+    const hormigas = gastosEsteMes.filter(m => Math.abs(m.importe) < 15);
+    const totalHormiga = hormigas.reduce((sum, m) => sum + Math.abs(m.importe), 0);
+    
+    if (totalHormiga > 50) { 
+        const porcentaje = totalGastoMes > 0 ? ((totalHormiga / totalGastoMes) * 100).toFixed(0) : 0;
+        const dinero = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(totalHormiga);
+        html += `<span class="ai-line">> ALERTA: Los microgastos (<15€) suman <span class="ai-alert">${dinero}</span> (${porcentaje}% de tu mes).</span>`;
+    }
+
+    // --- ANÁLISIS 2: MAYOR GASTO (TENDENCIA) ---
+    const mapaConceptos = {};
+    gastosEsteMes.forEach(m => {
+        const c = (m.concepto || "Otros").toUpperCase();
+        mapaConceptos[c] = (mapaConceptos[c] || 0) + Math.abs(m.importe);
+    });
+
+    const topConcepto = Object.keys(mapaConceptos).sort((a,b) => mapaConceptos[b] - mapaConceptos[a])[0];
+    
+    if (topConcepto) {
+        // Media histórica
+        const historial = gastosHistoricos.filter(m => (m.concepto || "").toUpperCase() === topConcepto);
+        if (historial.length > 0) {
+            const primerMov = new Date(historial[historial.length-1].ts);
+            const mesesDif = Math.max(1, (hoy - primerMov) / (1000 * 60 * 60 * 24 * 30));
+            const media = (historial.reduce((s, m) => s + Math.abs(m.importe), 0)) / mesesDif;
+            const actual = mapaConceptos[topConcepto];
+
+            if (actual > media * 1.3) { 
+                const exceso = media > 0 ? ((actual / media) - 1) * 100 : 100;
+                html += `<span class="ai-line">> TENDENCIA: <span class="ai-info">${topConcepto}</span> se ha disparado un <span class="ai-alert">+${exceso.toFixed(0)}%</span> sobre tu media.</span>`;
+            } else {
+                html += `<span class="ai-line">> CONTROL: <span class="ai-info">${topConcepto}</span> es tu mayor gasto, pero está bajo control.</span>`;
+            }
+        }
+    }
+
+    // --- ANÁLISIS 3: PROYECCIÓN FUTURA ---
+    const diaHoy = hoy.getDate();
+    const diasMes = new Date(anioActual, mesActual + 1, 0).getDate();
+    
+    if (diaHoy > 1) { 
+        const gastoDiario = totalGastoMes / diaHoy;
+        const proyeccion = gastoDiario * diasMes;
+        const dineroProy = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(proyeccion);
+        html += `<span class="ai-line">> FUTURO: A este ritmo, cerrarás el mes gastando <span class="ai-highlight">-${dineroProy}</span>.</span>`;
+    }
+
+    html += `<span class="blink-cursor">_</span>`;
+    output.innerHTML = html;
+};
 
 // ==========================================
     // 1. VARIABLES GLOBALES
@@ -4452,40 +4539,6 @@ function renderizarGraficoEvolucion(movimientos) {
 }
 
 
-function generarAnalisisIA(movimientos) {
-    const output = document.getElementById('ai-output');
-    if (!output || !movimientos.length) return;
-    const hoy = new Date();
-    const mesActual = hoy.getMonth();
-    const mesAnterior = mesActual === 0 ? 11 : mesActual - 1;
-    let gastoEsteMes = 0;
-    let gastoMesPasado = 0;
-    movimientos.forEach(m => {
-        if (m.tipo === 'gasto') {
-            const fecha = new Date(m.ts);
-            if (fecha.getMonth() === mesActual && fecha.getFullYear() === hoy.getFullYear()) { gastoEsteMes += Math.abs(m.importe); }
-            let anoPasado = hoy.getFullYear();
-            if (mesActual === 0) anoPasado--;
-            if (fecha.getMonth() === mesAnterior && fecha.getFullYear() === anoPasado) { gastoMesPasado += Math.abs(m.importe); }
-        }
-    });
-    let html = '';
-    if (gastoMesPasado > 0) {
-        const diferencia = gastoEsteMes - gastoMesPasado;
-        const porcentaje = ((diferencia / gastoMesPasado) * 100).toFixed(1);
-        if (diferencia > 0) { html += `<span class="ai-line">> ALERTA: Estás gastando un <span class="ai-alert">${porcentaje}% MÁS</span> que el mes pasado. Controla los caprichos.</span>`; } else { html += `<span class="ai-line">> BUEN TRABAJO: Tu gasto es un <span class="ai-highlight">${Math.abs(porcentaje)}% MENOR</span> que el mes anterior. Vas por buen camino.</span>`; }
-    } else { html += `<span class="ai-line">> RECOPILANDO DATOS HISTÓRICOS para comparar tendencias...</span>`; }
-    const mapCat = {};
-    movimientos.forEach(m => { if (m.tipo === 'gasto' && new Date(m.ts).getMonth() === mesActual) { mapCat[m.concepto] = (mapCat[m.concepto] || 0) + Math.abs(m.importe); } });
-    const topCat = Object.keys(mapCat).sort((a,b) => mapCat[b] - mapCat[a])[0];
-    if (topCat) { html += `<span class="ai-line">> FOCO DE ATENCIÓN: Tu mayor fuga de dinero este mes es <span class="ai-info">${topCat}</span> (${fmt(mapCat[topCat])}€). ¿Es necesario?</span>`; }
-    const diasDelMes = new Date(hoy.getFullYear(), mesActual + 1, 0).getDate();
-    const diaHoy = hoy.getDate();
-    const proyeccion = (gastoEsteMes / diaHoy) * diasDelMes;
-    html += `<span class="ai-line">> PROYECCIÓN: A este ritmo, cerrarás el mes gastando aprox. <span class="ai-info">${fmt(proyeccion)}€</span>. <span class="blink-cursor">_</span></span>`;
-    output.innerHTML = html;
-}
-
     // ==========================================================
     // CÓDIGO 2: LÓGICA DE CALCULADORA.HTML (COMPLETO)
     // ==========================================================
@@ -5780,6 +5833,7 @@ window.toggleCustomDates = function() {
 // 🚀 1. VARIABLE GLOBAL DE ESTADO
 // =========================================================
 var filtroUsuarioActual = 'todos'; // Valor inicial por defecto
+
 
 // =========================================================
 // 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (VERSIÓN CORREGIDA)
