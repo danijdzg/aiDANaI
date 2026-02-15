@@ -1582,6 +1582,35 @@ body {
     overflow: hidden !important; /* Si el texto es largo, que no empuje */
 }
  
+ /* --- ESTILOS DIARIO AGRUPADO --- */
+    
+    /* 1. Cabecera del Día (Separador) */
+    tr.fila-fecha-cabecera {
+        background-color: #050505 !important; /* Fondo casi negro */
+        pointer-events: none;
+    }
+    
+    td.celda-fecha-cabecera {
+        color: #FFD60A !important; /* AMARILLO (Tu color de acento) */
+        font-family: 'Inter', sans-serif;
+        font-weight: 900; 
+        text-transform: capitalize;
+        padding: 15px 10px 5px 10px !important;
+        border-bottom: 1px solid #333;
+        font-size: 13px;
+        letter-spacing: 1px;
+    }
+
+    /* 2. Beneficiario en BLANCO PURO (Sobrescribe el amarillo original) */
+    .texto-blanco {
+        color: #FFFFFF !important;
+        opacity: 1 !important;
+        font-weight: 500;
+    }
+
+    /* Ocultar fecha repetida en móvil */
+    .oculto-en-agrupado { display: none !important; }
+ 
    </style>
 
 <body>
@@ -1736,17 +1765,13 @@ body {
     </div>
                     <div class="table-wrap">
                         <table>
-                            <thead>
+                           <thead>
     <tr>
-        <th id="th-ts" onclick="cambiarOrden('ts')" style="width:95px; cursor:pointer">Fecha ⇅</th>
-        
         <th id="th-importe" onclick="cambiarOrden('importe')" style="width:100px; text-align:right; cursor:pointer">Importe ⇅</th>
-        
-        <th id="th-cuenta" onclick="cambiarOrden('cuenta')" style="width:230px; cursor:pointer">Cuenta ⇅</th>
-        <th id="th-concepto" onclick="cambiarOrden('concepto')" style="width:100px; cursor:pointer">Concepto ⇅</th>
+        <th id="th-cuenta" onclick="cambiarOrden('cuenta')" style="width:200px; cursor:pointer">Cuenta ⇅</th>
+        <th id="th-concepto" onclick="cambiarOrden('concepto')" style="width:120px; cursor:pointer">Concepto ⇅</th>
         <th id="th-detalle" onclick="cambiarOrden('detalle')" style="cursor:pointer">Descripción ⇅</th>
-        
-        <th id="th-beneficiario" onclick="cambiarOrden('beneficiario')" style="width:75px; cursor:pointer">Beneficiario ⇅</th>
+        <th id="th-beneficiario" onclick="cambiarOrden('beneficiario')" style="width:100px; cursor:pointer">Beneficiario ⇅</th>
     </tr>
 </thead>
                             <tbody id="lista-movimientos"><tr><td colspan="6" style="text-align:center; padding:30px; color:#666">Carga un archivo para ver datos</td></tr></tbody>
@@ -3376,11 +3401,11 @@ function finalizarGuardado(esTraspaso) {
         return true;
     }
 
-    function renderizar() {
+function renderizar() {
         const tbody = document.getElementById('lista-movimientos');
         if(!tbody) return;
         
-        // 1. FILTRADO
+        // 1. FILTRADO (Tu lógica original intacta)
         let lista = datos.filter(m => {
             if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return false;
             if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
@@ -3401,110 +3426,118 @@ function finalizarGuardado(esTraspaso) {
             return true;
         });
 
-        // 2. ORDENACIÓN
-        lista.sort((a, b) => {
-            let campo = window.ordenActivo.campo;
+        // 2. ORDENACIÓN FORZADA POR FECHA (Vital para agrupar)
+        lista.sort((a, b) => b.ts - a.ts);
 
-            if (campo === 'importe') {
-                const valA = parseFloat(a[campo]) || 0;
-                const valB = parseFloat(b[campo]) || 0;
-                return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
-            }
-            if (campo === 'ts') {
-                const valA = a.ts || 0;
-                const valB = b.ts || 0;
-                return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
-            }
-            if(campo === 'detalle') campo = 'descripcion'; 
-            
-            let valA = String(a[campo] || (campo === 'descripcion' ? a.detalle : '') || '').toLowerCase();
-            let valB = String(b[campo] || (campo === 'descripcion' ? b.detalle : '') || '').toLowerCase();
-            
-            if (valA === valB) return window.ordenActivo.asc ? (a.id - b.id) : (b.id - a.id);
-            if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
-            return window.ordenActivo.asc ? 1 : -1;
+        // 3. CÁLCULO DE TOTALES POR DÍA
+        const totalesDia = {};
+        lista.forEach(m => {
+            const fechaKey = new Date(m.ts).toLocaleDateString();
+            if (!totalesDia[fechaKey]) totalesDia[fechaKey] = 0;
+            if (m.tipo !== 'traspaso') totalesDia[fechaKey] += m.importe;
         });
 
-        // 3. ACTUALIZACIÓN VISUAL
-        const totalResultados = lista.length;
-        const listaVisual = lista; 
-
+        // Actualizar contador
         const contador = document.getElementById('contador-filas');
-        if(contador) contador.innerText = `Mostrando ${totalResultados} movimientos (Total)`;
+        if(contador) contador.innerText = `Mostrando ${lista.length} movimientos`;
         
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#FFFFFF; font-weight:bold;">No hay movimientos que coincidan con los filtros</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#666">No hay movimientos</td></tr>';
             return;
         }
 
-        // 4. GENERACIÓN HTML CON BARRAS FLOTANTES
-        let htmlFilas = listaVisual.map(m => {
-            let dateStr = "---";
-            try {
-                let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
-                if (!isNaN(d.getTime())) {
-                    dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-                }
-            } catch(e) { console.warn("Error fecha", m); }
+        // 4. GENERACIÓN HTML
+        let htmlFinal = '';
+        let ultimaFecha = null;
+        const optsFecha = { weekday: 'long', day: 'numeric', month: 'long' }; // Ej: Jueves, 12 de febrero
 
-            // Lógica de colores y clases
-            let colorClass = 'val-neg'; 
-            let claseFila = 'mov-gasto'; // Por defecto Rojo
-            let signo = '';
+        lista.forEach(m => {
+            const d = new Date(m.ts);
+            const fechaKey = d.toLocaleDateString();
             
-            const esTraspaso = m.tipo === 'traspaso' || 
-                             (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO')) ||
-                             (m.descripcion && String(m.descripcion).toUpperCase().includes('TRASPASO'));
+            // --- A) CABECERA DE GRUPO (Si cambia el día) ---
+            if (fechaKey !== ultimaFecha) {
+                const fechaBonita = d.toLocaleDateString('es-ES', optsFecha);
+                const total = totalesDia[fechaKey];
+                const colorTotal = total >= 0 ? '#39FF14' : '#FF2E4D'; // Verde o Rojo neón
+                const signoTotal = total > 0 ? '+' : '';
+
+                htmlFinal += `
+                <tr class="fila-fecha-cabecera">
+                    <td colspan="5" class="celda-fecha-cabecera">
+                        ${fechaBonita}
+                        <span style="float:right; color:${colorTotal}; font-weight:bold;">
+                            ${signoTotal}${fmt(total)}
+                        </span>
+                    </td>
+                </tr>`;
+                ultimaFecha = fechaKey;
+            }
+
+            // --- B) PREPARAR COLORES ORIGINALES ---
+            // Recuperamos tus clases originales: mov-ingreso, mov-gasto, mov-traspaso
+            let claseFila = 'mov-gasto'; 
+            let claseColorTexto = 'val-neg';
+            let signo = '';
+
+            const esTraspaso = m.tipo === 'traspaso' || (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO'));
 
             if (esTraspaso) {
-                colorClass = 'val-tra'; 
-                claseFila = 'mov-traspaso'; // Clase Azul
+                claseFila = 'mov-traspaso'; // Tu clase azul original
+                claseColorTexto = 'val-tra';
             } else if (m.importe >= 0) {
-                colorClass = 'val-pos'; 
-                claseFila = 'mov-ingreso'; // Clase Verde
+                claseFila = 'mov-ingreso'; // Tu clase verde original
+                claseColorTexto = 'val-pos';
                 signo = '+';
             }
 
-            const descripcionFinal = m.descripcion || m.detalle || '';
-            const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
+            const saldoStr = (m.saldo !== undefined) ? fmt(m.saldo) : '-';
+            const desc = m.descripcion || m.detalle || '';
 
-            // APLICAMOS LA CLASE A LA FILA <TR>
-            // APLICAMOS LA CLASE A LA FILA <TR>
-            return `
-            <tr class="${claseFila}" onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
-                <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${dateStr}</td>
+            // --- C) FILA DEL MOVIMIENTO ---
+            // Nota: Aquí aplicamos 'texto-blanco' AL BENEFICIARIO
+            htmlFinal += `
+            <tr class="${claseFila}" onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer;">
                 
-                <td class="pc-only ${colorClass}" style="text-align:right; font-weight:bold">${signo}${fmt(m.importe)}</td>
-                
-                <td class="pc-only ${colorClass}" style="font-weight:bold;">
-                    ${Security.escapeHTML(m.cuenta)} 
-                    <span class="saldo-small">(${saldoStr})</span>
+                <td class="pc-only ${claseColorTexto}" style="text-align:right; font-weight:800; font-size:15px;">
+                    ${signo}${fmt(m.importe)}
                 </td>
-                
+
+                <td class="pc-only" style="font-weight:700; font-size:13px; color:#FFFFFF;">
+                    ${Security.escapeHTML(m.cuenta)}
+                    <span class="saldo-small" style="font-size:11px; opacity:0.7">(${saldoStr})</span>
+                </td>
+
                 <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.concepto)}</td>
-                <td class="pc-only" style="color:#FFFFFF; font-style:normal; opacity:0.9;">${Security.escapeHTML(descripcionFinal)}</td>
-                <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.beneficiario)}</td>
-                
-                <td class="mob-only td-date-mob" style="color:var(--c-warning) !important">${dateStr}</td>
-                
-                <td class="mob-only td-cuenta-mob ${colorClass}">
-                    ${Security.escapeHTML(m.cuenta)} 
-                    <span class="saldo-small">(${saldoStr})</span>
-                </td>
-                
-                <td class="mob-only td-amount ${colorClass}">${signo}${fmt(m.importe)}</td>
-                
-                <td class="mob-only td-desc-mob">
-                    <strong style="color:#FFFFFF">${Security.escapeHTML(m.concepto)}</strong>
-                    ${descripcionFinal ? ' - ' + Security.escapeHTML(descripcionFinal) : ''}
-                </td>
-                
-                <td class="mob-only td-ben-mob" style="color:var(--c-warning)">${Security.escapeHTML(m.beneficiario)}</td>
-            </tr>
-            `;
-        }).join('');
 
-        tbody.innerHTML = htmlFilas;
+                <td class="pc-only" style="color:#bbb; font-style:italic;">${Security.escapeHTML(desc)}</td>
+
+                <td class="pc-only texto-blanco">
+                    ${Security.escapeHTML(m.beneficiario)}
+                </td>
+
+                <td class="mob-only td-date-mob oculto-en-agrupado"></td>
+
+                <td class="mob-only td-cuenta-mob ${claseColorTexto}" style="grid-area: 1 / 1 / 2 / 3;">
+                    ${Security.escapeHTML(m.cuenta)}
+                </td>
+                
+                <td class="mob-only td-amount ${claseColorTexto}" style="grid-area: 1 / 3 / 2 / 4;">
+                    ${signo}${fmt(m.importe)}
+                </td>
+
+                <td class="mob-only td-desc-mob" style="grid-area: 2 / 1 / 3 / 3;">
+                    <strong style="color:#FFFFFF">${Security.escapeHTML(m.concepto)}</strong>
+                    <div style="color:#999; font-size:12px;">${Security.escapeHTML(desc)}</div>
+                </td>
+
+                <td class="mob-only td-ben-mob texto-blanco" style="grid-area: 2 / 3 / 3 / 4; text-align:right;">
+                    ${Security.escapeHTML(m.beneficiario)}
+                </td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = htmlFinal;
     }
 	
     function irPestana(p) {
@@ -3813,33 +3846,28 @@ window.cargarParaEditar = function(id) {
             if(areaExtras) areaExtras.style.display = 'grid';
         }
 
-        // 2. RECOPILAR DATOS PARA LOS DESPLEGABLES
+        // 2. RECOPILAR DATOS (MODO ESTRICTO: SOLO CONFIGURACIÓN)
         const sCuentas = new Set(); 
         const sConceptos = new Set(); 
         const sBeneficiarios = new Set();
         
-        // A) Buscar en el Historial de movimientos (window.datos)
-        if(window.datos && Array.isArray(window.datos)) {
-            window.datos.forEach(d => {
-                if(d.cuenta) sCuentas.add(d.cuenta);
-                if(d.concepto) sConceptos.add(d.concepto);
-                if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
-            });
-        }
-        
-        // B) Buscar en la Configuración (Excel) para añadir los nuevos
+        // A) Solo leemos de la configuración oficial (Excel)
+        // Cuentas
         if (window.mapaCuentas) {
             Object.keys(window.mapaCuentas).forEach(c => sCuentas.add(c));
         }
-        // Aquí añadimos los conceptos de la hoja Configuración
+        
+        // Conceptos (Lista oficial)
         if (window.listaConceptos && Array.isArray(window.listaConceptos)) {
             window.listaConceptos.forEach(c => sConceptos.add(c));
         }
-        // Y los beneficiarios de la hoja Configuración
+        
+        // Beneficiarios (Lista oficial)
         if (window.listaBeneficiarios && Array.isArray(window.listaBeneficiarios)) {
             window.listaBeneficiarios.forEach(b => sBeneficiarios.add(b));
         }
 
+        // NOTA: Ya NO miramos en window.datos, así evitamos que aparezca "basura" antigua.
         // 3. FUNCIÓN INTELIGENTE PARA LLENAR MENÚS
         const llenarSelect = (id, setValores) => {
             const el = document.getElementById(id);
