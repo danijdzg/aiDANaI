@@ -3214,149 +3214,213 @@ function leerExcel(blob) {
     reader.readAsArrayBuffer(blob);
 }
 // ==========================================
-// 🧠 PROCESADOR MAESTRO DE DATOS (CORREGIDO Y MEJORADO)
+// 🧠 PROCESADOR MAESTRO DE DATOS (VERSIÓN MATRIX - BLINDADA)
 // ==========================================
-function procesarLibroLeido(wb) {
-    console.log("📖 Procesando archivo con Motor Unificado v2 (Fix Cuentas)...");
-    
-    // 1. Limpieza y preparación de Configuración
+window.procesarLibroLeido = function(wb) {
+    console.log("📖 Procesando archivo en MODO MATRIZ (Ignora errores de encabezados)...");
+
+    // ----------------------------------------------------
+    // 1. LEER CONFIGURACIÓN (Detectando columnas dinámicamente)
+    // ----------------------------------------------------
     window.mapaCuentas = {};
     window.listaConceptos = [];
     window.listaBeneficiarios = [];
 
-    // Buscamos la hoja de Configuración (flexible mayúsculas/minúsculas)
+    // Buscamos la hoja "Config..."
     const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
     
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
-        const rawConfig = XLSX.utils.sheet_to_json(wsConfig);
-        
-        rawConfig.forEach(fila => {
-            // Buscamos la cuenta
-            const ctaRaw = String(fila.CUENTA || fila.Cuenta || fila.cuenta || '').trim();
-            
-            if (ctaRaw) {
-                // CLAVE DEL ÉXITO: Usamos la cuenta en MAYÚSCULAS como clave para buscarla siempre bien
-                const ctaKey = ctaRaw.toUpperCase();
+        // LEEMOS COMO MATRIZ (Array de Arrays) para evitar problemas de nombres
+        const matrizConfig = XLSX.utils.sheet_to_json(wsConfig, { header: 1 });
 
-                const tipoRaw = fila.TIPO || fila.Tipo || fila.tipo || 'OTROS';
-                const invRaw = fila.ES_INVERSION || fila.Es_inversion || fila.es_inversion || 'NO';
-                
-                // Guardamos la configuración de esta cuenta
-                window.mapaCuentas[ctaKey] = {
-                    nombreOriginal: ctaRaw, // Para mostrarla bonita si hace falta
-                    tipo: String(tipoRaw).trim().toUpperCase(), // BANCO, BOLSA, CRIPTO...
-                    esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(String(invRaw).trim().toUpperCase())
-                };
+        if (matrizConfig && matrizConfig.length > 0) {
+            // Buscamos en qué fila están los títulos
+            let filaTitulos = -1;
+            let colCuenta = -1, colTipo = -1, colInv = -1;
+            let colConcepto = -1, colBenef = -1;
+
+            // Escaneamos las primeras 10 filas buscando "CUENTA" y "TIPO"
+            for (let i = 0; i < Math.min(10, matrizConfig.length); i++) {
+                const fila = matrizConfig[i].map(c => String(c).toUpperCase().trim());
+                if (fila.includes("CUENTA") || fila.includes("TIPO")) {
+                    filaTitulos = i;
+                    // Guardamos la posición exacta de cada columna
+                    colCuenta = fila.findIndex(c => c.includes("CUENTA"));
+                    colTipo = fila.findIndex(c => c === "TIPO");
+                    colInv = fila.findIndex(c => c.includes("INVERSION") || c.includes("INVERSIÓN"));
+                    colConcepto = fila.findIndex(c => c === "CONCEPTO");
+                    colBenef = fila.findIndex(c => c.includes("BENEFICIARIO"));
+                    break;
+                }
             }
-            
-            // Recopilamos Conceptos y Beneficiarios para los desplegables
-            const concepto = fila.CONCEPTO || fila.Concepto || fila.concepto;
-            if (concepto) window.listaConceptos.push(String(concepto).trim());
-            
-            const beneficiario = fila.BENEFICIARIO || fila.Beneficiario || fila.beneficiario;
-            if (beneficiario) window.listaBeneficiarios.push(String(beneficiario).trim());
-        });
-        console.log("✅ Configuración cargada:", Object.keys(window.mapaCuentas).length, "cuentas.");
+
+            if (filaTitulos !== -1) {
+                // Leemos los datos a partir de la fila siguiente a los títulos
+                for (let i = filaTitulos + 1; i < matrizConfig.length; i++) {
+                    const fila = matrizConfig[i];
+                    if (!fila) continue;
+
+                    // Extraer Cuenta
+                    if (colCuenta !== -1 && fila[colCuenta]) {
+                        const nombreCuenta = String(fila[colCuenta]).trim();
+                        const keyCuenta = nombreCuenta.toUpperCase();
+                        
+                        const tipo = (colTipo !== -1 && fila[colTipo]) ? String(fila[colTipo]).trim().toUpperCase() : "OTROS";
+                        const esInvRaw = (colInv !== -1 && fila[colInv]) ? String(fila[colInv]).trim().toUpperCase() : "NO";
+                        const esInversion = ["SI", "SÍ", "YES", "TRUE"].includes(esInvRaw);
+
+                        window.mapaCuentas[keyCuenta] = {
+                            nombreOriginal: nombreCuenta,
+                            tipo: tipo,
+                            esInversion: esInversion
+                        };
+                    }
+
+                    // Extraer Conceptos (si hay)
+                    if (colConcepto !== -1 && fila[colConcepto]) {
+                        window.listaConceptos.push(String(fila[colConcepto]).trim());
+                    }
+                    // Extraer Beneficiarios (si hay)
+                    if (colBenef !== -1 && fila[colBenef]) {
+                        window.listaBeneficiarios.push(String(fila[colBenef]).trim());
+                    }
+                }
+                console.log("✅ Configuración cargada (Modo Matriz):", Object.keys(window.mapaCuentas).length, "cuentas detectadas.");
+            }
+        }
     }
 
-    // 2. Procesamiento de Movimientos
-    const wsName = wb.SheetNames.find(n => n.toUpperCase().includes('MOVIMIENTO')) || wb.SheetNames[0];
-    const rawMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName]);
+    // ----------------------------------------------------
+    // 2. LEER MOVIMIENTOS (Modo Matriz)
+    // ----------------------------------------------------
+    const wsMovsName = wb.SheetNames.find(n => n.toUpperCase().includes('MOVIMIENTO')) || wb.SheetNames[0];
+    const wsMovs = wb.Sheets[wsMovsName];
+    const matrizMovs = XLSX.utils.sheet_to_json(wsMovs, { header: 1 });
 
-    window.datos = rawMovs.map(fila => {
-        let id = fila.Id || fila.ID || crypto.randomUUID(); // Si no tiene ID, le creamos uno
-        
-        // --- Lógica de FECHAS (Tu lógica original era buena, la mantenemos) ---
-        let f = fila.Fecha || fila.FECHA;
-        let fechaObj = new Date();
+    window.datos = [];
+    
+    if (matrizMovs && matrizMovs.length > 0) {
+        let fTit = -1;
+        let cId = -1, cFecha = -1, cCuenta = -1, cConcepto = -1, cImporte = -1, cDesc = -1, cBenef = -1;
 
-        if (typeof f === 'number') {
-            const fechaBase = new Date(Math.round((f - 25569) * 86400 * 1000));
-            fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
-        } else if (typeof f === 'string') {
-            const partes = f.split('-');
-            if (partes.length === 3) {
-                fechaObj = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
-            } else {
-                fechaObj = new Date(f);
+        // Buscar encabezados en Movimientos
+        for (let i = 0; i < Math.min(10, matrizMovs.length); i++) {
+            const fila = matrizMovs[i].map(c => String(c).toUpperCase().trim());
+            if (fila.includes("FECHA") && (fila.includes("IMPORTE") || fila.includes("CANTIDAD"))) {
+                fTit = i;
+                cId = fila.findIndex(c => c === "ID");
+                cFecha = fila.findIndex(c => c === "FECHA");
+                cCuenta = fila.findIndex(c => c.includes("CUENTA"));
+                cConcepto = fila.findIndex(c => c.includes("CONCEPTO"));
+                cImporte = fila.findIndex(c => c === "IMPORTE");
+                cDesc = fila.findIndex(c => c.includes("DESCRIPCION") || c.includes("DESCRIPCIÓN") || c.includes("DETALLE"));
+                cBenef = fila.findIndex(c => c.includes("BENEFICIARIO"));
+                break;
             }
         }
 
-        // --- Lógica de IMPORTE ---
-        let imp = fila.Importe || fila.IMPORTE || 0;
-        if (typeof imp === 'string') imp = parseFloat(imp.replace(',', '.')) || 0;
+        if (fTit !== -1) {
+            for (let i = fTit + 1; i < matrizMovs.length; i++) {
+                const fila = matrizMovs[i];
+                if (!fila || !fila[cFecha]) continue; // Si no hay fecha, saltamos
 
-        // --- Lógica de CUENTA Y TIPO (AQUÍ ESTÁ EL CAMBIO IMPORTANTE) ---
-        const cuentaOriginal = String(fila.Cuenta || fila.CUENTA || '').trim();
-        const cuentaKey = cuentaOriginal.toUpperCase(); // Clave para buscar en el mapa
-        
-        // Buscamos los datos extra en el mapa que creamos antes
-        let infoCuenta = window.mapaCuentas[cuentaKey];
-        
-        // Valores por defecto si la cuenta no está en configuración
-        let tipoAsignado = "OTROS";
-        let esInversionAsignado = false;
+                // PROCESAR FECHA
+                let f = fila[cFecha];
+                let fechaObj = new Date();
+                if (typeof f === 'number') {
+                    // Excel number date
+                    const fechaBase = new Date(Math.round((f - 25569) * 86400 * 1000));
+                    fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
+                } else if (typeof f === 'string') {
+                    // String YYYY-MM-DD
+                    const partes = f.split('-');
+                    if (partes.length === 3) {
+                        fechaObj = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+                    } else {
+                        fechaObj = new Date(f);
+                    }
+                }
 
-        if (infoCuenta) {
-            tipoAsignado = infoCuenta.tipo;
-            esInversionAsignado = infoCuenta.esInversion;
+                // PROCESAR IMPORTE
+                let imp = fila[cImporte];
+                if (typeof imp === 'string') imp = parseFloat(imp.replace(',', '.')) || 0;
+                else imp = parseFloat(imp) || 0;
+
+                // PROCESAR CUENTA Y TIPO (CRÍTICO)
+                const nombreCuenta = (cCuenta !== -1 && fila[cCuenta]) ? String(fila[cCuenta]).trim() : "Desconocida";
+                const cuentaKey = nombreCuenta.toUpperCase();
+                
+                // Buscamos en el mapa de configuración
+                let info = window.mapaCuentas[cuentaKey];
+                let tipoFinal = "OTROS";
+                let esInvFinal = false;
+
+                if (info) {
+                    tipoFinal = info.tipo;
+                    esInvFinal = info.esInversion;
+                } else {
+                    // Intento desesperado: si no está exacta, buscamos si alguna contiene el texto
+                    // (Útil si en movs pone "Cuenta ING" y en config "ING")
+                    const posibleKey = Object.keys(window.mapaCuentas).find(k => cuentaKey.includes(k) || k.includes(cuentaKey));
+                    if (posibleKey) {
+                        tipoFinal = window.mapaCuentas[posibleKey].tipo;
+                        esInvFinal = window.mapaCuentas[posibleKey].esInversion;
+                    }
+                }
+
+                window.datos.push({
+                    id: (cId !== -1 && fila[cId]) ? String(fila[cId]) : crypto.randomUUID(),
+                    ts: fechaObj.getTime(),
+                    fecha: fechaObj,
+                    cuenta: nombreCuenta,
+                    tipoCuenta: tipoFinal,   // <--- AQUÍ SE ASIGNA EL TIPO
+                    esInversion: esInvFinal, // <--- AQUÍ SE ASIGNA INVERSIÓN
+                    concepto: (cConcepto !== -1) ? String(fila[cConcepto] || "").trim() : "",
+                    importe: imp,
+                    descripcion: (cDesc !== -1) ? String(fila[cDesc] || "").trim() : "",
+                    beneficiario: (cBenef !== -1) ? String(fila[cBenef] || "").trim() : "",
+                    tipo: (imp >= 0) ? 'ingreso' : 'gasto'
+                });
+            }
         }
+    }
 
-        return {
-            id: String(id),
-            ts: fechaObj.getTime(),
-            fecha: fechaObj,
-            cuenta: cuentaOriginal,
-            // Inyectamos los datos que faltaban:
-            tipoCuenta: tipoAsignado,
-            esInversion: esInversionAsignado, 
-            concepto: String(fila.Concepto || fila.CONCEPTO || '').trim(),
-            importe: imp,
-            descripcion: String(fila.Descripcion || fila.DESCRIPCION || fila.Detalle || '').trim(),
-            beneficiario: String(fila.Beneficiario || fila.BENEFICIARIO || '').trim(),
-            tipo: (imp >= 0) ? 'ingreso' : 'gasto'
-        };
-    }).filter(d => d.cuenta !== ""); // Quitamos filas vacías
-
-    // 3. Ordenar y guardar en caché
+    // Ordenar por fecha descendente
     window.datos.sort((a, b) => b.ts - a.ts);
+
+    // Guardar Caché
     localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos));
     localStorage.setItem('aidanai_config_cache', JSON.stringify(window.mapaCuentas));
 
-    console.log(`✅ ${window.datos.length} movimientos procesados correctamente.`);
+    console.log(`✅ ${window.datos.length} movimientos procesados (Modo Matriz).`);
 
-    // --- RELLENAR FILTROS DESPLEGABLES (Tu lógica original) ---
+    // ----------------------------------------------------
+    // 3. ACTUALIZAR INTERFAZ
+    // ----------------------------------------------------
+    // Actualizar filtros
     const sCuentas = new Set();
-    const sConceptos = new Set();
-    const sBeneficiarios = new Set();
-
-    // Añadimos lo que viene de la configuración primero
-    window.listaConceptos.forEach(c => sConceptos.add(c));
-    window.listaBeneficiarios.forEach(b => sBeneficiarios.add(b));
-    if (window.mapaCuentas) Object.keys(window.mapaCuentas).forEach(k => sCuentas.add(window.mapaCuentas[k].nombreOriginal));
-
-    // Y luego lo que encontremos en los movimientos (por si hay nuevos)
+    const sConceptos = new Set(window.listaConceptos);
+    const sBeneficiarios = new Set(window.listaBeneficiarios);
+    
     window.datos.forEach(d => {
         if(d.cuenta) sCuentas.add(d.cuenta);
         if(d.concepto) sConceptos.add(d.concepto);
         if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
     });
+    // Añadir cuentas de config aunque no tengan movs
+    Object.keys(window.mapaCuentas).forEach(k => sCuentas.add(window.mapaCuentas[k].nombreOriginal));
 
-    if (typeof actualizarFiltrosUI === 'function') {
-        actualizarFiltrosUI(sCuentas, sConceptos, sBeneficiarios);
-    }
-
-    // 4. ACTUALIZACIÓN DE INTERFAZ
+    if (typeof actualizarFiltrosUI === 'function') actualizarFiltrosUI(sCuentas, sConceptos, sBeneficiarios);
+    
+    // Refrescar gráficos
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if (typeof actualizarDashboard === 'function') actualizarDashboard();
     if (typeof renderizar === 'function') renderizar();
-    
-    // Gráficos opcionales
     if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
     if (typeof renderizarRadarSalud === 'function') renderizarRadarScoring();
     if (typeof cargarInterfaz === 'function') cargarInterfaz();
-}
+};
  
 // ==========================================
 // 💾 FINALIZAR GUARDADO (Conexión con el nuevo sistema)
