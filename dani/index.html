@@ -3214,83 +3214,110 @@ function leerExcel(blob) {
     reader.readAsArrayBuffer(blob);
 }
 // ==========================================
-// 🧠 PROCESADOR MAESTRO DE DATOS (VERSIÓN UNIFICADA FINAL)
+// 🧠 PROCESADOR MAESTRO DE DATOS (CORREGIDO Y MEJORADO)
 // ==========================================
 function procesarLibroLeido(wb) {
-    console.log("📖 Procesando archivo con Motor Unificado...");
+    console.log("📖 Procesando archivo con Motor Unificado v2 (Fix Cuentas)...");
     
     // 1. Limpieza y preparación de Configuración
     window.mapaCuentas = {};
     window.listaConceptos = [];
     window.listaBeneficiarios = [];
 
+    // Buscamos la hoja de Configuración (flexible mayúsculas/minúsculas)
     const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
+    
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
         const rawConfig = XLSX.utils.sheet_to_json(wsConfig);
+        
         rawConfig.forEach(fila => {
-            // CORRECCIÓN: Ahora buscamos CUENTA, Cuenta o cuenta para ser más robustos
-            const cta = String(fila.CUENTA || fila.Cuenta || fila.cuenta || '').trim();
+            // Buscamos la cuenta
+            const ctaRaw = String(fila.CUENTA || fila.Cuenta || fila.cuenta || '').trim();
             
-            if (cta) {
-                // Hacemos lo mismo con TIPO y ES_INVERSION
+            if (ctaRaw) {
+                // CLAVE DEL ÉXITO: Usamos la cuenta en MAYÚSCULAS como clave para buscarla siempre bien
+                const ctaKey = ctaRaw.toUpperCase();
+
                 const tipoRaw = fila.TIPO || fila.Tipo || fila.tipo || 'OTROS';
-                const invRaw = fila.ES_INVERSION || fila.Es_inversion || fila.es_inversion || '';
+                const invRaw = fila.ES_INVERSION || fila.Es_inversion || fila.es_inversion || 'NO';
                 
-                window.mapaCuentas[cta] = {
-                    tipo: String(tipoRaw).toUpperCase(),
-                    esInversion: String(invRaw).toUpperCase() === 'SI'
+                // Guardamos la configuración de esta cuenta
+                window.mapaCuentas[ctaKey] = {
+                    nombreOriginal: ctaRaw, // Para mostrarla bonita si hace falta
+                    tipo: String(tipoRaw).trim().toUpperCase(), // BANCO, BOLSA, CRIPTO...
+                    esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(String(invRaw).trim().toUpperCase())
                 };
             }
             
-            // También protegemos CONCEPTOS y BENEFICIARIOS
+            // Recopilamos Conceptos y Beneficiarios para los desplegables
             const concepto = fila.CONCEPTO || fila.Concepto || fila.concepto;
             if (concepto) window.listaConceptos.push(String(concepto).trim());
             
             const beneficiario = fila.BENEFICIARIO || fila.Beneficiario || fila.beneficiario;
             if (beneficiario) window.listaBeneficiarios.push(String(beneficiario).trim());
         });
+        console.log("✅ Configuración cargada:", Object.keys(window.mapaCuentas).length, "cuentas.");
     }
 
     // 2. Procesamiento de Movimientos
-    const wsName = wb.SheetNames.find(n => n.toUpperCase() === 'MOVIMIENTOS') || wb.SheetNames[0];
+    const wsName = wb.SheetNames.find(n => n.toUpperCase().includes('MOVIMIENTO')) || wb.SheetNames[0];
     const rawMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName]);
 
     window.datos = rawMovs.map(fila => {
-        let id = fila.Id || fila.ID || crypto.randomUUID();
+        let id = fila.Id || fila.ID || crypto.randomUUID(); // Si no tiene ID, le creamos uno
+        
+        // --- Lógica de FECHAS (Tu lógica original era buena, la mantenemos) ---
         let f = fila.Fecha || fila.FECHA;
         let fechaObj = new Date();
 
         if (typeof f === 'number') {
-            // Caso Excel numérico: Convertimos a UTC puro y luego extraemos componentes para crear fecha local
-            // Esto evita que "1 Enero UTC" se convierta en "31 Dic Local"
             const fechaBase = new Date(Math.round((f - 25569) * 86400 * 1000));
             fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
         } else if (typeof f === 'string') {
-            // Caso Texto (YYYY-MM-DD): Forzamos interpretación local (año, mes-1, día)
             const partes = f.split('-');
             if (partes.length === 3) {
                 fechaObj = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
             } else {
-                fechaObj = new Date(f); // Fallback por si formato raro
+                fechaObj = new Date(f);
             }
         }
 
+        // --- Lógica de IMPORTE ---
         let imp = fila.Importe || fila.IMPORTE || 0;
         if (typeof imp === 'string') imp = parseFloat(imp.replace(',', '.')) || 0;
+
+        // --- Lógica de CUENTA Y TIPO (AQUÍ ESTÁ EL CAMBIO IMPORTANTE) ---
+        const cuentaOriginal = String(fila.Cuenta || fila.CUENTA || '').trim();
+        const cuentaKey = cuentaOriginal.toUpperCase(); // Clave para buscar en el mapa
+        
+        // Buscamos los datos extra en el mapa que creamos antes
+        let infoCuenta = window.mapaCuentas[cuentaKey];
+        
+        // Valores por defecto si la cuenta no está en configuración
+        let tipoAsignado = "OTROS";
+        let esInversionAsignado = false;
+
+        if (infoCuenta) {
+            tipoAsignado = infoCuenta.tipo;
+            esInversionAsignado = infoCuenta.esInversion;
+        }
 
         return {
             id: String(id),
             ts: fechaObj.getTime(),
             fecha: fechaObj,
-            cuenta: String(fila.Cuenta || fila.CUENTA || '').trim(),
+            cuenta: cuentaOriginal,
+            // Inyectamos los datos que faltaban:
+            tipoCuenta: tipoAsignado,
+            esInversion: esInversionAsignado, 
             concepto: String(fila.Concepto || fila.CONCEPTO || '').trim(),
             importe: imp,
             descripcion: String(fila.Descripcion || fila.DESCRIPCION || fila.Detalle || '').trim(),
             beneficiario: String(fila.Beneficiario || fila.BENEFICIARIO || '').trim(),
             tipo: (imp >= 0) ? 'ingreso' : 'gasto'
         };
-    }).filter(d => d.cuenta !== "");
+    }).filter(d => d.cuenta !== ""); // Quitamos filas vacías
 
     // 3. Ordenar y guardar en caché
     window.datos.sort((a, b) => b.ts - a.ts);
@@ -3298,33 +3325,34 @@ function procesarLibroLeido(wb) {
     localStorage.setItem('aidanai_config_cache', JSON.stringify(window.mapaCuentas));
 
     console.log(`✅ ${window.datos.length} movimientos procesados correctamente.`);
-	// --- CORRECCIÓN: RELLENAR FILTROS DESPLEGABLES ---
-    // Recopilamos todas las cuentas, conceptos y beneficiarios únicos
+
+    // --- RELLENAR FILTROS DESPLEGABLES (Tu lógica original) ---
     const sCuentas = new Set();
     const sConceptos = new Set();
     const sBeneficiarios = new Set();
 
+    // Añadimos lo que viene de la configuración primero
+    window.listaConceptos.forEach(c => sConceptos.add(c));
+    window.listaBeneficiarios.forEach(b => sBeneficiarios.add(b));
+    if (window.mapaCuentas) Object.keys(window.mapaCuentas).forEach(k => sCuentas.add(window.mapaCuentas[k].nombreOriginal));
+
+    // Y luego lo que encontremos en los movimientos (por si hay nuevos)
     window.datos.forEach(d => {
         if(d.cuenta) sCuentas.add(d.cuenta);
         if(d.concepto) sConceptos.add(d.concepto);
         if(d.beneficiario) sBeneficiarios.add(d.beneficiario);
     });
 
-    // Añadimos también las cuentas de la configuración (por si hay alguna sin movimientos)
-    if (window.mapaCuentas) {
-        Object.keys(window.mapaCuentas).forEach(c => sCuentas.add(c));
-    }
-
-    // Llamamos a la función que pinta las opciones en el HTML
     if (typeof actualizarFiltrosUI === 'function') {
         actualizarFiltrosUI(sCuentas, sConceptos, sBeneficiarios);
     }
-    // 4. ACTUALIZACIÓN DE INTERFAZ (Orden crítico)
+
+    // 4. ACTUALIZACIÓN DE INTERFAZ
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if (typeof actualizarDashboard === 'function') actualizarDashboard();
     if (typeof renderizar === 'function') renderizar();
     
-    // Gráficos opcionales (solo si existen las funciones)
+    // Gráficos opcionales
     if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
     if (typeof renderizarRadarSalud === 'function') renderizarRadarScoring();
     if (typeof cargarInterfaz === 'function') cargarInterfaz();
