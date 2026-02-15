@@ -1473,6 +1473,24 @@ th {
     color: var(--c-accent) !important;
 }
  
+ /* --- ESTILOS PANEL DE ESTADO NEÓN --- */
+        .status-panel {
+            margin-top: 8px;
+            min-height: 24px;
+            display: flex; justify-content: center; align-items: center;
+            font-family: 'Courier New', monospace;
+            font-size: 14px; font-weight: 900;
+            text-transform: uppercase; letter-spacing: 1px;
+            color: #FF9F1C; /* Naranja */
+            text-shadow: 0 0 10px rgba(255, 159, 28, 0.8);
+            opacity: 0; transition: opacity 0.3s ease;
+            width: 100%;
+        }
+        .status-panel.activo { opacity: 1; animation: parpadeo 1.2s infinite alternate; }
+        .status-panel.error { color: #FF2E4D; text-shadow: 0 0 15px red; }
+        .status-panel.success { color: #39FF14; text-shadow: 0 0 15px lime; }
+        @keyframes parpadeo { from { opacity: 0.6; } to { opacity: 1; } }
+ 
    </style>
 
 <body>
@@ -1545,6 +1563,7 @@ th {
             </button>
         </div>
     </div>
+	<div id="status-panel" class="status-panel"></div>
 </header>
 
             <div class="app-main">
@@ -2842,44 +2861,40 @@ function lanzarToast(mensaje, tipo) {
 }
 
 // ==========================================
-// 🔔 GESTOR DE NOTIFICACIONES (Solución Final)
-// ==========================================
-window.mostrarEstado = function(texto, tipo = 'normal') {
-    // 1. Buscar o crear el contenedor
-    let container = document.getElementById('toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toast-container';
-        document.body.appendChild(container);
-    }
+    // 🚨 GESTOR DE ESTADO (Panel Naranja)
+    // ==========================================
+    window.mostrarEstado = function(mensaje, tipo = 'info') {
+        const panel = document.getElementById('status-panel');
+        if (!panel) return; // Si no existe, no hacemos nada
 
-    // 2. Definir icono y estilo
-    let icon = 'ℹ️';
-    let claseExtra = '';
-    
-    // Mapeo de tipos antiguos a nuevos
-    if (tipo === 'success' || tipo === 'ok') { icon = '✅'; claseExtra = 'toast-success'; }
-    if (tipo === 'error' || tipo === 'err')  { icon = '⚠️'; claseExtra = 'toast-error'; }
-    if (tipo === 'loading') { icon = '⏳'; claseExtra = 'toast-loading'; }
+        // Limpiar temporizador anterior
+        if (window.statusTimeout) clearTimeout(window.statusTimeout);
 
-    // 3. Crear la burbuja
-    const toast = document.createElement('div');
-    toast.className = `toast-msg ${claseExtra}`;
-    toast.innerHTML = `<span class="toast-icon">${icon}</span><span>${texto}</span>`;
+        // Mostrar mensaje
+        panel.innerHTML = mensaje;
+        panel.className = 'status-panel activo'; // Activa el naranja
+        
+        // Colores especiales
+        if (tipo === 'error' || tipo === 'err') {
+            panel.classList.add('error');
+            panel.innerHTML = '⚠️ ' + mensaje;
+        } else if (tipo === 'success' || tipo === 'ok') {
+            panel.classList.add('success');
+            panel.innerHTML = '✅ ' + mensaje;
+        } else if (tipo === 'loading') {
+            panel.innerHTML = '⏳ ' + mensaje;
+        }
 
-    container.appendChild(toast);
-
-    // 4. Lógica de desaparición
-    if (tipo !== 'loading') {
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateY(-10px)';
-            setTimeout(() => toast.remove(), 300);
-        }, 3500);
-    } else {
-        return toast;
-    }
-};
+        // Ocultar a los 4 segundos (si no es carga)
+        if (tipo !== 'loading') {
+            window.statusTimeout = setTimeout(() => {
+                panel.className = 'status-panel'; // Ocultar
+                panel.innerHTML = '';
+            }, 4000);
+        }
+    };
+    // Redirigir toasts antiguos
+    window.showToast = window.mostrarEstado;
 
 
 // --- CEREBRO DEL SEMÁFORO DE NUBE ---
