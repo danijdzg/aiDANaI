@@ -3270,50 +3270,58 @@ function leerExcel(blob) {
 // ==========================================
 // 🧠 PROCESADOR MAESTRO DE DATOS (VERSIÓN DEFINITIVA BLINDADA)
 // ==========================================
+// ==========================================
+// 🧠 PROCESADOR MAESTRO DE DATOS (ARREGLADO PARA MAYÚSCULAS)
+// ==========================================
 function procesarLibroLeido(wb) {
-    console.log("📖 Procesando archivo con Motor Unificado...");
+    console.log("📖 Procesando archivo con Corrección de Tipos...");
     
     // 1. LIMPIEZA Y PREPARACIÓN DE CONFIGURACIÓN
     window.mapaCuentas = {};
     window.listaConceptos = [];
     window.listaBeneficiarios = [];
 
-    // Buscamos la hoja de configuración (sin importar mayúsculas/minúsculas)
+    // Buscamos la hoja que tenga "CONFIG" en el nombre (Mayús/Minús da igual)
     const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
     
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
-        // Convertimos a JSON crudo
+        // Leemos el Excel crudo
         const rawConfig = XLSX.utils.sheet_to_json(wsConfig, {defval: ""});
         
         rawConfig.forEach(fila => {
-            // A) NORMALIZACIÓN: Convertimos las claves de la fila a MAYÚSCULAS
-            // Esto es "Magia": hace que 'Tipo', 'tipo' y 'TIPO' sean lo mismo para el código.
+            // --- EL TRUCO DE MAGIA ---
+            // Creamos un 'dato' nuevo donde todas las claves son MAYÚSCULAS.
+            // Así 'Tipo' se convierte en 'TIPO' y coincide con tu Excel.
             const dato = {};
             Object.keys(fila).forEach(key => {
                 dato[key.trim().toUpperCase()] = fila[key];
             });
 
-            // B) PROCESAR CUENTAS
-            // Buscamos columna CUENTA o ID
+            // A) PROCESAR CUENTAS
+            // Buscamos la columna CUENTA (o ID)
             const cta = String(dato.CUENTA || dato.ID || '').trim();
             
             if (cta) {
-                // Buscamos TIPO (o TIPO DE CUENTA) -> Arregla el problema de "OTROS"
-                const tipoRaw = dato.TIPO || dato['TIPO DE CUENTA'] || 'OTROS';
+                // LEEMOS EL TIPO EXACTO DE TU EXCEL
+                // Buscamos 'TIPO' (que es como lo tienes) o 'TIPO DE CUENTA' por si acaso
+                let tipoLeido = dato.TIPO || dato['TIPO DE CUENTA'] || 'OTROS';
                 
-                // Buscamos ES_INVERSION (o INVERSION) -> Detectamos "Si", "SI", "True"...
+                // LEEMOS SI ES INVERSIÓN (Columna ES_INVERSION)
+                // Buscamos 'ES_INVERSION', 'ES INVERSION' o 'INVERSION'
                 const invRaw = String(dato.ES_INVERSION || dato['ES INVERSION'] || dato.INVERSION || "No").toUpperCase();
+                
+                // Si pone "Si", "SI", "Yes" o "True", lo marcamos como inversión
                 const esInversion = (invRaw === 'SI' || invRaw === 'YES' || invRaw === 'TRUE');
                 
+                // Guardamos en la memoria de la App
                 window.mapaCuentas[cta] = {
-                    tipo: String(tipoRaw).toUpperCase(), // Guardamos el tipo (BANCO, BOLSA...)
+                    tipo: String(tipoLeido).toUpperCase(), // Guardamos BANCO, BOLSA, etc. en mayúsculas
                     esInversion: esInversion
                 };
             }
             
-            // C) RECOPILAR LISTAS DESPLEGABLES (MODO ESTRICTO)
-            // Solo guardamos lo que está explícitamente en el Excel de Configuración
+            // B) PROCESAR LISTAS DESPLEGABLES (Solo lo que hay en config)
             if (dato.CONCEPTO) window.listaConceptos.push(String(dato.CONCEPTO).trim());
             if (dato.BENEFICIARIO) window.listaBeneficiarios.push(String(dato.BENEFICIARIO).trim());
         });
@@ -3324,15 +3332,15 @@ function procesarLibroLeido(wb) {
     const rawMovs = XLSX.utils.sheet_to_json(wb.Sheets[wsName]);
 
     window.datos = rawMovs.map(fila => {
-        // Normalización de claves para movimientos también (evita errores de columnas)
+        // Normalización de claves para movimientos también
         const d = {};
         Object.keys(fila).forEach(key => { d[key.trim().toUpperCase()] = fila[key]; });
 
         let id = d.ID || crypto.randomUUID();
-        let f = d.FECHA;
+        let f = d.FECHA; // Tu Excel tiene columna FECHA
         let fechaObj = new Date();
 
-        // Lógica de fechas (Excel Numérico vs Texto)
+        // Lógica para arreglar fechas de Excel
         if (typeof f === 'number') {
             const fechaBase = new Date(Math.round((f - 25569) * 86400 * 1000));
             fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
@@ -3345,49 +3353,43 @@ function procesarLibroLeido(wb) {
             }
         }
 
-        let imp = d.IMPORTE || 0;
+        let imp = d.IMPORTE || 0; // Tu Excel tiene columna IMPORTE
         if (typeof imp === 'string') imp = parseFloat(imp.replace(',', '.')) || 0;
 
         return {
             id: String(id),
             ts: fechaObj.getTime(),
             fecha: fechaObj,
-            cuenta: String(d.CUENTA || '').trim(),
-            concepto: String(d.CONCEPTO || '').trim(),
+            cuenta: String(d.CUENTA || '').trim(), // Tu Excel tiene columna CUENTA
+            concepto: String(d.CONCEPTO || '').trim(), // Tu Excel tiene columna CONCEPTO
             importe: imp,
-            descripcion: String(d.DESCRIPCION || d.DETALLE || '').trim(),
-            beneficiario: String(d.BENEFICIARIO || '').trim(),
+            descripcion: String(d.DESCRIPCION || d.DETALLE || '').trim(), // Tu Excel tiene DESCRIPCION
+            beneficiario: String(d.BENEFICIARIO || '').trim(), // Tu Excel tiene BENEFICIARIO
             tipo: (imp >= 0) ? 'ingreso' : 'gasto' 
         };
     }).filter(d => d.cuenta !== "");
 
-    // 3. ORDENAR Y GUARDAR EN CACHÉ
+    // 3. ACTUALIZAR TODO
     window.datos.sort((a, b) => b.ts - a.ts);
     localStorage.setItem('aidanai_datos_cache', JSON.stringify(window.datos));
-    // Guardamos también la configuración procesada
     localStorage.setItem('aidanai_config_cache', JSON.stringify(window.mapaCuentas));
 
-    console.log(`✅ ${window.datos.length} movimientos procesados.`);
+    console.log(`✅ ${window.datos.length} movimientos procesados. Tipos detectados.`);
 
-    // 4. ACTUALIZAR INTERFAZ GLOBALMENTE
-    
-    // --- MODO ESTRICTO PARA DESPLEGABLES ---
-    // Usamos Sets para eliminar duplicados, pero SOLO de la configuración
+    // Actualizar filtros UI
     const sCuentas = new Set(Object.keys(window.mapaCuentas));
     const sConceptos = new Set(window.listaConceptos);
     const sBeneficiarios = new Set(window.listaBeneficiarios);
 
-    // Llamada a la UI con listas limpias
     if (typeof actualizarFiltrosUI === 'function') {
         actualizarFiltrosUI(sCuentas, sConceptos, sBeneficiarios);
     }
 
-    // Refrescar cálculos y gráficos
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if (typeof actualizarDashboard === 'function') actualizarDashboard();
-    if (typeof renderizar === 'function') renderizar(); // Esto actualiza tu Diario
+    if (typeof renderizar === 'function') renderizar(); 
     
-    // Gráficos (si existen)
+    // Gráficos
     if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
     if (typeof renderizarRadarScoring === 'function') renderizarRadarScoring();
     if (typeof cargarInterfaz === 'function') cargarInterfaz();
