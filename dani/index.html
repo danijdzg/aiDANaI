@@ -4383,84 +4383,91 @@ function formatear(val, tipo) {
     }
 
    function actualizarPatrimonio() {
+        // 1. Localizar elementos (igual que antes)
         const contenedorLista = document.getElementById('lista-cuentas-patri');
         const elTotalDetalle = document.getElementById('total-patri-valor');
         const elTotalHome = document.getElementById('d-patri-total');
-        
+
+        // 2. Seguridad: Si no hay datos, mensaje de espera
         if (!datos || datos.length === 0) {
             if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF;">ESPERANDO DATOS...</div>';
             return;
         }
-        
-        const saldos = {};
-        const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
-        
-        datosFiltrados.forEach(m => {
-            // PROTECCIÓN CONTRA ERRORES:
-            // Si la cuenta es null/undefined, usamos cadena vacía para que no falle el trim
-            const cta = String(m.cuenta || '').trim();
-            if (!cta) return; // Si no hay cuenta, saltamos esta línea
 
+        // 3. Cálculos en memoria (Rápido)
+        const saldos = {};
+        // Usamos el filtro de propietario actual para sumar solo lo tuyo (o todo)
+        const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+
+        datosFiltrados.forEach(m => {
+            const cta = String(m.cuenta || '').trim();
+            if (!cta) return; // Si no hay nombre de cuenta, saltamos
             const val = parseFloat(m.importe) || 0;
             saldos[cta] = (saldos[cta] || 0) + val;
         });
 
         const grupos = {};
         let sumaTotal = 0;
-        
-        // Sumamos solo cuentas con saldo relevante
-        Object.keys(saldos).forEach(cta => { 
-            if (Math.abs(saldos[cta]) >= 0.01) sumaTotal += saldos[cta]; 
+
+        // Agrupar saldos
+        Object.keys(saldos).forEach(cta => {
+            if (Math.abs(saldos[cta]) >= 0.01) sumaTotal += saldos[cta];
         });
 
         Object.keys(saldos).forEach(cta => {
             const saldo = saldos[cta];
-            if (Math.abs(saldo) < 0.01) return;
-            
-            const ctaKey = cta.trim().toUpperCase(); // CORRECCIÓN: Mayúsculas para coincidir con Configuración
-            // PROTECCIÓN EXTRA: Si mapaCuentas no existe, creamos uno vacío
+            if (Math.abs(saldo) < 0.01) return; // Ocultar cuentas a cero
+
+            const ctaKey = cta.trim().toUpperCase();
             const mapa = window.mapaCuentas || {};
-            // CAMBIO: Usamos 'SIN CLASIFICAR' en lugar de 'OTROS'
+            // Clasificación inteligente: Si no está en config, va a "SIN CLASIFICAR"
             const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
-            
+
             const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'SIN CLASIFICAR';
-            
+
             if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
             grupos[nombreGrupo].total += saldo;
             grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
         });
 
+        // 4. Actualizar Totales (UI Superior) - Esto es rápido y no afecta al scroll
         const textoTotal = fmt(sumaTotal) + ' €';
-        const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg'; 
-        
+        const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg';
+
         if (elTotalDetalle) { elTotalDetalle.innerText = textoTotal; elTotalDetalle.className = 'kpi-value ' + claseColor; }
         if (elTotalHome) { elTotalHome.innerText = textoTotal; elTotalHome.className = 'kpi-value ' + claseColor; }
-        
+
+        // 5. LA GRAN OPTIMIZACIÓN: Construcción del HTML en memoria
         if (contenedorLista) {
-            contenedorLista.innerHTML = '';
-            if (Object.keys(grupos).length === 0) { 
-                contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>'; 
-                return; 
+            if (Object.keys(grupos).length === 0) {
+                contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>';
+                return;
             }
-            
+
+            let htmlFinal = ''; // Aquí acumularemos todo el HTML antes de tocar la pantalla
+
             Object.keys(grupos).sort().forEach(nombreGrupo => {
                 const grupo = grupos[nombreGrupo];
-                const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF'; 
+                const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF';
                 const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #FFFFFF;';
                 
-                // Evitar división por cero
+                // Evitar errores de división por cero
                 const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
                 const groupId = nombreGrupo.replace(/[^a-zA-Z0-9]/g, '');
-                
+
+                // Generar HTML de las cuentas internas
                 let htmlCuentas = '';
                 grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
                     const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
                     const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
+
                     htmlCuentas += `
                         <div class="patri-account-item" onclick="verExtractoCuenta('${c.nombre}')" style="border-bottom: 1px solid #333;">
                             <div class="patri-acc-name-col">
                                 <span class="patri-acc-name" style="color:#FFFFFF; font-size:13px;">${c.nombre}</span>
-                                <div class="patri-progress-bar-bg" style="background:#222;"><div class="patri-progress-bar-fill" style="width:${Math.abs(pctCuenta)}%; background:${colorVal}; opacity:1;"></div></div>
+                                <div class="patri-progress-bar-bg" style="background:#222;">
+                                    <div class="patri-progress-bar-fill" style="width:${Math.abs(pctCuenta)}%; background:${colorVal}; opacity:1;"></div>
+                                </div>
                             </div>
                             <div class="patri-acc-val-col">
                                 <div class="patri-acc-val" style="color:${colorVal}">${fmt(c.valor)}€</div>
@@ -4469,19 +4476,29 @@ function formatear(val, tipo) {
                         </div>
                     `;
                 });
-                contenedorLista.innerHTML += `
+
+                // Añadir el bloque del grupo al HTML final
+                htmlFinal += `
                     <div class="patri-group-card" style="${borderStyle} background:#000; border:1px solid #222;">
                         <div class="patri-group-header" onclick="togglePatriGroup('${groupId}')" style="cursor:pointer; background:#0a0a0a; border-bottom:1px solid #222;">
                             <div style="display:flex; gap:8px; align-items:center;">
                                 <span class="patri-group-title" style="color:${colorTitle}; font-size:12px;">${nombreGrupo}</span>
                                 <span style="color:var(--c-warning); border:1px solid var(--c-warning); padding:1px 6px; border-radius:4px; font-size:9px; font-weight:800">${pctGrupo}%</span>
                             </div>
-                            <div style="display:flex; align-items:center; gap:10px"><span class="patri-group-total" style="color:#FFFFFF;">${fmt(grupo.total)}€</span><span class="material-icons" id="icon-${groupId}" style="font-size:20px; color:#FFFFFF;">expand_more</span></div>
+                            <div style="display:flex; align-items:center; gap:10px">
+                                <span class="patri-group-total" style="color:#FFFFFF;">${fmt(grupo.total)}€</span>
+                                <span class="material-icons" id="icon-${groupId}" style="font-size:20px; color:#FFFFFF;">expand_more</span>
+                            </div>
                         </div>
-                        <div id="list-${groupId}" class="patri-account-list" style="display:none; animation: fadeIn 0.3s ease;">${htmlCuentas}</div>
+                        <div id="list-${groupId}" class="patri-account-list" style="display:none; animation: fadeIn 0.3s ease;">
+                            ${htmlCuentas}
+                        </div>
                     </div>
                 `;
             });
+
+            // 6. GOLPE MAESTRO: Pintar todo de una sola vez
+            contenedorLista.innerHTML = htmlFinal;
         }
     }
 
