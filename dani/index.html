@@ -5106,26 +5106,21 @@ function accionFab(tipo) {
 async function guardarUniversal(nuevasFilas) {
     const btn = document.getElementById('btn-guardar');
     const originalText = btn ? btn.innerHTML : '';
-    // Indicador visual en el botón manual
     const btnModal = document.getElementById('btn-modal-action');
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
 
-    // Bloqueamos la interfaz
     window.isSaving = true;
 
-    // [SEMÁFORO] 1. LUZ AMARILLA (Empieza el trabajo)
-    // Llamamos a la función que creamos en el paso anterior
-    if (typeof window.actualizarSemaforo === 'function') {
-        window.actualizarSemaforo('cargando');
-    }
+    // [SEMÁFORO] 1. LUZ AMARILLA (Trabajando)
+    if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
 
     try {
-        console.log("💾 Iniciando PROTOCOLO DE GUARDADO CON SEMÁFORO...");
+        console.log("💾 Iniciando PROTOCOLO DE GUARDADO BLINDADO...");
 
         // 0. HERRAMIENTA DE LIMPIEZA
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
 
-        // 1. PREPARACIÓN DE DATOS
+        // 1. PREPARACIÓN DE DATOS (Fusión de lo nuevo con lo viejo)
         let datosCandidatos = [...(window.datos || [])];
 
         if (nuevasFilas) {
@@ -5155,11 +5150,13 @@ async function guardarUniversal(nuevasFilas) {
                 };
             });
 
+            // Añadimos lo nuevo al principio
             datosCandidatos.unshift(...filasNormalizadas);
             datosCandidatos.sort((a, b) => b.ts - a.ts);
         }
 
-        // 2. GENERAR HOJA MOVIMIENTOS
+        // 2. GENERAR EL EXCEL EN MEMORIA (El "Paquete")
+        // Hoja Movimientos
         const filasExcel = datosCandidatos.map(mov => ({
             "Id": mov.id,
             "Fecha": mov.fecha,
@@ -5176,7 +5173,7 @@ async function guardarUniversal(nuevasFilas) {
         });
         XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
-        // 3. GENERAR HOJA CONFIGURACIÓN
+        // Hoja Configuración
         const listaCuentas = Object.entries(window.mapaCuentas || {});
         const rawConceptos = window.listaConceptosConfig || [];
         const rawBeneficiarios = window.listaBeneficiariosConfig || [];
@@ -5201,32 +5198,43 @@ async function guardarUniversal(nuevasFilas) {
         const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
         XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
 
-        // 4. CRUCE DE CAMINOS: ¿NUBE O LOCAL?
+        // 3. ESTRATEGIA DE GUARDADO (EL AIRBAG)
         const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
 
         if (usarNube && typeof oneDrive !== 'undefined') {
-            // --- SUBIDA A LA NUBE ---
-            if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
+            try {
+                // INTENTO A: NUBE
+                if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
+                
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                await oneDrive.saveFile(wbout, "aidanai.xlsx");
+                
+                console.log("✅ Nube OK.");
+                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
+                if(typeof mostrarEstado === 'function') mostrarEstado("☁️ Nube Sincronizada", "success");
 
-            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            await oneDrive.saveFile(wbout, "aidanai.xlsx");
-            
-            console.log("✅ Confirmado: Archivo recibido por OneDrive.");
-            
-            // [SEMÁFORO] 2. LUZ VERDE (Éxito Nube)
-            if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
-            if(typeof mostrarEstado === 'function') mostrarEstado("☁️ Guardado seguro en Nube", "success");
-
+            } catch (cloudError) {
+                // FALLO EN NUBE -> ACTIVAR PLAN B (AIRBAG)
+                console.warn("⚠️ FALLO NUBE. Activando descarga de emergencia...", cloudError);
+                
+                const fechaHora = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+                XLSX.writeFile(wb, `aidanai_RESCATE_${fechaHora}.xlsx`);
+                
+                // Avisar al usuario claramente
+                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+                if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ ERROR NUBE: Se ha descargado copia local", "warn");
+                
+                alert("AVISO DE SEGURIDAD:\n\nNo se pudo guardar en OneDrive (posible fallo de red).\n\nPara no perder tus datos, se ha descargado un archivo 'RESCATE' en tu dispositivo.\n\nCuando recuperes conexión, carga ese archivo manualmente.");
+            }
         } else {
-            // MODO LOCAL
+            // MODO LOCAL (Estándar)
             XLSX.writeFile(wb, "aidanai.xlsx");
-            
-            // [SEMÁFORO] 3. LUZ NEUTRA (Modo Local)
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
-            if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado LOCAL", "info");
+            if(typeof mostrarEstado === 'function') mostrarEstado("💾 Guardado Local", "info");
         }
 
-        // 5. ACTUALIZAR MEMORIA Y PANTALLA
+        // 4. ACTUALIZAR PANTALLA (ÉXITO VISUAL)
+        // Aunque falle la nube, en la pantalla lo verás actualizado porque ya tienes tu copia
         window.datos = datosCandidatos;
 
         if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
@@ -5234,18 +5242,10 @@ async function guardarUniversal(nuevasFilas) {
         if(typeof cargarSugerenciasAjustes === 'function') cargarSugerenciasAjustes();
 
     } catch (error) {
-        // --- GESTIÓN DE ERRORES ---
-        console.error("❌ ERROR CRÍTICO:", error);
-        
-        // [SEMÁFORO] 4. LUZ ROJA (Fallo)
+        console.error("❌ ERROR FATAL:", error);
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
-
-        if(typeof mostrarEstado === 'function') mostrarEstado("❌ FALLO: " + error.message, "error");
-        else alert("Error al guardar: " + error.message);
-
-        throw error; 
+        alert("Error crítico: " + error.message);
     } finally {
-        // Restaurar botones
         if(btn) btn.innerHTML = originalText;
         if(btnModal) btnModal.innerHTML = 'GUARDAR';
         window.isSaving = false;
