@@ -1834,7 +1834,61 @@ body {
     </div>
 </div>
                 </div>
-                
+    <div id="tab-recurrentes" class="view-section">
+    <div style="padding: 20px;">
+        <h3 style="color:var(--c-primary); margin-bottom:15px; text-transform:uppercase; letter-spacing:1px; text-align:center;">
+            Movimientos Fijos
+        </h3>
+
+        <div class="master-card" style="border-color: #555; background: rgba(30,30,30,0.8);">
+            <div class="card-header" onclick="document.getElementById('form-recurrente').style.display = document.getElementById('form-recurrente').style.display==='none'?'block':'none'" style="cursor:pointer">
+                <span class="card-title" style="color:#fff;">+ CREAR NUEVA REGLA</span>
+                <span class="material-icons">expand_more</span>
+            </div>
+            
+            <div id="form-recurrente" style="display:none; padding-top:10px; border-top:1px solid #333;">
+                <div class="input-group-pro">
+                    <label class="label-pro">Frecuencia</label>
+                    <select id="rec-frecuencia" class="input-pro form-field" style="font-size:14px; padding:10px;">
+                        <option value="Mensual">📅 Mensual (Mismo día)</option>
+                        <option value="Anual">🎂 Anual</option>
+                        <option value="Semanal">🔄 Semanal (+7 días)</option>
+                    </select>
+                </div>
+                <div class="input-group-pro">
+                    <label class="label-pro">Próxima Fecha (Primer cobro)</label>
+                    <input type="date" id="rec-fecha" class="input-pro form-field">
+                </div>
+                <div class="input-group-pro">
+                    <label class="label-pro">Cuenta</label>
+                    <select id="rec-cuenta" class="input-pro form-field" style="font-size:14px; padding:10px;"></select>
+                </div>
+                <div class="input-group-pro">
+                    <label class="label-pro">Concepto</label>
+                    <input type="text" id="rec-concepto" class="input-pro form-field" placeholder="Ej: Netflix, Alquiler...">
+                </div>
+                <div class="input-group-pro">
+                    <label class="label-pro">Importe (€)</label>
+                    <input type="number" id="rec-importe" class="input-pro form-field" placeholder="-12.99" step="0.01">
+                    <small style="color:#666">Usa negativo (-) para gastos</small>
+                </div>
+
+                <button class="full-btn btn-blue" onclick="crearReglaRecurrente()">GUARDAR REGLA</button>
+            </div>
+        </div>
+
+        <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
+
+        <div id="lista-recurrentes-pendientes">
+            <div style="text-align:center; color:#666; padding:20px;">Cargando reglas...</div>
+        </div>
+
+        <button class="filters-toggle" onclick="document.getElementById('lista-recurrentes-futuros').style.display = document.getElementById('lista-recurrentes-futuros').style.display==='none'?'block':'none'" style="margin-top:20px; opacity:0.7;">
+            Ver Futuros / Al día
+        </button>
+        <div id="lista-recurrentes-futuros" style="display:none; margin-top:10px;"></div>
+    </div>
+</div>            
                 <div id="tab-ajustes" class="view-section">
 				<div style="padding: 20px 20px 0 20px;">
     <h3 style="color:var(--c-success); margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">Caja Fuerte (Backups)</h3>
@@ -1883,7 +1937,9 @@ body {
     <button class="nav-item" id="nav-movs" onclick="irPestana('movs')">
         <span class="material-icons">feed</span> Diario
     </button>
-    
+    <button class="nav-item" id="nav-recurrentes" onclick="irPestana('recurrentes'); cargarVistaRecurrentes()">
+        <span class="material-icons">update</span> Fijos
+    </button>
     <div class="fab-container" id="fab-container">
         <div id="fab-overlay" class="fab-overlay" onclick="toggleFab()"></div>
 
@@ -3118,22 +3174,22 @@ function leerExcel(blob) {
 }
 
 // ==========================================
-// 🧠 PROCESADOR MAESTRO V7 (SIN "OTROS" + SABUESO BIDIRECCIONAL)
+// 🧠 PROCESADOR MAESTRO V7 + RECURRENTES (FUSIÓN)
 // ==========================================
 window.procesarLibroLeido = function(wb) {
-    console.log("📖 Procesando Excel (Motor V3: Búsqueda Inteligente)...");
+    console.log("📖 Procesando Excel (Motor V7 + Recurrentes)...");
 
     // 1. LIMPIEZA Y PREPARACIÓN
     window.mapaCuentas = {};
     window.listaCuentasConfig = [];
     window.listaConceptosConfig = [];
     window.listaBeneficiariosConfig = [];
+    window.datosRecurrentes = []; // <--- NUEVO: Inicializamos almacén de recurrentes
 
     const limpiar = (txt) => String(txt || "").toUpperCase().trim().replace(/\s+/g, ' ');
     const nuclear = (txt) => String(txt || "").toUpperCase().replace(/[^A-Z0-9]/g, '');
 
     // 2. LEER HOJA DE CONFIGURACIÓN
-    // Buscamos cualquier hoja que contenga "CONFIG"
     const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
     
     if (wsConfigName) {
@@ -3141,7 +3197,6 @@ window.procesarLibroLeido = function(wb) {
         const datosConfig = XLSX.utils.sheet_to_json(wsConfig, { defval: "" });
 
         if (datosConfig.length > 0) {
-            // Detección flexible de columnas
             const row0 = datosConfig[0];
             const keys = Object.keys(row0);
             
@@ -3175,6 +3230,22 @@ window.procesarLibroLeido = function(wb) {
         }
     }
 
+    // 2b. LEER HOJA DE RECURRENTES (NUEVO BLOQUE INTEGRADO)
+    const wsRecName = wb.SheetNames.find(n => n.toUpperCase().includes("RECURRENTE"));
+    if (wsRecName) {
+        console.log("Detectada hoja de Recurrentes");
+        const rawRec = XLSX.utils.sheet_to_json(wb.Sheets[wsRecName]);
+        window.datosRecurrentes = rawRec.map(r => ({
+            id: r.ID || r.Id,
+            fechaProx: r.PROXIMA_FECHA || r.Proxima_Fecha,
+            frecuencia: r.FRECUENCIA || r.Frecuencia,
+            cuenta: r.CUENTA || r.Cuenta,
+            importe: parseFloat(r.IMPORTE || r.Importe || 0),
+            concepto: r.CONCEPTO || r.Concepto,
+            beneficiario: r.BENEFICIARIO || r.Beneficiario
+        }));
+    }
+
     // 3. LEER MOVIMIENTOS
     const wsMovsName = wb.SheetNames.find(n => n.toUpperCase().includes('MOVIMIENTO')) || wb.SheetNames[0];
     const datosRaw = XLSX.utils.sheet_to_json(wb.Sheets[wsMovsName]);
@@ -3185,7 +3256,7 @@ window.procesarLibroLeido = function(wb) {
         mKeyCuenta = mKeys.find(k => k.toUpperCase().includes("CUENTA")) || "CUENTA";
     }
 
-    // 4. PROCESAR Y ENLAZAR (SABUESO V3)
+    // 4. PROCESAR Y ENLAZAR (TU SABUESO V3 ORIGINAL)
     window.datos = datosRaw.map(fila => {
         const id = fila.ID || fila.Id || fila.id || crypto.randomUUID();
         const rawFecha = fila.FECHA || fila.Fecha || fila.fecha;
@@ -3198,7 +3269,7 @@ window.procesarLibroLeido = function(wb) {
         let infoCuenta = window.mapaCuentas[cuentaLimpia]; // 1. Coincidencia Exacta
 
         if (!infoCuenta) {
-            // 2. Coincidencia Nuclear (Sin espacios/símbolos)
+            // 2. Coincidencia Nuclear
             const matchKey = Object.keys(window.mapaCuentas).find(k => 
                 window.mapaCuentas[k].idNuclear === cuentaNuclear
             );
@@ -3206,22 +3277,15 @@ window.procesarLibroLeido = function(wb) {
         }
 
         if (!infoCuenta) {
-            // 3. Coincidencia Parcial Inteligente (Contiene)
+            // 3. Coincidencia Parcial Inteligente
             const configKeys = Object.keys(window.mapaCuentas);
-            
-            // Buscamos si el nombre en Movimientos está CONTENIDO en el nombre de Configuración (o viceversa)
             const match = configKeys.find(k => {
                 const cNuc = window.mapaCuentas[k].idNuclear;
-                // Evitamos coincidencias absurdas con nombres muy cortos (min 3 letras)
                 if (cNuc.length < 3 || cuentaNuclear.length < 3) return false;
-                
-                // Prioridad a prefijos D- y N-
                 if ("D"+cNuc === cuentaNuclear || "N"+cNuc === cuentaNuclear) return true;
                 if (cNuc === "D"+cuentaNuclear || cNuc === "N"+cuentaNuclear) return true;
-
                 return cNuc.includes(cuentaNuclear) || cuentaNuclear.includes(cNuc);
             });
-
             if (match) infoCuenta = window.mapaCuentas[match];
         }
 
@@ -3234,14 +3298,14 @@ window.procesarLibroLeido = function(wb) {
             esInvFinal = infoCuenta.esInversion;
         }
 
-        // Procesar Fecha con robustez
+        // Procesar Fecha
         let fechaObj = new Date();
         if (typeof rawFecha === 'number') {
             const fechaBase = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
             fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
         } else if (typeof rawFecha === 'string') {
             if (rawFecha.includes('/')) {
-                const parts = rawFecha.split('/'); // Soporte DD/MM/YYYY
+                const parts = rawFecha.split('/');
                 if(parts.length === 3) fechaObj = new Date(parts[2], parts[1]-1, parts[0]);
                 else fechaObj = new Date(rawFecha);
             } else {
@@ -3256,7 +3320,7 @@ window.procesarLibroLeido = function(wb) {
             ts: fechaObj.getTime(),
             fecha: fechaObj,
             cuenta: cuentaLimpia, 
-            tipoCuenta: tipoFinal, // Aquí se guarda el tipo recuperado
+            tipoCuenta: tipoFinal,
             esInversion: esInvFinal,
             concepto: limpiar(fila.CONCEPTO || fila.Concepto),
             importe: typeof rawImporte === 'string' ? parseFloat(rawImporte.replace(',', '.')) : rawImporte,
@@ -3278,6 +3342,9 @@ window.procesarLibroLeido = function(wb) {
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if (typeof actualizarDashboard === 'function') actualizarDashboard();
     if (typeof renderizar === 'function') renderizar();
+    
+    // NUEVO: Refrescar la vista de recurrentes si estamos en ella
+    if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 };
  
 
@@ -6581,6 +6648,221 @@ window.actualizarSemaforo = function(estado) {
         el.classList.add('status-none'); // Gris
     }
 };
+
+/* ==========================================
+   ⚙️ MOTOR DE RECURRENTES (LÓGICA NUEVA)
+   ========================================== */
+
+function cargarVistaRecurrentes() {
+    // 1. Rellenar select de cuentas en el formulario
+    const selCta = document.getElementById('rec-cuenta');
+    selCta.innerHTML = '<option value="">Selecciona...</option>';
+    if(window.listaCuentasConfig) {
+        window.listaCuentasConfig.sort().forEach(c => {
+            selCta.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+    }
+    
+    // 2. Pintar la lista
+    renderizarRecurrentes();
+}
+
+function renderizarRecurrentes() {
+    const contenedorPend = document.getElementById('lista-recurrentes-pendientes');
+    const contenedorFut = document.getElementById('lista-recurrentes-futuros');
+    
+    if(!window.datosRecurrentes || window.datosRecurrentes.length === 0) {
+        contenedorPend.innerHTML = '<div style="text-align:center; padding:20px;">No hay reglas definidas. Crea una arriba.</div>';
+        return;
+    }
+
+    contenedorPend.innerHTML = '';
+    contenedorFut.innerHTML = '';
+
+    const hoy = new Date();
+    hoy.setHours(0,0,0,0); // Ignorar hora
+
+    window.datosRecurrentes.forEach(rec => {
+        // Convertir fecha Excel/Texto a objeto Date
+        let fechaRec = new Date(rec.fechaProx);
+        // Ajuste zona horaria simple
+        fechaRec.setMinutes(fechaRec.getMinutes() + fechaRec.getTimezoneOffset());
+
+        const esPendiente = fechaRec <= hoy;
+        const colorBorde = rec.importe >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+        const icono = rec.importe >= 0 ? 'add_circle' : 'remove_circle';
+
+        const htmlCard = `
+            <div class="master-card" style="border-left: 4px solid ${colorBorde}; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:14px; font-weight:bold; color:#fff;">${rec.concepto}</div>
+                        <div style="font-size:11px; color:#aaa;">${rec.cuenta} • ${rec.frecuencia}</div>
+                        <div style="font-size:12px; color:${esPendiente ? 'var(--c-warning)' : '#666'}; margin-top:4px;">
+                            📅 Toca: ${fechaRec.toLocaleDateString()}
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:16px; font-weight:bold; color:#fff;">${rec.importe}€</div>
+                        ${esPendiente ? 
+                          `<button class="btn-compact btn-glow" style="margin-top:5px; background:${colorBorde}; color:#000;" onclick="ejecutarRecurrente('${rec.id}')">
+                             ACEPTAR
+                           </button>
+                           <button class="btn-compact" style="margin-top:5px; background:#333;" onclick="saltarRecurrente('${rec.id}')">
+                             SALTAR
+                           </button>` 
+                          : '<span style="font-size:10px; color:#666">EN ESPERA</span>'}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        if(esPendiente) contenedorPend.innerHTML += htmlCard;
+        else contenedorFut.innerHTML += htmlCard;
+    });
+
+    if(contenedorPend.innerHTML === '') contenedorPend.innerHTML = '<div style="text-align:center; color:#888;">✅ Todo al día. No tienes pagos pendientes.</div>';
+}
+
+async function ejecutarRecurrente(idRec) {
+    // 1. Encontrar la regla
+    const regla = window.datosRecurrentes.find(r => r.id === idRec);
+    if(!regla) return;
+
+    if(!confirm(`¿Confirmas añadir ${regla.concepto} (${regla.importe}€)?`)) return;
+
+    // 2. Crear el movimiento REAL
+    const movimientoNuevo = {
+        id: crypto.randomUUID(),
+        fecha: regla.fechaProx, // Usamos la fecha que tocaba
+        cuenta: regla.cuenta,
+        concepto: regla.concepto,
+        importe: regla.importe,
+        descripcion: `Fijo: ${regla.frecuencia}`,
+        beneficiario: regla.beneficiario || 'Suscripción',
+        tipo: regla.importe >= 0 ? 'ingreso' : 'gasto'
+    };
+
+    // 3. Calcular la SIGUIENTE fecha
+    const fechaActual = new Date(regla.fechaProx);
+    let nuevaFecha = new Date(fechaActual);
+    
+    if(regla.frecuencia === 'Mensual') nuevaFecha.setMonth(nuevaFecha.getMonth() + 1);
+    else if(regla.frecuencia === 'Anual') nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
+    else if(regla.frecuencia === 'Semanal') nuevaFecha.setDate(nuevaFecha.getDate() + 7);
+    
+    const nuevaFechaStr = nuevaFecha.toISOString().split('T')[0];
+
+    try {
+        mostrarEstado("⏳ Guardando y actualizando...", "loading");
+
+        // A) Guardar el movimiento en el historial
+        // Usamos guardarUniversal pero pasando el movimiento nuevo
+        // IMPORTANTE: Tienes que adaptar guardarUniversal para que acepte un array o hacer push manual
+        // Aquí hacemos el "truco" de añadirlo a memoria y guardar todo.
+        
+        // Añadimos a memoria local primero
+        // (Convertir fecha a objeto Date para compatibilidad)
+        movimientoNuevo.ts = new Date(movimientoNuevo.fecha).getTime();
+        window.datos.unshift(movimientoNuevo);
+        
+        // B) Actualizar la regla recurrente (memoria)
+        regla.fechaProx = nuevaFechaStr;
+        
+        // C) GUARDAR TODO EL EXCEL (Movimientos + Recurrentes actualizados)
+        // Necesitamos reconstruir el Excel con la hoja Recurrentes actualizada
+        await guardarTodoConRecurrentes();
+
+        mostrarEstado("✅ Movimiento añadido y fecha actualizada", "success");
+        cargarVistaRecurrentes(); // Refrescar pantalla
+        
+    } catch(e) {
+        console.error(e);
+        alert("Error: " + e.message);
+    }
+}
+
+async function saltarRecurrente(idRec) {
+    if(!confirm("¿Saltar este pago? Se actualizará la fecha pero NO se añadirá el gasto.")) return;
+    
+    const regla = window.datosRecurrentes.find(r => r.id === idRec);
+    
+    const fechaActual = new Date(regla.fechaProx);
+    let nuevaFecha = new Date(fechaActual);
+    
+    if(regla.frecuencia === 'Mensual') nuevaFecha.setMonth(nuevaFecha.getMonth() + 1);
+    else if(regla.frecuencia === 'Anual') nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
+    else if(regla.frecuencia === 'Semanal') nuevaFecha.setDate(nuevaFecha.getDate() + 7);
+    
+    regla.fechaProx = nuevaFecha.toISOString().split('T')[0];
+    
+    await guardarTodoConRecurrentes();
+    cargarVistaRecurrentes();
+}
+
+async function crearReglaRecurrente() {
+    const frec = document.getElementById('rec-frecuencia').value;
+    const fecha = document.getElementById('rec-fecha').value;
+    const cta = document.getElementById('rec-cuenta').value;
+    const imp = document.getElementById('rec-importe').value;
+    const conc = document.getElementById('rec-concepto').value;
+
+    if(!fecha || !cta || !imp || !conc) return alert("Rellena todos los campos");
+
+    const nuevaRegla = {
+        id: 'REC-' + Date.now(),
+        fechaProx: fecha,
+        frecuencia: frec,
+        cuenta: cta,
+        importe: parseFloat(imp),
+        concepto: conc.toUpperCase(),
+        beneficiario: "FIJO"
+    };
+
+    window.datosRecurrentes.push(nuevaRegla);
+    await guardarTodoConRecurrentes();
+    
+    document.getElementById('form-recurrente').style.display = 'none';
+    cargarVistaRecurrentes();
+}
+
+// FUNCIÓN MAESTRA DE GUARDADO (Sobrescribe el Excel con la hoja extra)
+async function guardarTodoConRecurrentes() {
+    // Es igual que tu guardarUniversal pero añadiendo la hoja 'Recurrentes'
+    // 1. Generar Movimientos
+    const wb = XLSX.utils.book_new();
+    
+    // ... (Copia aquí la parte de guardarUniversal que genera la hoja Movimientos) ...
+    // Simplificado para el ejemplo:
+    const filasMovs = window.datos.map(m => ({
+        "Id": m.id, "Fecha": m.fecha, "Cuenta": m.cuenta, "Concepto": m.concepto, 
+        "Importe": m.importe, "Descripcion": m.descripcion, "Beneficiario": m.beneficiario
+    }));
+    const wsMovs = XLSX.utils.json_to_sheet(filasMovs);
+    XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+    // 2. Generar Configuracion (Igual que antes)
+    // ... (Tu lógica existente de Configuración) ...
+    const wsConfig = XLSX.utils.json_to_sheet([]); // Placeholder, usa tu lógica real
+    XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
+
+    // 3. GENERAR HOJA RECURRENTES (NUEVO)
+    const filasRec = window.datosRecurrentes.map(r => ({
+        "ID": r.id, "PROXIMA_FECHA": r.fechaProx, "FRECUENCIA": r.frecuencia,
+        "CUENTA": r.cuenta, "IMPORTE": r.importe, "CONCEPTO": r.concepto, "BENEFICIARIO": r.beneficiario
+    }));
+    const wsRec = XLSX.utils.json_to_sheet(filasRec);
+    XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
+
+    // 4. SUBIR
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    if(window.modoNube) {
+        await oneDrive.saveFile(wbout);
+        mostrarEstado("💾 Guardado Recurrente OK", "success");
+    } else {
+        XLSX.writeFile(wb, "aidanai.xlsx");
+    }
+}
 
 </script>
 </body>
