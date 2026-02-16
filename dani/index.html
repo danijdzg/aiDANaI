@@ -3950,12 +3950,12 @@ function generarUUID() {
     });
 }
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO (Fusión: Manual + Traspasos Inteligentes)
+// 🛡️ GUARDAR MOVIMIENTO (Con detección automática de Dueño en Traspasos)
 // ==========================================
 window.guardarManual = async function() {
-    console.log("--- 🔄 Ejecutando Guardado Inteligente ---");
+    console.log("--- 🔄 Ejecutando Guardado Inteligente (V2: Dueño Auto) ---");
 
-    // 1. BLOQUEO VISUAL (Evita doble clic compulsivo)
+    // 1. BLOQUEO VISUAL
     const btnGuardar = document.getElementById('btn-modal-action');
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
@@ -3973,10 +3973,10 @@ window.guardarManual = async function() {
         const elImporte = document.getElementById('m-cantidad');
         let importeRaw = elImporte ? elImporte.value : "";
         
-        // Concepto y Descripción (FORZANDO MAYÚSCULAS)
+        // Concepto y Descripción
         let concepto = (document.getElementById('m-concepto')?.value || "").toUpperCase().trim();
         let desc = (document.getElementById('m-desc')?.value || "").toUpperCase().trim();
-        const benef = (document.getElementById('m-beneficiario')?.value || "").toUpperCase().trim();
+        const benefManual = (document.getElementById('m-beneficiario')?.value || "").toUpperCase().trim();
 
         // 3. VALIDACIONES BÁSICAS
         if (!fecha) throw new Error("❌ Falta la FECHA");
@@ -3986,11 +3986,18 @@ window.guardarManual = async function() {
         // Convertir importe a número
         let importeNum = parseFloat(importeRaw.toString().replace(',', '.'));
         if (isNaN(importeNum) || importeNum === 0) throw new Error("❌ El importe no es válido");
-        importeNum = Math.abs(importeNum); // Trabajamos siempre con el valor absoluto al principio
+        importeNum = Math.abs(importeNum); 
 
         // DETECTAR SI ES TRASPASO
-        // Es traspaso si estamos en modo traspaso O si el usuario eligió una cuenta destino
         const esTraspaso = (window.modoTransaccionActual === 'traspaso') || (cuentaDestino && cuentaDestino !== "");
+
+        // --- FUNCIÓN AUXILIAR PARA DETECTAR DUEÑO ---
+        const detectarDueño = (nombreCuenta) => {
+            const c = String(nombreCuenta).toUpperCase().trim();
+            if (c.startsWith("D-")) return "DANI";
+            if (c.startsWith("N-")) return "NORMA";
+            return "PROPIO"; // Si no tiene prefijo, ponemos PROPIO o el nombre que prefieras
+        };
 
         // =========================================================
         // 🅰️ CAMINO A: ES UN TRASPASO (Genera 2 Movimientos)
@@ -4011,7 +4018,7 @@ window.guardarManual = async function() {
                 concepto: "Traspaso Enviado",
                 importe: -importeNum, // Negativo
                 descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-                beneficiario: "Transferencia Interna",
+                beneficiario: detectarDueño(cuentaOrigen), // <--- AQUÍ ESTÁ LA MAGIA
                 tipo: 'traspaso',
                 ts: new Date(fecha).getTime()
             };
@@ -4024,12 +4031,12 @@ window.guardarManual = async function() {
                 concepto: "Traspaso Recibido",
                 importe: importeNum, // Positivo
                 descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-                beneficiario: "Transferencia Interna",
+                beneficiario: detectarDueño(cuentaDestino), // <--- AQUÍ ESTÁ LA MAGIA
                 tipo: 'traspaso',
                 ts: new Date(fecha).getTime()
             };
 
-            // GUARDAR AMBOS (Pasamos un array a guardarUniversal)
+            // GUARDAR AMBOS
             console.log("Generando traspaso doble:", movSalida, movEntrada);
             if (typeof window.guardarUniversal === 'function') {
                 await window.guardarUniversal([movSalida, movEntrada]);
@@ -4042,13 +4049,10 @@ window.guardarManual = async function() {
         else {
             if (!concepto) throw new Error("❌ Falta el CONCEPTO");
 
-            // Ajustar signo según el modo
             if (window.modoTransaccionActual === 'gasto' || window.modoTransaccionActual === 'pago') {
                 importeNum = -importeNum;
             } 
-            // Si es ingreso, se queda positivo.
-
-            // ID: Si existe (edición) lo usamos, si no, uno nuevo
+            
             const idFinal = elId.value ? elId.value : ((typeof generarUUID === 'function') ? generarUUID() : Date.now().toString());
             const esEdicion = !!elId.value;
 
@@ -4059,13 +4063,11 @@ window.guardarManual = async function() {
                 concepto: concepto,
                 importe: importeNum,
                 descripcion: desc,
-                beneficiario: benef,
+                beneficiario: benefManual, // Aquí sí respetamos lo que escribas manualmente
                 tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
                 ts: new Date(fecha).getTime()
             };
 
-            // Si es edición, primero borramos el antiguo para evitar duplicados raros
-            // (Opcional, pero recomendado si tu guardarUniversal no reemplaza por ID)
              if (esEdicion && window.datos) {
                 window.datos = window.datos.filter(m => m.id !== idFinal);
              }
@@ -4081,19 +4083,16 @@ window.guardarManual = async function() {
         if (elImporte) elImporte.value = '';
         if (document.getElementById('m-desc')) document.getElementById('m-desc').value = '';
         
-        // Cerrar modal
         const modalElement = document.getElementById('modal-manual');
         if (modalElement) modalElement.classList.remove('active');
 
-        // Feedback al usuario
         if (typeof mostrarEstado === 'function') mostrarEstado("✅ Operación guardada con éxito", "success");
         if (typeof vibrar === 'function') vibrar('ingreso');
 
     } catch (error) {
         console.error("Error al guardar:", error);
-        alert(error.message); // Usamos alert para asegurar que lo lees
+        alert(error.message);
     } finally {
-        // Restaurar botón siempre, pase lo que pase
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
