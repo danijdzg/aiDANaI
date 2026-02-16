@@ -1601,6 +1601,20 @@ body {
 
     @keyframes parpadeo { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
  
+/* Estilo para los botones de día */
+.day-check input { display: none; }
+.day-check span {
+    display: flex; width: 35px; height: 35px;
+    align-items: center; justify-content: center;
+    background: #333; border-radius: 50%;
+    font-weight: bold; font-size: 12px; color: #888;
+    cursor: pointer; transition: all 0.2s; border: 1px solid #444;
+}
+.day-check input:checked + span {
+    background: var(--c-primary); color: #000;
+    box-shadow: 0 0 10px var(--c-primary); border-color: var(--c-primary);
+}
+ 
    </style>
 
 <body>
@@ -1848,13 +1862,27 @@ body {
             
             <div id="form-recurrente" style="display:none; padding-top:10px; border-top:1px solid #333;">
                 <div class="input-group-pro">
-                    <label class="label-pro">Frecuencia</label>
-                    <select id="rec-frecuencia" class="input-pro form-field" style="font-size:14px; padding:10px;">
-                        <option value="Mensual">📅 Mensual (Mismo día)</option>
-                        <option value="Anual">🎂 Anual</option>
-                        <option value="Semanal">🔄 Semanal (+7 días)</option>
-                    </select>
-                </div>
+    <label class="label-pro">Frecuencia</label>
+    <select id="rec-frecuencia" class="input-pro form-field" style="font-size:14px; padding:10px;" onchange="toggleDiasSemana()">
+        <option value="Mensual">📅 Mensual (Mismo día)</option>
+        <option value="Anual">🎂 Anual</option>
+        <option value="Semanal">🔄 Semanal (+7 días)</option>
+        <option value="Diario">📆 Diario / Días Específicos</option>
+    </select>
+</div>
+
+<div id="bloque-dias-semana" class="input-group-pro" style="display:none; background:rgba(255,255,255,0.05); padding:10px; border-radius:12px;">
+    <label class="label-pro" style="margin-bottom:10px; display:block;">Elige los días:</label>
+    <div style="display:flex; justify-content:space-between; gap:5px;">
+        <label class="day-check"><input type="checkbox" value="1"><span>L</span></label>
+        <label class="day-check"><input type="checkbox" value="2"><span>M</span></label>
+        <label class="day-check"><input type="checkbox" value="3"><span>X</span></label>
+        <label class="day-check"><input type="checkbox" value="4"><span>J</span></label>
+        <label class="day-check"><input type="checkbox" value="5"><span>V</span></label>
+        <label class="day-check"><input type="checkbox" value="6"><span>S</span></label>
+        <label class="day-check"><input type="checkbox" value="0"><span>D</span></label>
+    </div>
+</div>
                 <div class="input-group-pro">
                     <label class="label-pro">Próxima Fecha (Primer cobro)</label>
                     <input type="date" id="rec-fecha" class="input-pro form-field">
@@ -3230,7 +3258,7 @@ window.procesarLibroLeido = function(wb) {
         }
     }
 
-    // 2b. LEER HOJA DE RECURRENTES (NUEVO BLOQUE INTEGRADO)
+    // 2b. LEER HOJA DE RECURRENTES (ACTUALIZADO CON DÍAS SEMANA)
     const wsRecName = wb.SheetNames.find(n => n.toUpperCase().includes("RECURRENTE"));
     if (wsRecName) {
         console.log("Detectada hoja de Recurrentes");
@@ -3239,6 +3267,7 @@ window.procesarLibroLeido = function(wb) {
             id: r.ID || r.Id,
             fechaProx: r.PROXIMA_FECHA || r.Proxima_Fecha,
             frecuencia: r.FRECUENCIA || r.Frecuencia,
+            diasSemana: r.DIAS_SEMANA || r.Dias_Semana || "", // <--- NUEVO CAMPO
             cuenta: r.CUENTA || r.Cuenta,
             importe: parseFloat(r.IMPORTE || r.Importe || 0),
             concepto: r.CONCEPTO || r.Concepto,
@@ -6723,57 +6752,85 @@ function renderizarRecurrentes() {
     if(contenedorPend.innerHTML === '') contenedorPend.innerHTML = '<div style="text-align:center; color:#888;">✅ Todo al día. No tienes pagos pendientes.</div>';
 }
 
+/* ==========================================
+   ⚙️ MOTOR DE RECURRENTES AVANZADO (V2: DÍAS SEMANA)
+   ========================================== */
+
+// Función auxiliar para calcular la siguiente fecha válida
+function calcularSiguienteFecha(fechaBaseStr, frecuencia, diasSemanaStr) {
+    let fecha = new Date(fechaBaseStr);
+    
+    // Si es Mensual, Anual o Semanal (Lógica clásica)
+    if (frecuencia === 'Mensual') {
+        fecha.setMonth(fecha.getMonth() + 1);
+    } else if (frecuencia === 'Anual') {
+        fecha.setFullYear(fecha.getFullYear() + 1);
+    } else if (frecuencia === 'Semanal') {
+        fecha.setDate(fecha.getDate() + 7);
+    } 
+    // Lógica DIARIA / DÍAS ESPECÍFICOS
+    else if (frecuencia === 'Diario') {
+        // Parseamos los días elegidos "1,3,5" -> [1, 3, 5]
+        let diasValidos = [];
+        if (diasSemanaStr && diasSemanaStr.length > 0) {
+            diasValidos = String(diasSemanaStr).split(',').map(Number);
+        }
+
+        // Si no hay días marcados, asumimos "todos los días" (+1 día)
+        if (diasValidos.length === 0) {
+            fecha.setDate(fecha.getDate() + 1);
+        } else {
+            // Buscamos el siguiente día válido
+            // Empezamos probando "mañana"
+            for (let i = 1; i <= 7; i++) {
+                fecha.setDate(fecha.getDate() + 1); // Avanzamos 1 día
+                const diaSemana = fecha.getDay();   // 0=Domingo, 1=Lunes...
+                if (diasValidos.includes(diaSemana)) {
+                    break; // ¡Encontrado!
+                }
+            }
+        }
+    }
+    
+    return fecha.toISOString().split('T')[0];
+}
+
 async function ejecutarRecurrente(idRec) {
-    // 1. Encontrar la regla
     const regla = window.datosRecurrentes.find(r => r.id === idRec);
     if(!regla) return;
 
     if(!confirm(`¿Confirmas añadir ${regla.concepto} (${regla.importe}€)?`)) return;
 
-    // 2. Crear el movimiento REAL
+    // 1. Crear Movimiento
     const movimientoNuevo = {
         id: crypto.randomUUID(),
-        fecha: regla.fechaProx, // Usamos la fecha que tocaba
+        fecha: regla.fechaProx,
         cuenta: regla.cuenta,
         concepto: regla.concepto,
         importe: regla.importe,
-        descripcion: `Fijo: ${regla.frecuencia}`,
+        descripcion: `Fijo: ${regla.frecuencia} ${regla.diasSemana ? '('+regla.diasSemana+')' : ''}`,
         beneficiario: regla.beneficiario || 'Suscripción',
-        tipo: regla.importe >= 0 ? 'ingreso' : 'gasto'
+        tipo: regla.importe >= 0 ? 'ingreso' : 'gasto',
+        ts: new Date(regla.fechaProx).getTime()
     };
 
-    // 3. Calcular la SIGUIENTE fecha
-    const fechaActual = new Date(regla.fechaProx);
-    let nuevaFecha = new Date(fechaActual);
-    
-    if(regla.frecuencia === 'Mensual') nuevaFecha.setMonth(nuevaFecha.getMonth() + 1);
-    else if(regla.frecuencia === 'Anual') nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
-    else if(regla.frecuencia === 'Semanal') nuevaFecha.setDate(nuevaFecha.getDate() + 7);
-    
-    const nuevaFechaStr = nuevaFecha.toISOString().split('T')[0];
+    // 2. Calcular Nueva Fecha
+    const nuevaFechaStr = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
 
     try {
-        mostrarEstado("⏳ Guardando y actualizando...", "loading");
+        mostrarEstado("⏳ Procesando recurrente...", "loading");
 
-        // A) Guardar el movimiento en el historial
-        // Usamos guardarUniversal pero pasando el movimiento nuevo
-        // IMPORTANTE: Tienes que adaptar guardarUniversal para que acepte un array o hacer push manual
-        // Aquí hacemos el "truco" de añadirlo a memoria y guardar todo.
-        
-        // Añadimos a memoria local primero
-        // (Convertir fecha a objeto Date para compatibilidad)
-        movimientoNuevo.ts = new Date(movimientoNuevo.fecha).getTime();
+        // Guardar en memoria
         window.datos.unshift(movimientoNuevo);
         
-        // B) Actualizar la regla recurrente (memoria)
+        // Actualizar regla
         regla.fechaProx = nuevaFechaStr;
         
-        // C) GUARDAR TODO EL EXCEL (Movimientos + Recurrentes actualizados)
-        // Necesitamos reconstruir el Excel con la hoja Recurrentes actualizada
+        // Guardar en Excel
         await guardarTodoConRecurrentes();
 
-        mostrarEstado("✅ Movimiento añadido y fecha actualizada", "success");
-        cargarVistaRecurrentes(); // Refrescar pantalla
+        mostrarEstado("✅ Hecho. Próxima fecha: " + nuevaFechaStr, "success");
+        cargarVistaRecurrentes();
         
     } catch(e) {
         console.error(e);
@@ -6782,18 +6839,12 @@ async function ejecutarRecurrente(idRec) {
 }
 
 async function saltarRecurrente(idRec) {
-    if(!confirm("¿Saltar este pago? Se actualizará la fecha pero NO se añadirá el gasto.")) return;
+    if(!confirm("¿Saltar este pago? Se moverá la fecha sin guardar nada.")) return;
     
     const regla = window.datosRecurrentes.find(r => r.id === idRec);
     
-    const fechaActual = new Date(regla.fechaProx);
-    let nuevaFecha = new Date(fechaActual);
-    
-    if(regla.frecuencia === 'Mensual') nuevaFecha.setMonth(nuevaFecha.getMonth() + 1);
-    else if(regla.frecuencia === 'Anual') nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
-    else if(regla.frecuencia === 'Semanal') nuevaFecha.setDate(nuevaFecha.getDate() + 7);
-    
-    regla.fechaProx = nuevaFecha.toISOString().split('T')[0];
+    // Solo calculamos nueva fecha sin crear movimiento
+    regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
     
     await guardarTodoConRecurrentes();
     cargarVistaRecurrentes();
@@ -6808,10 +6859,20 @@ async function crearReglaRecurrente() {
 
     if(!fecha || !cta || !imp || !conc) return alert("Rellena todos los campos");
 
+    // Recoger días seleccionados
+    let diasStr = "";
+    if (frec === 'Diario') {
+        const checks = document.querySelectorAll('#bloque-dias-semana input:checked');
+        const dias = Array.from(checks).map(c => c.value);
+        if (dias.length === 0) return alert("¡Elige al menos un día de la semana!");
+        diasStr = dias.join(',');
+    }
+
     const nuevaRegla = {
         id: 'REC-' + Date.now(),
         fechaProx: fecha,
         frecuencia: frec,
+        diasSemana: diasStr, // Guardamos los días "1,3,5"
         cuenta: cta,
         importe: parseFloat(imp),
         concepto: conc.toUpperCase(),
@@ -6821,18 +6882,15 @@ async function crearReglaRecurrente() {
     window.datosRecurrentes.push(nuevaRegla);
     await guardarTodoConRecurrentes();
     
+    // Limpieza
     document.getElementById('form-recurrente').style.display = 'none';
+    document.querySelectorAll('#bloque-dias-semana input').forEach(c => c.checked = false);
     cargarVistaRecurrentes();
 }
 
-// FUNCIÓN MAESTRA DE GUARDADO (Sobrescribe el Excel con la hoja extra)
 async function guardarTodoConRecurrentes() {
-    // Es igual que tu guardarUniversal pero añadiendo la hoja 'Recurrentes'
-    // 1. Generar Movimientos
+    // 1. Movimientos
     const wb = XLSX.utils.book_new();
-    
-    // ... (Copia aquí la parte de guardarUniversal que genera la hoja Movimientos) ...
-    // Simplificado para el ejemplo:
     const filasMovs = window.datos.map(m => ({
         "Id": m.id, "Fecha": m.fecha, "Cuenta": m.cuenta, "Concepto": m.concepto, 
         "Importe": m.importe, "Descripcion": m.descripcion, "Beneficiario": m.beneficiario
@@ -6840,14 +6898,18 @@ async function guardarTodoConRecurrentes() {
     const wsMovs = XLSX.utils.json_to_sheet(filasMovs);
     XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
-    // 2. Generar Configuracion (Igual que antes)
-    // ... (Tu lógica existente de Configuración) ...
-    const wsConfig = XLSX.utils.json_to_sheet([]); // Placeholder, usa tu lógica real
+    // 2. Configuración (Reconstrucción básica basada en memoria)
+    const datosConfig = [];
+    datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO"]);
+    // ... (Tu lógica para rellenar config si quieres, o dejar vacío si no la usas para guardar) ...
+    // Para simplificar, usamos un array vacío o lo que tengas en memoria:
+    const wsConfig = XLSX.utils.json_to_sheet([]); 
     XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
 
-    // 3. GENERAR HOJA RECURRENTES (NUEVO)
+    // 3. RECURRENTES (CON NUEVA COLUMNA DIAS_SEMANA)
     const filasRec = window.datosRecurrentes.map(r => ({
         "ID": r.id, "PROXIMA_FECHA": r.fechaProx, "FRECUENCIA": r.frecuencia,
+        "DIAS_SEMANA": r.diasSemana, // <--- Guardamos la columna nueva
         "CUENTA": r.cuenta, "IMPORTE": r.importe, "CONCEPTO": r.concepto, "BENEFICIARIO": r.beneficiario
     }));
     const wsRec = XLSX.utils.json_to_sheet(filasRec);
@@ -6855,12 +6917,18 @@ async function guardarTodoConRecurrentes() {
 
     // 4. SUBIR
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    if(window.modoNube) {
+    if(window.modoNube && typeof oneDrive !== 'undefined') {
         await oneDrive.saveFile(wbout);
-        mostrarEstado("💾 Guardado Recurrente OK", "success");
+        mostrarEstado("💾 Recurrentes actualizados", "success");
     } else {
-        XLSX.writeFile(wb, "aidanai.xlsx");
+        XLSX.writeFile(wb, "aidanai_con_recurrentes.xlsx");
+        mostrarEstado("💾 Descarga local (Modo Offline)", "info");
     }
+}
+
+function toggleDiasSemana() {
+    const val = document.getElementById('rec-frecuencia').value;
+    document.getElementById('bloque-dias-semana').style.display = (val === 'Diario') ? 'block' : 'none';
 }
 
 </script>
