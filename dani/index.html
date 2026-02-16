@@ -6216,21 +6216,50 @@ function cargarSugerenciasAjustes() {
 }
 
 // === FUNCIÓN DE EDICIÓN (VERSIÓN BLINDADA) ===
-    window.editarMovimiento = function(idMov) {
+window.editarMovimiento = function(idMov) {
     console.log("✏️ Editando ID:", idMov);
     const mov = datos.find(m => m.id === idMov);
     if (!mov) return alert("Error: Movimiento no encontrado en memoria.");
 
-    // Detectar tipo para configurar el formulario (Colores, campos, etc.)
-    let tipo = 'gasto'; // Por defecto
-    if (mov.tipo === 'traspaso' || mov.concepto.toUpperCase().includes('TRASPASO')) tipo = 'traspaso';
-    else if (mov.importe >= 0) tipo = 'ingreso';
+    // 1. DETECTAR TIPO REAL Y GUARDARLO EN EL GLOBAL (¡ESTO FALTABA!)
+    let tipo = 'gasto'; // Por defecto asumimos gasto si no es positivo
     
-    // Llamamos a la función que abre el modal y configura los colores
-    // (Asegúrate de tener la función abrirModal que acepta tipo, si no, usa tu lógica actual)
-    if(typeof abrirModal === 'function') abrirModal(tipo);
+    if (mov.tipo === 'traspaso' || (mov.concepto && mov.concepto.toUpperCase().includes('TRASPASO'))) {
+        tipo = 'traspaso';
+    } else if (mov.importe >= 0) {
+        tipo = 'ingreso';
+    }
     
-    // RELLENADO DE CAMPOS (Con retardo mínimo para asegurar que el DOM existe)
+    // CRÍTICO: Decirle al sistema global en qué modo estamos para que 'guardarManual' sepa poner el signo (-)
+    window.modoTransaccionActual = tipo;
+
+    // 2. ABRIR EL MODAL (Pasamos 'true' para indicar que es edición)
+    if(typeof abrirModal === 'function') abrirModal(true);
+    
+    // 3. CONFIGURAR COLORES VISUALES SEGÚN EL TIPO (Feedback visual)
+    const modalBox = document.querySelector('.modal-box');
+    const titulo = document.querySelector('#modal-manual h3');
+    const inputCant = document.getElementById('m-cantidad');
+
+    if (tipo === 'ingreso') {
+        modalBox.style.borderColor = 'var(--c-success)';
+        inputCant.style.color = 'var(--c-success)';
+        titulo.innerText = "EDITAR INGRESO";
+        titulo.style.color = 'var(--c-success)';
+    } else if (tipo === 'traspaso') {
+        modalBox.style.borderColor = 'var(--c-transfer)';
+        inputCant.style.color = 'var(--c-transfer)';
+        titulo.innerText = "EDITAR TRASPASO";
+        titulo.style.color = 'var(--c-transfer)';
+    } else {
+        // Gasto
+        modalBox.style.borderColor = 'var(--c-danger)';
+        inputCant.style.color = 'var(--c-danger)';
+        titulo.innerText = "EDITAR GASTO";
+        titulo.style.color = 'var(--c-danger)';
+    }
+    
+    // 4. RELLENADO DE CAMPOS (Con retardo mínimo para asegurar que el DOM existe)
     setTimeout(() => {
         // ID (Vital para saber que es edición)
         document.getElementById('m-id').value = mov.id; 
@@ -6238,7 +6267,6 @@ function cargarSugerenciasAjustes() {
         // Fecha (Formato YYYY-MM-DD para input date)
         let fechaObj = (mov.fecha instanceof Date) ? mov.fecha : new Date(mov.ts);
         
-        // Función rápida para formato local YYYY-MM-DD
         const yyyy = fechaObj.getFullYear();
         const mm = String(fechaObj.getMonth() + 1).padStart(2, '0');
         const dd = String(fechaObj.getDate()).padStart(2, '0');
@@ -6248,7 +6276,7 @@ function cargarSugerenciasAjustes() {
         // Campos de texto e importe
         document.getElementById('m-cuenta').value = mov.cuenta;
         document.getElementById('m-concepto').value = mov.concepto;
-        document.getElementById('m-cantidad').value = Math.abs(mov.importe); // Siempre positivo en el input
+        document.getElementById('m-cantidad').value = Math.abs(mov.importe); // Siempre positivo en el input visual
         document.getElementById('m-desc').value = mov.detalle || mov.descripcion || '';
         document.getElementById('m-beneficiario').value = mov.beneficiario || '';
 
