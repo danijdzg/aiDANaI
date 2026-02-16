@@ -1747,7 +1747,18 @@ body {
                 <div id="tab-movs" class="view-section">
                     <button class="filters-toggle" onclick="toggleFiltros()"><span class="material-icons">filter_list</span> Filtros Avanzados</button>
                     <div id="panel-filtros" class="filters-container">
-                        <div class="filters-row-3"><select id="f-cuenta" class="filter-input"><option value="">Todas Cuentas</option></select><select id="f-concepto" class="filter-input"><option value="">Todos Conceptos</option></select><select id="f-beneficiario" class="filter-input"><option value="">Todos Beneficiarios</option></select></div>
+                        <div class="filters-row-2">
+    <select id="f-tipo-cuenta" class="filter-input" style="color:var(--c-accent); font-weight:bold;">
+        <option value="">Todos los Tipos</option>
+    </select>
+    <select id="f-cuenta" class="filter-input">
+        <option value="">Todas las Cuentas</option>
+    </select>
+</div>
+<div class="filters-row-2">
+    <select id="f-concepto" class="filter-input"><option value="">Todos Conceptos</option></select>
+    <select id="f-beneficiario" class="filter-input"><option value="">Todos Beneficiarios</option></select>
+</div>
                         <div class="filters-row-2"><input type="date" id="f-desde" class="filter-input" placeholder="Desde"><input type="date" id="f-hasta" class="filter-input" placeholder="Hasta"></div>
                         <div class="filters-row-2"><input type="number" id="f-min" class="filter-input" placeholder="Min €"><input type="number" id="f-max" class="filter-input" placeholder="Max €"></div>
                         <input type="text" id="f-texto" class="filter-input" placeholder="Buscar en descripción..." style="margin-bottom:10px; width:100%">
@@ -3110,30 +3121,34 @@ function leerExcel(blob) {
 // 🧠 PROCESADOR MAESTRO V7 (SIN "OTROS" + SABUESO BIDIRECCIONAL)
 // ==========================================
 window.procesarLibroLeido = function(wb) {
-    console.log("📖 Procesando Excel: MODO ESTRICTO (PROHIBIDO 'OTROS')...");
+    console.log("📖 Procesando Excel (Motor V3: Búsqueda Inteligente)...");
 
-    // 1. PREPARAR VARIABLES GLOBALES
+    // 1. LIMPIEZA Y PREPARACIÓN
     window.mapaCuentas = {};
     window.listaCuentasConfig = [];
     window.listaConceptosConfig = [];
     window.listaBeneficiariosConfig = [];
 
-    // Funciones de limpieza
     const limpiar = (txt) => String(txt || "").toUpperCase().trim().replace(/\s+/g, ' ');
     const nuclear = (txt) => String(txt || "").toUpperCase().replace(/[^A-Z0-9]/g, '');
 
     // 2. LEER HOJA DE CONFIGURACIÓN
+    // Buscamos cualquier hoja que contenga "CONFIG"
     const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
     
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
-        const datosConfig = XLSX.utils.sheet_to_json(wsConfig);
+        const datosConfig = XLSX.utils.sheet_to_json(wsConfig, { defval: "" });
 
         if (datosConfig.length > 0) {
-            const keys = Object.keys(datosConfig[0]);
+            // Detección flexible de columnas
+            const row0 = datosConfig[0];
+            const keys = Object.keys(row0);
+            
             const keyCuenta = keys.find(k => k.toUpperCase().includes("CUENTA"));
-            const keyTipo = keys.find(k => k.toUpperCase().includes("TIPO"));
+            const keyTipo = keys.find(k => k.toUpperCase().includes("TIPO") || k.toUpperCase().includes("CATEGORIA"));
             const keyInv = keys.find(k => k.toUpperCase().includes("INVERSION"));
+            
             const keyConcepto = keys.find(k => k.toUpperCase().includes("CONCEPTO"));
             const keyBenef = keys.find(k => k.toUpperCase().includes("BENEFICIARIO"));
 
@@ -3141,17 +3156,18 @@ window.procesarLibroLeido = function(wb) {
                 const ctaRaw = keyCuenta ? fila[keyCuenta] : null;
                 if (ctaRaw) {
                     const nombreCuenta = limpiar(ctaRaw); 
-                    // CAMBIO 1: Si no hay tipo, ponemos "SIN TIPO" (Nunca "OTROS")
-                    const tipoRaw = keyTipo ? fila[keyTipo] : "SIN TIPO";
-                    const esInvRaw = keyInv ? fila[keyInv] : "NO";
-                    
-                    window.mapaCuentas[nombreCuenta] = {
-                        nombre: nombreCuenta,
-                        tipo: limpiar(tipoRaw),
-                        esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(limpiar(esInvRaw)),
-                        idNuclear: nuclear(nombreCuenta)
-                    };
-                    window.listaCuentasConfig.push(nombreCuenta);
+                    if(nombreCuenta) {
+                        const tipoRaw = keyTipo ? fila[keyTipo] : "SIN TIPO";
+                        const esInvRaw = keyInv ? fila[keyInv] : "NO";
+                        
+                        window.mapaCuentas[nombreCuenta] = {
+                            nombre: nombreCuenta,
+                            tipo: limpiar(tipoRaw) || "SIN TIPO",
+                            esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(limpiar(esInvRaw)),
+                            idNuclear: nuclear(nombreCuenta)
+                        };
+                        window.listaCuentasConfig.push(nombreCuenta);
+                    }
                 }
                 if (keyConcepto && fila[keyConcepto]) window.listaConceptosConfig.push(limpiar(fila[keyConcepto]));
                 if (keyBenef && fila[keyBenef]) window.listaBeneficiariosConfig.push(limpiar(fila[keyBenef]));
@@ -3169,6 +3185,7 @@ window.procesarLibroLeido = function(wb) {
         mKeyCuenta = mKeys.find(k => k.toUpperCase().includes("CUENTA")) || "CUENTA";
     }
 
+    // 4. PROCESAR Y ENLAZAR (SABUESO V3)
     window.datos = datosRaw.map(fila => {
         const id = fila.ID || fila.Id || fila.id || crypto.randomUUID();
         const rawFecha = fila.FECHA || fila.Fecha || fila.fecha;
@@ -3177,11 +3194,11 @@ window.procesarLibroLeido = function(wb) {
         const cuentaLimpia = limpiar(rawCuenta);
         const cuentaNuclear = nuclear(rawCuenta); 
 
-        // --- EL SABUESO V2: BÚSQUEDA BIDIRECCIONAL ---
-        let infoCuenta = window.mapaCuentas[cuentaLimpia]; // 1. Exacto
+        // --- ALGORITMO DE BÚSQUEDA MEJORADO ---
+        let infoCuenta = window.mapaCuentas[cuentaLimpia]; // 1. Coincidencia Exacta
 
         if (!infoCuenta) {
-            // 2. Nuclear (Sin espacios ni simbolos)
+            // 2. Coincidencia Nuclear (Sin espacios/símbolos)
             const matchKey = Object.keys(window.mapaCuentas).find(k => 
                 window.mapaCuentas[k].idNuclear === cuentaNuclear
             );
@@ -3189,27 +3206,26 @@ window.procesarLibroLeido = function(wb) {
         }
 
         if (!infoCuenta) {
-            // 3. Prefijos (D- o N-) BIDIRECCIONAL
-            // Caso A: Banco dice "TRADEREPUBLIC" -> Config tiene "D-TRADEREPUBLIC"
-            let matchPrefijo = Object.keys(window.mapaCuentas).find(k => 
-                window.mapaCuentas[k].idNuclear === "D" + cuentaNuclear || 
-                window.mapaCuentas[k].idNuclear === "N" + cuentaNuclear
-            );
+            // 3. Coincidencia Parcial Inteligente (Contiene)
+            const configKeys = Object.keys(window.mapaCuentas);
+            
+            // Buscamos si el nombre en Movimientos está CONTENIDO en el nombre de Configuración (o viceversa)
+            const match = configKeys.find(k => {
+                const cNuc = window.mapaCuentas[k].idNuclear;
+                // Evitamos coincidencias absurdas con nombres muy cortos (min 3 letras)
+                if (cNuc.length < 3 || cuentaNuclear.length < 3) return false;
+                
+                // Prioridad a prefijos D- y N-
+                if ("D"+cNuc === cuentaNuclear || "N"+cNuc === cuentaNuclear) return true;
+                if (cNuc === "D"+cuentaNuclear || cNuc === "N"+cuentaNuclear) return true;
 
-            // Caso B: Banco dice "D-TRADEREPUBLIC" -> Config tiene "TRADEREPUBLIC"
-            if (!matchPrefijo) {
-                matchPrefijo = Object.keys(window.mapaCuentas).find(k => 
-                    cuentaNuclear === "D" + window.mapaCuentas[k].idNuclear || 
-                    cuentaNuclear === "N" + window.mapaCuentas[k].idNuclear
-                );
-            }
+                return cNuc.includes(cuentaNuclear) || cuentaNuclear.includes(cNuc);
+            });
 
-            if (matchPrefijo) infoCuenta = window.mapaCuentas[matchPrefijo];
+            if (match) infoCuenta = window.mapaCuentas[match];
         }
-        // ----------------------------------------
 
-        // CAMBIO 2: Eliminado "OTROS" como fallback.
-        // Si no se encuentra, se marca como "SIN CLASIFICAR" para alertar del error.
+        // Asignación de Tipo
         let tipoFinal = "SIN CLASIFICAR";
         let esInvFinal = false;
 
@@ -3218,12 +3234,20 @@ window.procesarLibroLeido = function(wb) {
             esInvFinal = infoCuenta.esInversion;
         }
 
-        // Procesar Fecha
+        // Procesar Fecha con robustez
         let fechaObj = new Date();
         if (typeof rawFecha === 'number') {
             const fechaBase = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
             fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
-        } else if (typeof rawFecha === 'string') fechaObj = new Date(rawFecha);
+        } else if (typeof rawFecha === 'string') {
+            if (rawFecha.includes('/')) {
+                const parts = rawFecha.split('/'); // Soporte DD/MM/YYYY
+                if(parts.length === 3) fechaObj = new Date(parts[2], parts[1]-1, parts[0]);
+                else fechaObj = new Date(rawFecha);
+            } else {
+                fechaObj = new Date(rawFecha);
+            }
+        }
 
         const rawImporte = fila.IMPORTE || fila.Importe || fila.importe || 0;
         
@@ -3232,21 +3256,24 @@ window.procesarLibroLeido = function(wb) {
             ts: fechaObj.getTime(),
             fecha: fechaObj,
             cuenta: cuentaLimpia, 
-            tipoCuenta: tipoFinal, // Será "BANCO", "INVERSION" o "SIN CLASIFICAR"
+            tipoCuenta: tipoFinal, // Aquí se guarda el tipo recuperado
             esInversion: esInvFinal,
             concepto: limpiar(fila.CONCEPTO || fila.Concepto),
             importe: typeof rawImporte === 'string' ? parseFloat(rawImporte.replace(',', '.')) : rawImporte,
             descripcion: limpiar(fila.DESCRIPCION || fila.Descripcion || fila.Detalle),
             beneficiario: limpiar(fila.BENEFICIARIO || fila.Beneficiario),
-            tipo: (rawImporte >= 0) ? 'ingreso' : 'gasto'
+            tipo: (parseFloat(rawImporte) >= 0) ? 'ingreso' : 'gasto'
         };
     }).filter(d => d.cuenta !== "DESCONOCIDA");
 
     window.datos.sort((a, b) => b.ts - a.ts);
+    
+    // Limpieza de listas
     window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].sort();
     window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
     window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
 
+    // Actualizar UI
     if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if (typeof actualizarDashboard === 'function') actualizarDashboard();
@@ -3269,6 +3296,8 @@ window.procesarLibroLeido = function(wb) {
         // 1. FILTRADO
         let lista = datos.filter(m => {
             if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return false;
+			// NUEVO: Filtro por TIPO DE CUENTA
+            if (filtros.tipoCuenta && m.tipoCuenta !== filtros.tipoCuenta) return false;
             if (filtros.tipo && filtros.tipo !== 'neto' && m.tipo !== filtros.tipo) return false;
             if (filtros.tipo === 'neto' && m.tipo === 'traspaso') return false;
             if (filtros.cuenta && m.cuenta !== filtros.cuenta) return false;
@@ -3527,7 +3556,61 @@ window.getFechasDashboard = function() {
         fill('f-beneficiario', b, 'Todos Beneficiarios');
         console.timeEnd("FiltrosUI");
     }
+    // --- NUEVA FUNCIÓN: RELLENAR DESPLEGABLES DE FILTRO ---
+    // Esta función se llama automáticamente al cargar datos
+    window.actualizarDesplegablesRestringidos = function() {
+        console.log("🔄 Actualizando filtros disponibles...");
+        
+        // 1. Recopilar datos únicos
+        const sCuentas = new Set();
+        const sTipos = new Set(); // Nuevo
+        const sConceptos = new Set();
+        const sBeneficiarios = new Set();
+
+        // Usamos la configuración cargada del Excel
+        if (window.listaCuentasConfig) window.listaCuentasConfig.forEach(c => sCuentas.add(c));
+        if (window.listaConceptosConfig) window.listaConceptosConfig.forEach(c => sConceptos.add(c));
+        if (window.listaBeneficiariosConfig) window.listaBeneficiariosConfig.forEach(b => sBeneficiarios.add(b));
+        
+        // Extraemos los TIPOS DE CUENTA del mapa de cuentas
+        if (window.mapaCuentas) {
+            Object.values(window.mapaCuentas).forEach(info => {
+                if (info.tipo && info.tipo !== 'SIN TIPO') sTipos.add(info.tipo);
+            });
+        }
+
+        // 2. Función auxiliar de llenado
+        const llenar = (id, setDatos, labelDefecto) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const valorActual = el.value; // Guardar selección actual si la hay
+            
+            el.innerHTML = `<option value="">${labelDefecto}</option>`;
+            
+            Array.from(setDatos).sort().forEach(val => {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.innerText = val;
+                el.appendChild(opt);
+            });
+            
+            // Intentar restaurar valor
+            if (valorActual && Array.from(setDatos).includes(valorActual)) {
+                el.value = valorActual;
+            }
+        };
+
+        // 3. Rellenar los selects del HTML
+        llenar('f-cuenta', sCuentas, 'Todas las Cuentas');
+        llenar('f-tipo-cuenta', sTipos, 'Todos los Tipos'); // Nuevo
+        llenar('f-concepto', sConceptos, 'Todos Conceptos');
+        llenar('f-beneficiario', sBeneficiarios, 'Todos Beneficiarios');
+    };
+
     function aplicarFiltros() {
+        // Leemos el nuevo filtro
+        filtros.tipoCuenta = document.getElementById('f-tipo-cuenta').value; 
+        
         filtros.cuenta = document.getElementById('f-cuenta').value;
         filtros.concepto = document.getElementById('f-concepto').value;
         filtros.beneficiario = document.getElementById('f-beneficiario').value;
@@ -3538,7 +3621,9 @@ window.getFechasDashboard = function() {
         filtros.max = document.getElementById('f-max').value;
         renderizar();
     }
+
     function limpiarFiltros() {
+        document.getElementById('f-tipo-cuenta').value = ''; // Limpiar nuevo
         document.getElementById('f-cuenta').value = '';
         document.getElementById('f-concepto').value = '';
         document.getElementById('f-beneficiario').value = '';
@@ -3547,7 +3632,10 @@ window.getFechasDashboard = function() {
         document.getElementById('f-hasta').value = '';
         document.getElementById('f-min').value = '';
         document.getElementById('f-max').value = '';
+        
         filtros.tipo = ''; 
+        filtros.tipoCuenta = ''; // Resetear variable interna
+        
         aplicarFiltros();
         document.getElementById('panel-filtros').classList.remove('open');
     }
