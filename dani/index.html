@@ -26,6 +26,7 @@
 </head>
 
     <style>
+		
         /* =========================================
            ESTILOS ORIGINALES DE INDEX.HTML
            ========================================= */
@@ -1584,6 +1585,22 @@ body {
     border-radius: 0 0 12px 12px; /* Redondeado abajo para estilo */
 }
  
+ /* --- SEMÁFORO DE SINCRONIZACIÓN --- */
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        transition: all 0.3s ease;
+        z-index: 100;
+    }
+    .status-none { background-color: #444; border: 1px solid #666; }
+    .status-sync { background-color: #39FF14; box-shadow: 0 0 10px #39FF14; } /* Verde Neón */
+    .status-saving { background-color: #FFD60A; box-shadow: 0 0 10px #FFD60A; animation: parpadeo 0.8s infinite; } /* Amarillo */
+    .status-error { background-color: #FF2E4D; box-shadow: 0 0 10px #FF2E4D; } /* Rojo */
+
+    @keyframes parpadeo { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+ 
    </style>
 
 <body>
@@ -1648,9 +1665,14 @@ body {
         </div>
     </div>
 
-    <div id="data-sentry" class="sentry-panel sentry-idle">
+    <div id="data-sentry" class="sentry-panel sentry-idle" style="position: relative; justify-content: center;">
+        
+        <div style="position: absolute; left: 15px; top: 0; bottom: 0; display: flex; align-items: center;">
+            <span id="sync-status" class="status-dot status-none"></span>
+        </div>
+
         <span id="sentry-icon">🛡️</span>
-        <span id="sentry-text">SISTEMA BLINDADO</span>
+        <span id="sentry-text" style="margin-left: 5px;">SISTEMA BLINDADO</span>
     </div>
     
     <div id="status-panel" class="status-panel" style="display:none"></div>
@@ -5062,39 +5084,37 @@ function accionFab(tipo) {
 
 
 // ==========================================
-// 💾 GUARDADO MAESTRO BLINDADO (Semáforo + Mayúsculas + Configuraicón)
+// 💾 GUARDADO MAESTRO BLINDADO (Con Semáforo Integrado)
 // ==========================================
 async function guardarUniversal(nuevasFilas) {
     const btn = document.getElementById('btn-guardar');
     const originalText = btn ? btn.innerHTML : '';
-    // Indicador visual en el botón manual si existe
+    // Indicador visual en el botón manual
     const btnModal = document.getElementById('btn-modal-action');
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
 
-    // Bloqueamos la interfaz para evitar doble clic
+    // Bloqueamos la interfaz
     window.isSaving = true;
 
-    // [SEMÁFORO] 1. ENCENDER LUZ AMARILLA (Solo si estamos en modo nube)
-    if (window.modoNube && typeof window.setNube === 'function') {
-        window.setNube('syncing');
+    // [SEMÁFORO] 1. LUZ AMARILLA (Empieza el trabajo)
+    // Llamamos a la función que creamos en el paso anterior
+    if (typeof window.actualizarSemaforo === 'function') {
+        window.actualizarSemaforo('cargando');
     }
 
     try {
-        console.log("💾 Iniciando PROTOCOLO DE GUARDADO SEGURO (Mayúsculas Forzadas)...");
+        console.log("💾 Iniciando PROTOCOLO DE GUARDADO CON SEMÁFORO...");
 
-        // 0. HERRAMIENTA DE LIMPIEZA (El "Lejía" de datos)
-        // Convierte cualquier texto a MAYÚSCULAS y quita espacios sobrantes
+        // 0. HERRAMIENTA DE LIMPIEZA
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
 
-        // 1. PREPARACIÓN DE DATOS (En una copia temporal)
+        // 1. PREPARACIÓN DE DATOS
         let datosCandidatos = [...(window.datos || [])];
 
         if (nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
             
-            // Normalizamos las nuevas filas antes de añadirlas
             const filasNormalizadas = nuevasFilas.map(filaNueva => {
-                // TRUCO ANTIDESFASE DE FECHAS
                 let fechaFinal = new Date();
                 const rawFecha = filaNueva.FECHA || filaNueva.fecha;
                 
@@ -5105,7 +5125,6 @@ async function guardarUniversal(nuevasFilas) {
                     fechaFinal = new Date(rawFecha);
                 }
 
-                // AQUI APLICAMOS LA LIMPIEZA (CLEAN)
                 return {
                     id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
                     fecha: fechaFinal,
@@ -5119,12 +5138,11 @@ async function guardarUniversal(nuevasFilas) {
                 };
             });
 
-            // Añadimos al principio y reordenamos
             datosCandidatos.unshift(...filasNormalizadas);
             datosCandidatos.sort((a, b) => b.ts - a.ts);
         }
 
-        // 2. GENERAR HOJA MOVIMIENTOS (Asegurando limpieza en todo el historial)
+        // 2. GENERAR HOJA MOVIMIENTOS
         const filasExcel = datosCandidatos.map(mov => ({
             "Id": mov.id,
             "Fecha": mov.fecha,
@@ -5141,12 +5159,10 @@ async function guardarUniversal(nuevasFilas) {
         });
         XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
-        // 3. GENERAR HOJA CONFIGURACIÓN (REPARADA Y LIMPIA)
+        // 3. GENERAR HOJA CONFIGURACIÓN
         const listaCuentas = Object.entries(window.mapaCuentas || {});
-        // Usamos las listas globales de configuración si existen, o sets vacíos
         const rawConceptos = window.listaConceptosConfig || [];
         const rawBeneficiarios = window.listaBeneficiariosConfig || [];
-
         const maxFilas = Math.max(listaCuentas.length, rawConceptos.length, rawBeneficiarios.length);
         
         const datosConfig = [];
@@ -5157,7 +5173,6 @@ async function guardarUniversal(nuevasFilas) {
             const concepto = rawConceptos[i];
             const beneficiario = rawBeneficiarios[i];
             
-            // Aplicamos CLEAN también aquí para que la configuración sea robusta
             datosConfig.push([
                 cuenta ? CLEAN(cuenta[0]) : "",
                 cuenta ? CLEAN(cuenta[1].tipo) : "",
@@ -5174,7 +5189,7 @@ async function guardarUniversal(nuevasFilas) {
 
         if (usarNube && typeof oneDrive !== 'undefined') {
             // --- SUBIDA A LA NUBE ---
-            if (!navigator.onLine) throw new Error("Sin conexión a Internet. No se puede guardar en la nube.");
+            if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
 
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
             await oneDrive.saveFile(wbout, "aidanai.xlsx");
@@ -5182,16 +5197,16 @@ async function guardarUniversal(nuevasFilas) {
             console.log("✅ Confirmado: Archivo recibido por OneDrive.");
             
             // [SEMÁFORO] 2. LUZ VERDE (Éxito Nube)
-            if (typeof window.setNube === 'function') window.setNube('saved');
+            if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
             if(typeof mostrarEstado === 'function') mostrarEstado("☁️ Guardado seguro en Nube", "success");
 
         } else {
             // MODO LOCAL
             XLSX.writeFile(wb, "aidanai.xlsx");
             
-            // [SEMÁFORO] 3. LUZ GRIS (Modo Local)
-            if (typeof window.setNube === 'function') window.setNube('offline');
-            if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado LOCAL (Archivo descargado)", "info");
+            // [SEMÁFORO] 3. LUZ NEUTRA (Modo Local)
+            if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
+            if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado LOCAL", "info");
         }
 
         // 5. ACTUALIZAR MEMORIA Y PANTALLA
@@ -5203,12 +5218,12 @@ async function guardarUniversal(nuevasFilas) {
 
     } catch (error) {
         // --- GESTIÓN DE ERRORES ---
-        console.error("❌ ERROR CRÍTICO AL GUARDAR:", error);
+        console.error("❌ ERROR CRÍTICO:", error);
         
-        // [SEMÁFORO] 4. LUZ ROJA (Error)
-        if (typeof window.setNube === 'function') window.setNube('error');
+        // [SEMÁFORO] 4. LUZ ROJA (Fallo)
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
 
-        if(typeof mostrarEstado === 'function') mostrarEstado("❌ FALLO AL GUARDAR: " + error.message, "error");
+        if(typeof mostrarEstado === 'function') mostrarEstado("❌ FALLO: " + error.message, "error");
         else alert("Error al guardar: " + error.message);
 
         throw error; 
@@ -6422,6 +6437,29 @@ window.cambiarPinSeguridad = function() {
     oldPinInput.value = "";
     newPinInput.value = "";
     mostrarEstado("✅ ¡PIN Actualizado con éxito! Úsalo la próxima vez.", "success");
+};
+
+// --- CONTROL DEL SEMÁFORO ---
+window.actualizarSemaforo = function(estado) {
+    const el = document.getElementById('sync-status');
+    const textoSentry = document.getElementById('sentry-text');
+    if (!el) return;
+
+    // Reseteamos clases
+    el.className = 'status-dot';
+
+    if (estado === 'ok') {
+        el.classList.add('status-sync'); // Verde
+        if(textoSentry) textoSentry.innerText = "NUBE SEGURA";
+    } else if (estado === 'cargando') {
+        el.classList.add('status-saving'); // Amarillo
+        if(textoSentry) textoSentry.innerText = "GUARDANDO...";
+    } else if (estado === 'error') {
+        el.classList.add('status-error'); // Rojo
+        if(textoSentry) textoSentry.innerText = "ERROR DE NUBE";
+    } else {
+        el.classList.add('status-none'); // Gris
+    }
 };
 
 </script>
