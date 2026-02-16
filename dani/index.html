@@ -118,44 +118,54 @@
         .owner-dani { background: var(--c-primary); color: #000000; border: 2px solid var(--c-primary); box-shadow: 0 0 15px var(--c-primary); transform: scale(1.1); }
         .owner-norma { background: var(--c-danger); color: #000000; border: 2px solid var(--c-danger); box-shadow: 0 0 15px var(--c-danger); transform: scale(1.1); }
 		
-/* === CORRECCIÓN MAESTRA DE AJUSTE (ELIMINA HUECOS) === */
-
-/* 1. La caja del encabezado */
+/* =========================================
+   CANDADO DE POSICIÓN INTELIGENTE (Header Centrado y Limpio)
+   ========================================= */
 header {
     position: fixed !important;
     top: 0 !important;
     height: auto !important;
-    
-    /* TRUCO DE CENTRADO EXACTO */
+    /* Centrado matemático para PC y Móvil */
     width: 100% !important;
-    max-width: 800px !important; /* El mismo ancho que #app-viewport */
+    max-width: 800px !important; 
     left: 50% !important;
-    transform: translateX(-50%) !important; /* Esto lo centra matemáticamente */
+    transform: translateX(-50%) !important;
     
     z-index: 9000 !important;
     background-color: #000000 !important;
     border-bottom: 1px solid rgba(255,255,255,0.1);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.8); /* Sombra para que flote sobre el contenido */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
 }
 
-/* 2. Primera Fila (Botones): Altura fija de 50px */
+/* Primera Fila: Botones y Logo */
 .header-row-top, .header-compact-row {
     height: 50px !important;
     min-height: 50px !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
+    padding: 0 10px !important; /* Pequeño margen lateral */
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
 }
 
-/* 3. Segunda Fila (Sentry): Altura fija de 25px */
+/* Segunda Fila: Sentry (Barra de estado) */
 .sentry-panel {
     height: 25px !important;
     min-height: 25px !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    top: 0 !important;
-    position: relative !important;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     border-top: 1px solid rgba(255,255,255,0.1);
+    border-radius: 0 0 12px 12px;
 }
+
+/* Limpieza de iframes de Microsoft */
+iframe[id*="msal"], iframe[id*="adal"] { display: none !important; }
+
+/* Ajuste del cuerpo para no tapar el header */
+body { padding-top: calc(75px + env(safe-area-inset-top)) !important; }
 
 /* 4. El contenedor de la App: Fondo negro obligatorio */
 #app-viewport {
@@ -169,7 +179,6 @@ header {
     background-color: #000000 !important;
 }
 
-        .header-row-top { display: flex; justify-content: space-between; align-items: center; }
         .brand-area { display: flex; align-items: center; height: 100%: gap: 10px; }
         h2 { margin: 0; font-size: 18px; color: var(--c-accent); font-weight: 800; letter-spacing: 1px; text-shadow: 0 0 10px rgba(191, 90, 242, 0.4); }
 
@@ -177,9 +186,7 @@ header {
         .source-option { padding: 4px 10px; font-size: 10px; font-weight: 700; cursor: pointer; border-radius: 10px; border: none; background: transparent; color: #888; display: flex; align-items: center; gap: 4px; transition: all 0.2s; }
         .source-option.active { background: #333; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
         .source-option.active.cloud { color: var(--c-primary); text-shadow: 0 0 8px rgba(0, 184, 255, 0.5); }
-
-        .header-row-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; height: 32px; }
-       
+               
         .action-area { display: flex; gap: 8px; align-items: center; }
         .btn-compact { height: 28px; padding: 0 12px; border-radius: 14px; font-size: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; border: 1px solid #333; background: #111; color: #ccc; transition: all 0.2s; white-space: nowrap; }
         .btn-compact:hover { background: #222; border-color: #666; transform: translateY(-1px); }
@@ -2524,15 +2531,15 @@ window.generarAnalisisIA = function(movimientos) {
 // ==========================================
 class OneDriveManager {
     constructor() {
+        // Asegúrate de que MSAL_CONFIG esté definido antes en tu código
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         this.fileId = localStorage.getItem("aidanai_file_id");
     }
 
-// --- 1. GESTIÓN DE TOKEN (CORREGIDO) ---
+    // --- 1. GESTIÓN DE TOKEN ---
     async getToken() {
-        // Aseguramos que existe la instancia
         if (!this.msalInstance) {
-             console.error("MSAL no inicializado, intentando recuperar...");
+             console.error("MSAL no inicializado, recuperando...");
              this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         }
 
@@ -2540,7 +2547,7 @@ class OneDriveManager {
         const account = accounts[0];
         
         if (!account) {
-            throw new Error("No hay ninguna cuenta activa. Por favor, pulsa CONECTAR.");
+            throw new Error("No hay cuenta activa. Pulsa CONECTAR NUBE.");
         }
 
         const request = {
@@ -2549,21 +2556,18 @@ class OneDriveManager {
         };
 
         try {
-            // 1. Intentamos obtener el token en silencio (rápido)
+            // Intento silencioso
             const response = await this.msalInstance.acquireTokenSilent(request);
             return response.accessToken;
         } catch (error) {
-            console.warn("⚠️ El token silencioso falló. Intentando vía Popup...", error);
-            
-            // 2. PLAN B: Si falla el silencio, intentamos con ventana emergente
+            console.warn("⚠️ Token silencioso falló. Probando Popup...", error);
             try {
+                // Intento interactivo
                 const response = await this.msalInstance.acquireTokenPopup(request);
                 return response.accessToken;
             } catch (popupError) {
-                console.error("❌ Error fatal al obtener token:", popupError);
-                if(typeof mostrarEstado === 'function') {
-                    mostrarEstado("❌ ERROR DE CONEXIÓN: Inicia sesión de nuevo", "error");
-                }
+                console.error("❌ Error token:", popupError);
+                if(typeof mostrarEstado === 'function') mostrarEstado("❌ Error de conexión: Inicia sesión", "error");
                 throw popupError;
             }
         }
@@ -2572,22 +2576,26 @@ class OneDriveManager {
     async login() {
         try {
             await this.msalInstance.handleRedirectPromise().catch(()=>{});
-            const resp = await this.msalInstance.loginPopup({ scopes: ["User.Read", "Files.ReadWrite.All"], prompt: "select_account" });
+            const resp = await this.msalInstance.loginPopup({ 
+                scopes: ["User.Read", "Files.ReadWrite.All"], 
+                prompt: "select_account" 
+            });
             return resp.accessToken;
         } catch (e) {
-            if (e.message && e.message.includes("popup")) alert("Desbloquea los popups para conectar.");
+            if (e.message && e.message.includes("popup")) alert("Permite las ventanas emergentes.");
             throw e;
         }
     }
 
-    // --- 2. LOCALIZADOR (OPTIMIZADO RAÍZ) ---
+    // --- 2. LOCALIZADOR ---
     async getFileId() {
         if (this.fileId) return this.fileId;
+        
         const cached = localStorage.getItem("aidanai_file_id");
         if(cached) { this.fileId = cached; return cached; }
 
         const token = await this.getToken();
-        // Búsqueda directa en raíz
+        // Busca aidanai.xlsx en la raíz
         const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
             headers: { Authorization: `Bearer ${token}` }
         });
@@ -2598,131 +2606,69 @@ class OneDriveManager {
             localStorage.setItem("aidanai_file_id", data.id);
             return data.id;
         } else {
-            throw new Error("❌ 'aidanai.xlsx' no está en la raíz de tu OneDrive.");
+            throw new Error("❌ No encuentro 'aidanai.xlsx' en tu OneDrive.");
         }
     }
 
-    // --- 3. LECTURA TURBO (JSON DIRECTO) ---
-    // Esta función ya no devuelve un archivo binario, devuelve un objeto Workbook falso pero compatible
+    // --- 3. LECTURA TURBO (JSON PARALELO) ---
     async descargarDatosJSON() {
-        if(window.mostrarEstado) window.mostrarEstado("🚀 Leyendo datos (Modo Turbo)...", "normal");
+        if(window.mostrarEstado) window.mostrarEstado("🚀 Leyendo nube (Modo Turbo)...", "normal");
         
         const token = await this.getToken();
         const id = await this.getFileId();
 
-        // Lanzamos dos peticiones en paralelo (Mucho más rápido)
-        const pMovs = fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const pConf = fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Configuracion/usedRange`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        // Peticiones paralelas (Mucho más rápido)
+        const [resMovs, resConf] = await Promise.all([
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`, { headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Configuracion/usedRange`, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
 
-        const [resMovs, resConf] = await Promise.all([pMovs, pConf]);
-
-        if (!resMovs.ok) throw new Error("Error leyendo Movimientos: " + resMovs.statusText);
+        if (!resMovs.ok) throw new Error("Error leyendo Movimientos");
         
         const jsonMovs = await resMovs.json();
         const jsonConf = resConf.ok ? await resConf.json() : { values: [] };
 
-        // CONVERTIMOS EL JSON DE MICROSOFT A FORMATO SHEETJS
-        // Para que el resto de tu app no se rompa, creamos un "Workbook Virtual"
-        const wb = {
+        // Construimos un objeto compatible con SheetJS
+        return {
             Sheets: {
                 "Movimientos": XLSX.utils.aoa_to_sheet(jsonMovs.values || []),
                 "Configuracion": XLSX.utils.aoa_to_sheet(jsonConf.values || [])
             },
             SheetNames: ["Movimientos", "Configuracion"]
         };
-
-        return wb;
     }
 
-    // Mantenemos compatibilidad con tu código antiguo que llama a loadFile
+    // Alias para compatibilidad
     async loadFile() { return await this.descargarDatosJSON(); }
-	async saveFile(blob) {
-        // 1. Obtenemos ID del archivo y Token de seguridad
+
+    // --- 4. GUARDADO ---
+    async saveFile(blob) {
         const id = await this.getFileId();
         const token = await this.getToken();
         
-        console.log("📤 Subiendo archivo a OneDrive...");
+        console.log("📤 Subiendo archivo...");
         
-        // 2. Enviamos el archivo a Microsoft (PUT = Sobrescribir)
         const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`,
-                // Indicamos que es un archivo Excel
                 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             },
             body: blob
         });
 
-        // 3. Comprobamos si salió bien
-        if (!response.ok) {
-            const errorTexto = await response.text();
-            throw new Error("Error al guardar en nube: " + errorTexto);
-        }
-        
-        console.log("✅ Archivo sobrescrito con éxito en la nube.");
-    }
-    // --- 4. ESCRITURA ---
-    async agregarFila(nuevaFilaArray) {
-        const id = await this.getFileId();
-        const token = await this.getToken();
-        
-        // 1. Leer rango usado
-        const urlRange = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`;
-        const resRange = await fetch(urlRange, { headers: { Authorization: `Bearer ${token}` } });
-        const dataRange = await resRange.json();
-        
-        // 2. Escribir al final (Append)
-        let filaDestino = dataRange.rowIndex + dataRange.rowCount; 
-        const urlWrite = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/range(address='A${filaDestino + 1}')`;
-        
-        await fetch(urlWrite, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: [nuevaFilaArray] })
-        });
+        if (!response.ok) throw new Error("Error al subir: " + await response.text());
+        console.log("✅ Nube sincronizada.");
     }
 
-    async borrarFilaPorID(idMovimiento) {
-        const id = await this.getFileId();
-        const token = await this.getToken();
-        
-        // Leemos solo los valores para buscar rápido
-        const urlData = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`;
-        const resData = await fetch(urlData, { headers: { Authorization: `Bearer ${token}` } });
-        const jsonRange = await resData.json();
-        
-        const valores = jsonRange.values;
-        let filaEncontrada = -1;
-        
-        for (let i = 1; i < valores.length; i++) {
-            if (String(valores[i][0]) === String(idMovimiento)) {
-                filaEncontrada = jsonRange.rowIndex + i + 1;
-                break;
-            }
-        }
-
-        if (filaEncontrada === -1) throw new Error("Movimiento no encontrado.");
-
-        const urlDelete = `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/range(address='${filaEncontrada}:${filaEncontrada}')/delete`;
-        await fetch(urlDelete, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ shift: "Up" })
-        });
-    }
-}
+} 
+// Instancia única global
 const oneDrive = new OneDriveManager();
 
     // ==========================================
     // 4. LÓGICA DE ARRANQUE AUTOMÁTICO
     // ==========================================
-    // BUSCA Y REEMPLAZA:
-
+   
 async function iniciarSistema() {
     const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
     
@@ -3285,44 +3231,6 @@ window.procesarLibroLeido = function(wb) {
     if (typeof renderizar === 'function') renderizar();
 };
  
-// ==========================================
-// 💾 FINALIZAR GUARDADO (Conexión con el nuevo sistema)
-// ==========================================
-function finalizarGuardado(esTraspaso) {
-    // 1. Reordenar datos por fecha
-    datos.sort((a, b) => a.ts - b.ts || a.id - b.id);
-    
-    // 2. Recalcular saldos en memoria
-    const ac = {};
-    datos.forEach(m => {
-        if(!ac[m.cuenta]) ac[m.cuenta] = 0;
-        ac[m.cuenta] += m.importe;
-        m.saldo = ac[m.cuenta];
-    });
-
-    // 3. Actualizar UI (Optimizada)
-    // Solo actualizamos la lista visual inmediata, el dashboard se actualizará tras el guardado seguro
-    renderizar(); 
-    // Actualizamos patrimonio rápido para feedback visual inmediato
-    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-    document.getElementById('modal-manual').classList.remove('active');
-    idEnEdicion = null; 
-    
-    // Feedback
-    const msg = esTraspaso ? 'Traspaso realizado con éxito' : 'Movimiento guardado';
-    mostrarEstado(msg, 'ok');
-    vibrar('ingreso');
-
-    // 4. GUARDADO AUTOMÁTICO INTELIGENTE
-    // Aquí conectamos con la función "guardarUniversal" que creamos antes
-    // Si estás en la nube, se sube solo. Si es local, te avisa.
-    if (modoNube) {
-        guardarUniversal(); // <--- ESTA ES LA CLAVE DE LA SINCRONIZACIÓN
-    } else {
-        mostrarEstado('Guardado en memoria. Recuerda exportar.', 'normal');
-        revisarBotonExportar();
-    }
-}
 
     function pasaFiltroPropietario(m) {
         if (estadoPropietario === 0) return true; 
@@ -3424,7 +3332,7 @@ function finalizarGuardado(esTraspaso) {
             const descripcionFinal = m.descripcion || m.detalle || '';
             const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
 
-            // APLICAMOS LA CLASE A LA FILA <TR>
+            
             // APLICAMOS LA CLASE A LA FILA <TR>
             return `
             <tr class="${claseFila}" onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
