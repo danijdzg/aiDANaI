@@ -3783,38 +3783,35 @@ window.cargarParaEditar = function(id) {
             if(areaExtras) areaExtras.style.display = 'grid';
         }
 
-        // 2. RECOPILAR DATOS PARA LOS DESPLEGABLES
+        // 2. RECOPILAR DATOS (MODO ESTRICTO: SOLO EXCEL CONFIGURACIÓN)
         const sCuentas = new Set(); 
         const sConceptos = new Set(); 
         const sBeneficiarios = new Set();
         
-                
-        // B) Buscar en la Configuración (Excel) para añadir los nuevos
+        // A) Conceptos y Beneficiarios: SOLO desde las listas de configuración cargadas del Excel
+        // Estas variables se llenan en 'procesarLibroLeido' leyendo la hoja 'Configuracion'
+        if (window.listaConceptosConfig) window.listaConceptosConfig.forEach(c => sConceptos.add(c));
+        if (window.listaBeneficiariosConfig) window.listaBeneficiariosConfig.forEach(b => sBeneficiarios.add(b));
+
+        // B) Cuentas: SOLO desde el mapa de configuración
         if (window.mapaCuentas) {
             Object.keys(window.mapaCuentas).forEach(c => sCuentas.add(c));
         }
-        // Aquí añadimos los conceptos de la hoja Configuración
-        if (window.listaConceptos && Array.isArray(window.listaConceptos)) {
-            window.listaConceptos.forEach(c => sConceptos.add(c));
-        }
-        // Y los beneficiarios de la hoja Configuración
-        if (window.listaBeneficiarios && Array.isArray(window.listaBeneficiarios)) {
-            window.listaBeneficiarios.forEach(b => sBeneficiarios.add(b));
-        }
 
-        // 3. FUNCIÓN INTELIGENTE PARA LLENAR MENÚS
+        // NOTA: Hemos eliminado el bloque que miraba en 'window.datos' (historial)
+
+        // 3. FUNCIÓN DE LLENADO DE DESPLEGABLES
         const llenarSelect = (id, setValores) => {
             const el = document.getElementById(id);
             if (!el) return;
             
-            const valActual = el.value; // Guardamos lo que había seleccionado
+            const valActual = el.value; 
             
-            // Reseteamos el menú con la opción por defecto
+            // Limpiamos y ponemos la opción base
             el.innerHTML = '<option value="">Selecciona...</option>';
             
-            // Ordenamos alfabéticamente y creamos las opciones
+            // Convertimos el Set a Array y ordenamos alfabéticamente
             Array.from(setValores).sort().forEach(val => {
-                // Solo añadimos si tiene texto real
                 if(val && String(val).trim() !== "") {
                     const opt = document.createElement('option');
                     opt.value = val;
@@ -3823,23 +3820,24 @@ window.cargarParaEditar = function(id) {
                 }
             });
 
-            // Si estamos editando, volvemos a marcar lo que estaba seleccionado
+            // MODO SEGURIDAD PARA EDICIÓN:
+            // Si estás editando un movimiento antiguo que tiene un concepto que YA NO EXISTE en tu configuración,
+            // lo añadimos temporalmente solo a este movimiento para que no se vea vacío el campo.
             if(esEdicion && valActual) {
                 el.value = valActual;
-                // Si el valor histórico no está en la lista actual, lo forzamos
                 if (el.value !== valActual) {
                     const opt = document.createElement('option');
                     opt.value = valActual;
-                    opt.text = valActual + " (Histórico)";
+                    opt.text = valActual + " (No en lista)"; // Indicador visual
                     el.appendChild(opt);
                     el.value = valActual;
                 }
             }
         };
 
-        // 4. LLENAR LOS 3 MENÚS (Ahora Concepto se comporta igual que los otros)
+        // 4. APLICAR A LOS CAMPOS
         llenarSelect('m-cuenta', sCuentas);
-        llenarSelect('m-cuenta-destino', sCuentas);
+        llenarSelect('m-cuenta-destino', sCuentas); // Para traspasos
         llenarSelect('m-beneficiario', sBeneficiarios);
         llenarSelect('m-concepto', sConceptos); 
     }
