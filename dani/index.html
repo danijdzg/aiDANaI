@@ -6019,60 +6019,75 @@ window.actualizarDashboard = function() {
     animarValor('d-patri-liq', totalLiquidez, '', ' €');
     animarValor('d-patri-inv', totalInversion, '', ' €');
 
-    // 7. CÁLCULO DE KPIs FINANCIEROS AVANZADOS (COBERTURA Y LIBERTAD)
-    // CORRECCIÓN: Usamos métricas ESTRUCTURALES (históricas), no solo del mes actual.
-    // Así el scoring no falla si aún no has cobrado la nómina este mes.
+    // 7. CÁLCULO DE KPIs FINANCIEROS AVANZADOS (MEJORADO: ÚLTIMOS 12 MESES)
+    // Usamos solo el último año para que el promedio de gastos sea realista y actual.
     
-    let gastoTotalHist = 0;
-    let ingresoTotalHist = 0;
-    let primerMov = new Date();
-    let ultimoMov = new Date(0);
-    let hayDatosHistoricos = false;
+    let gastoTotalUltimoAno = 0;
+    let ingresoTotalUltimoAno = 0;
+    
+    // Calculamos la fecha de corte (hoy menos 365 días)
+    const fechaHaceUnAno = new Date();
+    fechaHaceUnAno.setFullYear(fechaHaceUnAno.getFullYear() - 1);
+    const tsCorte = fechaHaceUnAno.getTime();
 
-    // Recorremos TODO el historial del usuario (no solo lo filtrado por fecha)
-    datosUsuario.forEach(m => {
+    // Filtramos movimientos del último año (ignorando traspasos e iniciales)
+    const datosUltimoAno = datosUsuario.filter(m => m.ts >= tsCorte);
+    
+    // Variables para detectar fechas reales dentro de este año
+    let primerMovAno = new Date();
+    let ultimoMovAno = new Date(0);
+    let hayDatosAno = false;
+
+    datosUltimoAno.forEach(m => {
         const conc = String(m.concepto || "").toLowerCase();
-        // Ignoramos traspasos e iniciales para el cálculo real de salud financiera
         if (conc.includes('inicial') || conc.includes('traspaso')) return;
 
         if (m.tipo === 'gasto') {
-            gastoTotalHist += Math.abs(m.importe);
-            if (m.fecha < primerMov) primerMov = m.fecha;
-            if (m.fecha > ultimoMov) ultimoMov = m.fecha;
-            hayDatosHistoricos = true;
+            gastoTotalUltimoAno += Math.abs(m.importe);
+            if (m.fecha < primerMovAno) primerMovAno = m.fecha;
+            if (m.fecha > ultimoMovAno) ultimoMovAno = m.fecha;
+            hayDatosAno = true;
         } else if (m.tipo === 'ingreso') {
-            ingresoTotalHist += m.importe;
+            ingresoTotalUltimoAno += m.importe;
         }
     });
 
-    // A) COBERTURA: Liquidez Actual / Gasto Mensual Promedio
+    // A) COBERTURA: Liquidez Actual / Gasto Mensual Promedio (DEL ÚLTIMO AÑO)
     let gastoMensualMedio = 0;
-    if (hayDatosHistoricos) {
-        // Calculamos cuántos días de historia real tenemos
-        const diasDif = Math.max(1, (ultimoMov - primerMov) / (1000 * 60 * 60 * 24));
-        gastoMensualMedio = (gastoTotalHist / diasDif) * 30.44; // Convertimos a mes promedio
+    
+    if (hayDatosAno) {
+        // Cuántos días han pasado entre el primer y último gasto de este año (mínimo 1)
+        const diasDif = Math.max(1, (ultimoMovAno - primerMovAno) / (1000 * 60 * 60 * 24));
+        
+        // Si llevamos menos de 30 días registrando datos, usamos los días reales.
+        // Si ya llevamos tiempo, normalizamos.
+        gastoMensualMedio = (gastoTotalUltimoAno / diasDif) * 30.44; 
     }
-    if (gastoMensualMedio < 1) gastoMensualMedio = 1; // Evitar división por cero
+    
+    // Protección: Si el gasto es 0 o ridículo, ponemos 1€ para no romper la división
+    if (gastoMensualMedio < 1) gastoMensualMedio = 1; 
 
+    // Cálculo final de meses de vida (Runway)
     let mesesCobertura = totalLiquidez / gastoMensualMedio;
+    
     const elCob = document.getElementById('d-cobertura');
     if(elCob) {
         animarValor('d-cobertura', mesesCobertura, '', ' Meses', 1);
+        // Semáforo visual
         elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
     }
 
-    // B) LIBERTAD: (Inversión Total * 4% anual) / Gasto Anual Promedio
+    // B) LIBERTAD: (Inversión Total * 4% anual) / Gasto Anual Promedio (Realista)
     let rentaPasivaAnual = totalInversion * 0.04;
-    let gastoAnual = gastoMensualMedio * 12;
-    let pctLibertad = (rentaPasivaAnual / gastoAnual) * 100;
+    let gastoAnualProyectado = gastoMensualMedio * 12;
+    let pctLibertad = (rentaPasivaAnual / gastoAnualProyectado) * 100;
     
     animarValor('d-libertad', pctLibertad, '', '%', 2);
 
-    // C) AHORRO ESTRUCTURAL (La clave de la corrección)
-    // Calculamos cuánto ahorra este usuario DE MEDIA en toda su historia.
+    // C) AHORRO ESTRUCTURAL (Tasa media de ahorro del último año)
     let tasaAhorroEstructural = 0;
-    if (ingresoTotalHist > 0) {
-        tasaAhorroEstructural = ((ingresoTotalHist - gastoTotalHist) / ingresoTotalHist) * 100;
+    if (ingresoTotalUltimoAno > 0) {
+        tasaAhorroEstructural = ((ingresoTotalUltimoAno - gastoTotalUltimoAno) / ingresoTotalUltimoAno) * 100;
     }
 
     // 8. RENDERIZADO DE GRÁFICOS
