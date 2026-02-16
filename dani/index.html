@@ -1063,30 +1063,6 @@ th:active {
     box-shadow: none;
 }
 
-/* --- NUEVO ESTILO PARA TREEMAP APEXCHARTS --- */
-#chartDistribucion {
-    min-height: 350px !important;
-    width: 100%;
-}
-.apexcharts-tooltip {
-    background: #000 !important;
-    border-color: #333 !important;
-    color: #fff;
-}
-.apexcharts-treemap-rect {
-    stroke: #000;
-    stroke-width: 2px;
-}
-/* Ocultamos elementos viejos del donut si quedaran residuos */
-.donut-section, .legend-section {
-    display: none !important; 
-}
-/* Aseguramos que el contenedor padre ocupe espacio */
-.chart-wrapper {
-    display: block !important; 
-    height: auto !important;
-    padding: 10px;
-}
 /* --- NUEVO BOTÓN DE IDENTIDAD (COMPACTO Y NEÓN) --- */
 .btn-identity {
     /* 1. DIMENSIONES EXACTAS (Para que no rompa el header) */
@@ -2768,17 +2744,7 @@ async function iniciarSistema() {
         }
     }
 }
-	// Función auxiliar para el botón
-    async function iniciarSesionManual() {
-        try {
-            await oneDrive.login(); // Esto ahora sí abrirá el popup porque viene de un clic
-            await iniciarSistema(); // Reintentamos la carga
-        } catch (e) {
-            alert("No se pudo conectar: " + e.message);
-        }
-    }
-
-    
+	    
     // ==========================================
     // 5. CALCULADORA Y VIBRACIÓN (Tu código original)
     // ==========================================
@@ -3315,10 +3281,11 @@ function finalizarGuardado(esTraspaso) {
         m.saldo = ac[m.cuenta];
     });
 
-    // 3. Actualizar UI
-    renderizar();
-    actualizarDashboard();
-    actualizarPatrimonio(); // <--- Importante para ver los cambios en las barras
+    // 3. Actualizar UI (Optimizada)
+    // Solo actualizamos la lista visual inmediata, el dashboard se actualizará tras el guardado seguro
+    renderizar(); 
+    // Actualizamos patrimonio rápido para feedback visual inmediato
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
     document.getElementById('modal-manual').classList.remove('active');
     idEnEdicion = null; 
     
@@ -4182,11 +4149,11 @@ function recalcularSaldosGlobal() {
     // 4. Guardamos los saldos finales en la Configuración Global (Para el Patrimonio)
     Object.keys(saldosTemporales).forEach(cta => {
         if (!window.mapaCuentas[cta]) {
-            window.mapaCuentas[cta] = { tipo: 'OTROS', esInversion: false };
+            // CAMBIO: Si la cuenta es nueva, la marcamos como SIN CLASIFICAR para que destaque
+            window.mapaCuentas[cta] = { tipo: 'SIN CLASIFICAR', esInversion: false };
         }
         window.mapaCuentas[cta].saldoActual = saldosTemporales[cta];
     });
-
     console.log("🧮 Saldos recalculados correctamente.");
 
     // 5. ACTUALIZAR PANTALLA (Lo que le faltaba a tu función original)
@@ -4503,9 +4470,10 @@ function formatear(val, tipo) {
             const ctaKey = cta.trim().toUpperCase(); // CORRECCIÓN: Mayúsculas para coincidir con Configuración
             // PROTECCIÓN EXTRA: Si mapaCuentas no existe, creamos uno vacío
             const mapa = window.mapaCuentas || {};
-            const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'OTROS', esInversion: false };
+            // CAMBIO: Usamos 'SIN CLASIFICAR' en lugar de 'OTROS'
+            const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
             
-            const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'OTROS';
+            const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'SIN CLASIFICAR';
             
             if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
             grupos[nombreGrupo].total += saldo;
@@ -6378,34 +6346,8 @@ function cargarSugerenciasAjustes() {
     }, 50);
 };
 
-         // Muestra un mensaje flotante tipo App nativa
-    function showToast(mensaje, tipo = 'success') {
-        // 1. Busca si ya existe el elemento toast, si no, lo crea
-        let toast = document.getElementById('app-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'app-toast';
-            document.body.appendChild(toast);
-        }
-
-        // 2. Configura el icono según sea éxito o error
-        const icono = tipo === 'success' ? 'check_circle' : 'error_outline';
-        const claseColor = tipo === 'success' ? 'toast-success' : 'toast-error';
-
-        // 3. Inserta el HTML dentro de la burbuja
-        toast.className = `toast-container ${claseColor}`;
-        toast.innerHTML = `<i class="material-icons">${icono}</i> <span>${mensaje}</span>`;
-
-        // 4. Lo hace visible (con un micro-retraso para que la animación funcione)
-        requestAnimationFrame(() => {
-            toast.classList.add('visible');
-        });
-
-        // 5. Lo oculta automáticamente a los 3 segundos
-        setTimeout(() => {
-            toast.classList.remove('visible');
-        }, 3000);
-    }
+ // Redirección de seguridad: Si algo llama a showToast, usamos el sistema Sentry
+window.showToast = window.mostrarEstado; 
     // Ayudante para escribir en inputs sin que de error si no existen
     function setValue(id, val) {
         const el = document.getElementById(id);
