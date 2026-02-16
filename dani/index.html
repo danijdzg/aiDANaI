@@ -122,14 +122,20 @@
 
 /* 1. La caja del encabezado */
 header {
-	
+    position: fixed !important;
     top: 0 !important;
-	z-index: 9000 !important; /* Asegura que esté encima de las estrellas */
     height: auto !important;
-    min-height: 0 !important;
-    background-color: #000000 !important; /* Negro puro */
+    
+    /* TRUCO DE CENTRADO EXACTO */
+    width: 100% !important;
+    max-width: 800px !important; /* El mismo ancho que #app-viewport */
+    left: 50% !important;
+    transform: translateX(-50%) !important; /* Esto lo centra matemáticamente */
+    
+    z-index: 9000 !important;
+    background-color: #000000 !important;
     border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 0 !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8); /* Sombra para que flote sobre el contenido */
 }
 
 /* 2. Primera Fila (Botones): Altura fija de 50px */
@@ -1529,16 +1535,7 @@ th {
 
 /* 1. Obligar al Header a no moverse JAMÁS, ni en Cloud ni en Local */
 header, .top-bar {
-    position: fixed !important;
-    top: 0 !important;
-    margin-top: 0 !important;
-    transform: none !important; /* Evita que animaciones lo muevan */
-    left: 0 !important;
-    width: 100% !important;
-    z-index: 9999 !important;
-}
-
-/* 2. Ocultar posibles iframes o basura que mete Microsoft/OneDrive */
+    /* 2. Ocultar iframes basura de Microsoft */
 iframe[id*="msal"], iframe[id*="adal"] {
     display: none !important;
     height: 0 !important;
@@ -1546,16 +1543,38 @@ iframe[id*="msal"], iframe[id*="adal"] {
     position: absolute !important;
 }
 
-/* 3. Asegurar que el cuerpo respete el espacio EXACTO (75px) */
+/* 3. El cuerpo respete el espacio EXACTO (75px) */
 body {
     padding-top: calc(75px + env(safe-area-inset-top)) !important;
 }
 
-/* 4. Parche específico por si la clase 'sentry-working' (nube) engorda el header */
+/* 4. Sentry (Barra de estado) dentro del header */
 .sentry-panel {
     height: 25px !important;
     max-height: 25px !important;
-    overflow: hidden !important; /* Si el texto es largo, que no empuje */
+    overflow: hidden !important;
+    border-radius: 0 0 12px 12px; /* Redondeado abajo para estilo */
+}
+
+/* 2. Ocultar iframes basura de Microsoft */
+iframe[id*="msal"], iframe[id*="adal"] {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    position: absolute !important;
+}
+
+/* 3. El cuerpo respete el espacio EXACTO (75px) */
+body {
+    padding-top: calc(75px + env(safe-area-inset-top)) !important;
+}
+
+/* 4. Sentry (Barra de estado) dentro del header */
+.sentry-panel {
+    height: 25px !important;
+    max-height: 25px !important;
+    overflow: hidden !important;
+    border-radius: 0 0 12px 12px; /* Redondeado abajo para estilo */
 }
  
    </style>
@@ -5135,7 +5154,7 @@ function accionFab(tipo) {
 
 
 // ==========================================
-// 💾 GUARDADO MAESTRO (Con Semáforo Anti-Infarto)
+// 💾 GUARDADO MAESTRO BLINDADO (Semáforo + Mayúsculas + Configuraicón)
 // ==========================================
 async function guardarUniversal(nuevasFilas) {
     const btn = document.getElementById('btn-guardar');
@@ -5153,9 +5172,13 @@ async function guardarUniversal(nuevasFilas) {
     }
 
     try {
-        console.log("💾 Iniciando PROTOCOLO DE GUARDADO SEGURO...");
+        console.log("💾 Iniciando PROTOCOLO DE GUARDADO SEGURO (Mayúsculas Forzadas)...");
 
-        // 1. PREPARACIÓN DE DATOS (En una copia temporal, no tocamos la oficial aún)
+        // 0. HERRAMIENTA DE LIMPIEZA (El "Lejía" de datos)
+        // Convierte cualquier texto a MAYÚSCULAS y quita espacios sobrantes
+        const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
+
+        // 1. PREPARACIÓN DE DATOS (En una copia temporal)
         let datosCandidatos = [...(window.datos || [])];
 
         if (nuevasFilas) {
@@ -5163,45 +5186,45 @@ async function guardarUniversal(nuevasFilas) {
             
             // Normalizamos las nuevas filas antes de añadirlas
             const filasNormalizadas = nuevasFilas.map(filaNueva => {
-                // TRUCO ANTIDESFASE: Parseamos "2023-05-20" manualmente a (2023, 4, 20)
+                // TRUCO ANTIDESFASE DE FECHAS
                 let fechaFinal = new Date();
                 const rawFecha = filaNueva.FECHA || filaNueva.fecha;
                 
                 if (typeof rawFecha === 'string' && rawFecha.includes('-')) {
                     const [y, m, d] = rawFecha.split('-').map(Number);
-                    fechaFinal = new Date(y, m - 1, d); // Mes es base 0 en JS
+                    fechaFinal = new Date(y, m - 1, d); 
                 } else {
                     fechaFinal = new Date(rawFecha);
                 }
 
+                // AQUI APLICAMOS LA LIMPIEZA (CLEAN)
                 return {
                     id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
                     fecha: fechaFinal,
-                    cuenta: filaNueva.CUENTA || filaNueva.cuenta,
-                    concepto: filaNueva.CONCEPTO || filaNueva.concepto,
+                    cuenta: CLEAN(filaNueva.CUENTA || filaNueva.cuenta),
+                    concepto: CLEAN(filaNueva.CONCEPTO || filaNueva.concepto),
                     importe: parseFloat(filaNueva.IMPORTE || filaNueva.importe),
-                    descripcion: filaNueva.DESCRIPCION || filaNueva.descripcion || "",
-                    beneficiario: filaNueva.BENEFICIARIO || filaNueva.beneficiario || "",
-                    ts: fechaFinal.getTime(), // Timestamp seguro
+                    descripcion: CLEAN(filaNueva.DESCRIPCION || filaNueva.descripcion),
+                    beneficiario: CLEAN(filaNueva.BENEFICIARIO || filaNueva.beneficiario),
+                    ts: fechaFinal.getTime(),
                     tipo: (parseFloat(filaNueva.IMPORTE || filaNueva.importe) >= 0) ? 'ingreso' : 'gasto'
                 };
             });
 
-            // Añadimos al principio de la copia temporal
+            // Añadimos al principio y reordenamos
             datosCandidatos.unshift(...filasNormalizadas);
-            // Reordenamos por fecha para mantener el Excel limpio
             datosCandidatos.sort((a, b) => b.ts - a.ts);
         }
 
-        // 2. GENERAR HOJA MOVIMIENTOS (Virtual)
+        // 2. GENERAR HOJA MOVIMIENTOS (Asegurando limpieza en todo el historial)
         const filasExcel = datosCandidatos.map(mov => ({
             "Id": mov.id,
             "Fecha": mov.fecha,
-            "Cuenta": mov.cuenta,
-            "Concepto": mov.concepto,
+            "Cuenta": CLEAN(mov.cuenta),
+            "Concepto": CLEAN(mov.concepto),
             "Importe": mov.importe,
-            "Descripcion": mov.descripcion,
-            "Beneficiario": mov.beneficiario
+            "Descripcion": CLEAN(mov.descripcion),
+            "Beneficiario": CLEAN(mov.beneficiario)
         }));
 
         const wb = XLSX.utils.book_new();
@@ -5210,28 +5233,29 @@ async function guardarUniversal(nuevasFilas) {
         });
         XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
-        // 3. GENERAR HOJA CONFIGURACIÓN (REPARADA CON HUECOS)
+        // 3. GENERAR HOJA CONFIGURACIÓN (REPARADA Y LIMPIA)
         const listaCuentas = Object.entries(window.mapaCuentas || {});
-        const listaConceptos = window.listaConceptos || [];
-        const listaBeneficiarios = window.listaBeneficiarios || [];
-        const maxFilas = Math.max(listaCuentas.length, listaConceptos.length, listaBeneficiarios.length);
+        // Usamos las listas globales de configuración si existen, o sets vacíos
+        const rawConceptos = window.listaConceptosConfig || [];
+        const rawBeneficiarios = window.listaBeneficiariosConfig || [];
+
+        const maxFilas = Math.max(listaCuentas.length, rawConceptos.length, rawBeneficiarios.length);
         
         const datosConfig = [];
-        // CORRECCIÓN: Eliminamos las columnas vacías para asegurar que sheet_to_json lea las cabeceras correctamente
         datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO"]); 
 
         for (let i = 0; i < maxFilas; i++) {
             const cuenta = listaCuentas[i];
-            const concepto = listaConceptos[i];
-            const beneficiario = listaBeneficiarios[i];
+            const concepto = rawConceptos[i];
+            const beneficiario = rawBeneficiarios[i];
+            
+            // Aplicamos CLEAN también aquí para que la configuración sea robusta
             datosConfig.push([
-                cuenta ? cuenta[0] : "",
-                cuenta ? cuenta[1].tipo : "",
-                cuenta ? (cuenta[1].esInversion ? "Si" : "No") : "",
-                // Quitamos la coma y comillas vacías de aquí
-                concepto || "",
-                // Quitamos la coma y comillas vacías de aquí
-                beneficiario || ""
+                cuenta ? CLEAN(cuenta[0]) : "",
+                cuenta ? CLEAN(cuenta[1].tipo) : "",
+                cuenta ? (cuenta[1].esInversion ? "SI" : "NO") : "",
+                concepto ? CLEAN(concepto) : "",
+                beneficiario ? CLEAN(beneficiario) : ""
             ]);
         }
         const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
@@ -5241,21 +5265,16 @@ async function guardarUniversal(nuevasFilas) {
         const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
 
         if (usarNube && typeof oneDrive !== 'undefined') {
-            // --- FASE CRÍTICA: SUBIDA A LA NUBE ---
-            // Primero verificamos conexión básica
+            // --- SUBIDA A LA NUBE ---
             if (!navigator.onLine) throw new Error("Sin conexión a Internet. No se puede guardar en la nube.");
 
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            
-            // Intentamos subir. Si esto falla, saltará al CATCH y NO se actualizará la pantalla.
             await oneDrive.saveFile(wbout, "aidanai.xlsx");
             
-            // --- ÉXITO ---
             console.log("✅ Confirmado: Archivo recibido por OneDrive.");
             
             // [SEMÁFORO] 2. LUZ VERDE (Éxito Nube)
             if (typeof window.setNube === 'function') window.setNube('saved');
-
             if(typeof mostrarEstado === 'function') mostrarEstado("☁️ Guardado seguro en Nube", "success");
 
         } else {
@@ -5264,34 +5283,26 @@ async function guardarUniversal(nuevasFilas) {
             
             // [SEMÁFORO] 3. LUZ GRIS (Modo Local)
             if (typeof window.setNube === 'function') window.setNube('offline');
-
             if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado LOCAL (Archivo descargado)", "info");
         }
 
-        // 5. ACTUALIZAR MEMORIA Y PANTALLA (Solo si llegamos aquí)
-        // Ahora sí es seguro hacer oficial la copia temporal
+        // 5. ACTUALIZAR MEMORIA Y PANTALLA
         window.datos = datosCandidatos;
 
-        // Recalculamos todo
         if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         if(typeof renderizar === 'function') renderizar();
-        
-        // Actualizamos filtros dinámicos con los nuevos datos
         if(typeof cargarSugerenciasAjustes === 'function') cargarSugerenciasAjustes();
 
     } catch (error) {
-        // --- GESTIÓN DE DESASTRES ---
+        // --- GESTIÓN DE ERRORES ---
         console.error("❌ ERROR CRÍTICO AL GUARDAR:", error);
         
-        // [SEMÁFORO] 4. LUZ ROJA (Pánico controlado)
+        // [SEMÁFORO] 4. LUZ ROJA (Error)
         if (typeof window.setNube === 'function') window.setNube('error');
 
-        // Avisamos al usuario
         if(typeof mostrarEstado === 'function') mostrarEstado("❌ FALLO AL GUARDAR: " + error.message, "error");
         else alert("Error al guardar: " + error.message);
 
-        // RE-LANZAMOS EL ERROR
-        // Esto es vital: le dice a guardarManual que NO cierre el formulario
         throw error; 
     } finally {
         // Restaurar botones
