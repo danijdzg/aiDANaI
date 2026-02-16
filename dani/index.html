@@ -654,7 +654,7 @@ th:active {
         .patri-acc-name { color: #FFFFFF !important; font-weight: 700 !important; } 
         .patri-acc-pct { color: var(--c-warning) !important; font-weight: 700 !important; } 
         ::placeholder { color: var(--c-primary); opacity: 0.5; } 
-        input, select, textarea { color: #FFFFFF !important; font-weight: 600; }
+        input, select, textarea { color: #FFFFFF !important; font-weight: 600; text-transform: uppercase !important; }
         .td-date-mob, .td-desc-mob, .td-ben-mob { opacity: 1 !important; }
         .td-desc-mob strong { color: var(--c-primary); } 
         .patri-breakdown { background: rgba(0,0,0,0.3); border-top: 1px solid #222; border-radius: 12px; padding: 12px 10px; margin-top: 15px; display: flex; justify-content: space-between; position: relative; }
@@ -3152,94 +3152,112 @@ function leerExcel(blob) {
 
     reader.readAsArrayBuffer(blob);
 }
+
 // ==========================================
-// 🧠 PROCESADOR MAESTRO V3 (CLASIFICACIÓN + LISTAS RESTRINGIDAS)
+// 🧠 PROCESADOR MAESTRO V7 (SIN "OTROS" + SABUESO BIDIRECCIONAL)
 // ==========================================
 window.procesarLibroLeido = function(wb) {
-    console.log("📖 Procesando Excel con lógica estricta de configuración...");
+    console.log("📖 Procesando Excel: MODO ESTRICTO (PROHIBIDO 'OTROS')...");
 
     // 1. PREPARAR VARIABLES GLOBALES
     window.mapaCuentas = {};
-    window.listaCuentasConfig = [];      // Solo las del Excel Config
-    window.listaConceptosConfig = [];    // Solo los del Excel Config
-    window.listaBeneficiariosConfig = [];// Solo los del Excel Config
+    window.listaCuentasConfig = [];
+    window.listaConceptosConfig = [];
+    window.listaBeneficiariosConfig = [];
+
+    // Funciones de limpieza
+    const limpiar = (txt) => String(txt || "").toUpperCase().trim().replace(/\s+/g, ' ');
+    const nuclear = (txt) => String(txt || "").toUpperCase().replace(/[^A-Z0-9]/g, '');
 
     // 2. LEER HOJA DE CONFIGURACIÓN
     const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
+    
     if (wsConfigName) {
         const wsConfig = wb.Sheets[wsConfigName];
-        const datosConfig = XLSX.utils.sheet_to_json(wsConfig); // Lectura estándar inteligente
+        const datosConfig = XLSX.utils.sheet_to_json(wsConfig);
 
-        datosConfig.forEach(fila => {
-            // -- A) PROCESAR CUENTAS --
-            // Buscamos columnas como "CUENTA", "Cuenta", "cuenta"...
-            const cta = fila.CUENTA || fila.Cuenta || fila.cuenta;
-            if (cta) {
-                const nombreCuenta = String(cta).trim();
-                const tipo = fila.TIPO || fila.Tipo || fila.tipo || "OTROS";
-                const esInv = fila.ES_INVERSION || fila.Es_inversion || fila.es_inversion;
-                
-                // Guardamos en el Mapa (Clave en mayúsculas para buscar, Valor original para mostrar)
-                window.mapaCuentas[nombreCuenta.toUpperCase()] = {
-                    nombre: nombreCuenta,
-                    tipo: String(tipo).trim().toUpperCase(),
-                    esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(String(esInv).trim().toUpperCase())
-                };
-                window.listaCuentasConfig.push(nombreCuenta);
-            }
+        if (datosConfig.length > 0) {
+            const keys = Object.keys(datosConfig[0]);
+            const keyCuenta = keys.find(k => k.toUpperCase().includes("CUENTA"));
+            const keyTipo = keys.find(k => k.toUpperCase().includes("TIPO"));
+            const keyInv = keys.find(k => k.toUpperCase().includes("INVERSION"));
+            const keyConcepto = keys.find(k => k.toUpperCase().includes("CONCEPTO"));
+            const keyBenef = keys.find(k => k.toUpperCase().includes("BENEFICIARIO"));
 
-            // -- B) PROCESAR CONCEPTOS PERMITIDOS --
-            const concepto = fila.CONCEPTO || fila.Concepto || fila.concepto;
-            if (concepto) window.listaConceptosConfig.push(String(concepto).trim());
-
-            // -- C) PROCESAR BENEFICIARIOS PERMITIDOS --
-            const benef = fila.BENEFICIARIO || fila.Beneficiario || fila.beneficiario;
-            if (benef) window.listaBeneficiariosConfig.push(String(benef).trim());
-        });
-        
-        // Limpiamos duplicados y vacíos
-        window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].filter(Boolean).sort();
-        window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].filter(Boolean).sort();
-        window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].filter(Boolean).sort();
-        
-        console.log("✅ Configuración cargada:", 
-            window.listaCuentasConfig.length, "cuentas,", 
-            window.listaConceptosConfig.length, "conceptos,", 
-            window.listaBeneficiariosConfig.length, "beneficiarios."
-        );
-    } else {
-        alert("⚠️ No encuentro la hoja 'Configuracion'. Revisa el nombre en el Excel.");
+            datosConfig.forEach(fila => {
+                const ctaRaw = keyCuenta ? fila[keyCuenta] : null;
+                if (ctaRaw) {
+                    const nombreCuenta = limpiar(ctaRaw); 
+                    // CAMBIO 1: Si no hay tipo, ponemos "SIN TIPO" (Nunca "OTROS")
+                    const tipoRaw = keyTipo ? fila[keyTipo] : "SIN TIPO";
+                    const esInvRaw = keyInv ? fila[keyInv] : "NO";
+                    
+                    window.mapaCuentas[nombreCuenta] = {
+                        nombre: nombreCuenta,
+                        tipo: limpiar(tipoRaw),
+                        esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(limpiar(esInvRaw)),
+                        idNuclear: nuclear(nombreCuenta)
+                    };
+                    window.listaCuentasConfig.push(nombreCuenta);
+                }
+                if (keyConcepto && fila[keyConcepto]) window.listaConceptosConfig.push(limpiar(fila[keyConcepto]));
+                if (keyBenef && fila[keyBenef]) window.listaBeneficiariosConfig.push(limpiar(fila[keyBenef]));
+            });
+        }
     }
 
-    // 3. LEER MOVIMIENTOS Y CRUZAR DATOS
+    // 3. LEER MOVIMIENTOS
     const wsMovsName = wb.SheetNames.find(n => n.toUpperCase().includes('MOVIMIENTO')) || wb.SheetNames[0];
     const datosRaw = XLSX.utils.sheet_to_json(wb.Sheets[wsMovsName]);
 
+    let mKeyCuenta = "CUENTA"; 
+    if (datosRaw.length > 0) {
+        const mKeys = Object.keys(datosRaw[0]);
+        mKeyCuenta = mKeys.find(k => k.toUpperCase().includes("CUENTA")) || "CUENTA";
+    }
+
     window.datos = datosRaw.map(fila => {
-        // Normalización de nombres de columna (ID, FECHA, CUENTA...)
         const id = fila.ID || fila.Id || fila.id || crypto.randomUUID();
         const rawFecha = fila.FECHA || fila.Fecha || fila.fecha;
-        const rawCuenta = fila.CUENTA || fila.Cuenta || fila.cuenta || "DESCONOCIDA";
-        const rawConcepto = fila.CONCEPTO || fila.Concepto || fila.concepto || "";
-        const rawImporte = fila.IMPORTE || fila.Importe || fila.importe || 0;
-        const rawDesc = fila.DESCRIPCION || fila.Descripcion || fila.descripcion || "";
-        const rawBenef = fila.BENEFICIARIO || fila.Beneficiario || fila.beneficiario || "";
+        const rawCuenta = fila[mKeyCuenta] || fila.CUENTA || fila.Cuenta || "DESCONOCIDA";
+        
+        const cuentaLimpia = limpiar(rawCuenta);
+        const cuentaNuclear = nuclear(rawCuenta); 
 
-        // Procesar Fecha
-        let fechaObj = new Date();
-        if (typeof rawFecha === 'number') {
-            const fechaBase = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
-            fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
-        } else if (typeof rawFecha === 'string') {
-            fechaObj = new Date(rawFecha);
+        // --- EL SABUESO V2: BÚSQUEDA BIDIRECCIONAL ---
+        let infoCuenta = window.mapaCuentas[cuentaLimpia]; // 1. Exacto
+
+        if (!infoCuenta) {
+            // 2. Nuclear (Sin espacios ni simbolos)
+            const matchKey = Object.keys(window.mapaCuentas).find(k => 
+                window.mapaCuentas[k].idNuclear === cuentaNuclear
+            );
+            if (matchKey) infoCuenta = window.mapaCuentas[matchKey];
         }
 
-        // --- CLASIFICACIÓN (CRÍTICO) ---
-        const cuentaKey = String(rawCuenta).trim().toUpperCase();
-        let infoCuenta = window.mapaCuentas[cuentaKey];
-        
-        // Valores por defecto si no está en config
-        let tipoFinal = "OTROS"; 
+        if (!infoCuenta) {
+            // 3. Prefijos (D- o N-) BIDIRECCIONAL
+            // Caso A: Banco dice "TRADEREPUBLIC" -> Config tiene "D-TRADEREPUBLIC"
+            let matchPrefijo = Object.keys(window.mapaCuentas).find(k => 
+                window.mapaCuentas[k].idNuclear === "D" + cuentaNuclear || 
+                window.mapaCuentas[k].idNuclear === "N" + cuentaNuclear
+            );
+
+            // Caso B: Banco dice "D-TRADEREPUBLIC" -> Config tiene "TRADEREPUBLIC"
+            if (!matchPrefijo) {
+                matchPrefijo = Object.keys(window.mapaCuentas).find(k => 
+                    cuentaNuclear === "D" + window.mapaCuentas[k].idNuclear || 
+                    cuentaNuclear === "N" + window.mapaCuentas[k].idNuclear
+                );
+            }
+
+            if (matchPrefijo) infoCuenta = window.mapaCuentas[matchPrefijo];
+        }
+        // ----------------------------------------
+
+        // CAMBIO 2: Eliminado "OTROS" como fallback.
+        // Si no se encuentra, se marca como "SIN CLASIFICAR" para alertar del error.
+        let tipoFinal = "SIN CLASIFICAR";
         let esInvFinal = false;
 
         if (infoCuenta) {
@@ -3247,36 +3265,39 @@ window.procesarLibroLeido = function(wb) {
             esInvFinal = infoCuenta.esInversion;
         }
 
+        // Procesar Fecha
+        let fechaObj = new Date();
+        if (typeof rawFecha === 'number') {
+            const fechaBase = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
+            fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
+        } else if (typeof rawFecha === 'string') fechaObj = new Date(rawFecha);
+
+        const rawImporte = fila.IMPORTE || fila.Importe || fila.importe || 0;
+        
         return {
             id: String(id),
             ts: fechaObj.getTime(),
             fecha: fechaObj,
-            cuenta: String(rawCuenta).trim(),
-            tipoCuenta: tipoFinal,    // Ahora sí coge el tipo (BANCO, BOLSA...)
+            cuenta: cuentaLimpia, 
+            tipoCuenta: tipoFinal, // Será "BANCO", "INVERSION" o "SIN CLASIFICAR"
             esInversion: esInvFinal,
-            concepto: String(rawConcepto).trim(),
+            concepto: limpiar(fila.CONCEPTO || fila.Concepto),
             importe: typeof rawImporte === 'string' ? parseFloat(rawImporte.replace(',', '.')) : rawImporte,
-            descripcion: String(rawDesc).trim(),
-            beneficiario: String(rawBenef).trim(),
+            descripcion: limpiar(fila.DESCRIPCION || fila.Descripcion || fila.Detalle),
+            beneficiario: limpiar(fila.BENEFICIARIO || fila.Beneficiario),
             tipo: (rawImporte >= 0) ? 'ingreso' : 'gasto'
         };
     }).filter(d => d.cuenta !== "DESCONOCIDA");
 
-    // Ordenar y guardar
     window.datos.sort((a, b) => b.ts - a.ts);
-    
-    // 4. ACTUALIZAR INTERFAZ
-    // Importante: Aquí llamamos a la función que rellena los desplegables restringidos
-    if (typeof actualizarDesplegablesRestringidos === 'function') {
-        actualizarDesplegablesRestringidos();
-    }
-    
-    // Actualizar resto de la app
+    window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].sort();
+    window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
+    window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
+
+    if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
     if (typeof actualizarDashboard === 'function') actualizarDashboard();
     if (typeof renderizar === 'function') renderizar();
-    if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
-    if (typeof renderizarRadarSalud === 'function') renderizarRadarScoring();
 };
  
 // ==========================================
@@ -3883,10 +3904,10 @@ window.guardarManual = async function() {
         const elImporte = document.getElementById('m-cantidad');
         let importeRaw = elImporte ? elImporte.value : "";
         
-        // Concepto y Descripción
-        let concepto = document.getElementById('m-concepto')?.value;
-        let desc = document.getElementById('m-desc')?.value || "";
-        const benef = document.getElementById('m-beneficiario')?.value || "";
+        // Concepto y Descripción (FORZANDO MAYÚSCULAS)
+        let concepto = (document.getElementById('m-concepto')?.value || "").toUpperCase().trim();
+        let desc = (document.getElementById('m-desc')?.value || "").toUpperCase().trim();
+        const benef = (document.getElementById('m-beneficiario')?.value || "").toUpperCase().trim();
 
         // 3. VALIDACIONES BÁSICAS
         if (!fecha) throw new Error("❌ Falta la FECHA");
@@ -5829,42 +5850,38 @@ async function guardarAjuste(tipo) {
     event.target.innerText = "GUARDANDO...";
     event.target.disabled = true;
 
+    // Función auxiliar local para mayúsculas
+    const A_MAYUS = (t) => String(t || "").toUpperCase().trim();
+
     try {
         if (tipo === 'cuenta') {
-            const nombre = normalizarTexto(document.getElementById('new-cta-nombre').value.trim());
-            const categoria = document.getElementById('new-cta-tipo').value;
+            const nombre = A_MAYUS(document.getElementById('new-cta-nombre').value);
+            const categoria = A_MAYUS(document.getElementById('new-cta-tipo').value);
             const esInv = document.getElementById('new-cta-inv').checked ? "SI" : "NO";
             
             if (!nombre) throw new Error("El nombre es obligatorio");
 
-            // 1. Guardar en Excel (TablaCuentas)
-            // Estructura: [CUENTA, TIPO, ES_INVERSION]
+            // Guardar en Excel SIEMPRE EN MAYÚSCULAS
             await oneDrive.addRowToTable([nombre, categoria, esInv], 'TablaCuentas');
             
-            // 2. Actualizar memoria local (para que salga en el Sunburst y desplegables ya)
             mapaCuentas[nombre] = { tipo: categoria, esInversion: (esInv === "SI") };
             
-            // Limpiar
             document.getElementById('new-cta-nombre').value = "";
             mostrarEstado(`✅ Cuenta "${nombre}" creada`, 'ok');
         } 
         else if (tipo === 'concepto') {
-            const val = document.getElementById('new-concepto').value.trim();
+            const val = A_MAYUS(document.getElementById('new-concepto').value);
             if (!val) throw new Error("Escribe un concepto");
             
-            // Guardar en TablaConceptos
             await oneDrive.addRowToTable([val], 'TablaConceptos');
             
-            // No necesitamos actualizar un mapa global de conceptos porque se leen dinámicamente,
-            // pero podríamos añadirlo a un set temporal si fuera necesario.
             document.getElementById('new-concepto').value = "";
             mostrarEstado(`✅ Concepto "${val}" añadido`, 'ok');
         }
         else if (tipo === 'beneficiario') {
-            const val = document.getElementById('new-benef').value.trim();
+            const val = A_MAYUS(document.getElementById('new-benef').value);
             if (!val) throw new Error("Escribe un beneficiario");
             
-            // Guardar en TablaBeneficiarios
             await oneDrive.addRowToTable([val], 'TablaBeneficiarios');
             
             document.getElementById('new-benef').value = "";
@@ -5872,9 +5889,8 @@ async function guardarAjuste(tipo) {
         }
 
         vibrar('ingreso');
-        
-        // OPCIONAL: Recargar todo para asegurar sincronización total
-        // await cargarDesdeNube(); 
+        // Actualizamos sugerencias
+        if(typeof cargarSugerenciasAjustes === 'function') cargarSugerenciasAjustes();
 
     } catch (e) {
         console.error(e);
@@ -5884,7 +5900,6 @@ async function guardarAjuste(tipo) {
         event.target.disabled = false;
     }
 }
-
 // ==========================================
 // 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO)
 // ==========================================
