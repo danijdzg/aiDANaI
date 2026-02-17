@@ -6188,49 +6188,70 @@ window.clearCalc = function() {
 }
 
 function cargarVistaRecurrentes() {
-        // 1. Rellenar selects (Cuentas, Conceptos, Beneficiarios)
-        const llenar = (id, lista) => {
-            const el = document.getElementById(id);
-            if(!el) return;
-            el.innerHTML = '<option value="">Selecciona...</option>';
-            if(lista) {
-                lista.sort().forEach(item => {
-                    el.innerHTML += `<option value="${item}">${item}</option>`;
-                });
-            }
-        };
-
-        llenar('rec-cuenta', window.listaCuentasConfig);
-        llenar('rec-cuenta-destino', window.listaCuentasConfig);
-        llenar('rec-concepto', window.listaConceptosConfig);
-        llenar('rec-beneficiario', window.listaBeneficiariosConfig);
-
-        // Inicializar fecha a hoy si está vacía
-        const hoy = new Date().toISOString().split('T')[0];
-        const fechaRec = document.getElementById('rec-fecha');
-        if(fechaRec && !fechaRec.value) fechaRec.value = hoy;
+    // 1. Definir función de llenado segura
+    const llenar = (id, listaConfig, listaHistorial) => {
+        const el = document.getElementById(id);
+        if(!el) return;
         
-        // Resetear tipo a Gasto por defecto
-        if (typeof setRecType === 'function') setRecType('gasto');
+        // Guardar selección actual si existe
+        const valorActual = el.value;
+        
+        el.innerHTML = '<option value="">Selecciona...</option>';
+        
+        // Unimos configuración + historial para que nunca falten opciones
+        const setOpciones = new Set([
+            ...(listaConfig || []),
+            ...(listaHistorial || [])
+        ]);
+        
+        // Convertimos a array, filtramos vacíos y ordenamos
+        const opcionesOrdenadas = Array.from(setOpciones)
+                                    .filter(item => item && String(item).trim() !== "")
+                                    .sort();
 
-        // Configurar clic en el importe recurrente
-        const inputRec = document.getElementById('rec-importe');
-        if(inputRec) {
-            inputRec.setAttribute('readonly', true); // Importante: que no se pueda escribir a mano
-            inputRec.style.cursor = 'pointer';
-            
-            // FORZAMOS LA REASIGNACIÓN DEL EVENTO
-            inputRec.onclick = function() {
-                abrirCalculadora('rec-importe');
-            };
+        opcionesOrdenadas.forEach(item => {
+            el.innerHTML += `<option value="${item}">${item}</option>`;
+        });
+
+        // Restaurar valor si sigue existiendo
+        if(valorActual && setOpciones.has(valorActual)) {
+            el.value = valorActual;
         }
+    };
 
-        // 2. Pintar la lista de recurrentes existentes
-        if (typeof renderizarRecurrentes === 'function') renderizarRecurrentes();
+    // 2. Recopilar datos del historial si la config está vacía
+    const historialConceptos = window.datos ? window.datos.map(m => m.concepto) : [];
+    const historialBeneficiarios = window.datos ? window.datos.map(m => m.beneficiario) : [];
 
-        // NOTA: Hemos quitado el setTimeout que abría la calculadora automáticamente.
-        // Ahora solo se abrirá si el usuario hace clic en el input 'rec-importe'.
+    // 3. Rellenar los selectores
+    llenar('rec-cuenta', window.listaCuentasConfig, []); // Cuentas solo de config (seguridad)
+    llenar('rec-cuenta-destino', window.listaCuentasConfig, []);
+    llenar('rec-concepto', window.listaConceptosConfig, historialConceptos);
+    llenar('rec-beneficiario', window.listaBeneficiariosConfig, historialBeneficiarios);
+
+    // 4. Inicializar fecha a hoy si está vacía
+    const hoy = new Date().toISOString().split('T')[0];
+    const fechaRec = document.getElementById('rec-fecha');
+    if(fechaRec && !fechaRec.value) fechaRec.value = hoy;
+    
+    // 5. Resetear tipo a Gasto por defecto si no hay nada seleccionado
+    if (!document.getElementById('rec-tipo').value) {
+        if (typeof setRecType === 'function') setRecType('gasto');
     }
+
+    // 6. Configurar clic en el importe (Calculadora)
+    const inputRec = document.getElementById('rec-importe');
+    if(inputRec) {
+        inputRec.setAttribute('readonly', true);
+        inputRec.style.cursor = 'pointer';
+        inputRec.onclick = function() {
+            abrirCalculadora('rec-importe');
+        };
+    }
+
+    // 7. Pintar la lista de abajo
+    if (typeof renderizarRecurrentes === 'function') renderizarRecurrentes();
+}
 
 // ==========================================
 // 🎨 PINTAR LISTA DE RECURRENTES (FALTABA ESTO)
@@ -6322,7 +6343,7 @@ window.borrarRecurrente = async function(id) {
 }
 
 async function crearReglaRecurrente() {
-    // Recoger datos
+    // 1. Recoger datos del formulario
     const tipo = document.getElementById('rec-tipo').value;
     const frec = document.getElementById('rec-frecuencia').value;
     const fecha = document.getElementById('rec-fecha').value;
@@ -6331,54 +6352,79 @@ async function crearReglaRecurrente() {
     const conc = document.getElementById('rec-concepto').value;
     const benef = document.getElementById('rec-beneficiario').value;
     const desc = document.getElementById('rec-descripcion').value;
-    let imp = parseFloat(document.getElementById('rec-importe').value);
-
-    // Validaciones
-    if(!fecha || !cta || isNaN(imp) || !conc) return alert("Rellena los campos obligatorios (Fecha, Cuenta, Concepto, Importe)");
     
-    // Validación de importe positivo
-    imp = Math.abs(imp); // Nos aseguramos que es positivo base
+    // 2. Tratamiento especial del importe (quitamos símbolos y comas)
+    let impRaw = document.getElementById('rec-importe').value || "";
+    impRaw = impRaw.replace('€', '').replace(',', '.').trim();
+    let imp = parseFloat(impRaw);
 
-    // Lógica según tipo
-    let importeFinal = imp;
-    if (tipo === 'gasto') {
-        importeFinal = -imp; // Convertimos a negativo para guardar
-    } else if (tipo === 'traspaso') {
-        if (!ctaDest || cta === ctaDest) return alert("Para traspaso selecciona una Cuenta Destino diferente.");
+    // 3. Validaciones con avisos claros
+    if(!fecha) return alert("❌ Falta la FECHA de inicio.");
+    if(!cta) return alert("❌ Selecciona una CUENTA.");
+    if(!conc) return alert("❌ Selecciona o escribe un CONCEPTO.");
+    if(isNaN(imp) || imp === 0) return alert("❌ El IMPORTE no es válido. Toca el cuadro numérico.");
+    
+    if (tipo === 'traspaso') {
+        if (!ctaDest) return alert("❌ Para traspaso falta la Cuenta Destino.");
+        if (cta === ctaDest) return alert("❌ La cuenta origen y destino son la misma.");
     }
 
-    // Recoger días seleccionados (si es diario)
+    // 4. Preparar el importe final (siempre positivo aquí, el tipo define el signo después)
+    imp = Math.abs(imp);
+    
+    // Si es Gasto, lo guardamos como negativo internamente
+    let importeGuardar = (tipo === 'gasto') ? -imp : imp;
+
+    // 5. Recoger días seleccionados (si es diario)
     let diasStr = "";
     if (frec === 'Diario') {
         const checks = document.querySelectorAll('#bloque-dias-semana input:checked');
         const dias = Array.from(checks).map(c => c.value);
-        if (dias.length === 0) return alert("¡Elige al menos un día de la semana!");
+        if (dias.length === 0) return alert("⚠️ Selecciona al menos un día de la semana (L, M, X...).");
         diasStr = dias.join(',');
     }
 
+    // 6. Crear el objeto regla
     const nuevaRegla = {
         id: 'REC-' + Date.now(),
         fechaProx: fecha,
         frecuencia: frec,
         diasSemana: diasStr,
         cuenta: cta,
-        cuentaDestino: (tipo === 'traspaso') ? ctaDest : "", // Guardamos destino
-        importe: importeFinal,
+        cuentaDestino: (tipo === 'traspaso') ? ctaDest : "",
+        importe: importeGuardar,
         concepto: conc,
         beneficiario: benef,
         descripcion: desc,
-        tipoRegla: tipo // Guardamos si es gasto/ingreso/traspaso
+        tipoRegla: tipo
     };
 
+    // 7. Inicializar lista si no existe y guardar
     if(!window.datosRecurrentes) window.datosRecurrentes = [];
     window.datosRecurrentes.push(nuevaRegla);
     
-    await guardarTodoConRecurrentes();
+    // Feedback visual inmediato
+    mostrarEstado("💾 Guardando regla...", "loading");
     
-    // Limpieza
-    document.getElementById('form-recurrente').style.display = 'none';
-    cargarVistaRecurrentes();
-    mostrarEstado("✅ Regla fija creada", "success");
+    try {
+        await guardarTodoConRecurrentes();
+        
+        // Limpieza y cierre
+        document.getElementById('form-recurrente').style.display = 'none';
+        
+        // Limpiar campos para la próxima
+        document.getElementById('rec-importe').value = "";
+        document.getElementById('rec-descripcion').value = "";
+        
+        cargarVistaRecurrentes();
+        mostrarEstado("✅ Regla fija creada correctamente", "success");
+        if(typeof vibrar === 'function') vibrar('success');
+
+    } catch (e) {
+        console.error(e);
+        alert("Error al guardar: " + e.message);
+        mostrarEstado("❌ Error de guardado", "error");
+    }
 }
 
 // --- MOTOR DE CALENDARIO (NUEVO) ---
@@ -6500,11 +6546,10 @@ async function ejecutarRecurrente(idRec) {
 }
 
 async function guardarTodoConRecurrentes() {
-    // Reutilizamos la lógica de guardado pero asegurando que los campos nuevos se guardan en el Excel
-    if (!window.datosRecurrentes) return;
-
-    // 1. Movimientos (Igual que siempre)
+    // 1. Preparar libro nuevo
     const wb = XLSX.utils.book_new();
+
+    // 2. Hoja Movimientos
     const filasMovs = window.datos.map(m => ({
         "Id": m.id, "Fecha": m.fecha, "Cuenta": m.cuenta, "Concepto": m.concepto, 
         "Importe": m.importe, "Descripcion": m.descripcion, "Beneficiario": m.beneficiario
@@ -6512,42 +6557,57 @@ async function guardarTodoConRecurrentes() {
     const wsMovs = XLSX.utils.json_to_sheet(filasMovs);
     XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
-    // 2. Configuración
-    const datosConfig = [];
-    // ... tu lógica de config existente, o simplificada:
+    // 3. Hoja Configuración
     const listaCuentas = Object.entries(window.mapaCuentas || {});
-    const maxFilas = Math.max(listaCuentas.length, (window.listaConceptosConfig||[]).length, (window.listaBeneficiariosConfig||[]).length);
+    // Calculamos el máximo de filas necesarias
+    const maxFilas = Math.max(
+        listaCuentas.length, 
+        (window.listaConceptosConfig||[]).length, 
+        (window.listaBeneficiariosConfig||[]).length
+    );
+    
+    const datosConfig = [];
     datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO"]);
+    
     for(let i=0; i<maxFilas; i++) {
         const cta = listaCuentas[i];
         datosConfig.push([
-            cta ? cta[0] : "", cta ? cta[1].tipo : "", cta ? (cta[1].esInversion?"SI":"NO") : "",
-            (window.listaConceptosConfig||[])[i] || "", (window.listaBeneficiariosConfig||[])[i] || ""
+            cta ? cta[0] : "", 
+            cta ? cta[1].tipo : "", 
+            cta ? (cta[1].esInversion?"SI":"NO") : "",
+            (window.listaConceptosConfig||[])[i] || "", 
+            (window.listaBeneficiariosConfig||[])[i] || ""
         ]);
     }
     const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
     XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
 
-    // 3. RECURRENTES (ACTUALIZADO CON NUEVAS COLUMNAS)
-    const filasRec = window.datosRecurrentes.map(r => ({
+    // 4. Hoja RECURRENTES (La parte importante)
+    // Nos aseguramos de que window.datosRecurrentes exista
+    const listaRec = window.datosRecurrentes || [];
+    
+    const filasRec = listaRec.map(r => ({
         "ID": r.id, 
         "PROXIMA_FECHA": r.fechaProx, 
         "FRECUENCIA": r.frecuencia,
-        "DIAS_SEMANA": r.diasSemana, 
-        "TIPO_REGLA": r.tipoRegla, // Nuevo
+        "DIAS_SEMANA": r.diasSemana || "", 
+        "TIPO_REGLA": r.tipoRegla || "gasto",
         "CUENTA": r.cuenta, 
-        "CUENTA_DESTINO": r.cuentaDestino, // Nuevo
+        "CUENTA_DESTINO": r.cuentaDestino || "",
         "IMPORTE": r.importe, 
         "CONCEPTO": r.concepto, 
-        "BENEFICIARIO": r.beneficiario, // Nuevo
-        "DESCRIPCION": r.descripcion // Nuevo
+        "BENEFICIARIO": r.beneficiario || "",
+        "DESCRIPCION": r.descripcion || ""
     }));
+    
     const wsRec = XLSX.utils.json_to_sheet(filasRec);
     XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
 
-    // 4. SUBIR
+    // 5. SUBIR A LA NUBE O DESCARGAR
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    
     if(window.modoNube && typeof oneDrive !== 'undefined') {
+        console.log("☁️ Subiendo Excel con hoja Recurrentes...");
         await oneDrive.saveFile(wbout);
     } else {
         XLSX.writeFile(wb, "aidanai_con_recurrentes.xlsx");
