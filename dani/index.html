@@ -3281,9 +3281,13 @@ window.pasaFiltroPropietario = function(movimiento) {
 };
 
 
-    function renderizar() {
+function renderizar() {
         const tbody = document.getElementById('lista-movimientos');
         if(!tbody) return;
+
+        // Ocultar cabecera de fecha en PC
+        const thFecha = document.getElementById('th-ts');
+        if(thFecha) thFecha.style.display = 'none';
         
         // 1. FILTRADO
         let lista = datos.filter(m => {
@@ -3330,39 +3334,18 @@ window.pasaFiltroPropietario = function(movimiento) {
             return window.ordenActivo.asc ? 1 : -1;
         });
 
-        // 3. ACTUALIZACIÓN VISUAL
+        // 3. CONTADORES
         const totalResultados = lista.length;
-        const listaVisual = lista; 
-
         const contador = document.getElementById('contador-filas');
-        if(contador) contador.innerText = `Mostrando ${totalResultados} movimientos (Total)`;
+        if(contador) contador.innerText = `Mostrando ${totalResultados} movimientos`;
         
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#FFFFFF; font-weight:bold;">No hay movimientos que coincidan con los filtros</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#FFFFFF; font-weight:bold; opacity:0.5;">No hay movimientos que coincidan con los filtros</td></tr>';
             return;
         }
 
-        // 4. GENERACIÓN HTML
-        let htmlFilas = listaVisual.map(m => {
-            // FECHA PC
-            let dateStrPC = "---";
-            try {
-                let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
-                if (!isNaN(d.getTime())) {
-                    dateStrPC = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
-                }
-            } catch(e) {}
-
-            // FECHA MÓVIL (dd/mm)
-            let dateStrMob = "---";
-            try {
-                let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
-                if (!isNaN(d.getTime())) {
-                    dateStrMob = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-                }
-            } catch(e) {}
-
-            // Lógica de colores y clases
+        // --- GENERADOR DE FILA ---
+        const generarFilaHTML = (m) => {
             let colorClass = 'val-neg'; 
             let claseFila = 'mov-gasto'; 
             let signo = '';
@@ -3378,47 +3361,145 @@ window.pasaFiltroPropietario = function(movimiento) {
                 signo = '+';
             }
 
-            // Datos compuestos
             const descripcionFinal = m.descripcion || m.detalle || '';
             const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
-            
-            // Construcción del texto "Concepto - Descripción"
             let conceptoCompleto = Security.escapeHTML(m.concepto);
             if (descripcionFinal) {
                 conceptoCompleto += ' - <span style="font-weight:400; opacity:0.8">' + Security.escapeHTML(descripcionFinal) + '</span>';
             }
+            
+            const beneficiarioStr = m.beneficiario ? ` · <span style="color:#FFD700; opacity:0.9;">${Security.escapeHTML(m.beneficiario)}</span>` : '';
 
             return `
             <tr class="${claseFila}" onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
-                <td class="pc-only" style="color:var(--c-warning); font-weight:bold">${dateStrPC}</td>
+                <td class="pc-only" style="display:none">${m.fecha}</td>
                 <td class="pc-only ${colorClass}" style="text-align:right; font-weight:bold">${signo}${fmt(m.importe)}</td>
                 <td class="pc-only ${colorClass}" style="font-weight:bold;">${Security.escapeHTML(m.cuenta)} <span class="saldo-small">(${saldoStr})</span></td>
                 <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.concepto)}</td>
                 <td class="pc-only" style="color:#FFFFFF; opacity:0.9;">${Security.escapeHTML(descripcionFinal)}</td>
                 <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.beneficiario)}</td>
                 
-                <td class="mob-only td-date-mob">
-                    <div style="font-size:12px; font-weight:800; color:#FFD700">${dateStrMob}</div>
-                    <div style="font-size:8px; color:#888; margin-top:3px; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60px;">
-                        ${Security.escapeHTML(m.beneficiario) || '---'}
-                    </div>
-                </td>
-                
                 <td class="mob-only td-center-mob">
-                    <div style="font-size:14px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    <div style="font-size:14px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:2px;">
                         ${conceptoCompleto}
                     </div>
-                    <div class="${colorClass}" style="font-size:14px; font-weight:700; opacity:0.9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${Security.escapeHTML(m.cuenta)} (${saldoStr})
+                    <div class="${colorClass}" style="font-size:12px; font-weight:600; opacity:0.9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${Security.escapeHTML(m.cuenta)} (${saldoStr})${beneficiarioStr}
                     </div>
                 </td>
                 
                 <td class="mob-only td-amount ${colorClass}">${signo}${fmt(m.importe)}</td>
             </tr>
             `;
-        }).join('');
+        };
 
-        tbody.innerHTML = htmlFilas;
+        // 4. HTML FINAL CON AGRUPACIÓN Y FECHA AMARILLA
+        let htmlFinal = '';
+
+        if (window.ordenActivo.campo === 'ts') {
+            const gruposMeses = [];
+            let mesActual = null;
+            let diaActual = null;
+
+            lista.forEach(m => {
+                let d = new Date(m.ts || m.fecha);
+                if (isNaN(d.getTime())) d = new Date(0); 
+
+                const keyMes = d.getFullYear() + '-' + (d.getMonth() + 1).toString().padStart(2, '0');
+                const keyDia = keyMes + '-' + d.getDate().toString().padStart(2, '0');
+
+                if (!mesActual || mesActual.key !== keyMes) {
+                    mesActual = { key: keyMes, fechaObj: d, dias: [], gastos: 0, ingresos: 0, neto: 0 };
+                    gruposMeses.push(mesActual);
+                    diaActual = null;
+                }
+
+                if (!diaActual || diaActual.key !== keyDia) {
+                    diaActual = { key: keyDia, fechaObj: d, movimientos: [], gastos: 0, ingresos: 0, neto: 0 };
+                    mesActual.dias.push(diaActual);
+                }
+                
+                diaActual.movimientos.push(m);
+
+                if (m.tipo !== 'traspaso' && m.concepto !== 'INICIAL') {
+                    const imp = m.importe;
+                    if (imp < 0) { mesActual.gastos += imp; diaActual.gastos += imp; }
+                    else { mesActual.ingresos += imp; diaActual.ingresos += imp; }
+                    mesActual.neto += imp;
+                    diaActual.neto += imp;
+                }
+            });
+
+            gruposMeses.forEach(gMes => {
+                let tituloMes = gMes.fechaObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+                tituloMes = tituloMes.charAt(0).toUpperCase() + tituloMes.slice(1);
+                let colorNetoMes = gMes.neto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+                let signoNetoMes = gMes.neto >= 0 ? '+' : '';
+
+                htmlFinal += `
+                <tr class="mes-separator" style="background:transparent; pointer-events:none;">
+                    <td colspan="9" style="padding: 30px 5px 10px 5px; border:none;">
+                        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--c-accent); padding-bottom: 5px; gap: 5px;">
+                            <span style="color: var(--c-accent); font-weight: 900; text-transform: uppercase; font-size: 16px; letter-spacing: 1px; text-shadow: 0 0 10px rgba(191, 90, 242, 0.4); white-space: nowrap;">${tituloMes}</span>
+                            <div style="font-family:'Inter', sans-serif; font-weight:bold; font-size:11px; display:flex; gap:8px; align-items:center;">
+                                <span style="color:${colorNetoMes}; font-size:13px;">NETO: ${signoNetoMes}${fmt(gMes.neto)}</span>
+                                <span style="color:#666;">|</span>
+                                <span style="color:var(--c-success); opacity:0.8;">IN ${fmt(gMes.ingresos)}</span>
+                                <span style="color:var(--c-danger); opacity:0.8;">OUT ${fmt(gMes.gastos)}</span>
+                            </div>
+                        </div>
+                    </td>
+                </tr>`;
+
+                gMes.dias.forEach(gDia => {
+                    // --- AQUÍ ESTÁ EL CAMBIO DE FECHA ---
+                    const diaNum = gDia.fechaObj.getDate().toString().padStart(2, '0'); // "16"
+                    const mesNum = (gDia.fechaObj.getMonth() + 1).toString().padStart(2, '0'); // "02"
+                    let nombreDia = gDia.fechaObj.toLocaleDateString('es-ES', { weekday: 'long' }); // "lunes"
+                    nombreDia = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1); // "Lunes"
+
+                    // Formato final: "Lunes, 16/02"
+                    const textoFecha = `${nombreDia}, ${diaNum}/${mesNum}`;
+
+                    let colorNetoDia = gDia.neto >= 0 ? '#4ade80' : '#f87171';
+                    let signoNetoDia = gDia.neto >= 0 ? '+' : '';
+
+                    htmlFinal += `
+                    <tr class="dia-separator" style="background:transparent; pointer-events:none;">
+                        <td colspan="9" style="padding: 15px 5px 5px 10px; border:none;">
+                            <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px dashed #333; padding-bottom: 4px;">
+                                <span style="color: #FFD700; font-weight: 800; font-size: 13px;">${textoFecha}</span>
+                                
+                                <span style="font-size: 11px; font-weight: 700; color: ${colorNetoDia}; opacity: 0.9;">(Neto: ${signoNetoDia}${fmt(gDia.neto)})</span>
+                            </div>
+                        </td>
+                    </tr>`;
+
+                    gDia.movimientos.forEach(m => htmlFinal += generarFilaHTML(m));
+                });
+            });
+
+        } else {
+            htmlFinal = lista.map(m => generarFilaHTML(m)).join('');
+        }
+
+        tbody.innerHTML = htmlFinal;
+
+        const styleFixId = 'style-fix-grid-v3';
+        if (!document.getElementById(styleFixId)) {
+            const style = document.createElement('style');
+            style.id = styleFixId;
+            style.innerHTML = `
+                @media (max-width: 650px) {
+                    tbody tr { grid-template-columns: 1fr auto !important; padding: 10px 12px !important; }
+                    .td-date-mob { display: none !important; }
+                    .td-center-mob { grid-area: auto !important; display: flex; flex-direction: column; justify-content: center; }
+                    .td-amount { grid-area: auto !important; align-self: center; }
+                    tr.mes-separator, tr.mes-separator td, tr.dia-separator, tr.dia-separator td { display: block !important; width: 100% !important; border:none !important; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
     }
 	
     function irPestana(p) {
