@@ -2445,31 +2445,35 @@ class OneDriveManager {
         }
     }
 
-    // --- 3. LECTURA TURBO (JSON PARALELO) ---
+    // --- 3. LECTURA TURBO (JSON PARALELO + RECURRENTES) ---
     async descargarDatosJSON() {
         if(window.mostrarEstado) window.mostrarEstado("🚀 Leyendo nube (Modo Turbo)...", "normal");
         
         const token = await this.getToken();
         const id = await this.getFileId();
 
-        // Peticiones paralelas (Mucho más rápido)
-        const [resMovs, resConf] = await Promise.all([
+        // Peticiones paralelas: Ahora pedimos TAMBIÉN la hoja "Recurrentes"
+        const [resMovs, resConf, resRec] = await Promise.all([
             fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Configuracion/usedRange`, { headers: { Authorization: `Bearer ${token}` } })
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Configuracion/usedRange`, { headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Recurrentes/usedRange`, { headers: { Authorization: `Bearer ${token}` } })
         ]);
 
         if (!resMovs.ok) throw new Error("Error leyendo Movimientos");
         
         const jsonMovs = await resMovs.json();
+        // Si no existe Configuración o Recurrentes (404), usamos un array vacío para no romper nada
         const jsonConf = resConf.ok ? await resConf.json() : { values: [] };
+        const jsonRec = resRec.ok ? await resRec.json() : { values: [] };
 
-        // Construimos un objeto compatible con SheetJS
+        // Construimos un objeto compatible con SheetJS con LAS TRES HOJAS
         return {
             Sheets: {
                 "Movimientos": XLSX.utils.aoa_to_sheet(jsonMovs.values || []),
-                "Configuracion": XLSX.utils.aoa_to_sheet(jsonConf.values || [])
+                "Configuracion": XLSX.utils.aoa_to_sheet(jsonConf.values || []),
+                "Recurrentes": XLSX.utils.aoa_to_sheet(jsonRec.values || [])
             },
-            SheetNames: ["Movimientos", "Configuracion"]
+            SheetNames: ["Movimientos", "Configuracion", "Recurrentes"]
         };
     }
 
