@@ -6266,12 +6266,28 @@ function renderizarRecurrentes() {
 
         const div = document.createElement('div');
         div.className = 'card-movimiento'; // Reutilizamos estilo de tarjeta
-        div.style.borderLeft = `4px solid ${color}`;
+		// --- DETECTOR DE VENCIMIENTO ---
+        const hoy = new Date();
+        const fechaRegla = new Date(regla.fechaProx);
+        // Reseteamos horas para comparar solo días
+        hoy.setHours(0,0,0,0);
+        fechaRegla.setHours(0,0,0,0);
+
+        let estiloExtra = "";
+        let avisoVence = "";
+
+        if (fechaRegla <= hoy) {
+            // ¡VENCIDO O ES HOY! -> Borde Amarillo y fondo resaltado
+            estiloExtra = "box-shadow: 0 0 10px #FFD60A; border: 1px solid #FFD60A;";
+            avisoVence = `<span style="color:#000; background:#FFD60A; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:10px; margin-right:5px;">¡EJECUTAR!</span>`;
+        }
+        // -------------------------------
+        div.style = 'border-left: 4px solid ' + color + '; ' + estiloExtra;
         div.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="flex:1;">
                     <div style="font-size:16px; font-weight:bold; color:#fff;">
-                        ${icono} ${regla.concepto}
+                        ${avisoVence} ${icono} ${regla.concepto}
                     </div>
                     <div style="font-size:12px; color:#aaa; margin-top:4px;">
                         ${regla.beneficiario || ''} • 
@@ -6365,84 +6381,121 @@ async function crearReglaRecurrente() {
     mostrarEstado("✅ Regla fija creada", "success");
 }
 
+// --- MOTOR DE CALENDARIO (NUEVO) ---
+function calcularSiguienteFecha(fechaActual, frecuencia, diasSemana) {
+    let fecha = new Date(fechaActual);
+    
+    // Ajuste de seguridad para fechas
+    if (isNaN(fecha.getTime())) return fechaActual;
+
+    if (frecuencia === 'Mensual') {
+        // Sumar 1 mes
+        fecha.setMonth(fecha.getMonth() + 1);
+    } 
+    else if (frecuencia === 'Anual') {
+        // Sumar 1 año
+        fecha.setFullYear(fecha.getFullYear() + 1);
+    } 
+    else if (frecuencia === 'Semanal') {
+        // Sumar 7 días
+        fecha.setDate(fecha.getDate() + 7);
+    } 
+    else if (frecuencia === 'Diario') {
+        // Si hay días específicos marcados (L, M, X...) es más complejo
+        // Por ahora, sumamos 1 día simple para que funcione básico
+        fecha.setDate(fecha.getDate() + 1);
+    }
+
+    // Devolver en formato YYYY-MM-DD para que el Excel lo entienda
+    return fecha.toISOString().split('T')[0];
+}
+
 async function ejecutarRecurrente(idRec) {
+    // 1. Localizar la regla
     const regla = window.datosRecurrentes.find(r => r.id === idRec);
-    if(!regla) return;
+    if(!regla) return alert("❌ Error: No encuentro esa regla en memoria.");
 
-    if(!confirm(`¿Ejecutar ahora: ${regla.concepto} (${Math.abs(regla.importe)}€)?`)) return;
+    const importeBonito = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Math.abs(regla.importe));
+    if(!confirm(`¿Ejecutar ahora?\n\nConcepto: ${regla.concepto}\nImporte: ${importeBonito}\n\nSe generará el movimiento y la fecha avanzará.`)) return;
 
-    const fechaTs = new Date(regla.fechaProx).getTime();
+    mostrarEstado("⏳ Generando movimiento...", "loading");
+
+    // 2. Preparar datos comunes
+    const fechaOperacion = new Date(regla.fechaProx);
+    const tsOperacion = fechaOperacion.getTime();
+    
+    // Función auxiliar para IDs
+    const nuevoID = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'REC-MOV-' + Date.now() + Math.random();
+
     let movimientosAGuardar = [];
 
-    // LÓGICA DE TRASPASO VS NORMAL
-    if (regla.tipoRegla === 'traspaso' || (regla.cuentaDestino && regla.cuentaDestino !== "")) {
-        // CREAR DOS MOVIMIENTOS
-        const idSalida = crypto.randomUUID();
-        const idEntrada = crypto.randomUUID();
-        
-        // 1. Salida
+    // 3. Lógica según tipo (Traspaso vs Normal)
+    if (regla.tipoRegla === 'traspaso' || (regla.cuentaDestino && regla.cuentaDestino.length > 1)) {
+        // ES UN TRASPASO (Genera 2 movimientos)
+        const idSalida = nuevoID + "-A";
+        const idEntrada = nuevoID + "-B";
+
         movimientosAGuardar.push({
             id: idSalida,
-            fecha: new Date(regla.fechaProx),
+            fecha: fechaOperacion,
+            ts: tsOperacion,
             cuenta: regla.cuenta,
             concepto: regla.concepto,
             importe: -Math.abs(regla.importe), // Sale dinero
             descripcion: `>> A: ${regla.cuentaDestino} | ${regla.descripcion || 'Fijo'}`,
             beneficiario: regla.beneficiario || 'Traspaso',
-            tipo: 'traspaso',
-            ts: fechaTs
+            tipo: 'traspaso'
         });
 
-        // 2. Entrada
         movimientosAGuardar.push({
             id: idEntrada,
-            fecha: new Date(regla.fechaProx),
+            fecha: fechaOperacion,
+            ts: tsOperacion,
             cuenta: regla.cuentaDestino,
             concepto: regla.concepto,
             importe: Math.abs(regla.importe), // Entra dinero
             descripcion: `<< DE: ${regla.cuenta} | ${regla.descripcion || 'Fijo'}`,
             beneficiario: regla.beneficiario || 'Traspaso',
-            tipo: 'traspaso',
-            ts: fechaTs
+            tipo: 'traspaso'
         });
 
     } else {
-        // MOVIMIENTO SIMPLE (Gasto o Ingreso)
+        // ES GASTO O INGRESO (Genera 1 movimiento)
         movimientosAGuardar.push({
-            id: crypto.randomUUID(),
-            fecha: new Date(regla.fechaProx),
+            id: nuevoID,
+            fecha: fechaOperacion,
+            ts: tsOperacion,
             cuenta: regla.cuenta,
             concepto: regla.concepto,
-            importe: regla.importe, // Ya viene con el signo correcto del guardado
-            descripcion: `${regla.descripcion || ''} (Fijo: ${regla.frecuencia})`,
+            importe: regla.importe, // El signo ya viene correcto de la regla
+            descripcion: `${regla.descripcion || ''} (Recurrente)`,
             beneficiario: regla.beneficiario,
-            tipo: (regla.importe >= 0) ? 'ingreso' : 'gasto',
-            ts: fechaTs
+            tipo: (regla.importe >= 0) ? 'ingreso' : 'gasto'
         });
     }
 
     try {
-        mostrarEstado("⏳ Procesando...", "loading");
+        // 4. Inyectar en la lista principal (window.datos)
+        // Usamos unshift para que salgan los primeros
+        window.datos.unshift(...movimientosAGuardar);
 
-        // 1. Guardar movimientos en historial
-        if (typeof window.guardarUniversal === 'function') {
-            await window.guardarUniversal(movimientosAGuardar);
-        } else {
-            window.datos.unshift(...movimientosAGuardar);
-        }
-        
-        // 2. Calcular Nueva Fecha
-        regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
-        
-        // 3. Guardar cambios en recurrentes
+        // 5. CALCULAR LA NUEVA FECHA (Aquí usamos el motor nuevo)
+        const nuevaFecha = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
+        regla.fechaProx = nuevaFecha; // Actualizamos la regla en memoria
+
+        // 6. GUARDAR TODO (Excel actualizado)
         await guardarTodoConRecurrentes();
 
-        mostrarEstado("✅ Ejecutado. Próxima: " + regla.fechaProx, "success");
-        cargarVistaRecurrentes();
+        // 7. Refrescar pantalla
+        mostrarEstado("✅ Ejecutado. Próxima: " + nuevaFecha, "success");
+        if(typeof vibrar === 'function') vibrar('ingreso');
+        
+        cargarVistaRecurrentes(); // Recargar la lista para ver la nueva fecha
         
     } catch(e) {
         console.error(e);
-        alert("Error: " + e.message);
+        alert("Error al procesar recurrente: " + e.message);
+        mostrarEstado("❌ Error al guardar", "error");
     }
 }
 
