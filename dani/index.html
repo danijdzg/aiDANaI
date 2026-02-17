@@ -6261,15 +6261,27 @@ function renderizarRecurrentes() {
 
     contenedor.innerHTML = '';
     
-    if (!window.datosRecurrentes || window.datosRecurrentes.length === 0) {
-        contenedor.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">No hay reglas fijas creadas</div>';
+    // 1. FILTRADO INTELIGENTE: Aplicamos el mismo filtro que al resto de la app
+    const listaCompleta = window.datosRecurrentes || [];
+    const reglasFiltradas = listaCompleta.filter(r => {
+        // Si existe la función de filtro (la que usas en el Dashboard), la usamos
+        if (typeof pasaFiltroPropietario === 'function') {
+            return pasaFiltroPropietario(r);
+        }
+        return true; // Si no hay filtro definido, mostramos todo por seguridad
+    });
+    
+    // 2. Comprobar si hay datos DESPUÉS de filtrar
+    if (reglasFiltradas.length === 0) {
+        contenedor.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">No hay reglas fijas para este usuario</div>';
         return;
     }
 
-    // Ordenar por fecha próxima
-    window.datosRecurrentes.sort((a, b) => new Date(a.fechaProx) - new Date(b.fechaProx));
+    // 3. Ordenar por fecha próxima
+    reglasFiltradas.sort((a, b) => new Date(a.fechaProx) - new Date(b.fechaProx));
 
-    window.datosRecurrentes.forEach(regla => {
+    // 4. Pintar tarjetas
+    reglasFiltradas.forEach(regla => {
         // Icono y Color según tipo
         let icono = '💸';
         let color = '#fff';
@@ -6285,11 +6297,11 @@ function renderizarRecurrentes() {
         }
 
         const div = document.createElement('div');
-        div.className = 'card-movimiento'; // Reutilizamos estilo de tarjeta
-		// --- DETECTOR DE VENCIMIENTO ---
+        div.className = 'card-movimiento'; 
+        
+        // --- DETECTOR DE VENCIMIENTO ---
         const hoy = new Date();
         const fechaRegla = new Date(regla.fechaProx);
-        // Reseteamos horas para comparar solo días
         hoy.setHours(0,0,0,0);
         fechaRegla.setHours(0,0,0,0);
 
@@ -6297,11 +6309,11 @@ function renderizarRecurrentes() {
         let avisoVence = "";
 
         if (fechaRegla <= hoy) {
-            // ¡VENCIDO O ES HOY! -> Borde Amarillo y fondo resaltado
             estiloExtra = "box-shadow: 0 0 10px #FFD60A; border: 1px solid #FFD60A;";
             avisoVence = `<span style="color:#000; background:#FFD60A; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:10px; margin-right:5px;">¡EJECUTAR!</span>`;
         }
         // -------------------------------
+
         div.style = 'border-left: 4px solid ' + color + '; ' + estiloExtra;
         div.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
