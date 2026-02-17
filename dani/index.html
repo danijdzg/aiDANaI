@@ -433,37 +433,55 @@ select.filter-input option { background-color: #000; color: #fff; }
         .td-ben-mob { grid-area: 2 / 3 / 3 / 4; text-align: right; font-size: 11px; color: var(--c-warning); font-style: italic; font-weight: bold; }
         
         /* =========================================
-           DISEÑO MÓVIL FINAL (2 FILAS - COMPACTO)
+           DISEÑO MÓVIL FINAL (CON BORDES DE COLOR)
            ========================================= */
         @media (max-width: 650px) {
             
             thead { display: none !important; }
 
-            /* TARJETA PRINCIPAL */
+            /* ESTRUCTURA BASE DE LA TARJETA */
             tbody tr { 
                 display: grid; 
-                /* Col 1: Fecha (65px) | Col 2: Info (Flexible) | Col 3: Importe (Auto) */
                 grid-template-columns: 65px 1fr auto; 
                 grid-template-rows: auto;   
-                align-items: center; /* Centrado vertical */
+                align-items: center;
                 
                 background: #151515 !important;
                 margin-bottom: 8px !important;
                 padding: 8px 10px !important; 
                 border-radius: 12px !important;
-                border: 1px solid #333;
+                
+                /* Borde base (por si acaso), pero los colores de abajo mandan */
+                border: 1px solid #333; 
+                
                 box-shadow: 0 4px 10px rgba(0,0,0,0.3);
                 position: relative;
                 height: auto !important;
+                transition: transform 0.1s;
             }
 
+            /* --- AQUÍ ESTÁ LA MAGIA DE LOS COLORES --- */
+            /* Borde Rojo para Gastos */
+            tbody tr.mov-gasto {
+                border: 1px solid rgba(255, 69, 58, 0.6) !important; 
+            }
+            /* Borde Verde para Ingresos */
+            tbody tr.mov-ingreso {
+                border: 1px solid rgba(50, 215, 75, 0.6) !important; 
+            }
+            /* Borde Azul para Traspasos */
+            tbody tr.mov-traspaso {
+                border: 1px solid rgba(10, 132, 255, 0.6) !important; 
+            }
+
+            /* Efecto al tocar */
             tbody tr:active { transform: scale(0.98); background: #222 !important; }
 
-            /* Limpieza general de celdas */
+            /* Limpieza */
             td { display: block; padding: 0; border: none; white-space: normal !important; max-width: unset !important; }
             .pc-only { display: none !important; } 
 
-            /* COLUMNA 1: Fecha + Beneficiario */
+            /* COLUMNA 1: Fecha (Amarilla) + Beneficiario */
             .td-date-mob { 
                 grid-area: 1 / 1 / 2 / 2; 
                 display: flex; 
@@ -472,19 +490,19 @@ select.filter-input option { background-color: #000; color: #fff; }
                 align-items: center;
                 background: #222; 
                 border-radius: 8px;
-                height: 55px; /* Altura fija cuadrada */
+                height: 55px; 
                 border: 1px solid #333;
                 text-align: center;
                 margin-right: 8px;
             }
 
-            /* COLUMNA 2: Concepto + Cuenta (Coloreada) */
+            /* COLUMNA 2: Info central */
             .td-center-mob {
                 grid-area: 1 / 2 / 2 / 3;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 2px; /* Espacio entre concepto y cuenta */
+                gap: 2px;
                 overflow: hidden;
             }
 
@@ -510,7 +528,7 @@ select.filter-input option { background-color: #000; color: #fff; }
             }
         }
 
-        /* En PC ocultar móvil */
+        /* PC: Ocultar móvil */
         @media (min-width: 651px) { 
             .mobile-search-container { display: none !important; }
             .mob-only { display: none !important; } 
@@ -3326,7 +3344,7 @@ window.pasaFiltroPropietario = function(movimiento) {
 
         // 4. GENERACIÓN HTML
         let htmlFilas = listaVisual.map(m => {
-            // FECHA PC (Larga)
+            // FECHA PC
             let dateStrPC = "---";
             try {
                 let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
@@ -3335,7 +3353,7 @@ window.pasaFiltroPropietario = function(movimiento) {
                 }
             } catch(e) {}
 
-            // FECHA MÓVIL (Corta: dd/mm)
+            // FECHA MÓVIL (dd/mm)
             let dateStrMob = "---";
             try {
                 let d = m.fecha instanceof Date ? m.fecha : new Date(m.ts || m.fecha);
@@ -3360,8 +3378,15 @@ window.pasaFiltroPropietario = function(movimiento) {
                 signo = '+';
             }
 
+            // Datos compuestos
             const descripcionFinal = m.descripcion || m.detalle || '';
             const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? fmt(m.saldo) : '-';
+            
+            // Construcción del texto "Concepto - Descripción"
+            let conceptoCompleto = Security.escapeHTML(m.concepto);
+            if (descripcionFinal) {
+                conceptoCompleto += ' - <span style="font-weight:400; opacity:0.8">' + Security.escapeHTML(descripcionFinal) + '</span>';
+            }
 
             return `
             <tr class="${claseFila}" onclick="window.editarMovimiento('${m.id}')" style="cursor:pointer">
@@ -3373,7 +3398,7 @@ window.pasaFiltroPropietario = function(movimiento) {
                 <td class="pc-only" style="color:#FFFFFF;">${Security.escapeHTML(m.beneficiario)}</td>
                 
                 <td class="mob-only td-date-mob">
-                    <div style="font-size:12px; font-weight:800; color:#fff">${dateStrMob}</div>
+                    <div style="font-size:12px; font-weight:800; color:#FFD700">${dateStrMob}</div>
                     <div style="font-size:8px; color:#888; margin-top:3px; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60px;">
                         ${Security.escapeHTML(m.beneficiario) || '---'}
                     </div>
@@ -3381,10 +3406,10 @@ window.pasaFiltroPropietario = function(movimiento) {
                 
                 <td class="mob-only td-center-mob">
                     <div style="font-size:14px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${Security.escapeHTML(m.concepto)}
+                        ${conceptoCompleto}
                     </div>
                     <div class="${colorClass}" style="font-size:14px; font-weight:700; opacity:0.9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${Security.escapeHTML(m.cuenta)}
+                        ${Security.escapeHTML(m.cuenta)} (${saldoStr})
                     </div>
                 </td>
                 
