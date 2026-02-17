@@ -4666,151 +4666,161 @@ function accionFab(tipo) {
 // 💾 GUARDADO MAESTRO BLINDADO (Con Semáforo Integrado)
 // ==========================================
 async function guardarUniversal(nuevasFilas) {
+    // --- REFERENCIAS VISUALES ---
     const btn = document.getElementById('btn-guardar');
-    const originalText = btn ? btn.innerHTML : '';
+    const originalText = btn ? btn.innerHTML : 'GUARDAR';
     const btnModal = document.getElementById('btn-modal-action');
+    
+    // --- ACTIVAR MODO "GUARDANDO" ---
+    if (btn) btn.innerHTML = '<span class="material-icons spin">sync</span> GUARDANDO...';
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
-
     window.isSaving = true;
 
-    // [SEMÁFORO] 1. LUZ AMARILLA (Trabajando)
+    // Semáforo: Luz Amarilla (Procesando)
     if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
 
+    // Objeto Excel (Workbook) declarado fuera para que sea accesible en caso de error
+    let wb = null; 
+
     try {
-        console.log("💾 Iniciando PROTOCOLO DE GUARDADO BLINDADO...");
+        console.log("🛡️ [SEGURIDAD] Iniciando protocolo de guardado blindado...");
 
-        // 0. HERRAMIENTA DE LIMPIEZA
+        // 1. LIMPIEZA Y PREPARACIÓN DE DATOS
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
+        // Usamos los datos actuales de la memoria como base
+        let datosFinales = [...(window.datos || [])];
 
-        // 1. PREPARACIÓN DE DATOS (Fusión de lo nuevo con lo viejo)
-        let datosCandidatos = [...(window.datos || [])];
-
+        // Si llegan nuevas filas (ej. desde el modal), las añadimos al principio
         if (nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
-            
-            const filasNormalizadas = nuevasFilas.map(filaNueva => {
+            const filasProcesadas = nuevasFilas.map(f => {
+                // Asegurar fecha válida
                 let fechaFinal = new Date();
-                const rawFecha = filaNueva.FECHA || filaNueva.fecha;
-                
+                const rawFecha = f.FECHA || f.fecha;
                 if (typeof rawFecha === 'string' && rawFecha.includes('-')) {
                     const [y, m, d] = rawFecha.split('-').map(Number);
-                    fechaFinal = new Date(y, m - 1, d); 
+                    fechaFinal = new Date(y, m - 1, d);
                 } else {
-                    fechaFinal = new Date(rawFecha);
+                    fechaFinal = new Date(rawFecha || Date.now());
                 }
 
                 return {
-                    id: filaNueva.ID || filaNueva.id || crypto.randomUUID(),
+                    id: f.ID || f.id || crypto.randomUUID(), // UUID Único
                     fecha: fechaFinal,
-                    cuenta: CLEAN(filaNueva.CUENTA || filaNueva.cuenta),
-                    concepto: CLEAN(filaNueva.CONCEPTO || filaNueva.concepto),
-                    importe: parseFloat(filaNueva.IMPORTE || filaNueva.importe),
-                    descripcion: CLEAN(filaNueva.DESCRIPCION || filaNueva.descripcion),
-                    beneficiario: CLEAN(filaNueva.BENEFICIARIO || filaNueva.beneficiario),
+                    cuenta: CLEAN(f.CUENTA || f.cuenta),
+                    concepto: CLEAN(f.CONCEPTO || f.concepto),
+                    importe: parseFloat(f.IMPORTE || f.importe || 0),
+                    descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
+                    beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
+                    // Marcas de tiempo para ordenar
                     ts: fechaFinal.getTime(),
-                    tipo: (parseFloat(filaNueva.IMPORTE || filaNueva.importe) >= 0) ? 'ingreso' : 'gasto'
+                    tipo: (parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto'
                 };
             });
-
-            // Añadimos lo nuevo al principio
-            datosCandidatos.unshift(...filasNormalizadas);
-            datosCandidatos.sort((a, b) => b.ts - a.ts);
+            
+            // Insertar lo nuevo arriba del todo
+            datosFinales.unshift(...filasProcesadas);
+            // Reordenar por fecha (más reciente primero)
+            datosFinales.sort((a, b) => b.ts - a.ts);
         }
 
-        // 2. GENERAR EL EXCEL EN MEMORIA (El "Paquete")
-        // Hoja Movimientos
-        const filasExcel = datosCandidatos.map(mov => ({
-            "Id": mov.id,
-            "Fecha": mov.fecha,
-            "Cuenta": CLEAN(mov.cuenta),
-            "Concepto": CLEAN(mov.concepto),
-            "Importe": mov.importe,
-            "Descripcion": CLEAN(mov.descripcion),
-            "Beneficiario": CLEAN(mov.beneficiario)
-        }));
+        // 2. CONSTRUIR EL ARCHIVO EXCEL EN MEMORIA
+        wb = XLSX.utils.book_new();
+        
+        // Hoja: Movimientos
+        const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
+            "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
+            "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario
+        })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"] });
+        XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
 
-        const wb = XLSX.utils.book_new();
-        const wsMovs = XLSX.utils.json_to_sheet(filasExcel, {
-            header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
-        });
-        XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
-
-        // Hoja Configuración
+        // Hoja: Configuracion (Reconstruida fielmente)
         const listaCuentas = Object.entries(window.mapaCuentas || {});
         const rawConceptos = window.listaConceptosConfig || [];
         const rawBeneficiarios = window.listaBeneficiariosConfig || [];
         const maxFilas = Math.max(listaCuentas.length, rawConceptos.length, rawBeneficiarios.length);
         
-        const datosConfig = [];
-        datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO"]); 
-
+        const datosConfig = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO"]];
         for (let i = 0; i < maxFilas; i++) {
-            const cuenta = listaCuentas[i];
-            const concepto = rawConceptos[i];
-            const beneficiario = rawBeneficiarios[i];
-            
+            const c = listaCuentas[i];
             datosConfig.push([
-                cuenta ? CLEAN(cuenta[0]) : "",
-                cuenta ? CLEAN(cuenta[1].tipo) : "",
-                cuenta ? (cuenta[1].esInversion ? "SI" : "NO") : "",
-                concepto ? CLEAN(concepto) : "",
-                beneficiario ? CLEAN(beneficiario) : ""
+                c ? CLEAN(c[0]) : "", 
+                c ? CLEAN(c[1].tipo) : "", 
+                c ? (c[1].esInversion ? "SI" : "NO") : "",
+                rawConceptos[i] ? CLEAN(rawConceptos[i]) : "", 
+                rawBeneficiarios[i] ? CLEAN(rawBeneficiarios[i]) : ""
             ]);
         }
-        const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
-        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(datosConfig), "Configuracion");
 
-        // 3. ESTRATEGIA DE GUARDADO (EL AIRBAG)
+        // 3. ESTRATEGIA DE GUARDADO CON "REINTENTO INTELIGENTE"
         const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
+        
+        if (usarNube) {
+            let exito = false;
+            let intentos = 0;
+            const maxRetries = 2; // Intentaremos 2 veces antes de rendirnos
 
-        if (usarNube && typeof oneDrive !== 'undefined') {
-            try {
-                // INTENTO A: NUBE
-                if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
-                
-                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                await oneDrive.saveFile(wbout, "aidanai.xlsx");
-                
-                console.log("✅ Nube OK.");
-                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
-                if(typeof mostrarEstado === 'function') mostrarEstado("☁️ Nube Sincronizada", "success");
-
-            } catch (cloudError) {
-                // FALLO EN NUBE -> ACTIVAR PLAN B (AIRBAG)
-                console.warn("⚠️ FALLO NUBE. Activando descarga de emergencia...", cloudError);
-                
-                const fechaHora = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-                XLSX.writeFile(wb, `aidanai_RESCATE_${fechaHora}.xlsx`);
-                
-                // Avisar al usuario claramente
-                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
-                if(typeof mostrarEstado === 'function') mostrarEstado("⚠️ ERROR NUBE: Se ha descargado copia local", "warn");
-                
-                alert("AVISO DE SEGURIDAD:\n\nNo se pudo guardar en OneDrive (posible fallo de red).\n\nPara no perder tus datos, se ha descargado un archivo 'RESCATE' en tu dispositivo.\n\nCuando recuperes conexión, carga ese archivo manualmente.");
+            while (!exito && intentos < maxRetries) {
+                try {
+                    intentos++;
+                    if (!navigator.onLine) throw new Error("Sin conexión a Internet detectada.");
+                    
+                    console.log(`☁️ Subiendo a OneDrive (Intento ${intentos})...`);
+                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    
+                    // Llamada a la API de OneDrive
+                    await oneDrive.saveFile(wbout, "aidanai.xlsx");
+                    
+                    exito = true; // ¡Conseguido!
+                } catch (e) {
+                    console.warn(`⚠️ Fallo en intento ${intentos}: ${e.message}`);
+                    if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500)); // Esperar 1.5s
+                }
             }
+
+            if (!exito) throw new Error("Fallo tras múltiples intentos de conexión.");
+
+            // ÉXITO CONFIRMADO
+            console.log("✅ Guardado en Nube OK");
+            if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
+            if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
+
         } else {
-            // MODO LOCAL (Estándar)
+            // MODO LOCAL (Ordenador sin nube)
             XLSX.writeFile(wb, "aidanai.xlsx");
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
-            if(typeof mostrarEstado === 'function') mostrarEstado("💾 Guardado Local", "info");
+            console.log("✅ Guardado Local OK");
         }
 
-        // 4. ACTUALIZAR PANTALLA (ÉXITO VISUAL)
-        // Aunque falle la nube, en la pantalla lo verás actualizado porque ya tienes tu copia
-        window.datos = datosCandidatos;
+        // 4. ACTUALIZAR INTERFAZ (Solo si todo ha ido bien)
+        window.datos = datosFinales; // Actualizamos la "verdad" en memoria
+        if (typeof renderizar === 'function') renderizar();
+        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        
+        // Restaurar botón tras 2 segundos
+        setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
 
-        if(typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-        if(typeof renderizar === 'function') renderizar();
-        if(typeof cargarSugerenciasAjustes === 'function') cargarSugerenciasAjustes();
+    } catch (errorCritico) {
+        // --- PROTOCOLO DE EMERGENCIA (AIRBAG) ---
+        console.error("🚨 ERROR CRÍTICO AL GUARDAR:", errorCritico);
+        
+        const fechaHora = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+        const nombreRescate = `aidanai_RESCATE_${fechaHora}.xlsx`;
+        
+        // Alerta visible e intrusiva
+        alert(`⚠️ ¡ATENCIÓN! ERROR DE CONEXIÓN\n\nNo se ha podido guardar en OneDrive.\n\nPara evitar perder tus datos, se descargará automáticamente un archivo de seguridad llamado:\n👉 ${nombreRescate}\n\nGuárdalo bien. Cuando recuperes la conexión, impórtalo.`);
+        
+        // Forzar descarga del archivo que ya teníamos preparado en 'wb'
+        if (wb) {
+            XLSX.writeFile(wb, nombreRescate);
+        }
 
-    } catch (error) {
-        console.error("❌ ERROR FATAL:", error);
+        // Semáforo rojo
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
-        alert("Error crítico: " + error.message);
     } finally {
-        if(btn) btn.innerHTML = originalText;
-        if(btnModal) btnModal.innerHTML = 'GUARDAR';
         window.isSaving = false;
+        if (btnModal) btnModal.innerHTML = 'GUARDAR';
     }
 }
 
