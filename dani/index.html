@@ -1082,12 +1082,19 @@ body {
 
 /* INPUTS (Ajustados para ser compactos) */
 .pin-input {
-    width: 45px; height: 55px; /* Un poco más pequeños */
+    width: 45px; height: 55px;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 12px;
-    color: white; font-size: 24px; font-weight: bold; text-align: center;
-    transition: all 0.2s; outline: none;
+    color: white; 
+    font-size: 24px; 
+    font-weight: bold; 
+    text-align: center;
+    transition: all 0.2s; 
+    outline: none;
+    /* --- ESTO ES LO QUE PONE LOS ASTERISCOS --- */
+    -webkit-text-security: disc;
+    -moz-text-security: disc;
 }
 .pin-input:focus {
     border-color: #00F260;
@@ -1101,15 +1108,6 @@ body {
 /* INPUTS DEL PIN */
 #pin-inputs-container {
     display: flex; gap: 12px; justify-content: center; margin-top: 25px;
-}
-.pin-input {
-    width: 50px; height: 60px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 12px;
-    color: white; font-size: 28px; font-weight: bold; text-align: center;
-    transition: all 0.2s;
-    outline: none;
 }
 .pin-input:focus {
     border-color: var(--c-primary);
@@ -2720,72 +2718,11 @@ function usarCacheSiExiste() {
         mostrarEstado("❌ No hay copia local. Carga un archivo.", "error");
     }
 }
-	    
-    // ==========================================
-    // 5. CALCULADORA Y VIBRACIÓN (Tu código original)
-    // ==========================================
-    let campoDestinoCalculadora = null;
-
-    // ==========================================
-// 🧮 CALCULADORA MULTIUSO
-// ==========================================
-// Variable para saber a qué input devolver el valor
-window.inputDestinoCalculadora = 'input-importe'; 
-
-window.abrirCalculadora = function(idInputDestino = 'input-importe') {
-    window.inputDestinoCalculadora = idInputDestino; // Guardamos quién llamó a la calculadora
-    document.getElementById('modal-calculadora').style.display = 'flex';
     
-    // Recuperar valor actual del input si existe
-    const valorActual = document.getElementById(idInputDestino).value;
-    window.calcDisplay = valorActual ? valorActual : '0';
-    actualizarDisplayCalc();
-}
-
-window.cerrarCalculadora = function(guardar) {
-    if (guardar) {
-        // Calcular resultado final (eval) de forma segura
-        try {
-            // Reemplazar 'x' por '*' y ',' por '.'
-            let expresion = window.calcDisplay.replace(/x/g, '*').replace(/,/g, '.');
-            let resultado = eval(expresion); // Nota: eval es simple, para una app local está bien
-            
-            // Redondear a 2 decimales
-            resultado = Math.round(resultado * 100) / 100;
-            
-            // Devolver el valor al input que nos llamó
-            const input = document.getElementById(window.inputDestinoCalculadora);
-            if(input) {
-                input.value = resultado;
-                // Si es el formulario principal, lanzamos validación visual
-                if(window.inputDestinoCalculadora === 'input-importe') validarFormulario();
-            }
-        } catch (e) {
-            mostrarEstado("Error en el cálculo", "error");
-            return;
-        }
-    }
-    document.getElementById('modal-calculadora').style.display = 'none';
-    window.calcDisplay = '0';
-}
-// Funciones auxiliares para que funcionen los botones de la calculadora
-window.actualizarDisplayCalc = function() {
-    document.getElementById('calc-display').innerText = window.calcDisplay;
-}
-window.addCalcNum = function(n) {
-    if(window.calcDisplay === '0' && n !== '.') window.calcDisplay = n;
-    else window.calcDisplay += n;
-    actualizarDisplayCalc();
-}
-window.addCalcOp = function(op) {
-    window.calcDisplay += op;
-    actualizarDisplayCalc();
-}
 window.clearCalc = function() {
     window.calcDisplay = '0';
     actualizarDisplayCalc();
 }
-
     
     function vibrar(tipo) {
         const patrones = { 'ingreso': [50], 'error': [50, 50, 50], 'clonar': [30, 30] };
@@ -6288,15 +6225,11 @@ window.actualizarSemaforo = function(estado) {
     }
 };
 
-/* ==========================================
-   ⚙️ MOTOR DE RECURRENTES V3 (TIPO + DESPLEGABLES)
-   ========================================== */
+// ==========================================
+// 🧮 LÓGICA DE CALCULADORA (LIBERADA Y GLOBAL)
+// ==========================================
 
-// 1. Control visual del tipo (Gasto/Ingreso/Traspaso)
-window.setRecType = function(tipo) {
-    document.getElementById('rec-tipo').value = tipo;
-// --- INICIO LÓGICA CALCULADORA (VERSIÓN FINAL ROBUSTA) ---
-// Variables GLOBALES para asegurar persistencia
+// Variables GLOBALES de la calculadora
 window.calcInputId = null;       
 window.calcOperacion = null;     
 window.calcValorAnterior = null; 
@@ -6307,7 +6240,7 @@ window.abrirCalculadora = function(idInput) {
     const input = document.getElementById(idInput);
     if (!input) return;
 
-    window.calcInputId = idInput; // Usamos window.
+    window.calcInputId = idInput; 
     
     // Leemos valor y limpiamos (por si tiene €)
     let rawVal = input.value || '0';
@@ -6327,91 +6260,78 @@ window.abrirCalculadora = function(idInput) {
     window.calcReiniciar = true; 
 };
 
-// 2. CERRAR CALCULADORA (ACEPTAR O CANCELAR)
+// 2. CERRAR CALCULADORA Y SALTAR A DESCRIPCIÓN
 window.cerrarCalculadora = function(guardar) {
     const modal = document.getElementById('modal-calculadora');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.style.display = 'none'; 
     
     if (guardar && window.calcInputId) {
-        // PASO CLAVE: Si hay operación pendiente, calcularla ANTES de guardar
-        if (window.calcOperacion) {
-            window.calcResult();
-        }
+        // Calcular si quedó algo pendiente
+        if (window.calcOperacion) window.calcResult();
         
         const display = document.getElementById('calc-display');
         const input = document.getElementById(window.calcInputId);
         
         if (display && input) {
             input.value = display.innerText;
-            // Avisar cambios
+            // Avisar cambios al sistema
             input.dispatchEvent(new Event('change'));
             input.dispatchEvent(new Event('input'));
+
+            // === EL SALTO AUTOMÁTICO A DESCRIPCIÓN ===
+            if (window.calcInputId === 'm-cantidad') {
+                setTimeout(() => {
+                    const descInput = document.getElementById('m-desc');
+                    if (descInput) {
+                        descInput.focus();
+                        descInput.click(); 
+                    }
+                }, 100);
+            }
         }
     }
-    // No limpiamos calcInputId por seguridad
+    // Limpieza segura
     window.calcOperacion = null;
     window.calcValorAnterior = null;
 };
 
-// 3. AÑADIR NÚMERO
+// 3. FUNCIONES DE TECLAS
 window.addCalcNum = function(num) {
     const display = document.getElementById('calc-display');
     if (!display) return;
-    
     let actual = display.innerText;
-    
-    if (window.calcReiniciar) {
-        actual = '0';
-        window.calcReiniciar = false;
-    }
-    
-    if (num === '.') {
-        if (!actual.includes('.')) display.innerText = actual + '.';
-    } else {
-        if (actual === '0') display.innerText = num;
-        else display.innerText = actual + num;
-    }
+    if (window.calcReiniciar) { actual = '0'; window.calcReiniciar = false; }
+    if (num === '.') { if (!actual.includes('.')) display.innerText = actual + '.'; } 
+    else { if (actual === '0') display.innerText = num; else display.innerText = actual + num; }
 };
 
-// 4. AÑADIR OPERACIÓN
 window.addCalcOp = function(op) {
     const display = document.getElementById('calc-display');
     if (!display) return;
-    
-    // Si ya había operación, resolverla antes de encadenar la siguiente
-    if (window.calcOperacion && window.calcValorAnterior !== null && !window.calcReiniciar) {
-        window.calcResult();
-    }
-    
+    if (window.calcOperacion && window.calcValorAnterior !== null && !window.calcReiniciar) window.calcResult();
     window.calcValorAnterior = parseFloat(display.innerText);
     window.calcOperacion = op;
     window.calcReiniciar = true;
 };
 
-// 5. CALCULAR RESULTADO (=)
 window.calcResult = function() {
     if (!window.calcOperacion || window.calcValorAnterior === null) return;
-    
     const display = document.getElementById('calc-display');
     const actual = parseFloat(display.innerText);
     let resultado = 0;
-    
     switch(window.calcOperacion) {
         case '+': resultado = window.calcValorAnterior + actual; break;
         case '-': resultado = window.calcValorAnterior - actual; break;
         case '*': resultado = window.calcValorAnterior * actual; break;
         case '/': resultado = (actual !== 0) ? window.calcValorAnterior / actual : 0; break;
     }
-    
     resultado = Math.round(resultado * 100) / 100;
     display.innerText = resultado;
-    
     window.calcOperacion = null;
     window.calcValorAnterior = null;
     window.calcReiniciar = true;
 };
 
-// 6. BORRAR (C)
 window.clearCalc = function() {
     const display = document.getElementById('calc-display');
     if (display) display.innerText = '0';
@@ -6419,23 +6339,32 @@ window.clearCalc = function() {
     window.calcValorAnterior = null;
     window.calcReiniciar = false;
 };
-// --- FIN LÓGICA CALCULADORA ---
+
+// ==========================================
+// ⚙️ CONTROL DE TIPO RECURRENTE (SEPARADO Y LIMPIO)
+// ==========================================
+window.setRecType = function(tipo) {
+    document.getElementById('rec-tipo').value = tipo;
+
     // Reset de botones
     document.querySelectorAll('#form-recurrente .source-option').forEach(b => b.classList.remove('active'));
-    document.getElementById('btn-type-' + tipo).classList.add('active');
+    const btnActivo = document.getElementById('btn-type-' + tipo);
+    if(btnActivo) btnActivo.classList.add('active');
 
     // Lógica visual
     const bloqueDestino = document.getElementById('bloque-rec-destino');
     const lblOrigen = document.getElementById('lbl-rec-origen');
     
     if (tipo === 'traspaso') {
-        bloqueDestino.style.display = 'block';
-        lblOrigen.innerText = "Desde Cuenta (Origen)";
+        if(bloqueDestino) bloqueDestino.style.display = 'block';
+        if(lblOrigen) lblOrigen.innerText = "Desde Cuenta (Origen)";
     } else {
-        bloqueDestino.style.display = 'none';
-        lblOrigen.innerText = "Cuenta";
+        if(bloqueDestino) bloqueDestino.style.display = 'none';
+        if(lblOrigen) lblOrigen.innerText = "Cuenta";
     }
-}
+};
+
+// (Aquí termina el bloque corregido, justo antes de cargarVistaRecurrentes)
 
 function cargarVistaRecurrentes() {
     // 1. Definir función de llenado segura
