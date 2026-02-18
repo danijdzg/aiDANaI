@@ -1900,7 +1900,7 @@ select:focus > option:checked {
     <div class="card-header">
         <span class="card-title">MAPA DE ACTIVOS</span>
     </div>
-    <div id="chart-TreeMap" style="width: 100%; height: 350px;"></div>
+    <div id="chart-TreeMap" style="width: 100%; height: 400px;"></div>
 </div>
 </div>
 	
@@ -5091,25 +5091,24 @@ async function guardarUniversal(nuevasFilas) {
 } 
 
 // ==========================================
-// 🗺️ TREEMAP INTERACTIVO (CORREGIDO: LEYENDA SCROLL)
+// 🗺️ TREEMAP PROFESIONAL: LEYENDA SUPERIOR Y FILTRO ACTIVO
 // ==========================================
 window.renderTreeMap = function() {
-    // 1. Verificar contenedor
     const container = document.getElementById('chart-TreeMap');
     if (!container) return;
 
-    // Limpieza de memoria
-    if (window.echartTreeMap) window.echartTreeMap.dispose();
-
-    // Seguridad: Si no hay datos, mostramos aviso
+    if (window.echartTreeMap) {
+        window.echartTreeMap.dispose();
+    }
+    
     if (!window.datos || window.datos.length === 0) {
-        container.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#666;">Sin datos</div>';
+        container.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#666;">Cargando datos...</div>';
         return;
     }
 
     window.echartTreeMap = echarts.init(container);
 
-    // 2. Procesar Datos (Agrupar por Tipo)
+    // 1. FILTRADO POR USUARIO
     const datosFiltrados = window.datos.filter(m => (typeof pasaFiltroPropietario === 'function') ? pasaFiltroPropietario(m) : true);
     
     const saldos = {};
@@ -5118,14 +5117,29 @@ window.renderTreeMap = function() {
         saldos[cta] = (saldos[cta] || 0) + m.importe;
     });
 
+    // 2. PALETA DE COLORES FIJA (Imprescindible para la leyenda)
+    const mapaColores = {
+        'BANCO': '#00F0FF',        
+        'BOLSA': '#F72585',        
+        'CRIPTOMONEDAS': '#7209B7', 
+        'CRIPTO': '#7209B7',       
+        'EFECTIVO': '#4CC9F0',     
+        'VIVIENDA': '#FFD60A',     
+        'INMOBILIARIO': '#FFD60A', 
+        'PLANPENSIONES': '#39FF14', 
+        'CROWDFUNDING': '#FF4444', 
+        'OTROS': '#888888'         
+    };
+    const paletaBackup = ['#00F0FF', '#F72585', '#7209B7', '#4CC9F0', '#FFD60A', '#39FF14', '#FF4444'];
+
+    // 3. AGRUPACIÓN
     const grupos = {};
     Object.keys(saldos).forEach(cta => {
         const valor = saldos[cta];
-        if (valor < 1) return; // Solo positivos
+        if (valor < 1) return; 
 
-        // Buscar TIPO en configuración
         let config = (window.mapaCuentas && window.mapaCuentas[cta]) ? window.mapaCuentas[cta] : { tipo: 'OTROS' };
-        const tipo = String(config.tipo || 'OTROS').toUpperCase();
+        const tipo = String(config.tipo || 'OTROS').toUpperCase().trim();
         
         if (!grupos[tipo]) grupos[tipo] = [];
         grupos[tipo].push({ 
@@ -5134,46 +5148,50 @@ window.renderTreeMap = function() {
         });
     });
 
-    // 3. Preparar series y leyenda
     const dataChildren = [];
     const categoriasLeyenda = [];
-    
-    // Ordenamos alfabéticamente para que la leyenda salga bonita
+    let colorIdx = 0;
+
     Object.keys(grupos).sort().forEach(tipo => {
-        dataChildren.push({ name: tipo, children: grupos[tipo] });
+        const colorAsignado = mapaColores[tipo] || paletaBackup[colorIdx % paletaBackup.length];
+        colorIdx++;
+
         categoriasLeyenda.push(tipo);
+
+        // Cada grupo es un nodo de nivel superior
+        dataChildren.push({ 
+            name: tipo, 
+            children: grupos[tipo],
+            itemStyle: {
+                color: colorAsignado,
+                borderColor: '#000',
+                borderWidth: 2
+            }
+        });
     });
 
-    // Colores Neón Fijos
-    const coloresNeon = ['#00F0FF', '#F72585', '#7209B7', '#4CC9F0', '#FFD60A', '#39FF14', '#FF4444'];
-
-    // 4. Configuración del Gráfico (AJUSTADA)
+    // 4. CONFIGURACIÓN DEL GRÁFICO
     const option = {
         backgroundColor: 'transparent',
         
-        // --- 🔘 LEYENDA INTERACTIVA (AHORA CON SCROLL) ---
+        // LEYENDA EN LA PARTE SUPERIOR (Más accesible)
         legend: {
             show: true,
-            type: 'scroll',          // <--- CLAVE: Permite scroll si hay muchas categorías
-            data: categoriasLeyenda, 
-            bottom: 5,               // Pegada al fondo (dentro del canvas)
-            left: 'center',          
-            width: '90%',            // Ocupa casi todo el ancho
-            z: 100,                  // <--- CLAVE: Se pinta ENCIMA de todo
-            
-            icon: 'roundRect',       
-            itemWidth: 15,           
-            itemHeight: 10,
-            
+            type: 'scroll',
+            data: categoriasLeyenda,
+            top: 0,               // CAMBIO: Ahora arriba
+            left: 'center',
+            z: 1000,
+            icon: 'roundRect',
+            itemWidth: 15,
+            itemHeight: 12,
+            itemGap: 10,
             textStyle: {
-                color: '#fff',       
+                color: '#fff',
                 fontSize: 10,
-                fontWeight: 'bold',
-                padding: [0, 2, 0, 0]
+                fontWeight: 'bold'
             },
-            
-            pageIconColor: '#fff',        // Flechas de scroll blancas
-            pageIconInactiveColor: '#555',
+            pageIconColor: '#fff',
             pageTextStyle: { color: '#fff' }
         },
 
@@ -5182,65 +5200,55 @@ window.renderTreeMap = function() {
             borderColor: '#333',
             textStyle: { color: '#fff' },
             formatter: (info) => {
-                var valFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(info.value);
-                return `<div style="color:${info.color}; font-weight:bold; margin-bottom:2px">${info.name}</div>
-                        <div style="color:#fff; font-size:14px">${valFmt}</div>`;
+                const valFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(info.value);
+                return `<div style="color:${info.color}; font-weight:bold">${info.name}</div><div style="font-size:14px">${valFmt}</div>`;
             }
         },
 
         series: [{
-            name: 'Patrimonio',
+            name: 'Distribución',
             type: 'treemap',
-            top: 0,         
-            bottom: '15%',  // <--- CLAVE: Dejamos un 15% de espacio VACÍO abajo para la leyenda
+            top: 40,              // Dejamos espacio arriba para la leyenda
+            bottom: 0,            
             width: '100%',
-            
-            roam: false,      
-            nodeClick: false, 
-            breadcrumb: { show: false }, 
+            roam: false,          
+            nodeClick: false,
+            breadcrumb: { show: false },
             
             label: {
                 show: true,
-                formatter: '{b}', 
+                formatter: '{b}',
                 color: '#fff',
-                fontSize: 10,
                 fontWeight: 'bold',
-                textShadowColor: 'rgba(0,0,0,0.5)',
-                textShadowBlur: 2
+                fontSize: 10
             },
-            
+
             itemStyle: {
-                borderColor: '#111', 
+                borderColor: '#111',
                 borderWidth: 2,
-                gapWidth: 1
+                gapWidth: 2
             },
-            
-            data: dataChildren,
-            
+
             levels: [
                 {
-                    itemStyle: {
-                        borderColor: '#111',
-                        borderWidth: 3,
-                        gapWidth: 3
-                    }
+                    itemStyle: { borderColor: '#000', borderWidth: 4, gapWidth: 4 }
                 },
                 {
-                    colorSaturation: [0.35, 0.7], 
-                    itemStyle: {
-                        gapWidth: 1,
-                        borderColorSaturation: 0.7
-                    }
+                    colorSaturation: [0.3, 0.6],
+                    itemStyle: { borderColorSaturation: 0.6, gapWidth: 2 }
                 }
-            ]
-        }],
-        
-        color: coloresNeon
+            ],
+            
+            data: dataChildren
+        }]
     };
 
     try {
         window.echartTreeMap.setOption(option);
-    } catch (e) { console.error("Error TreeMap:", e); }
+        setTimeout(() => window.echartTreeMap.resize(), 200);
+    } catch (e) { 
+        console.error("Error TreeMap:", e); 
+    }
     
     window.addEventListener('resize', () => {
         if(window.echartTreeMap) window.echartTreeMap.resize();
