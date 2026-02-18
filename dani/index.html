@@ -5899,7 +5899,7 @@ window.actualizarDashboard = function() {
         generarAnalisisIA(datosUsuario);
     }
 
-    // --- LÓGICA NUEVA: TARJETA PRÓXIMOS 10 DÍAS ---
+    // --- LÓGICA NUEVA: TARJETA PRÓXIMOS 10 DÍAS (CON FILTRO DE USUARIO) ---
     const divRecurrentes = document.getElementById('dash-recurrentes-list');
     // Verificamos si existe la tarjeta y si hay datos cargados
     if (divRecurrentes && window.datosRecurrentes) {
@@ -5910,8 +5910,14 @@ window.actualizarDashboard = function() {
         limite.setDate(hoy.getDate() + 10); // 10 días vista
         limite.setHours(23,59,59,999);
 
-        // 1. Filtrar reglas que caigan en fecha
+        // 1. Filtrar reglas que caigan en fecha Y QUE SEAN DEL USUARIO ACTUAL
         const proximos = window.datosRecurrentes.filter(r => {
+            // === NUEVO: FILTRO DE PROPIETARIO ===
+            // Si existe la función de filtro, la usamos para descartar lo que no sea del usuario actual
+            if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(r)) {
+                return false;
+            }
+
             if (!r.fechaProx) return false;
             // Corregir posible formato Excel numérico o texto
             let fechaR = new Date(r.fechaProx);
@@ -5923,7 +5929,11 @@ window.actualizarDashboard = function() {
 
         // 2. Pintar resultados
         if (proximos.length === 0) {
-            divRecurrentes.innerHTML = '<div style="text-align:center; font-size:11px; color:#666; padding:10px;">✅ Nada previsto (10 días)</div>';
+            // Mensaje personalizado según si estamos filtrando o no
+            const nombreUsuario = (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos') ? filtroUsuarioActual : '';
+            const mensaje = nombreUsuario ? `✅ Nada para ${nombreUsuario}` : '✅ Nada previsto (10 días)';
+            
+            divRecurrentes.innerHTML = `<div style="text-align:center; font-size:11px; color:#666; padding:10px; font-style:italic;">${mensaje}</div>`;
         } else {
             let htmlRec = '';
             proximos.forEach(p => {
@@ -5954,7 +5964,6 @@ window.actualizarDashboard = function() {
             divRecurrentes.innerHTML = htmlRec;
         }
     }
-};
 
 // ==========================================
 // 🚀 3. CAMBIO DE USUARIO (CON RETARDO TÁCTICO)
