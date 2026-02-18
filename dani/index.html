@@ -3400,7 +3400,7 @@ function renderizar() {
                         <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--c-accent); padding-bottom: 5px; gap: 5px;">
                             <span style="color: var(--c-accent); font-weight: 900; text-transform: uppercase; font-size: 16px; letter-spacing: 1px; text-shadow: 0 0 10px rgba(191, 90, 242, 0.4); white-space: nowrap;">${tituloMes}</span>
                             <div style="font-family:'Inter', sans-serif; font-weight:bold; font-size:11px; display:flex; gap:8px; align-items:center;">
-                                <span style="color:${colorNetoMes}; font-size:13px;">NETO: ${signoNetoMes}${fmt(gMes.neto)}</span>
+                                <span style="color:${colorNetoMes}; font-size:13px;">Saldo: ${signoNetoMes}${fmt(gMes.neto)}</span>
                                 <span style="color:#666;">|</span>
                                 <span style="color:var(--c-success); opacity:0.8;">IN ${fmt(gMes.ingresos)}</span>
                                 <span style="color:var(--c-danger); opacity:0.8;">OUT ${fmt(gMes.gastos)}</span>
@@ -3428,7 +3428,7 @@ function renderizar() {
                             <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px dashed #333; padding-bottom: 4px;">
                                 <span style="color: #FFD700; font-weight: 800; font-size: 13px;">${textoFecha}</span>
                                 
-                                <span style="font-size: 11px; font-weight: 700; color: ${colorNetoDia}; opacity: 0.9;">(Neto: ${signoNetoDia}${fmt(gDia.neto)})</span>
+                                <span style="font-size: 11px; font-weight: 700; color: ${colorNetoDia}; opacity: 0.9;">(Saldo: ${signoNetoDia}${fmt(gDia.neto)})</span>
                             </div>
                         </td>
                     </tr>`;
@@ -5849,9 +5849,9 @@ window.actualizarDashboard = function() {
         generarAnalisisIA(datosUsuario);
     }
 
-    // --- LÓGICA NUEVA: TARJETA PRÓXIMOS 10 DÍAS (CON FILTRO DE USUARIO) ---
+   // --- LÓGICA NUEVA: TARJETA PRÓXIMOS 10 DÍAS (CON FILTRO DE USUARIO) ---
     const divRecurrentes = document.getElementById('dash-recurrentes-list');
-    // Verificamos si existe la tarjeta y si hay datos cargados
+    
     if (divRecurrentes && window.datosRecurrentes) {
         const hoy = new Date();
         hoy.setHours(0,0,0,0);
@@ -5860,61 +5860,64 @@ window.actualizarDashboard = function() {
         limite.setDate(hoy.getDate() + 10); // 10 días vista
         limite.setHours(23,59,59,999);
 
-        // 1. Filtrar reglas que caigan en fecha Y QUE SEAN DEL USUARIO ACTUAL
+        // 1. Filtrar reglas
         const proximos = window.datosRecurrentes.filter(r => {
-            // === NUEVO: FILTRO DE PROPIETARIO ===
-            // Si existe la función de filtro, la usamos para descartar lo que no sea del usuario actual
-            if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(r)) {
-                return false;
-            }
-
+            if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(r)) return false;
             if (!r.fechaProx) return false;
-            // Corregir posible formato Excel numérico o texto
+            
             let fechaR = new Date(r.fechaProx);
             if (isNaN(fechaR.getTime())) return false;
             
-            fechaR.setHours(12,0,0,0); // Evitar problemas de zona horaria
+            // Truco: Ponemos la hora a mediodía para evitar problemas de zona horaria
+            fechaR.setHours(12,0,0,0); 
             return fechaR >= hoy && fechaR <= limite;
         }).sort((a,b) => new Date(a.fechaProx) - new Date(b.fechaProx));
 
         // 2. Pintar resultados
         if (proximos.length === 0) {
-            // Mensaje personalizado según si estamos filtrando o no
             const nombreUsuario = (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos') ? filtroUsuarioActual : '';
-            const mensaje = nombreUsuario ? `✅ Nada para ${nombreUsuario}` : '✅ Nada previsto (10 días)';
-            
-            divRecurrentes.innerHTML = `<div style="text-align:center; font-size:11px; color:#666; padding:10px; font-style:italic;">${mensaje}</div>`;
+            divRecurrentes.innerHTML = `<div style="text-align:center; font-size:11px; color:#666; padding:10px; font-style:italic;">✅ Nada previsto (10 días) ${nombreUsuario}</div>`;
         } else {
             let htmlRec = '';
             proximos.forEach(p => {
                 const fObj = new Date(p.fechaProx);
                 const dia = fObj.getDate();
                 const mes = fObj.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
-                const esGasto = (p.tipoRegla !== 'ingreso');
-                const colorImporte = esGasto ? '#FF2E4D' : '#39FF14';
+                
+                // Colores
+                const esGasto = (p.tipoRegla !== 'ingreso' && p.importe < 0);
+                const colorImporte = esGasto ? '#FF2E4D' : '#39FF14'; // Rojo o Verde Neón
                 const importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(Math.abs(p.importe));
 
                 htmlRec += `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border-radius:6px; padding:6px 8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); border-radius:8px; padding:8px; margin-bottom:6px; border-left: 3px solid ${colorImporte};">
+                    
                     <div style="display:flex; gap:10px; align-items:center;">
-                        <div style="background:#222; border:1px solid #444; padding:2px 6px; border-radius:4px; text-align:center; min-width:35px;">
-                            <div style="font-size:9px; color:#aaa; line-height:1;">${mes}</div>
-                            <div style="font-size:13px; font-weight:bold; color:#fff; line-height:1;">${dia}</div>
+                        <div style="background:#111; border:1px solid #333; padding:4px 8px; border-radius:6px; text-align:center; min-width:35px;">
+                            <div style="font-size:9px; color:#aaa; line-height:1; margin-bottom:2px;">${mes}</div>
+                            <div style="font-size:14px; font-weight:800; color:#fff; line-height:1;">${dia}</div>
                         </div>
                         <div style="display:flex; flex-direction:column;">
-                            <span style="font-size:12px; font-weight:bold; color:#eee;">${p.concepto}</span>
-                            <span style="font-size:10px; color:#888;">${p.beneficiario || 'Recurrente'}</span>
+                            <span style="font-size:13px; font-weight:700; color:#eee;">${p.concepto}</span>
+                            <span style="font-size:10px; color:#888;">${p.beneficiario || 'Fijo'}</span>
                         </div>
                     </div>
-                    <div style="font-size:13px; font-weight:800; color:${colorImporte}; text-shadow:0 0 5px ${colorImporte}40;">
-                        ${importeFmt}€
+
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="font-size:14px; font-weight:800; color:${colorImporte}; text-shadow:0 0 10px ${colorImporte}40;">
+                            ${importeFmt}€
+                        </div>
+                        <button onclick="window.agregarDesdeRecurrente('${p.id}', '${p.fechaProx}')" 
+                                style="background:${colorImporte}; border:none; color:#000; width:28px; height:28px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 10px ${colorImporte}; font-weight:bold;">
+                            <span class="material-icons" style="font-size:18px;">add</span>
+                        </button>
                     </div>
                 </div>`;
             });
             divRecurrentes.innerHTML = htmlRec;
         }
     }
-};
+};	
 // ==========================================
 // 🚀 3. CAMBIO DE USUARIO (CON RETARDO TÁCTICO)
 // ==========================================
@@ -6929,6 +6932,41 @@ window.toggleDiasSemana = function() {
             e.preventDefault();
         }
     });
+
+// --- NUEVA FUNCIÓN: AÑADIR DESDE RECURRENTE (CEREBRO) ---
+window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
+    if (!confirm("¿Confirmas que quieres añadir este gasto hoy?")) return;
+
+    // 1. Buscar los datos originales
+    const regla = window.datosRecurrentes.find(r => r.id === idRecurrente);
+    if (!regla) {
+        alert("Error: No encuentro la regla original.");
+        return;
+    }
+
+    mostrarEstado("⏳ Creando movimiento...", "loading");
+
+    // 2. Crear el objeto movimiento compatible con tu sistema
+    const nuevoMovimiento = {
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'AUTO-' + Date.now(),
+        fecha: new Date(fechaPrevista), // Usamos la fecha programada
+        cuenta: regla.cuenta,
+        concepto: regla.concepto,
+        importe: regla.importe, // El signo ya viene correcto de la regla (negativo si es gasto)
+        descripcion: (regla.descripcion || "") + " (Fijo)",
+        beneficiario: regla.beneficiario || "",
+        tipo: (regla.importe >= 0) ? 'ingreso' : 'gasto'
+    };
+
+    // 3. Guardar usando tu función universal (que ya maneja Excel y Nube)
+    try {
+        await window.guardarUniversal([nuevoMovimiento]);
+        // guardarUniversal ya refresca la pantalla y avisa, no hace falta hacer más
+    } catch (e) {
+        console.error(e);
+        alert("Error al guardar: " + e.message);
+    }
+};
 
 </script>
 </body>
