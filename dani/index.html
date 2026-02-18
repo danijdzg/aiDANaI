@@ -1591,7 +1591,7 @@ body {
 
             <div class="app-main">
                 <div id="tab-inicio" class="view-section active">
-                    <div class="master-card" style="margin-top: 0;">
+                    <div class="master-card" style="margin-top: 15;">
                         <div class="card-header">
                             <span class="card-title">RESUMEN</span>
                             <div style="display:flex; gap:5px;">
@@ -1629,7 +1629,15 @@ body {
                             <div class="patri-col"><span class="kpi-label"><span class="material-icons freedom-icon">flag</span> LIBERTAD</span><span class="green-val-freedom" id="d-libertad">0.00%</span></div>
                         </div>
                     </div>
-                				
+                <div class="master-card" style="border-color: #BF5AF2; background: linear-gradient(160deg, rgba(191, 90, 242, 0.05), rgba(10, 10, 10, 0.8));">
+                        <div class="card-header" style="border-bottom: 1px solid rgba(191, 90, 242, 0.3); padding-bottom: 8px; margin-bottom: 8px;">
+                            <span class="card-title" style="color: #BF5AF2 !important;">PRÓXIMOS 10 DÍAS</span>
+                        </div>
+                        <div id="dash-recurrentes-list" style="min-height: 40px; display:flex; flex-direction:column; gap:5px;">
+                            <div style="text-align:center; font-size:10px; color:#666; padding:10px;">Cargando previsiones...</div>
+                        </div>
+                    </div>
+ 			
 				<div id="box-grafico" class="chart-container" style="margin-top: 15px;"><canvas id="chartPatrimonio"></canvas></div>
 				<div class="master-card green-card" style="margin-top: 20px; margin-bottom: 30px;">
                     <div class="card-header">
@@ -5889,6 +5897,62 @@ window.actualizarDashboard = function() {
     // Análisis IA (Llamamos al cerebro nuevo)
     if (typeof generarAnalisisIA === 'function') {
         generarAnalisisIA(datosUsuario);
+    }
+
+    // --- LÓGICA NUEVA: TARJETA PRÓXIMOS 10 DÍAS ---
+    const divRecurrentes = document.getElementById('dash-recurrentes-list');
+    // Verificamos si existe la tarjeta y si hay datos cargados
+    if (divRecurrentes && window.datosRecurrentes) {
+        const hoy = new Date();
+        hoy.setHours(0,0,0,0);
+        
+        const limite = new Date(hoy);
+        limite.setDate(hoy.getDate() + 10); // 10 días vista
+        limite.setHours(23,59,59,999);
+
+        // 1. Filtrar reglas que caigan en fecha
+        const proximos = window.datosRecurrentes.filter(r => {
+            if (!r.fechaProx) return false;
+            // Corregir posible formato Excel numérico o texto
+            let fechaR = new Date(r.fechaProx);
+            if (isNaN(fechaR.getTime())) return false;
+            
+            fechaR.setHours(12,0,0,0); // Evitar problemas de zona horaria
+            return fechaR >= hoy && fechaR <= limite;
+        }).sort((a,b) => new Date(a.fechaProx) - new Date(b.fechaProx));
+
+        // 2. Pintar resultados
+        if (proximos.length === 0) {
+            divRecurrentes.innerHTML = '<div style="text-align:center; font-size:11px; color:#666; padding:10px;">✅ Nada previsto (10 días)</div>';
+        } else {
+            let htmlRec = '';
+            proximos.forEach(p => {
+                const fObj = new Date(p.fechaProx);
+                const dia = fObj.getDate();
+                const mes = fObj.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
+                const esGasto = (p.tipoRegla !== 'ingreso');
+                const colorImporte = esGasto ? '#FF2E4D' : '#39FF14';
+                const importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(Math.abs(p.importe));
+
+                htmlRec += `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border-radius:6px; padding:6px 8px;">
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <div style="background:#222; border:1px solid #444; padding:2px 6px; border-radius:4px; text-align:center; min-width:35px;">
+                            <div style="font-size:9px; color:#aaa; line-height:1;">${mes}</div>
+                            <div style="font-size:13px; font-weight:bold; color:#fff; line-height:1;">${dia}</div>
+                        </div>
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-size:12px; font-weight:bold; color:#eee;">${p.concepto}</span>
+                            <span style="font-size:10px; color:#888;">${p.beneficiario || 'Recurrente'}</span>
+                        </div>
+                    </div>
+                    <div style="font-size:13px; font-weight:800; color:${colorImporte}; text-shadow:0 0 5px ${colorImporte}40;">
+                        ${importeFmt}€
+                    </div>
+                </div>`;
+            });
+            divRecurrentes.innerHTML = htmlRec;
+        }
     }
 };
 
