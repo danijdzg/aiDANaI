@@ -3924,156 +3924,161 @@ function generarUUID() {
     });
 }
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO (Con detección automática de Dueño en Traspasos)
+// 🛡️ GUARDAR MOVIMIENTO BLINDADO (V3: Lógica Inteligente + Seguridad Nube)
 // ==========================================
 window.guardarManual = async function() {
-    console.log("--- 🔄 Ejecutando Guardado Inteligente (V2: Dueño Auto) ---");
+    console.log("--- 🔄 Ejecutando Guardado Inteligente (Blindado) ---");
 
-    // 1. BLOQUEO VISUAL
-    const btnGuardar = document.getElementById('btn-modal-action');
+    // 1. BLOQUEO VISUAL Y PREPARACIÓN
+    const btnGuardar = document.getElementById('btn-guardar-mov'); // ID Corregido
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
     try {
         if (btnGuardar) {
-            btnGuardar.innerHTML = '<span class="material-icons spin">sync</span> Procesando...';
+            btnGuardar.innerHTML = '⏳ Guardando...';
             btnGuardar.disabled = true;
+            btnGuardar.style.backgroundColor = "#ff9800"; // Naranja de espera
         }
 
-        // 2. RECOGER DATOS DEL FORMULARIO
-        const elId = document.getElementById('m-id');
-        const fecha = document.getElementById('m-fecha')?.value;
-        const cuentaOrigen = document.getElementById('m-cuenta')?.value;
-        const cuentaDestino = document.getElementById('m-cuenta-destino')?.value;
-        const elImporte = document.getElementById('m-cantidad');
-        let importeRaw = elImporte ? elImporte.value : "";
+        // 2. RECOGER DATOS DEL FORMULARIO (Con IDs reales de tu index.html)
+        // Usamos crypto.randomUUID() si generarUUID no existe
+        const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
         
-        // Concepto y Descripción
-        let concepto = (document.getElementById('m-concepto')?.value || "").toUpperCase().trim();
-        let desc = (document.getElementById('m-desc')?.value || "").toUpperCase().trim();
-        const benefManual = (document.getElementById('m-beneficiario')?.value || "").toUpperCase().trim();
+        const elId = document.getElementById('inp-id-oculto'); // A veces no existe, no pasa nada
+        const idExistente = elId ? elId.value : "";
+        
+        const fecha = document.getElementById('inp-fecha').value || new Date().toISOString().split('T')[0];
+        const cuentaOrigen = document.getElementById('sel-cuenta').value;
+        const cuentaDestino = document.getElementById('sel-cuenta-destino') ? document.getElementById('sel-cuenta-destino').value : "";
+        const concepto = document.getElementById('sel-concepto').value;
+        const importeStr = document.getElementById('inp-importe').value;
+        const desc = (document.getElementById('inp-desc').value || "").toUpperCase().trim();
+        const benefManual = (document.getElementById('sel-beneficiario').value || "").toUpperCase().trim();
 
         // 3. VALIDACIONES BÁSICAS
         if (!fecha) throw new Error("❌ Falta la FECHA");
         if (!cuentaOrigen) throw new Error("❌ Falta la CUENTA");
-        if (!importeRaw) throw new Error("❌ Falta el IMPORTE");
+        if (!importeStr) throw new Error("❌ Falta el IMPORTE");
+        if (!concepto) throw new Error("❌ Falta el CONCEPTO");
 
-        // Convertir importe a número
-        let importeNum = parseFloat(importeRaw.toString().replace(',', '.'));
+        let importeNum = parseFloat(importeStr.replace(',', '.'));
         if (isNaN(importeNum) || importeNum === 0) throw new Error("❌ El importe no es válido");
         importeNum = Math.abs(importeNum); 
 
-        // DETECTAR SI ES TRASPASO
-        const esTraspaso = (window.modoTransaccionActual === 'traspaso') || (cuentaDestino && cuentaDestino !== "");
+        // DETECTAR SI ES TRASPASO (Lógica de tu código)
+        const modoActual = window.modoTransaccionActual || 'gasto'; // gasto, ingreso, traspaso
+        const esTraspaso = (modoActual === 'traspaso') || (concepto === 'TRASPASO');
 
-        // --- FUNCIÓN AUXILIAR PARA DETECTAR DUEÑO ---
-        const detectarDueño = (nombreCuenta) => {
+        // --- FUNCIÓN AUXILIAR PARA DETECTAR DUEÑO (Tu lógica solicitada) ---
+        const detectarDueno = (nombreCuenta) => {
             const c = String(nombreCuenta).toUpperCase().trim();
             if (c.startsWith("D-")) return "DANI";
             if (c.startsWith("N-")) return "NORMA";
-            return "PROPIO"; // Si no tiene prefijo, ponemos PROPIO o el nombre que prefieras
+            return "PROPIO"; 
         };
+
+        // VARIABLES PARA GUARDAR
+        let filasParaExcel = [];
+        let movimientosParaLocal = [];
 
         // =========================================================
         // 🅰️ CAMINO A: ES UN TRASPASO (Genera 2 Movimientos)
         // =========================================================
         if (esTraspaso) {
-            if (!cuentaDestino) throw new Error("❌ Para un traspaso necesitas una CUENTA DESTINO");
-            if (cuentaOrigen === cuentaDestino) throw new Error("❌ La cuenta origen y destino son la misma");
+            if (!cuentaDestino) throw new Error("❌ Selecciona una CUENTA DESTINO para el traspaso");
+            if (cuentaOrigen === cuentaDestino) throw new Error("❌ Origen y Destino son iguales");
 
-            // Generamos 2 IDs únicos
-            const idSalida = (typeof generarUUID === 'function') ? generarUUID() : "T-OUT-" + Date.now();
-            const idEntrada = (typeof generarUUID === 'function') ? generarUUID() : "T-IN-" + Date.now();
+            const idSalida = generarID();
+            const idEntrada = generarID();
 
-            // Movimiento 1: SALE dinero de Origen
+            // Movimiento 1: SALIDA
             const movSalida = {
-                id: idSalida,
-                fecha: fecha,
-                cuenta: cuentaOrigen,
-                concepto: "Traspaso Enviado",
-                importe: -importeNum, // Negativo
-                descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-                beneficiario: detectarDueño(cuentaOrigen), // <--- AQUÍ ESTÁ LA MAGIA
-                tipo: 'traspaso',
-                ts: new Date(fecha).getTime()
+                id: idSalida, fecha: fecha, cuenta: cuentaOrigen, concepto: "TRASPASO",
+                importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
+                beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: new Date(fecha).getTime()
             };
 
-            // Movimiento 2: ENTRA dinero en Destino
+            // Movimiento 2: ENTRADA
             const movEntrada = {
-                id: idEntrada,
-                fecha: fecha,
-                cuenta: cuentaDestino,
-                concepto: "Traspaso Recibido",
-                importe: importeNum, // Positivo
-                descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-                beneficiario: detectarDueño(cuentaDestino), // <--- AQUÍ ESTÁ LA MAGIA
-                tipo: 'traspaso',
-                ts: new Date(fecha).getTime()
+                id: idEntrada, fecha: fecha, cuenta: cuentaDestino, concepto: "TRASPASO",
+                importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
+                beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: new Date(fecha).getTime()
             };
 
-            // GUARDAR AMBOS
-            console.log("Generando traspaso doble:", movSalida, movEntrada);
-            if (typeof window.guardarUniversal === 'function') {
-                await window.guardarUniversal([movSalida, movEntrada]);
-            }
+            // Preparamos para Excel (Orden: ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESC, BENEF)
+            filasParaExcel.push([movSalida.id, movSalida.fecha, movSalida.cuenta, movSalida.concepto, movSalida.importe, movSalida.descripcion, movSalida.beneficiario]);
+            filasParaExcel.push([movEntrada.id, movEntrada.fecha, movEntrada.cuenta, movEntrada.concepto, movEntrada.importe, movEntrada.descripcion, movEntrada.beneficiario]);
+            
+            movimientosParaLocal.push(movSalida, movEntrada);
 
         } 
         // =========================================================
-        // 🅱️ CAMINO B: ES GASTO O INGRESO (Genera 1 Movimiento)
+        // 🅱️ CAMINO B: GASTO O INGRESO NORMAL
         // =========================================================
         else {
-            if (!concepto) throw new Error("❌ Falta el CONCEPTO");
-
-            if (window.modoTransaccionActual === 'gasto' || window.modoTransaccionActual === 'pago') {
-                importeNum = -importeNum;
-            } 
+            if (modoActual === 'gasto') importeNum = -importeNum; // Gasto es negativo
             
-            const idFinal = elId.value ? elId.value : ((typeof generarUUID === 'function') ? generarUUID() : Date.now().toString());
-            const esEdicion = !!elId.value;
+            const idFinal = idExistente || generarID();
+            
+            // Lógica beneficiario: Si está vacío, intentamos adivinarlo, si no, usamos el manual
+            let benefFinal = benefManual;
+            if(!benefFinal) benefFinal = detectarDueno(cuentaOrigen);
 
-            const nuevoMovimiento = {
-                id: idFinal,
-                fecha: fecha,
-                cuenta: cuentaOrigen,
-                concepto: concepto,
-                importe: importeNum,
-                descripcion: desc,
-                beneficiario: benefManual, // Aquí sí respetamos lo que escribas manualmente
-                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
-                ts: new Date(fecha).getTime()
+            const nuevoMov = {
+                id: idFinal, fecha: fecha, cuenta: cuentaOrigen, concepto: concepto,
+                importe: importeNum, descripcion: desc, beneficiario: benefFinal,
+                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: new Date(fecha).getTime()
             };
 
-             if (esEdicion && window.datos) {
-                window.datos = window.datos.filter(m => m.id !== idFinal);
-             }
-
-            // GUARDAR UNO
-            if (typeof window.guardarUniversal === 'function') {
-                await window.guardarUniversal(nuevoMovimiento);
-            }
+            filasParaExcel.push([nuevoMov.id, nuevoMov.fecha, nuevoMov.cuenta, nuevoMov.concepto, nuevoMov.importe, nuevoMov.descripcion, nuevoMov.beneficiario]);
+            movimientosParaLocal.push(nuevoMov);
         }
 
-        // 4. LIMPIEZA FINAL
-        if (elId) elId.value = '';
-        if (elImporte) elImporte.value = '';
-        if (document.getElementById('m-desc')) document.getElementById('m-desc').value = '';
-        
-        const modalElement = document.getElementById('modal-manual');
-        if (modalElement) modalElement.classList.remove('active');
+        // =========================================================
+        // 🛡️ FASE CRÍTICA: GUARDADO EN NUBE (PRIMERO)
+        // =========================================================
+        if (window.odManager && window.odManager.fileId) {
+            // Intentamos guardar en OneDrive
+            await window.odManager.addRows(filasParaExcel);
+            console.log("✅ Guardado en OneDrive confirmado.");
+        } else {
+            console.warn("⚠️ Modo Offline: Se guardará solo en local (Riesgo de pérdida al recargar)");
+             // Si quieres ser estricto, descomenta: throw new Error("Sin conexión a OneDrive");
+        }
 
-        if (typeof mostrarEstado === 'function') mostrarEstado("✅ Operación guardada con éxito", "success");
-        if (typeof vibrar === 'function') vibrar('ingreso');
+        // =========================================================
+        // 🔄 FASE LOCAL: ACTUALIZAR PANTALLA
+        // =========================================================
+        
+        // Si era edición, borramos el antiguo primero
+        if (idExistente) {
+            window.datos = window.datos.filter(m => m.id !== idExistente);
+        }
+
+        // Añadimos los nuevos a la memoria
+        movimientosParaLocal.forEach(m => window.datos.push(m));
+
+        // Actualizamos todo
+        if (typeof actualizarDashboard === 'function') actualizarDashboard();
+        if (typeof renderizarTablaMovimientos === 'function') renderizarTablaMovimientos();
+
+        // Limpieza UI
+        document.getElementById('form-nuevo-mov').reset();
+        window.cerrarModal();
+        if (typeof mostrarEstado === 'function') mostrarEstado("✅ Movimiento guardado y asegurado", "success");
 
     } catch (error) {
-        console.error("Error al guardar:", error);
-        alert(error.message);
+        console.error("❌ Error al guardar:", error);
+        alert("⛔ NO SE PUDO GUARDAR:\n" + error.message + "\n\nTu formulario sigue abierto. Revisa la conexión.");
     } finally {
+        // Restaurar botón siempre
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
+            btnGuardar.style.backgroundColor = "";
         }
     }
 };
-
 // ==========================================
 // ⚡ ACCIONES RÁPIDAS: DUPLICAR Y ELIMINAR (CORREGIDO)
 // ==========================================
