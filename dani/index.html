@@ -1487,6 +1487,42 @@ th {
     }
     /* --- FIN: DISEÑO MÓVIL --- */
  
+ /* --- ESTILOS MODAL CONFIRMACIÓN PREMIUM --- */
+.modal-backdrop-pro {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8); /* Fondo oscuro */
+    backdrop-filter: blur(8px); /* Efecto cristal */
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 20001; /* Por encima de todo, incluso de otros modales */
+    display: flex; justify-content: center; align-items: center;
+    animation: fadeIn 0.2s forwards;
+}
+
+.modal-card-pro {
+    background: linear-gradient(145deg, #1a1a1a, #000000);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 25px;
+    border-radius: 24px;
+    width: 85%; max-width: 320px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+    transform: scale(0.9);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.modal-icon-pro { font-size: 45px; margin-bottom: 15px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.2)); }
+.modal-card-pro h3 { margin: 0 0 10px 0; color: #fff; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; }
+.modal-card-pro p { color: #aaa; margin-bottom: 25px; font-size: 14px; line-height: 1.5; font-weight: 500; }
+
+.modal-actions-pro { display: flex; gap: 12px; }
+.modal-actions-pro button { flex: 1; padding: 14px; border-radius: 14px; border: none; font-weight: 700; cursor: pointer; font-size: 14px; transition: transform 0.1s; }
+.modal-actions-pro button:active { transform: scale(0.95); }
+
+.btn-secondary-pro { background: #333; color: #ccc; border: 1px solid #444; }
+.btn-primary-pro { background: var(--c-primary, #00B8FF); color: #000; box-shadow: 0 4px 15px rgba(0, 184, 255, 0.3); }
+
+@keyframes popIn { to { transform: scale(1); } }
+ 
    </style>
 
 <body>
@@ -2002,6 +2038,17 @@ th {
         <div style="display:flex; gap:10px; margin-top:20px;">
             <button onclick="cerrarCalculadora(false)" style="flex:1; padding:15px; background:transparent; border:1px solid #666; color:#aaa; border-radius:10px;">Cancelar</button>
             <button onclick="cerrarCalculadora(true)" style="flex:1; padding:15px; background:#007bff; border:none; color:white; font-weight:bold; border-radius:10px;">ACEPTAR</button>
+        </div>
+    </div>
+</div>
+<div id="modal-confirmacion" class="modal-backdrop-pro" style="display: none;">
+    <div class="modal-card-pro">
+        <div class="modal-icon-pro">🤔</div>
+        <h3 id="modal-titulo-pro">Confirmar acción</h3>
+        <p id="modal-mensaje-pro">¿Estás seguro?</p>
+        <div class="modal-actions-pro">
+            <button id="btn-modal-cancelar-pro" class="btn-secondary-pro">Cancelar</button>
+            <button id="btn-modal-aceptar-pro" class="btn-primary-pro">Confirmar</button>
         </div>
     </div>
 </div>
@@ -6943,38 +6990,96 @@ window.detectarMagia = function(texto) {
     }
 };
 
-// --- NUEVA FUNCIÓN: AÑADIR DESDE RECURRENTE (CEREBRO) ---
-window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
-    if (!confirm("¿Confirmas que quieres añadir este gasto hoy?")) return;
+// --- NUEVA UTILIDAD: PREGUNTAR CON MODAL PRO ---
+window.pedirConfirmacion = function(titulo, mensaje, icono = "🤔") {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modal-confirmacion');
+        const h3 = document.getElementById('modal-titulo-pro');
+        const p = document.getElementById('modal-mensaje-pro');
+        const iconDiv = document.querySelector('.modal-icon-pro');
+        const btnSi = document.getElementById('btn-modal-aceptar-pro');
+        const btnNo = document.getElementById('btn-modal-cancelar-pro');
 
-    // 1. Buscar los datos originales
+        if(!modal) {
+            // Fallback de seguridad por si no se copió el HTML
+            resolve(confirm(mensaje));
+            return;
+        }
+
+        // Configurar textos
+        h3.innerText = titulo;
+        p.innerText = mensaje;
+        iconDiv.innerText = icono;
+
+        // Mostrar modal
+        modal.style.display = 'flex';
+
+        // Función de limpieza interna para no acumular eventos
+        function cerrar(resultado) {
+            modal.style.display = 'none';
+            // Clonamos los botones para eliminar los eventos 'onclick' anteriores
+            const nuevoSi = btnSi.cloneNode(true);
+            const nuevoNo = btnNo.cloneNode(true);
+            btnSi.parentNode.replaceChild(nuevoSi, btnSi);
+            btnNo.parentNode.replaceChild(nuevoNo, btnNo);
+            resolve(resultado);
+        }
+
+        // Asignar eventos a los botones actuales
+        btnSi.onclick = () => cerrar(true);
+        btnNo.onclick = () => cerrar(false);
+    });
+};
+
+// --- FUNCIÓN MEJORADA: AGREGAR RECURRENTE (SIN ALERTAS ANTIGUAS) ---
+window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
+    // 1. Usar el nuevo modal Premium
+    const confirmado = await window.pedirConfirmacion(
+        "Añadir Gasto Fijo", 
+        "¿Quieres añadir este movimiento hoy y actualizar la fecha?",
+        "📅"
+    );
+
+    if (!confirmado) return; // Si cancela, no hacemos nada.
+
+    // 2. Buscar datos originales
     const regla = window.datosRecurrentes.find(r => r.id === idRecurrente);
     if (!regla) {
         window.mostrarNotificacion("❌ Regla original perdida", "error");
         return;
     }
 
-    mostrarEstado("⏳ Creando movimiento...", "loading");
+    if(window.mostrarEstado) window.mostrarEstado("⏳ Creando movimiento...", "loading");
 
-    // 2. Crear el objeto movimiento compatible con tu sistema
+    // 3. Crear el objeto movimiento
     const nuevoMovimiento = {
         id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'AUTO-' + Date.now(),
-        fecha: new Date(fechaPrevista), // Usamos la fecha programada
+        fecha: new Date(fechaPrevista), 
         cuenta: regla.cuenta,
         concepto: regla.concepto,
-        importe: regla.importe, // El signo ya viene correcto de la regla (negativo si es gasto)
+        importe: regla.importe, // El signo ya viene correcto de la regla
         descripcion: (regla.descripcion || "") + " (Fijo)",
         beneficiario: regla.beneficiario || "",
         tipo: (regla.importe >= 0) ? 'ingreso' : 'gasto'
     };
 
-    // 3. Guardar usando tu función universal (que ya maneja Excel y Nube)
+    // 4. Guardar usando tu sistema blindado
     try {
         await window.guardarUniversal([nuevoMovimiento]);
-        // guardarUniversal ya refresca la pantalla y avisa, no hace falta hacer más
+        
+        // 5. Actualizar la fecha de la regla recurrente (Avanzarla)
+        // Nota: ejecutarRecurrente ya lo hacía, pero aquí lo hacemos manual
+        // Si prefieres que solo se añada sin mover la fecha, borra estas líneas siguientes:
+        if(typeof calcularSiguienteFecha === 'function') {
+            const nuevaFecha = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
+            regla.fechaProx = nuevaFecha;
+            await guardarTodoConRecurrentes(); // Guardamos también el cambio de fecha
+            cargarVistaRecurrentes(); // Refrescamos la lista
+        }
+
     } catch (e) {
         console.error(e);
-        window.mostrarNotificacion("❌ Error al guardar regla: " + e.message, "error");
+        window.mostrarNotificacion("❌ Error al procesar fijo", "error");
     }
 };
 
