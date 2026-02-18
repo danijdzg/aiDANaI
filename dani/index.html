@@ -3870,12 +3870,12 @@ function generarUUID() {
 }
 
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO BLINDADO (CORREGIDO Y RECONECTADO)
+// 🛡️ GUARDAR MOVIMIENTO BLINDADO (CORREGIDO SIGNO)
 // ==========================================
 window.guardarManual = async function() {
     console.log("--- 🔄 Ejecutando Guardado Manual ---");
 
-    // 1. REFERENCIAS VISUALES CORRECTAS (Adaptadas a tu nuevo diseño PRO)
+    // 1. REFERENCIAS VISUALES
     const btnGuardar = document.getElementById('btn-modal-action'); 
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
@@ -3884,49 +3884,45 @@ window.guardarManual = async function() {
         if (btnGuardar) {
             btnGuardar.innerHTML = '⏳ Guardando...';
             btnGuardar.disabled = true;
-            btnGuardar.style.backgroundColor = "#ff9800"; // Naranja de espera
+            btnGuardar.style.backgroundColor = "#ff9800"; 
         }
 
-        // 2. RECOGER DATOS DEL FORMULARIO (¡AHORA CON LOS IDs CORRECTOS!)
+        // 2. RECOGER DATOS
         const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
         
-        // --- AQUÍ ESTABA EL ERROR: AHORA APUNTAMOS A LOS IDs QUE EMPIEZAN POR 'm-' ---
         const elId = document.getElementById('m-id'); 
         const idExistente = elId ? elId.value : "";
         
         const fecha = document.getElementById('m-fecha').value;
         const cuentaOrigen = document.getElementById('m-cuenta').value;
         
-        // El destino solo existe si estamos en modo traspaso
         const elDestino = document.getElementById('m-cuenta-destino');
         const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
         
         const concepto = document.getElementById('m-concepto').value;
-        
-        // OJO: Tu campo de importe se llama 'm-cantidad' ahora
-        const importeStr = document.getElementById('m-cantidad').value;
-        
+        const importeStr = document.getElementById('m-cantidad').value; // Usamos m-cantidad
         const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
         const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
 
-        // 3. VALIDACIONES BÁSICAS
+        // 3. VALIDACIONES
         if (!fecha) throw new Error("❌ Falta la FECHA");
         if (!cuentaOrigen) throw new Error("❌ Falta la CUENTA");
         if (!importeStr) throw new Error("❌ Falta el IMPORTE");
         if (!concepto) throw new Error("❌ Falta el CONCEPTO");
 
-        // Limpieza de importe (quitar € y cambiar comas)
+        // Limpieza de importe
         let importeLimpio = importeStr.replace('€', '').replace(',', '.').trim();
         let importeNum = parseFloat(importeLimpio);
         
         if (isNaN(importeNum) || importeNum === 0) throw new Error("❌ El importe no es válido");
+        
+        // Empezamos trabajando siempre con el valor absoluto (positivo)
         importeNum = Math.abs(importeNum); 
 
-        // DETECTAR SI ES TRASPASO
-        const modoActual = window.modoTransaccionActual || 'gasto'; // gasto, ingreso, traspaso
+        // DETECTAR MODO
+        const modoActual = window.modoTransaccionActual || 'gasto'; 
         const esTraspaso = (modoActual === 'traspaso') || (concepto === 'TRASPASO');
 
-        // FUNCIÓN AUXILIAR PARA DETECTAR DUEÑO
         const detectarDueno = (nombreCuenta) => {
             const c = String(nombreCuenta).toUpperCase().trim();
             if (c.startsWith("D-")) return "DANI";
@@ -3934,12 +3930,11 @@ window.guardarManual = async function() {
             return "PROPIO"; 
         };
 
-        // VARIABLES PARA GUARDAR
         let filasParaExcel = [];
         let movimientosParaLocal = [];
 
         // =========================================================
-        // 🅰️ CAMINO A: ES UN TRASPASO (Genera 2 Movimientos)
+        // 🅰️ CAMINO A: ES UN TRASPASO
         // =========================================================
         if (esTraspaso) {
             if (!cuentaDestino) throw new Error("❌ Selecciona una CUENTA DESTINO");
@@ -3948,14 +3943,12 @@ window.guardarManual = async function() {
             const idSalida = generarID();
             const idEntrada = generarID();
 
-            // Movimiento 1: SALIDA (Negativo)
             const movSalida = {
                 id: idSalida, fecha: fecha, cuenta: cuentaOrigen, concepto: "TRASPASO",
                 importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
                 beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: new Date(fecha).getTime()
             };
 
-            // Movimiento 2: ENTRADA (Positivo)
             const movEntrada = {
                 id: idEntrada, fecha: fecha, cuenta: cuentaDestino, concepto: "TRASPASO",
                 importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
@@ -3964,17 +3957,20 @@ window.guardarManual = async function() {
 
             filasParaExcel.push([movSalida.id, movSalida.fecha, movSalida.cuenta, movSalida.concepto, movSalida.importe, movSalida.descripcion, movSalida.beneficiario]);
             filasParaExcel.push([movEntrada.id, movEntrada.fecha, movEntrada.cuenta, movEntrada.concepto, movEntrada.importe, movEntrada.descripcion, movEntrada.beneficiario]);
-            
             movimientosParaLocal.push(movSalida, movEntrada);
         } 
         // =========================================================
-        // 🅱️ CAMINO B: GASTO O INGRESO NORMAL
+        // 🅱️ CAMINO B: GASTO O INGRESO NORMAL (AQUÍ ESTABA EL ERROR)
         // =========================================================
         else {
-            if (modoActual === 'gasto') importeNum = -importeNum; // Gasto es negativo
+            // CORRECCIÓN: Si es 'gasto' O 'pago', forzamos negativo
+            if (modoActual === 'gasto' || modoActual === 'pago') {
+                importeNum = -Math.abs(importeNum); // ⬅️ SIEMPRE NEGATIVO
+            } else {
+                importeNum = Math.abs(importeNum);  // ⬅️ SIEMPRE POSITIVO (Ingreso)
+            }
             
             const idFinal = idExistente || generarID();
-            
             let benefFinal = benefManual;
             if(!benefFinal) benefFinal = detectarDueno(cuentaOrigen);
 
@@ -3989,36 +3985,33 @@ window.guardarManual = async function() {
         }
 
         // =========================================================
-        // 🛡️ FASE CRÍTICA: GUARDADO
+        // 🛡️ FASE GUARDADO
         // =========================================================
         
-        // 1. Actualizar memoria local PRIMERO (Optimistic UI)
+        // 1. Actualizar memoria
         if (idExistente) {
             window.datos = window.datos.filter(m => m.id !== idExistente);
         }
         movimientosParaLocal.forEach(m => window.datos.push(m));
 
-        // 2. Refrescar Pantallas (Dashboard, Lista, Gráficos)
+        // 2. Refrescar Pantallas
         if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         if (typeof renderizar === 'function') renderizar();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
 
-        // 3. INTENTAR GUARDADO EN LA NUBE/EXCEL
-        // Usamos la función universal para que gestione la subida
+        // 3. Guardar Físico (Nube/Local)
         await window.guardarUniversal();
 
-        // Limpieza UI
+        // Limpieza
         window.cerrarModal();
         if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado con éxito", "success");
         if (typeof vibrar === 'function') vibrar('ingreso');
 
     } catch (error) {
         console.error("❌ Error al guardar:", error);
-        // Usamos tu sistema de notificación Toast
         if(window.mostrarNotificacion) window.mostrarNotificacion(error.message, "error");
         else alert(error.message);
     } finally {
-        // Restaurar botón siempre
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
