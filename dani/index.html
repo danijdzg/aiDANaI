@@ -1422,27 +1422,26 @@ body {
         /* 2. Ocultar el ID para que no moleste en la cuadrícula */
         #m-id { display: none; }
 
-        /* 3. CONTROL DE TAMAÑOS (Las piezas del puzzle) */
+        /* 3. CONTROL DE TAMAÑOS (NUEVO ORDEN MAGICO) */
         
-        /* -- FILA 1: Importe y Fecha (Ocupan 1 hueco cada uno, se ponen lado a lado solos) -- */
+        /* FILA 1: Importe (Izquierda) y Fecha (Derecha) */
+        /* Importe es el nº1, Fecha es el nº3 en HTML. Los colocamos visualmente */
+        #modal-manual .input-group-pro:nth-of-type(1) { grid-column: span 1; } /* Importe */
+        #modal-manual .input-group-pro:nth-of-type(3) { grid-column: span 1; } /* Fecha (Ahora es el 3º elemento) */
+
+        /* FILA 2: Descripción (OCUPA TODO EL ANCHO) */
+        #modal-manual .input-group-pro:nth-of-type(2) { 
+            grid-column: span 2; 
+        }
+
+        /* FILA 3: Cuenta (Ocupa todo) */
+        #modal-manual .input-group-pro:nth-of-type(4) { grid-column: span 2; }
         
-        /* -- FILA 2: Cuenta (Queremos que ocupe los 2 huecos) -- */
-        /* Seleccionamos el div de la cuenta (el 3º input-group porque el ID oculto no cuenta visualmente) */
-        #modal-manual .input-group-pro:nth-of-type(3) {
-            grid-column: span 2;
-        }
+        /* Bloque Destino (Si aparece, ocupa todo) */
+        #bloque-destino { grid-column: span 2; }
 
-        /* -- Bloque Destino (Si aparece, ocupa todo) -- */
-        #bloque-destino {
-            grid-column: span 2;
-        }
-
-        /* -- FILA 3: Concepto y Beneficiario (Se ponen lado a lado solos) -- */
-
-        /* -- FILA 4: Nota/Detalle (Ocupa todo) -- */
-        #modal-manual .input-group-pro:last-of-type {
-            grid-column: span 2;
-        }
+        /* FILA 4: Concepto y Beneficiario (Mitad y Mitad) */
+        /* Se ajustan solos */
 
         /* -- BOTONES EXTRA (Duplicar/Borrar) al fondo -- */
         #extra-actions {
@@ -1911,6 +1910,9 @@ body {
             <input type="text" id="m-cantidad" class="input-pro input-amount-pro form-field" 
                    placeholder="0.00 €" readonly onclick="abrirCalculadora('m-cantidad')">
         </div>
+		<div class="input-group-pro">
+            <label class="label-pro">Descripción (Detectar Auto)</label> <input type="text" id="m-desc" class="input-pro form-field" placeholder="Ej: Mercadona, Cine..." onkeyup="detectarMagia(this.value)">
+        </div>
 
         <div class="input-group-pro">
             <label class="label-pro">Fecha</label>
@@ -1945,11 +1947,7 @@ body {
             </select>
         </div>
 
-        <div class="input-group-pro">
-            <label class="label-pro">Nota / Detalle</label>
-            <input type="text" id="m-desc" class="input-pro form-field" placeholder="Ej: Cena del viernes...">
-        </div>
-
+        
         <div id="extra-actions" class="extra-actions-grid" style="display:none;">
             <button type="button" class="input-pro" onclick="window.duplicarMovimiento(document.getElementById('m-id').value)" 
                     style="border-color:#ffc107; color:#ffc107; font-weight:bold; font-size:14px;">
@@ -3389,46 +3387,44 @@ function renderizar() {
             });
 
             gruposMeses.forEach(gMes => {
+                // Título del MES (Ej: "Marzo 2026")
                 let tituloMes = gMes.fechaObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
                 tituloMes = tituloMes.charAt(0).toUpperCase() + tituloMes.slice(1);
-                let colorNetoMes = gMes.neto >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-                let signoNetoMes = gMes.neto >= 0 ? '+' : '';
 
+                // Semáforo MES (Verde/Rojo/Azul)
+                let colorNetoMes = '#00B8FF'; 
+                if (gMes.neto > 0.001) colorNetoMes = '#39FF14'; 
+                if (gMes.neto < -0.001) colorNetoMes = '#FF2E4D'; 
+
+                // HTML MES (Línea fina)
                 htmlFinal += `
                 <tr class="mes-separator" style="background:transparent; pointer-events:none;">
-                    <td colspan="9" style="padding: 30px 5px 10px 5px; border:none;">
-                        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--c-accent); padding-bottom: 5px; gap: 5px;">
-                            <span style="color: var(--c-accent); font-weight: 900; text-transform: uppercase; font-size: 16px; letter-spacing: 1px; text-shadow: 0 0 10px rgba(191, 90, 242, 0.4); white-space: nowrap;">${tituloMes}</span>
-                            <div style="font-family:'Inter', sans-serif; font-weight:bold; font-size:11px; display:flex; gap:8px; align-items:center;">
-                                <span style="color:${colorNetoMes}; font-size:13px;">Saldo: ${signoNetoMes}${fmt(gMes.neto)}</span>
-                                <span style="color:#666;">|</span>
-                                <span style="color:var(--c-success); opacity:0.8;">IN ${fmt(gMes.ingresos)}</span>
-                                <span style="color:var(--c-danger); opacity:0.8;">OUT ${fmt(gMes.gastos)}</span>
-                            </div>
+                    <td colspan="9" style="padding: 15px 5px 2px 5px; border:none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--c-accent); padding-bottom: 2px;">
+                            <span style="color: var(--c-accent); font-weight: 900; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">${tituloMes}</span>
+                            <span style="color:${colorNetoMes}; font-weight:bold; font-size:14px;">${fmt(gMes.neto)} €</span>
                         </div>
                     </td>
                 </tr>`;
 
                 gMes.dias.forEach(gDia => {
-                    // --- AQUÍ ESTÁ EL CAMBIO DE FECHA ---
-                    const diaNum = gDia.fechaObj.getDate().toString().padStart(2, '0'); // "16"
-                    const mesNum = (gDia.fechaObj.getMonth() + 1).toString().padStart(2, '0'); // "02"
-                    let nombreDia = gDia.fechaObj.toLocaleDateString('es-ES', { weekday: 'long' }); // "lunes"
-                    nombreDia = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1); // "Lunes"
+                    // 1. FORMATO LARGO: "Miércoles, 11 de marzo"
+                    let textoFecha = gDia.fechaObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+                    // Ponemos la primera letra en mayúscula (ej: "miércoles..." -> "Miércoles...")
+                    textoFecha = textoFecha.charAt(0).toUpperCase() + textoFecha.slice(1);
 
-                    // Formato final: "Lunes, 16/02"
-                    const textoFecha = `${nombreDia}, ${diaNum}/${mesNum}`;
+                    // Semáforo DÍA (Verde/Rojo/Azul)
+                    let colorNetoDia = '#00B8FF'; 
+                    if (gDia.neto > 0.001) colorNetoDia = '#39FF14'; 
+                    if (gDia.neto < -0.001) colorNetoDia = '#FF2E4D'; 
 
-                    let colorNetoDia = gDia.neto >= 0 ? '#4ade80' : '#f87171';
-                    let signoNetoDia = gDia.neto >= 0 ? '+' : '';
-
+                    // HTML DÍA (AMARILLO Y UNA SOLA LÍNEA)
                     htmlFinal += `
                     <tr class="dia-separator" style="background:transparent; pointer-events:none;">
-                        <td colspan="9" style="padding: 15px 5px 5px 10px; border:none;">
-                            <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px dashed #333; padding-bottom: 4px;">
-                                <span style="color: #FFD700; font-weight: 800; font-size: 13px;">${textoFecha}</span>
-                                
-                                <span style="font-size: 11px; font-weight: 700; color: ${colorNetoDia}; opacity: 0.9;">(Saldo: ${signoNetoDia}${fmt(gDia.neto)})</span>
+                        <td colspan="9" style="padding: 5px 5px 0px 5px; border:none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding: 3px 5px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                                <span style="color: #FFD60A; font-weight: 700; font-size: 12px;">${textoFecha}</span>
+                                <span style="font-size: 12px; font-weight: 700; color: ${colorNetoDia};">${fmt(gDia.neto)} €</span>
                             </div>
                         </td>
                     </tr>`;
@@ -3436,7 +3432,7 @@ function renderizar() {
                     gDia.movimientos.forEach(m => htmlFinal += generarFilaHTML(m));
                 });
             });
-
+			
         } else {
             htmlFinal = lista.map(m => generarFilaHTML(m)).join('');
         }
@@ -6932,6 +6928,96 @@ window.toggleDiasSemana = function() {
             e.preventDefault();
         }
     });
+
+// --- OPCIÓN B: AUTOCOMPLETADO MÁGICO (VERSIÓN 4.0 - TRASPASOS INTELIGENTES) ---
+window.detectarMagia = function(texto) {
+    // 1. Mínimo 3 letras para actuar
+    if (!texto || texto.length < 3) return;
+    
+    // Si estamos editando (no creando), no tocar nada para evitar desastres
+    if (window.idEnEdicion) return;
+
+    const busqueda = texto.toLowerCase();
+    
+    // --- MODO 1: DETECCIÓN DE TRASPASOS ---
+    // Si escribes "traspaso", "transf" o "bizum", activamos lógica especial
+    if (busqueda.includes("traspaso") || busqueda.includes("transf")) {
+        console.log("🔄 Modo Traspaso Detectado");
+
+        // A. Fijar Concepto a "TRASPASO"
+        const selConcepto = document.getElementById('m-concepto');
+        if (selConcepto) {
+            selConcepto.value = "TRASPASO";
+            // Efecto visual amarillo para indicar modo especial
+            selConcepto.style.backgroundColor = "rgba(255, 214, 10, 0.2)"; 
+            setTimeout(() => selConcepto.style.backgroundColor = "", 600);
+        }
+
+        // B. Adivinar Beneficiario según el DUEÑO de la cuenta seleccionada
+        const selCuenta = document.getElementById('m-cuenta');
+        const selBen = document.getElementById('m-beneficiario');
+        
+        if (selCuenta && selBen) {
+            const cuentaID = selCuenta.value.toUpperCase(); // Ej: D-ING o N-BBVA
+            let dueno = "";
+
+            // Lógica de prefijos (D- para Dani, N- para Norma)
+            if (cuentaID.startsWith("D-")) dueno = "DANI";
+            else if (cuentaID.startsWith("N-")) dueno = "NORMA";
+            else if (cuentaID.startsWith("C-")) dueno = "COMÚN";
+
+            if (dueno) {
+                selBen.value = dueno;
+                selBen.style.backgroundColor = "rgba(255, 214, 10, 0.2)";
+                setTimeout(() => selBen.style.backgroundColor = "", 600);
+            }
+        }
+        
+        // En modo traspaso, NO buscamos en el historial. Terminamos aquí.
+        return; 
+    }
+
+    // --- MODO 2: ADIVINO HISTÓRICO (Para el resto de gastos) ---
+    // Buscar el movimiento MÁS RECIENTE (leemos la lista al revés)
+    const copiaDatos = window.datos.slice().reverse(); 
+    
+    const encontrado = copiaDatos.find(m => {
+        const desc = (m.Descripcion || m.DESCRIPCION || m.descripcion || m.detalle || "").toLowerCase();
+        const ben = (m.Beneficiario || m.BENEFICIARIO || m.beneficiario || "").toLowerCase();
+        const conc = (m.Concepto || m.CONCEPTO || m.concepto || "").toLowerCase();
+        return desc.includes(busqueda) || ben.includes(busqueda) || conc.includes(busqueda);
+    });
+
+    if (encontrado) {
+        console.log("🪄 Magia Histórica:", encontrado);
+
+        // Extraer valores con seguridad
+        const nuevaCuenta = encontrado.Cuenta || encontrado.CUENTA || encontrado.cuenta;
+        const nuevoConcepto = encontrado.Concepto || encontrado.CONCEPTO || encontrado.concepto;
+        const nuevoBen = encontrado.Beneficiario || encontrado.BENEFICIARIO || encontrado.beneficiario;
+
+        // Actualizar CUENTA
+        const selCuenta = document.getElementById('m-cuenta');
+        if (selCuenta && nuevaCuenta) {
+            selCuenta.value = nuevaCuenta;
+            selCuenta.style.transition = "background 0.2s";
+            selCuenta.style.backgroundColor = "#d0f0fd"; // Azul = Historial
+            setTimeout(() => selCuenta.style.backgroundColor = "", 400);
+        }
+
+        // Actualizar CONCEPTO (Si no es traspaso)
+        const selConcepto = document.getElementById('m-concepto');
+        if (selConcepto && nuevoConcepto) {
+            selConcepto.value = nuevoConcepto;
+            selConcepto.style.backgroundColor = "#d0f0fd";
+            setTimeout(() => selConcepto.style.backgroundColor = "", 400);
+        }
+
+        // Actualizar BENEFICIARIO
+        const selBen = document.getElementById('m-beneficiario');
+        if (selBen) selBen.value = nuevoBen || "";
+    }
+};
 
 // --- NUEVA FUNCIÓN: AÑADIR DESDE RECURRENTE (CEREBRO) ---
 window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
