@@ -1900,7 +1900,10 @@ select:focus > option:checked {
     <div class="card-header">
         <span class="card-title">MAPA DE ACTIVOS</span>
     </div>
-    <div id="chart-TreeMap" style="width: 100%; height: 400px;"></div>
+    
+    <div id="treemap-filters" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 15px; padding: 0 10px;"></div>
+    
+    <div id="chart-TreeMap" style="width: 100%; height: 380px; user-select: none; touch-action: pan-y;"></div>
 </div>
 </div>
 	
@@ -5091,170 +5094,112 @@ async function guardarUniversal(nuevasFilas) {
 } 
 
 // ==========================================
-// 🗺️ TREEMAP PROFESIONAL: LEYENDA SUPERIOR Y FILTRO ACTIVO
+// 🗺️ TREEMAP DEFINITIVO (FILTROS HTML + SINGLE SERIES)
 // ==========================================
+window.tiposExcluidos = window.tiposExcluidos || new Set();
+
 window.renderTreeMap = function() {
     const container = document.getElementById('chart-TreeMap');
-    if (!container) return;
+    const filterContainer = document.getElementById('treemap-filters');
+    if (!container || !filterContainer) return;
 
-    if (window.echartTreeMap) {
-        window.echartTreeMap.dispose();
-    }
-    
+    if (window.echartTreeMap) window.echartTreeMap.dispose();
     if (!window.datos || window.datos.length === 0) {
-        container.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#666;">Cargando datos...</div>';
+        container.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#666;">Cargando...</div>';
         return;
     }
 
     window.echartTreeMap = echarts.init(container);
 
-    // 1. FILTRADO POR USUARIO
+    // 1. PROCESAR DATOS Y COLORES
+    const mapaColores = {
+        'BANCO': '#00F0FF', 'BOLSA': '#F72585', 'CRIPTOMONEDAS': '#7209B7', 
+        'CRIPTO': '#7209B7', 'EFECTIVO': '#4CC9F0', 'VIVIENDA': '#FFD60A', 
+        'PLANPENSIONES': '#39FF14', 'CROWDFUNDING': '#FF4444', 'OTROS': '#888888'
+    };
+
     const datosFiltrados = window.datos.filter(m => (typeof pasaFiltroPropietario === 'function') ? pasaFiltroPropietario(m) : true);
-    
     const saldos = {};
     datosFiltrados.forEach(m => {
-        const cta = String(m.cuenta || 'Sin Cuenta').trim().toUpperCase();
-        saldos[cta] = (saldos[cta] || 0) + m.importe;
+        const cta = String(m.cuenta || '').trim().toUpperCase();
+        if(cta) saldos[cta] = (saldos[cta] || 0) + m.importe;
     });
 
-    // 2. PALETA DE COLORES FIJA (Imprescindible para la leyenda)
-    const mapaColores = {
-        'BANCO': '#00F0FF',        
-        'BOLSA': '#F72585',        
-        'CRIPTOMONEDAS': '#7209B7', 
-        'CRIPTO': '#7209B7',       
-        'EFECTIVO': '#4CC9F0',     
-        'VIVIENDA': '#FFD60A',     
-        'INMOBILIARIO': '#FFD60A', 
-        'PLANPENSIONES': '#39FF14', 
-        'CROWDFUNDING': '#FF4444', 
-        'OTROS': '#888888'         
-    };
-    const paletaBackup = ['#00F0FF', '#F72585', '#7209B7', '#4CC9F0', '#FFD60A', '#39FF14', '#FF4444'];
-
-    // 3. AGRUPACIÓN
     const grupos = {};
     Object.keys(saldos).forEach(cta => {
         const valor = saldos[cta];
-        if (valor < 1) return; 
-
+        if (valor < 1) return;
         let config = (window.mapaCuentas && window.mapaCuentas[cta]) ? window.mapaCuentas[cta] : { tipo: 'OTROS' };
         const tipo = String(config.tipo || 'OTROS').toUpperCase().trim();
-        
         if (!grupos[tipo]) grupos[tipo] = [];
-        grupos[tipo].push({ 
-            name: cta.replace('D-', '').replace('N-', ''), 
-            value: valor 
-        });
+        grupos[tipo].push({ name: cta.replace('D-', '').replace('N-', ''), value: valor });
     });
 
-    const dataChildren = [];
-    const categoriasLeyenda = [];
-    let colorIdx = 0;
+    // 2. CREAR BOTONES DE FILTRO (LEYENDA)
+    const todosLosTipos = Object.keys(grupos).sort();
+    filterContainer.innerHTML = ''; 
+    todosLosTipos.forEach(tipo => {
+        const estaActivo = !window.tiposExcluidos.has(tipo);
+        const color = mapaColores[tipo] || '#888';
+        
+        const btn = document.createElement('button');
+        btn.style = `
+            background: ${estaActivo ? color + '20' : '#111'};
+            color: ${estaActivo ? color : '#444'};
+            border: 1px solid ${estaActivo ? color : '#333'};
+            padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 800;
+            cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+            box-shadow: ${estaActivo ? '0 0 10px ' + color + '30' : 'none'};
+        `;
+        btn.innerText = tipo;
+        btn.onclick = () => {
+            if (window.tiposExcluidos.has(tipo)) window.tiposExcluidos.delete(tipo);
+            else window.tiposExcluidos.add(tipo);
+            window.renderTreeMap(); // Redibujar
+        };
+        filterContainer.appendChild(btn);
+    });
 
-    Object.keys(grupos).sort().forEach(tipo => {
-        const colorAsignado = mapaColores[tipo] || paletaBackup[colorIdx % paletaBackup.length];
-        colorIdx++;
-
-        categoriasLeyenda.push(tipo);
-
-        // Cada grupo es un nodo de nivel superior
-        dataChildren.push({ 
-            name: tipo, 
-            children: grupos[tipo],
-            itemStyle: {
-                color: colorAsignado,
-                borderColor: '#000',
-                borderWidth: 2
-            }
-        });
+    // 3. PREPARAR DATA PARA EL GRÁFICO (Solo tipos no excluidos)
+    const dataTree = [];
+    todosLosTipos.forEach(tipo => {
+        if (!window.tiposExcluidos.has(tipo)) {
+            dataTree.push({
+                name: tipo,
+                children: grupos[tipo],
+                itemStyle: { color: mapaColores[tipo] || '#888' }
+            });
+        }
     });
 
     // 4. CONFIGURACIÓN DEL GRÁFICO
     const option = {
         backgroundColor: 'transparent',
-        
-        // LEYENDA EN LA PARTE SUPERIOR (Más accesible)
-        legend: {
-            show: true,
-            type: 'scroll',
-            data: categoriasLeyenda,
-            top: 0,               // CAMBIO: Ahora arriba
-            left: 'center',
-            z: 1000,
-            icon: 'roundRect',
-            itemWidth: 15,
-            itemHeight: 12,
-            itemGap: 10,
-            textStyle: {
-                color: '#fff',
-                fontSize: 10,
-                fontWeight: 'bold'
-            },
-            pageIconColor: '#fff',
-            pageTextStyle: { color: '#fff' }
-        },
-
-        tooltip: { 
+        tooltip: {
             backgroundColor: 'rgba(0,0,0,0.9)',
-            borderColor: '#333',
             textStyle: { color: '#fff' },
             formatter: (info) => {
-                const valFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(info.value);
-                return `<div style="color:${info.color}; font-weight:bold">${info.name}</div><div style="font-size:14px">${valFmt}</div>`;
+                const val = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(info.value);
+                return `<div style="color:${info.color}; font-weight:bold">${info.name}</div><div>${val}</div>`;
             }
         },
-
         series: [{
-            name: 'Distribución',
             type: 'treemap',
-            top: 40,              // Dejamos espacio arriba para la leyenda
-            bottom: 0,            
-            width: '100%',
-            roam: false,          
-            nodeClick: false,
-            breadcrumb: { show: false },
-            
-            label: {
-                show: true,
-                formatter: '{b}',
-                color: '#fff',
-                fontWeight: 'bold',
-                fontSize: 10
-            },
-
-            itemStyle: {
-                borderColor: '#111',
-                borderWidth: 2,
-                gapWidth: 2
-            },
-
+            width: '100%', height: '100%',
+            roam: false, nodeClick: false, breadcrumb: { show: false },
+            label: { show: true, formatter: '{b}', color: '#fff', fontWeight: 'bold', fontSize: 10 },
+            itemStyle: { borderColor: '#000', borderWidth: 2, gapWidth: 1 },
             levels: [
-                {
-                    itemStyle: { borderColor: '#000', borderWidth: 4, gapWidth: 4 }
-                },
-                {
-                    colorSaturation: [0.3, 0.6],
-                    itemStyle: { borderColorSaturation: 0.6, gapWidth: 2 }
-                }
+                { itemStyle: { borderColor: '#000', borderWidth: 4, gapWidth: 4 } },
+                { colorSaturation: [0.3, 0.6], itemStyle: { gapWidth: 2, borderColorSaturation: 0.6 } }
             ],
-            
-            data: dataChildren
+            data: dataTree
         }]
     };
 
-    try {
-        window.echartTreeMap.setOption(option);
-        setTimeout(() => window.echartTreeMap.resize(), 200);
-    } catch (e) { 
-        console.error("Error TreeMap:", e); 
-    }
-    
-    window.addEventListener('resize', () => {
-        if(window.echartTreeMap) window.echartTreeMap.resize();
-    });
+    window.echartTreeMap.setOption(option);
+    window.addEventListener('resize', () => window.echartTreeMap && window.echartTreeMap.resize());
 };
-
 // ==========================================
 // 💎 RAYO X PATRIMONIAL (MODO NEÓN CLEAN)
 // ==========================================
