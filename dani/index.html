@@ -26,6 +26,15 @@
 </head>
 
     <style>
+	/* --- FIX: PERMITIR SCROLL VERTICAL SOBRE GRÁFICOS --- */
+#chart-TreeMap, #chart-Sunburst, #chartRadar, canvas {
+    touch-action: pan-y !important; /* Permite deslizar arriba/abajo */
+}
+
+/* Aumentar espacio al final de la pestaña Patrimonio para ver bien la leyenda */
+#tab-patri {
+    padding-bottom: 120px !important; 
+}
 		/* --- INICIO BLOQUE NOTIFICACIONES TOAST (NUEVO) --- */
 #toast-container {
     position: fixed;
@@ -1614,6 +1623,24 @@ select:focus > option:checked {
     background: var(--theme-color) !important; /* Color neón al seleccionar */
     color: #000 !important;
 }
+ /* --- FIX FINAL: SCROLL Y ESPACIADO --- */
+
+/* 1. Obligar al gráfico a dejar pasar el scroll vertical */
+#chart-TreeMap, #chart-TreeMap canvas {
+    touch-action: pan-y !important; 
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* 2. Ajuste de espaciado en la pestaña Patrimonio */
+#tab-patri {
+    padding-bottom: 100px !important; /* Espacio solo al FINAL de la página */
+}
+
+/* 3. Forzar separación exacta de 20px entre tarjetas */
+.master-card + .master-card {
+    margin-top: 20px !important;
+}
  
    </style>
 
@@ -1869,7 +1896,13 @@ select:focus > option:checked {
         </div>
     </div>
 </div>
-                </div>
+</div>
+	<div class="master-card" style="margin-top: 20px;">
+    <div class="card-header">
+        <span class="card-title">MAPA DE ACTIVOS</span>
+    </div>
+    <div id="chart-TreeMap" style="width: 100%; height: 350px;"></div>
+</div>	
     <div id="tab-recurrentes" class="view-section">
     <div style="padding: 20px;">
         <h3 style="color:var(--c-primary); margin-bottom:15px; text-transform:uppercase; letter-spacing:1px; text-align:center;">
@@ -3559,7 +3592,7 @@ function renderizar() {
         setTimeout(() => {
             actualizarPatrimonio();
             if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
-            // HE QUITADO renderizarRadarSalud() DE AQUÍ
+            if (typeof renderTreeMap === 'function') renderTreeMap();
         }, 100);
     }
     
@@ -5057,6 +5090,102 @@ async function guardarUniversal(nuevasFilas) {
 } 
 
 // ==========================================
+// 🗺️ TREEMAP INTERACTIVO (Con Leyenda y Filtros)
+// ==========================================
+window.renderTreeMap = function() {
+    const container = document.getElementById('chart-TreeMap');
+    if (!container) return;
+
+    if (window.echartTreeMap) window.echartTreeMap.dispose();
+    if (!window.datos || window.datos.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">Sin datos</div>';
+        return;
+    }
+
+    window.echartTreeMap = echarts.init(container);
+
+    // --- PROCESAMIENTO DE DATOS ---
+    const datosFiltrados = window.datos.filter(m => (typeof pasaFiltroPropietario === 'function') ? pasaFiltroPropietario(m) : true);
+    const saldos = {};
+    datosFiltrados.forEach(m => {
+        const cta = String(m.cuenta || 'Sin Cuenta').trim().toUpperCase();
+        saldos[cta] = (saldos[cta] || 0) + m.importe;
+    });
+
+    const grupos = {};
+    Object.keys(saldos).forEach(cta => {
+        const valor = saldos[cta];
+        if (valor < 1) return; 
+
+        let config = (window.mapaCuentas && window.mapaCuentas[cta]) ? window.mapaCuentas[cta] : { tipo: 'OTROS' };
+        const tipo = String(config.tipo || 'OTROS').toUpperCase();
+        
+        if (!grupos[tipo]) grupos[tipo] = [];
+        grupos[tipo].push({ name: cta.replace('D-', '').replace('N-', ''), value: valor });
+    });
+
+    const dataChildren = [];
+    const categoriasLeyenda = [];
+    Object.keys(grupos).forEach(tipo => {
+        dataChildren.push({ name: tipo, children: grupos[tipo] });
+        categoriasLeyenda.push(tipo);
+    });
+
+    const coloresNeon = ['#00F0FF', '#F72585', '#7209B7', '#4CC9F0', '#FFD60A', '#39FF14', '#FF4444'];
+
+    // --- OPCIONES VISUALES AJUSTADAS ---
+    const option = {
+        backgroundColor: 'transparent',
+        
+        color: coloresNeon, 
+        legend: {
+            data: categoriasLeyenda,
+            bottom: 0,
+            left: 'center',
+            icon: 'circle',         // Icono circular más limpio
+            itemWidth: 10,
+            itemHeight: 10,
+            textStyle: { color: '#ccc', fontSize: 10, fontWeight: 'bold' },
+            itemGap: 10,
+            padding: [0, 0, 5, 0]   // Pegado abajo del todo
+        },
+
+        tooltip: { 
+            backgroundColor: 'rgba(0,0,0,0.9)',
+            borderColor: '#333',
+            textStyle: { color: '#fff' },
+            formatter: (info) => {
+                var valFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(info.value);
+                return `<div style="color:${info.color}; font-weight:bold">${info.name}</div><div style="color:#fff">${valFmt}</div>`;
+            }
+        },
+
+        series: [{
+            type: 'treemap',
+            top: 0,
+            bottom: 40,    // Dejamos 40px para la leyenda
+            width: '100%',
+            roam: false,   // Importante para el scroll
+            nodeClick: false,
+            breadcrumb: { show: false },
+            label: { show: true, formatter: '{b}', color: '#fff', fontSize: 10, fontWeight: 'bold' },
+            itemStyle: { borderColor: '#000', borderWidth: 2, gapWidth: 1 },
+            data: dataChildren,
+            levels: [
+                { itemStyle: { borderColor: '#000', borderWidth: 3, gapWidth: 2 } },
+                { colorSaturation: [0.3, 0.6], itemStyle: { gapWidth: 1, borderColorSaturation: 0.6 } }
+            ]
+        }]
+    };
+
+    try {
+        window.echartTreeMap.setOption(option);
+    } catch (e) { console.error(e); }
+    
+    window.addEventListener('resize', () => window.echartTreeMap && window.echartTreeMap.resize());
+};
+
+// ==========================================
 // 💎 RAYO X PATRIMONIAL (MODO NEÓN CLEAN)
 // ==========================================
 window.renderizarSunburstPatrimonio = function() {
@@ -6002,7 +6131,9 @@ window.toggleUsuario = function() {
         if(typeof renderizarSunburstPatrimonio === 'function') {
             renderizarSunburstPatrimonio();
         }
-        
+        if(typeof renderTreeMap === 'function') {
+            renderTreeMap();
+        }
         // Forzamos Dashboard una vez más para asegurar el Pentágono
         if(typeof actualizarDashboard === 'function') {
             actualizarDashboard();
