@@ -3904,37 +3904,46 @@ function generarUUID() {
         return v.toString(16);
     });
 }
+
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO BLINDADO (V3: Lógica Inteligente + Seguridad Nube)
+// 🛡️ GUARDAR MOVIMIENTO BLINDADO (CORREGIDO Y RECONECTADO)
 // ==========================================
 window.guardarManual = async function() {
-    console.log("--- 🔄 Ejecutando Guardado Inteligente (Blindado) ---");
+    console.log("--- 🔄 Ejecutando Guardado Manual ---");
 
-    // 1. BLOQUEO VISUAL Y PREPARACIÓN
-    const btnGuardar = document.getElementById('btn-guardar-mov'); // ID Corregido
+    // 1. REFERENCIAS VISUALES CORRECTAS (Adaptadas a tu nuevo diseño PRO)
+    const btnGuardar = document.getElementById('btn-modal-action'); 
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
     try {
+        // Bloqueo visual del botón
         if (btnGuardar) {
             btnGuardar.innerHTML = '⏳ Guardando...';
             btnGuardar.disabled = true;
             btnGuardar.style.backgroundColor = "#ff9800"; // Naranja de espera
         }
 
-        // 2. RECOGER DATOS DEL FORMULARIO (Con IDs reales de tu index.html)
-        // Usamos crypto.randomUUID() si generarUUID no existe
+        // 2. RECOGER DATOS DEL FORMULARIO (¡AHORA CON LOS IDs CORRECTOS!)
         const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
         
-        const elId = document.getElementById('inp-id-oculto'); // A veces no existe, no pasa nada
+        // --- AQUÍ ESTABA EL ERROR: AHORA APUNTAMOS A LOS IDs QUE EMPIEZAN POR 'm-' ---
+        const elId = document.getElementById('m-id'); 
         const idExistente = elId ? elId.value : "";
         
-        const fecha = document.getElementById('inp-fecha').value || new Date().toISOString().split('T')[0];
-        const cuentaOrigen = document.getElementById('sel-cuenta').value;
-        const cuentaDestino = document.getElementById('sel-cuenta-destino') ? document.getElementById('sel-cuenta-destino').value : "";
-        const concepto = document.getElementById('sel-concepto').value;
-        const importeStr = document.getElementById('inp-importe').value;
-        const desc = (document.getElementById('inp-desc').value || "").toUpperCase().trim();
-        const benefManual = (document.getElementById('sel-beneficiario').value || "").toUpperCase().trim();
+        const fecha = document.getElementById('m-fecha').value;
+        const cuentaOrigen = document.getElementById('m-cuenta').value;
+        
+        // El destino solo existe si estamos en modo traspaso
+        const elDestino = document.getElementById('m-cuenta-destino');
+        const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
+        
+        const concepto = document.getElementById('m-concepto').value;
+        
+        // OJO: Tu campo de importe se llama 'm-cantidad' ahora
+        const importeStr = document.getElementById('m-cantidad').value;
+        
+        const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
+        const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
 
         // 3. VALIDACIONES BÁSICAS
         if (!fecha) throw new Error("❌ Falta la FECHA");
@@ -3942,15 +3951,18 @@ window.guardarManual = async function() {
         if (!importeStr) throw new Error("❌ Falta el IMPORTE");
         if (!concepto) throw new Error("❌ Falta el CONCEPTO");
 
-        let importeNum = parseFloat(importeStr.replace(',', '.'));
+        // Limpieza de importe (quitar € y cambiar comas)
+        let importeLimpio = importeStr.replace('€', '').replace(',', '.').trim();
+        let importeNum = parseFloat(importeLimpio);
+        
         if (isNaN(importeNum) || importeNum === 0) throw new Error("❌ El importe no es válido");
         importeNum = Math.abs(importeNum); 
 
-        // DETECTAR SI ES TRASPASO (Lógica de tu código)
+        // DETECTAR SI ES TRASPASO
         const modoActual = window.modoTransaccionActual || 'gasto'; // gasto, ingreso, traspaso
         const esTraspaso = (modoActual === 'traspaso') || (concepto === 'TRASPASO');
 
-        // --- FUNCIÓN AUXILIAR PARA DETECTAR DUEÑO (Tu lógica solicitada) ---
+        // FUNCIÓN AUXILIAR PARA DETECTAR DUEÑO
         const detectarDueno = (nombreCuenta) => {
             const c = String(nombreCuenta).toUpperCase().trim();
             if (c.startsWith("D-")) return "DANI";
@@ -3966,32 +3978,30 @@ window.guardarManual = async function() {
         // 🅰️ CAMINO A: ES UN TRASPASO (Genera 2 Movimientos)
         // =========================================================
         if (esTraspaso) {
-            if (!cuentaDestino) throw new Error("❌ Selecciona una CUENTA DESTINO para el traspaso");
+            if (!cuentaDestino) throw new Error("❌ Selecciona una CUENTA DESTINO");
             if (cuentaOrigen === cuentaDestino) throw new Error("❌ Origen y Destino son iguales");
 
             const idSalida = generarID();
             const idEntrada = generarID();
 
-            // Movimiento 1: SALIDA
+            // Movimiento 1: SALIDA (Negativo)
             const movSalida = {
                 id: idSalida, fecha: fecha, cuenta: cuentaOrigen, concepto: "TRASPASO",
                 importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
                 beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: new Date(fecha).getTime()
             };
 
-            // Movimiento 2: ENTRADA
+            // Movimiento 2: ENTRADA (Positivo)
             const movEntrada = {
                 id: idEntrada, fecha: fecha, cuenta: cuentaDestino, concepto: "TRASPASO",
                 importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
                 beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: new Date(fecha).getTime()
             };
 
-            // Preparamos para Excel (Orden: ID, FECHA, CUENTA, CONCEPTO, IMPORTE, DESC, BENEF)
             filasParaExcel.push([movSalida.id, movSalida.fecha, movSalida.cuenta, movSalida.concepto, movSalida.importe, movSalida.descripcion, movSalida.beneficiario]);
             filasParaExcel.push([movEntrada.id, movEntrada.fecha, movEntrada.cuenta, movEntrada.concepto, movEntrada.importe, movEntrada.descripcion, movEntrada.beneficiario]);
             
             movimientosParaLocal.push(movSalida, movEntrada);
-
         } 
         // =========================================================
         // 🅱️ CAMINO B: GASTO O INGRESO NORMAL
@@ -4001,7 +4011,6 @@ window.guardarManual = async function() {
             
             const idFinal = idExistente || generarID();
             
-            // Lógica beneficiario: Si está vacío, intentamos adivinarlo, si no, usamos el manual
             let benefFinal = benefManual;
             if(!benefFinal) benefFinal = detectarDueno(cuentaOrigen);
 
@@ -4016,41 +4025,34 @@ window.guardarManual = async function() {
         }
 
         // =========================================================
-        // 🛡️ FASE CRÍTICA: GUARDADO EN NUBE (PRIMERO)
-        // =========================================================
-        if (window.odManager && window.odManager.fileId) {
-            // Intentamos guardar en OneDrive
-            await window.odManager.addRows(filasParaExcel);
-            console.log("✅ Guardado en OneDrive confirmado.");
-        } else {
-            console.warn("⚠️ Modo Offline: Se guardará solo en local (Riesgo de pérdida al recargar)");
-             // Si quieres ser estricto, descomenta: throw new Error("Sin conexión a OneDrive");
-        }
-
-        // =========================================================
-        // 🔄 FASE LOCAL: ACTUALIZAR PANTALLA
+        // 🛡️ FASE CRÍTICA: GUARDADO
         // =========================================================
         
-        // Si era edición, borramos el antiguo primero
+        // 1. Actualizar memoria local PRIMERO (Optimistic UI)
         if (idExistente) {
             window.datos = window.datos.filter(m => m.id !== idExistente);
         }
-
-        // Añadimos los nuevos a la memoria
         movimientosParaLocal.forEach(m => window.datos.push(m));
 
-        // Actualizamos todo
-        if (typeof actualizarDashboard === 'function') actualizarDashboard();
+        // 2. Refrescar Pantallas (Dashboard, Lista, Gráficos)
+        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         if (typeof renderizar === 'function') renderizar();
+        if (typeof actualizarDashboard === 'function') actualizarDashboard();
+
+        // 3. INTENTAR GUARDADO EN LA NUBE/EXCEL
+        // Usamos la función universal para que gestione la subida
+        await window.guardarUniversal();
 
         // Limpieza UI
-        document.getElementById('form-nuevo-mov').reset();
         window.cerrarModal();
-        if (typeof mostrarEstado === 'function') mostrarEstado("✅ Movimiento guardado y asegurado", "success");
+        if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado con éxito", "success");
+        if (typeof vibrar === 'function') vibrar('ingreso');
 
     } catch (error) {
         console.error("❌ Error al guardar:", error);
-        window.mostrarNotificacion("⛔ Error al guardar: " + error.message, "error");
+        // Usamos tu sistema de notificación Toast
+        if(window.mostrarNotificacion) window.mostrarNotificacion(error.message, "error");
+        else alert(error.message);
     } finally {
         // Restaurar botón siempre
         if (btnGuardar) {
