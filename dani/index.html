@@ -1978,16 +1978,6 @@ th {
 </div>
 
     <script>
-	// --- GENERADOR DE IDs UNIFICADO ---
-window.generarID = function() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return window.generarID();
-    }
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-};
 	// --- FUNCIÓN UTILIDAD: MOSTRAR TOAST ---
 window.mostrarNotificacion = function(mensaje, tipo = 'info') {
     const container = document.getElementById('toast-container');
@@ -3008,112 +2998,107 @@ function leerExcel(blob) {
 }
 
 // ==========================================
-// 🧠 PROCESADOR MAESTRO V8 (NORMALIZADO + RECURRENTES)
+// 🧠 PROCESADOR MAESTRO V7 + RECURRENTES (FUSIÓN)
 // ==========================================
 window.procesarLibroLeido = function(wb) {
-    console.log("📖 Procesando Excel (Motor V8 - Normalizado)...");
+    console.log("📖 Procesando Excel (Motor V7 + Recurrentes)...");
 
-    // --- 1. FUNCIÓN AUXILIAR: NORMALIZAR CABECERAS ---
-    // Convierte las claves de las filas a MAYÚSCULAS y quita espacios
-    const obtenerDatosNormalizados = (nombreHojaParcial) => {
-        const nombreHoja = wb.SheetNames.find(n => n.toUpperCase().includes(nombreHojaParcial.toUpperCase()));
-        if (!nombreHoja) return [];
-        
-        const jsonCrudo = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja]);
-        
-        return jsonCrudo.map(fila => {
-            const filaNueva = {};
-            Object.keys(fila).forEach(key => {
-                const keyLimpia = key.trim().toUpperCase();
-                filaNueva[keyLimpia] = fila[key];
-            });
-            return filaNueva;
-        });
-    };
-
-    // 2. LIMPIEZA DE VARIABLES
+    // 1. LIMPIEZA Y PREPARACIÓN
     window.mapaCuentas = {};
     window.listaCuentasConfig = [];
     window.listaConceptosConfig = [];
     window.listaBeneficiariosConfig = [];
-    window.datosRecurrentes = [];
+    window.datosRecurrentes = []; // <--- NUEVO: Inicializamos almacén de recurrentes
 
     const limpiar = (txt) => String(txt || "").toUpperCase().trim().replace(/\s+/g, ' ');
     const nuclear = (txt) => String(txt || "").toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-    // 3. LEER CONFIGURACIÓN (Normalizado)
-    const datosConfig = obtenerDatosNormalizados("CONFIG");
+    // 2. LEER HOJA DE CONFIGURACIÓN
+    const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
     
-    if (datosConfig.length > 0) {
-        datosConfig.forEach(fila => {
-            const ctaRaw = fila["CUENTA"]; 
+    if (wsConfigName) {
+        const wsConfig = wb.Sheets[wsConfigName];
+        const datosConfig = XLSX.utils.sheet_to_json(wsConfig, { defval: "" });
+
+        if (datosConfig.length > 0) {
+            const row0 = datosConfig[0];
+            const keys = Object.keys(row0);
             
-            if (ctaRaw) {
-                const nombreCuenta = limpiar(ctaRaw);
-                if(nombreCuenta) {
-                    const tipoRaw = fila["TIPO"] || fila["CATEGORIA"] || "SIN TIPO";
-                    const esInvRaw = fila["ES_INVERSION"] || fila["INVERSION"] || "NO";
-                    
-                    window.mapaCuentas[nombreCuenta] = {
-                        nombre: nombreCuenta,
-                        tipo: limpiar(tipoRaw) || "SIN TIPO",
-                        esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(limpiar(esInvRaw)),
-                        idNuclear: nuclear(nombreCuenta)
-                    };
-                    window.listaCuentasConfig.push(nombreCuenta);
+            const keyCuenta = keys.find(k => k.toUpperCase().includes("CUENTA"));
+            const keyTipo = keys.find(k => k.toUpperCase().includes("TIPO") || k.toUpperCase().includes("CATEGORIA"));
+            const keyInv = keys.find(k => k.toUpperCase().includes("INVERSION"));
+            
+            const keyConcepto = keys.find(k => k.toUpperCase().includes("CONCEPTO"));
+            const keyBenef = keys.find(k => k.toUpperCase().includes("BENEFICIARIO"));
+
+            datosConfig.forEach(fila => {
+                const ctaRaw = keyCuenta ? fila[keyCuenta] : null;
+                if (ctaRaw) {
+                    const nombreCuenta = limpiar(ctaRaw); 
+                    if(nombreCuenta) {
+                        const tipoRaw = keyTipo ? fila[keyTipo] : "SIN TIPO";
+                        const esInvRaw = keyInv ? fila[keyInv] : "NO";
+                        
+                        window.mapaCuentas[nombreCuenta] = {
+                            nombre: nombreCuenta,
+                            tipo: limpiar(tipoRaw) || "SIN TIPO",
+                            esInversion: ["SI", "SÍ", "YES", "TRUE"].includes(limpiar(esInvRaw)),
+                            idNuclear: nuclear(nombreCuenta)
+                        };
+                        window.listaCuentasConfig.push(nombreCuenta);
+                    }
                 }
-            }
-            if (fila["CONCEPTO"]) window.listaConceptosConfig.push(limpiar(fila["CONCEPTO"]));
-            if (fila["BENEFICIARIO"]) window.listaBeneficiariosConfig.push(limpiar(fila["BENEFICIARIO"]));
-        });
+                if (keyConcepto && fila[keyConcepto]) window.listaConceptosConfig.push(limpiar(fila[keyConcepto]));
+                if (keyBenef && fila[keyBenef]) window.listaBeneficiariosConfig.push(limpiar(fila[keyBenef]));
+            });
+        }
     }
 
-    // 4. LEER RECURRENTES (Normalizado)
-    const datosRecRaw = obtenerDatosNormalizados("RECURRENTE");
-    if (datosRecRaw.length > 0) {
-        window.datosRecurrentes = datosRecRaw.map(r => ({
-            id: r.ID || window.generarID(),
-            fechaProx: r.PROXIMA_FECHA || r.FECHA || "",
-            frecuencia: r.FRECUENCIA || "Mensual",
-            diasSemana: r.DIAS_SEMANA || "",
-            tipoRegla: r.TIPO_REGLA || (parseFloat(r.IMPORTE || 0) < 0 ? 'gasto' : 'ingreso'),
-            cuenta: r.CUENTA,
-            cuentaDestino: r.CUENTA_DESTINO || "",
-            importe: parseFloat(r.IMPORTE || 0),
-            concepto: r.CONCEPTO || "",
-            beneficiario: r.BENEFICIARIO || "",
+    // 2b. LEER HOJA DE RECURRENTES (ACTUALIZADO V3)
+    const wsRecName = wb.SheetNames.find(n => n.toUpperCase().includes("RECURRENTE"));
+    if (wsRecName) {
+        const rawRec = XLSX.utils.sheet_to_json(wb.Sheets[wsRecName]);
+        window.datosRecurrentes = rawRec.map(r => ({
+            id: r.ID || r.Id,
+            fechaProx: r.PROXIMA_FECHA || r.Proxima_Fecha,
+            frecuencia: r.FRECUENCIA || r.Frecuencia,
+            diasSemana: r.DIAS_SEMANA || r.Dias_Semana || "",
+            tipoRegla: r.TIPO_REGLA || (parseFloat(r.IMPORTE)<0 ? 'gasto' : 'ingreso'), // Recuperar tipo
+            cuenta: r.CUENTA || r.Cuenta,
+            cuentaDestino: r.CUENTA_DESTINO || "", // Recuperar destino
+            importe: parseFloat(r.IMPORTE || r.Importe || 0),
+            concepto: r.CONCEPTO || r.Concepto,
+            beneficiario: r.BENEFICIARIO || r.Beneficiario,
             descripcion: r.DESCRIPCION || ""
         }));
     } else {
         window.datosRecurrentes = [];
     }
 
-    // 5. LEER MOVIMIENTOS (Aquí estaba el error de gráficos vacíos)
-    let datosMovs = obtenerDatosNormalizados("MOVIMIENTO");
-    
-    // Si no encuentra hoja "Movimientos", usa la primera hoja por defecto (seguridad)
-    if (datosMovs.length === 0 && wb.SheetNames.length > 0) {
-        const primeraHoja = wb.SheetNames[0];
-        console.warn(`⚠️ Hoja 'Movimientos' no encontrada. Usando '${primeraHoja}'`);
-        datosMovs = obtenerDatosNormalizados(primeraHoja);
+    // 3. LEER MOVIMIENTOS
+    const wsMovsName = wb.SheetNames.find(n => n.toUpperCase().includes('MOVIMIENTO')) || wb.SheetNames[0];
+    const datosRaw = XLSX.utils.sheet_to_json(wb.Sheets[wsMovsName]);
+
+    let mKeyCuenta = "CUENTA"; 
+    if (datosRaw.length > 0) {
+        const mKeys = Object.keys(datosRaw[0]);
+        mKeyCuenta = mKeys.find(k => k.toUpperCase().includes("CUENTA")) || "CUENTA";
     }
 
-    // 6. PROCESAR MOVIMIENTOS (Mapeo a memoria)
-    window.datos = datosMovs.map(fila => {
-        // AHORA LAS CLAVES SON SIEMPRE MAYÚSCULAS
-        const id = fila.ID || window.generarID();
-        const rawFecha = fila.FECHA;
-        const rawCuenta = fila.CUENTA || "DESCONOCIDA";
-        const rawImporte = fila.IMPORTE || 0;
+    // 4. PROCESAR Y ENLAZAR (TU SABUESO V3 ORIGINAL)
+    window.datos = datosRaw.map(fila => {
+        const id = fila.ID || fila.Id || fila.id || crypto.randomUUID();
+        const rawFecha = fila.FECHA || fila.Fecha || fila.fecha;
+        const rawCuenta = fila[mKeyCuenta] || fila.CUENTA || fila.Cuenta || "DESCONOCIDA";
         
         const cuentaLimpia = limpiar(rawCuenta);
         const cuentaNuclear = nuclear(rawCuenta); 
 
-        // --- Búsqueda de Cuenta (Tu algoritmo V3) ---
-        let infoCuenta = window.mapaCuentas[cuentaLimpia]; 
+        // --- ALGORITMO DE BÚSQUEDA MEJORADO ---
+        let infoCuenta = window.mapaCuentas[cuentaLimpia]; // 1. Coincidencia Exacta
 
         if (!infoCuenta) {
-            // Coincidencia Nuclear
+            // 2. Coincidencia Nuclear
             const matchKey = Object.keys(window.mapaCuentas).find(k => 
                 window.mapaCuentas[k].idNuclear === cuentaNuclear
             );
@@ -3121,7 +3106,7 @@ window.procesarLibroLeido = function(wb) {
         }
 
         if (!infoCuenta) {
-            // Coincidencia Parcial (D- / N-)
+            // 3. Coincidencia Parcial Inteligente
             const configKeys = Object.keys(window.mapaCuentas);
             const match = configKeys.find(k => {
                 const cNuc = window.mapaCuentas[k].idNuclear;
@@ -3133,88 +3118,62 @@ window.procesarLibroLeido = function(wb) {
             if (match) infoCuenta = window.mapaCuentas[match];
         }
 
-        // Tipo y Clasificación
-        let tipoFinal = infoCuenta ? infoCuenta.tipo : "SIN CLASIFICAR";
-        let esInvFinal = infoCuenta ? infoCuenta.esInversion : false;
+        // Asignación de Tipo
+        let tipoFinal = "SIN CLASIFICAR";
+        let esInvFinal = false;
 
-        // Procesar Fecha (Robustez máxima)
+        if (infoCuenta) {
+            tipoFinal = infoCuenta.tipo;
+            esInvFinal = infoCuenta.esInversion;
+        }
+
+        // Procesar Fecha
         let fechaObj = new Date();
         if (typeof rawFecha === 'number') {
-            // Formato Excel Serial
             const fechaBase = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
             fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
-        } else if (rawFecha) {
-            // Formato Texto
-            const fechaStr = String(rawFecha);
-            if (fechaStr.includes('/')) {
-                const parts = fechaStr.split('/');
+        } else if (typeof rawFecha === 'string') {
+            if (rawFecha.includes('/')) {
+                const parts = rawFecha.split('/');
                 if(parts.length === 3) fechaObj = new Date(parts[2], parts[1]-1, parts[0]);
-                else fechaObj = new Date(fechaStr);
-            } else if (fechaStr.includes('-')) {
-                 fechaObj = new Date(fechaStr);
+                else fechaObj = new Date(rawFecha);
+            } else {
+                fechaObj = new Date(rawFecha);
             }
-        }
-        
-        // Corrección si la fecha es inválida (pone hoy para que no desaparezca)
-        if (isNaN(fechaObj.getTime())) {
-            fechaObj = new Date(); 
-            console.warn("Fecha inválida corregida en movimiento ID:", id);
         }
 
-        // Limpieza de Importe (Corrección 1.000,00 -> 1000.00)
-        let importeNum = 0;
-        if (typeof rawImporte === 'number') {
-            importeNum = rawImporte;
-        } else {
-            // Es texto: quitamos puntos de miles, cambiamos coma por punto
-            let impLimpio = String(rawImporte).replace(/[€\s]/g, ''); // Quitar € y espacios
-            // Si tiene punto y coma, asumimos formato europeo 1.250,50
-            if (impLimpio.includes('.') && impLimpio.includes(',')) {
-                impLimpio = impLimpio.replace(/\./g, '').replace(',', '.');
-            } else if (impLimpio.includes(',')) {
-                impLimpio = impLimpio.replace(',', '.');
-            }
-            importeNum = parseFloat(impLimpio);
-        }
-        if (isNaN(importeNum)) importeNum = 0;
+        const rawImporte = fila.IMPORTE || fila.Importe || fila.importe || 0;
         
         return {
             id: String(id),
-            ts: fechaObj.getTime(), // CRÍTICO: El timestamp correcto para filtrar
+            ts: fechaObj.getTime(),
             fecha: fechaObj,
             cuenta: cuentaLimpia, 
             tipoCuenta: tipoFinal,
             esInversion: esInvFinal,
-            concepto: limpiar(fila.CONCEPTO),
-            importe: importeNum,
-            descripcion: limpiar(fila.DESCRIPCION || fila.DETALLE),
-            beneficiario: limpiar(fila.BENEFICIARIO),
-            tipo: (importeNum >= 0) ? 'ingreso' : 'gasto'
+            concepto: limpiar(fila.CONCEPTO || fila.Concepto),
+            importe: typeof rawImporte === 'string' ? parseFloat(rawImporte.replace(',', '.')) : rawImporte,
+            descripcion: limpiar(fila.DESCRIPCION || fila.Descripcion || fila.Detalle),
+            beneficiario: limpiar(fila.BENEFICIARIO || fila.Beneficiario),
+            tipo: (parseFloat(rawImporte) >= 0) ? 'ingreso' : 'gasto'
         };
-    }).filter(d => d.cuenta !== "DESCONOCIDA"); // Quitar filas vacías
+    }).filter(d => d.cuenta !== "DESCONOCIDA");
 
-    // ORDENACIÓN DESCENDENTE (Más nuevo arriba)
     window.datos.sort((a, b) => b.ts - a.ts);
     
-    // Limpieza de listas para filtros
+    // Limpieza de listas
     window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].sort();
     window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
     window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
 
-    // 7. ACTUALIZAR INTERFAZ (EL RENACIMIENTO)
-    console.log(`✅ Carga finalizada: ${window.datos.length} movimientos.`);
-    
+    // Actualizar UI
     if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
-    
-    // IMPORTANTE: Primero calculamos saldos
     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+    if (typeof actualizarDashboard === 'function') actualizarDashboard();
+    if (typeof renderizar === 'function') renderizar();
     
-    // Y luego forzamos el Dashboard y Gráficos
-    setTimeout(() => {
-        if (typeof actualizarDashboard === 'function') actualizarDashboard();
-        if (typeof renderizar === 'function') renderizar();
-        if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
-    }, 100);
+    // NUEVO: Refrescar la vista de recurrentes si estamos en ella
+    if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 };
 
 // ==========================================
@@ -3861,7 +3820,7 @@ let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocup
 // --- HERRAMIENTA OBLIGATORIA: GENERADOR DE IDs ---
 function generarUUID() {
     // Si el navegador es moderno, usa la forma segura
-    if (crypto && crypto.randomUUID) return window.generarID();
+    if (crypto && crypto.randomUUID) return crypto.randomUUID();
     
     // Si no, usa la fórmula matemática compatible
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -3886,7 +3845,10 @@ window.guardarManual = async function() {
             btnGuardar.style.backgroundColor = "#ff9800"; // Naranja de espera
         }
 
-               
+        // 2. RECOGER DATOS DEL FORMULARIO (Con IDs reales de tu index.html)
+        // Usamos crypto.randomUUID() si generarUUID no existe
+        const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
+        
         const elId = document.getElementById('inp-id-oculto'); // A veces no existe, no pasa nada
         const idExistente = elId ? elId.value : "";
         
@@ -4190,9 +4152,41 @@ function recalcularSaldosGlobal() {
 }
      	
     
+   // ==========================================
+    // 🎨 PUENTE DE ANIMACIÓN MEJORADO (V2)
+    // ==========================================
+    function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
+        // Corrección de signo: Si el prefijo es un menos, invertimos el valor
+        // para que la animación moderna lo entienda bien.
+        let valorReal = valorFinal;
+        if (prefijo.includes('-')) {
+            valorReal = -Math.abs(valorFinal);
+        }
+
+        // Detectar tipo
+        let tipo = 'moneda';
+        if (sufijo.includes('%')) tipo = 'porcentaje';
+        else if (sufijo.includes('Meses')) tipo = 'meses';
+        else if (sufijo === '') tipo = 'numero';
+        
+        // Ejecutar animación si el motor existe
+        if (typeof window.animarCifra === 'function') {
+            // Pequeño truco: forzamos que empiece de 0 si no tiene historial
+            const el = document.getElementById(id);
+            if(el && !el.getAttribute('data-prev')) el.innerText = prefijo + "0" + sufijo;
+            
+            window.animarCifra(id, valorReal, tipo);
+        } else {
+            // Fallback de seguridad
+            const el = document.getElementById(id);
+            if(el) el.innerText = prefijo + new Intl.NumberFormat('es-ES', { minimumFractionDigits: decimales }).format(valorFinal) + sufijo;
+        }
+    }
+ 
 // ==========================================
 // 🎢 MOTOR DE ANIMACIÓN DE NÚMEROS (CountUp)
 // ==========================================
+const cacheValores = {}; // Memoria para recordar el valor anterior
 
 function animarCifra(id, valorFinal, tipo = 'moneda') {
     const elemento = document.getElementById(id);
@@ -4804,7 +4798,7 @@ async function guardarUniversal(nuevasFilas) {
                 }
 
                 return {
-                    id: f.ID || f.id || window.generarID(), // UUID Único
+                    id: f.ID || f.id || crypto.randomUUID(), // UUID Único
                     fecha: fechaFinal,
                     cuenta: CLEAN(f.CUENTA || f.cuenta),
                     concepto: CLEAN(f.CONCEPTO || f.concepto),
@@ -5171,7 +5165,7 @@ function cargarDesdeCache() {
             window.datos = window.datos.map(m => {
                 return {
                     ...m, // Mantenemos el resto de info
-                    id: m.id || m.ID || window.generarID(), // ¡Si falta ID, lo creamos ya!
+                    id: m.id || m.ID || crypto.randomUUID(), // ¡Si falta ID, lo creamos ya!
                     fecha: new Date(m.fecha) // Convertimos el texto "2025-01-01" en una Fecha real
                 };
             });
@@ -5486,6 +5480,72 @@ async function guardarAjuste(tipo) {
         event.target.disabled = false;
     }
 }
+// ==========================================
+// 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO)
+// ==========================================
+
+// 1. Formateador Estricto (Sin Euros donde no tocan)
+function formatearDatoMaestro(valor, tipo) {
+    if (tipo === 'moneda') {
+        return new Intl.NumberFormat('es-ES', { 
+            style: 'currency', currency: 'EUR', 
+            minimumFractionDigits: 2 
+        }).format(valor);
+    } 
+    else if (tipo === 'porcentaje') {
+        // CAMBIO: 0 decimales para limpieza visual
+        return valor.toFixed(0) + '%';
+    } 
+    else if (tipo === 'meses') {
+        // CAMBIO: 0 decimales para limpieza visual
+        return valor.toFixed(0) + ' Meses';
+    } 
+    else {
+        // Número simple (por defecto)
+        return valor.toFixed(2);
+    }
+}
+
+// 2. Motor de Animación "Con Vida" (Counting Effect)
+window.animarCifra = function(id, valorFinal, tipo = 'moneda') {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+
+    // Recuperamos valor anterior para animar desde ahí
+    const valorInicial = parseFloat(elemento.getAttribute('data-prev')) || 0;
+    elemento.setAttribute('data-prev', valorFinal);
+
+    // Si el cambio es muy pequeño, pintar directo
+    if (Math.abs(valorFinal - valorInicial) < 0.01) {
+        elemento.innerText = formatearDatoMaestro(valorFinal, tipo);
+        return;
+    }
+
+    // Configuración de la animación
+    const duracion = 1500; // 1.5 segundos
+    const inicio = performance.now();
+
+    function frame(tiempoActual) {
+        const tiempoPasado = tiempoActual - inicio;
+        const progreso = Math.min(tiempoPasado / duracion, 1);
+        
+        // Easing suave (frena al final)
+        const ease = 1 - Math.pow(2, -10 * progreso);
+        
+        const valorActual = valorInicial + (valorFinal - valorInicial) * ease;
+        
+        // Pintamos el frame actual
+        elemento.innerText = formatearDatoMaestro(valorActual, tipo);
+
+        if (progreso < 1) {
+            requestAnimationFrame(frame);
+        } else {
+            // Asegurar valor final exacto
+            elemento.innerText = formatearDatoMaestro(valorFinal, tipo);
+        }
+    }
+    requestAnimationFrame(frame);
+};
 
 // ==========================================
 // 📅 GESTIÓN DE FECHAS (EL INTERRUPTOR)
@@ -5521,83 +5581,6 @@ window.toggleCustomDates = function() {
 // =========================================================
 var filtroUsuarioActual = 'todos'; // Valor inicial por defecto
 
-/* ==========================================
-   🚀 MOTOR DE ANIMACIÓN UNIFICADO (SÚPER ANIMARVALOR)
-   ========================================== */
-// Memoria para que la animación empiece donde se quedó la última vez
-const cacheAnimacion = {}; 
-
-window.animarValor = function(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
-    const elemento = document.getElementById(id);
-    if (!elemento) return;
-
-    // 1. LÓGICA DE SIGNOS (Heredada de tu código original)
-    // Si el prefijo tiene un menos, invertimos el valor numérico
-    if (prefijo && prefijo.includes('-')) {
-        valorFinal = -Math.abs(valorFinal);
-    }
-
-    // 2. PUNTO DE PARTIDA
-    // Si no tiene historial, empieza en 0. Si tiene, empieza donde se quedó.
-    const valorInicial = cacheAnimacion[id] || 0;
-    const variacion = valorFinal - valorInicial;
-
-    // 3. OPTIMIZACIÓN
-    // Si el cambio es minúsculo (menos de 1 céntimo), no animamos, pintamos directo.
-    if (Math.abs(variacion) < 0.01) {
-        elemento.innerText = formatearSalida(valorFinal, prefijo, sufijo, decimales);
-        cacheAnimacion[id] = valorFinal; // Guardamos dato
-        return;
-    }
-
-    // 4. CONFIGURACIÓN ANIMACIÓN
-    const duracion = 1500; // 1.5 segundos (Suave)
-    const tiempoInicio = performance.now();
-
-    function frame(tiempoActual) {
-        const tiempoPasado = tiempoActual - tiempoInicio;
-        const progreso = Math.min(tiempoPasado / duracion, 1);
-        
-        // Easing "EaseOutExpo" (Frena suave al final)
-        const ease = (progreso === 1) ? 1 : 1 - Math.pow(2, -10 * progreso);
-        
-        const valorActual = valorInicial + (variacion * ease);
-
-        // Pintamos el frame actual formateado
-        elemento.innerText = formatearSalida(valorActual, prefijo, sufijo, decimales);
-
-        if (progreso < 1) {
-            requestAnimationFrame(frame);
-        } else {
-            // Aseguramos el valor final exacto al terminar
-            elemento.innerText = formatearSalida(valorFinal, prefijo, sufijo, decimales);
-            cacheAnimacion[id] = valorFinal; // Actualizamos la memoria
-        }
-    }
-
-    // Arrancamos
-    requestAnimationFrame(frame);
-};
-
-// --- FUNCIÓN AUXILIAR DE FORMATO (Privada para la animación) ---
-function formatearSalida(valor, pre, suf, dec) {
-    let textoNumero = '';
-    
-    // Si el sufijo es '%', formateamos simple
-    if (suf && suf.includes('%')) {
-        textoNumero = valor.toFixed(dec);
-    } 
-    // Si es dinero o número normal
-    else {
-        textoNumero = new Intl.NumberFormat('es-ES', {
-            minimumFractionDigits: dec,
-            maximumFractionDigits: dec
-        }).format(valor);
-    }
-    
-    // Reconstruimos: Prefijo + Número + Sufijo
-    return (pre || '') + textoNumero + (suf || '');
-}
 
 // =========================================================
 // 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (VERSIÓN CORREGIDA)
@@ -6109,7 +6092,7 @@ window.editarMovimiento = function(idMov) {
 
             // 2. Hoja de Movimientos (Idéntica a la original)
             const filasMovimientos = window.datos.map(mov => ({
-                "Id": mov.id || mov.ID || window.generarID(), 
+                "Id": mov.id || mov.ID || crypto.randomUUID(), 
                 "Fecha": mov.fecha, 
                 "Cuenta": mov.cuenta,
                 "Concepto": mov.concepto,
@@ -6671,7 +6654,7 @@ async function ejecutarRecurrente(idRec) {
     const tsOperacion = fechaOperacion.getTime();
     
     // Función auxiliar para IDs
-    const nuevoID = (typeof crypto !== 'undefined' && crypto.randomUUID) ? window.generarID() : 'REC-MOV-' + Date.now() + Math.random();
+    const nuevoID = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'REC-MOV-' + Date.now() + Math.random();
 
     let movimientosAGuardar = [];
 
@@ -6979,7 +6962,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
 
     // 2. Crear el objeto movimiento compatible con tu sistema
     const nuevoMovimiento = {
-        id: window.generarID(),
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'AUTO-' + Date.now(),
         fecha: new Date(fechaPrevista), // Usamos la fecha programada
         cuenta: regla.cuenta,
         concepto: regla.concepto,
