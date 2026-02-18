@@ -4427,25 +4427,24 @@ function formatear(val, tipo) {
     }
 
    function actualizarPatrimonio() {
-        // 1. Localizar elementos (igual que antes)
+        // 1. Localizar elementos
         const contenedorLista = document.getElementById('lista-cuentas-patri');
         const elTotalDetalle = document.getElementById('total-patri-valor');
         const elTotalHome = document.getElementById('d-patri-total');
 
-        // 2. Seguridad: Si no hay datos, mensaje de espera
+        // 2. Seguridad
         if (!datos || datos.length === 0) {
             if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF;">ESPERANDO DATOS...</div>';
             return;
         }
 
-        // 3. Cálculos en memoria (Rápido)
+        // 3. Cálculos en memoria
         const saldos = {};
-        // Usamos el filtro de propietario actual para sumar solo lo tuyo (o todo)
         const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
 
         datosFiltrados.forEach(m => {
             const cta = String(m.cuenta || '').trim();
-            if (!cta) return; // Si no hay nombre de cuenta, saltamos
+            if (!cta) return;
             const val = parseFloat(m.importe) || 0;
             saldos[cta] = (saldos[cta] || 0) + val;
         });
@@ -4460,46 +4459,50 @@ function formatear(val, tipo) {
 
         Object.keys(saldos).forEach(cta => {
             const saldo = saldos[cta];
-            if (Math.abs(saldo) < 0.01) return; // Ocultar cuentas a cero
+            if (Math.abs(saldo) < 0.01) return;
 
             const ctaKey = cta.trim().toUpperCase();
             const mapa = window.mapaCuentas || {};
-            // Clasificación inteligente: Si no está en config, va a "SIN CLASIFICAR"
             const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
 
             const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'SIN CLASIFICAR';
 
-            if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { total: 0, cuentas: [], esInversion: config.esInversion };
+            if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { nombre: nombreGrupo, total: 0, cuentas: [], esInversion: config.esInversion };
             grupos[nombreGrupo].total += saldo;
             grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
         });
 
-        // 4. Actualizar Totales (UI Superior) - Esto es rápido y no afecta al scroll
+        // 4. Actualizar Totales (UI Superior)
         const textoTotal = fmt(sumaTotal) + ' €';
         const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg';
 
         if (elTotalDetalle) { elTotalDetalle.innerText = textoTotal; elTotalDetalle.className = 'kpi-value ' + claseColor; }
         if (elTotalHome) { elTotalHome.innerText = textoTotal; elTotalHome.className = 'kpi-value ' + claseColor; }
 
-        // 5. LA GRAN OPTIMIZACIÓN: Construcción del HTML en memoria
+        // 5. PINTADO ORDENADO POR IMPORTE
         if (contenedorLista) {
             if (Object.keys(grupos).length === 0) {
                 contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>';
                 return;
             }
 
-            let htmlFinal = ''; // Aquí acumularemos todo el HTML antes de tocar la pantalla
+            let htmlFinal = '';
 
-            Object.keys(grupos).sort().forEach(nombreGrupo => {
-                const grupo = grupos[nombreGrupo];
+            // --- CAMBIO CLAVE: CONVERTIR A ARRAY Y ORDENAR POR TOTAL ---
+            const listaGrupos = Object.values(grupos);
+            
+            // Ordenamos: Mayor dinero primero
+            listaGrupos.sort((a, b) => b.total - a.total);
+
+            listaGrupos.forEach(grupo => {
                 const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF';
+                // Si es inversión borde morado, si no blanco
                 const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #FFFFFF;';
                 
-                // Evitar errores de división por cero
                 const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
-                const groupId = nombreGrupo.replace(/[^a-zA-Z0-9]/g, '');
+                const groupId = grupo.nombre.replace(/[^a-zA-Z0-9]/g, '');
 
-                // Generar HTML de las cuentas internas
+                // Generar HTML cuentas (Ordenadas por valor también)
                 let htmlCuentas = '';
                 grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
                     const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
@@ -4521,12 +4524,11 @@ function formatear(val, tipo) {
                     `;
                 });
 
-                // Añadir el bloque del grupo al HTML final
                 htmlFinal += `
                     <div class="patri-group-card" style="${borderStyle} background:#000; border:1px solid #222;">
                         <div class="patri-group-header" onclick="togglePatriGroup('${groupId}')" style="cursor:pointer; background:#0a0a0a; border-bottom:1px solid #222;">
                             <div style="display:flex; gap:8px; align-items:center;">
-                                <span class="patri-group-title" style="color:${colorTitle}; font-size:12px;">${nombreGrupo}</span>
+                                <span class="patri-group-title" style="color:${colorTitle}; font-size:12px;">${grupo.nombre}</span>
                                 <span style="color:var(--c-warning); border:1px solid var(--c-warning); padding:1px 6px; border-radius:4px; font-size:9px; font-weight:800">${pctGrupo}%</span>
                             </div>
                             <div style="display:flex; align-items:center; gap:10px">
@@ -4541,7 +4543,6 @@ function formatear(val, tipo) {
                 `;
             });
 
-            // 6. GOLPE MAESTRO: Pintar todo de una sola vez
             contenedorLista.innerHTML = htmlFinal;
         }
     }
@@ -4954,7 +4955,6 @@ window.renderizarSunburstPatrimonio = function() {
     const container = document.getElementById('chart-Sunburst'); 
     if (!container) return; 
 
-    // Limpieza de instancia
     if (window.echartSunburst) {
         window.echartSunburst.clear();
         window.echartSunburst.dispose();
@@ -4962,31 +4962,29 @@ window.renderizarSunburstPatrimonio = function() {
     window.echartSunburst = echarts.init(container);
     const chart = window.echartSunburst;
 
-    // Si no hay datos, salimos
     if (!window.datos || window.datos.length === 0) return;
 
-    // 2. PROCESAMIENTO DE DATOS
+    // 2. PROCESAMIENTO
     const saldos = {};
     const datosFiltrados = window.datos.filter(m => pasaFiltroPropietario(m));
 
     datosFiltrados.forEach(m => {
         if (!m.cuenta) return;
-        const cta = String(m.cuenta || '').trim().toUpperCase(); // CORRECCIÓN: Todo en mayúsculas
+        const cta = String(m.cuenta || '').trim().toUpperCase();
         saldos[cta] = (saldos[cta] || 0) + m.importe;
     });
 
     let patrimonioNetoReal = 0;
     let activosBrutos = 0;
     
-    // Arrays para hijos
     const childrenLiquidez = [];
     const childrenInversion = [];
 
-    // --- PALETA DE COLORES "NEÓN FUTURE" ---
-    // Degradado de Azules/Cianes Eléctricos (Liquidez)
-    const cLiq = ['#00FFFF', '#00C3FF', '#0088FF', '#0048FF'];
-    // Degradado de Rosas/Violetas Láser (Inversión)
-    const cInv = ['#FF00CC', '#FF0055', '#CC00FF', '#7000FF'];
+    // --- PALETA DE COLORES "CYBERPUNK NEÓN" MEJORADA ---
+    // Liquidez: Cianes, Azules Eléctricos y Turquesas
+    const cLiq = ['#00F0FF', '#00B8FF', '#0066FF', '#00FFFF', '#2DE2E6', '#03DAC6']; 
+    // Inversión: Fucsias, Violetas, Morados y Rosas Neón
+    const cInv = ['#F72585', '#B5179E', '#7209B7', '#560BAD', '#FF00CC', '#FF4081'];
 
     let idxLiq = 0; 
     let idxInv = 0;
@@ -4997,7 +4995,7 @@ window.renderizarSunburstPatrimonio = function() {
         const valor = saldos[cta];
         patrimonioNetoReal += valor; 
 
-        if (valor < 1) return; // Solo activos positivos
+        if (valor < 1) return; // Solo positivos
 
         activosBrutos += valor;
 
@@ -5014,7 +5012,7 @@ window.renderizarSunburstPatrimonio = function() {
                 value: valor,
                 itemStyle: { 
                     color: cInv[idxInv % cInv.length],
-                    shadowBlur: 15, shadowColor: cInv[idxInv % cInv.length] // Glow individual
+                    shadowBlur: 20, shadowColor: cInv[idxInv % cInv.length] 
                 }
             });
             idxInv++;
@@ -5025,51 +5023,43 @@ window.renderizarSunburstPatrimonio = function() {
                 value: valor,
                 itemStyle: { 
                     color: cLiq[idxLiq % cLiq.length],
-                    shadowBlur: 15, shadowColor: cLiq[idxLiq % cLiq.length] // Glow individual
+                    shadowBlur: 20, shadowColor: cLiq[idxLiq % cLiq.length] 
                 }
             });
             idxLiq++;
         }
     });
 
-    // Ordenar de mayor a menor
     childrenLiquidez.sort((a, b) => b.value - a.value);
     childrenInversion.sort((a, b) => b.value - a.value);
 
-    // ESTRUCTURA DE 2 NIVELES (Grupos -> Cuentas)
     const dataTree = [
         {
             name: 'LIQUIDEZ',
-            itemStyle: { color: '#00C3FF' },
+            itemStyle: { color: '#00F0FF' },
             children: childrenLiquidez
         },
         {
             name: 'INVERSIÓN',
-            itemStyle: { color: '#FF00CC' },
+            itemStyle: { color: '#F72585' },
             children: childrenInversion
         }
     ];
 
-    // 3. ACTUALIZAR TOTAL INICIAL (ESTADO DE REPOSO)
+    // 3. ACTUALIZAR TEXTO CENTRAL
     const elLabelTotal = document.querySelector('#sunburst-center-info div:first-child');
     const elValorTotal = document.getElementById('sb-total-val');
-    
-    // Función auxiliar
     const fmt = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
-    // Estado inicial del centro
     if(elValorTotal) {
         elLabelTotal.innerText = "PATRIMONIO";
         elLabelTotal.style.color = "#888"; 
-        elLabelTotal.style.fontSize = "10px";
-        elLabelTotal.style.letterSpacing = "2px";
         
         elValorTotal.innerText = fmt(patrimonioNetoReal);
         elValorTotal.style.color = patrimonioNetoReal >= 0 ? '#fff' : '#FF2E4D';
-        elValorTotal.style.textShadow = "0 0 20px rgba(255,255,255,0.2)"; // Luz blanca suave
+        elValorTotal.style.textShadow = "0 0 20px rgba(255,255,255,0.4)";
     }
 
-    // Actualizar KPIs inferiores
     const elRatioLiq = document.getElementById('kpi-ratio-liq');
     const elRatioInv = document.getElementById('kpi-ratio-inv');
     if (activosBrutos > 0) {
@@ -5077,41 +5067,33 @@ window.renderizarSunburstPatrimonio = function() {
         elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(0) + '%';
     }
 
-    // 4. CONFIGURACIÓN VISUAL (MODO LIMPIO)
+    // 4. CONFIGURACIÓN DEL GRÁFICO (MODO NEÓN)
     const option = {
         backgroundColor: 'transparent',
-        tooltip: { show: false }, // Tooltip desactivado (usamos el centro)
+        tooltip: { show: false }, 
 
         series: {
             type: 'sunburst',
             data: dataTree,
-            radius: ['55%', '90%'], // Donut muy fino y moderno
+            radius: ['50%', '90%'], 
             sort: undefined, 
             
             itemStyle: {
-                borderRadius: 8, 
-                borderColor: '#050505', // Borde casi negro para separar
-                borderWidth: 4
+                borderRadius: 6, 
+                borderColor: '#050505', 
+                borderWidth: 2
             },
-
-            // ¡AQUÍ ESTÁ LA CLAVE! OCULTAMOS TODAS LAS ETIQUETAS
-            label: {
-                show: false 
-            },
+            label: { show: false },
             
-            // Niveles
             levels: [
-                // Centro
                 {},
-                // Anillo Interior (Categorías)
                 {
-                    r0: '55%', r: '60%', 
-                    itemStyle: { opacity: 0.5, borderWidth: 0 } // Anillo sutil
+                    r0: '50%', r: '58%', 
+                    itemStyle: { opacity: 0.6, borderWidth: 1 } 
                 },
-                // Anillo Exterior (Cuentas)
                 {
-                    r0: '62%', r: '90%',
-                    itemStyle: { opacity: 1 } // Colores vibrantes
+                    r0: '60%', r: '90%',
+                    itemStyle: { opacity: 1 } 
                 }
             ]
         }
@@ -5119,53 +5101,38 @@ window.renderizarSunburstPatrimonio = function() {
 
     chart.setOption(option);
 
-    // 5. INTERACCIÓN (CENTRO DINÁMICO)
+    // 5. INTERACCIÓN
     chart.on('mouseover', function(params) {
         if(elValorTotal) {
-            // Nombre en el color del sector
             elLabelTotal.innerText = params.name; 
             elLabelTotal.style.color = params.color;
-            elLabelTotal.style.fontSize = "14px"; // Más grande al seleccionar
-            elLabelTotal.style.letterSpacing = "0px";
+            elLabelTotal.style.fontSize = "13px"; 
+            elLabelTotal.style.fontWeight = "bold";
 
-            // Valor
             const valStr = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(params.value);
             const pct = ((params.value / activosBrutos) * 100).toFixed(2);
             
-            // HTML enriquecido en el centro
             elValorTotal.innerHTML = `
-                <div style="font-size:18px; text-shadow:0 0 15px ${params.color}">${valStr} €</div>
-                <div style="font-size:12px; color:#aaa; margin-top:5px; font-weight:400">${pct}%</div>
+                <div style="font-size:18px; text-shadow:0 0 20px ${params.color}">${valStr} €</div>
+                <div style="font-size:12px; color:#fff; margin-top:5px; font-weight:700">${pct}%</div>
             `;
         }
-        
-        // Efecto de resaltar sector
-        chart.dispatchAction({
-            type: 'highlight',
-            dataIndex: params.dataIndex
-        });
+        chart.dispatchAction({ type: 'highlight', dataIndex: params.dataIndex });
     });
 
     chart.on('mouseout', function(params) {
         if(elValorTotal) {
-            // Restaurar estado reposo
             elLabelTotal.innerText = "PATRIMONIO";
             elLabelTotal.style.color = "#888";
             elLabelTotal.style.fontSize = "10px";
-            elLabelTotal.style.letterSpacing = "2px";
+            elLabelTotal.style.fontWeight = "normal";
             
             elValorTotal.innerHTML = fmt(patrimonioNetoReal);
-            elValorTotal.style.textShadow = "0 0 20px rgba(255,255,255,0.2)";
+            elValorTotal.style.textShadow = "0 0 20px rgba(255,255,255,0.4)";
         }
-        
-        // Quitar resaltado
-        chart.dispatchAction({
-            type: 'downplay',
-            dataIndex: params.dataIndex
-        });
+        chart.dispatchAction({ type: 'downplay', dataIndex: params.dataIndex });
     });
 
-    // 6. REDIMENSIONADO
     setTimeout(() => chart.resize(), 100);
     window.addEventListener('resize', () => chart.resize());
 };
