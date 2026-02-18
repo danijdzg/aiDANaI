@@ -6180,73 +6180,97 @@ window.editarMovimiento = function(idMov) {
         }
     }
 
-// --- FUNCIÓN DE EMERGENCIA: BACKUP LOCAL ---
-    function descargarBackupLocal() {
-        if (!window.datos || window.datos.length === 0) {
-            mostrarToast("No hay datos para descargar", "error");
-            return;
-        }
-
-        try {
-            // 1. Prepara el libro de Excel
-            const wb = XLSX.utils.book_new();
-
-            // 2. Hoja de Movimientos (Idéntica a la original)
-            const filasMovimientos = window.datos.map(mov => ({
-                "Id": mov.id || mov.ID || crypto.randomUUID(), 
-                "Fecha": mov.fecha, 
-                "Cuenta": mov.cuenta,
-                "Concepto": mov.concepto,
-                "Importe": mov.importe,
-                "Descripcion": mov.descripcion || mov.detalle || "", 
-                "Beneficiario": mov.beneficiario
-            }));
-
-            const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
-                header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
-            });
-            XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
-
-            // 3. Hoja de Configuración (Reconstruye las columnas separadas)
-            const listaCuentas = Object.entries(window.mapaCuentas || {});
-            const listaConceptos = window.listaConceptos || [];
-            const listaBeneficiarios = window.listaBeneficiarios || [];
-
-            const maxFilas = Math.max(listaCuentas.length, listaConceptos.length, listaBeneficiarios.length);
-            const datosConfig = [];
-            // Cabecera exacta con huecos vacíos
-            datosConfig.push(["CUENTA", "TIPO", "ES_INVERSION", "", "CONCEPTO", "", "BENEFICIARIO"]);
-
-            for (let i = 0; i < maxFilas; i++) {
-                const cuenta = listaCuentas[i]; 
-                const concepto = listaConceptos[i];
-                const beneficiario = listaBeneficiarios[i];
-
-                datosConfig.push([
-                    cuenta ? cuenta[0] : "",                
-                    cuenta ? cuenta[1].tipo : "",           
-                    cuenta ? (cuenta[1].esInversion ? "Si" : "No") : "", 
-                    "",                                     
-                    concepto || "",                         
-                    "",                                     
-                    beneficiario || ""                      
-                ]);
-            }
-
-            const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
-            XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
-
-            // 4. Descarga forzada
-            const fechaHoy = new Date().toISOString().slice(0,10).replace(/-/g, "");
-            XLSX.writeFile(wb, `aidanai_backup_LOCAL_${fechaHoy}.xlsx`, { compression: true });
-            
-            mostrarToast("Copia Local descargada correctamente", "success");
-
-        } catch (error) {
-            console.error(error);
-            mostrarToast("Error al generar el backup local", "error");
-        }
+// ==========================================
+// 📥 FUNCIÓN DE EMERGENCIA: BACKUP LOCAL (CORREGIDO 3 HOJAS)
+// ==========================================
+function descargarBackupLocal() {
+    if (!window.datos || window.datos.length === 0) {
+        if(typeof mostrarToast === 'function') mostrarToast("No hay datos para descargar", "error");
+        else alert("No hay datos");
+        return;
     }
+
+    try {
+        console.log("📦 Generando backup local completo...");
+        
+        // 1. Crear el libro de Excel
+        const wb = XLSX.utils.book_new();
+
+        // --- HOJA 1: MOVIMIENTOS ---
+        const filasMovimientos = window.datos.map(mov => ({
+            "Id": mov.id || mov.ID || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Date.now()), 
+            "Fecha": mov.fecha, 
+            "Cuenta": mov.cuenta,
+            "Concepto": mov.concepto,
+            "Importe": mov.importe,
+            "Descripcion": mov.descripcion || mov.detalle || "", 
+            "Beneficiario": mov.beneficiario
+        }));
+
+        const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
+            header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
+        });
+        XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+
+        // --- HOJA 2: CONFIGURACIÓN (Limpia y compatible) ---
+        const listaCuentas = Object.entries(window.mapaCuentas || {});
+        // Intentamos coger las listas de donde estén (a veces cambian de nombre según versión)
+        const rawConceptos = window.listaConceptosConfig || window.listaConceptos || [];
+        const rawBeneficiarios = window.listaBeneficiariosConfig || window.listaBeneficiarios || [];
+        
+        const maxFilas = Math.max(listaCuentas.length, rawConceptos.length, rawBeneficiarios.length);
+        const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
+        
+        // Cabecera estándar
+        const datosConfig = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO"]];
+
+        for (let i = 0; i < maxFilas; i++) {
+            const c = listaCuentas[i];
+            datosConfig.push([
+                c ? CLEAN(c[0]) : "", 
+                c ? CLEAN(c[1].tipo) : "", 
+                c ? (c[1].esInversion ? "SI" : "NO") : "", // Normalizado a SI/NO
+                rawConceptos[i] ? CLEAN(rawConceptos[i]) : "", 
+                rawBeneficiarios[i] ? CLEAN(rawBeneficiarios[i]) : ""
+            ]);
+        }
+        const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
+        XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
+
+        // --- HOJA 3: RECURRENTES (¡AÑADIDA!) ---
+        const listaRec = window.datosRecurrentes || [];
+        const filasRec = listaRec.map(r => ({
+            "ID": r.id, 
+            "PROXIMA_FECHA": r.fechaProx, 
+            "FRECUENCIA": r.frecuencia,
+            "DIAS_SEMANA": r.diasSemana || "", 
+            "TIPO_REGLA": r.tipoRegla || "gasto",
+            "CUENTA": r.cuenta, 
+            "CUENTA_DESTINO": r.cuentaDestino || "",
+            "IMPORTE": r.importe, 
+            "CONCEPTO": r.concepto, 
+            "BENEFICIARIO": r.beneficiario || "",
+            "DESCRIPCION": r.descripcion || ""
+        }));
+
+        const wsRec = XLSX.utils.json_to_sheet(filasRec, {
+            header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"]
+        });
+        XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
+
+        // 4. Descarga Final
+        const fechaHoy = new Date().toISOString().slice(0,10).replace(/-/g, "");
+        XLSX.writeFile(wb, `aidanai_backup_LOCAL_${fechaHoy}.xlsx`, { compression: true });
+        
+        if(typeof mostrarToast === 'function') mostrarToast("✅ Backup completo (3 Hojas) descargado", "success");
+        else alert("Backup Completo Descargado");
+
+    } catch (error) {
+        console.error(error);
+        if(typeof mostrarToast === 'function') mostrarToast("❌ Error al generar el backup", "error");
+        else alert("Error: " + error.message);
+    }
+}
 	
 // ==========================================
 // 🔐 GESTOR DE SEGURIDAD (PIN)
