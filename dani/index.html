@@ -26,7 +26,35 @@
 </head>
 
     <style>
-		
+		/* --- INICIO BLOQUE NOTIFICACIONES TOAST (NUEVO) --- */
+#toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.toast {
+    background: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 8px;
+    border-left: 4px solid #007aff; /* Azul por defecto */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+    min-width: 250px;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { border-left-color: #34c759; } /* Verde */
+.toast.error { border-left-color: #ff3b30; }   /* Rojo */
+.toast.warning { border-left-color: #ffcc00; } /* Amarillo */
+/* --- FIN BLOQUE NOTIFICACIONES TOAST --- */
         /* =========================================
            ESTILOS ORIGINALES DE INDEX.HTML
            ========================================= */
@@ -465,9 +493,6 @@ select.filter-input option { background-color: #000; color: #fff; }
         /* Limpieza de celdas */
         td { display: block; padding: 0; border: none; white-space: normal !important; max-width: unset !important; }
         
-        /* Ocultar elementos antiguos de PC si quedara alguno */
-        .pc-only { display: none !important; } 
-
         /* COLUMNA 1: Info central */
         .td-center-mob {
             display: flex;
@@ -1299,53 +1324,6 @@ th {
     @keyframes sentry-pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
     @keyframes sentry-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
  
- /* =========================================================
-   CANDADO DE POSICIÓN (ANTI-REBOTE NUBE)
-   ========================================================= */
-
-/* 1. Obligar al Header a no moverse JAMÁS, ni en Cloud ni en Local */
-header, .top-bar {
-    /* 2. Ocultar iframes basura de Microsoft */
-iframe[id*="msal"], iframe[id*="adal"] {
-    display: none !important;
-    height: 0 !important;
-    width: 0 !important;
-    position: absolute !important;
-}
-
-/* 3. El cuerpo respete el espacio EXACTO (75px) */
-body {
-    padding-top: calc(75px + env(safe-area-inset-top)) !important;
-}
-
-/* 4. Sentry (Barra de estado) dentro del header */
-.sentry-panel {
-    height: 25px !important;
-    max-height: 25px !important;
-    overflow: hidden !important;
-    border-radius: 0 0 12px 12px; /* Redondeado abajo para estilo */
-}
-
-/* 2. Ocultar iframes basura de Microsoft */
-iframe[id*="msal"], iframe[id*="adal"] {
-    display: none !important;
-    height: 0 !important;
-    width: 0 !important;
-    position: absolute !important;
-}
-
-/* 3. El cuerpo respete el espacio EXACTO (75px) */
-body {
-    padding-top: calc(75px + env(safe-area-inset-top)) !important;
-}
-
-/* 4. Sentry (Barra de estado) dentro del header */
-.sentry-panel {
-    height: 25px !important;
-    max-height: 25px !important;
-    overflow: hidden !important;
-    border-radius: 0 0 12px 12px; /* Redondeado abajo para estilo */
-}
  
  /* --- SEMÁFORO DE SINCRONIZACIÓN --- */
     .status-dot {
@@ -1483,6 +1461,7 @@ body {
    </style>
 
 <body>
+<div id="toast-container"></div>
 <canvas id="deep-space"></canvas>
 
 <div id="pin-login-screen" class="login-view">
@@ -1999,6 +1978,40 @@ body {
 </div>
 
     <script>
+	// --- GENERADOR DE IDs UNIFICADO ---
+window.generarID = function() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return window.generarID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
+	// --- FUNCIÓN UTILIDAD: MOSTRAR TOAST ---
+window.mostrarNotificacion = function(mensaje, tipo = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return; // Seguridad por si no existe
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${tipo}`;
+    toast.innerText = mensaje;
+
+    container.appendChild(toast);
+
+    // Pequeño retardo para permitir la animación de entrada
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+
+    // Eliminar después de 3 segundos
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            container.removeChild(toast);
+        }, 300); // Esperar a que termine la animación de salida
+    }, 3000);
+};
 	// --- CONFIGURACIÓN GLOBAL DE AIDANAI ---
     const CONFIG = {
         APP_VERSION: "2026.2.0 - Clean",
@@ -2272,15 +2285,6 @@ const setupPinLogic = () => {
 };
 // Inicializar la lógica del PIN
 document.addEventListener('DOMContentLoaded', setupPinLogic);
-
-// ==========================================
-// 🆔 UTILIDADES DE IDENTIDAD (NUEVO)
-// ==========================================
-function generateUUID() {
-    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-    );
-}
 
 // ==========================================
 // 🧠 CEREBRO IA FINANCIERO 3.0 (MODE: PRO)
@@ -2691,18 +2695,6 @@ window.clearCalc = function() {
     actualizarDisplayCalc();
 }
 
-    function recibirInputCalculadora(valor) {
-        if (campoDestinoCalculadora) {
-            let rawVal = valor.toString().replace(',', '.');
-            let numero = parseFloat(rawVal);
-            numero = Math.abs(numero);
-            campoDestinoCalculadora.value = numero.toFixed(2);
-            campoDestinoCalculadora.dispatchEvent(new Event('input'));
-            campoDestinoCalculadora.dispatchEvent(new Event('change'));
-            vibrar('ingreso');
-            setTimeout(() => { cerrarCalculadora(); }, 500);
-        }
-    }
     
     function vibrar(tipo) {
         const patrones = { 'ingreso': [50], 'error': [50, 50, 50], 'clonar': [30, 30] };
@@ -2768,37 +2760,6 @@ const Security = {
         actualizarDashboard();
     }
 
-
-function lanzarToast(mensaje, tipo) {
-    const toast = document.getElementById('toast-container');
-    if (!toast) return;
-
-    // Colores según tipo
-    let color = 'var(--bg-card)'; // Default
-    if (tipo === 'ok' || tipo === 'success') color = '#10B981'; // Verde
-    else if (tipo === 'err' || tipo === 'error') color = '#EF4444'; // Rojo
-    else if (tipo === 'warn') color = '#F59E0B'; // Naranja
-
-    toast.innerText = mensaje;
-    toast.style.backgroundColor = color;
-    toast.className = "toast show";
-
-    // --- CORRECCIÓN VIBRACIÓN ---
-    // Solo vibramos si el usuario ya ha tocado la pantalla alguna vez
-    try {
-        if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) {
-            navigator.vibrate(tipo === 'err' ? [50, 50, 50] : [30]);
-        }
-    } catch (e) { 
-        // Silencio absoluto si falla
-    }
-    // ----------------------------
-
-    // Ocultar a los 3 segundos
-    setTimeout(() => { 
-        toast.className = toast.className.replace("show", ""); 
-    }, 3000);
-}
 
 // ==========================================
 // 🛡️ SENTRY: CONTROLADOR DE INTEGRIDAD DE DATOS
@@ -3035,7 +2996,7 @@ function leerExcel(blob) {
         } catch (error) {
             console.error(error);
             mostrarEstado('❌ Error al leer el Excel', 'err');
-            alert("El archivo no parece ser un Excel válido o está corrupto.");
+            window.mostrarNotificacion("❌ El archivo está dañado o no es válido", "error");
         }
     };
     
@@ -3136,7 +3097,7 @@ window.procesarLibroLeido = function(wb) {
 
     // 4. PROCESAR Y ENLAZAR (TU SABUESO V3 ORIGINAL)
     window.datos = datosRaw.map(fila => {
-        const id = fila.ID || fila.Id || fila.id || crypto.randomUUID();
+        const id = fila.ID || fila.Id || fila.id || window.generarID();
         const rawFecha = fila.FECHA || fila.Fecha || fila.fecha;
         const rawCuenta = fila[mKeyCuenta] || fila.CUENTA || fila.Cuenta || "DESCONOCIDA";
         
@@ -3869,7 +3830,7 @@ let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocup
 // --- HERRAMIENTA OBLIGATORIA: GENERADOR DE IDs ---
 function generarUUID() {
     // Si el navegador es moderno, usa la forma segura
-    if (crypto && crypto.randomUUID) return crypto.randomUUID();
+    if (crypto && crypto.randomUUID) return window.generarID();
     
     // Si no, usa la fórmula matemática compatible
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -3894,10 +3855,7 @@ window.guardarManual = async function() {
             btnGuardar.style.backgroundColor = "#ff9800"; // Naranja de espera
         }
 
-        // 2. RECOGER DATOS DEL FORMULARIO (Con IDs reales de tu index.html)
-        // Usamos crypto.randomUUID() si generarUUID no existe
-        const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
-        
+               
         const elId = document.getElementById('inp-id-oculto'); // A veces no existe, no pasa nada
         const idExistente = elId ? elId.value : "";
         
@@ -4014,7 +3972,7 @@ window.guardarManual = async function() {
 
         // Actualizamos todo
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
-        if (typeof renderizarTablaMovimientos === 'function') renderizarTablaMovimientos();
+        if (typeof renderizar === 'function') renderizar();
 
         // Limpieza UI
         document.getElementById('form-nuevo-mov').reset();
@@ -4023,7 +3981,7 @@ window.guardarManual = async function() {
 
     } catch (error) {
         console.error("❌ Error al guardar:", error);
-        alert("⛔ NO SE PUDO GUARDAR:\n" + error.message + "\n\nTu formulario sigue abierto. Revisa la conexión.");
+        window.mostrarNotificacion("⛔ Error al guardar: " + error.message, "error");
     } finally {
         // Restaurar botón siempre
         if (btnGuardar) {
@@ -4045,7 +4003,7 @@ window.duplicarMovimiento = function(id) {
     const mov = window.datos.find(m => m.id === id);
     
     if (!mov) {
-        alert("❌ Error: No se encuentra el movimiento original en memoria.");
+        window.mostrarNotificacion("❌ No encuentro el movimiento original", "error");
         return;
     }
 
@@ -4138,12 +4096,12 @@ window.borrarMovimiento = async function(id) {
             if(typeof vibrar === 'function') vibrar('error');
 
         } else {
-            alert("❌ No se pudo encontrar el movimiento para borrar. Quizás ya no existe.");
+            window.mostrarNotificacion("❌ No encuentro el movimiento para borrar", "warning");
             cerrarModal();
         }
     } catch (e) {
         console.error(e);
-        alert("Error al borrar: " + e.message);
+        window.mostrarNotificacion("❌ Error al borrar: " + e.message, "error");
         if(btnBorrar) {
             btnBorrar.innerText = "ELIMINAR";
             btnBorrar.disabled = false;
@@ -4200,65 +4158,10 @@ function recalcularSaldosGlobal() {
     if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
 }
      	
-	
-// ==========================================
-// 🗓️ UTILIDADES DE FECHAS (Faltaba esta función)
-// ==========================================
-
-function getFechasDashboard() {
-    // Usamos la fecha actual (o una variable global 'fechaActualDashboard' si existiera en tu lógica de navegación)
-    const now = new Date(); 
     
-    // Calculamos el primer milisegundo del mes
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    
-    // Calculamos el último milisegundo del mes
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
-    
-    // Devolvemos ambos formatos por compatibilidad (inglés/español)
-    return { 
-        start: start, 
-        end: end,
-        inicio: start,
-        fin: end
-    };
-}
-    
-   // ==========================================
-    // 🎨 PUENTE DE ANIMACIÓN MEJORADO (V2)
-    // ==========================================
-    function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
-        // Corrección de signo: Si el prefijo es un menos, invertimos el valor
-        // para que la animación moderna lo entienda bien.
-        let valorReal = valorFinal;
-        if (prefijo.includes('-')) {
-            valorReal = -Math.abs(valorFinal);
-        }
-
-        // Detectar tipo
-        let tipo = 'moneda';
-        if (sufijo.includes('%')) tipo = 'porcentaje';
-        else if (sufijo.includes('Meses')) tipo = 'meses';
-        else if (sufijo === '') tipo = 'numero';
-        
-        // Ejecutar animación si el motor existe
-        if (typeof window.animarCifra === 'function') {
-            // Pequeño truco: forzamos que empiece de 0 si no tiene historial
-            const el = document.getElementById(id);
-            if(el && !el.getAttribute('data-prev')) el.innerText = prefijo + "0" + sufijo;
-            
-            window.animarCifra(id, valorReal, tipo);
-        } else {
-            // Fallback de seguridad
-            const el = document.getElementById(id);
-            if(el) el.innerText = prefijo + new Intl.NumberFormat('es-ES', { minimumFractionDigits: decimales }).format(valorFinal) + sufijo;
-        }
-    }
- 
 // ==========================================
 // 🎢 MOTOR DE ANIMACIÓN DE NÚMEROS (CountUp)
 // ==========================================
-const cacheValores = {}; // Memoria para recordar el valor anterior
 
 function animarCifra(id, valorFinal, tipo = 'moneda') {
     const elemento = document.getElementById(id);
@@ -4870,7 +4773,7 @@ async function guardarUniversal(nuevasFilas) {
                 }
 
                 return {
-                    id: f.ID || f.id || crypto.randomUUID(), // UUID Único
+                    id: f.ID || f.id || window.generarID(), // UUID Único
                     fecha: fechaFinal,
                     cuenta: CLEAN(f.CUENTA || f.cuenta),
                     concepto: CLEAN(f.CONCEPTO || f.concepto),
@@ -4974,7 +4877,7 @@ async function guardarUniversal(nuevasFilas) {
         const nombreRescate = `aidanai_RESCATE_${fechaHora}.xlsx`;
         
         // Alerta visible e intrusiva
-        alert(`⚠️ ¡ATENCIÓN! ERROR DE CONEXIÓN\n\nNo se ha podido guardar en OneDrive.\n\nPara evitar perder tus datos, se descargará automáticamente un archivo de seguridad llamado:\n👉 ${nombreRescate}\n\nGuárdalo bien. Cuando recuperes la conexión, impórtalo.`);
+        window.mostrarNotificacion("⚠️ ERROR CRÍTICO: Descargando copia de seguridad de emergencia...", "error");
         
         // Forzar descarga del archivo que ya teníamos preparado en 'wb'
         if (wb) {
@@ -5237,7 +5140,7 @@ function cargarDesdeCache() {
             window.datos = window.datos.map(m => {
                 return {
                     ...m, // Mantenemos el resto de info
-                    id: m.id || m.ID || crypto.randomUUID(), // ¡Si falta ID, lo creamos ya!
+                    id: m.id || m.ID || window.generarID(), // ¡Si falta ID, lo creamos ya!
                     fecha: new Date(m.fecha) // Convertimos el texto "2025-01-01" en una Fecha real
                 };
             });
@@ -5496,7 +5399,7 @@ function renderizarRadarScoring(kpis) {
    ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
    ========================================= */
 async function guardarAjuste(tipo) {
-    if (!modoNube) return alert("⚠️ Debes estar conectado a la Nube (Modo Cloud) para guardar configuraciones.");
+    if (!modoNube) return window.mostrarNotificacion("☁️ Conéctate a la Nube para editar ajustes", "warning");
     
     const btnTextOriginal = event.target.innerText;
     event.target.innerText = "GUARDANDO...";
@@ -5546,78 +5449,12 @@ async function guardarAjuste(tipo) {
 
     } catch (e) {
         console.error(e);
-        alert("Error: " + e.message);
+        window.mostrarNotificacion("❌ Error en ajustes: " + e.message, "error");
     } finally {
         event.target.innerText = btnTextOriginal;
         event.target.disabled = false;
     }
 }
-// ==========================================
-// 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO)
-// ==========================================
-
-// 1. Formateador Estricto (Sin Euros donde no tocan)
-function formatearDatoMaestro(valor, tipo) {
-    if (tipo === 'moneda') {
-        return new Intl.NumberFormat('es-ES', { 
-            style: 'currency', currency: 'EUR', 
-            minimumFractionDigits: 2 
-        }).format(valor);
-    } 
-    else if (tipo === 'porcentaje') {
-        // CAMBIO: 0 decimales para limpieza visual
-        return valor.toFixed(0) + '%';
-    } 
-    else if (tipo === 'meses') {
-        // CAMBIO: 0 decimales para limpieza visual
-        return valor.toFixed(0) + ' Meses';
-    } 
-    else {
-        // Número simple (por defecto)
-        return valor.toFixed(2);
-    }
-}
-
-// 2. Motor de Animación "Con Vida" (Counting Effect)
-window.animarCifra = function(id, valorFinal, tipo = 'moneda') {
-    const elemento = document.getElementById(id);
-    if (!elemento) return;
-
-    // Recuperamos valor anterior para animar desde ahí
-    const valorInicial = parseFloat(elemento.getAttribute('data-prev')) || 0;
-    elemento.setAttribute('data-prev', valorFinal);
-
-    // Si el cambio es muy pequeño, pintar directo
-    if (Math.abs(valorFinal - valorInicial) < 0.01) {
-        elemento.innerText = formatearDatoMaestro(valorFinal, tipo);
-        return;
-    }
-
-    // Configuración de la animación
-    const duracion = 1500; // 1.5 segundos
-    const inicio = performance.now();
-
-    function frame(tiempoActual) {
-        const tiempoPasado = tiempoActual - inicio;
-        const progreso = Math.min(tiempoPasado / duracion, 1);
-        
-        // Easing suave (frena al final)
-        const ease = 1 - Math.pow(2, -10 * progreso);
-        
-        const valorActual = valorInicial + (valorFinal - valorInicial) * ease;
-        
-        // Pintamos el frame actual
-        elemento.innerText = formatearDatoMaestro(valorActual, tipo);
-
-        if (progreso < 1) {
-            requestAnimationFrame(frame);
-        } else {
-            // Asegurar valor final exacto
-            elemento.innerText = formatearDatoMaestro(valorFinal, tipo);
-        }
-    }
-    requestAnimationFrame(frame);
-};
 
 // ==========================================
 // 📅 GESTIÓN DE FECHAS (EL INTERRUPTOR)
@@ -5653,6 +5490,83 @@ window.toggleCustomDates = function() {
 // =========================================================
 var filtroUsuarioActual = 'todos'; // Valor inicial por defecto
 
+/* ==========================================
+   🚀 MOTOR DE ANIMACIÓN UNIFICADO (SÚPER ANIMARVALOR)
+   ========================================== */
+// Memoria para que la animación empiece donde se quedó la última vez
+const cacheAnimacion = {}; 
+
+window.animarValor = function(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+
+    // 1. LÓGICA DE SIGNOS (Heredada de tu código original)
+    // Si el prefijo tiene un menos, invertimos el valor numérico
+    if (prefijo && prefijo.includes('-')) {
+        valorFinal = -Math.abs(valorFinal);
+    }
+
+    // 2. PUNTO DE PARTIDA
+    // Si no tiene historial, empieza en 0. Si tiene, empieza donde se quedó.
+    const valorInicial = cacheAnimacion[id] || 0;
+    const variacion = valorFinal - valorInicial;
+
+    // 3. OPTIMIZACIÓN
+    // Si el cambio es minúsculo (menos de 1 céntimo), no animamos, pintamos directo.
+    if (Math.abs(variacion) < 0.01) {
+        elemento.innerText = formatearSalida(valorFinal, prefijo, sufijo, decimales);
+        cacheAnimacion[id] = valorFinal; // Guardamos dato
+        return;
+    }
+
+    // 4. CONFIGURACIÓN ANIMACIÓN
+    const duracion = 1500; // 1.5 segundos (Suave)
+    const tiempoInicio = performance.now();
+
+    function frame(tiempoActual) {
+        const tiempoPasado = tiempoActual - tiempoInicio;
+        const progreso = Math.min(tiempoPasado / duracion, 1);
+        
+        // Easing "EaseOutExpo" (Frena suave al final)
+        const ease = (progreso === 1) ? 1 : 1 - Math.pow(2, -10 * progreso);
+        
+        const valorActual = valorInicial + (variacion * ease);
+
+        // Pintamos el frame actual formateado
+        elemento.innerText = formatearSalida(valorActual, prefijo, sufijo, decimales);
+
+        if (progreso < 1) {
+            requestAnimationFrame(frame);
+        } else {
+            // Aseguramos el valor final exacto al terminar
+            elemento.innerText = formatearSalida(valorFinal, prefijo, sufijo, decimales);
+            cacheAnimacion[id] = valorFinal; // Actualizamos la memoria
+        }
+    }
+
+    // Arrancamos
+    requestAnimationFrame(frame);
+};
+
+// --- FUNCIÓN AUXILIAR DE FORMATO (Privada para la animación) ---
+function formatearSalida(valor, pre, suf, dec) {
+    let textoNumero = '';
+    
+    // Si el sufijo es '%', formateamos simple
+    if (suf && suf.includes('%')) {
+        textoNumero = valor.toFixed(dec);
+    } 
+    // Si es dinero o número normal
+    else {
+        textoNumero = new Intl.NumberFormat('es-ES', {
+            minimumFractionDigits: dec,
+            maximumFractionDigits: dec
+        }).format(valor);
+    }
+    
+    // Reconstruimos: Prefijo + Número + Sufijo
+    return (pre || '') + textoNumero + (suf || '');
+}
 
 // =========================================================
 // 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (VERSIÓN CORREGIDA)
@@ -6054,7 +5968,7 @@ function cargarSugerenciasAjustes() {
 window.editarMovimiento = function(idMov) {
     console.log("✏️ Editando ID:", idMov);
     const mov = datos.find(m => m.id === idMov);
-    if (!mov) return alert("Error: Movimiento no encontrado en memoria.");
+    if (!mov) return window.mostrarNotificacion("❌ Movimiento no encontrado", "error");
 
     // 1. DETECTAR TIPO REAL Y GUARDARLO EN EL GLOBAL (¡ESTO FALTABA!)
     let tipo = 'gasto'; // Por defecto asumimos gasto si no es positivo
@@ -6164,7 +6078,7 @@ window.editarMovimiento = function(idMov) {
 
             // 2. Hoja de Movimientos (Idéntica a la original)
             const filasMovimientos = window.datos.map(mov => ({
-                "Id": mov.id || mov.ID || crypto.randomUUID(), 
+                "Id": mov.id || mov.ID || window.generarID(), 
                 "Fecha": mov.fecha, 
                 "Cuenta": mov.cuenta,
                 "Concepto": mov.concepto,
@@ -6614,13 +6528,13 @@ async function crearReglaRecurrente() {
     let imp = parseFloat(impRaw);
 
     // 3. Validaciones con avisos claros
-    if(!fecha) return alert("❌ Falta la FECHA de inicio.");
-    if(!cta) return alert("❌ Selecciona una CUENTA.");
-    if(!conc) return alert("❌ Selecciona o escribe un CONCEPTO.");
-    if(isNaN(imp) || imp === 0) return alert("❌ El IMPORTE no es válido. Toca el cuadro numérico.");
+    if(!fecha) return window.mostrarNotificacion("📅 Falta la FECHA de inicio", "warning");
+    if(!cta) return window.mostrarNotificacion("🏦 Selecciona una CUENTA", "warning");
+    if(!conc) return window.mostrarNotificacion("🏷️ Falta el CONCEPTO", "warning");
+    if(isNaN(imp) || imp === 0) return window.mostrarNotificacion("🔢 Importe no válido (Toca los números)", "warning");
     
     if (tipo === 'traspaso') {
-        if (!ctaDest) return alert("❌ Para traspaso falta la Cuenta Destino.");
+        if (!ctaDest) return window.mostrarNotificacion("➡️ Falta la Cuenta Destino", "warning");
         if (cta === ctaDest) return alert("❌ La cuenta origen y destino son la misma.");
     }
 
@@ -6635,7 +6549,7 @@ async function crearReglaRecurrente() {
     if (frec === 'Diario') {
         const checks = document.querySelectorAll('#bloque-dias-semana input:checked');
         const dias = Array.from(checks).map(c => c.value);
-        if (dias.length === 0) return alert("⚠️ Selecciona al menos un día de la semana (L, M, X...).");
+        if (dias.length === 0) return window.mostrarNotificacion("📆 Selecciona algún día de la semana", "warning");
         diasStr = dias.join(',');
     }
 
@@ -6677,7 +6591,7 @@ async function crearReglaRecurrente() {
 
     } catch (e) {
         console.error(e);
-        alert("Error al guardar: " + e.message);
+        window.mostrarNotificacion("❌ Error guardando: " + e.message, "error");
         mostrarEstado("❌ Error de guardado", "error");
     }
 }
@@ -6714,7 +6628,7 @@ function calcularSiguienteFecha(fechaActual, frecuencia, diasSemana) {
 async function ejecutarRecurrente(idRec) {
     // 1. Localizar la regla
     const regla = window.datosRecurrentes.find(r => r.id === idRec);
-    if(!regla) return alert("❌ Error: No encuentro esa regla en memoria.");
+    if(!regla) return window.mostrarNotificacion("❌ Regla no encontrada", "error");
 
     const importeBonito = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Math.abs(regla.importe));
     if(!confirm(`¿Ejecutar ahora?\n\nConcepto: ${regla.concepto}\nImporte: ${importeBonito}\n\nSe generará el movimiento y la fecha avanzará.`)) return;
@@ -6726,7 +6640,7 @@ async function ejecutarRecurrente(idRec) {
     const tsOperacion = fechaOperacion.getTime();
     
     // Función auxiliar para IDs
-    const nuevoID = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'REC-MOV-' + Date.now() + Math.random();
+    const nuevoID = (typeof crypto !== 'undefined' && crypto.randomUUID) ? window.generarID() : 'REC-MOV-' + Date.now() + Math.random();
 
     let movimientosAGuardar = [];
 
@@ -6795,7 +6709,7 @@ async function ejecutarRecurrente(idRec) {
         
     } catch(e) {
         console.error(e);
-        alert("Error al procesar recurrente: " + e.message);
+        window.mostrarNotificacion("❌ Fallo al procesar: " + e.message, "error");
         mostrarEstado("❌ Error al guardar", "error");
     }
 }
@@ -7026,7 +6940,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
     // 1. Buscar los datos originales
     const regla = window.datosRecurrentes.find(r => r.id === idRecurrente);
     if (!regla) {
-        alert("Error: No encuentro la regla original.");
+        window.mostrarNotificacion("❌ Regla original perdida", "error");
         return;
     }
 
@@ -7034,7 +6948,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
 
     // 2. Crear el objeto movimiento compatible con tu sistema
     const nuevoMovimiento = {
-        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'AUTO-' + Date.now(),
+        id: window.generarID(),
         fecha: new Date(fechaPrevista), // Usamos la fecha programada
         cuenta: regla.cuenta,
         concepto: regla.concepto,
@@ -7050,7 +6964,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         // guardarUniversal ya refresca la pantalla y avisa, no hace falta hacer más
     } catch (e) {
         console.error(e);
-        alert("Error al guardar: " + e.message);
+        window.mostrarNotificacion("❌ Error al guardar regla: " + e.message, "error");
     }
 };
 
