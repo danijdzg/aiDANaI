@@ -1458,9 +1458,8 @@ th {
  /* =========================================
    🚀 FORMULARIO "THE NEON COCKPIT" (FULLSCREEN NO-SCROLL)
    ========================================= */
-
 /* El contenedor principal que tapa toda la pantalla */
-#modal-manual {
+#modal-manual, #modal-form-recurrente {
     display: none; /* Se activa con flex */
     position: fixed;
     top: 0; left: 0;
@@ -1469,19 +1468,19 @@ th {
     background: #000000;
     z-index: 20000;
     flex-direction: column;
-    overflow: hidden; /* PROHIBIDO EL SCROLL */
+    overflow: hidden; /* PROHIBIDO EL SCROLL GLOBAL */
     transition: all 0.3s ease;
 }
 
-#modal-manual.active { display: flex; }
+#modal-manual.active, #modal-form-recurrente.active { display: flex; }
 
 /* --- COLORES DINÁMICOS SEGÚN MODO --- */
 /* GASTO (Por defecto rojo) */
-#modal-manual[data-mode="gasto"] { --theme-color: #FF2E4D; }
+#modal-manual[data-mode="gasto"], #modal-form-recurrente[data-mode="gasto"] { --theme-color: #FF2E4D; }
 /* INGRESO */
-#modal-manual[data-mode="ingreso"] { --theme-color: #39FF14; }
+#modal-manual[data-mode="ingreso"], #modal-form-recurrente[data-mode="ingreso"] { --theme-color: #39FF14; }
 /* TRASPASO */
-#modal-manual[data-mode="traspaso"] { --theme-color: #00B8FF; }
+#modal-manual[data-mode="traspaso"], #modal-form-recurrente[data-mode="traspaso"] { --theme-color: #00B8FF; }
 
 /* 1. CABECERA (Compacta) */
 .cockpit-header {
@@ -1519,12 +1518,15 @@ th {
 
 /* 3. LA REJILLA DE CONTROL (Grid perfecto) */
 .cockpit-grid {
-    flex: 1; /* Ocupa todo el espacio sobrante */
+    flex: 1; /* Ocupa todo el espacio sobrante entre la cabecera y el botón */
     display: grid;
     grid-template-columns: 1fr 1fr; /* 2 Columnas */
-    grid-template-rows: repeat(3, 1fr); /* 3 Filas automáticas */
+    grid-auto-rows: max-content; /* Se adapta a los campos que haya */
+    align-content: start; /* Empuja los campos hacia arriba */
     gap: 12px;
     padding: 0 15px 15px 15px;
+    overflow-y: auto; /* PERMITE EL DESLIZAMIENTO SOLO AQUÍ DENTRO */
+    padding-bottom: 40px; /* Da un poco de aire antes del botón */
 }
 
 /* Cajas de input estilizadas como botones de nave */
@@ -1913,84 +1915,87 @@ select:focus > option:checked {
             Movimientos Fijos
         </h3>
 
-        <div class="master-card" id="modal-form-recurrente" style="display:none; border-color: #555; background: rgba(30,30,30,0.95); border-radius: 16px; margin-bottom: 100px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 20px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px;">
-        <span style="color:#fff; font-weight:bold; font-size: 16px;">✨ NUEVA REGLA FIJA</span>
-        <button onclick="document.getElementById('modal-form-recurrente').style.display='none'" style="background:none; border:none; color:#ff453a; font-size:14px; cursor:pointer; font-weight:bold;">✕ Cerrar</button>
-    </div>
+        <div id="modal-form-recurrente" class="modal-overlay" data-mode="gasto" style="z-index: 20005;">
     
-    <div id="form-recurrente">
+    <div class="cockpit-header">
+        <button class="btn-close-cockpit" onclick="cerrarModalRecurrente()">✕</button>
+        <span class="cockpit-title">NUEVA REGLA FIJA</span>
+        <div style="width: 24px;"></div> </div>
+
+    <div class="cockpit-hero">
+        <span class="cockpit-label">IMPORTE (FIJO O ESTIMADO)</span>
+        <input type="text" id="rec-importe" class="cockpit-amount" placeholder="0.00" readonly onclick="abrirCalculadora('rec-importe')">
+    </div>
+
+    <div class="cockpit-grid" style="overflow-y: auto; padding-bottom: 30px;">
         
-        <div class="source-switch" style="width: 100%; display: flex; justify-content: space-between; background: #111; padding: 2px; height: 32px; margin-bottom: 15px; border-radius: 8px;">
-            <button type="button" id="btn-type-gasto" class="source-option active" onclick="setRecType('gasto')" style="flex:1; font-size:11px; color:var(--c-danger)">GASTO</button>
-            <button type="button" id="btn-type-ingreso" class="source-option" onclick="setRecType('ingreso')" style="flex:1; font-size:11px; color:var(--c-success)">INGRESO</button>
-            <button type="button" id="btn-type-traspaso" class="source-option" onclick="setRecType('traspaso')" style="flex:1; font-size:11px; color:var(--c-transfer)">TRASPASO</button>
-        </div>
-        <input type="hidden" id="rec-tipo" value="gasto">
-
-        <div class="form-grid" style="margin-bottom: 10px;">
-            <div>
-                <label class="compact-label">Inicio</label>
-                <input type="date" id="rec-fecha" class="input-pro form-field compact-input" style="width:100%;">
+        <div class="cockpit-input-box span-2-cols" style="padding: 5px;">
+            <div class="source-switch" style="width: 100%; display: flex; justify-content: space-between; background: transparent;">
+                <button type="button" id="btn-type-gasto" class="source-option active" onclick="setRecType('gasto')" style="flex:1; font-size:12px; padding: 10px; color: var(--c-danger);">GASTO</button>
+                <button type="button" id="btn-type-ingreso" class="source-option" onclick="setRecType('ingreso')" style="flex:1; font-size:12px; padding: 10px;">INGRESO</button>
+                <button type="button" id="btn-type-traspaso" class="source-option" onclick="setRecType('traspaso')" style="flex:1; font-size:12px; padding: 10px;">TRASPASO</button>
             </div>
-            <div>
-                <label class="compact-label">Frecuencia</label>
-                <select id="rec-frecuencia" class="input-pro form-field compact-input" style="width:100%;" onchange="toggleDiasSemana()">
-                    <option value="Diario">📆 Diario</option>
-                    <option value="Semanal">🔄 Semanal</option>
-                    <option value="Mensual" selected>📅 Mensual</option>
-                    <option value="Anual">🎂 Anual</option>
-                </select>
-            </div>
+            <input type="hidden" id="rec-tipo" value="gasto">
         </div>
 
-        <div id="bloque-dias-semana" class="form-full dias-semana-wrapper" style="display:none; margin-bottom: 10px;">
-            <label class="day-check"><input type="checkbox" value="1"><span>L</span></label>
-            <label class="day-check"><input type="checkbox" value="2"><span>M</span></label>
-            <label class="day-check"><input type="checkbox" value="3"><span>X</span></label>
-            <label class="day-check"><input type="checkbox" value="4"><span>J</span></label>
-            <label class="day-check"><input type="checkbox" value="5"><span>V</span></label>
-            <label class="day-check"><input type="checkbox" value="6"><span>S</span></label>
-            <label class="day-check"><input type="checkbox" value="0"><span>D</span></label>
+        <div class="cockpit-input-box">
+            <label class="input-label-mini">FRECUENCIA</label>
+            <select id="rec-frecuencia" class="input-field-cockpit" onchange="toggleDiasSemana()">
+                <option value="Diario">Diario</option>
+                <option value="Semanal">Semanal</option>
+                <option value="Mensual" selected>Mensual</option>
+                <option value="Anual">Anual</option>
+            </select>
         </div>
 
-        <div class="form-grid" style="margin-bottom: 10px;">
-            <div>
-                <label class="compact-label" id="lbl-rec-origen">Cuenta</label>
-                <select id="rec-cuenta" class="input-pro form-field compact-input" style="width:100%;"></select>
-            </div>
-            <div id="bloque-rec-destino" style="display:none;">
-                <label class="compact-label" style="color:var(--c-transfer)">Destino</label>
-                <select id="rec-cuenta-destino" class="input-pro form-field compact-input" style="width:100%; border-color:var(--c-transfer);"></select>
+        <div class="cockpit-input-box">
+            <label class="input-label-mini">PRÓXIMA FECHA</label>
+            <input type="date" id="rec-fecha" class="input-field-cockpit">
+        </div>
+
+        <div id="bloque-dias-semana" class="cockpit-input-box span-2-cols" style="display:none; padding: 10px;">
+            <label class="input-label-mini">¿QUÉ DÍAS EXACTAMENTE?</label>
+            <div class="dias-semana-wrapper" style="margin-top: 5px; background: transparent;">
+                <label class="day-check"><input type="checkbox" value="1"><span>L</span></label>
+                <label class="day-check"><input type="checkbox" value="2"><span>M</span></label>
+                <label class="day-check"><input type="checkbox" value="3"><span>X</span></label>
+                <label class="day-check"><input type="checkbox" value="4"><span>J</span></label>
+                <label class="day-check"><input type="checkbox" value="5"><span>V</span></label>
+                <label class="day-check"><input type="checkbox" value="6"><span>S</span></label>
+                <label class="day-check"><input type="checkbox" value="0"><span>D</span></label>
             </div>
         </div>
 
-        <div class="form-grid" style="margin-bottom: 10px;">
-            <div>
-                <label class="compact-label">Concepto</label>
-                <select id="rec-concepto" class="input-pro form-field compact-input" style="width:100%;"></select>
-            </div>
-            <div>
-                <label class="compact-label">Beneficiario</label>
-                <select id="rec-beneficiario" class="input-pro form-field compact-input" style="width:100%;"></select>
-            </div>
+        <div class="cockpit-input-box">
+            <label class="input-label-mini" id="lbl-rec-origen">CUENTA</label>
+            <select id="rec-cuenta" class="input-field-cockpit"><option>Cargando...</option></select>
         </div>
 
-        <div class="form-full" style="margin-bottom: 25px;">
-            <input type="text" id="rec-descripcion" class="input-pro form-field compact-input" placeholder="Descripción (Opcional)" style="width:100%;">
+        <div class="cockpit-input-box" id="bloque-rec-destino" style="display:none;">
+            <label class="input-label-mini">DESTINO</label>
+            <select id="rec-cuenta-destino" class="input-field-cockpit"><option>Cargando...</option></select>
         </div>
 
-        <div class="form-full" style="position:relative; margin-bottom: 15px;">
-            <label class="compact-label" style="position:absolute; top:-15px; left:0;">Importe (€)</label>
-            <input type="text" id="rec-importe" class="input-pro form-field" 
-                   readonly 
-                   onclick="abrirCalculadora('rec-importe')" 
-                   placeholder="0.00 €" 
-                   style="width:100%; font-size:20px; text-align:center; color:var(--c-warning); height:45px; cursor:pointer; background: rgba(0,0,0,0.2);">
-            <span style="position:absolute; right:15px; top:12px; pointer-events:none; opacity:0.5;">🧮</span>
+        <div class="cockpit-input-box span-2-cols">
+            <label class="input-label-mini">CONCEPTO</label>
+            <select id="rec-concepto" class="input-field-cockpit"><option>Cargando...</option></select>
         </div>
 
-        <button class="full-btn btn-blue" onclick="crearReglaRecurrente(); setTimeout(() => document.getElementById('modal-form-recurrente').style.display='none', 800);" style="height:40px; line-height:40px; margin-top:5px; border-radius: 8px;">GUARDAR FIJO</button>
+        <div class="cockpit-input-box span-2-cols">
+            <label class="input-label-mini">BENEFICIARIO (OPCIONAL)</label>
+            <select id="rec-beneficiario" class="input-field-cockpit"><option>Cargando...</option></select>
+        </div>
+
+        <div class="cockpit-input-box span-2-cols">
+            <label class="input-label-mini">DESCRIPCIÓN (OPCIONAL)</label>
+            <input type="text" id="rec-descripcion" class="input-field-cockpit" placeholder="Ej: Pago gimnasio, Nómina...">
+        </div>
+    </div>
+
+    <div class="cockpit-footer">
+        <button class="btn-launch" onclick="crearReglaRecurrente()">
+            GUARDAR FIJO <span class="material-icons">update</span>
+        </button>
     </div>
 </div>
 
@@ -2060,7 +2065,7 @@ select:focus > option:checked {
     <div style="text-align:center; color:#666; padding:20px;">Cargando reglas...</div>
 </div>
 
-<button onclick="document.getElementById('modal-form-recurrente').style.display='block'; document.getElementById('modal-form-recurrente').scrollIntoView({behavior: 'smooth'});" class="boton-flotante-fijos" title="Crear nueva regla">
+<button onclick="abrirModalRecurrente()" class="boton-flotante-fijos" title="Crear nueva regla">
     +
 </button>
 
@@ -6908,30 +6913,54 @@ window.clearCalc = function() {
 };
 
 // ==========================================
-// ⚙️ CONTROL DE TIPO RECURRENTE (SEPARADO Y LIMPIO)
+// ⚙️ CONTROL DE TIPO RECURRENTE (Y FUNCIONES DE MODAL)
 // ==========================================
+window.abrirModalRecurrente = function() {
+    const modal = document.getElementById('modal-form-recurrente');
+    if (modal) {
+        modal.classList.add('active'); // Enciende la pantalla completa correctamente
+        setTimeout(() => { abrirCalculadora('rec-importe'); }, 100);
+    }
+};
+
+window.cerrarModalRecurrente = function() {
+    const modal = document.getElementById('modal-form-recurrente');
+    if (modal) modal.classList.remove('active'); // La apaga correctamente
+};
+
 window.setRecType = function(tipo) {
     document.getElementById('rec-tipo').value = tipo;
 
-    // Reset de botones
-    document.querySelectorAll('#form-recurrente .source-option').forEach(b => b.classList.remove('active'));
-    const btnActivo = document.getElementById('btn-type-' + tipo);
-    if(btnActivo) btnActivo.classList.add('active');
+    const modal = document.getElementById('modal-form-recurrente');
+    if (modal) modal.setAttribute('data-mode', tipo); // Cambia el color (Rojo/Verde/Azul)
 
-    // Lógica visual
+    // Reset de botones
+    document.querySelectorAll('#modal-form-recurrente .source-option').forEach(b => {
+        b.classList.remove('active');
+        b.style.color = '#888'; 
+    });
+    
+    // Encender el botón tocado con su color correcto
+    const btnActivo = document.getElementById('btn-type-' + tipo);
+    if (btnActivo) {
+        btnActivo.classList.add('active');
+        if (tipo === 'gasto') btnActivo.style.color = 'var(--c-danger)';
+        if (tipo === 'ingreso') btnActivo.style.color = 'var(--c-success)';
+        if (tipo === 'traspaso') btnActivo.style.color = 'var(--c-transfer)';
+    }
+
+    // Lógica de campos
     const bloqueDestino = document.getElementById('bloque-rec-destino');
     const lblOrigen = document.getElementById('lbl-rec-origen');
     
     if (tipo === 'traspaso') {
-        if(bloqueDestino) bloqueDestino.style.display = 'block';
-        if(lblOrigen) lblOrigen.innerText = "Desde Cuenta (Origen)";
+        if(bloqueDestino) bloqueDestino.style.display = 'flex'; // Usamos flex por el nuevo diseño de caja
+        if(lblOrigen) lblOrigen.innerText = "DESDE CUENTA";
     } else {
         if(bloqueDestino) bloqueDestino.style.display = 'none';
-        if(lblOrigen) lblOrigen.innerText = "Cuenta";
+        if(lblOrigen) lblOrigen.innerText = "CUENTA";
     }
 };
-
-// (Aquí termina el bloque corregido, justo antes de cargarVistaRecurrentes)
 
 function cargarVistaRecurrentes() {
     // 1. Definir función de llenado segura
@@ -7168,7 +7197,7 @@ async function crearReglaRecurrente() {
         await guardarTodoConRecurrentes();
         
         // Limpieza y cierre
-        document.getElementById('form-recurrente').style.display = 'none';
+        cerrarModalRecurrente();
         
         // Limpiar campos para la próxima
         document.getElementById('rec-importe').value = "";
