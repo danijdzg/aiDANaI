@@ -49,7 +49,7 @@
     <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- ECharts cubre todos los gráficos de la aplicación. Chart.js eliminado. -->
 
     <style>
 
@@ -1994,7 +1994,7 @@ select:focus > option:checked {
                         </div>
                     </div>
  			
-				<div id="box-grafico" class="chart-container" style="margin-top: 15px;"><canvas id="chartPatrimonio"></canvas></div>
+				<div id="box-grafico" class="chart-container" style="margin-top: 15px;"><div id="chartPatrimonio" style="width:100%;height:100%;"></div></div>
 				<div class="master-card green-card" style="margin-top: 20px; margin-bottom: 30px;">
                     <div class="card-header">
                         <span class="card-title" style="color: var(--c-success)!important">SCORING FINANCIERO</span>
@@ -2022,7 +2022,7 @@ select:focus > option:checked {
                 <div id="tab-movs" class="view-section">
 				<div class="mobile-search-container">
         <input type="text" id="f-texto-movil" class="mobile-search-input" 
-               placeholder="🔍 Buscar movimiento..." onkeyup="aplicarFiltros()">
+               placeholder="🔍 Buscar movimiento..." onkeyup="aplicarFiltrosDebounced()">
     </div>
                     <button class="filters-toggle" onclick="toggleFiltros()"><span class="material-icons">filter_list</span> Filtros Avanzados</button>
                     <div id="panel-filtros" class="filters-container">
@@ -2568,7 +2568,7 @@ window.mostrarNotificacion = function(mensaje, tipo = 'info') {
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => {
-            container.removeChild(toast);
+            if (toast.parentNode === container) container.removeChild(toast);
         }, 300); // Esperar a que termine la animación de salida
     }, 3000);
 };
@@ -3042,21 +3042,37 @@ window.generarAnalisisIA = function(movimientos) {
     let gastosUltimos3Meses = 0;
 
     // Recorremos los movimientos para estadísticas de flujo (ingresos/gastos del mes)
+    // ──────────────────────────────────────────────────────────────
+    // PUNTO 1 FIX: Los conceptos se almacenan en MAYÚSCULAS ('TRASPASO', 'INICIAL').
+    // Las comparaciones anteriores usaban 'Traspaso' e 'Inicial' (mixedCase),
+    // provocando que traspasos e iniciales SIEMPRE se sumaran como gastos/ingresos reales.
+    // Ahora normalizamos con toUpperCase() antes de comparar.
+    // ──────────────────────────────────────────────────────────────
+
+    // PUNTO 6 FIX: tresMesesAtras se calculaba DENTRO del forEach (new Date() × 2.872 veces).
+    // Ahora se calcula una sola vez antes del bucle.
+    const tresMesesAtras = new Date();
+    tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
+    const tsInicioMesActual = new Date(anioActual, mesActual, 1).getTime();
+
     movimientos.forEach(m => {
         if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return;
         const fecha = new Date(m.ts || m.fecha);
+        const conceptoUp = String(m.concepto || '').toUpperCase().trim();
+        const esInterno = conceptoUp === 'TRASPASO' || conceptoUp === 'INICIAL';
+
         if (fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) {
-            if (m.importe < 0 && m.concepto !== 'Traspaso' && m.concepto !== 'Inicial') {
-                gastosMes += Math.abs(m.importe);
-            } else if (m.importe > 0 && m.concepto !== 'Traspaso' && m.concepto !== 'Inicial') {
-                ingresosMes += m.importe;
+            if (!esInterno) {
+                if (m.importe < 0) {
+                    gastosMes += Math.abs(m.importe);
+                } else if (m.importe > 0) {
+                    ingresosMes += m.importe;
+                }
             }
         }
 
         // Datos de los ÚLTIMOS 3 MESES (para medias)
-        const tresMesesAtras = new Date();
-        tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
-        if (fecha > tresMesesAtras && fecha < new Date(anioActual, mesActual, 1) && m.importe < 0 && m.concepto !== 'Traspaso') {
+        if (fecha > tresMesesAtras && fecha.getTime() < tsInicioMesActual && m.importe < 0 && !esInterno) {
             gastosUltimos3Meses += Math.abs(m.importe);
         }
     });
@@ -3585,38 +3601,65 @@ window.mostrarEstado = function(mensaje, tipo = 'info') {
 // Redirección de seguridad para mantener compatibilidad
 window.showToast = window.mostrarEstado;
 
-// --- NUEVAS VARIABLES PARA POLLING ---
-let pollingInterval = null;
-const TIEMPO_POLLING = 60000; // 60 segundos
+// --- VARIABLES DE POLLING CON BACKOFF EXPONENCIAL ---
+let pollingTimeout  = null;   // handle del setTimeout activo
+let pollingInterval = null;   // alias legacy (para código externo que lo lea)
+const POLLING_BASE  = 60000;  // 60 s — delay inicial y de éxito
+const POLLING_MAX   = 300000; // 5 min — techo de backoff
+let   pollingDelay  = POLLING_BASE;
+let   pollingActivo = false;
 
 // ==========================================
-// 🔄 SISTEMA DE SINCRONIZACIÓN AUTOMÁTICA (Silencioso)
+// 🔄 SISTEMA DE SINCRONIZACIÓN CON BACKOFF EXPONENCIAL
 // ==========================================
+// Si OneDrive falla, el delay se duplica en cada intento (60s → 120s → 240s → 300s).
+// Al recuperarse, vuelve a 60 s. Esto evita martillar la API de Microsoft en caso
+// de fallo prolongado y ahorra batería en móvil.
 window.iniciarPolling = function() {
-    // ✅ FIX BUG-3: Antes se guardaba en window.pollingInterval pero detenerPolling()
-    // comprobaba la variable local pollingInterval (siempre null) → el intervalo nunca
-    // se limpiaba, se acumulaban múltiples setInterval en cada reconexión.
-    // Ahora ambas funciones usan la misma variable local y la sincronizan en window.
-    if (pollingInterval) clearInterval(pollingInterval);
-    pollingInterval = setInterval(async () => {
-        if (modoNube && !window.idEnEdicion) {
-            try {
-                await cargarDesdeNube();
-            } catch (e) {
-                // Errores de auto-sincronización silenciados
+    // Cancelar cualquier ciclo previo antes de crear uno nuevo
+    detenerPolling();
+    pollingActivo = true;
+    pollingDelay  = POLLING_BASE; // Siempre arrancamos "frescos"
+
+    function ciclo() {
+        if (!pollingActivo) return;
+
+        pollingTimeout = setTimeout(async () => {
+            if (!pollingActivo) return;
+
+            if (modoNube && !window.idEnEdicion) {
+                try {
+                    await cargarDesdeNube();
+                    // ✅ ÉXITO: resetear delay a base
+                    pollingDelay = POLLING_BASE;
+                } catch (e) {
+                    // ❌ FALLO: duplicar delay hasta el techo
+                    pollingDelay = Math.min(pollingDelay * 2, POLLING_MAX);
+                    console.warn(`⏳ Polling falló. Próximo intento en ${pollingDelay/1000}s`, e.message || e);
+                }
             }
-        }
-    }, TIEMPO_POLLING);
-    window.pollingInterval = pollingInterval; // alias para código externo
+
+            ciclo(); // programar el siguiente ciclo con el delay actualizado
+        }, pollingDelay);
+
+        // Mantener alias legacy sincronizado
+        pollingInterval = pollingTimeout;
+        window.pollingInterval = pollingTimeout;
+    }
+
+    ciclo();
 };
 
 function detenerPolling() {
-    // ✅ FIX BUG-3 (cont): ahora limpiamos la variable correcta
-    if (pollingInterval) {
-        clearInterval(pollingInterval);
+    pollingActivo = false;
+    if (pollingTimeout) {
+        clearTimeout(pollingTimeout);
+        pollingTimeout  = null;
         pollingInterval = null;
         window.pollingInterval = null;
     }
+    // Resetear delay para que el próximo iniciarPolling arranque limpio
+    pollingDelay = POLLING_BASE;
 }
 
 // ==========================================
@@ -3925,11 +3968,14 @@ window.procesarLibroLeido = function(wb) {
             importe: typeof rawImporte === 'string' ? parseFloat(rawImporte.replace(',', '.')) : rawImporte,
             descripcion: limpiar(fila.DESCRIPCION || fila.Descripcion || fila.Detalle),
             beneficiario: limpiar(fila.BENEFICIARIO || fila.Beneficiario),
-            // FIX 6: Detectar traspasos por el campo TIPO o por el CONCEPTO antes de caer
-            // en la clasificación por signo. Así se preserva el tipo al recargar el Excel.
+            // ✅ MEJORA: Leer TIPO explícito del Excel primero. Si existe y es válido,
+            // se usa directamente. Solo se recurre a la inferencia como último fallback.
             tipo: (function() {
                 const tipoRaw = String(fila.TIPO || fila.Tipo || '').toLowerCase().trim();
                 if (tipoRaw === 'traspaso') return 'traspaso';
+                if (tipoRaw === 'ingreso')  return 'ingreso';
+                if (tipoRaw === 'gasto')    return 'gasto';
+                // Fallback legacy: inferencia por concepto o signo (Excel sin columna TIPO)
                 const concRaw = String(fila.CONCEPTO || fila.Concepto || '').toUpperCase().trim();
                 if (concRaw.includes('TRASPASO')) return 'traspaso';
                 return (parseFloat(rawImporte) >= 0) ? 'ingreso' : 'gasto';
@@ -4021,7 +4067,7 @@ function renderizar() {
             let valA = String(a[campo] || (campo === 'descripcion' ? a.detalle : '') || '').toLowerCase();
             let valB = String(b[campo] || (campo === 'descripcion' ? b.detalle : '') || '').toLowerCase();
             
-            if (valA === valB) return window.ordenActivo.asc ? (a.id - b.id) : (b.id - a.id);
+            if (valA === valB) return window.ordenActivo.asc ? String(a.id).localeCompare(String(b.id)) : String(b.id).localeCompare(String(a.id));
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             return window.ordenActivo.asc ? 1 : -1;
         });
@@ -4340,6 +4386,17 @@ window.getFechasDashboard = function() {
         llenar('f-tipo-cuenta', sTipos, 'Todos los Tipos'); // Nuevo
         llenar('f-concepto', sConceptos, 'Todos Conceptos');
         llenar('f-beneficiario', sBeneficiarios, 'Todos Beneficiarios');
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // DEBOUNCE DEL BUSCADOR
+    // Evita re-renderizar 2.800+ tarjetas en cada pulsación de tecla.
+    // Espera 250 ms desde la última tecla antes de disparar el filtro.
+    // ──────────────────────────────────────────────────────────────
+    let _debounceSearchTimer = null;
+    window.aplicarFiltrosDebounced = function() {
+        clearTimeout(_debounceSearchTimer);
+        _debounceSearchTimer = setTimeout(aplicarFiltros, 250);
     };
 
     function aplicarFiltros() {
@@ -4697,7 +4754,9 @@ window.guardarManual = async function() {
             return "PROPIO"; 
         };
 
-        let filasParaExcel = [];
+        // PUNTO 5 FIX: Array filasParaExcel eliminado. Era dead code: se construía
+        // meticulosamente en cada rama pero guardarUniversal() lee directamente
+        // de window.datos, nunca de este array. CPU y memoria ahorradas.
         let movimientosParaLocal = [];
 
         // =========================================================
@@ -4724,8 +4783,6 @@ window.guardarManual = async function() {
                 beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: new Date(fecha + 'T12:00:00').getTime()
             };
 
-            filasParaExcel.push([movSalida.id, movSalida.fecha, movSalida.cuenta, movSalida.concepto, movSalida.importe, movSalida.descripcion, movSalida.beneficiario]);
-            filasParaExcel.push([movEntrada.id, movEntrada.fecha, movEntrada.cuenta, movEntrada.concepto, movEntrada.importe, movEntrada.descripcion, movEntrada.beneficiario]);
             movimientosParaLocal.push(movSalida, movEntrada);
         } 
         // =========================================================
@@ -4750,7 +4807,6 @@ window.guardarManual = async function() {
                 tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: new Date(fecha + 'T12:00:00').getTime()
             };
 
-            filasParaExcel.push([nuevoMov.id, nuevoMov.fecha, nuevoMov.cuenta, nuevoMov.concepto, nuevoMov.importe, nuevoMov.descripcion, nuevoMov.beneficiario]);
             movimientosParaLocal.push(nuevoMov);
         }
 
@@ -5345,128 +5401,112 @@ function formatear(val, tipo) {
     }
 
 function renderizarGraficoEvolucion(movimientos) {
-    const ctx = document.getElementById('chartPatrimonio');
-    const container = document.getElementById('box-grafico');
+    const container = document.getElementById('chartPatrimonio');
+    const boxGrafico = document.getElementById('box-grafico');
 
     // Validación de seguridad
     if (!movimientos || movimientos.length === 0) {
-        if (container) container.classList.remove('visible');
+        if (boxGrafico) boxGrafico.classList.remove('visible');
         return;
     }
-    if (container) container.classList.add('visible');
+    if (boxGrafico) boxGrafico.classList.add('visible');
 
-    // 1. PREPARACIÓN DE DATOS (Suavizado)
-    // Ordenamos cronológicamente
+    // 1. PREPARACIÓN DE DATOS (igual que antes, suavizado por día)
     const movs = [...movimientos].sort((a, b) => a.ts - b.ts);
-    
-    // Mapa para guardar solo el saldo FINAL de cada día (evita dientes de sierra)
     const historiaMap = new Map();
     let saldoAcumulado = 0;
 
     movs.forEach(m => {
         saldoAcumulado += m.importe;
-        // Creamos una clave de fecha "YYYY-MM-DD"
-        const fechaObj = new Date(m.ts);
-        const fechaKey = fechaObj.toISOString().split('T')[0]; // "2023-10-25"
-        
-        // Sobrescribimos el valor del día con el último saldo acumulado calculado
+        const fechaKey = new Date(m.ts).toISOString().split('T')[0];
         historiaMap.set(fechaKey, saldoAcumulado);
     });
 
-    const labels = Array.from(historiaMap.keys());
+    const labels     = Array.from(historiaMap.keys());
     const dataPoints = Array.from(historiaMap.values());
 
-    // 2. DESTRUIR GRÁFICO ANTERIOR (Evita superposiciones)
+    // 2. DESTRUIR INSTANCIA ANTERIOR (ECharts usa dispose())
     if (window.chartInstance) {
-        window.chartInstance.destroy();
+        window.chartInstance.dispose();
     }
 
-    // 3. CREAR GRÁFICO "FINTECH"
-    window.chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Patrimonio',
-                data: dataPoints,
-                borderColor: '#00B8FF', // Azul Neón (Coherente con var(--c-primary))
-                borderWidth: 2,
-                
-                // Puntos invisibles (salvo hover)
-                pointRadius: 0,         
-                pointHoverRadius: 6,
-                pointBackgroundColor: '#000000', // Centro negro
-                pointBorderColor: '#00B8FF',     // Borde azul
-                pointBorderWidth: 2,
-                
-                fill: true,             // Relleno activado
-                tension: 0.4,           // Curva suave (Bezier)
-                
-                // GRADIENTE DE FONDO PROFESIONAL
-                backgroundColor: (context) => {
-                    const chart = context.chart;
-                    const { ctx, chartArea } = chart;
-                    if (!chartArea) return null;
-                    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                    gradient.addColorStop(0, 'rgba(0, 184, 255, 0.4)'); // Arriba: Brillante
-                    gradient.addColorStop(1, 'rgba(0, 184, 255, 0.0)'); // Abajo: Transparente
-                    return gradient;
-                }
-            }]
+    // 3. CREAR GRÁFICO CON ECHARTS (misma estética que antes)
+    window.chartInstance = echarts.init(container, null, { renderer: 'canvas' });
+
+    window.chartInstance.setOption({
+        backgroundColor: 'transparent',
+        grid: { top: 10, right: 55, bottom: 10, left: 10, containLabel: false },
+        xAxis: {
+            type: 'category',
+            data: labels,
+            show: false   // Eje X invisible para limpieza total (igual que antes)
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false, // Muestra tooltip aunque no toques la línea exacta
-            },
-            plugins: {
-                legend: { display: false }, // Sin leyenda (minimalista)
-                tooltip: {
-                    backgroundColor: 'rgba(20, 20, 20, 0.95)', // Fondo casi negro
-                    titleColor: '#888',
-                    bodyColor: '#fff',
-                    bodyFont: { size: 14, weight: 'bold', family: 'Inter' },
-                    padding: 12,
-                    cornerRadius: 8,
-                    displayColors: false, // Sin cuadradito de color
-                    callbacks: {
-                        label: function(context) {
-                            return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
-                        },
-                        title: function(tooltipItems) {
-                            // Formato fecha amigable: "25 oct"
-                            const date = new Date(tooltipItems[0].label);
-                            return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
-                        }
-                    }
+        yAxis: {
+            type: 'value',
+            position: 'right',
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.03)' } },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: {
+                color: '#666',
+                fontSize: 10,
+                fontFamily: 'Inter',
+                formatter: v => Math.abs(v) >= 1000 ? (v / 1000).toFixed(0) + 'k' : v
+            }
+        },
+        series: [{
+            type: 'line',
+            data: dataPoints,
+            smooth: 0.4,                   // Curva Bezier equivalente a tension:0.4
+            symbol: 'none',                // Sin puntos visibles
+            lineStyle: { color: '#00B8FF', width: 2 },
+            emphasis: {
+                // Punto visible al hacer hover
+                scale: true,
+                itemStyle: {
+                    color: '#000000',
+                    borderColor: '#00B8FF',
+                    borderWidth: 2
                 }
             },
-            scales: {
-                x: {
-                    display: false, // Eje X invisible para limpieza total
-                    grid: { display: false }
-                },
-                y: {
-                    position: 'right',
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.03)', // Líneas horizontales muy sutiles
-                        drawBorder: false
-                    },
-                    ticks: {
-                        color: '#666',
-                        font: { size: 10, family: 'Inter' },
-                        callback: function(value) {
-                            // Abreviar miles (1k, 2k...)
-                            if(Math.abs(value) >= 1000) return (value/1000).toFixed(0) + 'k';
-                            return value;
-                        }
-                    }
-                }
+            areaStyle: {
+                // Gradiente idéntico al de Chart.js
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: 'rgba(0,184,255,0.4)' },
+                    { offset: 1, color: 'rgba(0,184,255,0.0)' }
+                ])
+            }
+        }],
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'none' },
+            backgroundColor: 'rgba(20,20,20,0.95)',
+            borderColor: 'transparent',
+            borderRadius: 8,
+            padding: 12,
+            textStyle: { color: '#fff', fontSize: 14, fontWeight: 'bold', fontFamily: 'Inter' },
+            formatter: params => {
+                const p = params[0];
+                const fecha = new Date(p.name).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                const valor = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(p.value);
+                return `<span style="color:#888;font-size:11px">${fecha}</span><br/>${valor}`;
             }
         }
     });
+
+    // PUNTO 3 FIX: ResizeObserver memory leak.
+    // Cada llamada a esta función creaba un nuevo observer sin desconectar el anterior.
+    // Con el tiempo (cambios de pestaña, guardados, filtros) se acumulaban decenas de
+    // observers activos sobre el mismo elemento, degradando el rendimiento.
+    // Solución: almacenar la referencia en window y desconectar antes de crear uno nuevo.
+    if (window._chartResizeObs) {
+        window._chartResizeObs.disconnect();
+        window._chartResizeObs = null;
+    }
+    window._chartResizeObs = new ResizeObserver(() => {
+        if (window.chartInstance) window.chartInstance.resize();
+    });
+    window._chartResizeObs.observe(container);
 }
     
 	// ==========================================
@@ -5679,10 +5719,13 @@ async function guardarUniversal(nuevasFilas) {
         wb = XLSX.utils.book_new();
         
         // --- HOJA 1: MOVIMIENTOS ---
+        // ✅ MEJORA: Se añade columna TIPO explícita para no depender de inferencia por signo
+        // al recargar el Excel. Esto evita que traspasos con importe positivo se lean como ingresos.
         const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
             "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
-            "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario
-        })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"] });
+            "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario,
+            "Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
+        })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
         XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
 
         // --- HOJA 2: CONFIGURACION ---
@@ -6044,7 +6087,7 @@ window.renderizarSunburstPatrimonio = function() {
     const elValorTotal = document.getElementById('sb-total-val');
     const fmt = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
-    if(elValorTotal) {
+    if(elValorTotal && elLabelTotal) {
         elLabelTotal.innerText = "PATRIMONIO";
         elLabelTotal.style.color = "#888"; 
         
@@ -6056,8 +6099,8 @@ window.renderizarSunburstPatrimonio = function() {
     const elRatioLiq = document.getElementById('kpi-ratio-liq');
     const elRatioInv = document.getElementById('kpi-ratio-inv');
     if (activosBrutos > 0) {
-        elRatioLiq.innerText = ((totalLiquidez / activosBrutos) * 100).toFixed(0) + '%';
-        elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(0) + '%';
+        if(elRatioLiq) elRatioLiq.innerText = ((totalLiquidez / activosBrutos) * 100).toFixed(0) + '%';
+        if(elRatioInv) elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(0) + '%';
     }
 
     // 4. CONFIGURACIÓN DEL GRÁFICO (MODO NEÓN)
@@ -6152,9 +6195,7 @@ async function cargarDesdeCacheAsync() {
                         window.listaConceptosConfig     = datos.config.conceptos    || [];
                         window.listaBeneficiariosConfig = datos.config.beneficiarios || [];
                     }
-                    window.datos = window.datos;
-                    // 🔒 BUG CORREGIDO: La línea "datos = window.datos" era un alias sin efecto
-                    // real porque la variable local 'datos' ya era window.datos. Se elimina.
+                    // (La reasignación de datos ya es window.datos directamente arriba)
                     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
                     if (typeof mostrarEstado === 'function') mostrarEstado('⚡ Datos locales descifrados ✓', 'ok');
                     return true;
@@ -7806,7 +7847,7 @@ async function ejecutarRecurrente(idRec) {
     const tsOperacion = fechaOperacion.getTime();
     
     // Función auxiliar para IDs
-    const nuevoID = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'REC-MOV-' + Date.now() + Math.random();
+    const nuevoID = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'REC-MOV-' + Date.now() + '-' + Math.random().toString(36).slice(2);
 
     let movimientosAGuardar = [];
 
@@ -8025,8 +8066,8 @@ window.detectarMagia = function(texto) {
     }
 
     // --- MODO 2: ADIVINO HISTÓRICO (Para el resto de gastos) ---
-    // Buscar el movimiento MÁS RECIENTE (leemos la lista al revés)
-    const copiaDatos = window.datos.slice().reverse(); 
+    // Buscar el movimiento MÁS RECIENTE (datos ya está ordenado: más nuevo primero)
+    const copiaDatos = window.datos; 
     
     const encontrado = copiaDatos.find(m => {
         const desc = (m.Descripcion || m.DESCRIPCION || m.descripcion || m.detalle || "").toLowerCase();
@@ -8182,7 +8223,6 @@ const CACHE_URLS = [
     'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
     'https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js',
     'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',
-    'https://cdn.jsdelivr.net/npm/chart.js',
     'https://fonts.googleapis.com/icon?family=Material+Icons',
     'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
