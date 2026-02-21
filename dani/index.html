@@ -3120,7 +3120,11 @@ window.generarAnalisisIA = function(movimientos) {
     window.mapaCuentas = {};   
 	window.listaConceptos = [];     
 	window.listaBeneficiarios = [];	
-    var idEnEdicion = null;    
+    var idEnEdicion = null;
+    // ✅ FIX SCOPE: idEnEdicion declarada como var local pero consultada como
+    // window.idEnEdicion en polling, detectarMagia y cargarParaEditar.
+    // La sincronizamos en window para que ambas referencias sean coherentes.
+    window.idEnEdicion = null;
     var filtroUsuarioActual = 'todos'; 
 
     // ==========================================
@@ -3570,22 +3574,29 @@ const TIEMPO_POLLING = 60000; // 60 segundos
 // 🔄 SISTEMA DE SINCRONIZACIÓN AUTOMÁTICA (Silencioso)
 // ==========================================
 window.iniciarPolling = function() {
-    if (window.pollingInterval) clearInterval(window.pollingInterval);
-    window.pollingInterval = setInterval(async () => {
-        if (modoNube && !idEnEdicion) {
+    // ✅ FIX BUG-3: Antes se guardaba en window.pollingInterval pero detenerPolling()
+    // comprobaba la variable local pollingInterval (siempre null) → el intervalo nunca
+    // se limpiaba, se acumulaban múltiples setInterval en cada reconexión.
+    // Ahora ambas funciones usan la misma variable local y la sincronizan en window.
+    if (pollingInterval) clearInterval(pollingInterval);
+    pollingInterval = setInterval(async () => {
+        if (modoNube && !window.idEnEdicion) {
             try {
                 await cargarDesdeNube();
             } catch (e) {
                 // Errores de auto-sincronización silenciados
             }
         }
-    }, 60000);
+    }, TIEMPO_POLLING);
+    window.pollingInterval = pollingInterval; // alias para código externo
 };
 
 function detenerPolling() {
+    // ✅ FIX BUG-3 (cont): ahora limpiamos la variable correcta
     if (pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
+        window.pollingInterval = null;
     }
 }
 
@@ -3631,7 +3642,10 @@ window.crearBackupNube = async function(forzarManual = false) {
             body: JSON.stringify({ "name": `aidanai_backup_${fechaHora}.xlsx`, "parentReference": { "id": folderId } })
         });
 
-        if(forzarManual) mostrarEstado("✅ Backup creado", "success");
+        if(forzarManual) mostrarEstado("✅ Backup creado en OneDrive", "success");
+        // ✅ FIX BUG-2: actualizarInfoBackup nunca era llamada → indicador siempre decía
+        // "No se ha hecho backup hoy" aunque se hubiera hecho correctamente.
+        if (typeof actualizarInfoBackup === 'function') actualizarInfoBackup(true);
     } catch (e) {
         console.error("Backup info:", e.message);
     }
@@ -4362,7 +4376,8 @@ window.cargarParaEditar = function(id) {
     const mov = datos.find(m => m.id === id);
     if (!mov) return;
 
-    idEnEdicion = id; 
+    idEnEdicion = id;
+    window.idEnEdicion = id; // ✅ Mantener sincronizado con window para polling y detectarMagia
     
     // Detectamos si es un traspaso
     const esTraspaso = (mov.tipo === 'traspaso') || 
@@ -4560,9 +4575,13 @@ window.cargarParaEditar = function(id) {
                 if (typeof cargarDesdeNube === 'function') {
                     cargarDesdeNube().catch(() => {/* silencioso */});
                 }
-            }, 500); // Pequeño retardo para no solaparse con el guardado que acaba de terminar
+            }, 500);
         }
     }
+    // ✅ FIX SCOPE: cerrarModal era función local pero guardarManual la llamaba como
+    // window.cerrarModal() → TypeError en runtime. La exponemos en window para que
+    // ambas llamadas (cerrarModal() local y window.cerrarModal()) funcionen.
+    window.cerrarModal = cerrarModal;
     function autoRellenarDescripcion() {
         const c = document.getElementById('m-concepto').value;
         const d = document.getElementById('m-desc');
@@ -5562,7 +5581,10 @@ async function guardarUniversal(nuevasFilas) {
                     descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
                     beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
                     ts: fechaFinal.getTime(),
-                    tipo: (parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto'
+                    // ✅ FIX BUG-4: Antes recalculaba el tipo SOLO por el signo del importe,
+                    // perdiendo 'traspaso' cuando venía de ejecutarRecurrente/agregarDesdeRecurrente.
+                    // Ahora respeta el tipo original del objeto fuente.
+                    tipo: f.tipo || f.TIPO || ((parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
                 };
             });
             datosFinales.unshift(...filasProcesadas);
@@ -7080,8 +7102,9 @@ window.editarMovimiento = function(idMov) {
 // ==========================================
 function descargarBackupLocal() {
     if (!window.datos || window.datos.length === 0) {
-        if(typeof mostrarToast === 'function') mostrarToast("No hay datos para descargar", "error");
-        else alert("No hay datos");
+        // ✅ FIX BUG-1: mostrarToast no existe en este app. Usar mostrarNotificacion.
+        if(typeof window.mostrarNotificacion === 'function') window.mostrarNotificacion("⚠️ No hay datos para descargar", "warning");
+        else alert("No hay datos cargados aún.");
         return;
     }
 
@@ -7157,12 +7180,14 @@ function descargarBackupLocal() {
         const fechaHoy = new Date().toISOString().slice(0,10).replace(/-/g, "");
         XLSX.writeFile(wb, `aidanai_backup_LOCAL_${fechaHoy}.xlsx`, { compression: true });
         
-        if(typeof mostrarToast === 'function') mostrarToast("✅ Backup completo (3 Hojas) descargado", "success");
-        else alert("Backup Completo Descargado");
+        // ✅ FIX BUG-1 (cont): Actualizar el indicador visual "backup hecho hoy"
+        if (typeof actualizarInfoBackup === 'function') actualizarInfoBackup(true);
+        if(typeof window.mostrarNotificacion === 'function') window.mostrarNotificacion("✅ Backup completo (3 hojas) descargado", "success");
+        else alert("✅ Backup Completo Descargado");
 
     } catch (error) {
         console.error(error);
-        if(typeof mostrarToast === 'function') mostrarToast("❌ Error al generar el backup", "error");
+        if(typeof window.mostrarNotificacion === 'function') window.mostrarNotificacion("❌ Error al generar el backup: " + error.message, "error");
         else alert("Error: " + error.message);
     }
 }
@@ -7677,28 +7702,52 @@ async function crearReglaRecurrente() {
 function calcularSiguienteFecha(fechaActual, frecuencia, diasSemana) {
     let fecha = new Date(fechaActual);
     
-    // Ajuste de seguridad para fechas
+    // Ajuste de seguridad para fechas mal formadas
     if (isNaN(fecha.getTime())) return fechaActual;
 
     if (frecuencia === 'Mensual') {
-        // Sumar 1 mes
         fecha.setMonth(fecha.getMonth() + 1);
     } 
     else if (frecuencia === 'Anual') {
-        // Sumar 1 año
         fecha.setFullYear(fecha.getFullYear() + 1);
     } 
     else if (frecuencia === 'Semanal') {
-        // Sumar 7 días
         fecha.setDate(fecha.getDate() + 7);
     } 
     else if (frecuencia === 'Diario') {
-        // Si hay días específicos marcados (L, M, X...) es más complejo
-        // Por ahora, sumamos 1 día simple para que funcione básico
-        fecha.setDate(fecha.getDate() + 1);
+        // ✅ FIX BUG-5: Antes siempre sumaba exactamente 1 día ignorando diasSemana.
+        // Una regla "Lunes, Miércoles" ejecutada un martes avanzaba al miércoles por
+        // casualidad, pero ejecutada un miércoles avanzaba al jueves (incorrecto).
+        // Ahora busca el siguiente día de la semana válido en la lista.
+        if (diasSemana && diasSemana.trim() !== '') {
+            // diasSemana llega como "1,3,5" (0=Dom, 1=Lun, ..., 6=Sáb)
+            const diasPermitidos = diasSemana
+                .split(',')
+                .map(d => parseInt(d.trim()))
+                .filter(d => !isNaN(d) && d >= 0 && d <= 6);
+            
+            if (diasPermitidos.length > 0) {
+                // Avanzamos desde el día SIGUIENTE a fechaActual
+                let intento = new Date(fecha);
+                intento.setDate(intento.getDate() + 1);
+                // Iteramos hasta encontrar un día de la semana permitido (máx 7 pasos)
+                let pasos = 0;
+                while (!diasPermitidos.includes(intento.getDay()) && pasos < 7) {
+                    intento.setDate(intento.getDate() + 1);
+                    pasos++;
+                }
+                fecha = intento;
+            } else {
+                // Lista vacía o inválida → +1 día por seguridad
+                fecha.setDate(fecha.getDate() + 1);
+            }
+        } else {
+            // Sin días concretos marcados → frecuencia diaria pura (+1 día)
+            fecha.setDate(fecha.getDate() + 1);
+        }
     }
 
-    // Devolver en formato YYYY-MM-DD para que el Excel lo entienda
+    // Siempre devolvemos en formato YYYY-MM-DD (compatible con Excel y Date())
     return fecha.toISOString().split('T')[0];
 }
 
@@ -7722,10 +7771,24 @@ async function ejecutarRecurrente(idRec) {
     let movimientosAGuardar = [];
 
     // 3. Lógica según tipo (Traspaso vs Normal)
+    // ✅ FIX BUG-7: Enriquecer cada movimiento con tipoCuenta y esInversion directamente
+    // desde mapaCuentas. Sin esto, el filtro "Todos los Tipos" del Diario los ocultaba
+    // hasta la próxima recarga completa porque recalcularSaldosGlobal no los tenía aún.
+    const obtenerInfoCuenta = (nombreCuenta) => {
+        const clave = String(nombreCuenta || '').toUpperCase().trim();
+        const info = (window.mapaCuentas && window.mapaCuentas[clave]) ? window.mapaCuentas[clave] : null;
+        return {
+            tipoCuenta: info ? (info.tipo || 'SIN CLASIFICAR') : 'SIN CLASIFICAR',
+            esInversion: info ? (info.esInversion === true || info.esInversion === 'SI') : false
+        };
+    };
+
     if (regla.tipoRegla === 'traspaso' || (regla.cuentaDestino && regla.cuentaDestino.length > 1)) {
         // ES UN TRASPASO (Genera 2 movimientos)
         const idSalida = nuevoID + "-A";
         const idEntrada = nuevoID + "-B";
+        const infoOrigen = obtenerInfoCuenta(regla.cuenta);
+        const infoDestino = obtenerInfoCuenta(regla.cuentaDestino);
 
         movimientosAGuardar.push({
             id: idSalida,
@@ -7736,7 +7799,9 @@ async function ejecutarRecurrente(idRec) {
             importe: -Math.abs(regla.importe), // Sale dinero
             descripcion: `>> A: ${regla.cuentaDestino} | ${regla.descripcion || 'Fijo'}`,
             beneficiario: regla.beneficiario || 'Traspaso',
-            tipo: 'traspaso'
+            tipo: 'traspaso',
+            tipoCuenta: infoOrigen.tipoCuenta,
+            esInversion: infoOrigen.esInversion
         });
 
         movimientosAGuardar.push({
@@ -7748,11 +7813,14 @@ async function ejecutarRecurrente(idRec) {
             importe: Math.abs(regla.importe), // Entra dinero
             descripcion: `<< DE: ${regla.cuenta} | ${regla.descripcion || 'Fijo'}`,
             beneficiario: regla.beneficiario || 'Traspaso',
-            tipo: 'traspaso'
+            tipo: 'traspaso',
+            tipoCuenta: infoDestino.tipoCuenta,
+            esInversion: infoDestino.esInversion
         });
 
     } else {
         // ES GASTO O INGRESO (Genera 1 movimiento)
+        const infoCtaSimple = obtenerInfoCuenta(regla.cuenta);
         movimientosAGuardar.push({
             id: nuevoID,
             fecha: fechaOperacion,
@@ -7762,29 +7830,31 @@ async function ejecutarRecurrente(idRec) {
             importe: regla.importe, // El signo ya viene correcto de la regla
             descripcion: `${regla.descripcion || ''} (Recurrente)`,
             beneficiario: regla.beneficiario,
-            // 🔥 FIX 3B APLICADO: Igual que 3A. Si la regla dice 'traspaso', lo respetamos.
-            // Antes siempre sobreescribía el tipo calculándolo solo del importe.
-            tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto')
+            tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto'),
+            // ✅ FIX BUG-7 (cont): tipoCuenta y esInversion para que el filtro del
+            // Diario los clasifique correctamente desde el instante de la inserción.
+            tipoCuenta: infoCtaSimple.tipoCuenta,
+            esInversion: infoCtaSimple.esInversion
         });
     }
 
     try {
         // 4. Inyectar en la lista principal (window.datos)
-        // Usamos unshift para que salgan los primeros
         window.datos.unshift(...movimientosAGuardar);
 
-        // 5. CALCULAR LA NUEVA FECHA (Aquí usamos el motor nuevo)
+        // 5. CALCULAR LA NUEVA FECHA
         const nuevaFecha = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
-        regla.fechaProx = nuevaFecha; // Actualizamos la regla en memoria
+        regla.fechaProx = nuevaFecha;
 
         // 6. GUARDAR TODO (Excel actualizado)
         await guardarTodoConRecurrentes();
 
         // 7. Refrescar pantalla
+        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         mostrarEstado("✅ Ejecutado. Próxima: " + nuevaFecha, "success");
         if(typeof vibrar === 'function') vibrar('ingreso');
         
-        cargarVistaRecurrentes(); // Recargar la lista para ver la nueva fecha
+        cargarVistaRecurrentes();
         
     } catch(e) {
         console.error(e);
@@ -8025,8 +8095,10 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         importe: regla.importe,
         descripcion: (regla.descripcion || "") + " (Fijo)",
         beneficiario: regla.beneficiario || "",
-        // 🔥 FIX 3A APLICADO: Antes siempre calculaba 'ingreso'/'gasto' por el importe,
-        // perdiendo la información de que era un 'traspaso'. Ahora respetamos el tipo original.
+        // ✅ FIX BUG-6A: ts ausente → recalcularSaldosGlobal no podía ordenar este
+        // movimiento cronológicamente hasta la próxima recarga completa.
+        ts: new Date(fechaPrevista).getTime(),
+        // ✅ FIX BUG-6B: Respetar el tipo original de la regla (igual que ejecutarRecurrente)
         tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto')
     };
 
