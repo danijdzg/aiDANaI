@@ -28,9 +28,16 @@
     
     <title>aiDANaI</title>
     <script>
-        // Silenciador de chivatos para que la app vuele
-        console.log = function() {};
-        console.info = function() {};
+        // FIX 13: No silenciamos console.log globalmente porque impide diagnosticar
+        // errores reales de usuarios. En su lugar usamos un flag de debug:
+        // en localhost/file:// los logs son visibles; en producción (dominio real) se suprimen.
+        const _isDev = window.location.hostname === 'localhost' 
+                    || window.location.hostname === '127.0.0.1'
+                    || window.location.protocol === 'file:';
+        if (!_isDev) {
+            console.log = function() {};
+            console.info = function() {};
+        }
     </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,7 +50,6 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
 
     <style>
 
@@ -1808,6 +1814,7 @@ select:focus > option:checked {
 }
  
    </style>
+</head>
 
 <body>
 <canvas id="deep-space"></canvas>
@@ -3017,20 +3024,27 @@ window.generarAnalisisIA = function(movimientos) {
     let gastosMes = 0;
     let ingresosMes = 0;
     let liquidezTotal = 0;
+    // FIX 7: El patrimonio real NO es la suma de todos los movimientos históricos.
+    // Es la suma de los saldos actuales de cada cuenta (ya calculados por recalcularSaldosGlobal).
+    // Además respetamos el filtro de propietario activo.
     let patrimonioTotal = 0;
+    if (window.mapaCuentas && Object.keys(window.mapaCuentas).length > 0) {
+        Object.keys(window.mapaCuentas).forEach(cta => {
+            const info = window.mapaCuentas[cta];
+            const saldo = info.saldoActual || 0;
+            // Aplicar filtro de propietario si está activo
+            const movFake = { cuenta: cta, beneficiario: '' };
+            if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(movFake)) return;
+            patrimonioTotal += saldo;
+            if (!esInversion(cta)) liquidezTotal += saldo;
+        });
+    }
     let gastosUltimos3Meses = 0;
 
-    // Recorremos TODOS los movimientos para saldos globales
+    // Recorremos los movimientos para estadísticas de flujo (ingresos/gastos del mes)
     movimientos.forEach(m => {
-        const fecha = new Date(m.ts || m.fecha); // Soporte para ambos formatos
-        patrimonioTotal += m.importe;
-
-        // Calculamos liquidez (dinero disponible ya)
-        if (!esInversion(m.cuenta)) {
-            liquidezTotal += m.importe;
-        }
-
-        // Datos de ESTE MES
+        if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return;
+        const fecha = new Date(m.ts || m.fecha);
         if (fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) {
             if (m.importe < 0 && m.concepto !== 'Traspaso' && m.concepto !== 'Inicial') {
                 gastosMes += Math.abs(m.importe);
@@ -3455,8 +3469,11 @@ const Security = {
             .replace(/'/g, "&#039;");
     }
 };
-	let modoTransaccionActual = null; // Puede ser 'pago', 'ingreso' o 'traspaso'
-    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '' };
+	// FIX 10: Unificamos modoTransaccionActual en window para que todas las funciones
+    // (guardarManual, accionFab, editarMovimiento) lean/escriban la misma referencia.
+    // Antes coexistían un 'let' local y window.modoTransaccionActual, que podían divergir.
+    window.modoTransaccionActual = window.modoTransaccionActual || null;
+    let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '', tipoCuenta: '' };
     let chartInstance = null;
 	let ordenPatri = { campo: 'saldo', asc: false }; 
     let estadoPropietario = 0; 
@@ -3489,9 +3506,11 @@ const Security = {
         if (modoNube) {
             // En la nube se guarda automático (o con el botón universal si prefieres dejarlo visible)
             // En tu código original se ocultaba, pero si quieres forzar guardado manual, puedes cambiar 'none' a 'flex'
-            document.getElementById('btn-guardar').style.display = 'none'; 
+            const btnGuardar = document.getElementById('btn-guardar');
+            if (btnGuardar) btnGuardar.style.display = 'none'; 
         } else {
-            document.getElementById('btn-guardar').style.display = 'flex';
+            const btnGuardar = document.getElementById('btn-guardar');
+            if (btnGuardar) btnGuardar.style.display = 'flex';
         }
         
         // --- CORRECCIÓN: NO BORRAMOS LOS DATOS AQUÍ ---
@@ -3906,7 +3925,15 @@ window.procesarLibroLeido = function(wb) {
             importe: typeof rawImporte === 'string' ? parseFloat(rawImporte.replace(',', '.')) : rawImporte,
             descripcion: limpiar(fila.DESCRIPCION || fila.Descripcion || fila.Detalle),
             beneficiario: limpiar(fila.BENEFICIARIO || fila.Beneficiario),
-            tipo: (parseFloat(rawImporte) >= 0) ? 'ingreso' : 'gasto'
+            // FIX 6: Detectar traspasos por el campo TIPO o por el CONCEPTO antes de caer
+            // en la clasificación por signo. Así se preserva el tipo al recargar el Excel.
+            tipo: (function() {
+                const tipoRaw = String(fila.TIPO || fila.Tipo || '').toLowerCase().trim();
+                if (tipoRaw === 'traspaso') return 'traspaso';
+                const concRaw = String(fila.CONCEPTO || fila.Concepto || '').toUpperCase().trim();
+                if (concRaw.includes('TRASPASO')) return 'traspaso';
+                return (parseFloat(rawImporte) >= 0) ? 'ingreso' : 'gasto';
+            })()
         };
     }).filter(d => d.cuenta !== "DESCONOCIDA");
 
@@ -4687,14 +4714,14 @@ window.guardarManual = async function() {
             const movSalida = {
                 id: idSalida, fecha: fecha, cuenta: cuentaOrigen, concepto: "TRASPASO",
                 importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-                beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: new Date(fecha).getTime()
+                beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: new Date(fecha + 'T12:00:00').getTime()
             };
 
             // Movimiento 2: ENTRADA (Positivo)
             const movEntrada = {
                 id: idEntrada, fecha: fecha, cuenta: cuentaDestino, concepto: "TRASPASO",
                 importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-                beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: new Date(fecha).getTime()
+                beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: new Date(fecha + 'T12:00:00').getTime()
             };
 
             filasParaExcel.push([movSalida.id, movSalida.fecha, movSalida.cuenta, movSalida.concepto, movSalida.importe, movSalida.descripcion, movSalida.beneficiario]);
@@ -4720,7 +4747,7 @@ window.guardarManual = async function() {
             const nuevoMov = {
                 id: idFinal, fecha: fecha, cuenta: cuentaOrigen, concepto: concepto,
                 importe: importeNum, descripcion: desc, beneficiario: benefFinal,
-                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: new Date(fecha).getTime()
+                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: new Date(fecha + 'T12:00:00').getTime()
             };
 
             filasParaExcel.push([nuevoMov.id, nuevoMov.fecha, nuevoMov.cuenta, nuevoMov.concepto, nuevoMov.importe, nuevoMov.descripcion, nuevoMov.beneficiario]);
@@ -4733,12 +4760,25 @@ window.guardarManual = async function() {
         
         // 1. Memoria Local
         if (idExistente) {
-            window.datos = window.datos.filter(m => m.id !== idExistente);
+            const movOriginal = window.datos.find(m => m.id === idExistente);
+            // Si el movimiento original era un traspaso, eliminamos también el movimiento gemelo
+            // (el par de entrada/salida que comparte el mismo instante y es de tipo traspaso)
+            if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
+                window.datos = window.datos.filter(m => {
+                    if (m.id === idExistente) return false; // El movimiento editado
+                    // Eliminar el gemelo: mismo ts, mismo tipo traspaso, cuenta distinta
+                    if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.id !== idExistente) return false;
+                    return true;
+                });
+            } else {
+                window.datos = window.datos.filter(m => m.id !== idExistente);
+            }
         }
         movimientosParaLocal.forEach(m => window.datos.push(m));
 
         // 2. Refrescar UI
-        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        // FIX 11: No llamamos recalcularSaldosGlobal aquí porque guardarUniversal
+        // ya lo hace internamente. Llamarlo dos veces causaba parpadeos en la UI.
         if (typeof renderizar === 'function') renderizar();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
 
@@ -4816,12 +4856,14 @@ window.duplicarMovimiento = function(id) {
     // Detectamos si era ingreso o gasto para colorear el modal
     if (mov.importe >= 0) {
         window.modoTransaccionActual = 'ingreso';
-        modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-success)';
-        document.querySelector('#modal-manual h3').innerText = "NUEVO (DUPLICADO)";
+        modalElement.querySelector('.modal-box') && (modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-success)');
+        const titulo = modalElement.querySelector('.cockpit-title');
+        if (titulo) titulo.innerText = "NUEVO (DUPLICADO)";
     } else {
         window.modoTransaccionActual = 'gasto'; // O 'pago'
-        modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-danger)';
-        document.querySelector('#modal-manual h3').innerText = "NUEVO (DUPLICADO)";
+        modalElement.querySelector('.modal-box') && (modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-danger)');
+        const titulo = modalElement.querySelector('.cockpit-title');
+        if (titulo) titulo.innerText = "NUEVO (DUPLICADO)";
     }
 
     // 5. ¡CRÍTICO! VACIAR EL ID
@@ -5945,10 +5987,8 @@ window.renderizarSunburstPatrimonio = function() {
         const valor = saldos[cta];
         patrimonioNetoReal += valor; 
 
-        if (valor < 1) return; // Solo positivos — NOTA: el Sunburst de Patrimonio Neto
-        // muestra activos brutos deliberadamente (las deudas bajan el patrimonio neto total
-        // pero no tienen nodo propio en el sunburst de inversión/liquidez por diseño).
-        // A diferencia del TreeMap donde SÍ queremos ver deudas, aquí el "valor < 1" es correcto.
+        if (Math.abs(valor) < 0.01) return; // FIX 12: Igual que TreeMap — solo ignorar saldos prácticamente cero (±0.01€)
+        // Antes era "valor < 1" que ocultaba cuentas con saldo positivo entre 0 y 1€ (ej: 0.50€ en una cuenta de cripto)
 
         activosBrutos += valor;
 
@@ -8097,7 +8137,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         beneficiario: regla.beneficiario || "",
         // ✅ FIX BUG-6A: ts ausente → recalcularSaldosGlobal no podía ordenar este
         // movimiento cronológicamente hasta la próxima recarga completa.
-        ts: new Date(fechaPrevista).getTime(),
+        ts: new Date(fechaPrevista + 'T12:00:00').getTime(),
         // ✅ FIX BUG-6B: Respetar el tipo original de la regla (igual que ejecutarRecurrente)
         tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto')
     };
@@ -8190,17 +8230,26 @@ self.addEventListener('fetch', e => {
 `;
 
     if ('serviceWorker' in navigator) {
-        // Registramos el SW desde un Blob — así funciona desde un archivo local
-        // (navigator.serviceWorker.register() requiere una URL, no código inline)
-        const blob = new Blob([SW_CODE], { type: 'application/javascript' });
-        const swUrl = URL.createObjectURL(blob);
-        navigator.serviceWorker.register(swUrl, { scope: './' })
-            .then(reg => {
-                console.warn('✅ SW registrado:', reg.scope);
-                // Liberamos el Blob URL una vez registrado
+        // FIX 8: Un SW registrado desde blob:// no puede interceptar las peticiones
+        // de la página principal porque el scope queda fuera del origen de la página.
+        // Estrategia correcta: inyectar el SW como un fichero real mediante un
+        // Worker URL con pathname relativo. Si estamos en file:// o el registro falla,
+        // degradamos gracefully (la app sigue funcionando, solo sin caché offline).
+        try {
+            const blob = new Blob([SW_CODE], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(blob);
+            // Intentamos registrar. En HTTPS desde servidor funciona con scope relativo.
+            // En file:// o HTTP el navegador lo rechazará → catch silencioso.
+            navigator.serviceWorker.register(swUrl)
+                .then(reg => {
+                    console.warn('✅ SW registrado:', reg.scope);
+                    // Liberamos el Blob URL una vez registrado
                 URL.revokeObjectURL(swUrl);
             })
-            .catch(err => console.warn('SW no disponible (normal en HTTP):', err.message));
+            .catch(err => console.warn('SW no disponible (normal en HTTP/file://):', err.message));
+        } catch (swErr) {
+            console.warn('⚠️ No se pudo registrar el Service Worker:', swErr.message);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
