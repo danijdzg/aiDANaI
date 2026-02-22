@@ -1900,6 +1900,53 @@ select:focus > option:checked {
     margin-top: 20px !important;
 }
  
+ /* ==========================================
+   ESTILOS EXTRACTO BANCARIO CLÁSICO (PASO 3)
+   ========================================== */
+/* 1. Anulamos el 'display: grid' global de las filas para que vuelva a ser una tabla normal */
+#modal-extracto tbody tr {
+    display: table-row !important; 
+    background: transparent !important; 
+    border: none !important;
+    box-shadow: none !important;
+    margin-bottom: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+}
+
+/* 2. Anulamos el 'display: block' global de las celdas */
+#modal-extracto td {
+    display: table-cell !important; 
+    border-bottom: 1px dashed #333 !important; /* La clásica línea punteada de las libretas */
+    padding: 12px 4px !important;
+    vertical-align: middle;
+}
+
+/* 3. Evitamos que la cabecera se superponga mal al hacer scroll */
+#modal-extracto th {
+    position: sticky !important;
+    top: 0 !important;
+    background-color: #000 !important;
+    border-bottom: 2px solid var(--c-primary) !important;
+    z-index: 20 !important;
+}
+
+/* 4. Efecto de pulsación al tocar una fila del extracto */
+#modal-extracto tbody tr:active {
+    background-color: rgba(0, 184, 255, 0.15) !important;
+    transform: scale(0.99);
+}
+
+/* 5. Ocultar barra de scroll nativa para un look más limpio */
+#modal-extracto > div:last-child {
+    scrollbar-width: none; 
+    -ms-overflow-style: none; 
+}
+#modal-extracto > div:last-child::-webkit-scrollbar { 
+    display: none; 
+}
+
+ 
    </style>
 </head>
 
@@ -2617,7 +2664,34 @@ select:focus > option:checked {
     </div>
 </div>
     </div>
-        
+  <div id="modal-extracto" class="modal-overlay" style="z-index: 20010; background: #000;">
+    <div class="cockpit-header" style="border-bottom: 1px solid var(--c-primary);">
+        <button class="btn-close-cockpit" onclick="document.getElementById('modal-extracto').classList.remove('active')">✕</button>
+        <span class="cockpit-title" id="extracto-titulo" style="color: var(--c-primary);">EXTRACTO BANCARIO</span>
+        <button class="btn-close-cockpit" style="font-size: 18px;" onclick="window.print()"><span class="material-icons">print</span></button>
+    </div>
+    
+    <div style="padding: 20px; text-align: center; background: linear-gradient(180deg, rgba(0, 184, 255, 0.1) 0%, transparent 100%);">
+        <div style="font-size: 11px; color: #888; letter-spacing: 2px;">SALDO ACTUAL</div>
+        <div id="extracto-saldo-actual" style="font-size: 40px; font-weight: 800; color: #fff; font-family: 'Inter', sans-serif;">0,00 €</div>
+    </div>
+
+    <div style="flex: 1; overflow-y: auto; padding: 0 10px 40px 10px; -webkit-overflow-scrolling: touch;">
+        <table style="width: 100%; border-collapse: collapse; font-family: 'Courier New', Courier, monospace; font-size: 12px; margin-top: 10px;">
+            <thead style="position: sticky; top: 0; background: #000; z-index: 10;">
+                <tr style="border-bottom: 2px solid #333; color: var(--c-primary); font-weight: bold;">
+                    <th style="padding: 10px 2px; text-align: left;">FECHA</th>
+                    <th style="padding: 10px 5px; text-align: left;">CONCEPTO</th>
+                    <th style="padding: 10px 5px; text-align: right;">IMPORTE</th>
+                    <th style="padding: 10px 2px; text-align: right;">SALDO</th>
+                </tr>
+            </thead>
+            <tbody id="extracto-body">
+                </tbody>
+        </table>
+    </div>
+</div>
+      
 <div id="modal-calculadora" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:30000; justify-content:center; align-items:center; flex-direction:column;">
     
     <div style="background:#222; padding:20px; border-radius:20px; width:90%; max-width:350px; border:1px solid #444;">
@@ -4494,7 +4568,13 @@ function renderizar() {
             if (campo === 'ts') {
                 const valA = a.ts || 0;
                 const valB = b.ts || 0;
-                return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
+                if (valA !== valB) {
+                    return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
+                }
+                // NUEVO: Si la fecha es exactamente igual, desempatamos por ID para evitar saltos locos
+                return window.ordenActivo.asc 
+                    ? String(a.id).localeCompare(String(b.id), undefined, {numeric: true})
+                    : String(b.id).localeCompare(String(a.id), undefined, {numeric: true});
             }
             if(campo === 'detalle') campo = 'descripcion'; 
             
@@ -4505,6 +4585,7 @@ function renderizar() {
             if (valA < valB) return window.ordenActivo.asc ? -1 : 1;
             return window.ordenActivo.asc ? 1 : -1;
         });
+
 
         // 3. CONTADORES
         const totalResultados = lista.length;
@@ -5442,8 +5523,11 @@ window.borrarMovimiento = async function(id) {
 function recalcularSaldosGlobal() {
     if (!window.datos || window.datos.length === 0) return;
 
-    // 1. Ordenamos cronológicamente (Vital para que el saldo tenga sentido histórico)
-    window.datos.sort((a, b) => a.ts - b.ts);
+    // 1. Ordenamos cronológicamente (Viejo a Nuevo) con DESEMPATE POR ID
+    window.datos.sort((a, b) => {
+        if (a.ts !== b.ts) return a.ts - b.ts;
+        return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+    });
 
     // 2. Reiniciamos los saldos en la configuración
     let saldosTemporales = {};
@@ -5465,28 +5549,33 @@ function recalcularSaldosGlobal() {
         // Sumamos (o restamos) el importe
         saldosTemporales[cta] += imp;
 
-        // Guardamos el saldo resultante EN EL MOVIMIENTO (para verlo en el Diario)
+        // Guardamos el saldo resultante EN EL MOVIMIENTO
         m.saldo = saldosTemporales[cta];
     });
 
-    // 4. Guardamos los saldos finales en la Configuración Global (Para el Patrimonio)
+    // 4. Guardamos los saldos finales en la Configuración Global
     Object.keys(saldosTemporales).forEach(cta => {
         if (!window.mapaCuentas[cta]) {
-            // CAMBIO: Si la cuenta es nueva, la marcamos como SIN CLASIFICAR para que destaque
             window.mapaCuentas[cta] = { tipo: 'SIN CLASIFICAR', esInversion: false };
         }
         window.mapaCuentas[cta].saldoActual = saldosTemporales[cta];
     });
-    console.log("🧮 Saldos recalculados correctamente.");
+    
+    // 5. NUEVO: Dejamos la lista principal ordenada del MÁS MODERNO al MÁS ANTIGUO
+    window.datos.sort((a, b) => {
+        if (b.ts !== a.ts) return b.ts - a.ts;
+        return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+    });
 
-    // 5. ACTUALIZAR PANTALLA (Lo que le faltaba a tu función original)
+    console.log("🧮 Saldos recalculados y ordenados del revés correctamente.");
+
+    // 6. ACTUALIZAR PANTALLA
     if(typeof renderizar === 'function') renderizar();
     if(typeof actualizarDashboard === 'function') actualizarDashboard();
     if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-    // Actualizamos también el gráfico de rayos X
     if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
 }
-     	
+
     
    // ==========================================
     // 🎨 PUENTE DE ANIMACIÓN MEJORADO (V2)
@@ -5702,15 +5791,72 @@ function formatear(val, tipo) {
         renderizarGraficoEvolucion(datosPropietario);
         generarAnalisisIA(datos);
 		renderizarRadarScoring();
-  	
-     function verExtractoCuenta(nombreCuenta) {
-        limpiarFiltros();
-        const selectCuenta = document.getElementById('f-cuenta');
-        if(selectCuenta) { selectCuenta.value = nombreCuenta; filtros.cuenta = nombreCuenta; }
-        aplicarFiltros();
-        irPestana('movs');
-        mostrarEstado('Extracto: ' + nombreCuenta, 'ok');
+window.verExtractoCuenta = function(nombreCuenta) {
+    // 1. Filtrar solo los movimientos de esta cuenta específica
+    const movs = window.datos.filter(m => m.cuenta === nombreCuenta);
+    
+    // 2. ORDENAR: Del MÁS MODERNO al MÁS ANTIGUO (Desempate por ID)
+    movs.sort((a, b) => {
+        if (b.ts !== a.ts) return b.ts - a.ts;
+        return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+    });
+    
+    const modal = document.getElementById('modal-extracto');
+    const tbody = document.getElementById('extracto-body');
+    const titulo = document.getElementById('extracto-titulo');
+    const saldoActualDom = document.getElementById('extracto-saldo-actual');
+    
+    if (!modal) return window.mostrarNotificacion("Error: Falta el HTML del modal extracto", "error");
+
+    // 2. Configurar Cabecera y Saldo Actual
+    titulo.innerText = "EXTRACTO: " + nombreCuenta.toUpperCase();
+    
+    let saldoActual = 0;
+    const cuentaClave = nombreCuenta.toUpperCase();
+    if (window.mapaCuentas && window.mapaCuentas[cuentaClave]) {
+        saldoActual = window.mapaCuentas[cuentaClave].saldoActual || 0;
     }
+    
+    saldoActualDom.innerText = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoActual) + ' €';
+    saldoActualDom.style.color = saldoActual >= 0 ? '#fff' : '#FF2E4D';
+
+    // 3. Generar las filas del extracto bancario clásico
+    let html = '';
+    if (movs.length === 0) {
+        html = '<tr><td colspan="4" style="text-align:center; padding:30px; color:#666; font-family: Inter, sans-serif;">No hay movimientos registrados</td></tr>';
+    } else {
+        movs.forEach(m => {
+            // Formatear Fecha (DD/MM)
+            const fechaStr = new Date(m.ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+            
+            // Formatear Concepto (Cortado para que quepa bien en móvil)
+            let conceptoAbrev = (m.concepto + (m.descripcion ? ' ' + m.descripcion : '')).substring(0, 22);
+            if ((m.concepto + (m.descripcion || '')).length > 22) conceptoAbrev += '…';
+
+            // Formatear Importe y Saldo
+            const colorImporte = m.importe >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+            const signo = m.importe > 0 ? '+' : '';
+            const importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(m.importe);
+            const saldoFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(m.saldo);
+            
+            html += `
+            <tr style="border-bottom: 1px dashed #222; transition: background 0.2s;" 
+                onclick="document.getElementById('modal-extracto').classList.remove('active'); editarMovimiento('${m.id}')">
+                <td style="padding: 14px 2px; color: #888;">${fechaStr}</td>
+                <td style="padding: 14px 5px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;">${Security.escapeHTML(conceptoAbrev)}</td>
+                <td style="padding: 14px 5px; text-align: right; color: ${colorImporte}; font-weight: bold;">${signo}${importeFmt}</td>
+                <td style="padding: 14px 2px; text-align: right; color: #fff;">${saldoFmt}</td>
+            </tr>`;
+        });
+    }
+    
+    tbody.innerHTML = html;
+    
+    // 4. Mostrar el Modal
+    modal.classList.add('active');
+    if (navigator.vibrate) navigator.vibrate(15);
+};
+
 
     function cambiarOrdenPatrimonio(campo) {
         if (ordenPatri.campo === campo) { ordenPatri.asc = !ordenPatri.asc; } 
