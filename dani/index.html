@@ -894,19 +894,32 @@ select.filter-input option { background-color: #000; color: #fff; }
 .chart-container { 
     position: relative; 
     width: 100%; 
-    height: 150px; /* Un poco más de altura para que respire */
+    height: 160px;
     margin-top: 10px;
     margin-bottom: 15px; 
-    background: linear-gradient(180deg, rgba(0, 184, 255, 0.05) 0%, rgba(0,0,0,0) 100%);
-    border: 1px solid rgba(0, 184, 255, 0.3); 
+    /* Fondo con gradiente adaptable al gráfico de evolución */
+    background: linear-gradient(180deg, rgba(0,229,255,0.04) 0%, rgba(0,0,0,0) 100%);
+    border: 1px solid rgba(0,229,255,0.18); 
     border-radius: 16px;
-    box-shadow: 0 0 20px rgba(0, 184, 255, 0.1);
+    box-shadow:
+        0 0 0 1px rgba(0,229,255,0.08) inset,
+        0 0 30px rgba(0,229,255,0.07),
+        0 4px 24px rgba(0,0,0,0.4);
     padding: 10px; 
     box-sizing: border-box; 
     display: none; 
-	transition: all 0.3s ease;
+    transition: all 0.4s ease;
+    overflow: hidden;
 }
-
+/* Reflejo sutil en el borde superior */
+.chart-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 10%; right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,229,255,0.35), transparent);
+    pointer-events: none;
+}
 .chart-container.visible { display: block; }
 
 /* Ajuste para PC (de 320px a 180px) */
@@ -1890,6 +1903,17 @@ select:focus > option:checked {
     -webkit-user-select: none;
 }
 
+/* Contenedor del TreeMap: bordes premium y profundidad */
+#chart-TreeMap {
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+        0 0 0 1px rgba(255,255,255,0.04) inset,
+        0 8px 32px rgba(0,0,0,0.6),
+        0 0 60px rgba(0,0,0,0.3);
+}
+
 /* 2. Ajuste de espaciado en la pestaña Patrimonio */
 #tab-patri {
     padding-bottom: 100px !important; /* Espacio solo al FINAL de la página */
@@ -2145,11 +2169,14 @@ select:focus > option:checked {
                     <div class="card-header">
                         <span class="card-title" style="color: var(--c-success)!important">SCORING FINANCIERO</span>
                     </div>
-                    <div style="position: relative; height: 380px; width: 100%;">
-                        <div id="chartRadar" style="width:100%; height:400px;"></div>
+                    <div style="position:relative;height:400px;width:100%;background:radial-gradient(ellipse at center,rgba(57,255,20,0.03) 0%,transparent 70%);">
+                        <div id="chartRadar" style="width:100%;height:420px;margin-top:-10px;"></div>
 
-                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; margin-top: 15px;">
-                            <div id="score-total" style="font-size: 24px; font-weight: 900; color: #fff; text-shadow: 0 0 15px rgba(57, 255, 20, 0.5);">---</div>
+                        <!-- Badge de puntuación flotante central -->
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;margin-top:10px;transition:all 0.3s ease;">
+                            <div style="font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:2px;text-transform:uppercase;margin-bottom:2px">score</div>
+                            <div id="score-total" style="font-size:26px;font-weight:900;color:#39FF14;text-shadow:0 0 20px rgba(57,255,20,0.6);letter-spacing:-1px;line-height:1;transition:all 0.5s ease">---</div>
+                            <div style="font-size:9px;color:rgba(255,255,255,0.25);margin-top:1px">/100</div>
                         </div>
                     </div>
                 </div>	
@@ -2226,12 +2253,12 @@ select:focus > option:checked {
         </button>
     </div>
 
-    <div style="position: relative; height: 400px; width: 100%; overflow: hidden;">
+    <div style="position: relative; height: 420px; width: 100%; overflow: hidden; background: radial-gradient(ellipse at center, rgba(0,229,255,0.03) 0%, transparent 70%);">
         <div id="chart-Sunburst" style="width: 100%; height: 100%;"></div>
         
-        <div id="sunburst-center-info" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
-            <div style="font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px;">TOTAL</div>
-            <div id="sb-total-val" style="font-size: 16px; font-weight: 800; color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.3);">---</div>
+        <div id="sunburst-center-info" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;transition:all 0.25s ease;">
+            <div style="font-size:9px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:2px;margin-bottom:4px">PATRIMONIO</div>
+            <div id="sb-total-val" style="font-size:18px;font-weight:800;color:#fff;text-shadow:0 0 16px rgba(255,255,255,0.35);letter-spacing:-0.5px;transition:all 0.25s ease">---</div>
         </div>
     </div>
 
@@ -6079,63 +6106,136 @@ function renderizarGraficoEvolucion(movimientos) {
     // 3. CREAR GRÁFICO CON ECHARTS (misma estética que antes)
     window.chartInstance = echarts.init(container, null, { renderer: 'canvas' });
 
+    // ── Color adaptativo según tendencia (¿el patrimonio sube o baja?) ──────
+    const ultimoVal  = dataPoints[dataPoints.length - 1] || 0;
+    const primerVal  = dataPoints[0] || 0;
+    const enAlza     = ultimoVal >= primerVal;
+    const C          = enAlza ? { r:0,  g:229, b:255 } : { r:255, g:46,  b:77  }; // cyan / rojo
+    const hex        = enAlza ? '#00E5FF' : '#FF2E4D';
+    const rgba = (a) => `rgba(${C.r},${C.g},${C.b},${a})`;
+
+    // ── Estadísticas para markPoints ─────────────────────────────────────────
+    const maxVal  = Math.max(...dataPoints);
+    const minVal  = Math.min(...dataPoints);
+    const idxMax  = dataPoints.indexOf(maxVal);
+    const idxMin  = dataPoints.indexOf(minVal);
+    const promedio = dataPoints.reduce((s, v) => s + v, 0) / dataPoints.length;
+    const fmtK = v => {
+        const a = Math.abs(v);
+        if (a >= 1e6) return (v/1e6).toFixed(1)+'M€';
+        if (a >= 1e3) return (v/1e3).toFixed(0)+'k€';
+        return v.toFixed(0)+'€';
+    };
+    const fmtFull = v => new Intl.NumberFormat('es-ES', {style:'currency',currency:'EUR'}).format(v);
+
     window.chartInstance.setOption({
         backgroundColor: 'transparent',
-        grid: { top: 10, right: 55, bottom: 10, left: 10, containLabel: false },
-        xAxis: {
-            type: 'category',
-            data: labels,
-            show: false   // Eje X invisible para limpieza total (igual que antes)
-        },
+        animation: true,
+        animationDuration: 1400,
+        animationEasing: 'cubicOut',
+
+        grid: { top: 32, right: 58, bottom: 12, left: 12, containLabel: false },
+
+        xAxis: { type:'category', data:labels, show:false },
+
         yAxis: {
             type: 'value',
             position: 'right',
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.03)' } },
-            axisLine: { show: false },
-            axisTick: { show: false },
+            splitNumber: 4,
+            splitLine: { lineStyle: { color:'rgba(255,255,255,0.04)', type:'dashed' } },
+            axisLine: { show:false }, axisTick: { show:false },
             axisLabel: {
-                color: '#666',
-                fontSize: 10,
-                fontFamily: 'Inter',
-                formatter: v => Math.abs(v) >= 1000 ? (v / 1000).toFixed(0) + 'k' : v
+                color: 'rgba(255,255,255,0.28)', fontSize:10, fontFamily:'monospace',
+                formatter: v => fmtK(v)
             }
         },
-        series: [{
-            type: 'line',
-            data: dataPoints,
-            smooth: 0.4,                   // Curva Bezier equivalente a tension:0.4
-            symbol: 'none',                // Sin puntos visibles
-            lineStyle: { color: '#00B8FF', width: 2 },
-            emphasis: {
-                // Punto visible al hacer hover
-                scale: true,
-                itemStyle: {
-                    color: '#000000',
-                    borderColor: '#00B8FF',
-                    borderWidth: 2
-                }
+
+        series: [
+            // ── Capa 1: halo exterior suave (glow difuminado bajo la línea) ──
+            {
+                type:'line', data:dataPoints, smooth:0.5,
+                symbol:'none', silent:true, z:1,
+                lineStyle: { color:hex, width:10, opacity:0.08 },
+                areaStyle: { opacity:0 }
             },
-            areaStyle: {
-                // Gradiente idéntico al de Chart.js
-                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0, color: 'rgba(0,184,255,0.4)' },
-                    { offset: 1, color: 'rgba(0,184,255,0.0)' }
-                ])
+            // ── Capa 2: línea principal con glow ────────────────────────────
+            {
+                type:'line', data:dataPoints, smooth:0.5, symbol:'none', z:3,
+                lineStyle: {
+                    color: hex, width:2.5,
+                    shadowBlur:18, shadowColor:rgba(0.85)
+                },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0,0,0,1, [
+                        { offset:0,    color:rgba(0.38) },
+                        { offset:0.5,  color:rgba(0.10) },
+                        { offset:1,    color:rgba(0.0)  }
+                    ]),
+                    shadowBlur:24, shadowColor:rgba(0.08)
+                },
+                // Picos máximo y mínimo
+                markPoint: {
+                    symbolSize:8,
+                    label: {
+                        show:true, fontSize:9, fontWeight:700, fontFamily:'monospace',
+                        padding:[3,7], borderRadius:4,
+                        backgroundColor:'rgba(0,0,0,0.88)', borderWidth:1
+                    },
+                    data: [
+                        {
+                            coord:[idxMax, maxVal],
+                            itemStyle:{ color:'#39FF14', borderColor:'#39FF14', shadowBlur:12, shadowColor:'#39FF1480' },
+                            label:{ color:'#39FF14', borderColor:'rgba(57,255,20,0.35)',
+                                    formatter:()=>'↑ '+fmtK(maxVal), position:'top' }
+                        },
+                        {
+                            coord:[idxMin, minVal],
+                            itemStyle:{ color:'#FF2E4D', borderColor:'#FF2E4D', shadowBlur:12, shadowColor:'#FF2E4D80' },
+                            label:{ color:'#FF2E4D', borderColor:'rgba(255,46,77,0.35)',
+                                    formatter:()=>'↓ '+fmtK(minVal), position:'bottom' }
+                        }
+                    ]
+                },
+                // Línea de media
+                markLine: {
+                    silent:true, symbol:'none',
+                    lineStyle:{ color:'rgba(255,255,255,0.1)', type:'dashed', width:1 },
+                    label:{
+                        show:true, position:'end',
+                        color:'rgba(255,255,255,0.28)', fontSize:9, fontFamily:'monospace',
+                        formatter:()=>'Ø '+fmtK(promedio)
+                    },
+                    data:[{ type:'average' }]
+                }
             }
-        }],
+        ],
+
         tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'none' },
-            backgroundColor: 'rgba(20,20,20,0.95)',
-            borderColor: 'transparent',
-            borderRadius: 8,
-            padding: 12,
-            textStyle: { color: '#fff', fontSize: 14, fontWeight: 'bold', fontFamily: 'Inter' },
+            trigger:'axis',
+            axisPointer:{ type:'line', lineStyle:{ color:rgba(0.35), width:1, type:'dashed' } },
+            backgroundColor:'rgba(6,6,14,0.97)',
+            borderColor: rgba(0.4),
+            borderWidth:1, borderRadius:10, padding:[12,16],
+            extraCssText:`box-shadow:0 0 24px ${rgba(0.2)}; font-family:monospace`,
             formatter: params => {
-                const p = params[0];
-                const fecha = new Date(p.name).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
-                const valor = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(p.value);
-                return `<span style="color:#888;font-size:11px">${fecha}</span><br/>${valor}`;
+                const p = params.find(x=>x.seriesIndex===1) || params[0];
+                if (!p) return '';
+                const idx   = p.dataIndex;
+                const val   = p.value;
+                const fecha = new Date(p.name).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
+                const prev  = idx > 0 ? dataPoints[idx-1] : null;
+                const diff  = prev !== null ? val - prev : 0;
+                const difFmt= (diff>=0?'+':'')+fmtFull(diff);
+                const difCol= diff>=0?'#39FF14':'#FF4D6D';
+                const pct   = dataPoints.length>1 ? Math.round((idx/(dataPoints.length-1))*100) : 100;
+                return `
+                    <div style="font-size:10px;color:${rgba(0.5)};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px">${fecha}</div>
+                    <div style="font-size:22px;font-weight:800;color:${hex};text-shadow:0 0 16px ${rgba(0.7)};letter-spacing:-0.5px;line-height:1">${fmtFull(val)}</div>
+                    ${prev!==null?`<div style="font-size:11px;color:${difCol};margin-top:5px;font-weight:700">${difFmt} respecto al día anterior</div>`:''}
+                    <div style="margin-top:10px;height:2px;background:rgba(255,255,255,0.06);border-radius:1px">
+                        <div style="height:2px;width:${pct}%;background:${hex};border-radius:1px;box-shadow:0 0 8px ${rgba(0.9)}"></div>
+                    </div>
+                `;
             }
         }
     });
@@ -6606,26 +6706,114 @@ window.renderTreeMap = function() {
         }
     });
 
-    // 4. CONFIGURACIÓN DEL GRÁFICO
+    // 4. CONFIGURACIÓN DEL GRÁFICO — VERSIÓN ESPECTACULAR
+    const totalAbs = Object.values(saldos).reduce((s,v)=>s+Math.abs(v),0);
+    const fmtCompact = v => {
+        const a=Math.abs(v);
+        if(a>=1e6) return (v/1e6).toFixed(1)+'M€';
+        if(a>=1e3) return (v/1e3).toFixed(0)+'k€';
+        return v.toFixed(0)+'€';
+    };
+
     const option = {
         backgroundColor: 'transparent',
+        animation: true,
+        animationDuration: 800,
+        animationEasing: 'quarticOut',
         tooltip: {
-            backgroundColor: 'rgba(0,0,0,0.9)',
-            textStyle: { color: '#fff' },
-            formatter: (info) => {
-                const val = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(info.value);
-                return `<div style="color:${info.color}; font-weight:bold">${info.name}</div><div>${val}</div>`;
+            backgroundColor: 'rgba(6,6,14,0.97)',
+            borderWidth:1, borderRadius:10, padding:[12,16],
+            extraCssText: 'font-family:monospace',
+            formatter: info => {
+                if(!info.value) return '';
+                const color = info.color;
+                const val   = fmtCompact(info.value);
+                const pct   = totalAbs>0 ? ((Math.abs(info.value)/totalAbs)*100).toFixed(1) : '0.0';
+                const tag   = info.value<0 ? '📉 DEUDA' : '💹 ACTIVO';
+                const bar   = Math.min(parseFloat(pct),100);
+                return `
+                    <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.07)">
+                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${color};box-shadow:0 0 8px ${color}80"></span>
+                        <span style="font-size:13px;font-weight:800;color:#fff;flex:1">${info.name}</span>
+                        <span style="font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:1px">${tag}</span>
+                    </div>
+                    <div style="font-size:20px;font-weight:800;color:${color};text-shadow:0 0 14px ${color}70;letter-spacing:-0.5px">${val}</div>
+                    <div style="margin-top:5px;font-size:11px;color:rgba(255,255,255,0.4)">${pct}% del patrimonio</div>
+                    <div style="margin-top:8px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px">
+                        <div style="height:3px;width:${bar}%;background:${color};border-radius:2px;box-shadow:0 0 8px ${color}80;transition:width .4s"></div>
+                    </div>`;
             }
         },
         series: [{
             type: 'treemap',
-            width: '100%', height: '100%',
-            roam: false, nodeClick: false, breadcrumb: { show: false },
-            label: { show: true, formatter: '{b}', color: '#fff', fontWeight: 'bold', fontSize: 10 },
-            itemStyle: { borderColor: '#000', borderWidth: 2, gapWidth: 1 },
+            width:'100%', height:'100%',
+            roam:false, nodeClick:false,
+            breadcrumb:{ show:false },
+            visibleMin: 80,
+            // Etiqueta: nombre + valor compacto en dos líneas
+            label: {
+                show: true,
+                color: '#fff',
+                fontFamily: 'monospace',
+                fontWeight: 700,
+                fontSize: 11,
+                lineHeight: 17,
+                overflow: 'truncate',
+                formatter: p => {
+                    if (!p.value) return p.name;
+                    return `${p.name}\n${fmtCompact(p.value)}`;
+                },
+                textShadowBlur: 8,
+                textShadowColor: 'rgba(0,0,0,0.9)'
+            },
+            // Etiqueta de categoría superior
+            upperLabel: {
+                show:true, height:22,
+                color:'rgba(255,255,255,0.9)',
+                fontWeight:800, fontSize:9,
+                fontFamily:'monospace',
+                letterSpacing:2,
+                backgroundColor:'rgba(0,0,0,0.55)',
+                padding:[3,8], borderRadius:[6,6,0,0]
+            },
+            itemStyle: {
+                borderColor: 'rgba(0,0,0,0.92)',
+                borderWidth: 3,
+                gapWidth: 3,
+                borderRadius: 7
+            },
+            emphasis: {
+                label:{ fontSize:12, fontWeight:800 },
+                upperLabel:{ color:'#fff' },
+                itemStyle:{
+                    borderColor:'rgba(255,255,255,0.7)',
+                    borderWidth:2,
+                    shadowBlur:28,
+                    shadowColor:'rgba(255,255,255,0.25)'
+                }
+            },
             levels: [
-                { itemStyle: { borderColor: '#000', borderWidth: 4, gapWidth: 4 } },
-                { colorSaturation: [0.3, 0.6], itemStyle: { gapWidth: 2, borderColorSaturation: 0.6 } }
+                // nivel raíz
+                { itemStyle:{ borderWidth:0, gapWidth:6 }, upperLabel:{ show:false } },
+                // categorías
+                {
+                    itemStyle:{
+                        borderColor:'rgba(0,0,0,0.95)', borderWidth:5,
+                        gapWidth:5, borderRadius:8,
+                        shadowBlur:12, shadowColor:'rgba(0,0,0,0.6)'
+                    },
+                    upperLabel:{ show:true, height:22 },
+                    emphasis:{ itemStyle:{ borderWidth:2 } }
+                },
+                // cuentas individuales
+                {
+                    colorSaturation:[0.5,0.9],
+                    itemStyle:{
+                        borderWidth:1, gapWidth:2,
+                        borderColorSaturation:0.7, borderRadius:5,
+                        shadowBlur:10, shadowColor:'rgba(0,0,0,0.5)'
+                    }
+                }
             ],
             data: dataTree
         }]
@@ -6757,33 +6945,97 @@ window.renderizarSunburstPatrimonio = function() {
         if(elRatioInv) elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(0) + '%';
     }
 
-    // 4. CONFIGURACIÓN DEL GRÁFICO (MODO NEÓN)
+    // 4. CONFIGURACIÓN DEL GRÁFICO — VERSIÓN ESPECTACULAR
+    const fmtEurSun = v => new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v);
+    const fmtKSun = v => {
+        const a=Math.abs(v);
+        if(a>=1e6) return (v/1e6).toFixed(1)+'M€';
+        if(a>=1e3) return (v/1e3).toFixed(0)+'k€';
+        return v.toFixed(0)+'€';
+    };
+
     const option = {
         backgroundColor: 'transparent',
-        tooltip: { show: false }, 
-
+        animation: true,
+        animationDuration: 1100,
+        animationEasing: 'cubicOut',
+        tooltip: {
+            show: true,
+            trigger: 'item',
+            backgroundColor: 'rgba(6,6,14,0.97)',
+            borderWidth:1, borderRadius:10, padding:[12,16],
+            extraCssText:'font-family:monospace',
+            formatter: p => {
+                if (!p.value) return '';
+                const color = p.color;
+                const val   = fmtEurSun(p.value);
+                const pct   = activosBrutos>0 ? ((Math.abs(p.value)/activosBrutos)*100).toFixed(1) : '0.0';
+                const bar   = Math.min(parseFloat(pct),100);
+                return `
+                    <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.07)">
+                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${color};box-shadow:0 0 10px ${color}90"></span>
+                        <span style="font-size:13px;font-weight:800;color:#fff">${p.name}</span>
+                    </div>
+                    <div style="font-size:20px;font-weight:800;color:${color};text-shadow:0 0 14px ${color}70;letter-spacing:-0.5px">${val}</div>
+                    <div style="margin-top:5px;font-size:11px;color:rgba(255,255,255,0.4)">${pct}% del patrimonio activo</div>
+                    <div style="margin-top:8px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px">
+                        <div style="height:3px;width:${bar}%;background:${color};border-radius:2px;box-shadow:0 0 8px ${color}80"></div>
+                    </div>`;
+            }
+        },
         series: {
             type: 'sunburst',
             data: dataTree,
-            radius: ['50%', '90%'], 
-            sort: undefined, 
-            
+            radius: ['38%', '94%'],
+            sort: undefined,
+            startAngle: 90,
             itemStyle: {
-                borderRadius: 6, 
-                borderColor: '#050505', 
-                borderWidth: 2
+                borderColor: 'rgba(0,0,0,0.88)',
+                borderWidth: 3,
+                borderRadius: 4
             },
-            label: { show: false },
-            
+            emphasis: {
+                focus: 'ancestor',
+                itemStyle: {
+                    borderColor: 'rgba(255,255,255,0.6)',
+                    borderWidth: 2,
+                    shadowBlur: 24,
+                    shadowColor: 'rgba(255,255,255,0.18)'
+                }
+            },
             levels: [
+                // nivel 0: raíz (invisible)
                 {},
+                // nivel 1: anillo interno — categorías LIQUIDEZ / INVERSIÓN
                 {
-                    r0: '50%', r: '58%', 
-                    itemStyle: { opacity: 0.6, borderWidth: 1 } 
+                    r0: '38%', r: '56%',
+                    label: {
+                        show: true,
+                        rotate: 'tangential',
+                        fontSize: 10, fontWeight: 800, fontFamily: 'monospace',
+                        color: '#fff', letterSpacing: 2,
+                        textShadowBlur: 8, textShadowColor: 'rgba(0,0,0,1)'
+                    },
+                    itemStyle: {
+                        borderWidth: 4, borderColor: 'rgba(0,0,0,0.9)',
+                        shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.7)'
+                    }
                 },
+                // nivel 2: anillo exterior — cuentas individuales
                 {
-                    r0: '60%', r: '90%',
-                    itemStyle: { opacity: 1 } 
+                    r0: '58%', r: '94%',
+                    label: {
+                        show: true,
+                        rotate: 'radial',
+                        fontSize: 9, fontWeight: 700, fontFamily: 'monospace',
+                        color: 'rgba(255,255,255,0.82)',
+                        overflow: 'truncate', width: 60,
+                        textShadowBlur: 6, textShadowColor: 'rgba(0,0,0,1)'
+                    },
+                    itemStyle: {
+                        borderWidth: 2, borderColor: 'rgba(0,0,0,0.85)',
+                        shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)'
+                    }
                 }
             ]
         }
@@ -7057,97 +7309,135 @@ function renderizarRadarScoring(kpis) {
         divScore.style.textShadow = `0 0 20px ${color}60`;
     }
 
-    // --- CONFIGURACIÓN VISUAL DEL GRÁFICO ---
+    // --- Color principal adaptado a la nota global (semáforo) ---------------
+    const colorBase = notaGlobal >= 80 ? { r:57,  g:255, b:20  }   // verde neón
+                    : notaGlobal >= 60 ? { r:0,   g:229, b:255 }   // cyan
+                    : notaGlobal >= 40 ? { r:255, g:214, b:10  }   // ámbar
+                    :                    { r:255, g:46,  b:77  };  // rojo
+    const hexBase = `#${colorBase.r.toString(16).padStart(2,'0')}${colorBase.g.toString(16).padStart(2,'0')}${colorBase.b.toString(16).padStart(2,'0')}`;
+    const rgbaB = a => `rgba(${colorBase.r},${colorBase.g},${colorBase.b},${a})`;
+
+    // Color único por dimensión (para los vértices)
+    const coloresEje = ['#00B8FF','#BF5AF2','#39FF14','#FFD60A','#FF6B35'];
+    const nombresEje = ['COBERTURA','INVERSIÓN','AHORRO','LIBERTAD','EFICIENCIA'];
+
+    // --- CONFIGURACIÓN VISUAL ---
     const option = {
-        color: ['#00E5FF'],
+        backgroundColor: 'transparent',
+        animation: true,
+        animationDuration: 1100,
+        animationEasing: 'elasticOut',
+
         tooltip: {
             trigger: 'item',
-            backgroundColor: 'rgba(10, 10, 10, 0.95)',
-            borderColor: '#333',
-            padding: 15,
-            textStyle: { color: '#eee', fontSize: 13, lineHeight: 20 },
-            formatter: function(params) {
-                // Función auxiliar para iconos de semáforo
-                const semaforo = (val) => val >= 80 ? '🟢' : (val >= 50 ? '🟡' : '🔴');
-                
+            backgroundColor: 'rgba(6,6,14,0.97)',
+            borderColor: rgbaB(0.35),
+            borderWidth:1, borderRadius:12, padding:[14,18],
+            extraCssText: `box-shadow:0 0 28px ${rgbaB(0.2)};font-family:monospace`,
+            formatter: () => {
+                const sem = v => v>=80?'🟢':v>=50?'🟡':'🔴';
+                const fila = (i) => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin:5px 0;gap:18px">
+                        <span style="font-size:10px;color:rgba(255,255,255,0.55)">${sem(scores[i])} ${nombresEje[i]}</span>
+                        <span style="font-size:12px;font-weight:800;color:${coloresEje[i]}">${scores[i]}<span style="font-size:9px;opacity:0.55">/100</span></span>
+                    </div>`;
                 return `
-                    <div style="font-size:16px; font-weight:bold; color:#00E5FF; margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px;">
-                        TU NOTA FINANCIERA: <span style="color:#fff">${notaGlobal}/100</span>
+                    <div style="padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.08)">
+                        <div style="font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.35);text-transform:uppercase">Salud Financiera</div>
+                        <div style="font-size:30px;font-weight:800;color:${hexBase};text-shadow:0 0 20px ${rgbaB(0.7)};letter-spacing:-1px;line-height:1.1;margin-top:3px">
+                            ${notaGlobal}<span style="font-size:15px;opacity:0.45">/100</span>
+                        </div>
                     </div>
-                    
-                    ${semaforo(scores[0])} <b>COBERTURA (${scores[0]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Tienes liquidez para <b>${valCobertura.toFixed(1)} meses</b> sin ingresos.<br>Meta: 6 meses.</span><br><br>
-
-                    ${semaforo(scores[1])} <b>INVERSIÓN (${scores[1]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">El <b>${ratioInv.toFixed(0)}%</b> de tu patrimonio trabaja por ti.<br>Meta: 50% invertido.</span><br><br>
-
-                    ${semaforo(scores[2])} <b>AHORRO (${scores[2]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Ahorras el <b>${valAhorro.toFixed(0)}%</b> de lo que ganas.<br>Meta: 20% mensual.</span><br><br>
-
-                    ${semaforo(scores[3])} <b>LIBERTAD (${scores[3]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Tus inversiones cubren el <b>${valLibertad.toFixed(1)}%</b> de tus gastos.<br>Meta: 25% (Libertad parcial).</span><br><br>
-
-                    ${semaforo(scores[4])} <b>EFICIENCIA (${scores[4]}/100)</b><br>
-                    <span style="color:#888; font-size:11px;">Capacidad de retener dinero y optimizar gastos.<br>Meta: Alta retención.</span>
+                    ${[0,1,2,3,4].map(fila).join('')}
                 `;
             }
         },
+
         radar: {
-            indicator: [
-                { name: 'COBERTURA\n(Seguridad)', max: 100 },
-                { name: 'INVERSIÓN\n(Crecimiento)', max: 100 },
-                { name: 'AHORRO\n(Hábito)', max: 100 },
-                { name: 'LIBERTAD\n(Futuro)', max: 100 },
-                { name: 'EFICIENCIA\n(Gestión)', max: 100 }
-            ],
-            center: ['50%', '55%'],
-            radius: '65%',
-            shape: 'circle',
-            splitNumber: 4,
+            indicator: nombresEje.map((name, i) => ({
+                name, max:100, color: coloresEje[i]
+            })),
+            center: ['50%', '53%'],
+            radius: '68%',
+            shape: 'polygon',
+            splitNumber: 5,
             axisName: {
-                color: '#bbb', 
-                fontSize: 10, 
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(0,0,0,0.8)', 
-                borderRadius: 4, 
-                padding: [4, 6]
+                fontFamily: 'monospace',
+                fontWeight: 800,
+                fontSize: 9,
+                letterSpacing: 1,
+                color: 'rgba(255,255,255,0.5)',
+                backgroundColor: 'rgba(0,0,0,0.65)',
+                borderRadius: 3,
+                padding: [3,7]
             },
+            // Anillos de referencia: más visibles hacia el exterior
             splitLine: {
                 lineStyle: {
-                    color: ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.3)'].reverse()
+                    color: [
+                        'rgba(255,255,255,0.03)',
+                        'rgba(255,255,255,0.05)',
+                        'rgba(255,255,255,0.07)',
+                        'rgba(255,255,255,0.10)',
+                        'rgba(255,255,255,0.14)'
+                    ]
                 }
             },
-            splitArea: { show: false },
-            axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
-        },
-        series: [{
-            type: 'radar',
-            data: [{
-                value: scores,
-                name: 'Financial Score',
-                symbol: 'circle',
-                symbolSize: 8,
-                itemStyle: { 
-                    color: '#00E5FF', 
-                    borderColor: '#fff', 
-                    borderWidth: 2,
-                    shadowBlur: 10,
-                    shadowColor: '#00E5FF'
-                },
-                lineStyle: { 
-                    width: 3, 
-                    color: '#00E5FF', 
-                    shadowBlur: 15, 
-                    shadowColor: '#00E5FF' 
-                },
+            // Relleno alternado para profundidad
+            splitArea: {
+                show: true,
                 areaStyle: {
-                    color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
-                        { offset: 0, color: 'rgba(0, 229, 255, 0.2)' },
-                        { offset: 1, color: 'rgba(0, 229, 255, 0.6)' }
-                    ])
+                    color: [
+                        'rgba(255,255,255,0.0)',
+                        'rgba(255,255,255,0.015)',
+                        'rgba(255,255,255,0.0)',
+                        'rgba(255,255,255,0.015)',
+                        'rgba(255,255,255,0.0)'
+                    ]
                 }
-            }]
-        }]
+            },
+            axisLine: { lineStyle:{ color:'rgba(255,255,255,0.07)', width:1 } }
+        },
+
+        series: [
+            // ── Capa 1: halo exterior suave (glow de área) ─────────────────
+            {
+                type:'radar', silent:true, z:1,
+                data:[{
+                    value: scores,
+                    itemStyle:{ opacity:0 },
+                    lineStyle:{ color:hexBase, width:10, opacity:0.07 },
+                    areaStyle:{ color:rgbaB(0.07) }
+                }]
+            },
+            // ── Capa 2: polígono principal con vértices coloreados ──────────
+            {
+                type:'radar', z:3,
+                data:[{
+                    value: scores,
+                    name: 'Financial Score',
+                    symbol: 'circle',
+                    symbolSize: 7,
+                    // Cada vértice con su color propio
+                    itemStyle:{
+                        color: params => coloresEje[params.dataIndex] || hexBase,
+                        borderColor:'rgba(0,0,0,0.9)', borderWidth:2,
+                        shadowBlur:16, shadowColor: hexBase
+                    },
+                    lineStyle:{
+                        width:2.5, color:hexBase,
+                        shadowBlur:16, shadowColor:rgbaB(0.85)
+                    },
+                    areaStyle:{
+                        color: new echarts.graphic.RadialGradient(0.5,0.5,1,[
+                            { offset:0,   color:rgbaB(0.55) },
+                            { offset:0.6, color:rgbaB(0.22) },
+                            { offset:1,   color:rgbaB(0.04) }
+                        ])
+                    }
+                }]
+            }
+        ]
     };
 
     window.radarInstance.setOption(option);
