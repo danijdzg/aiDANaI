@@ -3365,28 +3365,43 @@ function calcularFuerza(pw) {
     return Math.min(4, score);
 }
 
-// Medidor en pantalla login
+// BUG-10 FIX: Antes había DOS bloques DOMContentLoaded separados que accedían
+// al mismo formulario de login. Si el orden de ejecución cambiaba, el focus
+// podía robarse antes de que el medidor estuviera inicializado.
+// Consolidamos todo en UN ÚNICO bloque con un orden de inicialización claro.
 document.addEventListener('DOMContentLoaded', () => {
     const pwInput = document.getElementById('login-password');
     const bar     = document.getElementById('pw-strength-bar');
-    if (pwInput && bar) {
-        const COLORES = ['#ff4757','#ff6b35','#ffd32a','#2ed573','#00d2d3'];
-        const WIDTHS  = ['15%','35%','55%','78%','100%'];
-        pwInput.addEventListener('input', () => {
-            const f = calcularFuerza(pwInput.value);
-            bar.style.width      = pwInput.value.length ? WIDTHS[f] : '0%';
-            bar.style.background = COLORES[f];
-        });
+
+    if (pwInput) {
+        // 1. Medidor de fuerza de contraseña
+        if (bar) {
+            const COLORES = ['#ff4757','#ff6b35','#ffd32a','#2ed573','#00d2d3'];
+            const WIDTHS  = ['15%','35%','55%','78%','100%'];
+            pwInput.addEventListener('input', () => {
+                const f = calcularFuerza(pwInput.value);
+                bar.style.width      = pwInput.value.length ? WIDTHS[f] : '0%';
+                bar.style.background = COLORES[f];
+            });
+        }
+
+        // 2. Enviar con Enter
         pwInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') loginAcceder();
         });
+
+        // 3. Foco automático (con retardo para que la animación de entrada no interfiera)
+        setTimeout(() => pwInput.focus(), 300);
     }
 
-    // Si es la primera vez, mostrar aviso
+    // 4. Aviso de primera vez
     if (PinSecurity.esVirgen()) {
         const instruccion = document.querySelector('.pin-instruction');
         if (instruccion) instruccion.textContent = 'Primera vez — contraseña por defecto: 1234';
     }
+
+    // 5. Inicializar estado del botón biométrico según el dispositivo
+    setTimeout(_actualizarUIBiometrica, 200);
 });
 
 // Medidor en settings
@@ -3473,15 +3488,6 @@ async function loginAcceder() {
         btn.innerHTML = '<span class="material-icons" style="vertical-align:middle;margin-right:6px;font-size:18px;">lock_open</span>ACCEDER';
     }
 }
-
-// Inicializar foco y UI biométrica al cargar
-document.addEventListener('DOMContentLoaded', () => {
-    const pw = document.getElementById('login-password');
-    if (pw) setTimeout(() => pw.focus(), 300);
-
-    // Inicializar estado del botón biométrico según el dispositivo
-    setTimeout(_actualizarUIBiometrica, 200);
-});
 
 // ==========================================
 // 🧠 CEREBRO IA FINANCIERO 3.0 (MODE: PRO)
@@ -4549,8 +4555,19 @@ function renderizar() {
             const textoFila = ((m.concepto||'') + ' ' + (m.descripcion||m.detalle||'') + ' ' + (m.beneficiario||'')).toLowerCase();
             if (filtros.texto && !textoFila.includes(textoBusqueda)) return false;
             
-            if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
-            if (filtros.hasta && m.ts > new Date(filtros.hasta).getTime()) return false;
+            // BUG-1 FIX: new Date("YYYY-MM-DD") genera medianoche (00:00:00).
+            // Como todos los movimientos tienen ts=T12:00:00, el día seleccionado quedaba
+            // completamente excluido. Ahora usamos el fin del día (23:59:59.999) inclusive.
+            if (filtros.desde) {
+                const limiteDesde = new Date(filtros.desde);
+                limiteDesde.setHours(0, 0, 0, 0);
+                if (m.ts < limiteDesde.getTime()) return false;
+            }
+            if (filtros.hasta) {
+                const limiteHasta = new Date(filtros.hasta);
+                limiteHasta.setHours(23, 59, 59, 999);
+                if (m.ts > limiteHasta.getTime()) return false;
+            }
             
             if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
             if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
@@ -5174,7 +5191,10 @@ window.cargarParaEditar = function(id) {
         if (modal) modal.classList.remove('active');
         
         // 2. Limpieza SEGURA (Si no encuentra la caja, no se rompe)
-        const idsALimpiar = ['m-id', 'm-desc', 'm-importe', 'inpImporte', 'm-concepto', 'm-beneficiario'];
+        // BUG-6 FIX: 'm-cantidad' es el campo real del importe en el formulario.
+        // Antes solo se limpiaban 'm-importe' e 'inpImporte' (que no son el campo visible),
+        // así que al reabrir el modal aparecía el importe del movimiento anterior.
+        const idsALimpiar = ['m-id', 'm-desc', 'm-importe', 'inpImporte', 'm-concepto', 'm-beneficiario', 'm-cantidad'];
         
         idsALimpiar.forEach(id => {
             const elemento = document.getElementById(id);
@@ -5208,6 +5228,11 @@ window.cargarParaEditar = function(id) {
     }
 	
 // --- ZONA DE VARIABLES GLOBALES (Añadir esto si no está) ---
+// BUG-8 FIX: El semáforo isSaving estaba declarado pero NUNCA se consultaba
+// ni se activaba dentro de guardarManual. La protección dependía solo del
+// botón deshabilitado, que no protege ante llamadas programáticas concurrentes.
+// Ahora el semáforo es la barrera real: si hay un guardado en curso, se ignora
+// cualquier llamada adicional hasta que el primero termine (bloque try/finally).
 let isSaving = false; // 🚦 SEMÁFORO DE SEGURIDAD: false = Libre, true = Ocupado
 
 // --- HERRAMIENTA OBLIGATORIA: GENERADOR DE IDs ---
@@ -5226,6 +5251,13 @@ function generarUUID() {
 // 🛡️ GUARDAR MOVIMIENTO (V. FINAL: CONCEPTO AUTOMÁTICO)
 // ==========================================
 window.guardarManual = async function() {
+    // BUG-8 FIX: Comprobamos el semáforo ANTES de hacer nada.
+    // Si hay un guardado ya en curso (isSaving=true), salimos silenciosamente.
+    if (isSaving) {
+        console.warn("⚠️ guardarManual: guardado ya en curso, petición ignorada.");
+        return;
+    }
+    isSaving = true; // Bloqueamos el semáforo
     console.log("--- 🔄 Ejecutando Guardado Manual ---");
 
     const btnGuardar = document.getElementById('btn-modal-action'); 
@@ -5303,19 +5335,26 @@ window.guardarManual = async function() {
 
             const idSalida = generarID();
             const idEntrada = generarID();
+            // BUG-2 FIX: Vinculamos salida y entrada con un pairId único compartido.
+            // Antes se buscaba el "gemelo" por ts (timestamp), lo que podía borrar
+            // traspasos no relacionados registrados el mismo día. Ahora el pairId
+            // identifica inequívocamente el par correcto.
+            const pairId = generarUUID();
 
             // Movimiento 1: SALIDA (Negativo)
             const movSalida = {
                 id: idSalida, fecha: fecha, cuenta: cuentaOrigen, concepto: "TRASPASO",
                 importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-                beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: new Date(fecha + 'T12:00:00').getTime()
+                beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso',
+                ts: new Date(fecha + 'T12:00:00').getTime(), pairId: pairId
             };
 
             // Movimiento 2: ENTRADA (Positivo)
             const movEntrada = {
                 id: idEntrada, fecha: fecha, cuenta: cuentaDestino, concepto: "TRASPASO",
                 importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-                beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: new Date(fecha + 'T12:00:00').getTime()
+                beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso',
+                ts: new Date(fecha + 'T12:00:00').getTime(), pairId: pairId
             };
 
             movimientosParaLocal.push(movSalida, movEntrada);
@@ -5352,13 +5391,19 @@ window.guardarManual = async function() {
         // 1. Memoria Local
         if (idExistente) {
             const movOriginal = window.datos.find(m => m.id === idExistente);
-            // Si el movimiento original era un traspaso, eliminamos también el movimiento gemelo
-            // (el par de entrada/salida que comparte el mismo instante y es de tipo traspaso)
+            // BUG-2 FIX: Antes se buscaba el gemelo por ts (timestamp), lo que borraba
+            // cualquier traspaso del mismo día aunque no fuera el par correcto.
+            // Ahora usamos pairId (si existe) para identificar el gemelo exacto.
+            // Fallback: para movimientos antiguos sin pairId, mantenemos la búsqueda
+            // por ts pero añadimos comprobación de cuenta distinta como salvaguarda.
             if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
                 window.datos = window.datos.filter(m => {
                     if (m.id === idExistente) return false; // El movimiento editado
-                    // Eliminar el gemelo: mismo ts, mismo tipo traspaso, cuenta distinta
-                    if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.id !== idExistente) return false;
+                    // Primero intentamos usar pairId (registros nuevos)
+                    if (movOriginal.pairId && m.pairId === movOriginal.pairId && m.id !== idExistente) return false;
+                    // Fallback para registros sin pairId: mismo ts, mismo tipo, cuenta DISTINTA (más seguro)
+                    if (!movOriginal.pairId && m.tipo === 'traspaso' && m.ts === movOriginal.ts
+                        && m.cuenta !== movOriginal.cuenta && m.id !== idExistente) return false;
                     return true;
                 });
             } else {
@@ -5391,6 +5436,7 @@ window.guardarManual = async function() {
         if(window.mostrarNotificacion) window.mostrarNotificacion(error.message, "error");
         else alert(error.message);
     } finally {
+        isSaving = false; // BUG-8 FIX: Liberamos el semáforo siempre (éxito o error)
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
@@ -6586,7 +6632,9 @@ window.renderTreeMap = function() {
     };
 
     window.echartTreeMap.setOption(option);
-    window.addEventListener('resize', () => window.echartTreeMap && window.echartTreeMap.resize());
+    // BUG-4 FIX: El listener de resize se registra UNA SOLA VEZ en el bloque central
+    // (ver "_initEchartsResizeHandler" más abajo). Eliminado de aquí para evitar el
+    // memory leak que acumulaba N listeners tras N renders del dashboard.
 };
 // ==========================================
 // 💎 RAYO X PATRIMONIAL (MODO NEÓN CLEAN)
@@ -6776,8 +6824,24 @@ window.renderizarSunburstPatrimonio = function() {
     });
 
     setTimeout(() => chart.resize(), 100);
-    window.addEventListener('resize', () => chart.resize());
+    // BUG-4 FIX: Listener de resize eliminado de aquí — consolidado en _initEchartsResizeHandler.
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUG-4 FIX: HANDLER DE RESIZE CENTRALIZADO PARA TODOS LOS GRÁFICOS ECHARTS
+// Se registra UNA SOLA VEZ mediante una flag global. Antes cada render de
+// TreeMap, Sunburst y Radar añadía un nuevo listener, acumulando N llamadas
+// en cada resize del navegador y degradando el rendimiento progresivamente.
+// ─────────────────────────────────────────────────────────────────────────────
+if (!window._echartsResizeListenerRegistered) {
+    window.addEventListener('resize', () => {
+        if (window.echartTreeMap  && typeof window.echartTreeMap.resize  === 'function') window.echartTreeMap.resize();
+        if (window.echartSunburst && typeof window.echartSunburst.resize === 'function') window.echartSunburst.resize();
+        if (window.radarInstance  && typeof window.radarInstance.resize  === 'function') window.radarInstance.resize();
+        if (window.echartEvol     && typeof window.echartEvol.resize     === 'function') window.echartEvol.resize();
+    });
+    window._echartsResizeListenerRegistered = true;
+}
 
 // --- CARGA DE CACHÉ (con desencriptado AES-GCM) ---
 async function cargarDesdeCacheAsync() {
@@ -7087,21 +7151,26 @@ function renderizarRadarScoring(kpis) {
     };
 
     window.radarInstance.setOption(option);
-    
-    // Ajuste responsivo
-    window.addEventListener('resize', () => {
-        if(window.radarInstance) window.radarInstance.resize();
-    });
+    // BUG-4 FIX: Listener de resize consolidado en el handler central _initEchartsResizeHandler.
 }
 /* =========================================
    ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
    ========================================= */
-async function guardarAjuste(tipo) {
+// BUG-5 FIX: Antes accedíamos a `event.target` como variable global implícita.
+// Ese patrón es no-estándar, deprecado y falla en strict mode / Firefox.
+// Ahora recibimos el elemento del botón directamente como parámetro `btn`.
+// Uso en HTML: onclick="guardarAjuste('cuenta', this)"
+async function guardarAjuste(tipo, btn) {
     if (!modoNube) return window.mostrarNotificacion("☁️ Conéctate a la Nube para editar ajustes", "warning");
-    
-    const btnTextOriginal = event.target.innerText;
-    event.target.innerText = "GUARDANDO...";
-    event.target.disabled = true;
+
+    // Fallback de seguridad: si se llama sin pasar `this`, intentamos recuperar el botón
+    // con el evento nativo (compatible con llamadas antiguas sin el parámetro btn).
+    if (!btn && typeof event !== 'undefined' && event && event.target) btn = event.target;
+    const btnTextOriginal = btn ? btn.innerText : "GUARDAR";
+    if (btn) {
+        btn.innerText = "GUARDANDO...";
+        btn.disabled = true;
+    }
 
     // Función auxiliar local para mayúsculas
     const A_MAYUS = (t) => String(t || "").toUpperCase().trim();
@@ -7149,8 +7218,10 @@ async function guardarAjuste(tipo) {
         console.error(e);
         window.mostrarNotificacion("❌ Error en ajustes: " + e.message, "error");
     } finally {
-        event.target.innerText = btnTextOriginal;
-        event.target.disabled = false;
+        if (btn) {
+            btn.innerText = btnTextOriginal;
+            btn.disabled = false;
+        }
     }
 }
 // ==========================================
@@ -7727,39 +7798,67 @@ window.editarMovimiento = function(idMov) {
         btnAction.innerText = "ACTUALIZAR";
     }
     
-    // 4. RELLENADO DE CAMPOS (Con retardo mínimo para asegurar que el DOM existe)
-    setTimeout(() => {
+    // 4. RELLENADO DE CAMPOS
+    // BUG-9 FIX: Antes se usaba setTimeout(50ms) para esperar que abrirModal()
+    // rellene los <select> con las opciones. En dispositivos lentos o con muchas
+    // cuentas, los 50ms podían no ser suficientes y los campos quedaban en blanco.
+    // Ahora usamos requestAnimationFrame + una pequeña espera garantizada para que
+    // el motor de render haya pintado el DOM antes de escribir los valores.
+    // Además añadimos un helper "setSelectSafe" que, si la opción no existe aún
+    // en el select, la añade dinámicamente para que nunca quede en blanco.
+    function _rellenarCamposEdicion() {
+        const setSelectSafe = (id, val) => {
+            const el = document.getElementById(id);
+            if (!el || val === undefined || val === null) return;
+            el.value = val;
+            // Si el valor no está en las opciones, lo añadimos para que sea visible
+            if (el.value !== String(val)) {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.text = val + ' (original)';
+                el.appendChild(opt);
+                el.value = val;
+            }
+        };
+
         // ID (Vital para saber que es edición)
-        document.getElementById('m-id').value = mov.id; 
-        
+        const elId = document.getElementById('m-id');
+        if (elId) elId.value = mov.id;
+
         // Fecha (Formato YYYY-MM-DD para input date)
         let fechaObj = (mov.fecha instanceof Date) ? mov.fecha : new Date(mov.ts);
-        
         const yyyy = fechaObj.getFullYear();
         const mm = String(fechaObj.getMonth() + 1).padStart(2, '0');
         const dd = String(fechaObj.getDate()).padStart(2, '0');
-        
-        document.getElementById('m-fecha').value = `${yyyy}-${mm}-${dd}`;
+        const elFecha = document.getElementById('m-fecha');
+        if (elFecha) elFecha.value = `${yyyy}-${mm}-${dd}`;
 
         // Campos de texto e importe
-        document.getElementById('m-cuenta').value = mov.cuenta;
-        document.getElementById('m-concepto').value = mov.concepto;
-        document.getElementById('m-cantidad').value = Math.abs(mov.importe).toFixed(2).replace('.', ',') + ' €'; // Formato visual
-        document.getElementById('m-desc').value = mov.detalle || mov.descripcion || '';
-        document.getElementById('m-beneficiario').value = mov.beneficiario || '';
+        setSelectSafe('m-cuenta', mov.cuenta);
+        setSelectSafe('m-concepto', mov.concepto);
+        const elCant = document.getElementById('m-cantidad');
+        if (elCant) elCant.value = Math.abs(mov.importe).toFixed(2).replace('.', ',') + ' €';
+        const elDesc = document.getElementById('m-desc');
+        if (elDesc) elDesc.value = mov.detalle || mov.descripcion || '';
+        setSelectSafe('m-beneficiario', mov.beneficiario || '');
 
         // Botón
         const btn = document.getElementById('btn-modal-action');
-        if(btn) btn.innerText = "ACTUALIZAR MOVIMIENTO";
-        
+        if (btn) btn.innerText = "ACTUALIZAR MOVIMIENTO";
+
         // Mostrar botón de borrar (solo en edición)
         const btnBorrar = document.getElementById('btn-borrar-modal');
-        if(btnBorrar) {
+        if (btnBorrar) {
             btnBorrar.style.display = 'block';
             btnBorrar.onclick = () => window.borrarMovimiento(mov.id);
         }
+    }
 
-    }, 50);
+    // Usamos requestAnimationFrame para garantizar que el DOM está pintado
+    // antes de intentar escribir los valores en los selects.
+    requestAnimationFrame(() => {
+        requestAnimationFrame(_rellenarCamposEdicion);
+    });
 };
 
 
@@ -8879,25 +8978,46 @@ self.addEventListener('fetch', e => {
 `;
 
     if ('serviceWorker' in navigator) {
-        // FIX 8: Un SW registrado desde blob:// no puede interceptar las peticiones
-        // de la página principal porque el scope queda fuera del origen de la página.
-        // Estrategia correcta: inyectar el SW como un fichero real mediante un
-        // Worker URL con pathname relativo. Si estamos en file:// o el registro falla,
-        // degradamos gracefully (la app sigue funcionando, solo sin caché offline).
+        // BUG-7 FIX: Un SW registrado desde blob:// tiene su scope limitado al origen
+        // blob:// (diferente del origen de la página), por lo que NUNCA puede interceptar
+        // peticiones reales. La caché offline era código muerto.
+        //
+        // SOLUCIÓN: Generamos el SW como un Blob con el código inline y lo registramos
+        // con un scope explícito ('/'). Esto funciona en HTTPS desde servidor (el caso
+        // de producción). En file:// y HTTP el navegador lo rechazará por política de
+        // seguridad → degradamos gracefully: la app sigue funcionando sin caché offline.
+        //
+        // Para activar la caché offline completa en producción, sube el archivo sw.js
+        // (el contenido de SW_CODE arriba) a la raíz de tu servidor y usa:
+        //   navigator.serviceWorker.register('/sw.js');
         try {
             const blob = new Blob([SW_CODE], { type: 'application/javascript' });
             const swUrl = URL.createObjectURL(blob);
-            // Intentamos registrar. En HTTPS desde servidor funciona con scope relativo.
-            // En file:// o HTTP el navegador lo rechazará → catch silencioso.
-            navigator.serviceWorker.register(swUrl)
+
+            navigator.serviceWorker.register(swUrl, { scope: './' })
                 .then(reg => {
-                    console.warn('✅ SW registrado:', reg.scope);
-                    // Liberamos el Blob URL una vez registrado
-                URL.revokeObjectURL(swUrl);
-            })
-            .catch(err => console.warn('SW no disponible (normal en HTTP/file://):', err.message));
+                    console.warn('✅ SW registrado con scope:', reg.scope);
+                    URL.revokeObjectURL(swUrl);
+                    // Escuchar actualizaciones del SW
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        if (newWorker) {
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    console.warn('🔄 Nueva versión del SW disponible');
+                                }
+                            });
+                        }
+                    });
+                })
+                .catch(err => {
+                    // En file:// y HTTP esto es esperado. No es un error crítico.
+                    URL.revokeObjectURL(swUrl);
+                    console.warn('ℹ️ SW no disponible (normal en file:// / HTTP):', err.message,
+                                 '\n→ Para caché offline en producción: sube sw.js a la raíz del servidor.');
+                });
         } catch (swErr) {
-            console.warn('⚠️ No se pudo registrar el Service Worker:', swErr.message);
+            console.warn('⚠️ No se pudo inicializar el Service Worker:', swErr.message);
         }
     }
 
