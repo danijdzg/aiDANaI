@@ -2054,6 +2054,18 @@ select:focus > option:checked {
  /* ==========================================
    ESTILOS EXTRACTO BANCARIO CLÁSICO (PASO 3)
    ========================================== */
+   /* Corrección: Evitar que la tabla desborde la pantalla */
+#modal-extracto table {
+    table-layout: auto !important; 
+    width: 100% !important;
+}
+
+/* Limpieza de max-width globales que rompían la tabla */
+#modal-extracto th, 
+#modal-extracto td {
+    max-width: none !important;
+    white-space: nowrap !important; /* Mantiene cada dato en su línea */
+}
 /* 1. Anulamos el 'display: grid' global de las filas para que vuelva a ser una tabla normal */
 #modal-extracto tbody tr {
     display: table-row !important; 
@@ -2830,7 +2842,7 @@ select:focus > option:checked {
         <div id="extracto-saldo-actual" style="font-size: 40px; font-weight: 800; color: #fff; font-family: 'Inter', sans-serif;">0,00 €</div>
     </div>
 
-    <div style="flex: 1; overflow-y: auto; padding: 0 10px 40px 10px; -webkit-overflow-scrolling: touch;">
+    <div style="flex: 1; overflow-y: auto; overflow-x: auto; max-width: 100vw; padding: 0 10px 40px 10px; -webkit-overflow-scrolling: touch;">
         <table style="width: 100%; border-collapse: collapse; font-family: 'Courier New', Courier, monospace; font-size: 12px; margin-top: 10px;">
             <thead style="position: sticky; top: 0; background: #000; z-index: 10;">
                 <tr style="border-bottom: 2px solid #333; color: var(--c-primary); font-weight: bold;">
@@ -5309,12 +5321,7 @@ window.procesarLibroLeido = function(wb) {
 
     // Actualizar UI
     if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
-    if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-    if (typeof actualizarDashboard === 'function') actualizarDashboard();
-    if (typeof renderizar === 'function') renderizar();
-    
-    // NUEVO: Refrescar la vista de recurrentes si estamos en ella
-    if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
+    if (typeof window.actualizarUI === 'function') window.actualizarUI();
 };
 
 // ==========================================
@@ -6219,9 +6226,8 @@ window.guardarManual = async function() {
             window.PendingQueue.add(movimientosParaLocal);
         }
 
-        // 2. Refrescar UI (Optimistic UI)
+        // 2. Refrescar UI (Optimistic UI — sin llamar recalcularSaldosGlobal para no duplicar)
         if (typeof renderizar === 'function') renderizar();
-        if (typeof actualizarDashboard === 'function') actualizarDashboard();
 
         // 3. Guardar en local Y subir a la nube (best-effort)
         const resultadoGuardado = await window.guardarUniversal();
@@ -6280,9 +6286,7 @@ window.guardarManual = async function() {
         if (esErrorValidacion) {
             // Error de validación: revertimos porque nunca modificamos datos
             window.datos = copiaSeguridadEnMemoria;
-            if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-            if (typeof renderizar === 'function') renderizar();
-            if (typeof actualizarDashboard === 'function') actualizarDashboard();
+            if (typeof window.actualizarUI === 'function') window.actualizarUI();
             if(window.mostrarNotificacion) {
                 window.mostrarNotificacion("⚠️ " + error.message, "error");
             }
@@ -6291,8 +6295,7 @@ window.guardarManual = async function() {
             // Error de nube u otro: el movimiento ya está guardado localmente.
             // Cerramos el modal y mostramos advertencia de sync pendiente.
             window.cerrarModal();
-            if (typeof renderizar === 'function') renderizar();
-            if (typeof actualizarDashboard === 'function') actualizarDashboard();
+            if (typeof window.actualizarUI === 'function') window.actualizarUI();
             if(window.mostrarNotificacion) {
                 window.mostrarNotificacion("⚠️ Guardado LOCAL. La nube se sincronizará automáticamente.", "warning");
             }
@@ -6419,8 +6422,7 @@ window.borrarMovimiento = async function(id) {
                 // Nota: guardarUniversal ya se encarga de refrescar pantalla y subir a nube
             } else {
                 // Fallback si no existiera guardarUniversal
-                renderizar();
-                actualizarDashboard();
+                if (typeof window.actualizarUI === 'function') window.actualizarUI();
             }
 
             // 5. Cerrar modal y avisar
@@ -6491,16 +6493,42 @@ function recalcularSaldosGlobal() {
     });
 
     console.log("🧮 Saldos recalculados y ordenados del revés correctamente.");
-
-    // 6. ACTUALIZAR PANTALLA
-    if(typeof renderizar === 'function') renderizar();
-    if(typeof actualizarDashboard === 'function') actualizarDashboard();
-    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-    if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+    // ✅ FIX STACK OVERFLOW: recalcularSaldosGlobal es ahora una función PURA de cálculo.
+    // Ya NO llama a renderizar() ni a actualizarDashboard().
+    // Era la causa raíz del "maximum call stack": guardarUniversal llamaba a renderizar()
+    // y luego a recalcularSaldosGlobal(), que a su vez volvía a llamar a renderizar() y
+    // actualizarDashboard() — duplicando renders y creando cadenas de llamadas anidadas
+    // que desbordaban el call stack en la ruta de eliminación de movimientos.
+    // Los callers (guardarUniversal, procesarLibroLeido, etc.) son responsables de
+    // actualizar la UI después de llamar a esta función.
 }
 
     
    // ==========================================
+    // 🔄 ACTUALIZAR UI COMPLETA (centralizada con guard anti-recursión)
+    // ==========================================
+    window._uiUpdating = false;
+    window.actualizarUI = function(opciones) {
+        if (window._uiUpdating) { console.warn("⚠️ actualizarUI: recursión bloqueada"); return; }
+        window._uiUpdating = true;
+        try {
+            const opts = opciones || {};
+            if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+            if (!opts.sinLista && typeof renderizar === 'function') renderizar();
+            setTimeout(() => {
+                if (!opts.sinDashboard) {
+                    if (typeof actualizarDashboard === 'function') actualizarDashboard();
+                    if (typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+                    if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+                    if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
+                }
+            }, 0);
+        } finally {
+            window._uiUpdating = false;
+        }
+    };
+
+    // ==========================================
     // 🎨 PUENTE DE ANIMACIÓN MEJORADO (V2)
     // ==========================================
     function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
@@ -6766,7 +6794,7 @@ window.verExtractoCuenta = function(nombreCuenta) {
             <tr style="border-bottom: 1px dashed #222; transition: background 0.2s;" 
                 onclick="document.getElementById('modal-extracto').classList.remove('active'); editarMovimiento('${m.id}')">
                 <td style="padding: 14px 2px; color: #888;">${fechaStr}</td>
-                <td style="padding: 14px 5px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;">${Security.escapeHTML(conceptoAbrev)}</td>
+                <td style="padding: 14px 5px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 90px; max-width: 90px;">${Security.escapeHTML(conceptoAbrev)}</td>
                 <td style="padding: 14px 5px; text-align: right; color: ${colorImporte}; font-weight: bold;">${signo}${importeFmt}</td>
                 <td style="padding: 14px 2px; text-align: right; color: #fff;">${saldoFmt}</td>
             </tr>`;
@@ -7438,12 +7466,8 @@ async function guardarUniversal(nuevasFilas) {
                 setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
                 // Retornamos éxito total
                 window.datos = datosFinales;
-                if (typeof renderizar === 'function') renderizar();
-                if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-                // ✅ CONFIRMAR COLA: todos los movimientos de window.datos ya están en la nube
-                if (window.PendingQueue) {
-                    window.PendingQueue.clear();
-                }
+                if (window.PendingQueue) window.PendingQueue.clear();
+                if (typeof window.actualizarUI === 'function') window.actualizarUI();
                 return { localOk: true, cloudOk: true };
             } else {
                 // ✅ NUBE FALLIDA — pero los datos YA están en localStorage.
@@ -7453,8 +7477,7 @@ async function guardarUniversal(nuevasFilas) {
                 if (btn) { btn.innerHTML = '<span class="material-icons">cloud_off</span> LOCAL'; }
                 setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 3000);
                 window.datos = datosFinales;
-                if (typeof renderizar === 'function') renderizar();
-                if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+                if (typeof window.actualizarUI === 'function') window.actualizarUI();
                 // ← NO throw. El movimiento queda en local. El llamador ve cloudOk:false.
                 return { localOk: true, cloudOk: false };
             }
@@ -7464,8 +7487,7 @@ async function guardarUniversal(nuevasFilas) {
             console.log("💾 Solo localStorage, sin nube configurada.");
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
             window.datos = datosFinales;
-            if (typeof renderizar === 'function') renderizar();
-            if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+            if (typeof window.actualizarUI === 'function') window.actualizarUI();
             setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
             return { localOk: true, cloudOk: false };
         }
