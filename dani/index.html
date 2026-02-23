@@ -6403,7 +6403,7 @@ window.duplicarMovimiento = function() {
 
 // --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
 window.borrarMovimiento = async function(id) {
-    // 1. Usar tu Modal Pro en lugar del alert del navegador (evita bloqueos de la PWA)
+    // 1. Usar tu Modal Pro en lugar del alert del navegador
     const confirmado = await window.pedirConfirmacion(
         "ELIMINAR MOVIMIENTO", 
         "¿Estás seguro de que quieres borrar este movimiento permanentemente?", 
@@ -6419,12 +6419,19 @@ window.borrarMovimiento = async function(id) {
 
     try {
         const lenInicial = window.datos.length;
-        window.datos = window.datos.filter(m => m.id !== id && m.pairId !== id);
+        
+        // CORRECCIÓN AQUÍ: Comparamos siempre convirtiendo a String para evitar fallos numéricos
+        window.datos = window.datos.filter(m => 
+            String(m.id) !== String(id) && 
+            String(m.pairId) !== String(id)
+        );
 
+        // Si la longitud es la misma, significa que no se ha borrado nada
         if (window.datos.length === lenInicial) {
-            throw new Error("No se encontró el movimiento");
+            throw new Error("No se encontró el movimiento para borrar");
         }
 
+        // Recalcular y guardar
         if (typeof window.recalcularSaldosGlobal === 'function') window.recalcularSaldosGlobal();
         if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
 
@@ -6433,19 +6440,19 @@ window.borrarMovimiento = async function(id) {
         if(typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
         
         window.mostrarNotificacion("🗑️ Movimiento eliminado correctamente", "success");
-        if(typeof vibrar === 'function') vibrar('ingreso');
+        if(typeof vibrar === 'function') vibrar('error'); // 'error' hace un patrón de vibración doble ideal para borrados
 
     } catch (error) {
         console.error("Error al borrar:", error);
-        window.mostrarNotificacion("❌ Error al borrar el movimiento", "error");
+        window.mostrarNotificacion("❌ " + error.message, "error");
         
+        // Restaurar el botón si hubo error
         if(btnBorrar) {
             btnBorrar.innerHTML = '<span class="material-icons">delete</span>';
             btnBorrar.disabled = false;
         }
     }
 };
-
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
 function recalcularSaldosGlobal() {
     if (!window.datos || window.datos.length === 0) return;
