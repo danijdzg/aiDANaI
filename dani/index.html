@@ -566,14 +566,38 @@ iframe[id*="msal"], iframe[id*="adal"] { display: none !important; }
         .mini-date { width: auto; letter-spacing: 0.5px; }
 		
         .kpi-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; row-gap: 8px; column-gap: 8px; }
-        .kpi-box { display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s; padding: 4px 0; }
-        .kpi-label { font-family: 'Inter', sans-serif; font-size: 9px; font-weight: 700; color: var(--c-warning); letter-spacing: 0.5px; margin-bottom: 2px; text-transform: uppercase; opacity: 0.9; }
-        .kpi-value { font-family: 'Inter', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+        .kpi-box { 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            cursor: pointer; 
+            padding: 12px 5px; 
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            /* 🔥 Animación levitación iOS */
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; 
+        }
+        .kpi-box:hover, .kpi-box:active {
+            transform: translateY(-4px) scale(1.02);
+            background: rgba(255, 255, 255, 0.06);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+        .kpi-label { 
+            font-family: 'Inter', sans-serif; font-size: 9px; font-weight: 700; color: var(--c-warning); 
+            letter-spacing: 0.5px; margin-bottom: 4px; text-transform: uppercase; opacity: 0.9; 
+            transition: color 0.3s ease;
+        }
+        .kpi-value { 
+            font-family: 'Inter', sans-serif; font-size: 22px; font-weight: 800; 
+            letter-spacing: -0.5px; line-height: 1.1; 
+            /* 🔥 Transición suave para que los colores no den saltos bruscos */
+            transition: color 0.5s ease, text-shadow 0.5s ease, transform 0.2s ease;
+        }
 
         .val-std-pos { color: var(--c-success); text-shadow: 0 0 10px rgba(57, 255, 20, 0.4); }
         .val-std-neg { color: var(--c-danger);  text-shadow: 0 0 10px rgba(255, 46, 77, 0.4); }
         .val-std-neu { color: #FFFFFF; }
-        .val-std-blue { color: var(--c-primary); text-shadow: 0 0 15px rgba(0, 184, 255, 0.4); } 
+        .val-std-blue { color: var(--c-primary); text-shadow: 0 0 15px rgba(0, 184, 255, 0.4); }
 
         /* =========================================
    FILTROS AVANZADOS: ESTILO CRISTAL MORADO COMPACTO
@@ -5849,41 +5873,42 @@ window.guardarManual = async function() {
         return;
     }
     isSaving = true; // Bloqueamos el semáforo
-    console.log("--- 🔄 Ejecutando Guardado Manual ---");
 
-    const btnGuardar = document.getElementById('btn-modal-action'); 
+    console.log("--- 🔄 Ejecutando Guardado Manual ---");
+    const btnGuardar = document.getElementById('btn-modal-action');
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
+    
+    // 🛡️ NOVEDAD: Guardamos una copia exacta de los datos por si la nube falla
+    const copiaSeguridadEnMemoria = [...(window.datos || [])];
 
     try {
         // Bloqueo visual del botón
         if (btnGuardar) {
             btnGuardar.innerHTML = '⏳ Guardando...';
             btnGuardar.disabled = true;
-            btnGuardar.style.backgroundColor = "#ff9800"; 
+            btnGuardar.style.backgroundColor = "#ff9800";
         }
 
         // 1. DETECTAR EL MODO ACTUAL ANTES QUE NADA
-        const modoActual = window.modoTransaccionActual || 'gasto'; 
+        const modoActual = window.modoTransaccionActual || 'gasto';
 
         // 2. RECOGER DATOS
         const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
-        
-        const elId = document.getElementById('m-id'); 
+        const elId = document.getElementById('m-id');
         const idExistente = elId ? elId.value : "";
         
         const fecha = document.getElementById('m-fecha').value;
         const cuentaOrigen = document.getElementById('m-cuenta').value;
-        
         const elDestino = document.getElementById('m-cuenta-destino');
         const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
-        
+
         // 🔥 CORRECCIÓN AUTOMÁTICA: SI ES TRASPASO, EL CONCEPTO ES "TRASPASO"
         let concepto = document.getElementById('m-concepto').value;
         if (modoActual === 'traspaso') {
-            concepto = "TRASPASO"; 
+            concepto = "TRASPASO";
         }
 
-        const importeStr = document.getElementById('m-cantidad').value; 
+        const importeStr = document.getElementById('m-cantidad').value;
         const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
         const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
 
@@ -5891,8 +5916,6 @@ window.guardarManual = async function() {
         if (!fecha) throw new Error("❌ Falta la FECHA");
         if (!cuentaOrigen) throw new Error("❌ Falta la CUENTA");
         if (!importeStr) throw new Error("❌ Falta el IMPORTE");
-        
-        // Ahora esta validación no fallará en traspasos porque ya lo hemos rellenado
         if (!concepto) throw new Error("❌ Falta el CONCEPTO (Selecciona uno)");
 
         // Limpieza de importe
@@ -5902,19 +5925,16 @@ window.guardarManual = async function() {
         if (isNaN(importeNum) || importeNum === 0) throw new Error("❌ El importe no es válido");
         
         // Normalizamos a positivo absoluto para decidir el signo después
-        importeNum = Math.abs(importeNum); 
+        importeNum = Math.abs(importeNum);
 
         // DETECTAR DUEÑO AUTOMÁTICO
         const detectarDueno = (nombreCuenta) => {
             const c = String(nombreCuenta).toUpperCase().trim();
             if (c.startsWith("D-")) return "DANI";
             if (c.startsWith("N-")) return "NORMA";
-            return "PROPIO"; 
+            return "PROPIO";
         };
 
-        // PUNTO 5 FIX: Array filasParaExcel eliminado. Era dead code: se construía
-        // meticulosamente en cada rama pero guardarUniversal() lee directamente
-        // de window.datos, nunca de este array. CPU y memoria ahorradas.
         let movimientosParaLocal = [];
 
         // =========================================================
@@ -5926,50 +5946,61 @@ window.guardarManual = async function() {
 
             const idSalida = generarID();
             const idEntrada = generarID();
-            // BUG-2 FIX: Vinculamos salida y entrada con un pairId único compartido.
-            // Antes se buscaba el "gemelo" por ts (timestamp), lo que podía borrar
-            // traspasos no relacionados registrados el mismo día. Ahora el pairId
-            // identifica inequívocamente el par correcto.
+
             const pairId = generarUUID();
 
-            // Movimiento 1: SALIDA (Negativo)
             const movSalida = {
-                id: idSalida, fecha: fecha, cuenta: cuentaOrigen, concepto: "TRASPASO",
-                importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-                beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso',
-                ts: new Date(fecha + 'T12:00:00').getTime(), pairId: pairId
+                id: idSalida,
+                fecha: fecha,
+                cuenta: cuentaOrigen,
+                concepto: "TRASPASO",
+                importe: -importeNum,
+                descripcion: `>> A: ${cuentaDestino} | ${desc}`,
+                beneficiario: detectarDueno(cuentaOrigen),
+                tipo: 'traspaso',
+                ts: new Date(fecha + 'T12:00:00').getTime(),
+                pairId: pairId
             };
 
-            // Movimiento 2: ENTRADA (Positivo)
             const movEntrada = {
-                id: idEntrada, fecha: fecha, cuenta: cuentaDestino, concepto: "TRASPASO",
-                importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-                beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso',
-                ts: new Date(fecha + 'T12:00:00').getTime(), pairId: pairId
+                id: idEntrada,
+                fecha: fecha,
+                cuenta: cuentaDestino,
+                concepto: "TRASPASO",
+                importe: importeNum,
+                descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
+                beneficiario: detectarDueno(cuentaDestino),
+                tipo: 'traspaso',
+                ts: new Date(fecha + 'T12:00:00').getTime(),
+                pairId: pairId
             };
 
             movimientosParaLocal.push(movSalida, movEntrada);
-        } 
+        }
         // =========================================================
         // 🅱️ CAMINO B: GASTO O INGRESO
         // =========================================================
         else {
-            // GASTO o PAGO -> Negativo
             if (modoActual === 'gasto' || modoActual === 'pago') {
-                importeNum = -Math.abs(importeNum); 
+                importeNum = -Math.abs(importeNum);
             } else {
-                // INGRESO -> Positivo
-                importeNum = Math.abs(importeNum);  
+                importeNum = Math.abs(importeNum);
             }
-            
+
             const idFinal = idExistente || generarID();
             let benefFinal = benefManual;
             if(!benefFinal) benefFinal = detectarDueno(cuentaOrigen);
 
             const nuevoMov = {
-                id: idFinal, fecha: fecha, cuenta: cuentaOrigen, concepto: concepto,
-                importe: importeNum, descripcion: desc, beneficiario: benefFinal,
-                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: new Date(fecha + 'T12:00:00').getTime()
+                id: idFinal,
+                fecha: fecha,
+                cuenta: cuentaOrigen,
+                concepto: concepto,
+                importe: importeNum,
+                descripcion: desc,
+                beneficiario: benefFinal,
+                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
+                ts: new Date(fecha + 'T12:00:00').getTime()
             };
 
             movimientosParaLocal.push(nuevoMov);
@@ -5982,41 +6013,31 @@ window.guardarManual = async function() {
         // 1. Memoria Local
         if (idExistente) {
             const movOriginal = window.datos.find(m => m.id === idExistente);
-            // BUG-2 FIX: Antes se buscaba el gemelo por ts (timestamp), lo que borraba
-            // cualquier traspaso del mismo día aunque no fuera el par correcto.
-            // Ahora usamos pairId (si existe) para identificar el gemelo exacto.
-            // Fallback: para movimientos antiguos sin pairId, mantenemos la búsqueda
-            // por ts pero añadimos comprobación de cuenta distinta como salvaguarda.
+
             if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
                 window.datos = window.datos.filter(m => {
-                    if (m.id === idExistente) return false; // El movimiento editado
-                    // Primero intentamos usar pairId (registros nuevos)
+                    if (m.id === idExistente) return false;
                     if (movOriginal.pairId && m.pairId === movOriginal.pairId && m.id !== idExistente) return false;
-                    // Fallback para registros sin pairId: mismo ts, mismo tipo, cuenta DISTINTA (más seguro)
-                    if (!movOriginal.pairId && m.tipo === 'traspaso' && m.ts === movOriginal.ts
-                        && m.cuenta !== movOriginal.cuenta && m.id !== idExistente) return false;
+                    if (!movOriginal.pairId && m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.cuenta !== movOriginal.cuenta && m.id !== idExistente) return false;
                     return true;
                 });
             } else {
                 window.datos = window.datos.filter(m => m.id !== idExistente);
             }
         }
+
         movimientosParaLocal.forEach(m => window.datos.push(m));
 
-        // 2. Refrescar UI
-        // FIX 11: No llamamos recalcularSaldosGlobal aquí porque guardarUniversal
-        // ya lo hace internamente. Llamarlo dos veces causaba parpadeos en la UI.
+        // 2. Refrescar UI (Optimistic UI)
         if (typeof renderizar === 'function') renderizar();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
 
-        // 3. Guardar Físico
+        // 3. Guardar Físico en OneDrive
         await window.guardarUniversal();
 
-        // Limpieza
+        // Limpieza si todo fue bien
         window.cerrarModal();
         if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado con éxito", "success");
-        
-        // Vibración distinta según tipo
         if (typeof vibrar === 'function') {
             if (modoActual === 'traspaso') vibrar('clonar');
             else vibrar('ingreso');
@@ -6024,10 +6045,22 @@ window.guardarManual = async function() {
 
     } catch (error) {
         console.error("❌ Error al guardar:", error);
-        if(window.mostrarNotificacion) window.mostrarNotificacion(error.message, "error");
-        else alert(error.message);
+        
+        // 🛡️ NOVEDAD: ROLLBACK (Deshacer cambios visuales si falla la nube)
+        window.datos = copiaSeguridadEnMemoria;
+        
+        // Recalcular y repintar todo a como estaba
+        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if (typeof renderizar === 'function') renderizar();
+        if (typeof actualizarDashboard === 'function') actualizarDashboard();
+        
+        if(window.mostrarNotificacion) {
+            window.mostrarNotificacion("❌ Falló la nube: se ha deshecho la operación", "error");
+        } else {
+            alert("Falló la nube: se ha deshecho la operación. Comprueba tu conexión.");
+        }
     } finally {
-        isSaving = false; // BUG-8 FIX: Liberamos el semáforo siempre (éxito o error)
+        isSaving = false;
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
