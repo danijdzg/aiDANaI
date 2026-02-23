@@ -55,9 +55,8 @@
     <meta name="description" content="Tu gestor financiero personal. Privado, offline y siempre contigo.">
     <meta name="msapplication-TileColor" content="#000000">
 
-    <!-- Manifest PWA (incrustado como data URI para funcionar desde archivo único) -->
-    <link rel="manifest" href="data:application/json;charset=utf-8,%7B%22name%22%3A%22aiDANaI%20%E2%80%94%20Gestor%20Financiero%22%2C%22short_name%22%3A%22aiDANaI%22%2C%22description%22%3A%22Tu%20gestor%20financiero%20personal%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20512%20512'%3E%3Crect%20width%3D'512'%20height%3D'512'%20fill%3D'%23000'%20rx%3D'80'%2F%3E%3Ctext%20x%3D'256'%20y%3D'320'%20font-size%3D'320'%20text-anchor%3D'middle'%3E%F0%9F%92%B0%3C%2Ftext%3E%3C%2Fsvg%3E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%2C%22categories%22%3A%5B%22finance%22%2C%22productivity%22%5D%7D">
-
+    <link rel="manifest" href="manifest.json">
+	
     <!-- Apple touch icons (iOS requiere PNG; usamos SVG con fallback) -->
     <link rel="apple-touch-icon" sizes="180x180" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 180 180%22><rect width=%22180%22 height=%22180%22 rx=%2230%22 fill=%22%23000%22/><text x=%2290%22 y=%22125%22 font-size=%22110%22 text-anchor=%22middle%22>💰</text></svg>">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💰</text></svg>">
@@ -5913,6 +5912,9 @@ window.cargarParaEditar = function(id) {
         document.getElementById('modal-manual').classList.add('active');
         const btnAction = document.getElementById('btn-modal-action');
         const areaExtras = document.getElementById('extra-actions');
+        
+        // NUEVO: Buscamos el nuevo botón de borrar de la cabecera
+        const btnBorrar = document.getElementById('btn-borrar-modal');
 
         // 1. LIMPIEZA Y PREPARACIÓN VISUAL
         if (!esEdicion) {
@@ -5940,7 +5942,9 @@ window.cargarParaEditar = function(id) {
             if(titulo) titulo.innerText = "NUEVO MOVIMIENTO";
             if(btnAction) btnAction.innerText = "GUARDAR";
             
+            // Ocultamos el contenedor viejo (si existe) y el NUEVO botón de borrar
             if(areaExtras) areaExtras.style.display = 'none';
+            if(btnBorrar) btnBorrar.style.display = 'none';
 
             // --- TRUCO: ABRIR CALCULADORA AUTOMÁTICAMENTE (con pequeño retraso para asegurar que carga) ---
             setTimeout(() => {
@@ -5951,7 +5955,17 @@ window.cargarParaEditar = function(id) {
             const titulo = document.querySelector('#modal-manual h3');
             if(titulo) titulo.innerText = "EDITAR MOVIMIENTO";
             if(btnAction) btnAction.innerText = "ACTUALIZAR";
+            
+            // Mostramos el contenedor viejo (si existe)
             if(areaExtras) areaExtras.style.display = 'grid';
+            
+            // NUEVO: Mostramos la papelera en la cabecera al editar
+            if(btnBorrar) {
+                btnBorrar.style.display = 'block'; 
+                btnBorrar.innerHTML = '<span class="material-icons">delete</span>';
+                btnBorrar.style.color = '#FF2E4D'; // Rojo para que destaque
+                btnBorrar.disabled = false;
+            }
         }
 
         // 2. RECOPILAR DATOS (MODO ESTRICTO: SOLO EXCEL CONFIGURACIÓN)
@@ -6011,9 +6025,9 @@ window.cargarParaEditar = function(id) {
             if (elemento) elemento.value = "";
         });
 
-        // 3. Ocultar botones extra
-        const acciones = document.getElementById('extra-actions');
-        if (acciones) acciones.style.display = 'none';
+        // 3. Ocultar botón de borrar
+    const btnBorrar = document.getElementById('btn-borrar-modal');
+    if (btnBorrar) btnBorrar.style.display = 'none';
 
         // ✅ FIX CRÍTICO: Se eliminó la recarga automática desde nube al cerrar el modal.
         // Motivo: La Graph API de OneDrive tiene caché interna y puede devolver datos VIEJOS
@@ -6403,7 +6417,7 @@ window.borrarMovimiento = async function(id) {
     // Bloqueo visual del botón borrar si existe
     const btnBorrar = document.getElementById('btn-borrar-modal');
     if(btnBorrar) {
-        btnBorrar.innerText = "⏳ Eliminando...";
+        btnBorrar.innerHTML = "<span class='material-icons'>hourglass_empty</span>";
         btnBorrar.disabled = true;
     }
 
