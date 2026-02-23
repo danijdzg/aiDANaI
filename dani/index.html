@@ -6068,32 +6068,94 @@ window.guardarManual = async function() {
         if (typeof renderizar === 'function') renderizar();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
 
-        // 3. Guardar Físico en OneDrive
-        await window.guardarUniversal();
+        // 3. Guardar en local Y subir a la nube (best-effort)
+        const resultadoGuardado = await window.guardarUniversal();
 
-        // Limpieza si todo fue bien
+        // ─ El movimiento está siempre guardado en local ─
         window.cerrarModal();
-        if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado con éxito", "success");
         if (typeof vibrar === 'function') {
             if (modoActual === 'traspaso') vibrar('clonar');
             else vibrar('ingreso');
+        }
+        
+        // Mensaje según si la nube respondió o no
+        if (resultadoGuardado && resultadoGuardado.cloudOk) {
+            // ✅ Nube sincronizada
+            if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado en la nube", "success");
+            if(window.mostrarNotificacion) window.mostrarNotificacion("✅ Movimiento guardado y sincronizado", "success");
+        } else {
+            // ⚠️ Solo local — la nube fallará en silencio, reintento automático en 30s
+            if (typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado localmente", "warning");
+            if(window.mostrarNotificacion) window.mostrarNotificacion("⚠️ Guardado en local. Reintento en 30s...", "warning");
+            // Reintento automático
+            if (window._cloudRetryTimer) clearTimeout(window._cloudRetryTimer);
+            window._cloudRetryTimer = setTimeout(async () => {
+                if (!window.modoNube) return;
+                console.log("🔁 Reintentando sincronización con nube...");
+                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
+                try {
+                    const retry = await guardarUniversal();
+                    if (retry && retry.cloudOk) {
+                        if(window.mostrarNotificacion) window.mostrarNotificacion("✅ Sincronizado con la nube", "success");
+                    }
+                } catch(retryErr) {
+                    console.warn("🔁 Reintento fallido:", retryErr.message);
+                }
+            }, 30000);
         }
 
     } catch (error) {
         console.error("❌ Error al guardar:", error);
         
-        // 🛡️ NOVEDAD: ROLLBACK (Deshacer cambios visuales si falla la nube)
-        window.datos = copiaSeguridadEnMemoria;
+        // ✅ NUEVO DISEÑO OFFLINE-FIRST:
+        // Solo hacemos ROLLBACK si el error es de VALIDACIÓN (lanzado antes de modificar window.datos).
+        // Reconocemos los errores de validación porque su mensaje empieza por "❌ Falta".
+        // Para cualquier otro error (nube caída, token expirado, etc.) el movimiento ya está
+        // en window.datos y en localStorage → SE QUEDA. Solo el semáforo se pone rojo.
+        const esErrorValidacion = error && error.message && (
+            error.message.includes('Falta la FECHA') ||
+            error.message.includes('Falta la CUENTA') ||
+            error.message.includes('Falta el IMPORTE') ||
+            error.message.includes('Falta el CONCEPTO') ||
+            error.message.includes('no es válido') ||
+            error.message.includes('Origen y Destino') ||
+            error.message.includes('Selecciona una CUENTA')
+        );
         
-        // Recalcular y repintar todo a como estaba
-        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-        if (typeof renderizar === 'function') renderizar();
-        if (typeof actualizarDashboard === 'function') actualizarDashboard();
-        
-        if(window.mostrarNotificacion) {
-            window.mostrarNotificacion("❌ Falló la nube: se ha deshecho la operación", "error");
+        if (esErrorValidacion) {
+            // Error de validación: revertimos porque nunca modificamos datos
+            window.datos = copiaSeguridadEnMemoria;
+            if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+            if (typeof renderizar === 'function') renderizar();
+            if (typeof actualizarDashboard === 'function') actualizarDashboard();
+            if(window.mostrarNotificacion) {
+                window.mostrarNotificacion("⚠️ " + error.message, "error");
+            }
+            // No cerramos el modal — el usuario debe corregir el formulario
         } else {
-            alert("Falló la nube: se ha deshecho la operación. Comprueba tu conexión.");
+            // Error de nube u otro: el movimiento ya está guardado localmente.
+            // Cerramos el modal y mostramos advertencia de sync pendiente.
+            window.cerrarModal();
+            if (typeof renderizar === 'function') renderizar();
+            if (typeof actualizarDashboard === 'function') actualizarDashboard();
+            if(window.mostrarNotificacion) {
+                window.mostrarNotificacion("⚠️ Guardado LOCAL. La nube se sincronizará automáticamente.", "warning");
+            }
+            if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+            // Programar reintento de subida en 30 segundos
+            window._cloudRetryTimer = setTimeout(async () => {
+                if (window.modoNube && typeof guardarUniversal === 'function') {
+                    console.log("🔁 Reintentando subida a nube...");
+                    if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
+                    try {
+                        await guardarUniversal();
+                        if(window.mostrarNotificacion) window.mostrarNotificacion("✅ Datos sincronizados con la nube", "success");
+                    } catch(retryErr) {
+                        console.warn("🔁 Reintento fallido:", retryErr.message);
+                        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+                    }
+                }
+            }, 30000);
         }
     } finally {
         isSaving = false;
@@ -7165,12 +7227,14 @@ async function guardarUniversal(nuevasFilas) {
         const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
         
         if (usarNube) {
-            // MODO NUBE (ONEDRIVE)
-            let exito = false;
+            // ════════════════════════════════════════════════════════
+            // MODO NUBE: Best-effort, no bloquea si falla
+            // ════════════════════════════════════════════════════════
+            let cloudOk = false;
             let intentos = 0;
             const maxRetries = 2;
 
-            while (!exito && intentos < maxRetries) {
+            while (!cloudOk && intentos < maxRetries) {
                 try {
                     intentos++;
                     if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
@@ -7178,87 +7242,80 @@ async function guardarUniversal(nuevasFilas) {
                     
                     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
                     await oneDrive.saveFile(wbout, "aidanai.xlsx"); 
+                    cloudOk = true;
                     
-                    exito = true;
                 } catch (e) {
-                    // 🔒 RESOLUCIÓN DE CONFLICTO: Si recibimos un 412, significa que otro
-                    // usuario o dispositivo guardó cambios mientras nosotros editábamos.
-                    // Descargamos la versión más reciente de la nube, la procesamos para
-                    // actualizar window.datos y window.eTag, e intentamos guardar de nuevo.
                     if (e && e.code === 'CONFLICT_412') {
-                        console.warn("🔄 Conflicto 412 detectado. Sincronizando desde nube antes de reintentar...");
-                        if(typeof window.mostrarEstado === 'function') window.mostrarEstado("🔄 Conflicto: sincronizando con el otro dispositivo...", "loading");
+                        // Conflicto 412: otro dispositivo modificó el archivo.
+                        // Descargamos versión fresca, fusionamos nuestros cambios encima, reintentamos.
+                        console.warn("🔄 Conflicto 412: sincronizando antes de reintentar...");
+                        if(typeof window.mostrarEstado === 'function') window.mostrarEstado("🔄 Conflicto: sincronizando...", "loading");
                         try {
                             const wbFresco = await oneDrive.loadFile();
-                            // Procesamos los datos frescos (esto actualiza window.datos y el eTag)
                             if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
-                            // Ahora mezclamos: volvemos a añadir los nuevos movimientos pendientes encima
+                            // Reinyectamos los nuevos movimientos sobre los datos frescos
                             if (nuevasFilas) {
-                                const filasProcesadas = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
-                                filasProcesadas.forEach(f => {
-                                    if (!window.datos.find(m => m.id === (f.id || f.ID))) {
-                                        window.datos.unshift(f);
-                                    }
+                                const fp = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
+                                fp.forEach(f => {
+                                    if (!window.datos.find(m => m.id === (f.id || f.ID))) window.datos.unshift(f);
                                 });
-                                datosFinales = [...window.datos];
-                                // Reconstruimos el libro usando la función centralizada
-                                // (antes era código inline ilegible duplicado aquí mismo)
-                                wb = construirLibroExcel(datosFinales);
                             }
-                            if(typeof window.mostrarEstado === 'function') window.mostrarEstado("🔄 Datos fusionados. Reintentando guardado...", "loading");
-                            // Breve pausa antes de reintentar
+                            // Aseguramos que los movimientos actuales de window.datos estén incluidos
+                            datosFinales = [...window.datos];
+                            wb = construirLibroExcel(datosFinales);
                             await new Promise(r => setTimeout(r, 800));
                         } catch(syncErr) {
-                            console.error("❌ Fallo al sincronizar tras conflicto:", syncErr);
-                            throw new Error("No se pudo resolver el conflicto de sincronización.");
+                            console.error("❌ No se pudo resolver conflicto:", syncErr);
+                            break; // Salimos del bucle, registramos como error de nube
                         }
                     } else {
-                        console.warn(`⚠️ Fallo intento ${intentos}: ${e.message}`);
+                        console.warn(`⚠️ Fallo nube intento ${intentos}: ${e.message || e}`);
                         if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500));
                     }
                 }
             }
-            if (!exito) throw new Error("Fallo conexión OneDrive.");
-            
-            console.log("✅ Nube sincronizada.");
-            if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
-            if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
+
+            // ── Resultado de la subida ──
+            if (cloudOk) {
+                console.log("✅ Nube sincronizada.");
+                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
+                if (btn) { btn.innerHTML = '<span class="material-icons">cloud_done</span> OK'; }
+                setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
+                // Retornamos éxito total
+                window.datos = datosFinales;
+                if (typeof renderizar === 'function') renderizar();
+                if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+                return { localOk: true, cloudOk: true };
+            } else {
+                // ✅ NUBE FALLIDA — pero los datos YA están en localStorage.
+                // NO lanzamos excepción. El llamador (guardarManual) ya sabe manejar este caso.
+                console.warn("⚠️ Nube no disponible. Datos guardados SOLO localmente.");
+                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+                if (btn) { btn.innerHTML = '<span class="material-icons">cloud_off</span> LOCAL'; }
+                setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 3000);
+                window.datos = datosFinales;
+                if (typeof renderizar === 'function') renderizar();
+                if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+                // ← NO throw. El movimiento queda en local. El llamador ve cloudOk:false.
+                return { localOk: true, cloudOk: false };
+            }
 
         } else {
-            // MODO LOCAL (DESCARGA DE ARCHIVO)
-            console.log("💾 Generando descarga local...");
-            XLSX.writeFile(wb, "aidanai.xlsx"); 
-            
+            // MODO LOCAL (sin nube configurada)
+            console.log("💾 Solo localStorage, sin nube configurada.");
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
-            console.log("✅ Descarga local OK.");
+            window.datos = datosFinales;
+            if (typeof renderizar === 'function') renderizar();
+            if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+            setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
+            return { localOk: true, cloudOk: false };
         }
-
-        // 4. ACTUALIZAR INTERFAZ
-        window.datos = datosFinales;
-        if (typeof renderizar === 'function') renderizar();
-        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-        
-        setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
 
     } catch (errorCritico) {
-        console.error("🚨 ERROR CRÍTICO AL GUARDAR:", errorCritico);
-        
-        // ✅ FIX: Usamos notificación no bloqueante en lugar de alert() intrusivo.
-        // El alert() era el mensaje "datos no son seguros" que veía el usuario.
-        if (typeof window.mostrarNotificacion === 'function') {
-            window.mostrarNotificacion("🔴 Error al subir a la nube. Descargando copia local de seguridad...", "error");
-        }
-        // Descargamos copia de seguridad si tenemos el workbook construido
-        if (wb) {
-            try { XLSX.writeFile(wb, "aidanai_COPIA_SEGURIDAD.xlsx"); } catch(e2) { /* ignorar */ }
-        }
-        
+        // Solo llegamos aquí por errores realmente inesperados (bug de programación)
+        console.error("🚨 Error inesperado en guardarUniversal:", errorCritico);
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
-        
-        // ✅ FIX CRÍTICO: Relanzamos el error para que el llamador (guardarManual, etc.)
-        // pueda hacer ROLLBACK de los datos en memoria. Sin esto, guardarManual() creía que
-        // todo fue bien, llamaba a cerrarModal() y el movimiento quedaba solo en memoria.
-        // La siguiente recarga de nube borraba el movimiento ya que nunca se subió.
+        // Propagamos SOLO errores no relacionados con la nube
         throw errorCritico;
         
     } finally {
