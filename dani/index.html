@@ -6402,55 +6402,82 @@ window.duplicarMovimiento = function() {
 };
 
 // --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
+// Variable global de seguridad para evitar bucles de ejecución
+window._candadoBorrando = false;
+
 window.borrarMovimiento = async function(id) {
-    // 1. Usar tu Modal Pro en lugar del alert del navegador
-    const confirmado = await window.pedirConfirmacion(
-        "ELIMINAR MOVIMIENTO", 
-        "¿Estás seguro de que quieres borrar este movimiento permanentemente?", 
-        "🗑️"
-    );
-    if (!confirmado) return;
+    // PROTECCIÓN ANTI-BUCLES: Si ya se está borrando, ignoramos llamadas fantasma
+    if (window._candadoBorrando) return;
+    window._candadoBorrando = true;
 
     const btnBorrar = document.getElementById('btn-borrar-modal');
-    if(btnBorrar) {
-        btnBorrar.innerHTML = "<span class='material-icons'>hourglass_empty</span>";
-        btnBorrar.disabled = true;
-    }
 
     try {
-        const lenInicial = window.datos.length;
-        
-        // CORRECCIÓN AQUÍ: Comparamos siempre convirtiendo a String para evitar fallos numéricos
-        window.datos = window.datos.filter(m => 
-            String(m.id) !== String(id) && 
-            String(m.pairId) !== String(id)
-        );
-
-        // Si la longitud es la misma, significa que no se ha borrado nada
-        if (window.datos.length === lenInicial) {
-            throw new Error("No se encontró el movimiento para borrar");
+        // 1. Validar que el ID sea correcto (y no un evento del ratón por error)
+        if (typeof id === 'object') {
+            const inputId = document.getElementById('m-id');
+            if (inputId) id = inputId.value;
+            else throw new Error("ID de movimiento inválido");
         }
 
-        // Recalcular y guardar
+        // 2. Pedir confirmación visual
+        const confirmado = await window.pedirConfirmacion(
+            "ELIMINAR MOVIMIENTO", 
+            "¿Estás seguro de que quieres borrar este movimiento permanentemente?", 
+            "🗑️"
+        );
+        
+        if (!confirmado) return; // Si cancela, salimos
+
+        // 3. Bloquear el botón visualmente
+        if(btnBorrar) {
+            btnBorrar.innerHTML = "<span class='material-icons'>hourglass_empty</span>";
+            btnBorrar.disabled = true;
+        }
+
+        const lenInicial = window.datos.length;
+        const idStr = String(id);
+        
+        // 4. Filtrar y eliminar el movimiento (y su pareja si es un traspaso)
+        window.datos = window.datos.filter(m => {
+            if (!m) return false;
+            return String(m.id) !== idStr && String(m.pairId) !== idStr;
+        });
+
+        // 5. Comprobar si realmente se borró algo
+        if (window.datos.length === lenInicial) {
+            throw new Error("El movimiento ya no existe o no se pudo localizar.");
+        }
+
+        // 6. Actualizar cálculos y guardar en la nube
         if (typeof window.recalcularSaldosGlobal === 'function') window.recalcularSaldosGlobal();
         if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
 
-        window.cerrarModal();
-        if(typeof window.renderizar === 'function') window.renderizar();
-        if(typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
+        // 7. Cerrar ventanas y refrescar UI
+        if (typeof window.cerrarModal === 'function') window.cerrarModal();
+        if (typeof window.renderizar === 'function') window.renderizar();
+        if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
         
-        window.mostrarNotificacion("🗑️ Movimiento eliminado correctamente", "success");
-        if(typeof vibrar === 'function') vibrar('error'); // 'error' hace un patrón de vibración doble ideal para borrados
+        // 8. Feedback final
+        if (typeof window.mostrarNotificacion === 'function') {
+            window.mostrarNotificacion("🗑️ Movimiento eliminado correctamente", "success");
+        }
+        if (typeof vibrar === 'function') vibrar('error'); 
 
     } catch (error) {
-        console.error("Error al borrar:", error);
-        window.mostrarNotificacion("❌ " + error.message, "error");
+        console.error("❌ Error al borrar:", error);
+        if (typeof window.mostrarNotificacion === 'function') {
+            window.mostrarNotificacion("Error: " + error.message, "error");
+        }
         
-        // Restaurar el botón si hubo error
+        // Restaurar el botón si algo falla
         if(btnBorrar) {
             btnBorrar.innerHTML = '<span class="material-icons">delete</span>';
             btnBorrar.disabled = false;
         }
+    } finally {
+        // MUY IMPORTANTE: Abrir el candado de seguridad al terminar (con éxito o error)
+        window._candadoBorrando = false;
     }
 };
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
@@ -10044,38 +10071,34 @@ window.detectarMagia = function(texto) {
 window.pedirConfirmacion = function(titulo, mensaje, icono = "🤔") {
     return new Promise((resolve) => {
         const modal = document.getElementById('modal-confirmacion');
+        if(!modal) {
+            resolve(true); // Fallback seguro anti-bucles si no existe el HTML
+            return;
+        }
+
         const h3 = document.getElementById('modal-titulo-pro');
         const p = document.getElementById('modal-mensaje-pro');
         const iconDiv = document.querySelector('.modal-icon-pro');
         const btnSi = document.getElementById('btn-modal-aceptar-pro');
         const btnNo = document.getElementById('btn-modal-cancelar-pro');
 
-        if(!modal) {
-            // Fallback de seguridad por si no se copió el HTML
-            resolve(confirm(mensaje));
-            return;
-        }
-
         // Configurar textos
-        h3.innerText = titulo;
-        p.innerText = mensaje;
-        iconDiv.innerText = icono;
+        if(h3) h3.innerText = titulo;
+        if(p) p.innerText = mensaje;
+        if(iconDiv) iconDiv.innerText = icono;
 
         // Mostrar modal
         modal.style.display = 'flex';
 
-        // Función de limpieza interna para no acumular eventos
+        // Función de cierre segura
         function cerrar(resultado) {
             modal.style.display = 'none';
-            // Clonamos los botones para eliminar los eventos 'onclick' anteriores
-            const nuevoSi = btnSi.cloneNode(true);
-            const nuevoNo = btnNo.cloneNode(true);
-            btnSi.parentNode.replaceChild(nuevoSi, btnSi);
-            btnNo.parentNode.replaceChild(nuevoNo, btnNo);
+            // Limpiamos los eventos para que no se queden en memoria causando bucles (Fix)
+            btnSi.onclick = null;
+            btnNo.onclick = null;
             resolve(resultado);
         }
 
-        // Asignar eventos a los botones actuales
         btnSi.onclick = () => cerrar(true);
         btnNo.onclick = () => cerrar(false);
     });
