@@ -4276,18 +4276,78 @@ window.generarAnalisisIA = function(movimientos) {
     var filtroUsuarioActual = 'todos'; 
 
     // ==========================================
+    // 1b. COLA DE MOVIMIENTOS PENDIENTES (Offline-first safety net)
+    // ─────────────────────────────────────────────────────────────
+    // Cuando un movimiento se guarda en local pero NO llega a la nube,
+    // se encola aquí. procesarLibroLeido() siempre reinyecta estos
+    // movimientos para que nunca desaparezcan al hacer pull de la nube.
+    // Se eliminan de la cola solo cuando el servidor confirma el guardado (cloudOk=true).
+    // ==========================================
+    window.PendingQueue = {
+        _key: 'aidanai_pending_movs',
+
+        // Leer la cola actual desde localStorage
+        getAll() {
+            try {
+                const raw = localStorage.getItem(this._key);
+                return raw ? JSON.parse(raw) : [];
+            } catch(e) { return []; }
+        },
+
+        // Añadir uno o varios movimientos a la cola
+        add(movs) {
+            if (!Array.isArray(movs)) movs = [movs];
+            const current = this.getAll();
+            movs.forEach(m => {
+                if (!current.find(p => p.id === m.id)) {
+                    current.push(m);
+                }
+            });
+            localStorage.setItem(this._key, JSON.stringify(current));
+            console.log(`📥 PendingQueue: ${current.length} movimientos pendientes`);
+        },
+
+        // Confirmar IDs que ya llegaron a la nube (eliminarlos de la cola)
+        confirm(ids) {
+            if (!Array.isArray(ids)) ids = [ids];
+            const current = this.getAll().filter(m => !ids.includes(m.id));
+            localStorage.setItem(this._key, JSON.stringify(current));
+            if (current.length === 0) localStorage.removeItem(this._key);
+            console.log(`✅ PendingQueue: ${ids.length} confirmados, ${current.length} restantes`);
+        },
+
+        // Limpiar toda la cola (tras sync exitoso completo)
+        clear() {
+            localStorage.removeItem(this._key);
+            console.log("🧹 PendingQueue limpiada");
+        },
+
+        count() { return this.getAll().length; }
+    };
+
+    // ==========================================
     // 2. CONFIGURACIÓN DE SEGURIDAD (Tu ID real)
     // ==========================================
     const MSAL_CONFIG = {
         auth: {
             clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
             authority: "https://login.microsoftonline.com/common",
-            redirectUri: window.location.href.split('?')[0], // Limpia la URL base
-            navigateToLoginRequestUrl: false
+            redirectUri: window.location.href.split('?')[0].split('#')[0],
+            navigateToLoginRequestUrl: false,
+            postLogoutRedirectUri: window.location.href.split('?')[0].split('#')[0]
         },
         cache: {
             cacheLocation: "localStorage",
-            storeAuthStateInCookie: false
+            storeAuthStateInCookie: true   // ← necesario para flujo redirect en Safari/iOS
+        },
+        system: {
+            // ✅ FIX COOP: usamos redirect en lugar de popup.
+            // El popup falla porque el servidor envía COOP:same-origin que bloquea
+            // window.closed y MSAL no puede detectar que el popup se cerró.
+            allowNativeBroker: false,
+            windowHashTimeout: 9000,
+            iframeHashTimeout: 9000,
+            loadFrameTimeout: 9000
         }
     };
 	
@@ -4311,6 +4371,9 @@ class OneDriveManager {
              this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         }
 
+        // ✅ FIX COOP: NUNCA usamos acquireTokenPopup (causa el error COOP).
+        // Solo silencioso + redirect si el silencioso falla.
+
         const accounts = this.msalInstance.getAllAccounts();
         const account = accounts[0];
         
@@ -4324,35 +4387,60 @@ class OneDriveManager {
         };
 
         try {
-            // Intento silencioso
+            // Intento silencioso (usa el refresh token cacheado)
             const response = await this.msalInstance.acquireTokenSilent(request);
             return response.accessToken;
-        } catch (error) {
-            console.warn("⚠️ Token silencioso falló. Probando Popup...", error);
-            try {
-                // Intento interactivo
-                const response = await this.msalInstance.acquireTokenPopup(request);
-                return response.accessToken;
-            } catch (popupError) {
-                console.error("❌ Error token:", popupError);
-                if(typeof mostrarEstado === 'function') mostrarEstado("❌ Error de conexión: Inicia sesión", "error");
-                throw popupError;
+        } catch (silentError) {
+            console.warn("⚠️ Token silencioso falló:", silentError.message);
+            // Si el token está expirado y no podemos renovarlo silenciosamente,
+            // iniciamos redirect para nueva autenticación. 
+            // El usuario perderá el estado de navegación pero los datos locales se conservan.
+            if (silentError.name === 'InteractionRequiredAuthError' || 
+                silentError.name === 'BrowserAuthError') {
+                console.warn("🔄 Requiere interacción del usuario. Iniciando redirect...");
+                // Guardamos en localStorage que había un guardado pendiente
+                localStorage.setItem('aidanai_pending_auth', 'true');
+                await this.msalInstance.acquireTokenRedirect(request);
+                // No se llega aquí — la página se redirige
             }
+            throw silentError;
         }
     }
 
     async login() {
+        // ✅ FIX COOP: primero gestionamos si venimos de un redirect anterior
         try {
-            await this.msalInstance.handleRedirectPromise().catch(()=>{});
-            const resp = await this.msalInstance.loginPopup({ 
-                scopes: ["User.Read", "Files.ReadWrite.All"], 
-                prompt: "select_account" 
-            });
-            return resp.accessToken;
-        } catch (e) {
-            if (e.message && e.message.includes("popup")) alert("Permite las ventanas emergentes.");
-            throw e;
+            const redirectResult = await this.msalInstance.handleRedirectPromise();
+            if (redirectResult && redirectResult.accessToken) {
+                console.log("✅ Login via redirect completado");
+                return redirectResult.accessToken;
+            }
+        } catch(e) {
+            console.warn("handleRedirectPromise error (ignorado):", e.message);
         }
+
+        // Comprobamos si ya hay cuentas (sesión cacheada)
+        const accounts = this.msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+            try {
+                const resp = await this.msalInstance.acquireTokenSilent({
+                    scopes: ["User.Read", "Files.ReadWrite.All"],
+                    account: accounts[0]
+                });
+                return resp.accessToken;
+            } catch(silentErr) {
+                console.warn("Token silencioso falló, iniciando redirect...", silentErr.message);
+            }
+        }
+
+        // ✅ Usamos REDIRECT en lugar de POPUP para evitar el error COOP
+        // El usuario será redirigido a Microsoft y de vuelta a la app tras el login
+        await this.msalInstance.loginRedirect({
+            scopes: ["User.Read", "Files.ReadWrite.All"],
+            prompt: "select_account"
+        });
+        // ← Esta línea nunca se alcanza (la página se redirige)
+        return null;
     }
 
     // --- 2. LOCALIZADOR ---
@@ -4543,11 +4631,24 @@ const oneDrive = new OneDriveManager();
 async function iniciarSistema() {
     const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
     
+    // ✅ FIX REDIRECT: Procesamos el resultado de un redirect de Microsoft si venimos de uno.
+    // Esto ocurre cuando loginRedirect() redirige al usuario de vuelta a la app tras login.
+    try {
+        const redirectResult = await oneDrive.msalInstance.handleRedirectPromise();
+        if (redirectResult) {
+            console.log("✅ Vuelta de redirect Microsoft — token obtenido");
+            if(barra) barra.innerText = "✅ Sesión iniciada. Cargando datos...";
+            // Continuamos al bloque de carga normal (no hacemos return aquí)
+        }
+    } catch(redirectErr) {
+        console.warn("handleRedirectPromise error (no crítico):", redirectErr.message);
+    }
+
     // 1. PRIMER INTENTO: CONEXIÓN SILENCIOSA
     try {
         if(barra) barra.innerText = "☁️ Verificando Nube...";
         
-        // Intentamos conectar sin molestar
+        // Intentamos conectar sin molestar (solo usa token cacheado, sin popup)
         await oneDrive.getToken(); 
         
         // Si pasa, descargamos
@@ -4564,11 +4665,11 @@ async function iniciarSistema() {
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
 
     } catch (error) {
-        console.warn("⚠️ Fallo arranque automático:", error);
+        console.warn("⚠️ Fallo arranque automático:", error.message || error);
         
-        // 2. AQUÍ ESTÁ EL CAMBIO: SI FALLA, PREGUNTAMOS
-        // No cargamos caché automáticamente. Mostramos el modal.
-        document.getElementById('modal-fuente-datos').style.display = 'flex';
+        // Si falla, mostramos el modal de elección de fuente
+        const modalFuente = document.getElementById('modal-fuente-datos');
+        if (modalFuente) modalFuente.style.display = 'flex';
         
         if(barra) barra.innerText = "⚠️ Esperando decisión de usuario...";
     }
@@ -4895,30 +4996,54 @@ function actualizarInfoBackup(hechoHoy) {
 window.iniciarCargaNube = async function() {
     try {
         if(window.mostrarEstado) window.mostrarEstado("Conectando con Microsoft...", "normal");
+        if(window.mostrarNotificacion) window.mostrarNotificacion("🔗 Conectando con Microsoft OneDrive...", "info");
         
-        // 1. Intentamos obtener el token (Login)
+        // ✅ FIX REDIRECT: Primero intentamos token silencioso (si ya hay sesión)
+        const accounts = oneDrive.msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+            // Ya hay sesión — intentamos directo
+            try {
+                await cargarDesdeNube();
+                cambiarModo('cloud');
+                window.iniciarPolling();
+                if(window.mostrarEstado) window.mostrarEstado("✅ Conectado a la Nube", "ok");
+                if(window.mostrarNotificacion) window.mostrarNotificacion("✅ Conectado a OneDrive", "success");
+                setTimeout(() => {
+                    if(window.crearBackupNube) window.crearBackupNube(false);
+                }, 3000);
+                return;
+            } catch(e) {
+                console.warn("Token silencioso falló, iniciando login...", e.message);
+            }
+        }
+
+        // Sin sesión activa: usamos login() que hace redirect
+        // La página se redirigirá a Microsoft y volverá automáticamente
+        if(window.mostrarNotificacion) {
+            window.mostrarNotificacion("↗️ Redirigiendo a Microsoft para autenticación...", "info");
+        }
+        if(window.mostrarEstado) window.mostrarEstado("↗️ Redirigiendo a Microsoft...", "normal");
+        
+        // Pequeña pausa para que el usuario vea el mensaje
+        await new Promise(r => setTimeout(r, 800));
+        
+        // Esto redirige la página — el flujo continúa en iniciarSistema() al volver
         await oneDrive.login();
         
-        // 2. Si pasa el login, procedemos a la descarga
-        if(window.mostrarEstado) window.mostrarEstado("Descargando Excel...", "normal");
-        
-        // Llamamos a cargarDesdeNube
+        // Las líneas siguientes solo se alcanzan si login() devuelve sin redirigir
+        // (ej: ya tenía token silencioso disponible en la función login())
         await cargarDesdeNube();
-        
-        // 3. Todo OK
         cambiarModo('cloud');
+        window.iniciarPolling();
         if(window.mostrarEstado) window.mostrarEstado("✅ Conectado a la Nube", "ok");
-        
-        // --- NUEVO: TRIGGER DE BACKUP AUTOMÁTICO ---
-        // Esperamos 3 segundos para no saturar el arranque y lanzamos el backup silencioso
         setTimeout(() => {
-            if(window.crearBackupNube) window.crearBackupNube(false); // false = modo silencioso
+            if(window.crearBackupNube) window.crearBackupNube(false);
         }, 3000);
-        // -------------------------------------------
         
     } catch (e) {
         console.error("Fallo al iniciar carga nube:", e);
         if(window.mostrarEstado) window.mostrarEstado("❌ Error de conexión", "err");
+        if(window.mostrarNotificacion) window.mostrarNotificacion("❌ Error al conectar con OneDrive: " + (e.message || e), "error");
     }
 };
 
@@ -5154,6 +5279,29 @@ window.procesarLibroLeido = function(wb) {
 
     window.datos.sort((a, b) => b.ts - a.ts);
     
+    // ✅ FIX CRÍTICO: REINYECTAR MOVIMIENTOS PENDIENTES
+    // Cuando el polling descarga la nube, puede traer una versión que no tiene
+    // los últimos movimientos añadidos localmente (aún no subidos).
+    // Re-inyectamos cualquier pendiente que no esté ya en los datos descargados.
+    if (window.PendingQueue) {
+        const pendientes = window.PendingQueue.getAll();
+        if (pendientes.length > 0) {
+            const idsEnCloud = new Set(window.datos.map(m => m.id));
+            const faltantes = pendientes.filter(m => !idsEnCloud.has(m.id));
+            if (faltantes.length > 0) {
+                console.log(`🔄 Reinyectando ${faltantes.length} movimiento(s) pendiente(s) de nube`);
+                window.datos.unshift(...faltantes);
+                window.datos.sort((a, b) => b.ts - a.ts);
+            } else {
+                // Todos los pendientes YA están en la nube → la nube los tiene → confirmamos
+                const todosIds = pendientes.map(m => m.id);
+                window.PendingQueue.confirm(todosIds);
+                console.log("✅ Movimientos pendientes confirmados en nube");
+                if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
+            }
+        }
+    }
+
     // Limpieza de listas
     window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].sort();
     window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
@@ -6063,6 +6211,13 @@ window.guardarManual = async function() {
         }
 
         movimientosParaLocal.forEach(m => window.datos.push(m));
+
+        // ✅ ENCOLAR: guardamos en PendingQueue ANTES de intentar la nube.
+        // Así, aunque la nube falle o el polling descargue datos viejos,
+        // estos movimientos siempre se reinyectarán en procesarLibroLeido.
+        if (window.PendingQueue) {
+            window.PendingQueue.add(movimientosParaLocal);
+        }
 
         // 2. Refrescar UI (Optimistic UI)
         if (typeof renderizar === 'function') renderizar();
@@ -7285,6 +7440,10 @@ async function guardarUniversal(nuevasFilas) {
                 window.datos = datosFinales;
                 if (typeof renderizar === 'function') renderizar();
                 if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+                // ✅ CONFIRMAR COLA: todos los movimientos de window.datos ya están en la nube
+                if (window.PendingQueue) {
+                    window.PendingQueue.clear();
+                }
                 return { localOk: true, cloudOk: true };
             } else {
                 // ✅ NUBE FALLIDA — pero los datos YA están en localStorage.
