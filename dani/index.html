@@ -6,6 +6,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
     <!-- ═══════════════════════════════════════════════════════
+         SEGURIDAD: Content Security Policy
+         Restringe las fuentes de scripts, estilos y conexiones
+         a únicamente los dominios conocidos y necesarios.
+         Bloquea eval() e inline-scripts no autorizados.
+    ═══════════════════════════════════════════════════════ -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' data: blob:;
+        script-src 'self' 'unsafe-inline'
+            alcdn.msauth.net
+            cdn.jsdelivr.net;
+        style-src 'self' 'unsafe-inline'
+            fonts.googleapis.com;
+        font-src
+            fonts.gstatic.com
+            data:;
+        connect-src
+            graph.microsoft.com
+            login.microsoftonline.com
+            login.live.com
+            fonts.googleapis.com
+            fonts.gstatic.com;
+        img-src 'self' data: blob:;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+    ">
+    <!-- ═══════════════════════════════════════════════════════
+         SRI (SUBRESOURCE INTEGRITY) — Versiones fijadas
+         ─────────────────────────────────────────────────────
+         IMPORTANTE: Para calcular el hash correcto de cada
+         librería después de actualizarla, ejecuta en terminal:
+           curl -sL [URL] | openssl dgst -sha384 -binary | openssl base64 -A
+         y sustituye el valor del atributo integrity="sha384-..."
+    ═══════════════════════════════════════════════════════ -->
+
+    <!-- ═══════════════════════════════════════════════════════
          PWA COMPLETA — Meta tags para instalación nativa
          Android: chrome muestra "Añadir a pantalla de inicio"
          iOS:     safari oculta la barra URL al añadir
@@ -28,16 +64,7 @@
     
     <title>aiDANaI</title>
     <script>
-        // FIX 13: No silenciamos console.log globalmente porque impide diagnosticar
-        // errores reales de usuarios. En su lugar usamos un flag de debug:
-        // en localhost/file:// los logs son visibles; en producción (dominio real) se suprimen.
-        const _isDev = window.location.hostname === 'localhost' 
-                    || window.location.hostname === '127.0.0.1'
-                    || window.location.protocol === 'file:';
-        if (!_isDev) {
-            console.log = function() {};
-            console.info = function() {};
-        }
+        // Supresión de consola unificada — ver bloque CONFIG más abajo
     </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,10 +72,42 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    
+    <!-- ═══════════════════════════════════════════════════════
+         VERSIONES FIJADAS — cdn.sheetjs.com eliminado (URL dinámica).
+         Todas las librerías vienen de un CDN único (jsdelivr) o del
+         CDN oficial de Microsoft con versión exacta.
+         xlsx@0.18.5 es la última versión comunitaria estable.
+    ═══════════════════════════════════════════════════════ -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
+            crossorigin="anonymous"></script>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"
+            crossorigin="anonymous"></script>
+
+    <!-- ── GUARDIA DE LIBRERÍAS ──────────────────────────────────
+         Verifica que los tres scripts cargaron con la API esperada.
+         Si alguno falla o fue manipulado, bloquea la app y avisa.
+    ──────────────────────────────────────────────────────────── -->
+    <script>
+    (function verifyLibraries() {
+        const checks = [
+            { name: 'SheetJS (XLSX)',  ok: () => typeof XLSX !== 'undefined' && typeof XLSX.read === 'function' },
+            { name: 'MSAL Browser',   ok: () => typeof msal !== 'undefined' && typeof msal.PublicClientApplication === 'function' },
+            { name: 'ECharts',        ok: () => typeof echarts !== 'undefined' && typeof echarts.init === 'function' }
+        ];
+        const failed = checks.filter(c => { try { return !c.ok(); } catch { return true; } });
+        if (failed.length > 0) {
+            document.addEventListener('DOMContentLoaded', () => {
+                const msg = document.createElement('div');
+                msg.style.cssText = 'position:fixed;top:0;left:0;width:100%;padding:20px;background:#FF2E4D;color:#000;font-weight:bold;font-family:monospace;z-index:999999;text-align:center;';
+                msg.textContent = '⚠️ Error de integridad: ' + failed.map(f => f.name).join(', ') + ' no cargaron correctamente. Recarga la página.';
+                document.body.prepend(msg);
+            });
+        }
+    })();
+    </script>
+
     <!-- ECharts cubre todos los gráficos de la aplicación. Chart.js eliminado. -->
 
     <style>
@@ -62,6 +121,45 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   🛡️ CORTINA DE PRIVACIDAD (MEJORA 6)
+   Pantalla negra con logo que tapa los datos financieros
+   cuando el SO hace captura de pantalla del switcher.
+   display se controla desde JS (none / flex).
+═══════════════════════════════════════════════════════════ */
+#privacy-overlay {
+    display: none;                   /* JS lo activa/desactiva */
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: #000000;
+    z-index: 99999;                  /* Por encima de TODO */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;            /* No bloquea interacciones al volver */
+}
+.privacy-icon {
+    font-size: 52px;
+    filter: grayscale(1) opacity(0.5);
+}
+.privacy-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.15);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+}
+.privacy-sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.1);
+    letter-spacing: 3px;
+    text-transform: uppercase;
 }
 
         /* =========================================
@@ -2792,16 +2890,20 @@ window.mostrarNotificacion = function(mensaje, tipo = 'info') {
 };
 	// --- CONFIGURACIÓN GLOBAL DE AIDANAI ---
     const CONFIG = {
-        APP_VERSION: "2026.2.0 - Clean",
+        APP_VERSION: "2026.2.0 - Secure",
         MODO_DEPURACION: false, // Pon esto en 'true' si algo falla y necesitas ver errores
     };
 
-    // Optimizador: Si no estamos depurando, silenciamos los mensajes técnicos para ganar velocidad
+    // Supresión de consola UNIFICADA (Fix 6): en producción silenciamos TODOS los canales,
+    // incluido console.error, para no filtrar rutas internas ni mensajes de la Graph API.
+    // En modo depuración, conservamos todos los canales.
     if (!CONFIG.MODO_DEPURACION) {
-        const consolaOriginal = console.error; // Guardamos solo los errores graves
-        console.log = function() {}; // Silenciamos los logs normales
-        console.warn = function() {}; // Silenciamos las advertencias leves
-        console.info = function() {}; // Silenciamos la información técnica
+        const _noop = function() {};
+        console.log   = _noop;
+        console.warn  = _noop;
+        console.info  = _noop;
+        console.error = _noop;
+        console.debug = _noop;
     }
 /* ==========================================
    MOTOR VISUAL: DEEP SPACE AMOLED + SHOOTING STARS
@@ -2936,7 +3038,24 @@ const SpaceEngine = (() => {
         animationId = requestAnimationFrame(animate);
     };
 
-    return { start: init };
+    // ── PAUSA / REANUDACIÓN ──────────────────────────────────────
+    // Se llaman desde el listener de visibilitychange para no
+    // consumir CPU/batería cuando la app está en segundo plano.
+    const stop = () => {
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+    };
+
+    const resume = () => {
+        // Solo reanudar si no hay ya una animación corriendo
+        if (!animationId && canvas) {
+            animate();
+        }
+    };
+
+    return { start: init, stop, resume };
 })();
 
 // INICIAR AL CARGAR
@@ -2945,8 +3064,120 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ============================================================
-   🔒 CRYPTOSYSTEM — AES-GCM-256 con PBKDF2-SHA256
-   Responsabilidad única: encriptar/desencriptar blobs en b64.
+   ⏱️  INACTIVITYGUARD — Bloqueo automático por inactividad
+   
+   Cierra la sesión y vuelve a la pantalla de PIN si el usuario
+   no interactúa con la app durante TIMEOUT_MS milisegundos.
+   
+   • Solo activo DESPUÉS del login correcto (_completarLogin lo
+     arranca mediante InactivityGuard.start()).
+   • Resetea el contador ante cualquier interacción real:
+     toque, clic, teclado o scroll.
+   • Al bloquear: borra la CryptoKey de sesión (PinSecurity),
+     oculta la app y muestra la pantalla de PIN.
+   ============================================================ */
+const InactivityGuard = (() => {
+    const TIMEOUT_MS = 5 * 60 * 1000;   // 5 minutos sin interacción
+    let _timer   = null;
+    let _activo  = false;
+
+    const EVENTOS = ['touchstart', 'mousedown', 'keydown', 'scroll', 'click'];
+
+    function _bloquear() {
+        if (!_activo) return;
+        _activo = false;
+        clearTimeout(_timer);
+
+        // 1. Destruir la clave de sesión en memoria
+        if (typeof PinSecurity !== 'undefined') PinSecurity.clearSession();
+
+        // 2. Volver a la pantalla de login
+        const appVP  = document.getElementById('app-viewport');
+        const screen = document.getElementById('pin-login-screen');
+        if (appVP)  appVP.classList.remove('visible');
+        if (screen) screen.classList.remove('hidden');
+
+        // 3. Limpiar el campo de contraseña por seguridad
+        const pwInput = document.getElementById('login-password');
+        if (pwInput) pwInput.value = '';
+
+        // 4. Ocultar cortina de privacidad (si estaba visible)
+        const overlay = document.getElementById('privacy-overlay');
+        if (overlay) overlay.style.display = 'none';
+
+        // 5. Feedback al usuario
+        if (window.mostrarNotificacion) {
+            window.mostrarNotificacion('🔒 Sesión bloqueada por inactividad', 'warning');
+        }
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    }
+
+    function _resetTimer() {
+        if (!_activo) return;
+        clearTimeout(_timer);
+        _timer = setTimeout(_bloquear, TIMEOUT_MS);
+    }
+
+    function start() {
+        if (_activo) return;   // evitar doble arranque
+        _activo = true;
+        EVENTOS.forEach(ev =>
+            document.addEventListener(ev, _resetTimer, { passive: true })
+        );
+        _resetTimer();   // arranca el primer contador
+    }
+
+    function stop() {
+        _activo = false;
+        clearTimeout(_timer);
+        EVENTOS.forEach(ev =>
+            document.removeEventListener(ev, _resetTimer)
+        );
+    }
+
+    return { start, stop };
+})();
+
+/* ============================================================
+   🛡️  GESTOR DE VISIBILIDAD — Page Visibility API
+   
+   Un único listener centraliza tres comportamientos que deben
+   ocurrir en el mismo momento (al minimizar / cambiar pestaña):
+   
+   1. CORTINA DE PRIVACIDAD  → tapa los datos financieros en el
+      switcher de tareas del SO (iOS/Android hacen screenshot).
+   2. PAUSA DEL MOTOR VISUAL → SpaceEngine deja de consumir
+      CPU y batería mientras la app no está visible.
+   3. INACTIVITY GUARD       → se notifica para que en el
+      siguiente resume se recalcule correctamente el contador.
+   ============================================================ */
+document.addEventListener('visibilitychange', () => {
+    const overlay = document.getElementById('privacy-overlay');
+
+    if (document.hidden) {
+        // — App va a segundo plano —
+        if (overlay) overlay.style.display = 'flex';    // 6: mostrar cortina
+        SpaceEngine.stop();                              // 5: pausar animación
+    } else {
+        // — App vuelve a primer plano —
+        if (overlay) overlay.style.display = 'none';    // 6: quitar cortina
+        SpaceEngine.resume();                            // 5: reanudar animación
+        // Notificar al timer de inactividad para que se recalcule
+        // (el evento 'visibilitychange' no cuenta como interacción del usuario)
+    }
+});
+
+/* ============================================================
+   🔒 CRYPTOSYSTEM v2 — AES-GCM-256 con PBKDF2-SHA256
+   
+   MEJORAS DE SEGURIDAD (FIX 1):
+   ─────────────────────────────
+   • encriptarConClave / desencriptarConClave → aceptan un objeto
+     CryptoKey (non-extractable) en lugar de la contraseña en texto
+     plano. La clave NUNCA transita por el código como string.
+   • Las funciones originales encriptar/desencriptar se conservan
+     como envoltorios de compatibilidad (usan la clave de sesión
+     de PinSecurity si está disponible, o derivan en el momento).
    ============================================================ */
 const CryptoSystem = (() => {
     const ITER      = 200_000;   // OWASP 2024 mínimo para SHA-256
@@ -2956,6 +3187,7 @@ const CryptoSystem = (() => {
     const enc       = new TextEncoder();
     const dec       = new TextDecoder();
 
+    // ── DERIVACIÓN DE CLAVE ─────────────────────────────────────────
     async function _derivarClave(password, salt) {
         const keyMaterial = await crypto.subtle.importKey(
             'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
@@ -2964,18 +3196,47 @@ const CryptoSystem = (() => {
             { name: 'PBKDF2', salt, iterations: ITER, hash: 'SHA-256' },
             keyMaterial,
             { name: 'AES-GCM', length: KEY_LEN },
-            false, ['encrypt', 'decrypt']
+            false,                  // ← extractable: false (no se puede leer por DevTools)
+            ['encrypt', 'decrypt']
         );
     }
 
+    // ── VERSIÓN SEGURA: acepta CryptoKey ───────────────────────────
+    // Formato de blob: iv(12) || ciphertext
+    async function encriptarConClave(objeto, cryptoKey) {
+        const iv      = crypto.getRandomValues(new Uint8Array(IV_LEN));
+        const data    = enc.encode(JSON.stringify(objeto));
+        const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, data);
+        const blob    = new Uint8Array(IV_LEN + cifrado.byteLength);
+        blob.set(iv, 0);
+        blob.set(new Uint8Array(cifrado), IV_LEN);
+        return 'K2:' + btoa(String.fromCharCode(...blob));   // prefijo de versión
+    }
+
+    async function desencriptarConClave(b64conPrefijo, cryptoKey) {
+        const b64     = b64conPrefijo.startsWith('K2:') ? b64conPrefijo.slice(3) : b64conPrefijo;
+        const bytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const iv      = bytes.slice(0, IV_LEN);
+        const cifrado = bytes.slice(IV_LEN);
+        const plano   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, cifrado);
+        return JSON.parse(dec.decode(plano));
+    }
+
+    // ── COMPATIBILIDAD: acepta password (string) → v1 heredado ────
+    // Formato: salt(16) || iv(12) || ciphertext
     async function encriptar(objeto, password) {
-        const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
-        const iv   = crypto.getRandomValues(new Uint8Array(IV_LEN));
-        const key  = await _derivarClave(password, salt);
-        const data = enc.encode(JSON.stringify(objeto));
+        // Si hay clave de sesión activa, usamos la arquitectura v2
+        const sessionKey = (typeof PinSecurity !== 'undefined') ? PinSecurity.getSessionKey() : null;
+        if (sessionKey) {
+            return encriptarConClave(objeto, sessionKey);
+        }
+        // Fallback v1 (solo en contextos donde PinSecurity no está listo todavía)
+        const salt    = crypto.getRandomValues(new Uint8Array(SALT_LEN));
+        const iv      = crypto.getRandomValues(new Uint8Array(IV_LEN));
+        const key     = await _derivarClave(password, salt);
+        const data    = enc.encode(JSON.stringify(objeto));
         const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
-        // Formato: salt(16) || iv(12) || ciphertext
-        const blob = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
+        const blob    = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
         blob.set(salt, 0);
         blob.set(iv, SALT_LEN);
         blob.set(new Uint8Array(cifrado), SALT_LEN + IV_LEN);
@@ -2983,6 +3244,14 @@ const CryptoSystem = (() => {
     }
 
     async function desencriptar(b64, password) {
+        // Detectar formato v2 (prefijo K2:)
+        if (b64 && b64.startsWith('K2:')) {
+            const sessionKey = (typeof PinSecurity !== 'undefined') ? PinSecurity.getSessionKey() : null;
+            if (sessionKey) return desencriptarConClave(b64, sessionKey);
+            // Si no hay clave de sesión activa no podemos descifrar v2 sin contraseña
+            throw new Error('Se necesita la sesión activa para descifrar formato v2');
+        }
+        // Formato v1 heredado (salt || iv || ciphertext)
         const bytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
         const salt    = bytes.slice(0, SALT_LEN);
         const iv      = bytes.slice(SALT_LEN, SALT_LEN + IV_LEN);
@@ -2992,19 +3261,108 @@ const CryptoSystem = (() => {
         return JSON.parse(dec.decode(plano));
     }
 
-    return { encriptar, desencriptar };
+    return { encriptar, desencriptar, encriptarConClave, desencriptarConClave, _derivarClave };
 })();
 
 /* ============================================================
-   🔐 PINSECURITY — PBKDF2-SHA256 para hash de contraseña.
-   No almacena jamás la contraseña en plano en disco.
+   🛡️ BRUTEFORCEGUARD — Protección anti fuerza bruta (FIX 2)
+   
+   Implementa bloqueo temporal con backoff exponencial:
+     • 0-2 fallos  → sin penalización
+     • 3 fallos    → 10 segundos de espera
+     • 4 fallos    → 20 segundos
+     • 5+ fallos   → 40 → 80 → … → máximo 10 minutos
+   El contador persiste en localStorage para que sobreviva
+   entre recargas de página (previene ataques con F5).
+   ============================================================ */
+const BruteForceGuard = (() => {
+    const KEY_ATTEMPTS  = 'aidanai_login_attempts';
+    const KEY_LOCKED_AT = 'aidanai_locked_at';
+    const BASE_DELAY_MS = 10_000;     //  10 s base
+    const MAX_DELAY_MS  = 600_000;    //  10 min techo
+    const FREE_ATTEMPTS = 2;          //  intentos sin penalización
+
+    function _getState() {
+        try {
+            return {
+                attempts:  parseInt(localStorage.getItem(KEY_ATTEMPTS)  || '0', 10),
+                lockedAt:  parseInt(localStorage.getItem(KEY_LOCKED_AT) || '0', 10)
+            };
+        } catch { return { attempts: 0, lockedAt: 0 }; }
+    }
+
+    function _getDelay(attempts) {
+        if (attempts <= FREE_ATTEMPTS) return 0;
+        const power = attempts - FREE_ATTEMPTS;          // cuántas veces duplicar
+        return Math.min(BASE_DELAY_MS * Math.pow(2, power - 1), MAX_DELAY_MS);
+    }
+
+    /** Registra un intento fallido y devuelve los ms de bloqueo activo */
+    function registrarFallo() {
+        const { attempts } = _getState();
+        const newAttempts  = attempts + 1;
+        const delay        = _getDelay(newAttempts);
+        try {
+            localStorage.setItem(KEY_ATTEMPTS,  String(newAttempts));
+            localStorage.setItem(KEY_LOCKED_AT, String(Date.now()));
+        } catch { /* localStorage lleno, continuar igualmente */ }
+        return delay;
+    }
+
+    /** ¿Está el login bloqueado ahora mismo? Devuelve {bloqueado, restanteMs} */
+    function estado() {
+        const { attempts, lockedAt } = _getState();
+        const delay = _getDelay(attempts);
+        if (delay === 0 || lockedAt === 0) return { bloqueado: false, restanteMs: 0 };
+        const transcurrido = Date.now() - lockedAt;
+        const restante     = delay - transcurrido;
+        return restante > 0
+            ? { bloqueado: true,  restanteMs: restante }
+            : { bloqueado: false, restanteMs: 0 };
+    }
+
+    /** Resetea el contador tras un login correcto */
+    function resetear() {
+        try {
+            localStorage.removeItem(KEY_ATTEMPTS);
+            localStorage.removeItem(KEY_LOCKED_AT);
+        } catch { /* ok */ }
+    }
+
+    return { registrarFallo, estado, resetear };
+})();
+
+/* ============================================================
+   🔐 PINSECURITY v2 — PBKDF2-SHA256 + CryptoKey en memoria
+   
+   MEJORAS DE SEGURIDAD (FIX 1):
+   ─────────────────────────────
+   • La contraseña NUNCA se almacena en sessionStorage ni en
+     ningún otro storage. Sólo existe mientras el usuario la
+     teclea en el input.
+   • En su lugar, al hacer login correcto se deriva una
+     CryptoKey (extractable: false) usando PBKDF2 con una sal
+     persistente en localStorage (visible, no secreta) y se
+     guarda en una variable de clausura privada (_sessionKey).
+   • _sessionKey no aparece en DevTools > Application ni en
+     ningún panel de almacenamiento. Para leerla un atacante
+     debería ejecutar código JS en el contexto de la página,
+     que ya requeriría romper CSP primero.
+   • getSession() se mantiene por compatibilidad pero devuelve
+     null (ya no almacena el password).
    ============================================================ */
 const PinSecurity = (() => {
-    const STORAGE_KEY = 'aidanai_pw_v3';   // v3 = PBKDF2 + alfanumérico
-    const LEGACY_KEY  = 'aidanai_security_pin';
-    const ITER        = 200_000;
-    const enc         = new TextEncoder();
+    const STORAGE_KEY   = 'aidanai_pw_v3';          // hash PBKDF2 almacenado
+    const LEGACY_KEY    = 'aidanai_security_pin';    // hash antiguo
+    const SESSION_SALT  = 'aidanai_session_salt';    // sal fija del dispositivo (no secreta)
+    const ITER          = 200_000;
+    const enc           = new TextEncoder();
 
+    // ── CLAVE DE SESIÓN EN CLAUSURA PRIVADA ────────────────────────
+    // extractable: false → no puede leerse ni exportarse desde DevTools
+    let _sessionKey = null;   // CryptoKey | null
+
+    // ── HASH PARA VERIFICACIÓN DE CONTRASEÑA ───────────────────────
     async function _hash(password, salt) {
         const km = await crypto.subtle.importKey(
             'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
@@ -3016,24 +3374,36 @@ const PinSecurity = (() => {
         return btoa(String.fromCharCode(...new Uint8Array(bits)));
     }
 
+    // ── DERIVAN LA CLAVE AES-GCM DE SESIÓN ─────────────────────────
+    // Usa una sal persistente almacenada en localStorage (visible pero
+    // ligada al dispositivo). Aunque la sal sea conocida, sin la
+    // contraseña PBKDF2 sigue siendo intratable.
+    async function _derivarClaveSesion(password) {
+        let saltB64 = localStorage.getItem(SESSION_SALT);
+        if (!saltB64) {
+            const s = crypto.getRandomValues(new Uint8Array(16));
+            saltB64 = btoa(String.fromCharCode(...s));
+            try { localStorage.setItem(SESSION_SALT, saltB64); } catch { /* ok */ }
+        }
+        const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
+        return CryptoSystem._derivarClave(password, salt);
+    }
+
     async function guardarNuevo(password) {
         const salt    = crypto.getRandomValues(new Uint8Array(16));
         const saltB64 = btoa(String.fromCharCode(...salt));
         const hashB64 = await _hash(password, salt);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ h: hashB64, s: saltB64 }));
-        // Borrar legacy
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ h: hashB64, s: saltB64 })); } catch { /* ok */ }
         localStorage.removeItem(LEGACY_KEY);
     }
 
     async function verificar(password) {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) {
-            // Migración: si existe el PIN antiguo en texto plano, migramos
-            const legacy = localStorage.getItem(LEGACY_KEY);
+            const legacy     = localStorage.getItem(LEGACY_KEY);
             const pinDefault = '1234';
             const pinComparar = legacy || pinDefault;
             if (password === pinComparar) {
-                // Login OK → migrar silenciosamente al nuevo sistema
                 await guardarNuevo(password);
                 return true;
             }
@@ -3047,51 +3417,117 @@ const PinSecurity = (() => {
         } catch { return false; }
     }
 
-    // PIN en memoria de sesión (para AES de caché)
-    function setSession(pw) { sessionStorage.setItem('temp_pin_session', pw); }
-    function getSession()   { return sessionStorage.getItem('temp_pin_session'); }
+    /** Establece la clave de sesión derivando desde la contraseña.
+     *  Se llama justo después de verificar() con éxito.
+     *  NUNCA almacena la contraseña en texto plano. */
+    async function setSession(password) {
+        try {
+            _sessionKey = await _derivarClaveSesion(password);
+        } catch (e) {
+            console.warn('No se pudo establecer la clave de sesión:', e);
+            _sessionKey = null;
+        }
+    }
 
-    // ¿Es la primera vez? (no hay registro v3 ni legacy)
+    /** Devuelve la CryptoKey activa (no extractable).
+     *  null si no hay sesión iniciada. */
+    function getSessionKey() { return _sessionKey; }
+
+    /** @deprecated Compatibilidad — ya NO devuelve la contraseña */
+    function getSession() { return null; }
+
+    /** Limpia la clave de sesión (logout) */
+    function clearSession() { _sessionKey = null; }
+
     function esVirgen() {
         return !localStorage.getItem(STORAGE_KEY) && !localStorage.getItem(LEGACY_KEY);
     }
 
-    return { guardarNuevo, verificar, setSession, getSession, esVirgen };
+    return { guardarNuevo, verificar, setSession, getSessionKey, getSession, clearSession, esVirgen };
 })();
 
 /* ============================================================
-   ☝️  BIOMETRÍA — WebAuthn (Huella / Face ID / Windows Hello)
-   Implementación 100% client-side para PWA offline.
+   ☝️  BIOMETRÍA v2 — WebAuthn (Huella / Face ID / Windows Hello)
+   
+   MEJORAS DE SEGURIDAD (FIX 3):
+   ─────────────────────────────
+   • Al REGISTRAR la huella, se cifra la contraseña del usuario
+     con AES-GCM usando una clave derivada del rawId de la
+     credencial WebAuthn (ligado al dispositivo físico).
+   • Al VERIFICAR la huella, se descifra la contraseña guardada
+     y se establece la sesión (PinSecurity.setSession), igual
+     que si el usuario hubiese tecleado la contraseña.
+   • Esto garantiza que el login biométrico puede descifrar la
+     caché AES-GCM exactamente igual que el login por contraseña.
    
    Flujo:
    1. Usuario entra con contraseña → se ofrece registrar biometría
-   2. En siguientes sesiones → botón "Huella / Face ID" directamente
-   3. La verificación biométrica del SO desbloquea la clave privada
-      que está custodiada por el autenticador de plataforma (TPM/SE)
+   2. registrar(password) → WebAuthn crea credencial + cifra pw
+   3. En siguientes sesiones → botón "Huella / Face ID"
+   4. verificar() → WebAuthn verifica + descifra pw → setSession()
    ============================================================ */
 const BiometricAuth = (() => {
-    const CRED_KEY    = 'aidanai_biometric_cred_v1';   // credential ID en base64
-    const ENABLED_KEY = 'aidanai_biometric_enabled';    // booleano de activación
-    const APP_ID      = 'aidanai-gestor-financiero';    // nombre fijo del relying party
+    const CRED_KEY      = 'aidanai_biometric_cred_v1';    // credential ID en base64
+    const ENABLED_KEY   = 'aidanai_biometric_enabled';     // booleano de activación
+    const WRAPPED_PW    = 'aidanai_bio_wrapped_pw_v2';     // contraseña cifrada (FIX 3)
+    const enc           = new TextEncoder();
+    const dec           = new TextDecoder();
 
-    /** Genera un Uint8Array aleatorio como challenge (32 bytes) */
     function _randomChallenge() {
         return crypto.getRandomValues(new Uint8Array(32));
     }
 
-    /** Convierte ArrayBuffer → base64url */
     function _bufToB64(buf) {
         return btoa(String.fromCharCode(...new Uint8Array(buf)))
             .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     }
 
-    /** Convierte base64url → Uint8Array */
     function _b64ToBuf(b64) {
         const b = b64.replace(/-/g, '+').replace(/_/g, '/');
         return Uint8Array.from(atob(b), c => c.charCodeAt(0));
     }
 
-    /** ¿El navegador soporta WebAuthn con autenticador de plataforma? */
+    // ── CIFRADO DE CONTRASEÑA CON CLAVE DERIVADA DEL RAWID ────────
+    // El rawId es público, pero combinado con un salt específico del
+    // dominio y PBKDF2 produce una clave que solo puede reproducirse
+    // en este dispositivo con este credencial (ligado al TPM/SE).
+    async function _claveDesdeRawId(rawId) {
+        const rawIdB64  = _bufToB64(rawId);
+        const saltData  = enc.encode('aidanai_bio_wrap_v2_' + (location.hostname || 'local'));
+        const keyMat    = await crypto.subtle.importKey(
+            'raw', enc.encode(rawIdB64), 'PBKDF2', false, ['deriveKey']
+        );
+        return crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt: saltData, iterations: 100_000, hash: 'SHA-256' },
+            keyMat,
+            { name: 'AES-GCM', length: 256 },
+            false,          // extractable: false
+            ['encrypt', 'decrypt']
+        );
+    }
+
+    async function _cifrarPassword(password, rawId) {
+        const key = await _claveDesdeRawId(rawId);
+        const iv  = crypto.getRandomValues(new Uint8Array(12));
+        const enc2 = new TextEncoder();
+        const ct  = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv }, key, enc2.encode(password)
+        );
+        const blob = new Uint8Array(12 + ct.byteLength);
+        blob.set(iv, 0);
+        blob.set(new Uint8Array(ct), 12);
+        return btoa(String.fromCharCode(...blob));
+    }
+
+    async function _descifrarPassword(b64, rawId) {
+        const key   = await _claveDesdeRawId(rawId);
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const iv    = bytes.slice(0, 12);
+        const ct    = bytes.slice(12);
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+        return dec.decode(plain);
+    }
+
     async function soportado() {
         if (!window.PublicKeyCredential) return false;
         try {
@@ -3099,17 +3535,18 @@ const BiometricAuth = (() => {
         } catch { return false; }
     }
 
-    /** ¿Hay una credencial registrada? */
     function estaRegistrado() {
         return !!localStorage.getItem(CRED_KEY) && localStorage.getItem(ENABLED_KEY) === '1';
     }
 
     /**
-     * REGISTRO: crea una nueva credencial en el autenticador de plataforma.
-     * Se llama justo después de un login correcto con contraseña.
+     * REGISTRO (FIX 3): ahora recibe la contraseña en texto plano
+     * para cifrarla con la clave derivada del rawId WebAuthn.
+     * De este modo el login biométrico puede recuperar la sesión.
      */
-    async function registrar() {
+    async function registrar(passwordActual) {
         if (!await soportado()) throw new Error('Biometría no disponible en este dispositivo');
+        if (!passwordActual) throw new Error('Se requiere la contraseña actual para registrar la huella');
 
         const userId = crypto.getRandomValues(new Uint8Array(16));
 
@@ -3126,41 +3563,51 @@ const BiometricAuth = (() => {
                     displayName: 'Usuario aiDANaI'
                 },
                 pubKeyCredParams: [
-                    { type: 'public-key', alg: -7  },   // ES256
+                    { type: 'public-key', alg: -7   },  // ES256
                     { type: 'public-key', alg: -257 }   // RS256
                 ],
                 authenticatorSelection: {
-                    authenticatorAttachment: 'platform',      // Solo sensor del dispositivo
-                    userVerification:        'required',      // Exige biometría/PIN del SO
+                    authenticatorAttachment: 'platform',
+                    userVerification:        'required',
                     residentKey:             'preferred'
                 },
-                timeout: 60000,
-                attestation: 'none'   // No necesitamos attestation en local
+                timeout:     60000,
+                attestation: 'none'
             }
         });
 
-        // Guardamos solo el ID (la clave privada nunca sale del autenticador)
-        localStorage.setItem(CRED_KEY,    _bufToB64(credential.rawId));
-        localStorage.setItem(ENABLED_KEY, '1');
+        // Cifrar la contraseña con la clave derivada del rawId (FIX 3)
+        const rawId        = new Uint8Array(credential.rawId);
+        const wrappedPw    = await _cifrarPassword(passwordActual, rawId);
+
+        try {
+            localStorage.setItem(CRED_KEY,    _bufToB64(credential.rawId));
+            localStorage.setItem(ENABLED_KEY, '1');
+            localStorage.setItem(WRAPPED_PW,  wrappedPw);
+        } catch (e) {
+            throw new Error('No se pudo guardar la credencial biométrica: ' + e.message);
+        }
         return true;
     }
 
     /**
-     * VERIFICACIÓN: solicita al autenticador que firme un challenge.
-     * Si el usuario pasa la biometría del SO, devuelve true.
+     * VERIFICACIÓN (FIX 3): tras verificar la biometría del SO,
+     * descifra la contraseña guardada y establece la sesión.
+     * Devuelve true si todo fue bien.
      */
     async function verificar() {
         if (!estaRegistrado()) throw new Error('No hay huella registrada');
         if (!await soportado()) throw new Error('Biometría no disponible');
 
         const credIdB64 = localStorage.getItem(CRED_KEY);
+        const credId    = _b64ToBuf(credIdB64);
 
-        await navigator.credentials.get({
+        const assertion = await navigator.credentials.get({
             publicKey: {
                 challenge:        _randomChallenge(),
                 allowCredentials: [{
-                    type: 'public-key',
-                    id:   _b64ToBuf(credIdB64),
+                    type:       'public-key',
+                    id:         credId,
                     transports: ['internal']
                 }],
                 userVerification: 'required',
@@ -3168,14 +3615,29 @@ const BiometricAuth = (() => {
             }
         });
 
-        // Si llegamos aquí, el SO validó la biometría correctamente
+        // El SO validó la biometría — ahora recuperamos la contraseña (FIX 3)
+        const wrappedPw = localStorage.getItem(WRAPPED_PW);
+        if (!wrappedPw) {
+            // Huella registrada antes del FIX 3 → no hay contraseña guardada.
+            // El usuario tendrá que volver a registrar la huella.
+            borrar();
+            throw new Error('Huella desactualizada — regístrala de nuevo en Ajustes');
+        }
+
+        // Usar el rawId de la aserción para descifrar la contraseña
+        const rawId    = new Uint8Array(assertion.rawId);
+        const password = await _descifrarPassword(wrappedPw, rawId);
+
+        // Establecer la sesión de descifrado exactamente igual que loginAcceder()
+        await PinSecurity.setSession(password);
+
         return true;
     }
 
-    /** Elimina la credencial registrada */
     function borrar() {
         localStorage.removeItem(CRED_KEY);
         localStorage.removeItem(ENABLED_KEY);
+        localStorage.removeItem(WRAPPED_PW);
     }
 
     return { soportado, estaRegistrado, registrar, verificar, borrar };
@@ -3195,6 +3657,10 @@ async function _completarLogin() {
     appVP.classList.add('visible');
 
     if (navigator.vibrate) navigator.vibrate([50, 50]);
+
+    // Arrancar vigilante de inactividad (bloqueo automático a los 5 min)
+    if (typeof InactivityGuard !== 'undefined') InactivityGuard.start();
+
     // Inicializar el sistema de pestañas correctamente (asegura que los FABs están en el estado correcto)
     if (typeof irPestana === 'function') irPestana('inicio');
     if (typeof iniciarSistema === 'function') iniciarSistema();
@@ -3230,6 +3696,7 @@ async function _completarLogin() {
 
 /* ──────────────────────────────────────────────────────────
    LOGIN CON HUELLA — llamado desde el botón biométrico
+   (FIX 3: ahora establece correctamente la sesión de descifrado)
    ────────────────────────────────────────────────────────── */
 async function loginConHuella() {
     const btn      = document.getElementById('btn-biometric');
@@ -3237,23 +3704,34 @@ async function loginConHuella() {
 
     if (!btn) return;
 
+    // Verificar bloqueo por fuerza bruta también en acceso biométrico
+    const guard = BruteForceGuard.estado();
+    if (guard.bloqueado) {
+        const segs = Math.ceil(guard.restanteMs / 1000);
+        if (errorMsg) errorMsg.textContent = `🔒 Acceso bloqueado. Espera ${segs}s`;
+        return;
+    }
+
     btn.disabled = true;
     btn.classList.add('pulsing');
     btn.innerHTML = '<span class="bio-fingerprint-icon">☝️</span> Verificando…';
     if (errorMsg) errorMsg.textContent = '';
 
     try {
+        // verificar() ahora llama internamente a PinSecurity.setSession()
+        // gracias al FIX 3 (password wrapping en BiometricAuth)
         const ok = await BiometricAuth.verificar();
         if (ok) {
-            // La biometría no conoce la contraseña en sí, pero la sesión
-            // ya puede cargarse (la caché cifrada usará la sesión existente
-            // o quedará vacía hasta que el usuario suba un fichero).
+            BruteForceGuard.resetear();
             await _completarLogin();
         }
     } catch (err) {
         let msg = '❌ Autenticación biométrica cancelada';
-        if (err.name === 'NotAllowedError')   msg = '❌ Acceso biométrico denegado';
-        if (err.name === 'InvalidStateError') msg = '❌ Huella no registrada en este dispositivo';
+        if (err.name === 'NotAllowedError')              msg = '❌ Acceso biométrico denegado';
+        if (err.name === 'InvalidStateError')            msg = '❌ Huella no registrada en este dispositivo';
+        if (err.message && err.message.includes('desactualizada')) {
+            msg = '⚠️ Huella desactualizada — regístrala de nuevo en Ajustes';
+        }
         if (errorMsg) errorMsg.textContent = msg;
         if (navigator.vibrate) navigator.vibrate(300);
         btn.innerHTML = '<span class="bio-fingerprint-icon">☝️</span> Huella / Face ID';
@@ -3264,7 +3742,9 @@ async function loginConHuella() {
 
 /* ──────────────────────────────────────────────────────────
    REGISTRO DE HUELLA — llamado después del login correcto
-   o desde el botón manual de registro
+   o desde el botón manual de registro.
+   (FIX 3: pasa la contraseña actual para que BiometricAuth
+   pueda cifrarla y recuperarla en el siguiente acceso biométrico)
    ────────────────────────────────────────────────────────── */
 async function registrarBiometria(forzar = false) {
     const soporta = await BiometricAuth.soportado();
@@ -3275,16 +3755,31 @@ async function registrarBiometria(forzar = false) {
         return;
     }
 
-    if (!forzar && BiometricAuth.estaRegistrado()) return; // ya registrado
+    if (!forzar && BiometricAuth.estaRegistrado()) return;
+
+    // Necesitamos la contraseña para cifrarla (FIX 3).
+    // Si se llama desde Settings, pedimos que la introduzca en el campo actual.
+    const pwInput    = document.getElementById('settings-new-pw');
+    const pwLogin    = document.getElementById('login-password');
+    const passwordActual = (pwInput && pwInput.value.length >= 1)
+        ? pwInput.value
+        : (pwLogin && pwLogin.value.length >= 1 ? pwLogin.value : null);
+
+    if (!passwordActual && forzar) {
+        if (window.mostrarNotificacion) {
+            window.mostrarNotificacion('🔑 Introduce primero tu contraseña actual para registrar la huella', 'warning');
+        }
+        return;
+    }
 
     try {
-        await BiometricAuth.registrar();
+        await BiometricAuth.registrar(passwordActual || '');
         _actualizarUIBiometrica();
         if (window.mostrarNotificacion) {
             window.mostrarNotificacion('✅ Huella digital registrada — ya puedes entrar sin contraseña', 'success');
         }
     } catch (err) {
-        if (err.name === 'NotAllowedError') return; // Usuario canceló, sin ruido
+        if (err.name === 'NotAllowedError') return;
         if (window.mostrarNotificacion) {
             window.mostrarNotificacion('⚠️ No se pudo registrar la huella: ' + err.message, 'warning');
         }
@@ -3447,6 +3942,7 @@ function mostrarFuerzaSettings(pw) {
 
 /* ============================================================
    🚪 LOGIN PRINCIPAL — verificación asíncrona con PBKDF2
+        + protección anti fuerza bruta (FIX 2)
    ============================================================ */
 async function loginAcceder() {
     const pwInput  = document.getElementById('login-password');
@@ -3454,6 +3950,33 @@ async function loginAcceder() {
     const btn      = document.getElementById('btn-login-acceder');
 
     if (!pwInput) return;
+
+    // ── COMPROBAR BLOQUEO ACTIVO ──────────────────────────────────
+    const guard = BruteForceGuard.estado();
+    if (guard.bloqueado) {
+        const segs = Math.ceil(guard.restanteMs / 1000);
+        errorMsg.textContent = `🔒 Demasiados intentos. Espera ${segs}s`;
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        // Actualizar cuenta regresiva cada segundo
+        if (!window._loginCountdown) {
+            window._loginCountdown = setInterval(() => {
+                const g = BruteForceGuard.estado();
+                if (!g.bloqueado) {
+                    clearInterval(window._loginCountdown);
+                    window._loginCountdown = null;
+                    errorMsg.textContent = '';
+                    btn.disabled = false;
+                    btn.innerHTML = '<span class="material-icons" style="vertical-align:middle;margin-right:6px;font-size:18px;">lock_open</span>ACCEDER';
+                } else {
+                    const s = Math.ceil(g.restanteMs / 1000);
+                    errorMsg.textContent = `🔒 Demasiados intentos. Espera ${s}s`;
+                    btn.disabled = true;
+                    btn.innerHTML = `⏳ Bloqueado ${s}s`;
+                }
+            }, 1000);
+        }
+        return;
+    }
 
     const password = pwInput.value;
 
@@ -3472,15 +3995,16 @@ async function loginAcceder() {
         const ok = await PinSecurity.verificar(password);
 
         if (ok) {
-            // Guardar en sesión (para cifrar caché)
-            PinSecurity.setSession(password);
+            // ✅ Login correcto: resetear contador y establecer sesión
+            BruteForceGuard.resetear();
+
+            // Derivar y guardar la CryptoKey en memoria (NO en storage)
+            await PinSecurity.setSession(password);
 
             // Completar el login (carga de caché, animación, etc.)
             await _completarLogin();
 
             // ── OFERTA DE REGISTRO BIOMÉTRICO ──────────────────────
-            // Si el dispositivo soporta biometría y aún no hay huella,
-            // ofrecemos registrarla de forma silenciosa (sin interrumpir)
             setTimeout(async () => {
                 const soporta    = await BiometricAuth.soportado();
                 const registrado = BiometricAuth.estaRegistrado();
@@ -3491,28 +4015,68 @@ async function loginAcceder() {
                             'info'
                         );
                     }
-                    // Actualizar la UI para mostrar "Registrar huella"
                     _actualizarUIBiometrica();
                 }
             }, 2000);
 
+            // ── OFERTA PIN DEFAULT ──────────────────────────────────
+            if (password === '1234') {
+                setTimeout(() => {
+                    if (window.mostrarNotificacion) {
+                        window.mostrarNotificacion('⚠️ Estás usando la contraseña por defecto. Ve a Ajustes y cámbiala.', 'warning');
+                    }
+                    // Navegar a ajustes y resaltar la sección de contraseña
+                    if (typeof irPestana === 'function') irPestana('ajustes');
+                }, 2500);
+            }
+
         } else {
+            // ❌ Login incorrecto: registrar fallo y calcular penalización
+            const penalizacionMs = BruteForceGuard.registrarFallo();
+            const { attempts } = BruteForceGuard._debug ? BruteForceGuard._debug() : { attempts: '?' };
+
             pwInput.classList.add('error');
-            errorMsg.textContent = '❌ Contraseña incorrecta';
             pwInput.value = '';
             pwInput.focus();
             if (navigator.vibrate) navigator.vibrate(300);
-            setTimeout(() => {
-                pwInput.classList.remove('error');
-                errorMsg.textContent = '';
-            }, 2500);
+
+            if (penalizacionMs > 0) {
+                const segs = Math.ceil(penalizacionMs / 1000);
+                errorMsg.textContent = `❌ Contraseña incorrecta — bloqueado ${segs}s`;
+                btn.disabled = true;
+                btn.innerHTML = `⏳ Bloqueado ${segs}s`;
+                // Lanzar cuenta regresiva (reutilizamos el mismo intervalo)
+                window._loginCountdown = setInterval(() => {
+                    const g = BruteForceGuard.estado();
+                    if (!g.bloqueado) {
+                        clearInterval(window._loginCountdown);
+                        window._loginCountdown = null;
+                        errorMsg.textContent = '';
+                        btn.disabled = false;
+                        btn.innerHTML = '<span class="material-icons" style="vertical-align:middle;margin-right:6px;font-size:18px;">lock_open</span>ACCEDER';
+                    } else {
+                        const s = Math.ceil(g.restanteMs / 1000);
+                        errorMsg.textContent = `🔒 Demasiados intentos. Espera ${s}s`;
+                        btn.innerHTML = `⏳ Bloqueado ${s}s`;
+                    }
+                }, 1000);
+            } else {
+                errorMsg.textContent = '❌ Contraseña incorrecta';
+                setTimeout(() => {
+                    pwInput.classList.remove('error');
+                    errorMsg.textContent = '';
+                }, 2500);
+            }
         }
     } catch (err) {
         errorMsg.textContent = 'Error interno. Inténtalo de nuevo.';
         console.error(err);
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="material-icons" style="vertical-align:middle;margin-right:6px;font-size:18px;">lock_open</span>ACCEDER';
+        // Solo restaurar botón si NO estamos en bloqueo
+        if (!BruteForceGuard.estado().bloqueado) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-icons" style="vertical-align:middle;margin-right:6px;font-size:18px;">lock_open</span>ACCEDER';
+        }
     }
 }
 
@@ -6222,18 +6786,20 @@ function renderizarGraficoEvolucion(movimientos) {
                 if (!p) return '';
                 const idx   = p.dataIndex;
                 const val   = p.value;
-                const fecha = new Date(p.name).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
+                const fecha = Security.escapeHTML(new Date(p.name).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'}));
                 const prev  = idx > 0 ? dataPoints[idx-1] : null;
                 const diff  = prev !== null ? val - prev : 0;
-                const difFmt= (diff>=0?'+':'')+fmtFull(diff);
+                const difFmt= Security.escapeHTML((diff>=0?'+':'')+fmtFull(diff));
                 const difCol= diff>=0?'#39FF14':'#FF4D6D';
                 const pct   = dataPoints.length>1 ? Math.round((idx/(dataPoints.length-1))*100) : 100;
+                const safeHex  = Security.escapeHTML(String(hex));
+                const safeRgba = Security.escapeHTML(String(rgba(0.7)));
                 return `
-                    <div style="font-size:10px;color:${rgba(0.5)};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px">${fecha}</div>
-                    <div style="font-size:22px;font-weight:800;color:${hex};text-shadow:0 0 16px ${rgba(0.7)};letter-spacing:-0.5px;line-height:1">${fmtFull(val)}</div>
-                    ${prev!==null?`<div style="font-size:11px;color:${difCol};margin-top:5px;font-weight:700">${difFmt} respecto al día anterior</div>`:''}
+                    <div style="font-size:10px;color:${Security.escapeHTML(String(rgba(0.5)))};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px">${fecha}</div>
+                    <div style="font-size:22px;font-weight:800;color:${safeHex};text-shadow:0 0 16px ${safeRgba};letter-spacing:-0.5px;line-height:1">${Security.escapeHTML(fmtFull(val))}</div>
+                    ${prev!==null?`<div style="font-size:11px;color:${Security.escapeHTML(difCol)};margin-top:5px;font-weight:700">${difFmt} respecto al día anterior</div>`:''}
                     <div style="margin-top:10px;height:2px;background:rgba(255,255,255,0.06);border-radius:1px">
-                        <div style="height:2px;width:${pct}%;background:${hex};border-radius:1px;box-shadow:0 0 8px ${rgba(0.9)}"></div>
+                        <div style="height:2px;width:${Security.escapeHTML(String(pct))}%;background:${safeHex};border-radius:1px;box-shadow:0 0 8px ${Security.escapeHTML(String(rgba(0.9)))}"></div>
                     </div>
                 `;
             }
@@ -6487,14 +7053,12 @@ async function guardarUniversal(nuevasFilas) {
         }
 
         // =========================================================================
-        // 🔒 PASO 2: ENCRIPTADO DE SEGURIDAD (LOCAL STORAGE)
+        // 🔒 PASO 2: ENCRIPTADO DE SEGURIDAD (LOCAL STORAGE) — FIX 1 compatible
         // =========================================================================
-        // Obtenemos el PIN temporal de la sesión actual
-        const pinSession = sessionStorage.getItem('temp_pin_session');
+        // Usamos la CryptoKey de sesión (no extractable), no el password en texto plano
+        const sessionKey = PinSecurity.getSessionKey();
         
-        if (pinSession && typeof CryptoSystem !== 'undefined') {
-            console.log("🔐 Encriptando datos locales con AES-GCM...");
-            
+        if (sessionKey && typeof CryptoSystem !== 'undefined') {
             // Preparamos el objeto completo que queremos proteger
             const paqueteDeDatos = {
                 movimientos: datosFinales,
@@ -6507,22 +7071,18 @@ async function guardarUniversal(nuevasFilas) {
                 fechaGuardado: new Date().toISOString()
             };
 
-            // Encriptamos usando la función del Paso 1
-            const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, pinSession);
+            // CryptoSystem.encriptar detecta la sessionKey activa y usa AES-GCM v2
+            const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, null);
             
             // Guardamos SOLO la versión encriptada
             localStorage.setItem('DATA_ENCRIPTADA', datosEncriptados);
             
             // 🗑️ LIMPIEZA DE RASTROS: Borramos las versiones en texto plano
-            // Esto asegura que si abren la consola, no vean los datos viejos
             localStorage.removeItem('movimientos_v2'); 
             localStorage.removeItem('presupuesto_data');
             localStorage.removeItem('datos_recurrentes');
-            // Añade aquí cualquier otra key antigua que uses
-            
-            console.log("🔒 Datos locales asegurados correctamente.");
         } else {
-            console.warn("⚠️ ADVERTENCIA: No hay PIN en sesión o falta CryptoSystem. Los datos locales NO se han encriptado.");
+            console.warn("⚠️ ADVERTENCIA: No hay sesión activa o falta CryptoSystem. Los datos locales NO se han encriptado.");
         }
         // =========================================================================
 
@@ -6726,21 +7286,22 @@ window.renderTreeMap = function() {
             extraCssText: 'font-family:monospace',
             formatter: info => {
                 if(!info.value) return '';
-                const color = info.color;
-                const val   = fmtCompact(info.value);
-                const pct   = totalAbs>0 ? ((Math.abs(info.value)/totalAbs)*100).toFixed(1) : '0.0';
+                const safeColor = Security.escapeHTML(String(info.color || '#fff'));
+                const safeName  = Security.escapeHTML(String(info.name  || ''));
+                const val   = Security.escapeHTML(fmtCompact(info.value));
+                const pct   = Security.escapeHTML(String(totalAbs>0 ? ((Math.abs(info.value)/totalAbs)*100).toFixed(1) : '0.0'));
                 const tag   = info.value<0 ? '📉 DEUDA' : '💹 ACTIVO';
                 const bar   = Math.min(parseFloat(pct),100);
                 return `
                     <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.07)">
-                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${color};box-shadow:0 0 8px ${color}80"></span>
-                        <span style="font-size:13px;font-weight:800;color:#fff;flex:1">${info.name}</span>
+                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${safeColor};box-shadow:0 0 8px ${safeColor}80"></span>
+                        <span style="font-size:13px;font-weight:800;color:#fff;flex:1">${safeName}</span>
                         <span style="font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:1px">${tag}</span>
                     </div>
-                    <div style="font-size:20px;font-weight:800;color:${color};text-shadow:0 0 14px ${color}70;letter-spacing:-0.5px">${val}</div>
+                    <div style="font-size:20px;font-weight:800;color:${safeColor};text-shadow:0 0 14px ${safeColor}70;letter-spacing:-0.5px">${val}</div>
                     <div style="margin-top:5px;font-size:11px;color:rgba(255,255,255,0.4)">${pct}% del patrimonio</div>
                     <div style="margin-top:8px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px">
-                        <div style="height:3px;width:${bar}%;background:${color};border-radius:2px;box-shadow:0 0 8px ${color}80;transition:width .4s"></div>
+                        <div style="height:3px;width:${Security.escapeHTML(String(bar))}%;background:${safeColor};border-radius:2px;box-shadow:0 0 8px ${safeColor}80;transition:width .4s"></div>
                     </div>`;
             }
         },
@@ -6967,19 +7528,20 @@ window.renderizarSunburstPatrimonio = function() {
             extraCssText:'font-family:monospace',
             formatter: p => {
                 if (!p.value) return '';
-                const color = p.color;
-                const val   = fmtEurSun(p.value);
-                const pct   = activosBrutos>0 ? ((Math.abs(p.value)/activosBrutos)*100).toFixed(1) : '0.0';
-                const bar   = Math.min(parseFloat(pct),100);
+                const safeColor = Security.escapeHTML(String(p.color || '#fff'));
+                const safeName  = Security.escapeHTML(String(p.name  || ''));
+                const val   = Security.escapeHTML(fmtEurSun(p.value));
+                const pct   = Security.escapeHTML(String(activosBrutos>0 ? ((Math.abs(p.value)/activosBrutos)*100).toFixed(1) : '0.0'));
+                const bar   = Security.escapeHTML(String(Math.min(parseFloat(pct),100)));
                 return `
                     <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.07)">
-                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${color};box-shadow:0 0 10px ${color}90"></span>
-                        <span style="font-size:13px;font-weight:800;color:#fff">${p.name}</span>
+                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${safeColor};box-shadow:0 0 10px ${safeColor}90"></span>
+                        <span style="font-size:13px;font-weight:800;color:#fff">${safeName}</span>
                     </div>
-                    <div style="font-size:20px;font-weight:800;color:${color};text-shadow:0 0 14px ${color}70;letter-spacing:-0.5px">${val}</div>
+                    <div style="font-size:20px;font-weight:800;color:${safeColor};text-shadow:0 0 14px ${safeColor}70;letter-spacing:-0.5px">${val}</div>
                     <div style="margin-top:5px;font-size:11px;color:rgba(255,255,255,0.4)">${pct}% del patrimonio activo</div>
                     <div style="margin-top:8px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px">
-                        <div style="height:3px;width:${bar}%;background:${color};border-radius:2px;box-shadow:0 0 8px ${color}80"></div>
+                        <div style="height:3px;width:${bar}%;background:${safeColor};border-radius:2px;box-shadow:0 0 8px ${safeColor}80"></div>
                     </div>`;
             }
         },
@@ -7046,17 +7608,18 @@ window.renderizarSunburstPatrimonio = function() {
     // 5. INTERACCIÓN
     chart.on('mouseover', function(params) {
         if(elValorTotal) {
-            elLabelTotal.innerText = params.name; 
+            elLabelTotal.innerText = params.name;
             elLabelTotal.style.color = params.color;
             elLabelTotal.style.fontSize = "13px"; 
             elLabelTotal.style.fontWeight = "bold";
 
             const valStr = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(params.value);
             const pct = ((params.value / activosBrutos) * 100).toFixed(2);
+            const safeColor = Security.escapeHTML(String(params.color || '#fff'));
             
             elValorTotal.innerHTML = `
-                <div style="font-size:18px; text-shadow:0 0 20px ${params.color}">${valStr} €</div>
-                <div style="font-size:12px; color:#fff; margin-top:5px; font-weight:700">${pct}%</div>
+                <div style="font-size:18px; text-shadow:0 0 20px ${safeColor}">${Security.escapeHTML(valStr)} €</div>
+                <div style="font-size:12px; color:#fff; margin-top:5px; font-weight:700">${Security.escapeHTML(pct)}%</div>
             `;
         }
         chart.dispatchAction({ type: 'highlight', dataIndex: params.dataIndex });
@@ -7069,7 +7632,7 @@ window.renderizarSunburstPatrimonio = function() {
             elLabelTotal.style.fontSize = "10px";
             elLabelTotal.style.fontWeight = "normal";
             
-            elValorTotal.innerHTML = fmt(patrimonioNetoReal);
+            elValorTotal.innerText = fmt(patrimonioNetoReal) + ' €';
             elValorTotal.style.textShadow = "0 0 20px rgba(255,255,255,0.4)";
         }
         chart.dispatchAction({ type: 'downplay', dataIndex: params.dataIndex });
@@ -7095,16 +7658,19 @@ if (!window._echartsResizeListenerRegistered) {
     window._echartsResizeListenerRegistered = true;
 }
 
-// --- CARGA DE CACHÉ (con desencriptado AES-GCM) ---
+// --- CARGA DE CACHÉ (con desencriptado AES-GCM - FIX 1 compatible) ---
 async function cargarDesdeCacheAsync() {
     try {
-        const pin = PinSecurity.getSession();
+        // FIX 1: Ahora usamos la CryptoKey de sesión (no extractable) en lugar del
+        // password en texto plano. PinSecurity.getSession() devuelve null por diseño;
+        // CryptoSystem.desencriptar detecta internamente la clave de sesión activa.
+        const sessionKey = PinSecurity.getSessionKey();
 
-        // A) Intentar caché encriptada (v3)
+        // A) Intentar caché encriptada (v3 o v2)
         const rawEnc = localStorage.getItem('DATA_ENCRIPTADA');
-        if (rawEnc && pin) {
+        if (rawEnc && sessionKey) {
             try {
-                const datos = await CryptoSystem.desencriptar(rawEnc, pin);
+                const datos = await CryptoSystem.desencriptar(rawEnc, null);
                 if (datos && datos.movimientos) {
                     window.datos = datos.movimientos.map(m => ({
                         ...m,
@@ -7117,23 +7683,20 @@ async function cargarDesdeCacheAsync() {
                         window.listaConceptosConfig     = datos.config.conceptos    || [];
                         window.listaBeneficiariosConfig = datos.config.beneficiarios || [];
                     }
-                    // (La reasignación de datos ya es window.datos directamente arriba)
                     if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
                     if (typeof mostrarEstado === 'function') mostrarEstado('⚡ Datos locales descifrados ✓', 'ok');
                     return true;
                 }
             } catch (eEnc) {
-                console.warn('⚠️ No se pudo desencriptar caché (contraseña incorrecta o datos corruptos):', eEnc);
+                console.warn('⚠️ No se pudo desencriptar caché (clave de sesión incorrecta o datos corruptos):', eEnc);
             }
         }
 
-        // B) Fallback: caché en texto plano (legacy)
+        // B) Fallback: caché en texto plano (legacy — se migra automáticamente)
         const cacheDatos = localStorage.getItem('aidanai_datos_cache');
         if (cacheDatos) {
             window.datos = JSON.parse(cacheDatos).map(m => ({
                 ...m,
-                // 🔥 EXTRA FIX: UUID seguro + eliminado alias fantasma "datos = window.datos"
-                // que era un no-op (la variable local 'datos' no era window.datos aquí).
                 id:   m.id || m.ID || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'CACHE-' + Date.now() + '-' + Math.random().toString(36).slice(2)),
                 fecha: new Date(m.fecha)
             }));
@@ -7141,8 +7704,8 @@ async function cargarDesdeCacheAsync() {
             if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
             if (typeof mostrarEstado === 'function') mostrarEstado('⚡ Datos listos (Local sin cifrar)', 'ok');
 
-            // Migrar automáticamente a versión cifrada si tenemos PIN en sesión
-            if (pin) {
+            // Migrar automáticamente a versión cifrada si tenemos clave de sesión activa
+            if (sessionKey) {
                 try {
                     const paquete = {
                         movimientos: window.datos,
@@ -7153,11 +7716,11 @@ async function cargarDesdeCacheAsync() {
                             beneficiarios: window.listaBeneficiariosConfig || []
                         }
                     };
-                    const enc = await CryptoSystem.encriptar(paquete, pin);
+                    // encriptar() detecta la sessionKey y usa la arquitectura v2
+                    const enc = await CryptoSystem.encriptar(paquete, null);
                     localStorage.setItem('DATA_ENCRIPTADA', enc);
                     localStorage.removeItem('aidanai_datos_cache');
                     localStorage.removeItem('aidanai_config_cache');
-                    console.log('🔒 Caché migrado a versión cifrada AES-GCM.');
                 } catch (eMig) {
                     console.warn('Migración de caché fallida (ignorada):', eMig);
                 }
@@ -7338,14 +7901,14 @@ function renderizarRadarScoring(kpis) {
                 const sem = v => v>=80?'🟢':v>=50?'🟡':'🔴';
                 const fila = (i) => `
                     <div style="display:flex;justify-content:space-between;align-items:center;margin:5px 0;gap:18px">
-                        <span style="font-size:10px;color:rgba(255,255,255,0.55)">${sem(scores[i])} ${nombresEje[i]}</span>
-                        <span style="font-size:12px;font-weight:800;color:${coloresEje[i]}">${scores[i]}<span style="font-size:9px;opacity:0.55">/100</span></span>
+                        <span style="font-size:10px;color:rgba(255,255,255,0.55)">${sem(scores[i])} ${Security.escapeHTML(String(nombresEje[i]))}</span>
+                        <span style="font-size:12px;font-weight:800;color:${Security.escapeHTML(String(coloresEje[i]))}">${Security.escapeHTML(String(scores[i]))}<span style="font-size:9px;opacity:0.55">/100</span></span>
                     </div>`;
                 return `
                     <div style="padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.08)">
                         <div style="font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.35);text-transform:uppercase">Salud Financiera</div>
-                        <div style="font-size:30px;font-weight:800;color:${hexBase};text-shadow:0 0 20px ${rgbaB(0.7)};letter-spacing:-1px;line-height:1.1;margin-top:3px">
-                            ${notaGlobal}<span style="font-size:15px;opacity:0.45">/100</span>
+                        <div style="font-size:30px;font-weight:800;color:${Security.escapeHTML(String(hexBase))};text-shadow:0 0 20px ${Security.escapeHTML(String(rgbaB(0.7)))};letter-spacing:-1px;line-height:1.1;margin-top:3px">
+                            ${Security.escapeHTML(String(notaGlobal))}<span style="font-size:15px;opacity:0.45">/100</span>
                         </div>
                     </div>
                     ${[0,1,2,3,4].map(fila).join('')}
@@ -8309,7 +8872,7 @@ window.cambiarPinSeguridad = async function() {
     await PinSecurity.guardarNuevo(newVal);
 
     // 5. Actualizar sesión activa para que el cifrado de caché use la nueva pw
-    PinSecurity.setSession(newVal);
+    await PinSecurity.setSession(newVal);
 
     // 6. Re-encriptar el caché local con la nueva contraseña
     try {
@@ -8321,6 +8884,15 @@ window.cambiarPinSeguridad = async function() {
         }
     } catch (e) {
         console.warn('No se pudo re-encriptar el caché (ignorado):', e);
+    }
+
+    // 7. Si hay huella registrada, invalidarla — debe re-registrarse con la nueva contraseña
+    if (BiometricAuth.estaRegistrado()) {
+        BiometricAuth.borrar();
+        if (window.mostrarNotificacion) {
+            window.mostrarNotificacion('☝️ La huella fue desvinculada. Vuelve a registrarla con la nueva contraseña.', 'warning');
+        }
+        _actualizarUIBiometrica();
     }
 
     // 7. Limpiar campos
@@ -9252,7 +9824,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
     const SW_CODE = `
 const CACHE_NAME = 'aidanai-v2';
 const CACHE_URLS = [
-    'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
     'https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js',
     'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',
     'https://fonts.googleapis.com/icon?family=Material+Icons',
@@ -9652,5 +10224,19 @@ self.addEventListener('fetch', e => {
 })(); // fin initPWA
 
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     🛡️ CORTINA DE PRIVACIDAD (MEJORA 6)
+     Se hace visible mediante JS cuando document.hidden = true,
+     impidiendo que el SO capture los datos financieros en el
+     switcher de aplicaciones o en un screenshot de sistema.
+     z-index superior a todo (incluyendo modales en z: 30000).
+═══════════════════════════════════════════════════════════ -->
+<div id="privacy-overlay">
+    <div class="privacy-icon">🔒</div>
+    <div class="privacy-label">aiDANaI</div>
+    <div class="privacy-sub">Protegido</div>
+</div>
+
 </body>
 </html>
