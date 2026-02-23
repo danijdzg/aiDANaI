@@ -1771,21 +1771,26 @@ th {
     @keyframes sentry-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
  
  
- /* --- SEMÁFORO DE SINCRONIZACIÓN --- */
+ /* --- SEMÁFORO DE SINCRONIZACIÓN (MEJORADO) --- */
     .status-dot {
-        width: 10px;
-        height: 10px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         display: inline-block;
-        transition: all 0.3s ease;
+        transition: all 0.4s ease;
         z-index: 100;
+        flex-shrink: 0;
     }
-    .status-none { background-color: #444; border: 1px solid #666; }
-    .status-sync { background-color: #39FF14; box-shadow: 0 0 10px #39FF14; } /* Verde Neón */
-    .status-saving { background-color: #FFD60A; box-shadow: 0 0 10px #FFD60A; animation: parpadeo 0.8s infinite; } /* Amarillo */
-    .status-error { background-color: #FF2E4D; box-shadow: 0 0 10px #FF2E4D; } /* Rojo */
+    .status-none  { background-color: #444; border: 2px solid #666; }
+    /* 🟢 Verde = Conectado y sincronizado */
+    .status-sync  { background-color: #39FF14; box-shadow: 0 0 12px #39FF14, 0 0 4px #39FF14; border: 2px solid rgba(57,255,20,0.4); }
+    /* 🟠 Naranja pulsante = Guardando / Cargando datos */
+    .status-saving { background-color: #FF9500; box-shadow: 0 0 12px #FF9500, 0 0 4px #FF9500; border: 2px solid rgba(255,149,0,0.4); animation: parpadeo-naranja 0.7s infinite; }
+    /* 🔴 Rojo = Sin acceso / Error / Datos no seguros */
+    .status-error { background-color: #FF2E4D; box-shadow: 0 0 14px #FF2E4D, 0 0 6px #FF2E4D; border: 2px solid rgba(255,46,77,0.5); animation: pulso-error 1.2s infinite; }
 
-    @keyframes parpadeo { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+    @keyframes parpadeo-naranja { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.85); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes pulso-error { 0% { box-shadow: 0 0 6px #FF2E4D; } 50% { box-shadow: 0 0 20px #FF2E4D, 0 0 8px #FF2E4D; } 100% { box-shadow: 0 0 6px #FF2E4D; } }
  
     /* Días de la semana en FILA ÚNICA */
     .dias-semana-wrapper {
@@ -2199,14 +2204,16 @@ select:focus > option:checked {
         </div>
     </div>
 
-    <div id="data-sentry" class="sentry-panel sentry-idle" style="position: relative; justify-content: center;">
+    <div id="data-sentry" class="sentry-panel sentry-idle" style="position: relative; justify-content: center; gap: 8px;">
         
-        <div style="position: absolute; left: 15px; top: 0; bottom: 0; display: flex; align-items: center;">
-            <span id="sync-status" class="status-dot status-none"></span>
-        </div>
+        <!-- 🚦 SEMÁFORO: Punto de estado (Verde/Naranja/Rojo) -->
+        <span id="sync-status" class="status-dot status-none" title="Estado de sincronización con OneDrive"></span>
 
         <span id="sentry-icon">🛡️</span>
-        <span id="sentry-text" style="margin-left: 5px;">SISTEMA BLINDADO</span>
+        <span id="sentry-text" style="margin-left: 2px;">INICIANDO...</span>
+        
+        <!-- Indicador de peligro (solo visible en estado error) -->
+        <span id="sentry-danger-badge" style="display:none; background:#FF2E4D; color:#fff; font-size:9px; font-weight:900; padding:1px 6px; border-radius:4px; letter-spacing:0.5px; text-transform:uppercase; animation: pulso-error 1s infinite;">⚠ DATOS NO SEGUROS</span>
     </div>
     
     <div id="status-panel" class="status-panel" style="display:none"></div>
@@ -4538,6 +4545,9 @@ const oneDrive = new OneDriveManager();
 async function iniciarSistema() {
     const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
     
+    // 🟠 Naranja: Verificando conexión inicial
+    if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
+    
     // 1. PRIMER INTENTO: CONEXIÓN SILENCIOSA
     try {
         if(barra) barra.innerText = "☁️ Verificando Nube...";
@@ -4555,9 +4565,15 @@ async function iniciarSistema() {
         cambiarModo('cloud');
         window.iniciarPolling();
         if(barra) barra.innerText = "✅ Sincronizado";
+        
+        // 🟢 Verde: conexión y carga completadas
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
 
     } catch (error) {
         console.warn("⚠️ Fallo arranque automático:", error);
+        
+        // 🔴 Rojo: No se pudo conectar
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
         
         // 2. AQUÍ ESTÁ EL CAMBIO: SI FALLA, PREGUNTAMOS
         // No cargamos caché automáticamente. Mostramos el modal.
@@ -4576,8 +4592,10 @@ async function usarCacheSiExiste() {
     const hayDatos = await cargarDesdeCacheAsync();
     if(hayDatos) {
         mostrarEstado("⚡ Datos locales cargados", "ok");
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
     } else {
         mostrarEstado("❌ No hay copia local. Carga un archivo.", "error");
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
     }
 }
     
@@ -4642,6 +4660,11 @@ const Security = {
             if (btnGuardar) btnGuardar.style.display = 'flex';
         }
         
+        // 🚦 SEMÁFORO: actualizar según el modo seleccionado
+        if (typeof window.actualizarSemaforo === 'function') {
+            window.actualizarSemaforo(modoNube ? 'ok' : 'local');
+        }
+        
         // --- CORRECCIÓN: NO BORRAMOS LOS DATOS AQUÍ ---
         // Antes había una línea "datos = []" que borraba todo al cambiar de modo.
         // La hemos quitado para que lo que cargues de la nube SE QUEDE en pantalla.
@@ -4672,23 +4695,26 @@ window.mostrarEstado = function(mensaje, tipo = 'info') {
 
     // 3. ANALIZAR LA AMENAZA / ESTADO
     
-    // CASO A: ERROR (Crítico)
+    // CASO A: ERROR (Crítico) — Semáforo rojo
     if (tipo === 'error' || tipo === 'err') {
         sentry.className = 'sentry-panel sentry-danger';
         icon.innerText = '☠️';
         text.innerText = 'FALLO: ' + mensaje;
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
     } 
-    // CASO B: ÉXITO (Confirmación)
+    // CASO B: ÉXITO (Confirmación) — Semáforo verde
     else if (tipo === 'success' || tipo === 'ok') {
-        sentry.className = 'sentry-panel sentry-idle'; // Usamos estilo verde
+        sentry.className = 'sentry-panel sentry-idle';
         icon.innerText = '🔒';
         text.innerText = mensaje.toUpperCase();
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
     } 
-    // CASO C: TRABAJANDO (Cargando/Guardando)
+    // CASO C: TRABAJANDO (Cargando/Guardando) — Semáforo naranja
     else if (tipo === 'loading') {
         sentry.className = 'sentry-panel sentry-working';
         icon.innerText = '🔄';
         text.innerText = mensaje.toUpperCase();
+        // NO actualizamos semáforo aquí para no sobreescribir estados de guardado
         return; // Si está cargando, no ponemos temporizador de borrado
     } 
     // CASO D: INFORMACIÓN GENERAL
@@ -4707,6 +4733,10 @@ window.mostrarEstado = function(mensaje, tipo = 'info') {
             // Si usamos OneDrive, decimos que está en la nube
             const enNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
             text.innerText = enNube ? 'NUBE BLINDADA' : 'MODO LOCAL SEGURO';
+            // Restaurar semáforo según modo actual
+            if (typeof window.actualizarSemaforo === 'function') {
+                window.actualizarSemaforo(enNube ? 'ok' : 'local');
+            }
         }, 5000);
     }
 };
@@ -4891,16 +4921,23 @@ window.iniciarCargaNube = async function() {
 // 2. LÓGICA DE DESCARGA DE ONEDRIVE
 async function cargarDesdeNube() {
     if (!modoNube) return;
+    // 🟠 Naranja: inicio de carga desde nube
+    if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
     try {
         // AHORA: oneDrive.loadFile devuelve el Workbook YA PROCESADO (Rápido)
         // Antes devolvía un arrayBuffer y había que hacer XLSX.read (Lento)
         const wb = await oneDrive.loadFile(); 
         
         // Pasamos el libro directamente a tu procesador
-        procesarLibroLeido(wb); 
+        procesarLibroLeido(wb);
+        
+        // 🟢 Verde: carga completada con éxito
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
         
     } catch (error) {
         console.error("Error nube:", error);
+        // 🔴 Rojo: error al cargar desde nube
+        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
         throw error;
     }
 }
@@ -7041,8 +7078,8 @@ async function guardarUniversal(nuevasFilas) {
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
     window.isSaving = true;
 
-    // Semáforo: Luz Amarilla (Procesando)
-    if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
+    // Semáforo: Luz Naranja (Grabando datos en nube)
+    if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('guardando');
 
     let wb = null; 
 
@@ -7207,10 +7244,14 @@ async function guardarUniversal(nuevasFilas) {
     } catch (errorCritico) {
         console.error("🚨 ERROR CRÍTICO AL GUARDAR:", errorCritico);
         
-        alert("⚠️ ATENCIÓN: LA NUBE NO RESPONDE.\n\nSe va a descargar una copia 'aidanai.xlsx' en tu ordenador.");
-        if (wb) XLSX.writeFile(wb, "aidanai_COPIA_SEGURIDAD.xlsx");
-        
+        // 🔴 Semáforo rojo: error crítico de guardado
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+        if (typeof window.mostrarNotificacion === 'function') {
+            window.mostrarNotificacion('🔴 ERROR: No se pudo guardar en la nube. Se descargará copia local.', 'error');
+        }
+        
+        alert("⚠️ ATENCIÓN: LA NUBE NO RESPONDE.\n\n🔴 LOS DATOS NO SON SEGUROS EN LA NUBE.\n\nSe descargará una copia de seguridad 'aidanai.xlsx' en tu dispositivo.\n\nGuarda ese archivo en un lugar seguro hasta restablecer la conexión.");
+        if (wb) XLSX.writeFile(wb, "aidanai_COPIA_SEGURIDAD.xlsx");
     } finally {
         window.isSaving = false;
         if (btnModal) btnModal.innerHTML = 'GUARDAR';
@@ -8938,24 +8979,63 @@ window.cambiarPinSeguridad = async function() {
 
 // --- CONTROL DEL SEMÁFORO ---
 window.actualizarSemaforo = function(estado) {
-    const el = document.getElementById('sync-status');
+    const dot         = document.getElementById('sync-status');
     const textoSentry = document.getElementById('sentry-text');
-    if (!el) return;
+    const iconSentry  = document.getElementById('sentry-icon');
+    const sentry      = document.getElementById('data-sentry');
+    const badgePeligro = document.getElementById('sentry-danger-badge');
 
-    // Reseteamos clases
-    el.className = 'status-dot';
+    if (!dot) return;
+
+    // Resetear clases del dot y del panel
+    dot.className = 'status-dot';
+    if (sentry) sentry.className = 'sentry-panel';
+    if (badgePeligro) badgePeligro.style.display = 'none';
 
     if (estado === 'ok') {
-        el.classList.add('status-sync'); // Verde
-        if(textoSentry) textoSentry.innerText = "NUBE SEGURA";
-    } else if (estado === 'cargando') {
-        el.classList.add('status-saving'); // Amarillo
-        if(textoSentry) textoSentry.innerText = "GUARDANDO...";
+        // 🟢 VERDE: Conectado y sincronizado con OneDrive
+        dot.classList.add('status-sync');
+        if (sentry)      sentry.classList.add('sentry-idle');
+        if (iconSentry)  iconSentry.innerText = '☁️';
+        if (textoSentry) textoSentry.innerText = 'NUBE SEGURA';
+
+    } else if (estado === 'cargando' || estado === 'guardando') {
+        // 🟠 NARANJA: Guardando o cargando datos (operación en curso)
+        dot.classList.add('status-saving');
+        if (sentry)      sentry.classList.add('sentry-working');
+        if (iconSentry)  iconSentry.innerText = '🔄';
+        if (textoSentry) textoSentry.innerText = (estado === 'guardando') ? 'GRABANDO EN NUBE...' : 'SINCRONIZANDO...';
+        return; // No restaurar automáticamente mientras está guardando
+
     } else if (estado === 'error') {
-        el.classList.add('status-error'); // Rojo
-        if(textoSentry) textoSentry.innerText = "ERROR DE NUBE";
+        // 🔴 ROJO: Error de conexión — datos no garantizados
+        dot.classList.add('status-error');
+        if (sentry)      sentry.classList.add('sentry-danger');
+        if (iconSentry)  iconSentry.innerText = '☠️';
+        if (textoSentry) textoSentry.innerText = 'FALLO DE NUBE';
+        if (badgePeligro) badgePeligro.style.display = 'inline-block';
+
+    } else if (estado === 'offline') {
+        // 🔴 ROJO: Sin conexión a internet — datos no pueden guardarse
+        dot.classList.add('status-error');
+        if (sentry)      sentry.classList.add('sentry-danger');
+        if (iconSentry)  iconSentry.innerText = '📵';
+        if (textoSentry) textoSentry.innerText = 'SIN CONEXIÓN';
+        if (badgePeligro) badgePeligro.style.display = 'inline-block';
+
+    } else if (estado === 'local') {
+        // 🟡 AMARILLO: Modo local, sin sincronización en nube
+        dot.classList.add('status-saving');
+        if (sentry)      sentry.classList.add('sentry-working');
+        if (iconSentry)  iconSentry.innerText = '💾';
+        if (textoSentry) textoSentry.innerText = 'MODO LOCAL';
+
     } else {
-        el.classList.add('status-none'); // Gris
+        // ⚪ GRIS: Estado desconocido o inicial
+        dot.classList.add('status-none');
+        if (sentry)      sentry.classList.add('sentry-idle');
+        if (iconSentry)  iconSentry.innerText = '🛡️';
+        if (textoSentry) textoSentry.innerText = 'SISTEMA BLINDADO';
     }
 };
 
@@ -10160,13 +10240,15 @@ self.addEventListener('fetch', e => {
     //    En offline, el SW sirve los assets desde caché.
     // ─────────────────────────────────────────────────────────────
     window.addEventListener('offline', () => {
-        if(window.mostrarNotificacion) window.mostrarNotificacion('📵 Sin conexión — trabajando en local', 'warning');
+        if(window.mostrarNotificacion) window.mostrarNotificacion('📵 Sin conexión — los cambios no se guardarán en la nube', 'warning');
         if(window.actualizarSemaforo) window.actualizarSemaforo('offline');
     });
 
     window.addEventListener('online', () => {
-        if(window.mostrarNotificacion) window.mostrarNotificacion('📶 Conexión restaurada', 'success');
-        if(window.actualizarSemaforo) window.actualizarSemaforo('ok');
+        if(window.mostrarNotificacion) window.mostrarNotificacion('📶 Conexión restaurada — sincronizando con OneDrive...', 'success');
+        // Restaurar al estado correcto según modo
+        const enNube = window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0);
+        if(window.actualizarSemaforo) window.actualizarSemaforo(enNube ? 'ok' : 'local');
     });
 
     // ─────────────────────────────────────────────────────────────
