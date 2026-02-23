@@ -2801,10 +2801,17 @@ select:focus > option:checked {
         <button class="btn-close-cockpit" onclick="cerrarModal()">✕</button>
         <span class="cockpit-title">NUEVO GASTO</span>
         <input type="hidden" id="m-id">
-        <button id="btn-borrar-modal" onclick="borrarMovimiento(document.getElementById('m-id').value)" 
-                style="background:none; border:none; color:#333; display:none;">
-            <span class="material-icons">delete</span>
-        </button>
+        
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <button id="btn-duplicar-modal" onclick="window.duplicarMovimiento()" 
+                    style="background:none; border:none; color:var(--c-primary); display:none; cursor:pointer;" title="Duplicar">
+                <span class="material-icons">content_copy</span>
+            </button>
+            <button id="btn-borrar-modal" onclick="window.borrarMovimiento(document.getElementById('m-id').value)" 
+                    style="background:none; border:none; color:#FF2E4D; display:none; cursor:pointer;" title="Eliminar">
+                <span class="material-icons">delete</span>
+            </button>
+        </div>
     </div>
 
     <div class="cockpit-hero">
@@ -5933,64 +5940,59 @@ window.cargarParaEditar = function(id) {
 };
 	
    function abrirModal(esEdicion = false) {
-        document.getElementById('modal-manual').classList.add('active');
-        const btnAction = document.getElementById('btn-modal-action');
-        const areaExtras = document.getElementById('extra-actions');
+    document.getElementById('modal-manual').classList.add('active');
+    const btnAction = document.getElementById('btn-modal-action');
+    
+    // Capturamos AMBOS botones de la cabecera
+    const btnBorrar = document.getElementById('btn-borrar-modal');
+    const btnDuplicar = document.getElementById('btn-duplicar-modal');
+
+    // 1. LIMPIEZA Y PREPARACIÓN VISUAL
+    if (!esEdicion) {
+        window.idEnEdicion = null;
         
-        // NUEVO: Buscamos el nuevo botón de borrar de la cabecera
-        const btnBorrar = document.getElementById('btn-borrar-modal');
+        const hoy = new Date().toISOString().split('T')[0];
+        const elFecha = document.getElementById('m-fecha');
+        if(elFecha) elFecha.value = hoy;
 
-        // 1. LIMPIEZA Y PREPARACIÓN VISUAL
-        if (!esEdicion) {
-            window.idEnEdicion = null;
-            
-            // Poner fecha de hoy
-            const hoy = new Date().toISOString().split('T')[0];
-            const elFecha = document.getElementById('m-fecha');
-            if(elFecha) elFecha.value = hoy;
-
-            document.getElementById('m-cantidad').value = '';
-            
-            // Configurar campo importe para abrir calculadora al clic
-            const campoImporte = document.getElementById('m-cantidad');
-            if(campoImporte) {
-                campoImporte.setAttribute('readonly', true);
-                campoImporte.style.cursor = 'pointer';
-                campoImporte.onclick = () => abrirCalculadora('m-cantidad');
-            }
-
-            document.getElementById('m-desc').value = '';
-            
-            // Títulos y botones
-            const titulo = document.querySelector('#modal-manual h3');
-            if(titulo) titulo.innerText = "NUEVO MOVIMIENTO";
-            if(btnAction) btnAction.innerText = "GUARDAR";
-            
-            // Ocultamos el contenedor viejo (si existe) y el NUEVO botón de borrar
-            if(areaExtras) areaExtras.style.display = 'none';
-            if(btnBorrar) btnBorrar.style.display = 'none';
-
-            // --- TRUCO: ABRIR CALCULADORA AUTOMÁTICAMENTE (con pequeño retraso para asegurar que carga) ---
-            setTimeout(() => {
-                abrirCalculadora('m-cantidad');
-            }, 100);
-
-        } else {
-            const titulo = document.querySelector('#modal-manual h3');
-            if(titulo) titulo.innerText = "EDITAR MOVIMIENTO";
-            if(btnAction) btnAction.innerText = "ACTUALIZAR";
-            
-            // Mostramos el contenedor viejo (si existe)
-            if(areaExtras) areaExtras.style.display = 'grid';
-            
-            // NUEVO: Mostramos la papelera en la cabecera al editar
-            if(btnBorrar) {
-                btnBorrar.style.display = 'block'; 
-                btnBorrar.innerHTML = '<span class="material-icons">delete</span>';
-                btnBorrar.style.color = '#FF2E4D'; // Rojo para que destaque
-                btnBorrar.disabled = false;
-            }
+        document.getElementById('m-cantidad').value = '';
+        
+        const campoImporte = document.getElementById('m-cantidad');
+        if(campoImporte) {
+            campoImporte.setAttribute('readonly', true);
+            campoImporte.style.cursor = 'pointer';
+            campoImporte.onclick = () => abrirCalculadora('m-cantidad');
         }
+
+        document.getElementById('m-desc').value = '';
+        
+        const titulo = document.querySelector('.cockpit-title');
+        if(titulo) titulo.innerText = "NUEVO MOVIMIENTO";
+        if(btnAction) btnAction.innerText = "GUARDAR";
+        
+        // Ocultar iconos si es un registro nuevo
+        if(btnBorrar) btnBorrar.style.display = 'none';
+        if(btnDuplicar) btnDuplicar.style.display = 'none';
+
+        setTimeout(() => { abrirCalculadora('m-cantidad'); }, 100);
+
+    } else {
+        const titulo = document.querySelector('.cockpit-title');
+        if(titulo) titulo.innerText = "EDITAR MOVIMIENTO";
+        if(btnAction) btnAction.innerText = "ACTUALIZAR";
+        
+        // MOSTRAR ICONOS AL EDITAR
+        if(btnBorrar) {
+            btnBorrar.style.display = 'block'; 
+            btnBorrar.innerHTML = '<span class="material-icons">delete</span>';
+            btnBorrar.disabled = false;
+        }
+        if(btnDuplicar) {
+            btnDuplicar.style.display = 'block';
+            btnDuplicar.innerHTML = '<span class="material-icons">content_copy</span>';
+            btnDuplicar.disabled = false;
+        }
+    }
 
         // 2. RECOPILAR DATOS (MODO ESTRICTO: SOLO EXCEL CONFIGURACIÓN)
         const sCuentas = new Set(); 
@@ -6368,77 +6370,47 @@ window.guardarManual = async function() {
 // ==========================================
 
 // --- FUNCIÓN DUPLICAR: Prepara el formulario como "Nuevo" con datos copiados ---
-window.duplicarMovimiento = function(id) {
-    console.log("🐑 Duplicando movimiento ID:", id);
-
-    // 1. Buscar el movimiento original (En la lista plana window.datos)
-    const mov = window.datos.find(m => m.id === id);
+window.duplicarMovimiento = function() {
+    const id = document.getElementById('m-id').value;
+    if (!id) return; 
     
-    if (!mov) {
-        window.mostrarNotificacion("❌ No encuentro el movimiento original", "error");
-        return;
-    }
-
-    // 2. Abrir el modal (Usando tu sistema nativo, sin Bootstrap)
-    const modalElement = document.getElementById('modal-manual');
-    if (modalElement) {
-        modalElement.classList.add('active'); // ESTO es lo que usa tu CSS
-    } else {
-        console.error("No encuentro el modal-manual");
-        return;
-    }
-
-    // 3. Rellenar el formulario con los datos del original
-    // Usamos 'setValue' o asignación directa con validación de existencia
-    const setVal = (domId, valor) => {
-        const el = document.getElementById(domId);
-        if(el) el.value = valor || "";
-    };
-
-    // Ponemos la fecha de HOY, no la antigua (es lo lógico al duplicar)
+    console.log("🐑 Duplicando movimiento...");
+    
+    // 1. Vaciamos el ID (Vital: esto le dice al sistema que al guardar cree uno nuevo)
+    document.getElementById('m-id').value = "";
+    
+    // 2. Ponemos la fecha de HOY
     const hoy = new Date().toISOString().split('T')[0];
-    setVal('m-fecha', hoy);
-
-    setVal('m-cuenta', mov.cuenta);
-    setVal('m-concepto', mov.concepto);
-    setVal('m-desc', mov.descripcion || mov.detalle || ""); // Añadimos marca de copia si quieres
-    setVal('m-beneficiario', mov.beneficiario);
+    document.getElementById('m-fecha').value = hoy;
     
-    // Importe: siempre positivo y formateado visualmente
-    setVal('m-cantidad', Math.abs(mov.importe).toFixed(2).replace('.', ',') + ' €');
-
-    // 4. PREPARAR ESTADO VISUAL
-    // Detectamos si era ingreso o gasto para colorear el modal
-    if (mov.importe >= 0) {
-        window.modoTransaccionActual = 'ingreso';
-        modalElement.querySelector('.modal-box') && (modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-success)');
-        const titulo = modalElement.querySelector('.cockpit-title');
-        if (titulo) titulo.innerText = "NUEVO (DUPLICADO)";
-    } else {
-        window.modoTransaccionActual = 'gasto'; // O 'pago'
-        modalElement.querySelector('.modal-box') && (modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-danger)');
-        const titulo = modalElement.querySelector('.cockpit-title');
-        if (titulo) titulo.innerText = "NUEVO (DUPLICADO)";
-    }
-
-    // 5. ¡CRÍTICO! VACIAR EL ID
-    // Al dejar esto vacío, cuando pulses "GUARDAR", el sistema creará uno nuevo.
-    setVal('m-id', ""); 
-
-    // Ocultar botones extra (Borrar/Duplicar) porque es un movimiento nuevo
-    const extraActions = document.getElementById('extra-actions');
-    if(extraActions) extraActions.style.display = 'none';
-
-    // Feedback
+    // 3. Cambiamos textos visuales para que el usuario sepa lo que está pasando
+    const titulo = document.querySelector('.cockpit-title');
+    if(titulo) titulo.innerText = "NUEVO (DUPLICADO)";
+    
+    const btnAction = document.getElementById('btn-modal-action');
+    if(btnAction) btnAction.innerText = "GUARDAR COPIA";
+    
+    // 4. Ocultamos los botones de cabecera (ya no estamos editando)
+    const btnBorrar = document.getElementById('btn-borrar-modal');
+    if(btnBorrar) btnBorrar.style.display = 'none';
+    
+    const btnDuplicar = document.getElementById('btn-duplicar-modal');
+    if(btnDuplicar) btnDuplicar.style.display = 'none';
+    
+    window.mostrarNotificacion("✅ Datos copiados. Modifica lo que necesites y guarda.", "info");
     if(typeof vibrar === 'function') vibrar('clonar');
 };
 
 // --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
 window.borrarMovimiento = async function(id) {
-    // 1. Confirmación de seguridad
-    if(!confirm("¿Estás seguro de que quieres eliminar este movimiento permanentemente?")) return;
+    // 1. Usar tu Modal Pro en lugar del alert del navegador (evita bloqueos de la PWA)
+    const confirmado = await window.pedirConfirmacion(
+        "ELIMINAR MOVIMIENTO", 
+        "¿Estás seguro de que quieres borrar este movimiento permanentemente?", 
+        "🗑️"
+    );
+    if (!confirmado) return;
 
-    // Bloqueo visual del botón borrar si existe
     const btnBorrar = document.getElementById('btn-borrar-modal');
     if(btnBorrar) {
         btnBorrar.innerHTML = "<span class='material-icons'>hourglass_empty</span>";
@@ -6446,37 +6418,29 @@ window.borrarMovimiento = async function(id) {
     }
 
     try {
-        // 2. Filtrar: Nos quedamos con todos EXCEPTO el que tiene ese ID
-        const longitudAntes = window.datos.length;
-        // Filtramos comparando IDs como texto para evitar errores de tipo
-        window.datos = window.datos.filter(m => String(m.id) !== String(id));
+        const lenInicial = window.datos.length;
+        window.datos = window.datos.filter(m => m.id !== id && m.pairId !== id);
 
-        // 3. Verificación
-        if (window.datos.length < longitudAntes) {
-            
-            // 4. GUARDAR CAMBIOS (Usando la función universal que ya tienes)
-            if (typeof window.guardarUniversal === 'function') {
-                await window.guardarUniversal(); 
-                // Nota: guardarUniversal ya se encarga de refrescar pantalla y subir a nube
-            } else {
-                // Fallback si no existiera guardarUniversal
-                if (typeof window.actualizarUI === 'function') window.actualizarUI();
-            }
-
-            // 5. Cerrar modal y avisar
-            cerrarModal();
-            mostrarEstado("🗑️ Movimiento eliminado", "ok");
-            if(typeof vibrar === 'function') vibrar('error');
-
-        } else {
-            window.mostrarNotificacion("❌ No encuentro el movimiento para borrar", "warning");
-            cerrarModal();
+        if (window.datos.length === lenInicial) {
+            throw new Error("No se encontró el movimiento");
         }
-    } catch (e) {
-        console.error(e);
-        window.mostrarNotificacion("❌ Error al borrar: " + e.message, "error");
+
+        if (typeof window.recalcularSaldosGlobal === 'function') window.recalcularSaldosGlobal();
+        if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
+
+        window.cerrarModal();
+        if(typeof window.renderizar === 'function') window.renderizar();
+        if(typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
+        
+        window.mostrarNotificacion("🗑️ Movimiento eliminado correctamente", "success");
+        if(typeof vibrar === 'function') vibrar('ingreso');
+
+    } catch (error) {
+        console.error("Error al borrar:", error);
+        window.mostrarNotificacion("❌ Error al borrar el movimiento", "error");
+        
         if(btnBorrar) {
-            btnBorrar.innerText = "ELIMINAR";
+            btnBorrar.innerHTML = '<span class="material-icons">delete</span>';
             btnBorrar.disabled = false;
         }
     }
