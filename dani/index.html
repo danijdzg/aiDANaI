@@ -9166,9 +9166,28 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
 
     if(window.mostrarEstado) window.mostrarEstado("⏳ Creando movimiento...", "loading");
 
+    // ✅ FIX DOBLE GUARDADO: Antes se llamaba guardarUniversal([nuevoMovimiento]) y después
+    // guardarTodoConRecurrentes() → guardarUniversal() de nuevo. Esto causaba:
+    //   - Modo local: DOS descargas del xlsx (el diálogo "guardar" aparecía dos veces).
+    //   - Modo nube: La 2ª subida chocaba contra el eTag actualizado por la 1ª → error 412
+    //     → fallback a descarga local, pareciendo que "guardaba en local" aunque hubiese nube.
+    // SOLUCIÓN: Seguir el mismo patrón que ejecutarRecurrente: añadir a window.datos primero,
+    // actualizar la fecha del recurrente, y llamar guardarTodoConRecurrentes() UNA sola vez.
+
+    // Obtener info de cuenta para clasificación inmediata (igual que ejecutarRecurrente)
+    const obtenerInfoCuenta = (nombreCuenta) => {
+        const clave = String(nombreCuenta || '').toUpperCase().trim();
+        const info = (window.mapaCuentas && window.mapaCuentas[clave]) ? window.mapaCuentas[clave] : null;
+        return {
+            tipoCuenta: info ? (info.tipo || 'SIN CLASIFICAR') : 'SIN CLASIFICAR',
+            esInversion: info ? (info.esInversion === true || info.esInversion === 'SI') : false
+        };
+    };
+    const infoCuenta = obtenerInfoCuenta(regla.cuenta);
+
     const nuevoMovimiento = {
         id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'AUTO-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-        fecha: new Date(fechaPrevista), 
+        fecha: new Date(fechaPrevista + 'T12:00:00'),
         cuenta: regla.cuenta,
         concepto: regla.concepto,
         importe: regla.importe,
@@ -9178,20 +9197,35 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         // movimiento cronológicamente hasta la próxima recarga completa.
         ts: new Date(fechaPrevista + 'T12:00:00').getTime(),
         // ✅ FIX BUG-6B: Respetar el tipo original de la regla (igual que ejecutarRecurrente)
-        tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto')
+        tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto'),
+        // ✅ FIX BUG-7 (igual que ejecutarRecurrente): tipoCuenta y esInversion para que el
+        // filtro del Diario los clasifique correctamente desde el instante de la inserción.
+        tipoCuenta: infoCuenta.tipoCuenta,
+        esInversion: infoCuenta.esInversion
     };
 
     try {
-        await window.guardarUniversal([nuevoMovimiento]);
-        if(typeof calcularSiguienteFecha === 'function') {
+        // ✅ PASO 1: Inyectar en window.datos (igual que ejecutarRecurrente)
+        window.datos.unshift(nuevoMovimiento);
+
+        // ✅ PASO 2: Avanzar la fecha del recurrente
+        if (typeof calcularSiguienteFecha === 'function') {
             regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
-            await guardarTodoConRecurrentes();
-            cargarVistaRecurrentes();
         }
+
+        // ✅ PASO 3: UN SOLO guardado (incluye movimiento nuevo + fecha recurrente actualizada)
+        await guardarTodoConRecurrentes();
+
+        // ✅ PASO 4: Refrescar pantalla
+        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if (window.mostrarEstado) window.mostrarEstado("✅ Fijo añadido. Próxima: " + regla.fechaProx, "success");
+        if (typeof vibrar === 'function') vibrar('ingreso');
+        cargarVistaRecurrentes();
 
     } catch (e) {
         console.error(e);
         window.mostrarNotificacion("❌ Error al procesar fijo", "error");
+        if (window.mostrarEstado) window.mostrarEstado("❌ Error al guardar", "error");
     }
 };
 
