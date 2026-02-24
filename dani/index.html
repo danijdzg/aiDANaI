@@ -7375,44 +7375,45 @@ function construirLibroExcel(datosFinales) {
     const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
     const wb = XLSX.utils.book_new();
 
-    // ✅ FIX FECHA: Normalizador universal de fecha.
-    // window.datos puede contener fechas en tres formatos distintos:
-    //   1. Date object  → de movimientos cargados desde xlsx (procesarLibroLeido)
-    //   2. string "YYYY-MM-DD" → de movimientos OLD creados sin el fix (PendingQueue)
-    //   3. número (serial Excel) → caso extremo de doble conversión
-    // SheetJS json_to_sheet con cellDates:true serializa correctamente SOLO Date objects.
-    // Esta función garantiza que siempre llega un Date real a la hoja.
+    // ✅ FIX FECHA DEFINITIVO: Convertimos a texto puro DD/MM/YYYY
+    // OneDrive suele rechazar fechas nativas en ciertas actualizaciones.
+    // Al enviarlo como texto estricto, evitamos que la nube cancele la subida.
     const normalizarFecha = (f) => {
-        if (f instanceof Date && !isNaN(f)) return f;
-        if (typeof f === 'string' && f.trim()) {
-            // "YYYY-MM-DD" o ISO completo
-            const d = new Date(f.includes('T') ? f : f + 'T12:00:00');
-            if (!isNaN(d)) return d;
+        let d;
+        if (f instanceof Date && !isNaN(f)) d = f;
+        else if (typeof f === 'string' && f.trim()) {
+            d = new Date(f.includes('T') ? f : f + 'T12:00:00');
         }
-        if (typeof f === 'number' && f > 0) {
-            // Serial de Excel: días desde 1/1/1900
-            return new Date(Math.round((f - 25569) * 86400 * 1000));
+        else if (typeof f === 'number' && f > 0) {
+            d = new Date(Math.round((f - 25569) * 86400 * 1000));
         }
-        return new Date(); // fallback: hoy
+        else d = new Date(); 
+        
+        if (isNaN(d)) d = new Date();
+
+        const dia = String(d.getDate()).padStart(2, '0');
+        const mes = String(d.getMonth() + 1).padStart(2, '0');
+        const ano = d.getFullYear();
+        return `${dia}/${mes}/${ano}`; 
     };
 
     // --- HOJA 1: MOVIMIENTOS ---
     const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
-        "Id":          d.id,
-        "Fecha":       normalizarFecha(d.fecha),
-        "Cuenta":      d.cuenta,
-        "Concepto":    d.concepto,
-        "Importe":     d.importe,
+        "Id": d.id,
+        "Fecha": normalizarFecha(d.fecha),
+        "Cuenta": d.cuenta,
+        "Concepto": d.concepto,
+        "Importe": d.importe,
         "Descripcion": d.descripcion,
-        "Beneficiario":d.beneficiario,
-        "Tipo":        d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
-    })), {
+        "Beneficiario": d.beneficiario,
+        "Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
+    })), { 
         header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"],
-        // ✅ FIX cellDates: Sin este flag, SheetJS convierte los Date objects a números
-        // de serie de Excel. Con él, los escribe como celdas de tipo fecha, que Excel
-        // reconoce y formatea correctamente (DD/MM/YYYY).
-        cellDates: true
+        // Lo ponemos a false porque ahora enviamos un texto ('DD/MM/YYYY')
+        // para forzar a OneDrive a aceptarlo como un string normal.
+        cellDates: false 
     });
+
     XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
 
     // --- HOJA 2: CONFIGURACION ---
