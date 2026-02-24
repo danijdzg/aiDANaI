@@ -4555,14 +4555,10 @@ class OneDriveManager {
     // =====================================================================
     async descargarDatosBinario() {
         if (window.mostrarEstado) window.mostrarEstado("📥 Leyendo nube...", "normal");
-
         const token = await this.getToken();
-        const id    = await this.getFileId();
+        let id = await this.getFileId();
 
-        // Descargamos eTag y contenido binario en paralelo.
-        // eTag: huella de versión para el If-Match del próximo PUT (anti-412).
-        // content: el archivo xlsx binario completo, sin pasar por Excel Online.
-        const [resMeta, resContent] = await Promise.all([
+        let [resMeta, resContent] = await Promise.all([
             fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, {
                 headers: { Authorization: `Bearer ${token}` }
             }),
@@ -4570,6 +4566,28 @@ class OneDriveManager {
                 headers: { Authorization: `Bearer ${token}` }
             })
         ]);
+
+        // ✅ FIX 1: TRAMPA DEL ID OBSOLETO
+        // Si el archivo da error 404 (no existe), es porque se borró/reemplazó en OneDrive 
+        // pero la app seguía recordando el ID viejo. Limpiamos la memoria y reintentamos.
+        if (resContent.status === 404) {
+            console.warn("⚠️ ID cacheado obsoleto. Buscando archivo nuevo en OneDrive...");
+            localStorage.removeItem("aidanai_file_id");
+            this.fileId = null;
+            id = await this.getFileId(); // Esto buscará el nuevo aidanai.xlsx real
+            
+            // Reintentamos la descarga con el ID fresco
+            const retryRes = await Promise.all([
+                fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }),
+                fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+            ]);
+            resMeta = retryRes[0];
+            resContent = retryRes[1];
+        }
 
         if (resMeta.ok) {
             const metaJson = await resMeta.json();
@@ -4581,11 +4599,9 @@ class OneDriveManager {
             throw new Error(`Error descargando archivo desde OneDrive (HTTP ${resContent.status})`);
         }
 
-        // Parsear con SheetJS localmente — igual que leerExcel() (modo local).
-        // cellDates:true convierte los seriales de fecha del xlsx a Date objects.
         const arrayBuffer = await resContent.arrayBuffer();
         const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
-
+        
         console.log("✅ Archivo descargado. Hojas:", wb.SheetNames);
         return wb;
     }
@@ -5148,26 +5164,19 @@ window.iniciarCargaNube = async function() {
         if(window.mostrarNotificacion) window.mostrarNotificacion("❌ Error al conectar con OneDrive: " + (e.message || e), "error");
     }
 };
-
 // 2. LÓGICA DE DESCARGA DE ONEDRIVE
 async function cargarDesdeNube() {
-    if (!modoNube) return;
-    // Semáforo naranja mientras carga
+    // ✅ FIX 2: BUCLE INFERNAL DE MODO NUBE
+    // Se ha eliminado la línea que bloqueaba la descarga. 
+    // Ahora, si el usuario pide cargar la nube, lo hace siempre, sin importar el modo previo.
+    
     if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
     try {
-        // oneDrive.loadFile descarga el xlsx binario desde OneDrive y lo parsea con SheetJS.
-        // NO usa la Workbook API de Graph (evita sesiones implícitas que sobrescriben datos).
         const wb = await oneDrive.loadFile();
-        
-        // Procesar datos y actualizar window.datos
         procesarLibroLeido(wb);
-        
-        // ✅ Semáforo verde: datos en sync con la nube
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
-        
     } catch (error) {
         console.error("Error nube:", error);
-        // ✅ Semáforo rojo: no pudimos leer la nube
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
         throw error;
     }
