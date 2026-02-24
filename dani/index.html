@@ -2407,7 +2407,68 @@ select:focus > option:checked {
     }
 }
 /* --- FIN CORRECCIÓN BOTONES V3 --- */	
-    </style>
+
+#modal-extracto {
+        display: none;
+        position: fixed;
+        top: 0; 
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 800px;
+        height: 100dvh;
+        background: #000000; /* NEGRO AMOLED */
+        color: #ffffff;
+        z-index: 25000;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    #modal-extracto.active { display: flex; animation: slideUpModal 0.2s ease-out; }
+    
+    /* Diseño ultra-compacto de 2 líneas */
+    .ext-row {
+        padding: 6px 12px; /* Reducimos el padding para que quepan más */
+        border-bottom: 1px solid #1c1c1e;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 2px; /* Espacio mínimo entre la línea 1 y la 2 */
+    }
+    .ext-row:active { background: #111111; }
+    
+    .ext-line { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        width: 100%;
+    }
+    
+    /* Anchos fijos para que el importe y el saldo queden alineados */
+    .ext-fecha { width: 65px; font-size: 11px; font-weight: bold; color: #FFD60A; flex-shrink: 0; }
+    .ext-concepto { flex: 1; font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+    .ext-importe { width: 90px; font-size: 15px; font-weight: 900; text-align: right; flex-shrink: 0; }
+    
+    .ext-detalle { flex: 1; font-size: 11px; color: #8e8e93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+    .ext-saldo { width: 90px; font-size: 11px; font-weight: bold; color: #d1d1d6; text-align: right; flex-shrink: 0; }
+</style>
+
+<div id="modal-extracto">
+    <div class="cockpit-header" style="border-bottom: 1px solid #1c1c1e; padding: 10px 15px; min-height: auto;">
+        <button class="btn-close-cockpit" onclick="cerrarModalExtracto()" style="width: 28px; height: 28px; font-size: 14px;">✕</button>
+        <span class="cockpit-title" id="ext-titulo" style="color: #ffffff; font-size: 14px;">EXTRACTO</span>
+        <div style="width: 28px;"></div>
+    </div>
+    
+    <div class="cockpit-hero" style="padding: 10px 0; border-bottom: 1px solid #1c1c1e;">
+        <span class="cockpit-label" style="color: #8e8e93; font-size: 10px;">SALDO ACTUAL</span>
+        <div id="ext-saldo" class="cockpit-amount" style="font-size: 32px; margin-top: 2px;">0,00 €</div>
+    </div>
+
+    <div style="flex: 1; overflow-y: auto; padding-bottom: 30px;">
+        <div id="ext-lista" style="display: flex; flex-direction: column;">
+            </div>
+    </div>
+</div>
 
     <div class="fab-container" id="fab-container">
         <div id="fab-overlay" class="fab-overlay" onclick="toggleFab()"></div>
@@ -5238,14 +5299,97 @@ function formatear(val, tipo) {
         generarAnalisisIA(datos);
 		renderizarRadarScoring();
   	
-     function verExtractoCuenta(nombreCuenta) {
+     // === FUNCIÓN ANTIGUA (Se mantiene para el Diario si se necesita) ===
+    window.verExtractoCuenta = function(nombreCuenta) {
         limpiarFiltros();
         const selectCuenta = document.getElementById('f-cuenta');
         if(selectCuenta) { selectCuenta.value = nombreCuenta; filtros.cuenta = nombreCuenta; }
         aplicarFiltros();
         irPestana('movs');
         mostrarEstado('Extracto: ' + nombreCuenta, 'ok');
-    }
+    };
+
+    // === NUEVA FUNCIÓN SOLO PARA PATRIMONIO ===
+    window.verExtractoPatrimonio = function(nombreCuenta) {
+        const modal = document.getElementById('modal-extracto');
+        const titulo = document.getElementById('ext-titulo');
+        const saldoEl = document.getElementById('ext-saldo');
+        const lista = document.getElementById('ext-lista');
+
+        if (!modal) return;
+
+        titulo.innerText = String(nombreCuenta).toUpperCase();
+
+        const ctaKey = String(nombreCuenta).toUpperCase().trim();
+        const infoCta = (window.mapaCuentas && window.mapaCuentas[ctaKey]) ? window.mapaCuentas[ctaKey] : null;
+        const saldoActual = infoCta ? (infoCta.saldoActual || 0) : 0;
+        
+        saldoEl.innerText = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(saldoActual);
+        saldoEl.style.color = saldoActual >= 0 ? '#32d74b' : '#ff453a';
+
+        let movsCuenta = window.datos.filter(m => String(m.cuenta).toUpperCase().trim() === ctaKey);
+        if (typeof pasaFiltroPropietario === 'function') {
+            movsCuenta = movsCuenta.filter(m => pasaFiltroPropietario(m));
+        }
+
+        // Ordenar del más nuevo al más viejo
+        movsCuenta.sort((a, b) => b.ts - a.ts);
+
+        // Variable para el saldo matemático hacia atrás
+        let saldoLinea = saldoActual;
+
+        let html = '';
+        if (movsCuenta.length === 0) {
+            html = '<div style="text-align:center; color:#8e8e93; padding: 20px; font-weight:bold; font-size: 13px;">No hay movimientos.</div>';
+        } else {
+            movsCuenta.forEach(m => {
+                const esIngreso = m.importe >= 0;
+                
+                let colorImporte = esIngreso ? '#32d74b' : '#ff453a';
+                if (m.tipo === 'traspaso' || (m.concepto && m.concepto.toUpperCase().includes('TRASPASO'))) {
+                    colorImporte = '#0a84ff'; 
+                }
+
+                const signo = esIngreso ? '+' : '';
+                const fechaTxt = new Date(m.ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                
+                const importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(m.importe));
+                const saldoFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoLinea);
+
+                // Unir beneficiario y descripción (Línea 2)
+                let textoDetalle = m.descripcion || m.detalle || '';
+                const ben = m.beneficiario || '';
+                if (ben) {
+                    textoDetalle = textoDetalle ? ben + ' - ' + textoDetalle : ben;
+                }
+                if (!textoDetalle) textoDetalle = 'Sin detalle';
+
+                html += `
+                <div class="ext-row" onclick="cerrarModalExtracto(); window.editarMovimiento('${m.id}')">
+                    <div class="ext-line">
+                        <span class="ext-fecha">${fechaTxt}</span>
+                        <span class="ext-concepto">${m.concepto}</span>
+                        <span class="ext-importe" style="color: ${colorImporte};">${signo}${importeFmt}</span>
+                    </div>
+                    <div class="ext-line">
+                        <span class="ext-detalle">${textoDetalle}</span>
+                        <span class="ext-saldo">${saldoFmt}</span>
+                    </div>
+                </div>`;
+
+                // Restamos para calcular el saldo de la fila inferior (más antigua)
+                saldoLinea = saldoLinea - m.importe;
+            });
+        }
+
+        lista.innerHTML = html;
+        modal.classList.add('active');
+    };
+
+    window.cerrarModalExtracto = function() {
+        const modal = document.getElementById('modal-extracto');
+        if(modal) modal.classList.remove('active');
+    };
 
     function cambiarOrdenPatrimonio(campo) {
         if (ordenPatri.campo === campo) { ordenPatri.asc = !ordenPatri.asc; } 
@@ -5351,7 +5495,7 @@ function formatear(val, tipo) {
                     const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
 
                     htmlCuentas += `
-                        <div class="patri-account-item" onclick="verExtractoCuenta('${c.nombre}')" style="border-bottom: 1px solid #333;">
+                        <div class="patri-account-item" onclick="verExtractoPatrimonio('${c.nombre}')" style="border-bottom: 1px solid #333;">
                             <div class="patri-acc-name-col">
                                 <span class="patri-acc-name" style="color:#FFFFFF; font-size:13px;">${c.nombre}</span>
                                 <div class="patri-progress-bar-bg" style="background:#222;">
@@ -8586,6 +8730,7 @@ self.addEventListener('fetch', e => {
     }
 
 })(); // fin initPWA
+
 
 </script>
 </body>
