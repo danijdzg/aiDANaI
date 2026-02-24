@@ -2756,12 +2756,20 @@ const CryptoSystem = (() => {
         const key  = await _derivarClave(password, salt);
         const data = enc.encode(JSON.stringify(objeto));
         const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+        
         // Formato: salt(16) || iv(12) || ciphertext
         const blob = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
         blob.set(salt, 0);
         blob.set(iv, SALT_LEN);
         blob.set(new Uint8Array(cifrado), SALT_LEN + IV_LEN);
-        return btoa(String.fromCharCode(...blob));
+        
+        // --- FIX: Iteración manual en lugar de operador spread (...blob) ---
+        let binaryStr = '';
+        const len = blob.length;
+        for (let i = 0; i < len; i++) {
+            binaryStr += String.fromCharCode(blob[i]);
+        }
+        return btoa(binaryStr);
     }
 
     async function desencriptar(b64, password) {
