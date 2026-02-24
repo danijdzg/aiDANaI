@@ -4976,61 +4976,76 @@ window.iniciarPolling = function() {
     // Cancelar cualquier ciclo previo antes de crear uno nuevo
     detenerPolling();
     pollingActivo = true;
-    pollingDelay  = POLLING_BASE; // Siempre arrancamos "frescos"
+    pollingDelay = POLLING_BASE; 
 
     function ciclo() {
         if (!pollingActivo) return;
-
         pollingTimeout = setTimeout(async () => {
             if (!pollingActivo) return;
 
-            // ✅ FIX MULTI-USUARIO: El polling es la única fuente de verdad para cambios EXTERNOS.
-            // Guardias:
-            //  1. window.isSaving → hay un guardado en curso, NO sobreescribir
-            //  2. window.idEnEdicion → el usuario tiene el modal abierto, NO sobreescribir
-            // Si ninguna guardia está activa, comprobamos si el eTag del servidor ha cambiado.
-            // Si el eTag es el mismo que el nuestro → no hay cambios externos → no recargamos.
-            // Si el eTag es distinto → otro dispositivo/usuario guardó → recargamos para mergear.
             if (modoNube && !window.isSaving && !window.idEnEdicion) {
                 try {
-                    // Comprobamos el eTag sin descargar todo el archivo
+                    // Verificamos conexión real y acceso al archivo
                     const token = await oneDrive.getToken().catch(() => null);
-                    if (token && oneDrive.fileId) {
-                        const metaRes = await fetch(
-                            `https://graph.microsoft.com/v1.0/me/drive/items/${oneDrive.fileId}?$select=eTag`,
-                            { headers: { Authorization: `Bearer ${token}` } }
-                        );
-                        if (metaRes.ok) {
-                            const meta = await metaRes.json();
-                            const eTagServidor = meta.eTag;
-                            if (eTagServidor && oneDrive.lastETag && eTagServidor === oneDrive.lastETag) {
-                                // El archivo no ha cambiado en el servidor — saltamos la recarga
-                                console.log("🟢 Polling: eTag sin cambios, no se recarga.");
-                                pollingDelay = POLLING_BASE;
-                                ciclo();
-                                return;
-                            }
-                            console.log("🔄 Polling: eTag cambió, recargando desde nube...");
-                        }
+                    if (!token || !oneDrive.fileId) {
+                        throw new Error("Sin acceso o sin archivo vinculado.");
                     }
+                    
+                    const metaRes = await fetch(
+                        `https://graph.microsoft.com/v1.0/me/drive/items/${oneDrive.fileId}?$select=eTag`,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    
+                    if (!metaRes.ok) {
+                        throw new Error("Archivo aidanai.xlsx inaccesible (HTTP " + metaRes.status + ")");
+                    }
+                    
+                    const meta = await metaRes.json();
+                    const eTagServidor = meta.eTag;
+                    
+                    if (eTagServidor && oneDrive.lastETag && eTagServidor === oneDrive.lastETag) {
+                        console.log("🟢 Polling: Conectado y sin cambios.");
+                        ciclo();
+                        return;
+                    }
+                    
+                    console.log("🔄 Polling: Hay cambios en la nube, actualizando...");
                     await cargarDesdeNube();
-                    // ✅ ÉXITO: resetear delay a base
-                    pollingDelay = POLLING_BASE;
+                    
                 } catch (e) {
-                    // ❌ FALLO: duplicar delay hasta el techo
-                    pollingDelay = Math.min(pollingDelay * 2, POLLING_MAX);
-                    console.warn(`⏳ Polling falló. Próximo intento en ${pollingDelay/1000}s`, e.message || e);
+                    console.error("🚨 ALARMA: BASE DE DATOS INACCESIBLE.", e.message);
+                    
+                    // 1. Detenemos cualquier reintento automático
+                    detenerPolling();
+                    
+                    // 2. Destruimos la sesión (clave de memoria)
+                    if (typeof PinSecurity !== 'undefined') PinSecurity.clearSession();
+                    
+                    // 3. Volvemos al estado offline (bloquea interfaz)
+                    window.modoNube = false;
+                    
+                    // 4. Ocultamos la app y mostramos la pantalla de contraseña
+                    const appVP = document.getElementById('app-viewport');
+                    const screen = document.getElementById('pin-login-screen');
+                    if (appVP) appVP.classList.remove('visible');
+                    if (screen) screen.classList.remove('hidden');
+                    
+                    // 5. Lanzamos el aviso crítico al usuario
+                    if (window.mostrarNotificacion) {
+                        window.mostrarNotificacion('🚨 Conexión perdida con la base de datos. Sesión cerrada por seguridad.', 'error');
+                    }
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    
+                    // 6. Terminamos aquí (no volvemos a llamar a ciclo())
+                    return; 
                 }
             }
-
-            ciclo(); // programar el siguiente ciclo con el delay actualizado
+            ciclo(); 
         }, pollingDelay);
 
-        // Mantener alias legacy sincronizado
         pollingInterval = pollingTimeout;
         window.pollingInterval = pollingTimeout;
     }
-
     ciclo();
 };
 
