@@ -4386,16 +4386,19 @@ window.generarAnalisisIA = function(movimientos) {
             // obtener tokens de escritura para OneDrive.
             clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
             authority: "https://login.microsoftonline.com/common",
-            redirectUri: window.location.href.split('?')[0].split('#')[0],
+            // ✅ FIX REDIRECT URI: URL estática (origin + pathname) para que coincida
+            // siempre con la URI registrada en Azure Portal y MSAL complete el login.
+            // El cálculo dinámico anterior podía incluir hash/params de MSAL y diferir.
+            redirectUri: window.location.origin + window.location.pathname,
             navigateToLoginRequestUrl: false,
-            postLogoutRedirectUri: window.location.href.split('?')[0].split('#')[0]
+            postLogoutRedirectUri: window.location.origin + window.location.pathname
         },
         cache: {
-            // ✅ FIX SEGURIDAD: sessionStorage en lugar de localStorage.
-            // Con localStorage los tokens de OneDrive persisten entre sesiones y
-            // son accesibles por cualquier XSS. Con sessionStorage solo viven
-            // mientras la pestaña está abierta, reduciendo la ventana de ataque.
-            cacheLocation: "sessionStorage",
+            // ✅ FIX ESCRITURA ONEDRIVE: localStorage en lugar de sessionStorage.
+            // Con sessionStorage el token se borraba al recargar la pestaña, haciendo
+            // que getToken() no encontrase cuenta activa y fallase silenciosamente,
+            // impidiendo cualquier escritura (PUT) en OneDrive.
+            cacheLocation: "localStorage",
             storeAuthStateInCookie: true   // ← necesario para flujo redirect en Safari/iOS
         },
         system: {
@@ -4685,7 +4688,11 @@ class OneDriveManager {
             return;
         }
 
-        if (!response.ok) throw new Error("Error al subir: " + await response.text());
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error(`❌ PUT OneDrive falló. Status: ${response.status} | Body: ${errorBody}`);
+            throw new Error("Error al subir: " + errorBody);
+        }
         
         // ✅ Subida correcta: actualizamos nuestro eTag con la nueva versión del servidor
         // para que la próxima operación de guardado use la huella fresca.
@@ -7561,7 +7568,12 @@ async function guardarUniversal(nuevasFilas) {
         // Si había inconsistencia entre ambas (p.ej. tras login), usarNube podía evaluar false
         // aunque el usuario estuviera conectado, enviando el guardado solo a localStorage.
         // Ahora comprobamos las tres fuentes posibles para garantizar que no se nos escape.
-        const usarNube = !!(window.modoNube || (typeof modoNube !== 'undefined' && modoNube) || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0));
+        const cuentasActivas = (typeof oneDrive !== 'undefined' && oneDrive.msalInstance) 
+            ? oneDrive.msalInstance.getAllAccounts().length 
+            : 0;
+        const usarNube = !!(window.modoNube || (typeof modoNube !== 'undefined' && modoNube) || cuentasActivas > 0);
+        
+        console.log(`🔍 guardarUniversal: usarNube=${usarNube} | window.modoNube=${window.modoNube} | cuentasActivas=${cuentasActivas}`);
         
         if (usarNube) {
             let cloudOk = false;
@@ -7612,9 +7624,10 @@ async function guardarUniversal(nuevasFilas) {
                             window.mostrarEstado(`⚠️ Error nube: ${errMsg}`, "error");
                         }
                         
-                        // ✅ NUEVA ALARMA VISUAL: Si falla, te lo muestra en pantalla
+                        // ✅ FIX: Notificación no bloqueante en lugar de alert() para no congelar el async
                         if (intentos >= maxRetries) {
-                            alert("⚠️ ONEDRIVE HA RECHAZADO EL ARCHIVO\n\nMotivo:\n" + errMsg + "\n\n👉 Comprueba que el Excel no esté abierto en otra ventana o en tu móvil.");
+                            if(window.mostrarNotificacion) window.mostrarNotificacion("🚨 OneDrive rechazó el archivo: " + errMsg, "error");
+                            console.error("🚨 ONEDRIVE HA RECHAZADO EL ARCHIVO\nMotivo: " + errMsg + "\n👉 Comprueba que el Excel no esté abierto en otra ventana o en tu móvil.");
                         } else {
                             await new Promise(r => setTimeout(r, 1500));
                         }
