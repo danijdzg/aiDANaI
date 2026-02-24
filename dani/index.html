@@ -4530,50 +4530,68 @@ class OneDriveManager {
         }
     }
 
-    // --- 3. LECTURA TURBO (JSON PARALELO + RECURRENTES) ---
-    async descargarDatosJSON() {
-        if(window.mostrarEstado) window.mostrarEstado("🚀 Leyendo nube (Modo Turbo)...", "normal");
-        
-        const token = await this.getToken();
-        const id = await this.getFileId();
+    // --- 3. LECTURA BINARIA (SIMÉTRICA CON EL GUARDADO) ---
+    // =====================================================================
+    // ⚠️  POR QUÉ SE ELIMINÓ LA WORKBOOK API (descargarDatosJSON):
+    //
+    // La implementación anterior usaba los endpoints JSON de Graph Workbook:
+    //   GET /workbook/worksheets/Movimientos/usedRange
+    //
+    // Al llamar a esos endpoints, Microsoft Graph abría una SESIÓN IMPLÍCITA
+    // PERSISTENTE en el servidor de Excel Online sobre el archivo. Esta sesión:
+    //   1. Cacheaba el contenido del archivo en su estado ORIGINAL (antes del PUT)
+    //   2. Tenía tiempo de vida de ~5 min de inactividad
+    //   3. Al expirar, ESCRIBÍA SU COPIA ANTIGUA DE VUELTA AL ARCHIVO,
+    //      destruyendo cualquier PUT binario que hubiéramos hecho
+    //
+    // Resultado: el usuario veía los movimientos en pantalla (memoria RAM),
+    // pero al abrir aidanai.xlsx en Excel los movimientos no aparecían.
+    //
+    // SOLUCIÓN: usar la misma API que saveFile() para leer: GET /content
+    // (descarga binaria directa). Esta API NO abre ninguna sesión Workbook,
+    // es completamente independiente de Excel Online, y es simétrica con el
+    // PUT binario → lectura y escritura operan sobre la misma capa de storage,
+    // sin posibilidad de conflictos de caché.
+    // =====================================================================
+    async descargarDatosBinario() {
+        if (window.mostrarEstado) window.mostrarEstado("📥 Leyendo nube...", "normal");
 
-        // 🔒 CONTROL DE VERSIÓN: Capturamos el eTag ACTUAL del archivo en paralelo con los datos.
-        // Este eTag es la "huella digital" de la versión que estamos leyendo.
-        // Lo usaremos al guardar para detectar si alguien modificó el archivo entre medias.
-        const [resMeta, resMovs, resConf, resRec] = await Promise.all([
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Configuracion/usedRange`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Recurrentes/usedRange`, { headers: { Authorization: `Bearer ${token}` } })
+        const token = await this.getToken();
+        const id    = await this.getFileId();
+
+        // Descargamos eTag y contenido binario en paralelo.
+        // eTag: huella de versión para el If-Match del próximo PUT (anti-412).
+        // content: el archivo xlsx binario completo, sin pasar por Excel Online.
+        const [resMeta, resContent] = await Promise.all([
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }),
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
         ]);
 
-        // Guardamos el eTag para usarlo en la siguiente escritura
         if (resMeta.ok) {
             const metaJson = await resMeta.json();
             this.lastETag = metaJson.eTag || null;
             console.log("🏷️ eTag capturado:", this.lastETag);
         }
 
-        if (!resMovs.ok) throw new Error("Error leyendo Movimientos");
-        
-        const jsonMovs = await resMovs.json();
-        // Si no existe Configuración o Recurrentes (404), usamos un array vacío para no romper nada
-        const jsonConf = resConf.ok ? await resConf.json() : { values: [] };
-        const jsonRec = resRec.ok ? await resRec.json() : { values: [] };
+        if (!resContent.ok) {
+            throw new Error(`Error descargando archivo desde OneDrive (HTTP ${resContent.status})`);
+        }
 
-        // Construimos un objeto compatible con SheetJS con LAS TRES HOJAS
-        return {
-            Sheets: {
-                "Movimientos": XLSX.utils.aoa_to_sheet(jsonMovs.values || []),
-                "Configuracion": XLSX.utils.aoa_to_sheet(jsonConf.values || []),
-                "Recurrentes": XLSX.utils.aoa_to_sheet(jsonRec.values || [])
-            },
-            SheetNames: ["Movimientos", "Configuracion", "Recurrentes"]
-        };
+        // Parsear con SheetJS localmente — igual que leerExcel() (modo local).
+        // cellDates:true convierte los seriales de fecha del xlsx a Date objects.
+        const arrayBuffer = await resContent.arrayBuffer();
+        const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
+
+        console.log("✅ Archivo descargado. Hojas:", wb.SheetNames);
+        return wb;
     }
 
-    // Alias para compatibilidad
-    async loadFile() { return await this.descargarDatosJSON(); }
+    // loadFile usa siempre descarga binaria — nunca abre sesión Workbook
+    async loadFile() { return await this.descargarDatosBinario(); }
 
     // --- 4. GUARDADO CON CONTROL DE VERSIÓN ---
     async saveFile(blob) {
@@ -5137,8 +5155,9 @@ async function cargarDesdeNube() {
     // Semáforo naranja mientras carga
     if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
     try {
-        // oneDrive.loadFile devuelve el Workbook YA PROCESADO vía Graph API JSON (rápido)
-        const wb = await oneDrive.loadFile(); 
+        // oneDrive.loadFile descarga el xlsx binario desde OneDrive y lo parsea con SheetJS.
+        // NO usa la Workbook API de Graph (evita sesiones implícitas que sobrescriben datos).
+        const wb = await oneDrive.loadFile();
         
         // Procesar datos y actualizar window.datos
         procesarLibroLeido(wb);
@@ -7376,44 +7395,36 @@ function construirLibroExcel(datosFinales) {
     const wb = XLSX.utils.book_new();
 
     // ✅ FIX FECHA DEFINITIVO: Convertimos a texto puro DD/MM/YYYY
-    // OneDrive suele rechazar fechas nativas en ciertas actualizaciones.
-    // Al enviarlo como texto estricto, evitamos que la nube cancele la subida.
-    const normalizarFecha = (f) => {
+    // Obligamos a que Excel reciba un texto normal y no un Date Object
+    // que es lo que suele causar el rechazo silencioso en OneDrive.
+    const normalizarFechaTexto = (f) => {
         let d;
         if (f instanceof Date && !isNaN(f)) d = f;
-        else if (typeof f === 'string' && f.trim()) {
-            d = new Date(f.includes('T') ? f : f + 'T12:00:00');
-        }
-        else if (typeof f === 'number' && f > 0) {
-            d = new Date(Math.round((f - 25569) * 86400 * 1000));
-        }
+        else if (typeof f === 'string' && f.trim()) d = new Date(f.includes('T') ? f : f + 'T12:00:00');
+        else if (typeof f === 'number' && f > 0) d = new Date(Math.round((f - 25569) * 86400 * 1000));
         else d = new Date(); 
         
         if (isNaN(d)) d = new Date();
-
         const dia = String(d.getDate()).padStart(2, '0');
         const mes = String(d.getMonth() + 1).padStart(2, '0');
-        const ano = d.getFullYear();
-        return `${dia}/${mes}/${ano}`; 
+        return `${dia}/${mes}/${d.getFullYear()}`; 
     };
 
     // --- HOJA 1: MOVIMIENTOS ---
     const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
-        "Id": d.id,
-        "Fecha": normalizarFecha(d.fecha),
-        "Cuenta": d.cuenta,
-        "Concepto": d.concepto,
-        "Importe": d.importe,
+        "Id":          d.id,
+        "Fecha":       normalizarFechaTexto(d.fecha),
+        "Cuenta":      d.cuenta,
+        "Concepto":    d.concepto,
+        "Importe":     d.importe,
         "Descripcion": d.descripcion,
-        "Beneficiario": d.beneficiario,
-        "Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
-    })), { 
+        "Beneficiario":d.beneficiario,
+        "Tipo":        d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
+    })), {
         header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"],
-        // Lo ponemos a false porque ahora enviamos un texto ('DD/MM/YYYY')
-        // para forzar a OneDrive a aceptarlo como un string normal.
-        cellDates: false 
+        // ✅ APAGADO: Forzamos a que sean textos, no fechas internas de Excel
+        cellDates: false
     });
-
     XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
 
     // --- HOJA 2: CONFIGURACION ---
@@ -7463,17 +7474,14 @@ function construirLibroExcel(datosFinales) {
 // 💾 GUARDADO MAESTRO BLINDADO (V5: Con Encriptación AES-GCM)
 // ==========================================
 async function guardarUniversal(nuevasFilas) {
-    // --- REFERENCIAS VISUALES ---
     const btn = document.getElementById('btn-guardar');
     const originalText = btn ? btn.innerHTML : 'GUARDAR';
     const btnModal = document.getElementById('btn-modal-action');
     
-    // --- ACTIVAR MODO "GUARDANDO" ---
     if (btn) btn.innerHTML = '<span class="material-icons spin">sync</span> GUARDANDO...';
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
     window.isSaving = true;
 
-    // Semáforo: Luz Amarilla (Procesando)
     if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
 
     let wb = null; 
@@ -7481,53 +7489,20 @@ async function guardarUniversal(nuevasFilas) {
     try {
         console.log("🛡️ [SEGURIDAD] Iniciando protocolo de guardado completo...");
 
-        // 1. LIMPIEZA Y PREPARACIÓN DE DATOS (MOVIMIENTOS)
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
-        let datosFinales = [...(window.datos || [])];
 
-        // Si llegan nuevas filas (desde el modal), las añadimos
-        if (nuevasFilas) {
-            if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
-            const filasProcesadas = nuevasFilas.map(f => {
-                // ✅ FIX FECHA: Normalizamos igual que en construirLibroExcel.
-                // Los objetos de guardarManual ya traen Date objects (después del FIX 1),
-                // pero movimientos del PendingQueue pueden traer strings. Lo cubrimos todo.
-                let fechaFinal;
-                const rawFecha = f.fecha || f.FECHA;
-                if (rawFecha instanceof Date && !isNaN(rawFecha)) {
-                    fechaFinal = rawFecha;
-                } else if (typeof rawFecha === 'string' && rawFecha.trim()) {
-                    fechaFinal = new Date(rawFecha.includes('T') ? rawFecha : rawFecha + 'T12:00:00');
-                } else if (typeof rawFecha === 'number' && rawFecha > 0) {
-                    fechaFinal = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
-                } else {
-                    fechaFinal = new Date();
-                }
+        const idsVistos = new Set();
+        let datosFinales = (window.datos || []).filter(m => {
+            if (!m || !m.id) return false;
+            if (idsVistos.has(m.id)) return false;
+            idsVistos.add(m.id);
+            return true;
+        });
+        datosFinales.sort((a, b) => (b.ts || 0) - (a.ts || 0));
 
-                return {
-                    id: f.ID || f.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'MOV-' + Date.now() + '-' + Math.random().toString(36).slice(2)),
-                    fecha: fechaFinal,
-                    cuenta: CLEAN(f.CUENTA || f.cuenta),
-                    concepto: CLEAN(f.CONCEPTO || f.concepto),
-                    importe: parseFloat(f.IMPORTE || f.importe || 0),
-                    descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
-                    beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
-                    ts: fechaFinal.getTime(),
-                    tipo: f.tipo || f.TIPO || ((parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
-                };
-            });
-            datosFinales.unshift(...filasProcesadas);
-            datosFinales.sort((a, b) => b.ts - a.ts);
-        }
-
-        // =========================================================================
-        // 🔒 PASO 2: ENCRIPTADO DE SEGURIDAD (LOCAL STORAGE) — FIX 1 compatible
-        // =========================================================================
-        // Usamos la CryptoKey de sesión (no extractable), no el password en texto plano
-        const sessionKey = PinSecurity.getSessionKey();
-        
+        // ENCRIPTADO
+        const sessionKey = typeof PinSecurity !== 'undefined' ? PinSecurity.getSessionKey() : null;
         if (sessionKey && typeof CryptoSystem !== 'undefined') {
-            // Preparamos el objeto completo que queremos proteger
             const paqueteDeDatos = {
                 movimientos: datosFinales,
                 recurrentes: window.datosRecurrentes || [],
@@ -7538,35 +7513,18 @@ async function guardarUniversal(nuevasFilas) {
                 },
                 fechaGuardado: new Date().toISOString()
             };
-
-            // CryptoSystem.encriptar detecta la sessionKey activa y usa AES-GCM v2
             const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, null);
-            
-            // Guardamos SOLO la versión encriptada
             localStorage.setItem('DATA_ENCRIPTADA', datosEncriptados);
-            
-            // 🗑️ LIMPIEZA DE RASTROS: Borramos las versiones en texto plano
             localStorage.removeItem('movimientos_v2'); 
             localStorage.removeItem('presupuesto_data');
             localStorage.removeItem('datos_recurrentes');
-        } else {
-            console.warn("⚠️ ADVERTENCIA: No hay sesión activa o falta CryptoSystem. Los datos locales NO se han encriptado.");
         }
-        // =========================================================================
 
-
-        // 2. CONSTRUIR EL LIBRO EXCEL (WORKBOOK) — delegamos en construirLibroExcel()
-        // que es la única fuente de verdad para la estructura del archivo.
         wb = construirLibroExcel(datosFinales);
 
-
-        // 3. GUARDADO FINAL (NUBE O LOCAL)
         const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
         
         if (usarNube) {
-            // ════════════════════════════════════════════════════════
-            // MODO NUBE: Best-effort, no bloquea si falla
-            // ════════════════════════════════════════════════════════
             let cloudOk = false;
             let intentos = 0;
             const maxRetries = 2;
@@ -7575,19 +7533,14 @@ async function guardarUniversal(nuevasFilas) {
                 try {
                     intentos++;
                     if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
-                    console.log(`☁️ Subiendo a OneDrive (Intento ${intentos})...`);
                     
                     const wbout = XLSX.write(wb, {
                         bookType: 'xlsx',
                         type: 'array',
-                        // ✅ FIX cellDates: Necesario para que los Date objects del workbook
-                        // se serialicen como fechas reales en el xlsx binario, no como
-                        // números de serie. Sin esto, Excel ve números en la columna Fecha.
-                        cellDates: true
+                        // ✅ APAGADO EN LA ESCRITURA TAMBIÉN
+                        cellDates: false 
                     });
-                    // ✅ FIX BLOB: Convertimos el Uint8Array a Blob con el MIME correcto.
-                    // Algunos proxies corporativos y Safari antiguo rechazan Uint8Array en fetch PUT.
-                    // Además, el Content-Type del header de saveFile espera un Blob.
+                    
                     const blobFinal = new Blob([wbout], {
                         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                     });
@@ -7596,68 +7549,58 @@ async function guardarUniversal(nuevasFilas) {
                     
                 } catch (e) {
                     if (e && e.code === 'CONFLICT_412') {
-                        // Conflicto 412: otro dispositivo modificó el archivo.
-                        // Descargamos versión fresca, fusionamos nuestros cambios encima, reintentamos.
-                        console.warn("🔄 Conflicto 412: sincronizando antes de reintentar...");
                         if(typeof window.mostrarEstado === 'function') window.mostrarEstado("🔄 Conflicto: sincronizando...", "loading");
                         try {
                             const wbFresco = await oneDrive.loadFile();
                             if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
-                            // Reinyectamos los nuevos movimientos sobre los datos frescos
                             if (nuevasFilas) {
                                 const fp = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
                                 fp.forEach(f => {
                                     if (!window.datos.find(m => m.id === (f.id || f.ID))) window.datos.unshift(f);
                                 });
                             }
-                            // Aseguramos que los movimientos actuales de window.datos estén incluidos
                             datosFinales = [...window.datos];
                             wb = construirLibroExcel(datosFinales);
                             await new Promise(r => setTimeout(r, 800));
                         } catch(syncErr) {
                             console.error("❌ No se pudo resolver conflicto:", syncErr);
-                            break; // Salimos del bucle, registramos como error de nube
+                            break;
                         }
                     } else {
-                        // ✅ FIX DIAGNÓSTICO: Logueamos el error exacto (código HTTP, mensaje)
-                        // para que aparezca en la consola y en el Sentry bar.
                         const errMsg = e.message || String(e);
                         console.warn(`⚠️ Fallo nube intento ${intentos}: ${errMsg}`);
                         if (typeof window.mostrarEstado === 'function') {
-                            window.mostrarEstado(`⚠️ Error nube (intento ${intentos}): ${errMsg}`, "error");
+                            window.mostrarEstado(`⚠️ Error nube: ${errMsg}`, "error");
                         }
-                        if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500));
+                        
+                        // ✅ NUEVA ALARMA VISUAL: Si falla, te lo muestra en pantalla
+                        if (intentos >= maxRetries) {
+                            alert("⚠️ ONEDRIVE HA RECHAZADO EL ARCHIVO\n\nMotivo:\n" + errMsg + "\n\n👉 Comprueba que el Excel no esté abierto en otra ventana o en tu móvil.");
+                        } else {
+                            await new Promise(r => setTimeout(r, 1500));
+                        }
                     }
                 }
             }
 
-            // ── Resultado de la subida ──
             if (cloudOk) {
-                console.log("✅ Nube sincronizada.");
                 if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
                 if (btn) { btn.innerHTML = '<span class="material-icons">cloud_done</span> OK'; }
                 setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
-                // Retornamos éxito total
                 window.datos = datosFinales;
                 if (window.PendingQueue) window.PendingQueue.clear();
                 if (typeof window.actualizarUI === 'function') window.actualizarUI();
                 return { localOk: true, cloudOk: true };
             } else {
-                // ✅ NUBE FALLIDA — pero los datos YA están en localStorage.
-                // NO lanzamos excepción. El llamador (guardarManual) ya sabe manejar este caso.
-                console.warn("⚠️ Nube no disponible. Datos guardados SOLO localmente.");
                 if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
                 if (btn) { btn.innerHTML = '<span class="material-icons">cloud_off</span> LOCAL'; }
                 setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 3000);
                 window.datos = datosFinales;
                 if (typeof window.actualizarUI === 'function') window.actualizarUI();
-                // ← NO throw. El movimiento queda en local. El llamador ve cloudOk:false.
                 return { localOk: true, cloudOk: false };
             }
 
         } else {
-            // MODO LOCAL (sin nube configurada)
-            console.log("💾 Solo localStorage, sin nube configurada.");
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
             window.datos = datosFinales;
             if (typeof window.actualizarUI === 'function') window.actualizarUI();
@@ -7666,12 +7609,9 @@ async function guardarUniversal(nuevasFilas) {
         }
 
     } catch (errorCritico) {
-        // Solo llegamos aquí por errores realmente inesperados (bug de programación)
         console.error("🚨 Error inesperado en guardarUniversal:", errorCritico);
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
-        // Propagamos SOLO errores no relacionados con la nube
         throw errorCritico;
-        
     } finally {
         window.isSaving = false;
         if (btnModal) btnModal.innerHTML = 'GUARDAR';
