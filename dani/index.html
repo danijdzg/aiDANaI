@@ -25,12 +25,15 @@
             graph.microsoft.com
             login.microsoftonline.com
             login.live.com
+            alcdn.msauth.net
+            *.msauth.net
+            *.login.microsoftonline.com
             fonts.googleapis.com
             fonts.gstatic.com;
         img-src 'self' data: blob:;
         object-src 'none';
         base-uri 'self';
-        form-action 'self';
+        form-action 'self' login.microsoftonline.com login.live.com;
     ">
     <!-- ═══════════════════════════════════════════════════════
          SRI (SUBRESOURCE INTEGRITY) — Versiones fijadas
@@ -4372,6 +4375,13 @@ window.generarAnalisisIA = function(movimientos) {
     // ==========================================
     const MSAL_CONFIG = {
         auth: {
+            // ⚠️ IMPORTANTE — REGISTRO EN AZURE (PASO EXTERNO OBLIGATORIO):
+            // Para que el login funcione desde GitHub Pages, la URL exacta de tu app
+            // DEBE estar registrada en Azure Portal → App Registrations → tu app →
+            // Authentication → "Redirect URIs". Añade:
+            //   https://TU-USUARIO.github.io/TU-REPO/
+            // (con la barra final). Sin esto obtendrás error AADSTS50011 y no podrás
+            // obtener tokens de escritura para OneDrive.
             clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
             authority: "https://login.microsoftonline.com/common",
             redirectUri: window.location.href.split('?')[0].split('#')[0],
@@ -4379,7 +4389,11 @@ window.generarAnalisisIA = function(movimientos) {
             postLogoutRedirectUri: window.location.href.split('?')[0].split('#')[0]
         },
         cache: {
-            cacheLocation: "localStorage",
+            // ✅ FIX SEGURIDAD: sessionStorage en lugar de localStorage.
+            // Con localStorage los tokens de OneDrive persisten entre sesiones y
+            // son accesibles por cualquier XSS. Con sessionStorage solo viven
+            // mientras la pestaña está abierta, reduciendo la ventana de ataque.
+            cacheLocation: "sessionStorage",
             storeAuthStateInCookie: true   // ← necesario para flujo redirect en Safari/iOS
         },
         system: {
@@ -4424,7 +4438,10 @@ class OneDriveManager {
         }
 
         const request = {
-            scopes: ["User.Read", "Files.ReadWrite.All"],
+            // ✅ FIX SCOPE: Files.ReadWrite.All requiere admin consent en tenants corporativos
+            // y da permisos excesivos (acceder a archivos de OTROS usuarios del tenant).
+            // Files.ReadWrite es suficiente para leer/escribir los propios archivos de OneDrive.
+            scopes: ["User.Read", "Files.ReadWrite"],
             account: account
         };
 
@@ -4466,7 +4483,7 @@ class OneDriveManager {
         if (accounts.length > 0) {
             try {
                 const resp = await this.msalInstance.acquireTokenSilent({
-                    scopes: ["User.Read", "Files.ReadWrite.All"],
+                    scopes: ["User.Read", "Files.ReadWrite"],
                     account: accounts[0]
                 });
                 return resp.accessToken;
@@ -4478,7 +4495,7 @@ class OneDriveManager {
         // ✅ Usamos REDIRECT en lugar de POPUP para evitar el error COOP
         // El usuario será redirigido a Microsoft y de vuelta a la app tras el login
         await this.msalInstance.loginRedirect({
-            scopes: ["User.Read", "Files.ReadWrite.All"],
+            scopes: ["User.Read", "Files.ReadWrite"],
             prompt: "select_account"
         });
         // ← Esta línea nunca se alcanza (la página se redirige)
@@ -4772,6 +4789,11 @@ const Security = {
 
     function cambiarModo(modo) {
         modoNube = (modo === 'cloud');
+        // ✅ FIX SYNC: window.modoNube debe ser la misma referencia que la var local.
+        // guardarUniversal(), el polling y las funciones externas leen window.modoNube.
+        // Sin esta línea, window.modoNube era siempre undefined/false y el guardado
+        // caía al fallback de getAllAccounts(), que falla cuando el token expira.
+        window.modoNube = modoNube;
         
         // Cambio visual de los botones (Gris vs Azul)
         document.getElementById('mode-local').className = modoNube ? 'source-option' : 'source-option active';
@@ -6103,7 +6125,11 @@ window.guardarManual = async function() {
         console.warn("⚠️ guardarManual: guardado ya en curso, petición ignorada.");
         return;
     }
-    isSaving = true; // Bloqueamos el semáforo
+    isSaving = true; // Bloqueamos el semáforo local
+    // ✅ FIX RACE CONDITION: Sincronizamos también window.isSaving para que el polling
+    // (que lee window.isSaving) no descargue y sobreescriba window.datos mientras
+    // guardarManual está modificando la memoria y subiendo a la nube.
+    window.isSaving = true;
 
     console.log("--- 🔄 Ejecutando Guardado Manual ---");
     const btnGuardar = document.getElementById('btn-modal-action');
@@ -6357,6 +6383,7 @@ window.guardarManual = async function() {
         }
     } finally {
         isSaving = false;
+        window.isSaving = false; // ✅ FIX: Liberar también la referencia global para el polling
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
@@ -6440,20 +6467,32 @@ window.borrarMovimiento = async function(idRaw) {
             btnBorrar.disabled = true;
         }
 
-        // 5. Filtrado matemático exacto
+        // 5. Filtrado matemático exacto con borrado correcto de traspasos
+        // ✅ FIX PAIRID: La lógica anterior comparaba m.pairId === idStr, que NUNCA
+        // era cierto porque pairId es el UUID del grupo (ej: "abc-123") y idStr es el
+        // ID del movimiento clickado (ej: "mov-456"). El compañero de traspaso nunca
+        // se borraba, dejando un movimiento huérfano que corrompía los saldos.
+        // Ahora: primero buscamos el movimiento original para obtener SU pairId,
+        // luego borramos todos los movimientos que compartan ese mismo pairId.
+        const movOriginalABorrar = window.datos.find(m => m && String(m.id).trim() === idStr);
+        const pairIdABorrar = movOriginalABorrar ? movOriginalABorrar.pairId : null;
+
         let borrados = 0;
         window.datos = window.datos.filter(m => {
             if (!m) return false;
             
             const mId = String(m.id).trim();
-            const mPair = m.pairId ? String(m.pairId).trim() : null;
             
-            // Si coincide el ID principal o el de su pareja (Traspaso)
-            if (mId === idStr || (mPair && mPair === idStr)) {
+            // Borra el movimiento clickado
+            if (mId === idStr) { borrados++; return false; }
+            
+            // Borra el compañero de traspaso (comparten el mismo pairId)
+            if (pairIdABorrar && m.pairId && String(m.pairId).trim() === pairIdABorrar) {
                 borrados++;
-                return false; // Lo eliminamos de la memoria
+                return false;
             }
-            return true; // Lo conservamos
+            
+            return true; // Conservar
         });
 
         // 6. Verificación de borrado real
@@ -7286,6 +7325,7 @@ function accionFab(tipo) {
         await oneDrive.createFile('aidanai.xlsx', blob);
         mostrarEstado('✅ Archivo creado y conectado', 'ok');
         modoNube = true;
+        window.modoNube = true; // ✅ FIX SYNC: mantener coherente con la referencia global
     }
 
 
@@ -7471,7 +7511,13 @@ async function guardarUniversal(nuevasFilas) {
                     console.log(`☁️ Subiendo a OneDrive (Intento ${intentos})...`);
                     
                     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                    await oneDrive.saveFile(wbout, "aidanai.xlsx"); 
+                    // ✅ FIX BLOB: Convertimos el Uint8Array a Blob con el MIME correcto.
+                    // Algunos proxies corporativos y Safari antiguo rechazan Uint8Array en fetch PUT.
+                    // Además, el Content-Type del header de saveFile espera un Blob.
+                    const blobFinal = new Blob([wbout], {
+                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    });
+                    await oneDrive.saveFile(blobFinal, "aidanai.xlsx"); 
                     cloudOk = true;
                     
                 } catch (e) {
@@ -8158,6 +8204,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('btn-load-local').style.display = 'none';
             document.getElementById('btn-load-cloud').style.display = 'flex';
             modoNube = true;
+            window.modoNube = true; // ✅ FIX SYNC
 
             mostrarEstado('☁️ Sesión OneDrive activa. Introduce tu contraseña.', 'normal');
 
