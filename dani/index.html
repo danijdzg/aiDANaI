@@ -14,8 +14,8 @@
    <meta http-equiv="Content-Security-Policy" content="
         default-src 'self' data: blob:;
         script-src 'self' 'unsafe-inline'
-            alcdn.msauth.net
-            cdn.jsdelivr.net;
+            https://alcdn.msauth.net
+            https://cdn.jsdelivr.net;
         style-src 'self' 'unsafe-inline'
             fonts.googleapis.com;
         font-src
@@ -84,7 +84,7 @@
     ═══════════════════════════════════════════════════════ -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
             crossorigin="anonymous"></script>
-    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"
+    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.30.0/lib/msal-browser.min.js"
             crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"
             crossorigin="anonymous"></script>
@@ -4509,17 +4509,25 @@ class OneDriveManager {
 
     // --- 2. LOCALIZADOR ---
     async getFileId() {
+        // En memoria RAM está bien cachearlo para no saturar la red, pero NO en localStorage
         if (this.fileId) return this.fileId;
         
-        const cached = localStorage.getItem("aidanai_file_id");
-        if(cached) { this.fileId = cached; return cached; }
-
         const token = await this.getToken();
-        // Busca aidanai.xlsx en la raíz
+        // Forzamos a OneDrive a buscar SIEMPRE el archivo actual que está en la raíz
         const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai.xlsx", {
             headers: { Authorization: `Bearer ${token}` }
         });
 
+        if (res.ok) {
+            const data = await res.json();
+            this.fileId = data.id;
+            return data.id;
+        } else {
+            this.fileId = null;
+            this.lastETag = null;
+            throw new Error("❌ No encuentro 'aidanai.xlsx' en tu OneDrive. Asegúrate de que existe en la raíz.");
+        }
+ 
         if (res.ok) {
             const data = await res.json();
             this.fileId = data.id;
@@ -4620,30 +4628,7 @@ class OneDriveManager {
         const token = await this.getToken();
         
         console.log("📤 Subiendo archivo...");
-
-        // ✅ FIX ETAG CADUCADO: El eTag se capturó cuando se leyó el archivo (quizás
-        // hace varios minutos). Si el usuario tardó en guardar, el eTag del servidor
-        // puede haber cambiado (OneDrive lo actualiza internamente o el archivo se
-        // abrió en Excel). Esto causaba un 412 silencioso en el primer intento.
-        // Solución: refrescamos el eTag DEL SERVIDOR justo antes de cada PUT,
-        // añadiendo solo una petición GET ligera (~50ms) para garantizar coherencia.
-        try {
-            const freshMeta = await fetch(
-                `https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`,
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (freshMeta.ok) {
-                const m = await freshMeta.json();
-                if (m.eTag) {
-                    this.lastETag = m.eTag;
-                    console.log("🔄 eTag refrescado pre-PUT:", this.lastETag);
-                }
-            }
-        } catch(refreshErr) {
-            // No es crítico: si falla el refresco usamos el eTag que teníamos
-            console.warn("⚠️ No se pudo refrescar eTag (se usará el existente):", refreshErr.message);
-        }
-
+        
         const headers = {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -6235,8 +6220,12 @@ window.guardarManual = async function() {
         // 1. DETECTAR EL MODO ACTUAL ANTES QUE NADA
         const modoActual = window.modoTransaccionActual || 'gasto';
 
-        // 2. RECOGER DATOS
-        const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
+       // 2. RECOGER DATOS
+        // Aseguramos un UUID único y compatible siempre
+        const generarID = () => {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+            return 'MOV-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+        };
         const elId = document.getElementById('m-id');
         const idExistente = elId ? elId.value : "";
         
@@ -10350,7 +10339,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
 const CACHE_NAME = 'aidanai-v2';
 const CACHE_URLS = [
     'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-    'https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js',
+    'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.30.0/lib/msal-browser.min.js',
     'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',
     'https://fonts.googleapis.com/icon?family=Material+Icons',
     'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
