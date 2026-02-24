@@ -3727,21 +3727,48 @@ async function _completarLogin() {
     const screen = document.getElementById('pin-login-screen');
     const appVP  = document.getElementById('app-viewport');
 
-    await cargarDesdeCacheAsync();
-
-    screen.classList.add('hidden');
-    appVP.classList.add('visible');
+    // ── MOSTRAR PANTALLA DE CARGA (entre login y app) ───────────────
+    // Cambiamos el PIN screen a un estado "cargando" en lugar de ocultar
+    // antes de confirmar acceso a los datos.
+    const pinContent = screen.querySelector('.pin-content') || screen;
+    if (pinContent) {
+        pinContent.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;
+                justify-content:center;height:100vh;gap:20px;font-family:'Inter',sans-serif;">
+                <div style="font-size:48px;animation:spin 1s linear infinite">⚙️</div>
+                <div style="color:#00B8FF;font-weight:800;font-size:16px;letter-spacing:2px">
+                    CONECTANDO CON ONEDRIVE...
+                </div>
+                <div id="login-status-msg" style="color:#666;font-size:12px;letter-spacing:1px">
+                    Verificando acceso a aidanai.xlsx
+                </div>
+            </div>
+        `;
+    }
 
     if (navigator.vibrate) navigator.vibrate([50, 50]);
 
-    // Arrancar vigilante de inactividad (bloqueo automático a los 5 min)
+    try {
+        if (typeof iniciarSistema === 'function') {
+            await iniciarSistema();
+        }
+    } catch(e) {
+        // iniciarSistema ya llamó a bloquearAppSinDatos().
+        // Solo nos aseguramos de que el PIN screen no quede visible encima del modal.
+        if (screen) screen.classList.add('hidden');
+        return; // ← NO mostramos la app
+    }
+    
+    // Solo llegamos aquí si iniciarSistema() tuvo éxito
+    screen.classList.add('hidden');
+    appVP.classList.add('visible');
+   
+    // Arrancar vigilante de inactividad
     if (typeof InactivityGuard !== 'undefined') InactivityGuard.start();
 
-    // Inicializar el sistema de pestañas correctamente (asegura que los FABs están en el estado correcto)
     if (typeof irPestana === 'function') irPestana('inicio');
-    if (typeof iniciarSistema === 'function') iniciarSistema();
 
-    // Animación Matrix
+    // Animación Matrix (ya tenemos datos reales aquí)
     const DURACION = 1500;
     const inicio   = Date.now();
     const IDS      = ['d-patri-total','d-ing','d-gas','d-net','d-aho','d-cobertura','d-libertad'];
@@ -4762,62 +4789,52 @@ const oneDrive = new OneDriveManager();
 async function iniciarSistema() {
     const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
     
-    // ✅ FIX REDIRECT: Procesamos el resultado de un redirect de Microsoft si venimos de uno.
-    // Esto ocurre cuando loginRedirect() redirige al usuario de vuelta a la app tras login.
     try {
         const redirectResult = await oneDrive.msalInstance.handleRedirectPromise();
         if (redirectResult) {
             console.log("✅ Vuelta de redirect Microsoft — token obtenido");
             if(barra) barra.innerText = "✅ Sesión iniciada. Cargando datos...";
-            // Continuamos al bloque de carga normal (no hacemos return aquí)
         }
     } catch(redirectErr) {
         console.warn("handleRedirectPromise error (no crítico):", redirectErr.message);
     }
 
-    // 1. PRIMER INTENTO: CONEXIÓN SILENCIOSA
+    // 1. CONEXIÓN SILENCIOSA — intentamos sin molestar al usuario
     try {
         if(barra) barra.innerText = "☁️ Verificando Nube...";
+        const loginStatusMsg = document.getElementById('login-status-msg');
+        if (loginStatusMsg) loginStatusMsg.textContent = 'Verificando sesión de Microsoft...';
         
-        // Intentamos conectar sin molestar (solo usa token cacheado, sin popup)
-        await oneDrive.getToken(); 
+        await oneDrive.getToken();
         
-        // Si pasa, descargamos
         if(barra) barra.innerText = "⬇️ Bajando datos...";
-        const wb = await oneDrive.loadFile();
+        if (loginStatusMsg) loginStatusMsg.textContent = 'Descargando aidanai.xlsx...';
         
+        const wb = await oneDrive.loadFile();
         procesarLibroLeido(wb);
         
-        // ÉXITO: Activamos modo nube
         cambiarModo('cloud');
         window.iniciarPolling();
         if(barra) barra.innerText = "✅ Sincronizado";
-        // ✅ Semáforo verde: arranque exitoso con datos de nube
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
+        
+        // ✅ ÉXITO: la función retorna normalmente
+        return true;
 
     } catch (error) {
         console.error("🚫 Fallo crítico de acceso a datos:", error.message || error);
         
-        // ── BLOQUEO TOTAL ──────────────────────────────────────────
-        // La app SOLO funciona con aidanai.xlsx accesible en OneDrive.
-        // Si no hay acceso, bloqueamos completamente sin alternativas.
-        // ─────────────────────────────────────────────────────────
         const motivo = error.message || 'Error desconocido al contactar OneDrive';
+        
+        // ── BLOQUEAR LA APP ─────────────────────────────────────────
+        // Mostramos el modal de error. La app NO se abre.
         if (typeof window.bloquearAppSinDatos === 'function') {
             window.bloquearAppSinDatos(motivo);
-        } else {
-            // Fallback de emergencia si la función aún no cargó
-            document.body.innerHTML = `
-                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
-                    height:100vh;background:#000;color:#FF2E4D;font-family:monospace;text-align:center;padding:30px;">
-                    <div style="font-size:60px">🚫</div>
-                    <h2 style="color:#FF2E4D;margin:20px 0 10px">SIN ACCESO A LA BASE DE DATOS</h2>
-                    <p style="color:#aaa;max-width:300px">${motivo}</p>
-                    <button onclick="location.reload()" style="margin-top:20px;padding:12px 30px;
-                        background:#FF2E4D;color:#000;border:none;border-radius:20px;
-                        font-weight:900;font-size:14px;cursor:pointer">REINTENTAR</button>
-                </div>`;
         }
+        
+        // ← Lanzamos excepción para que _completarLogin sepa que falló
+        //   y NO ejecute las líneas que muestran la app.
+        throw new Error(motivo);
     }
 }
 
