@@ -4796,13 +4796,28 @@ async function iniciarSistema() {
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
 
     } catch (error) {
-        console.warn("⚠️ Fallo arranque automático:", error.message || error);
+        console.error("🚫 Fallo crítico de acceso a datos:", error.message || error);
         
-        // Si falla, mostramos el modal de elección de fuente
-        const modalFuente = document.getElementById('modal-fuente-datos');
-        if (modalFuente) modalFuente.style.display = 'flex';
-        
-        if(barra) barra.innerText = "⚠️ Esperando decisión de usuario...";
+        // ── BLOQUEO TOTAL ──────────────────────────────────────────
+        // La app SOLO funciona con aidanai.xlsx accesible en OneDrive.
+        // Si no hay acceso, bloqueamos completamente sin alternativas.
+        // ─────────────────────────────────────────────────────────
+        const motivo = error.message || 'Error desconocido al contactar OneDrive';
+        if (typeof window.bloquearAppSinDatos === 'function') {
+            window.bloquearAppSinDatos(motivo);
+        } else {
+            // Fallback de emergencia si la función aún no cargó
+            document.body.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                    height:100vh;background:#000;color:#FF2E4D;font-family:monospace;text-align:center;padding:30px;">
+                    <div style="font-size:60px">🚫</div>
+                    <h2 style="color:#FF2E4D;margin:20px 0 10px">SIN ACCESO A LA BASE DE DATOS</h2>
+                    <p style="color:#aaa;max-width:300px">${motivo}</p>
+                    <button onclick="location.reload()" style="margin-top:20px;padding:12px 30px;
+                        background:#FF2E4D;color:#000;border:none;border-radius:20px;
+                        font-weight:900;font-size:14px;cursor:pointer">REINTENTAR</button>
+                </div>`;
+        }
     }
 }
 
@@ -4819,7 +4834,45 @@ async function usarCacheSiExiste() {
         mostrarEstado("❌ No hay copia local. Carga un archivo.", "error");
     }
 }
+   
+// ═══════════════════════════════════════════════════════════
+// 🚫 BLOQUEO TOTAL: Sin acceso a aidanai.xlsx en OneDrive
+// Muestra el modal de error y congela la app completamente.
+// ═══════════════════════════════════════════════════════════
+window.bloquearAppSinDatos = function(motivo) {
+    console.error("🚫 APP BLOQUEADA — Sin acceso a datos:", motivo);
     
+    // Actualizar mensaje con el motivo específico
+    const msgEl = document.getElementById('modal-sin-datos-msg');
+    if (msgEl && motivo) {
+        msgEl.innerHTML = `
+            No se puede acceder a <b style="color:#fff;">aidanai.xlsx</b> en OneDrive.<br><br>
+            <span style="color:#FF2E4D; font-size:12px;">${motivo}</span>
+        `;
+    }
+    
+    // Mostrar el modal bloqueante
+    const modal = document.getElementById('modal-sin-datos');
+    if (modal) modal.style.display = 'flex';
+    
+    // Cerrar cualquier modal/fuente de datos abierto
+    const modalFuente = document.getElementById('modal-fuente-datos');
+    if (modalFuente) modalFuente.style.display = 'none';
+    
+    // Semáforo en rojo
+    if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+    if (typeof window.mostrarEstado === 'function') window.mostrarEstado('❌ Sin acceso a la base de datos', 'error');
+    
+    // Detener polling si estaba activo
+    if (window._pollingInterval) {
+        clearInterval(window._pollingInterval);
+        window._pollingInterval = null;
+    }
+    
+    // Vibración de alerta
+    try { if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]); } catch(e) {}
+};
+   
     function vibrar(tipo) {
         const patrones = { 'ingreso': [50], 'error': [50, 50, 50], 'clonar': [30, 30] };
         const patron = patrones[tipo] || [50];
@@ -5211,6 +5264,10 @@ async function cargarDesdeNube() {
     } catch (error) {
         console.error("Error nube:", error);
         if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+        // Si falla durante el uso normal de la app, bloquear también
+        if (typeof window.bloquearAppSinDatos === 'function') {
+            window.bloquearAppSinDatos(error.message || 'Conexión perdida con OneDrive');
+        }
         throw error;
     }
 }
@@ -10753,7 +10810,63 @@ self.addEventListener('fetch', e => {
 })(); // fin initPWA
 
 </script>
+<!-- ═══════════════════════════════════════════════════════════
+     🚫 MODAL DE BLOQUEO: Sin acceso a aidanai.xlsx en OneDrive
+     Se muestra cuando la app no puede acceder a la base de datos.
+     NO tiene botón de cerrar. Bloquea completamente la app.
+═══════════════════════════════════════════════════════════ -->
+<div id="modal-sin-datos" style="
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.97);
+    z-index: 999999;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    font-family: 'Inter', sans-serif;
+    padding: 30px;
+    box-sizing: border-box;
+    text-align: center;
+">
+    <div style="font-size: 64px; animation: pulse-danger 1.5s infinite;">🚫</div>
+    <div style="font-size: 22px; font-weight: 900; color: #FF2E4D; letter-spacing: 2px; text-transform: uppercase;">
+        Sin acceso a la base de datos
+    </div>
+    <div style="font-size: 14px; color: #aaa; max-width: 320px; line-height: 1.6;" id="modal-sin-datos-msg">
+        No se puede acceder a <b style="color:#fff;">aidanai.xlsx</b> en OneDrive.<br>
+        La aplicación no puede funcionar sin sus datos.
+    </div>
+    <div style="margin-top: 10px; padding: 14px 20px; background: rgba(255,46,77,0.1); border: 1px solid #FF2E4D; border-radius: 12px; font-size: 12px; color: #FF2E4D; max-width: 320px; line-height: 1.6;">
+        ⚠️ Asegúrate de que:<br>
+        1. El archivo <b>aidanai.xlsx</b> existe en la raíz de tu OneDrive<br>
+        2. Tienes conexión a Internet<br>
+        3. Tu sesión de Microsoft está activa
+    </div>
+    <button onclick="window.location.reload()" style="
+        margin-top: 10px;
+        padding: 14px 32px;
+        background: #FF2E4D;
+        color: #000;
+        font-family: 'Inter', sans-serif;
+        font-weight: 900;
+        font-size: 14px;
+        border: none;
+        border-radius: 24px;
+        cursor: pointer;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    ">🔄 Reintentar</button>
+</div>
 
+<style>
+@keyframes pulse-danger {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.7; }
+}
+</style>
 <!-- ═══════════════════════════════════════════════════════════
      🛡️ CORTINA DE PRIVACIDAD (MEJORA 6)
      Se hace visible mediante JS cuando document.hidden = true,
