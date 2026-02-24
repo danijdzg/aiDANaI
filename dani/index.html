@@ -6456,21 +6456,14 @@ window.guardarManual = async function() {
         movimientosParaLocal.forEach(m => window.datos.push(m));
 
         // ✅ ENCOLAR: guardamos en PendingQueue ANTES de intentar la nube.
-        // Así, aunque la nube falle o el polling descargue datos viejos,
-        // estos movimientos siempre se reinyectarán en procesarLibroLeido.
         if (window.PendingQueue) {
             window.PendingQueue.add(movimientosParaLocal);
         }
 
-        // 2. Refrescar UI (Optimistic UI — sin llamar recalcularSaldosGlobal para no duplicar)
+        // 2. Refrescar UI
         if (typeof renderizar === 'function') renderizar();
 
-        // 3. Guardar en local Y subir a la nube (best-effort)
-        // ✅ FIX CONFLICTO 412: Pasamos los nuevos movimientos como argumento.
-        // Si se produce un 412 (eTag caducado), el handler descarga la versión fresca
-        // del servidor y necesita saber qué movimientos nuevos reinyectar.
-        // Antes se llamaba sin argumento → los movimientos nuevos nunca llegaban al
-        // handler de conflicto → el segundo intento subía datos SIN el nuevo movimiento.
+        // 3. Guardar en local Y subir a la nube
         const resultadoGuardado = await window.guardarUniversal(movimientosParaLocal);
 
         // ─ El movimiento está siempre guardado en local ─
@@ -6482,11 +6475,9 @@ window.guardarManual = async function() {
         
         // Mensaje según si la nube respondió o no
         if (resultadoGuardado && resultadoGuardado.cloudOk) {
-            // ✅ Nube sincronizada
             if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado en la nube", "success");
             if(window.mostrarNotificacion) window.mostrarNotificacion("✅ Movimiento guardado y sincronizado", "success");
         } else {
-            // ⚠️ Solo local — la nube fallará en silencio, reintento automático en 30s
             if (typeof mostrarEstado === 'function') mostrarEstado("⚠️ Guardado localmente", "warning");
             if(window.mostrarNotificacion) window.mostrarNotificacion("⚠️ Guardado en local. Reintento en 30s...", "warning");
             // Reintento automático
@@ -6509,11 +6500,6 @@ window.guardarManual = async function() {
     } catch (error) {
         console.error("❌ Error al guardar:", error);
         
-        // ✅ NUEVO DISEÑO OFFLINE-FIRST:
-        // Solo hacemos ROLLBACK si el error es de VALIDACIÓN (lanzado antes de modificar window.datos).
-        // Reconocemos los errores de validación porque su mensaje empieza por "❌ Falta".
-        // Para cualquier otro error (nube caída, token expirado, etc.) el movimiento ya está
-        // en window.datos y en localStorage → SE QUEDA. Solo el semáforo se pone rojo.
         const esErrorValidacion = error && error.message && (
             error.message.includes('Falta la FECHA') ||
             error.message.includes('Falta la CUENTA') ||
@@ -6525,23 +6511,19 @@ window.guardarManual = async function() {
         );
         
         if (esErrorValidacion) {
-            // Error de validación: revertimos porque nunca modificamos datos
             window.datos = copiaSeguridadEnMemoria;
             if (typeof window.actualizarUI === 'function') window.actualizarUI();
             if(window.mostrarNotificacion) {
                 window.mostrarNotificacion("⚠️ " + error.message, "error");
             }
-            // No cerramos el modal — el usuario debe corregir el formulario
         } else {
-            // Error de nube u otro: el movimiento ya está guardado localmente.
-            // Cerramos el modal y mostramos advertencia de sync pendiente.
             window.cerrarModal();
             if (typeof window.actualizarUI === 'function') window.actualizarUI();
             if(window.mostrarNotificacion) {
                 window.mostrarNotificacion("⚠️ Guardado LOCAL. La nube se sincronizará automáticamente.", "warning");
             }
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
-            // Programar reintento de subida en 30 segundos
+            
             window._cloudRetryTimer = setTimeout(async () => {
                 if (window.modoNube && typeof guardarUniversal === 'function') {
                     console.log("🔁 Reintentando subida a nube...");
@@ -6558,7 +6540,7 @@ window.guardarManual = async function() {
         }
     } finally {
         isSaving = false;
-        window.isSaving = false; // ✅ FIX: Liberar también la referencia global para el polling
+        window.isSaving = false; 
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
             btnGuardar.disabled = false;
