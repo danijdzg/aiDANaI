@@ -6402,81 +6402,92 @@ window.duplicarMovimiento = function() {
 };
 
 // --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
-// Variable global de seguridad para evitar bucles de ejecución
-window._candadoBorrando = false;
-
-window.borrarMovimiento = async function(id) {
-    // PROTECCIÓN ANTI-BUCLES: Si ya se está borrando, ignoramos llamadas fantasma
+window.borrarMovimiento = async function(idRaw) {
+    // 1. Candado estricto anti-bucles
     if (window._candadoBorrando) return;
     window._candadoBorrando = true;
 
     const btnBorrar = document.getElementById('btn-borrar-modal');
 
     try {
-        // 1. Validar que el ID sea correcto (y no un evento del ratón por error)
-        if (typeof id === 'object') {
+        // 2. Extraer ID real a prueba de fallos (Evita el error "undefined")
+        let idFinal = idRaw;
+        
+        if (typeof idRaw === 'object' || !idRaw) {
             const inputId = document.getElementById('m-id');
-            if (inputId) id = inputId.value;
-            else throw new Error("ID de movimiento inválido");
+            if (inputId && inputId.value) {
+                idFinal = inputId.value;
+            } else {
+                throw new Error("No se ha detectado el ID del movimiento.");
+            }
         }
+        
+        // Limpiamos espacios invisibles que rompen la búsqueda
+        const idStr = String(idFinal).trim();
 
-        // 2. Pedir confirmación visual
+        // 3. Confirmación visual Pro
         const confirmado = await window.pedirConfirmacion(
             "ELIMINAR MOVIMIENTO", 
             "¿Estás seguro de que quieres borrar este movimiento permanentemente?", 
             "🗑️"
         );
         
-        if (!confirmado) return; // Si cancela, salimos
+        if (!confirmado) return; // Salir limpio sin error
 
-        // 3. Bloquear el botón visualmente
-        if(btnBorrar) {
-            btnBorrar.innerHTML = "<span class='material-icons'>hourglass_empty</span>";
+        // 4. Bloqueo visual del botón
+        if (btnBorrar) {
+            btnBorrar.innerHTML = "<span class='material-icons spin'>sync</span>";
             btnBorrar.disabled = true;
         }
 
-        const lenInicial = window.datos.length;
-        const idStr = String(id);
-        
-        // 4. Filtrar y eliminar el movimiento (y su pareja si es un traspaso)
+        // 5. Filtrado matemático exacto
+        let borrados = 0;
         window.datos = window.datos.filter(m => {
             if (!m) return false;
-            return String(m.id) !== idStr && String(m.pairId) !== idStr;
+            
+            const mId = String(m.id).trim();
+            const mPair = m.pairId ? String(m.pairId).trim() : null;
+            
+            // Si coincide el ID principal o el de su pareja (Traspaso)
+            if (mId === idStr || (mPair && mPair === idStr)) {
+                borrados++;
+                return false; // Lo eliminamos de la memoria
+            }
+            return true; // Lo conservamos
         });
 
-        // 5. Comprobar si realmente se borró algo
-        if (window.datos.length === lenInicial) {
-            throw new Error("El movimiento ya no existe o no se pudo localizar.");
+        // 6. Verificación de borrado real
+        if (borrados === 0) {
+            throw new Error(`El movimiento ya no existe en memoria (ID buscado: ${idStr}).`);
         }
 
-        // 6. Actualizar cálculos y guardar en la nube
+        // 7. Guardar y actualizar
         if (typeof window.recalcularSaldosGlobal === 'function') window.recalcularSaldosGlobal();
         if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
 
-        // 7. Cerrar ventanas y refrescar UI
+        // 8. Cierre y Refresco
         if (typeof window.cerrarModal === 'function') window.cerrarModal();
         if (typeof window.renderizar === 'function') window.renderizar();
         if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
         
-        // 8. Feedback final
         if (typeof window.mostrarNotificacion === 'function') {
             window.mostrarNotificacion("🗑️ Movimiento eliminado correctamente", "success");
         }
         if (typeof vibrar === 'function') vibrar('error'); 
 
     } catch (error) {
-        console.error("❌ Error al borrar:", error);
+        console.error("❌ Error en borrarMovimiento:", error);
         if (typeof window.mostrarNotificacion === 'function') {
             window.mostrarNotificacion("Error: " + error.message, "error");
         }
         
-        // Restaurar el botón si algo falla
-        if(btnBorrar) {
+        // Restaurar el botón si falló
+        if (btnBorrar) {
             btnBorrar.innerHTML = '<span class="material-icons">delete</span>';
             btnBorrar.disabled = false;
         }
     } finally {
-        // MUY IMPORTANTE: Abrir el candado de seguridad al terminar (con éxito o error)
+        // Abrimos la puerta de seguridad siempre al terminar
         window._candadoBorrando = false;
     }
 };
@@ -6564,7 +6575,220 @@ function recalcularSaldosGlobal() {
         }
     };
 
+    // ==========================================
+    // 🎨 PUENTE DE ANIMACIÓN MEJORADO (V2)
+    // ==========================================
+    function animarValor(id, valorFinal, prefijo = '', sufijo = '', decimales = 2) {
+        // Corrección de signo: Si el prefijo es un menos, invertimos el valor
+        // para que la animación moderna lo entienda bien.
+        let valorReal = valorFinal;
+        if (prefijo.includes('-')) {
+            valorReal = -Math.abs(valorFinal);
+        }
+
+        // Detectar tipo
+        let tipo = 'moneda';
+        if (sufijo.includes('%')) tipo = 'porcentaje';
+        else if (sufijo.includes('Meses')) tipo = 'meses';
+        else if (sufijo === '') tipo = 'numero';
+        
+        // Ejecutar animación si el motor existe
+        if (typeof window.animarCifra === 'function') {
+            // Pequeño truco: forzamos que empiece de 0 si no tiene historial
+            const el = document.getElementById(id);
+            if(el && !el.getAttribute('data-prev')) el.innerText = prefijo + "0" + sufijo;
+            
+            window.animarCifra(id, valorReal, tipo);
+        } else {
+            // Fallback de seguridad
+            const el = document.getElementById(id);
+            if(el) el.innerText = prefijo + new Intl.NumberFormat('es-ES', { minimumFractionDigits: decimales }).format(valorFinal) + sufijo;
+        }
+    }
+ 
+// ==========================================
+// 🎢 MOTOR DE ANIMACIÓN DE NÚMEROS (CountUp)
+// ==========================================
+const cacheValores = {}; // Memoria para recordar el valor anterior
+
+function animarCifra(id, valorFinal, tipo = 'moneda') {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+
+    // 1. Determinar punto de partida (para que no empiece siempre de 0)
+    const valorInicial = cacheValores[id] || 0;
+    const variacion = valorFinal - valorInicial;
     
+    // Si el cambio es minúsculo, no animamos
+    if (Math.abs(variacion) < 0.01) {
+        elemento.innerText = formatear(valorFinal, tipo);
+        return;
+    }
+
+    // 2. Configuración de la animación
+    const duracion = 1500; // 1.5 segundos (muy elegante)
+    const startTime = performance.now();
+
+    // Función de Easing (Ease Out Expo): Empieza rápido, frena suave al final
+    const easeOutExpo = (x) => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+
+    function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duracion, 1);
+        
+        // Calcular valor actual basado en la curva de aceleración
+        const valorActual = valorInicial + (variacion * easeOutExpo(progress));
+
+        // Pintar en pantalla
+        elemento.innerText = formatear(valorActual, tipo);
+
+        // Continuar o terminar
+        if (progress < 1) {
+            requestAnimationFrame(step);
+        } else {
+            cacheValores[id] = valorFinal; // Guardamos el valor final para la próxima
+        }
+    }
+
+    // Arrancar
+    requestAnimationFrame(step);
+}
+
+// Ayudante de formato interno
+function formatear(val, tipo) {
+    if (tipo === 'moneda') {
+        return new Intl.NumberFormat('es-ES', { 
+            style: 'currency', 
+            currency: 'EUR', 
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2 
+        }).format(val);
+    } else if (tipo === 'porcentaje') {
+        return val.toFixed(2) + '%';
+    } else if (tipo === 'numero') {
+        return val.toFixed(1); // Para los "Meses" de cobertura
+    }
+    return val;
+}
+ 
+        // 2. Calcular KPIs visuales (Ingresos/Gastos del periodo seleccionado)
+        let ing = 0, gas = 0;
+        datosResumen.forEach(m => {
+            if (m.tipo === 'ingreso') ing += m.importe;
+            if (m.tipo === 'gasto') gas += Math.abs(m.importe); 
+        });
+
+        let neto = ing - gas;
+        let tasaAhorro = (ing > 0) ? ((ing - gas) / ing) * 100 : 0;
+
+        // Actualizar KPIs superiores
+        animarValor('d-ing', ing);
+        animarValor('d-gas', gas, '-', ''); 
+        const elNeto = document.getElementById('d-net');
+        if(elNeto) {
+            animarValor('d-net', neto);
+            elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg'); 
+        }
+        animarValor('d-aho', tasaAhorro, '', '%', 2);
+
+        // 3. --- CORRECCIÓN: CÁLCULO DE PATRIMONIO Y GASTO MEDIO REAL ---
+        // Calculamos saldos totales (Liquidez e Inversión) iterando TODO el historial del propietario
+        let totalPatrimonio = 0, totalLiquidez = 0, totalInversion = 0;
+        
+        // Variables para calcular el Gasto Mensual Promedio Histórico
+        let gastoTotalHistorico = 0;
+        let primerGasto = new Date(); // Fecha muy futura
+        let ultimoGasto = new Date(0); // Fecha muy pasada
+        let hayGastos = false;
+
+        datosPropietario.forEach(m => {
+            // A. Suma de Saldos
+            totalPatrimonio += m.importe;
+            const ctaKey = m.cuenta.trim().toUpperCase();
+            // CORRECCIÓN: Usamos 'SIN CLASIFICAR' para cuentas desconocidas en el Dashboard
+            const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[ctaKey]) ? mapaCuentas[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
+            
+            if(config.esInversion) {
+                totalInversion += m.importe; 
+            } else { 
+                totalLiquidez += m.importe; 
+            }
+
+            // B. Detección de Gasto Histórico (Para hacer la media real)
+            if (m.tipo === 'gasto') {
+                gastoTotalHistorico += Math.abs(m.importe);
+                const fechaM = new Date(m.ts);
+                // Encontrar el rango de fechas donde ha habido gastos
+                if (fechaM < primerGasto) primerGasto = fechaM;
+                if (fechaM > ultimoGasto) ultimoGasto = fechaM;
+                hayGastos = true;
+            }
+        });
+
+        // Actualizar UI de Patrimonio
+        const elPatri = document.getElementById('d-patri-total');
+        if(elPatri) {
+            animarValor('d-patri-total', totalPatrimonio, '', ' €');
+            elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
+        }
+        animarValor('d-patri-liq', totalLiquidez, '', ' €');
+        animarValor('d-patri-inv', totalInversion, '', ' €');
+
+        // 4. --- LÓGICA FINANCIERA CORREGIDA (COBERTURA Y LIBERTAD) ---
+        
+        // Calculamos el Gasto Mensual Real basándonos en la media diaria histórica
+        // Esto evita que el indicador salte locamente si cambias el filtro de fecha.
+        let gastoMensualReal = 0;
+        
+        if (hayGastos) {
+            // Diferencia en milisegundos entre el primer y último gasto registrado
+            const diffTime = Math.abs(ultimoGasto - primerGasto);
+            // Convertir a días (mínimo 1 para evitar división por cero)
+            const diasTotales = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            
+            // Si llevamos poco tiempo registrando (ej. < 30 días), el promedio puede ser engañoso.
+            // Pero matemáticamente es: (Total Gastado / Días Registrados) * 30.44 días/mes
+            gastoMensualReal = (gastoTotalHistorico / diasTotales) * 30.44;
+        }
+
+        // Protección contra gastos 0 o irreales para no romper la división
+        if (gastoMensualReal < 1) gastoMensualReal = 1; 
+
+        // A. CÁLCULO COBERTURA (Runway)
+        // Fórmula: Liquidez Total / Gasto Mensual Promedio
+        let mesesCobertura = totalLiquidez / gastoMensualReal;
+
+        // B. CÁLCULO LIBERTAD FINANCIERA (FIRE)
+        // Regla del 4%: Necesitas 25 veces tu gasto anual (o 300 veces tu gasto mensual)
+        // Objetivo = GastoMensual * 300
+        let objetivoFIRE = gastoMensualReal * 300; 
+        let pctLibertad = (totalPatrimonio / objetivoFIRE) * 100;
+
+        // Visualización Cobertura
+        const elCob = document.getElementById('d-cobertura');
+        if(elCob) {
+            if (totalLiquidez <= 0) {
+                elCob.innerText = "0.0 Meses";
+                elCob.style.color = "var(--c-danger)";
+            } else {
+                animarValor('d-cobertura', mesesCobertura, '', ' Meses', 1);
+                // Semáforo de salud financiera
+                elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
+            }
+        }
+
+        // Visualización Libertad
+        const elLib = document.getElementById('d-libertad');
+        if(elLib) {
+            if (pctLibertad > 100) pctLibertad = 100; // Tope visual al 100%
+            if (pctLibertad < 0) pctLibertad = 0;
+            animarValor('d-libertad', pctLibertad, '', '%', 2);
+        }
+
+        // Renderizado de gráficos
+        renderizarGraficoEvolucion(datosPropietario);
+        generarAnalisisIA(datos);
+		renderizarRadarScoring();
 window.verExtractoCuenta = function(nombreCuenta) {
     // 1. Filtrar solo los movimientos de esta cuenta específica
     const movs = window.datos.filter(m => m.cuenta === nombreCuenta);
@@ -8847,7 +9071,16 @@ window.editarMovimiento = function(idMov) {
         const btnBorrar = document.getElementById('btn-borrar-modal');
         if (btnBorrar) {
             btnBorrar.style.display = 'block';
-            btnBorrar.onclick = () => window.borrarMovimiento(mov.id);
+            
+            // CLAVE: Destruimos eventos fantasma previos
+            btnBorrar.onclick = null; 
+            
+            // Asignamos el clic blindado
+            btnBorrar.onclick = (e) => {
+                e.preventDefault(); 
+                e.stopPropagation();
+                window.borrarMovimiento(mov.id);
+            };
         }
     }
 
