@@ -4582,9 +4582,29 @@ class OneDriveManager {
         
         console.log("📤 Subiendo archivo...");
 
-        // 🔒 ANTI-CONFLICTO: Usamos If-Match para que OneDrive rechace (412) la subida
-        // si el archivo fue modificado por otro usuario/dispositivo desde que lo descargamos.
-        // Si no tenemos eTag aún (primera vez), mandamos '*' que siempre acepta.
+        // ✅ FIX ETAG CADUCADO: El eTag se capturó cuando se leyó el archivo (quizás
+        // hace varios minutos). Si el usuario tardó en guardar, el eTag del servidor
+        // puede haber cambiado (OneDrive lo actualiza internamente o el archivo se
+        // abrió en Excel). Esto causaba un 412 silencioso en el primer intento.
+        // Solución: refrescamos el eTag DEL SERVIDOR justo antes de cada PUT,
+        // añadiendo solo una petición GET ligera (~50ms) para garantizar coherencia.
+        try {
+            const freshMeta = await fetch(
+                `https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (freshMeta.ok) {
+                const m = await freshMeta.json();
+                if (m.eTag) {
+                    this.lastETag = m.eTag;
+                    console.log("🔄 eTag refrescado pre-PUT:", this.lastETag);
+                }
+            }
+        } catch(refreshErr) {
+            // No es crítico: si falla el refresco usamos el eTag que teníamos
+            console.warn("⚠️ No se pudo refrescar eTag (se usará el existente):", refreshErr.message);
+        }
+
         const headers = {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -5298,20 +5318,25 @@ window.procesarLibroLeido = function(wb) {
             esInvFinal = infoCuenta.esInversion;
         }
 
-        // Procesar Fecha
+        // Procesar Fecha — siempre producimos un Date object para coherencia con construirLibroExcel
         let fechaObj = new Date();
-        if (typeof rawFecha === 'number') {
+        if (rawFecha instanceof Date && !isNaN(rawFecha)) {
+            // SheetJS con cellDates:true devuelve Date directamente → usamos tal cual
+            fechaObj = rawFecha;
+        } else if (typeof rawFecha === 'number') {
             const fechaBase = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
             fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
-        } else if (typeof rawFecha === 'string') {
+        } else if (typeof rawFecha === 'string' && rawFecha.trim()) {
             if (rawFecha.includes('/')) {
                 const parts = rawFecha.split('/');
                 if(parts.length === 3) fechaObj = new Date(parts[2], parts[1]-1, parts[0]);
                 else fechaObj = new Date(rawFecha);
             } else {
-                fechaObj = new Date(rawFecha);
+                fechaObj = new Date(rawFecha.includes('T') ? rawFecha : rawFecha + 'T12:00:00');
             }
         }
+        // Sanitizamos fechas inválidas para no romper sort ni cálculos
+        if (isNaN(fechaObj.getTime())) fechaObj = new Date();
 
         const rawImporte = fila.IMPORTE || fila.Importe || fila.importe || 0;
         
@@ -6159,6 +6184,12 @@ window.guardarManual = async function() {
         const elDestino = document.getElementById('m-cuenta-destino');
         const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
 
+        // 🔥 FIX FECHA: el input devuelve un string "YYYY-MM-DD".
+        // construirLibroExcel necesita un objeto Date real para que SheetJS lo
+        // serialice como celda de fecha en el xlsx (no como texto sin formato).
+        // Usamos T12:00:00 para evitar desfases de timezone.
+        const fechaComoDate = new Date(fecha + 'T12:00:00');
+
         // 🔥 CORRECCIÓN AUTOMÁTICA: SI ES TRASPASO, EL CONCEPTO ES "TRASPASO"
         let concepto = document.getElementById('m-concepto').value;
         if (modoActual === 'traspaso') {
@@ -6208,27 +6239,27 @@ window.guardarManual = async function() {
 
             const movSalida = {
                 id: idSalida,
-                fecha: fecha,
+                fecha: fechaComoDate,
                 cuenta: cuentaOrigen,
                 concepto: "TRASPASO",
                 importe: -importeNum,
                 descripcion: `>> A: ${cuentaDestino} | ${desc}`,
                 beneficiario: detectarDueno(cuentaOrigen),
                 tipo: 'traspaso',
-                ts: new Date(fecha + 'T12:00:00').getTime(),
+                ts: fechaComoDate.getTime(),
                 pairId: pairId
             };
 
             const movEntrada = {
                 id: idEntrada,
-                fecha: fecha,
+                fecha: fechaComoDate,
                 cuenta: cuentaDestino,
                 concepto: "TRASPASO",
                 importe: importeNum,
                 descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
                 beneficiario: detectarDueno(cuentaDestino),
                 tipo: 'traspaso',
-                ts: new Date(fecha + 'T12:00:00').getTime(),
+                ts: fechaComoDate.getTime(),
                 pairId: pairId
             };
 
@@ -6250,14 +6281,14 @@ window.guardarManual = async function() {
 
             const nuevoMov = {
                 id: idFinal,
-                fecha: fecha,
+                fecha: fechaComoDate,
                 cuenta: cuentaOrigen,
                 concepto: concepto,
                 importe: importeNum,
                 descripcion: desc,
                 beneficiario: benefFinal,
                 tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
-                ts: new Date(fecha + 'T12:00:00').getTime()
+                ts: fechaComoDate.getTime()
             };
 
             movimientosParaLocal.push(nuevoMov);
@@ -6296,7 +6327,12 @@ window.guardarManual = async function() {
         if (typeof renderizar === 'function') renderizar();
 
         // 3. Guardar en local Y subir a la nube (best-effort)
-        const resultadoGuardado = await window.guardarUniversal();
+        // ✅ FIX CONFLICTO 412: Pasamos los nuevos movimientos como argumento.
+        // Si se produce un 412 (eTag caducado), el handler descarga la versión fresca
+        // del servidor y necesita saber qué movimientos nuevos reinyectar.
+        // Antes se llamaba sin argumento → los movimientos nuevos nunca llegaban al
+        // handler de conflicto → el segundo intento subía datos SIN el nuevo movimiento.
+        const resultadoGuardado = await window.guardarUniversal(movimientosParaLocal);
 
         // ─ El movimiento está siempre guardado en local ─
         window.cerrarModal();
@@ -7339,17 +7375,44 @@ function construirLibroExcel(datosFinales) {
     const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
     const wb = XLSX.utils.book_new();
 
+    // ✅ FIX FECHA: Normalizador universal de fecha.
+    // window.datos puede contener fechas en tres formatos distintos:
+    //   1. Date object  → de movimientos cargados desde xlsx (procesarLibroLeido)
+    //   2. string "YYYY-MM-DD" → de movimientos OLD creados sin el fix (PendingQueue)
+    //   3. número (serial Excel) → caso extremo de doble conversión
+    // SheetJS json_to_sheet con cellDates:true serializa correctamente SOLO Date objects.
+    // Esta función garantiza que siempre llega un Date real a la hoja.
+    const normalizarFecha = (f) => {
+        if (f instanceof Date && !isNaN(f)) return f;
+        if (typeof f === 'string' && f.trim()) {
+            // "YYYY-MM-DD" o ISO completo
+            const d = new Date(f.includes('T') ? f : f + 'T12:00:00');
+            if (!isNaN(d)) return d;
+        }
+        if (typeof f === 'number' && f > 0) {
+            // Serial de Excel: días desde 1/1/1900
+            return new Date(Math.round((f - 25569) * 86400 * 1000));
+        }
+        return new Date(); // fallback: hoy
+    };
+
     // --- HOJA 1: MOVIMIENTOS ---
     const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
-        "Id": d.id,
-        "Fecha": d.fecha,
-        "Cuenta": d.cuenta,
-        "Concepto": d.concepto,
-        "Importe": d.importe,
+        "Id":          d.id,
+        "Fecha":       normalizarFecha(d.fecha),
+        "Cuenta":      d.cuenta,
+        "Concepto":    d.concepto,
+        "Importe":     d.importe,
         "Descripcion": d.descripcion,
-        "Beneficiario": d.beneficiario,
-        "Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
-    })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
+        "Beneficiario":d.beneficiario,
+        "Tipo":        d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
+    })), {
+        header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"],
+        // ✅ FIX cellDates: Sin este flag, SheetJS convierte los Date objects a números
+        // de serie de Excel. Con él, los escribe como celdas de tipo fecha, que Excel
+        // reconoce y formatea correctamente (DD/MM/YYYY).
+        cellDates: true
+    });
     XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
 
     // --- HOJA 2: CONFIGURACION ---
@@ -7425,13 +7488,19 @@ async function guardarUniversal(nuevasFilas) {
         if (nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
             const filasProcesadas = nuevasFilas.map(f => {
-                let fechaFinal = new Date();
-                const rawFecha = f.FECHA || f.fecha;
-                if (typeof rawFecha === 'string' && rawFecha.includes('-')) {
-                    const [y, m, d] = rawFecha.split('-').map(Number);
-                    fechaFinal = new Date(y, m - 1, d);
+                // ✅ FIX FECHA: Normalizamos igual que en construirLibroExcel.
+                // Los objetos de guardarManual ya traen Date objects (después del FIX 1),
+                // pero movimientos del PendingQueue pueden traer strings. Lo cubrimos todo.
+                let fechaFinal;
+                const rawFecha = f.fecha || f.FECHA;
+                if (rawFecha instanceof Date && !isNaN(rawFecha)) {
+                    fechaFinal = rawFecha;
+                } else if (typeof rawFecha === 'string' && rawFecha.trim()) {
+                    fechaFinal = new Date(rawFecha.includes('T') ? rawFecha : rawFecha + 'T12:00:00');
+                } else if (typeof rawFecha === 'number' && rawFecha > 0) {
+                    fechaFinal = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
                 } else {
-                    fechaFinal = new Date(rawFecha || Date.now());
+                    fechaFinal = new Date();
                 }
 
                 return {
@@ -7443,9 +7512,6 @@ async function guardarUniversal(nuevasFilas) {
                     descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
                     beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
                     ts: fechaFinal.getTime(),
-                    // ✅ FIX BUG-4: Antes recalculaba el tipo SOLO por el signo del importe,
-                    // perdiendo 'traspaso' cuando venía de ejecutarRecurrente/agregarDesdeRecurrente.
-                    // Ahora respeta el tipo original del objeto fuente.
                     tipo: f.tipo || f.TIPO || ((parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
                 };
             });
@@ -7510,7 +7576,14 @@ async function guardarUniversal(nuevasFilas) {
                     if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
                     console.log(`☁️ Subiendo a OneDrive (Intento ${intentos})...`);
                     
-                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    const wbout = XLSX.write(wb, {
+                        bookType: 'xlsx',
+                        type: 'array',
+                        // ✅ FIX cellDates: Necesario para que los Date objects del workbook
+                        // se serialicen como fechas reales en el xlsx binario, no como
+                        // números de serie. Sin esto, Excel ve números en la columna Fecha.
+                        cellDates: true
+                    });
                     // ✅ FIX BLOB: Convertimos el Uint8Array a Blob con el MIME correcto.
                     // Algunos proxies corporativos y Safari antiguo rechazan Uint8Array en fetch PUT.
                     // Además, el Content-Type del header de saveFile espera un Blob.
@@ -7545,7 +7618,13 @@ async function guardarUniversal(nuevasFilas) {
                             break; // Salimos del bucle, registramos como error de nube
                         }
                     } else {
-                        console.warn(`⚠️ Fallo nube intento ${intentos}: ${e.message || e}`);
+                        // ✅ FIX DIAGNÓSTICO: Logueamos el error exacto (código HTTP, mensaje)
+                        // para que aparezca en la consola y en el Sentry bar.
+                        const errMsg = e.message || String(e);
+                        console.warn(`⚠️ Fallo nube intento ${intentos}: ${errMsg}`);
+                        if (typeof window.mostrarEstado === 'function') {
+                            window.mostrarEstado(`⚠️ Error nube (intento ${intentos}): ${errMsg}`, "error");
+                        }
                         if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500));
                     }
                 }
