@@ -8391,99 +8391,16 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
     }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  ██████╗ ██╗    ██╗ █████╗     ███████╗███╗   ██╗ ██████╗ ██╗███╗   ██╗███████╗
-//  ██╔══██╗██║    ██║██╔══██╗    ██╔════╝████╗  ██║██╔════╝ ██║████╗  ██║██╔════╝
-//  ██████╔╝██║ █╗ ██║███████║    █████╗  ██╔██╗ ██║██║  ███╗██║██╔██╗ ██║█████╗  
-//  ██╔═══╝ ██║███╗██║██╔══██║    ██╔══╝  ██║╚██╗██║██║   ██║██║██║╚██╗██║██╔══╝  
-//  ██║     ╚███╔███╔╝██║  ██║    ███████╗██║ ╚████║╚██████╔╝██║██║ ╚████║███████╗
-//  ╚═╝      ╚══╝╚══╝ ╚═╝  ╚═╝    ╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝╚══════╝
-//  Motor PWA completo: SW inline, instalación, swipe, pull-to-refresh, offline
-// ═══════════════════════════════════════════════════════════════════════════
 
 (function initPWA() {
     'use strict';
-
-    // ─────────────────────────────────────────────────────────────
-    // 1. SERVICE WORKER INLINE
-    //    Estrategia: Cache-First para assets estáticos (CDN libs),
-    //    Network-First para el propio HTML y llamadas a Graph API.
-    //    El SW se registra desde un Blob URL para funcionar en
-    //    un archivo HTML único sin servidor.
-    // ─────────────────────────────────────────────────────────────
-    const SW_CODE = `
-const CACHE_NAME = 'aidanai-v2';
-const CACHE_URLS = [
-    'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
-    'https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js',
-    'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',
-    'https://fonts.googleapis.com/icon?family=Material+Icons',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
-];
-
-self.addEventListener('install', e => {
-    e.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
-            return Promise.allSettled(
-                CACHE_URLS.map(url => cache.add(url).catch(() => null))
-            );
-        })
-    );
-    self.skipWaiting();
-});
-
-self.addEventListener('activate', e => {
-    e.waitUntil(
-        caches.keys().then(keys =>
-            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-        )
-    );
-    self.clients.claim();
-});
-
-self.addEventListener('fetch', e => {
-    const url = e.request.url;
-    // Dejamos pasar las llamadas a Microsoft Graph (autenticación + datos)
-    if (url.includes('graph.microsoft.com') || url.includes('login.microsoftonline.com') || url.includes('msauth')) {
-        return; // Red directa
-    }
-    // Para todo lo demás: Cache-First con fallback a red
-    e.respondWith(
-        caches.match(e.request).then(cached => {
-            if (cached) return cached;
-            return fetch(e.request).then(response => {
-                if (response && response.status === 200 && response.type !== 'opaque') {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-                }
-                return response;
-            }).catch(() => cached || new Response('Sin conexión', { status: 503 }));
-        })
-    );
-});
-`;
-
-    if ('serviceWorker' in navigator) {
-        // FIX 8: Un SW registrado desde blob:// no puede interceptar las peticiones
-        // de la página principal porque el scope queda fuera del origen de la página.
-        // Estrategia correcta: inyectar el SW como un fichero real mediante un
-        // Worker URL con pathname relativo. Si estamos en file:// o el registro falla,
-        // degradamos gracefully (la app sigue funcionando, solo sin caché offline).
-        try {
-            const blob = new Blob([SW_CODE], { type: 'application/javascript' });
-            const swUrl = URL.createObjectURL(blob);
-            // Intentamos registrar. En HTTPS desde servidor funciona con scope relativo.
-            // En file:// o HTTP el navegador lo rechazará → catch silencioso.
-            navigator.serviceWorker.register(swUrl)
-                .then(reg => {
-                    console.warn('✅ SW registrado:', reg.scope);
-                    // Liberamos el Blob URL una vez registrado
-                URL.revokeObjectURL(swUrl);
-            })
-            .catch(err => console.warn('SW no disponible (normal en HTTP/file://):', err.message));
-        } catch (swErr) {
-            console.warn('⚠️ No se pudo registrar el Service Worker:', swErr.message);
-        }
+ if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            // Buscamos el archivo físico en la misma carpeta
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('✅ Service Worker registrado en el scope:', reg.scope))
+                .catch(err => console.warn('⚠️ No se pudo registrar el Service Worker:', err));
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -8796,8 +8713,6 @@ self.addEventListener('fetch', e => {
 //   LÓGICA DE SEGURIDAD (HUELLA Y PIN)
 // ═══════════════════════════════════════════════════════════
 let pinActual = "";
-// POR DEFECTO EL PIN ES 1234. Más adelante podrás cambiarlo en Ajustes.
-let PIN_CORRECTO = localStorage.getItem('aidanai_pin') || "1234";
 
 // Función que lee si quieres usar huella o no
 function cambiarAjusteBiometria(checkbox) {
@@ -8881,14 +8796,23 @@ function actualizarPuntosPin() {
     });
 }
 
-function checkPin() {
-    if (pinActual === PIN_CORRECTO) {
+async function checkPin() {
+    // 1. Preguntamos al motor criptográfico si el PIN es correcto (PBKDF2)
+    const esCorrecto = await PinSecurity.verificar(pinActual);
+
+    if (esCorrecto) {
+        // 2. CRÍTICO: Guardamos el PIN en la sesión temporal.
+        // Si no hacemos esto, CryptoSystem no tendrá la "llave" para desencriptar los datos locales.
+        PinSecurity.setSession(pinActual);
+        
+        // 3. Desbloqueamos la app
         desbloquearApp();
     } else {
+        // Lógica visual de error (se mantiene igual que la tenías)
         const msg = document.getElementById('auth-message');
         msg.innerText = "❌ PIN INCORRECTO";
         msg.style.color = "#ff5252";
-        // Efecto de vibración en las bolitas
+        
         document.querySelector('.pin-display').style.transform = "translateX(-10px)";
         setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(10px)", 50);
         setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(0)", 100);
@@ -8930,58 +8854,6 @@ async function desbloquearApp() {
             if (overlay) overlay.style.display = 'none';
         }, 500); 
     }, 400);
-}
-
-// ─────────────────────────────────────────────────────────────
-//   FUNCIÓN PARA CAMBIAR EL PIN DESDE AJUSTES (Diseño Nuevo)
-// ─────────────────────────────────────────────────────────────
-function cambiarPinSeguridad() {
-    // 1. Localizar los cajetines de tu diseño
-    const inputOld = document.getElementById('sec-old-pin');
-    const inputNew = document.getElementById('sec-new-pin');
-    const inputConfirm = document.getElementById('sec-confirm-pin');
-
-    // Extraer los valores escritos
-    const oldPin = inputOld.value;
-    const newPin = inputNew.value;
-    const confirmPin = inputConfirm.value;
-
-    // 2. Comprobaciones de seguridad
-    if (!oldPin || !newPin || !confirmPin) {
-        alert("⚠️ Por favor, rellena los tres campos.");
-        return;
-    }
-    
-    if (oldPin !== PIN_CORRECTO) {
-        alert("❌ PIN actual incorrecto. No se puede realizar el cambio.");
-        inputOld.value = ''; // Borramos lo que escribió para que repita
-        return;
-    }
-
-    if (newPin.length !== 4 || isNaN(newPin)) {
-        alert("❌ Error: El NUEVO PIN debe tener exactamente 4 números.");
-        inputNew.value = '';
-        inputConfirm.value = '';
-        return;
-    }
-
-    if (newPin !== confirmPin) {
-        alert("❌ Los códigos PIN nuevos no coinciden. Vuelve a intentarlo.");
-        inputNew.value = '';
-        inputConfirm.value = '';
-        return;
-    }
-
-    // 3. Guardar el nuevo PIN en la memoria del móvil
-    localStorage.setItem('aidanai_pin', newPin);
-    PIN_CORRECTO = newPin; // Actualizamos la memoria actual de la app
-    
-    alert("✅ ¡Éxito! Tu PIN de seguridad ha sido actualizado correctamente.");
-
-    // 4. Limpiar los cajetines para que quede bonito
-    inputOld.value = '';
-    inputNew.value = '';
-    inputConfirm.value = '';
 }
 
 // 💥 Disparar la seguridad JUSTO AL CARGAR LA APP
