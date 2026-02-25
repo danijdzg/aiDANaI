@@ -2626,10 +2626,6 @@ input:checked + .slider:before {
         <button class="btn-close-cockpit" onclick="cerrarModal()">✕</button>
         <span class="cockpit-title">NUEVO GASTO</span>
         <input type="hidden" id="m-id">
-        <button id="btn-borrar-modal" onclick="borrarMovimiento(document.getElementById('m-id').value)" 
-                style="background:none; border:none; color:#333; display:none;">
-            <span class="material-icons">delete</span>
-        </button>
     </div>
 
     <div class="cockpit-hero">
@@ -2672,6 +2668,14 @@ input:checked + .slider:before {
     </div>
 
     <div class="cockpit-footer">
+        <div id="extra-actions" style="display:none; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+            <button type="button" class="btn-launch" onclick="borrarMovimiento(document.getElementById('m-id').value)" style="background: rgba(255, 46, 77, 0.1); color: #FF2E4D; box-shadow: none; height: 45px; font-size: 13px; border: 1px solid #FF2E4D; border-radius: 12px;">
+                <span class="material-icons" style="font-size: 18px;">delete</span> BORRAR
+            </button>
+            <button type="button" class="btn-launch" onclick="duplicarMovimiento(document.getElementById('m-id').value)" style="background: rgba(255, 255, 255, 0.1); color: #FFF; box-shadow: none; height: 45px; font-size: 13px; border: 1px solid rgba(255,255,255,0.3); border-radius: 12px;">
+                <span class="material-icons" style="font-size: 18px;">content_copy</span> DUPLICAR
+            </button>
+        </div>
         <button id="btn-modal-action" class="btn-launch" onclick="guardarManual()">
             GUARDAR OPERACIÓN <span class="material-icons">rocket_launch</span>
         </button>
@@ -4954,68 +4958,97 @@ window.guardarManual = async function() {
 // --- FUNCIÓN DUPLICAR: Prepara el formulario como "Nuevo" con datos copiados ---
 window.duplicarMovimiento = function(id) {
     console.log("🐑 Duplicando movimiento ID:", id);
-
-    // 1. Buscar el movimiento original (En la lista plana window.datos)
     const mov = window.datos.find(m => m.id === id);
-    
     if (!mov) {
         window.mostrarNotificacion("❌ No encuentro el movimiento original", "error");
         return;
     }
 
-    // 2. Abrir el modal (Usando tu sistema nativo, sin Bootstrap)
     const modalElement = document.getElementById('modal-manual');
-    if (modalElement) {
-        modalElement.classList.add('active'); // ESTO es lo que usa tu CSS
-    } else {
-        console.error("No encuentro el modal-manual");
-        return;
-    }
+    if (modalElement) modalElement.classList.add('active');
 
-    // 3. Rellenar el formulario con los datos del original
-    // Usamos 'setValue' o asignación directa con validación de existencia
     const setVal = (domId, valor) => {
         const el = document.getElementById(domId);
         if(el) el.value = valor || "";
     };
 
-    // Ponemos la fecha de HOY, no la antigua (es lo lógico al duplicar)
+    // 1. Poner fecha de HOY
     const hoy = new Date().toISOString().split('T')[0];
     setVal('m-fecha', hoy);
 
+    // 2. Rellenar datos comunes
     setVal('m-cuenta', mov.cuenta);
     setVal('m-concepto', mov.concepto);
-    setVal('m-desc', mov.descripcion || mov.detalle || ""); // Añadimos marca de copia si quieres
     setVal('m-beneficiario', mov.beneficiario);
-    
-    // Importe: siempre positivo y formateado visualmente
     setVal('m-cantidad', Math.abs(mov.importe).toFixed(2).replace('.', ',') + ' €');
 
-    // 4. PREPARAR ESTADO VISUAL
-    // Detectamos si era ingreso o gasto para colorear el modal
-    if (mov.importe >= 0) {
-        window.modoTransaccionActual = 'ingreso';
-        modalElement.querySelector('.modal-box') && (modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-success)');
+    // 3. DETECTAR SI ES TRASPASO O NORMAL
+    const esTraspaso = (mov.tipo === 'traspaso') || (mov.concepto && mov.concepto.toUpperCase().includes('TRASPASO'));
+
+    if (esTraspaso) {
+        window.modoTransaccionActual = 'traspaso';
+        modalElement.setAttribute('data-mode', 'traspaso');
         const titulo = modalElement.querySelector('.cockpit-title');
-        if (titulo) titulo.innerText = "NUEVO (DUPLICADO)";
+        if (titulo) titulo.innerText = "NUEVO TRASPASO (COPIA)";
+
+        // Recuperar cuentas origen y destino de la descripción original
+        let detalleLimpio = mov.descripcion || mov.detalle || '';
+        let otraCuenta = '';
+
+        if (detalleLimpio.includes('>> A:')) {
+            const partes = detalleLimpio.split('|');
+            otraCuenta = partes[0].replace('>> A:', '').trim();
+            detalleLimpio = partes.slice(1).join('|').trim();
+        } else if (detalleLimpio.includes('<< DE:')) {
+            const partes = detalleLimpio.split('|');
+            otraCuenta = partes[0].replace('<< DE:', '').trim();
+            detalleLimpio = partes.slice(1).join('|').trim();
+            
+            // Si copiamos desde la pata de "entrada", invertimos para que el formulario tenga sentido (Desde -> Hacia)
+            setVal('m-cuenta', otraCuenta);
+            otraCuenta = mov.cuenta;
+        }
+        
+        // Rellenar selector de destino clonándolo del de origen
+        const selectOrigen = document.getElementById('m-cuenta');
+        const selectDestino = document.getElementById('m-cuenta-destino');
+        if (selectOrigen && selectDestino) {
+            selectDestino.innerHTML = selectOrigen.innerHTML;
+            selectDestino.value = otraCuenta;
+        }
+        setVal('m-desc', detalleLimpio);
+
     } else {
-        window.modoTransaccionActual = 'gasto'; // O 'pago'
-        modalElement.querySelector('.modal-box') && (modalElement.querySelector('.modal-box').style.borderColor = 'var(--c-danger)');
-        const titulo = modalElement.querySelector('.cockpit-title');
-        if (titulo) titulo.innerText = "NUEVO (DUPLICADO)";
+        // GASTO O INGRESO
+        setVal('m-desc', mov.descripcion || mov.detalle || "");
+
+        if (mov.importe >= 0) {
+            window.modoTransaccionActual = 'ingreso';
+            modalElement.setAttribute('data-mode', 'ingreso');
+            const titulo = modalElement.querySelector('.cockpit-title');
+            if (titulo) titulo.innerText = "NUEVO INGRESO (COPIA)";
+        } else {
+            window.modoTransaccionActual = 'gasto';
+            modalElement.setAttribute('data-mode', 'gasto');
+            const titulo = modalElement.querySelector('.cockpit-title');
+            if (titulo) titulo.innerText = "NUEVO GASTO (COPIA)";
+        }
     }
 
-    // 5. ¡CRÍTICO! VACIAR EL ID
-    // Al dejar esto vacío, cuando pulses "GUARDAR", el sistema creará uno nuevo.
+    // 4. ¡CRÍTICO! VACIAR EL ID (Para que guarde como nuevo y no sobreescriba)
     setVal('m-id', ""); 
 
-    // Ocultar botones extra (Borrar/Duplicar) porque es un movimiento nuevo
+    // Actualizar texto del botón principal
+    const btnAction = document.getElementById('btn-modal-action');
+    if(btnAction) btnAction.innerText = "GUARDAR COPIA";
+
+    // Ocultar la botonera extra para evitar "duplicar un duplicado" por accidente
     const extraActions = document.getElementById('extra-actions');
     if(extraActions) extraActions.style.display = 'none';
 
-    // Feedback
     if(typeof vibrar === 'function') vibrar('clonar');
 };
+
 
 // --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
 window.borrarMovimiento = async function(id) {
