@@ -84,13 +84,10 @@
 		}
         body { 
             font-family: 'Inter', sans-serif; 
-            background-color: #000000 !important; /* Fondo NEGRO SÓLIDO (Tapa estrellas) */
+            background-color: #000000 !important; 
             color: #FFFFFF; 
             margin: 0; 
-            
-            /* CÁLCULO EXACTO: 50px (Barra) + 25px (Sentry) = 75px totales */
-            padding-top: calc(75px + env(safe-area-inset-top)) !important; 
-            
+            padding-top: env(safe-area-inset-top) !important; 
             height: 100dvh; 
             overflow: hidden; 
             display: flex;
@@ -200,7 +197,8 @@ iframe[id*="msal"], iframe[id*="adal"] { display: none !important; }
     flex: 1; 
     overflow-y: auto; 
     padding: 20px; 
-	padding-top: 5px !important;
+    /* AQUÍ ESTÁ LA MAGIA: 95px de margen para no tocar el encabezado */
+    padding-top: 95px !important; 
     padding-bottom: 90px; 
     background-color: #000; 
     position: relative; 
@@ -7592,28 +7590,83 @@ window.cambiarPinSeguridad = async function() {
     mostrarEstado('✅ PIN actualizado con éxito', 'success');
 };
 
-// --- CONTROL DEL SEMÁFORO ---
+// --- CONTROL DEL SEMÁFORO Y SEGURIDAD (V. DEFINITIVA NATIVA) ---
+window.estadoConexion = 'ok';
+
 window.actualizarSemaforo = function(estado) {
     const el = document.getElementById('sync-status');
     const textoSentry = document.getElementById('sentry-text');
-    if (!el) return;
+    const sentryPanel = document.getElementById('data-sentry');
+    const icono = document.getElementById('sentry-icon');
+    
+    if (!el || !sentryPanel) return;
 
-    // Reseteamos clases
     el.className = 'status-dot';
+    window.estadoConexion = estado;
 
     if (estado === 'ok') {
-        el.classList.add('status-sync'); // Verde
-        if(textoSentry) textoSentry.innerText = "NUBE SEGURA";
+        el.classList.add('status-sync'); 
+        sentryPanel.className = 'sentry-panel sentry-idle';
+        if(icono) icono.innerText = '🛡️';
+        if(textoSentry) textoSentry.innerText = "ONEDRIVE CONECTADO";
     } else if (estado === 'cargando') {
-        el.classList.add('status-saving'); // Amarillo
-        if(textoSentry) textoSentry.innerText = "GUARDANDO...";
-    } else if (estado === 'error') {
-        el.classList.add('status-error'); // Rojo
-        if(textoSentry) textoSentry.innerText = "ERROR DE NUBE";
+        el.classList.add('status-saving'); 
+        sentryPanel.className = 'sentry-panel sentry-working';
+        if(icono) icono.innerText = '🔄';
+        if(textoSentry) textoSentry.innerText = "GUARDANDO DATOS...";
+    } else if (estado === 'error' || estado === 'desconectado') {
+        el.classList.add('status-error'); 
+        sentryPanel.className = 'sentry-panel sentry-danger';
+        if(icono) icono.innerText = '⚠️';
+        if(textoSentry) textoSentry.innerText = "PELIGRO: DESCONECTADO";
+        window.estadoConexion = 'desconectado';
     } else {
-        el.classList.add('status-none'); // Gris
+        el.classList.add('status-none'); 
+        sentryPanel.className = 'sentry-panel';
     }
 };
+
+// VIGILANTE INVISIBLE (Pregunta cada 60 segundos)
+setInterval(async () => {
+    // Si la app está trabajando, no molestamos
+    if (window.estadoConexion === 'cargando') return; 
+    
+    // Comprobar WiFi del dispositivo
+    if (!navigator.onLine) {
+        window.actualizarSemaforo('desconectado');
+        return;
+    }
+
+    // Preguntar a la API de OneDrive
+    try {
+        if (window.modoNube && window.OneDriveManager && window.OneDriveManager.client) {
+            await window.OneDriveManager.client.api('/me').get();
+            // Si antes había error pero ahora responde, vuelve a verde
+            if (window.estadoConexion === 'desconectado') {
+                window.actualizarSemaforo('ok'); 
+            }
+        }
+    } catch (error) {
+        window.actualizarSemaforo('desconectado');
+    }
+}, 60000);
+
+// PROTEGER Y BLOQUEAR AL GUARDAR
+setTimeout(() => {
+    const funcionesAProteger = ['guardarManual', 'guardarUniversal'];
+    funcionesAProteger.forEach(nombreFuncion => {
+        if (typeof window[nombreFuncion] === 'function') {
+            const funcionOriginal = window[nombreFuncion];
+            window[nombreFuncion] = async function(...args) {
+                if (window.estadoConexion === 'desconectado') {
+                    alert("🛑 OPERACIÓN BLOQUEADA:\n\nEstás desconectado de la nube. Por seguridad no se guardará nada para evitar la pérdida de datos.");
+                    return; // Bloquea y no guarda
+                }
+                return await funcionOriginal.apply(this, args);
+            };
+        }
+    });
+}, 1500);
 
 // ==========================================
 // 🧮 LÓGICA DE CALCULADORA (LIBERADA Y GLOBAL)
@@ -9100,31 +9153,12 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(revisarRecibosProximos, 2000);
 });
 
-// 1. INYECTAR EN LA CABECERA Y AJUSTAR EL ESPACIO DE LA APP
+// 1. INYECTAR EL SEMÁFORO EN EL ENCABEZADO LIMPIAMENTE
     setTimeout(() => {
         const cabecera = document.querySelector('header');
         const semaforo = document.getElementById('semaforo-container');
-        
         if (cabecera && semaforo) {
-            // 1.1 Metemos el semáforo en la cabecera
             cabecera.appendChild(semaforo);
-            
-            // 1.2 Aseguramos que la cabecera sea fija y se quede arriba
-            cabecera.style.position = 'fixed';
-            cabecera.style.top = '0';
-            cabecera.style.width = '100%';
-            cabecera.style.zIndex = '9999';
-            
-            // 1.3 Calculamos la altura total (fila 1 + fila 2) y empujamos el contenido principal
-            setTimeout(() => {
-                const alturaTotal = cabecera.offsetHeight;
-                const contenidoPrincipal = document.querySelector('main') || document.querySelector('.main-content') || document.body;
-                
-                if (contenidoPrincipal) {
-                    // Empujamos el contenido hacia abajo el tamaño exacto del nuevo encabezado
-                    contenidoPrincipal.style.paddingTop = (alturaTotal + 10) + 'px'; 
-                }
-            }, 50);
         }
     }, 50);
 
