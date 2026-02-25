@@ -5892,7 +5892,7 @@ async function guardarUniversal(nuevasFilas) {
         // (Nota: El Excel se mantiene legible para que puedas usarlo en tu PC)
         wb = XLSX.utils.book_new();
         
-        // --- HOJA 1: MOVIMIENTOS ---
+       // --- HOJA 1: MOVIMIENTOS ---
         // ✅ MEJORA: Se añade columna TIPO explícita para no depender de inferencia por signo
         // al recargar el Excel. Esto evita que traspasos con importe positivo se lean como ingresos.
         const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
@@ -5900,6 +5900,14 @@ async function guardarUniversal(nuevasFilas) {
             "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario,
             "Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
         })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
+
+        // 🟢 MAGIA FECHAS: Máscara visual DD/MM/AAAA para Excel
+        Object.keys(hojaMovs).forEach(key => {
+            if (hojaMovs[key].t === 'd') { 
+                hojaMovs[key].z = 'dd/mm/yyyy'; 
+            }
+        });
+
         XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
 
         // --- HOJA 2: CONFIGURACION ---
@@ -7383,6 +7391,12 @@ function descargarBackupLocal() {
         const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
             header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
         });
+        
+        // 🟢 MAGIA FECHAS: Máscara visual DD/MM/AAAA para copias de seguridad
+        Object.keys(wsMovs).forEach(key => {
+            if (wsMovs[key].t === 'd') wsMovs[key].z = 'dd/mm/yyyy';
+        });
+
         XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
 
         // --- HOJA 2: CONFIGURACIÓN (Limpia y compatible) ---
@@ -7410,11 +7424,11 @@ function descargarBackupLocal() {
         const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
         XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
 
-        // --- HOJA 3: RECURRENTES (¡AÑADIDA!) ---
+       // --- HOJA 3: RECURRENTES (¡AÑADIDA!) ---
         const listaRec = window.datosRecurrentes || [];
         const filasRec = listaRec.map(r => ({
             "ID": r.id, 
-            "PROXIMA_FECHA": r.fechaProx, 
+            "PROXIMA_FECHA": new Date(r.fechaProx), // Transformamos a Fecha Real
             "FRECUENCIA": r.frecuencia,
             "DIAS_SEMANA": r.diasSemana || "", 
             "TIPO_REGLA": r.tipoRegla || "gasto",
@@ -7429,6 +7443,12 @@ function descargarBackupLocal() {
         const wsRec = XLSX.utils.json_to_sheet(filasRec, {
             header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"]
         });
+        
+        // 🟢 MAGIA FECHAS: Máscara visual DD/MM/AAAA para recurrentes locales
+        Object.keys(wsRec).forEach(key => {
+            if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
+        });
+
         XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
 
         // 4. Descarga Final
