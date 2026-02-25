@@ -2106,6 +2106,43 @@ input:checked + .slider:before {
   transform: translateX(22px);
 }
  
+ /* Animación del motor de luz giratoria */
+@keyframes giro-luz-borde {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.tarjeta-alerta-animada {
+    position: relative;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    border-radius: 20px;
+    padding: 2px;
+    overflow: hidden;
+    box-shadow: 0 8px 25px rgba(255, 152, 0, 0.15);
+}
+
+.tarjeta-alerta-animada::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 300%;
+    height: 300%;
+    background: conic-gradient(from 0deg, transparent 0%, transparent 60%, #FFD60A 80%, #FF9800 100%);
+    animation: giro-luz-borde 3s linear infinite;
+    z-index: 1;
+}
+
+.contenido-alerta-amoled {
+    position: relative;
+    z-index: 2;
+    background-color: #000000;
+    border-radius: 18px;
+    padding: 16px 20px;
+    color: #FFFFFF;
+}
+ 
    </style>
 </head>
 <body>
@@ -8943,78 +8980,124 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Esta función se encargará de buscar y mostrar los recibos
-    function revisarRecibosProximos() {
-        // 1. Buscamos los datos de la pestaña Recurrentes
-        let recurrentes = [];
-        if (window.datosApp && window.datosApp.recurrentes) recurrentes = window.datosApp.recurrentes;
-        else if (window.recurrentesGlobales) recurrentes = window.recurrentesGlobales;
-        else if (window.recurrentes) recurrentes = window.recurrentes;
-
-        // Si no hay recurrentes cargados aún, lo volvemos a intentar en 2 segundos
-        if (!recurrentes || recurrentes.length === 0) {
-            setTimeout(revisarRecibosProximos, 2000);
-            return;
+    
+    // --------------------------------------------------------
+    // 1. MEJORA INTELIGENTE: AUTOCOMPLETADO Y ORDEN DE CAMPOS
+    // --------------------------------------------------------
+    const inputImporte = document.getElementById('mov-importe');
+    const inputDescripcion = document.getElementById('mov-descripcion');
+    
+    if (inputImporte && inputDescripcion) {
+        const contenedorImporte = inputImporte.closest('div');
+        const contenedorDescripcion = inputDescripcion.closest('div');
+        
+        if (contenedorImporte && contenedorDescripcion) {
+            contenedorImporte.parentNode.insertBefore(contenedorDescripcion, contenedorImporte.nextSibling);
         }
+    }
 
-        // 2. Calculamos las fechas (Hoy y dentro de 7 días)
+    if (inputDescripcion) {
+        inputDescripcion.addEventListener('input', (e) => {
+            const textoEscrito = e.target.value.toLowerCase().trim();
+            if (textoEscrito.length < 3) return;
+            
+            let historial = [];
+            if (window.datosApp && window.datosApp.movimientos) historial = window.datosApp.movimientos;
+            else if (window.movimientosGlobales) historial = window.movimientosGlobales;
+            else if (window.movimientos) historial = window.movimientos;
+
+            const movimientoPasado = historial.find(m => 
+                m.DESCRIPCION && m.DESCRIPCION.toLowerCase() === textoEscrito
+            );
+
+            if (movimientoPasado) {
+                const selectConcepto = document.getElementById('mov-concepto');
+                const selectCuenta = document.getElementById('mov-cuenta');
+                const selectBeneficiario = document.getElementById('mov-beneficiario');
+
+                if (selectConcepto && movimientoPasado.CONCEPTO) selectConcepto.value = movimientoPasado.CONCEPTO;
+                if (selectCuenta && movimientoPasado.CUENTA) selectCuenta.value = movimientoPasado.CUENTA;
+                if (selectBeneficiario && movimientoPasado.BENEFICIARIO) selectBeneficiario.value = movimientoPasado.BENEFICIARIO;
+                
+                [selectConcepto, selectCuenta, selectBeneficiario].forEach(campo => {
+                    if(campo) {
+                        campo.style.transition = "background-color 0.3s";
+                        campo.style.backgroundColor = "#e8f5e9";
+                        setTimeout(() => campo.style.backgroundColor = "", 800);
+                    }
+                });
+            }
+        });
+    }
+
+    // --------------------------------------------------------
+    // 2. MEJORA DE ALERTAS: PRÓXIMOS 7 DÍAS
+    // --------------------------------------------------------
+    function revisarRecibosProximos() {
+        let recurrentes = window.datosRecurrentes || [];
+        
         const hoy = new Date();
-        const limite = new Date();
+        hoy.setHours(0,0,0,0);
+        const limite = new Date(hoy);
         limite.setDate(hoy.getDate() + 7);
+        limite.setHours(23,59,59,999);
 
-        // 3. Filtramos los recibos que caen en esos días
         const proximos = recurrentes.filter(r => {
-            if (!r.PROXIMA_FECHA) return false;
-            const fechaRec = new Date(r.PROXIMA_FECHA);
+            if (!r.fechaProx) return false;
+            const fechaRec = new Date(r.fechaProx);
+            fechaRec.setHours(12,0,0,0);
+            
+            if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario(r)) return false;
+            
             return fechaRec >= hoy && fechaRec <= limite;
         });
 
-        // 4. Si hay recibos próximos, dibujamos la tarjeta visual
-        if (proximos.length > 0) {
-            // Evitamos que se dibuje dos veces
-            if (document.getElementById('alerta-recibos')) return;
+        const alertaAntigua = document.getElementById('alerta-recibos-7d');
+        if (alertaAntigua) alertaAntigua.remove();
 
+        if (proximos.length > 0) {
             const alertaDiv = document.createElement('div');
-            alertaDiv.id = 'alerta-recibos';
-            // Diseño de la tarjeta (estilo iOS/Dashboard moderno)
-            alertaDiv.style.background = 'linear-gradient(135deg, #ffb74d 0%, #ff9800 100%)';
-            alertaDiv.style.color = '#fff';
-            alertaDiv.style.padding = '15px 20px';
-            alertaDiv.style.borderRadius = '16px';
-            alertaDiv.style.margin = '15px';
-            alertaDiv.style.boxShadow = '0 4px 15px rgba(255, 152, 0, 0.3)';
-            alertaDiv.style.fontFamily = 'Inter, sans-serif';
+            alertaDiv.id = 'alerta-recibos-7d';
+            alertaDiv.className = 'tarjeta-alerta-animada';
             
-            let html = '<div style="display:flex; align-items:center; margin-bottom:10px;"><span class="material-icons" style="margin-right:8px;">notifications_active</span><h3 style="margin:0; font-size:16px;">Próximos movimientos (7 días)</h3></div>';
-            html += '<ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.5;">';
+            let html = '<div class="contenido-alerta-amoled">';
+            html += '<div style="display:flex; align-items:center; margin-bottom:12px;"><span class="material-icons" style="color: #FFD60A; margin-right:8px; font-size:22px; filter: drop-shadow(0 0 5px rgba(255,214,10,0.5));">notification_important</span><h3 style="margin:0; font-size:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; color: #FFD60A;">Próximos 7 días</h3></div>';
+            
+            html += '<ul style="margin: 0; padding-left: 0; list-style: none; font-size: 13px; font-weight: 600;">';
             
             proximos.forEach(p => {
-                // Formateamos la fecha visualmente
-                const f = new Date(p.PROXIMA_FECHA);
+                const f = new Date(p.fechaProx);
                 const dia = String(f.getDate()).padStart(2, '0');
                 const mes = String(f.getMonth() + 1).padStart(2, '0');
+                const imp = Math.abs(p.importe).toFixed(2);
                 
-                html += `<li style="margin-bottom: 5px;">
-                            <strong>${dia}/${mes}</strong> - ${p.CONCEPTO}: 
-                            <strong style="font-size: 15px;">${p.IMPORTE}€</strong>
-                         </li>`;
+                html += '<li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">';
+                html += '<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 70%;">';
+                html += '<strong style="color: #888; font-size: 11px; margin-right: 8px;">' + dia + '/' + mes + '</strong>';
+                html += '<span style="color: #fff;">' + p.concepto + '</span>';
+                html += '</div>';
+                html += '<span style="font-size: 14px; font-weight: 800; color: #FF9800; flex-shrink:0;">' + imp + '€</span>';
+                html += '</li>';
             });
-            html += '</ul>';
+            html += '</ul></div>';
             alertaDiv.innerHTML = html;
 
-            // Buscamos dónde ponerlo: al principio del dashboard
-            const dashboard = document.getElementById('dashboard') || document.querySelector('.dashboard') || document.body;
-            if (dashboard.firstChild) {
-                dashboard.insertBefore(alertaDiv, dashboard.firstChild);
-            } else {
-                dashboard.appendChild(alertaDiv);
+            const tabInicio = document.getElementById('tab-inicio');
+            if (tabInicio) {
+                tabInicio.insertBefore(alertaDiv, tabInicio.firstChild);
             }
         }
     }
 
-    // Iniciamos la revisión
-    revisarRecibosProximos();
+    const originalActualizar = window.actualizarDashboard;
+    window.actualizarDashboard = function() {
+        if (typeof originalActualizar === 'function') originalActualizar();
+        revisarRecibosProximos();
+    };
+
+    setTimeout(revisarRecibosProximos, 2000);
 });
 
 </script>
