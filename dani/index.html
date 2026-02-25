@@ -2236,17 +2236,6 @@ input:checked + .slider:before {
         </div>
     </div>
 
-    <div id="data-sentry" class="sentry-panel sentry-idle" style="position: relative; justify-content: center;">
-        
-        <div style="position: absolute; left: 15px; top: 0; bottom: 0; display: flex; align-items: center;">
-            <span id="sync-status" class="status-dot status-none"></span>
-        </div>
-
-        <span id="sentry-icon">🛡️</span>
-        <span id="sentry-text" style="margin-left: 5px;">SISTEMA BLINDADO</span>
-    </div>
-    
-    <div id="status-panel" class="status-panel" style="display:none"></div>
 </header>
 
 <!-- ═══ PWA: INDICADOR PULL-TO-REFRESH ═══ -->
@@ -2765,13 +2754,13 @@ input:checked + .slider:before {
     </div>
 </div>
 
-<div id="semaforo-container" style="width: 100%; background: #111; border-bottom: 1px solid #333; z-index: 1000; padding: 8px 0;">
-    <div style="display: flex; align-items: center; justify-content: center; font-size: 12px; font-family: 'Inter', sans-serif;">
+<div id="semaforo-container" style="width: 100%; min-height: 25px; background-color: #000000; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; flex-direction: column; justify-content: center; padding: 4px 0;">
+    <div style="display: flex; align-items: center; justify-content: center; font-size: 10px; font-family: 'Courier New', monospace; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
         <div id="semaforo-dot" style="width: 10px; height: 10px; border-radius: 50%; background-color: #4CAF50; margin-right: 8px; box-shadow: 0 0 8px #4CAF50; transition: background-color 0.3s ease;"></div>
-        <span id="semaforo-text" style="color: #fff; font-weight: 500;">OneDrive Conectado y Seguro</span>
+        <span id="semaforo-text" style="color: #00ff41; text-shadow: 0 0 5px rgba(0, 255, 65, 0.5);">OneDrive Conectado y Seguro</span>
     </div>
-    <div id="semaforo-warning" style="display: none; background: #D32F2F; color: white; margin-top: 5px; padding: 6px; text-align: center; font-size: 11px; font-weight: bold; border-radius: 4px; width: 90%; margin-left: auto; margin-right: auto;">
-        ⚠️ DESCONECTADO: Tus datos están en peligro. No guardes nada ahora.
+    <div id="semaforo-warning" style="display: none; background: rgba(255, 0, 60, 0.9); color: white; margin-top: 4px; padding: 4px; text-align: center; font-size: 11px; font-weight: bold; font-family: 'Inter', sans-serif; border-radius: 4px; width: 90%; margin-left: auto; margin-right: auto;">
+        ⚠️ DESCONECTADO: Tus datos están en peligro. No guardes nada.
     </div>
 </div>
 
@@ -9111,86 +9100,108 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(revisarRecibosProximos, 2000);
 });
 
-    // 1. LÓGICA DEL SEMÁFORO
-    window.estadoSemaforo = 'verde';
-    
-    // Movemos el semáforo a la parte superior de tu app automáticamente
-    document.body.insertBefore(document.getElementById('semaforo-container'), document.body.firstChild);
+// 1. INYECTAR EN LA CABECERA NATIVA (Alineación perfecta)
+    setTimeout(() => {
+        const cabecera = document.querySelector('header');
+        const semaforo = document.getElementById('semaforo-container');
+        if (cabecera && semaforo) {
+            cabecera.appendChild(semaforo);
+        }
+    }, 50);
 
-    window.actualizarSemaforo = function(estado) {
+    // 2. LÓGICA DEL SEMÁFORO
+    window.estadoSemaforo = 'verde';
+
+    window.actualizarSemaforo = function(estado, mensajePersonalizado = null) {
         const dot = document.getElementById('semaforo-dot');
         const text = document.getElementById('semaforo-text');
         const warning = document.getElementById('semaforo-warning');
+        
+        if (window.estadoSemaforo === 'rojo' && estado !== 'verde') return;
         window.estadoSemaforo = estado;
 
-        if (estado === 'verde') {
+        if (estado === 'verde' || estado === 'ok') {
             dot.style.backgroundColor = '#4CAF50';
             dot.style.boxShadow = '0 0 8px #4CAF50';
-            text.innerText = 'OneDrive Conectado y Seguro';
+            text.innerText = mensajePersonalizado || 'ONEDRIVE CONECTADO Y SEGURO';
+            text.style.color = '#00ff41';
+            text.style.textShadow = '0 0 5px rgba(0, 255, 65, 0.5)';
             warning.style.display = 'none';
-        } else if (estado === 'naranja') {
+        } else if (estado === 'naranja' || estado === 'cargando' || estado === 'loading') {
             dot.style.backgroundColor = '#FF9800';
             dot.style.boxShadow = '0 0 8px #FF9800';
-            text.innerText = 'Guardando datos en la nube...';
+            text.innerText = mensajePersonalizado || 'TRABAJANDO...';
+            text.style.color = '#ffb600';
+            text.style.textShadow = '0 0 5px rgba(255, 182, 0, 0.6)';
             warning.style.display = 'none';
-        } else if (estado === 'rojo') {
+        } else if (estado === 'rojo' || estado === 'error') {
             dot.style.backgroundColor = '#F44336';
             dot.style.boxShadow = '0 0 8px #F44336';
-            text.innerText = 'OneDrive Desconectado';
-            warning.style.display = 'block';
+            text.innerText = mensajePersonalizado || 'ONEDRIVE DESCONECTADO';
+            text.style.color = '#ff003c';
+            text.style.textShadow = '0 0 5px rgba(255, 0, 60, 0.6)';
+            if(!mensajePersonalizado) warning.style.display = 'block';
         }
     };
 
-    // 2. VIGILANTE INVISIBLE (Pregunta cada 60 segundos)
+    // 3. RECONECTAR LOS MENSAJES ORIGINALES DE TU APP AL NUEVO SEMÁFORO
+    window.mostrarEstado = function(mensaje, tipo = 'info') {
+        if (tipo === 'error' || tipo === 'err') {
+            window.actualizarSemaforo('rojo', '⚠️ ' + mensaje.toUpperCase());
+        } else if (tipo === 'success' || tipo === 'ok') {
+            window.actualizarSemaforo('verde', '✅ ' + mensaje.toUpperCase());
+        } else {
+            window.actualizarSemaforo('naranja', '🔄 ' + mensaje.toUpperCase());
+        }
+
+        // Devolver a la normalidad a los 4 segundos
+        if (tipo !== 'error' && tipo !== 'loading') {
+            setTimeout(() => {
+                const enNube = (window.modoNube || (typeof window.oneDrive !== 'undefined' && window.oneDrive.msalInstance.getAllAccounts().length > 0));
+                window.actualizarSemaforo('verde', enNube ? 'NUBE BLINDADA' : 'MODO LOCAL SEGURO');
+            }, 4000);
+        }
+    };
+    window.showToast = window.mostrarEstado;
+
+    // 4. VIGILANTE INVISIBLE (Pregunta cada 60 segundos)
     setInterval(async () => {
-        // Si la app está ocupada guardando (naranja), no la interrumpimos
         if (window.estadoSemaforo === 'naranja') return; 
-        
-        // Comprobación 1: ¿Se ha caído el WiFi o los datos?
         if (!navigator.onLine) {
             window.actualizarSemaforo('rojo');
             return;
         }
-
-        // Comprobación 2: ¿Microsoft OneDrive sigue respondiendo?
         try {
             if (window.OneDriveManager && window.OneDriveManager.client) {
                 await window.OneDriveManager.client.api('/me').get();
                 window.actualizarSemaforo('verde');
             }
         } catch (error) {
-            console.warn("El vigilante detectó un fallo con OneDrive:", error);
             window.actualizarSemaforo('rojo');
         }
     }, 60000);
 
-    // 3. PROTEGER Y BLOQUEAR AL GUARDAR
-    // Interceptamos tus funciones de guardar de forma segura sin borrar tu código original
+    // 5. PROTEGER AL GUARDAR
     setTimeout(() => {
         const funcionesAProteger = ['guardarManual', 'guardarUniversal'];
-        
         funcionesAProteger.forEach(nombreFuncion => {
             if (typeof window[nombreFuncion] === 'function') {
                 const funcionOriginal = window[nombreFuncion];
                 window[nombreFuncion] = async function(...args) {
                     if (window.estadoSemaforo === 'rojo') {
                         alert("🛑 OPERACIÓN BLOQUEADA: Estás desconectado. Por seguridad, no se guardará el movimiento.");
-                        return; // Abortamos el guardado
+                        return; 
                     }
-                    
-                    window.actualizarSemaforo('naranja');
                     try {
-                        const resultado = await funcionOriginal.apply(this, args);
-                        window.actualizarSemaforo('verde');
-                        return resultado;
+                        return await funcionOriginal.apply(this, args);
                     } catch (e) {
                         window.actualizarSemaforo('rojo');
-                        throw e; // Si falla el guardado, se pone rojo y lanza el error
+                        throw e; 
                     }
                 };
             }
         });
-    }, 2000); 
+    }, 2000);
 
 </script>
 </body>
