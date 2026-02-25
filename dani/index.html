@@ -8884,6 +8884,139 @@ async function desbloquearApp() {
 // 💥 Disparar la seguridad JUSTO AL CARGAR LA APP
 window.addEventListener('DOMContentLoaded', iniciarAutenticacion);
 
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Reordenar: Mover "Descripción" justo debajo de "Importe"
+    const inputImporte = document.getElementById('mov-importe');
+    const inputDescripcion = document.getElementById('mov-descripcion');
+    
+    if (inputImporte && inputDescripcion) {
+        const contenedorImporte = inputImporte.closest('div'); // Busca la "caja" que envuelve al importe
+        const contenedorDescripcion = inputDescripcion.closest('div'); // Busca la "caja" de la descripción
+        
+        // Coloca la caja de descripción justo después de la caja de importe
+        if (contenedorImporte && contenedorDescripcion) {
+            contenedorImporte.parentNode.insertBefore(contenedorDescripcion, contenedorImporte.nextSibling);
+        }
+    }
+
+    // 2. Inteligencia: Autocompletar basado en el historial
+    if (inputDescripcion) {
+        inputDescripcion.addEventListener('input', (e) => {
+            const textoEscrito = e.target.value.toLowerCase().trim();
+            
+            // Solo buscamos si has escrito al menos 3 letras
+            if (textoEscrito.length < 3) return;
+            
+            // Buscamos en los datos que la app ya ha cargado desde el Excel
+            // (Asumimos que la lista de datos está en una variable global como window.datos.movimientos o similar, 
+            // ajustaremos esto si tu app usa un nombre diferente, pero probaremos con la estructura estándar).
+            let historial = [];
+            if (window.datosApp && window.datosApp.movimientos) historial = window.datosApp.movimientos;
+            else if (window.movimientosGlobales) historial = window.movimientosGlobales;
+            else if (window.movimientos) historial = window.movimientos;
+
+            // Encontrar el último movimiento que tenga exactamente esa misma descripción
+            const movimientoPasado = historial.find(m => 
+                m.DESCRIPCION && m.DESCRIPCION.toLowerCase() === textoEscrito
+            );
+
+            // Si encontramos uno igual, copiamos sus datos a los selectores
+            if (movimientoPasado) {
+                const selectConcepto = document.getElementById('mov-concepto');
+                const selectCuenta = document.getElementById('mov-cuenta');
+                const selectBeneficiario = document.getElementById('mov-beneficiario');
+
+                if (selectConcepto && movimientoPasado.CONCEPTO) selectConcepto.value = movimientoPasado.CONCEPTO;
+                if (selectCuenta && movimientoPasado.CUENTA) selectCuenta.value = movimientoPasado.CUENTA;
+                if (selectBeneficiario && movimientoPasado.BENEFICIARIO) selectBeneficiario.value = movimientoPasado.BENEFICIARIO;
+                
+                // Efecto visual: iluminar brevemente los campos autocompletados para avisar al usuario
+                [selectConcepto, selectCuenta, selectBeneficiario].forEach(campo => {
+                    if(campo) {
+                        campo.style.transition = "background-color 0.3s";
+                        campo.style.backgroundColor = "#e8f5e9"; // Un verde muy suave
+                        setTimeout(() => campo.style.backgroundColor = "", 800);
+                    }
+                });
+            }
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Esta función se encargará de buscar y mostrar los recibos
+    function revisarRecibosProximos() {
+        // 1. Buscamos los datos de la pestaña Recurrentes
+        let recurrentes = [];
+        if (window.datosApp && window.datosApp.recurrentes) recurrentes = window.datosApp.recurrentes;
+        else if (window.recurrentesGlobales) recurrentes = window.recurrentesGlobales;
+        else if (window.recurrentes) recurrentes = window.recurrentes;
+
+        // Si no hay recurrentes cargados aún, lo volvemos a intentar en 2 segundos
+        if (!recurrentes || recurrentes.length === 0) {
+            setTimeout(revisarRecibosProximos, 2000);
+            return;
+        }
+
+        // 2. Calculamos las fechas (Hoy y dentro de 7 días)
+        const hoy = new Date();
+        const limite = new Date();
+        limite.setDate(hoy.getDate() + 7);
+
+        // 3. Filtramos los recibos que caen en esos días
+        const proximos = recurrentes.filter(r => {
+            if (!r.PROXIMA_FECHA) return false;
+            const fechaRec = new Date(r.PROXIMA_FECHA);
+            return fechaRec >= hoy && fechaRec <= limite;
+        });
+
+        // 4. Si hay recibos próximos, dibujamos la tarjeta visual
+        if (proximos.length > 0) {
+            // Evitamos que se dibuje dos veces
+            if (document.getElementById('alerta-recibos')) return;
+
+            const alertaDiv = document.createElement('div');
+            alertaDiv.id = 'alerta-recibos';
+            // Diseño de la tarjeta (estilo iOS/Dashboard moderno)
+            alertaDiv.style.background = 'linear-gradient(135deg, #ffb74d 0%, #ff9800 100%)';
+            alertaDiv.style.color = '#fff';
+            alertaDiv.style.padding = '15px 20px';
+            alertaDiv.style.borderRadius = '16px';
+            alertaDiv.style.margin = '15px';
+            alertaDiv.style.boxShadow = '0 4px 15px rgba(255, 152, 0, 0.3)';
+            alertaDiv.style.fontFamily = 'Inter, sans-serif';
+            
+            let html = '<div style="display:flex; align-items:center; margin-bottom:10px;"><span class="material-icons" style="margin-right:8px;">notifications_active</span><h3 style="margin:0; font-size:16px;">Próximos movimientos (7 días)</h3></div>';
+            html += '<ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.5;">';
+            
+            proximos.forEach(p => {
+                // Formateamos la fecha visualmente
+                const f = new Date(p.PROXIMA_FECHA);
+                const dia = String(f.getDate()).padStart(2, '0');
+                const mes = String(f.getMonth() + 1).padStart(2, '0');
+                
+                html += `<li style="margin-bottom: 5px;">
+                            <strong>${dia}/${mes}</strong> - ${p.CONCEPTO}: 
+                            <strong style="font-size: 15px;">${p.IMPORTE}€</strong>
+                         </li>`;
+            });
+            html += '</ul>';
+            alertaDiv.innerHTML = html;
+
+            // Buscamos dónde ponerlo: al principio del dashboard
+            const dashboard = document.getElementById('dashboard') || document.querySelector('.dashboard') || document.body;
+            if (dashboard.firstChild) {
+                dashboard.insertBefore(alertaDiv, dashboard.firstChild);
+            } else {
+                dashboard.appendChild(alertaDiv);
+            }
+        }
+    }
+
+    // Iniciamos la revisión
+    revisarRecibosProximos();
+});
+
 </script>
 </body>
 </html>
