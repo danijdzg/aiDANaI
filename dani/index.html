@@ -5,11 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
-    <!-- ═══════════════════════════════════════════════════════
-         PWA COMPLETA — Meta tags para instalación nativa
-         Android: chrome muestra "Añadir a pantalla de inicio"
-         iOS:     safari oculta la barra URL al añadir
-    ═══════════════════════════════════════════════════════ -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -21,15 +16,12 @@
 	
 	<link rel="manifest" href="manifest.json">
     
-    <!-- Apple touch icons (iOS requiere PNG; usamos SVG con fallback) -->
     <link rel="apple-touch-icon" sizes="180x180" href="favicon.ico">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     
     <title>aiDANaI</title>
     <script>
-        // FIX 13: No silenciamos console.log globalmente porque impide diagnosticar
-        // errores reales de usuarios. En su lugar usamos un flag de debug:
-        // en localhost/file:// los logs son visibles; en producción (dominio real) se suprimen.
+  
         const _isDev = window.location.hostname === 'localhost' 
                     || window.location.hostname === '127.0.0.1'
                     || window.location.protocol === 'file:';
@@ -47,9 +39,7 @@
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    
-    <!-- ECharts cubre todos los gráficos de la aplicación. Chart.js eliminado. -->
-
+     
     <style>
 
 		/* --- INICIO BLOQUE NOTIFICACIONES TOAST (NUEVO) --- */
@@ -710,24 +700,38 @@ select.filter-input option { background-color: #000; color: #fff; }
     
     /* --- POSICIONAMIENTO IGUAL AL ENCABEZADO --- */
     position: fixed !important;
-    bottom: 0 !important; /* Totalmente pegado al borde inferior */
+    bottom: 0 !important;
     left: 50% !important;
-    transform: translateX(-50%) !important; /* Para que quede centrado en PC */
+    transform: translateX(-50%) !important;
     
     /* --- ANCHO Y BORDES EXACTOS AL ENCABEZADO --- */
     width: 100% !important;
-    max-width: 800px !important; /* El mismo máximo que tu cabecera */
-    border-radius: 0; /* Sin curvas, completamente recto */
+    max-width: 800px !important;
+    border-radius: 0;
     
-    /* --- ESTÉTICA NEGRO SÓLIDO (Sin cristal/transparencias) --- */
+    /* --- ESTÉTICA NEGRO SÓLIDO --- */
     background-color: #000000 !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.1); /* Línea sutil superior */
-    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.8); /* Sombra hacia arriba */
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.8);
     
     display: flex;
     justify-content: space-around;
     align-items: center;
     z-index: 9000 !important;
+    
+    /* ← CLAVE: permite que el FAB sobresalga hacia arriba */
+    overflow: visible !important;
+}
+
+/* Hueco central que hace de "soporte visual" del FAB elevado */
+.nav-center-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 70px;
+    height: 100%;
+    position: relative;
+    flex-shrink: 0;
 }
         .nav-item { background: transparent; border: none; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer; height: 100%; text-transform: uppercase; padding-top: 4px; opacity: 1 !important; }
         .nav-item .material-icons { font-size: 20px; color: #FFFFFF; opacity: 1 !important; transition: all 0.3s; }
@@ -2268,10 +2272,6 @@ select:focus > option:checked {
     <div style="text-align:center; color:#666; padding:20px;">Cargando reglas...</div>
 </div>
 
-<button onclick="abrirModalRecurrente()" class="boton-flotante-fijos" title="Crear nueva regla">
-    +
-</button>
-
     </div>
 </div>            
                 <div id="tab-ajustes" class="view-section">
@@ -2321,92 +2321,120 @@ select:focus > option:checked {
     	
 	</div>
 		
-	<nav class="bottom-nav">
-    <button class="nav-item active" id="nav-inicio" onclick="irPestana('inicio'); document.getElementById('fab-container').style.display='none';">
+<nav class="bottom-nav">
+    <button class="nav-item active" id="nav-inicio" onclick="irPestana('inicio');">
         <span class="material-icons">dashboard</span> Inicio
     </button>
-    <button class="nav-item" id="nav-movs" onclick="irPestana('movs'); document.getElementById('fab-container').style.display='block';">
+    <button class="nav-item" id="nav-movs" onclick="irPestana('movs');">
         <span class="material-icons">feed</span> Diario
     </button>
-    <button class="nav-item" id="nav-recurrentes" onclick="irPestana('recurrentes'); cargarVistaRecurrentes(); document.getElementById('fab-container').style.display='none';">
+
+    <div class="nav-center-slot">
+        <div class="fab-container" id="fab-container" style="display:none;">
+            <div id="fab-overlay" class="fab-overlay" onclick="toggleFab()"></div>
+            <button class="fab-action btn-pagos" onclick="accionFab('pagos')">
+                <span class="material-icons">remove</span>
+                <span class="fab-label">GASTO</span>
+            </button>
+            <button class="fab-action btn-traspasos" onclick="accionFab('traspasos')">
+                <span class="material-icons">swap_horiz</span>
+                <span class="fab-label">TRASPASO</span>
+            </button>
+            <button class="fab-action btn-ingresos" onclick="accionFab('ingresos')">
+                <span class="material-icons">add</span>
+                <span class="fab-label">INGRESO</span>
+            </button>
+            <button id="fab-main" class="fab-btn" onclick="toggleFab()" title="Añadir movimiento">
+                <span class="material-icons" id="fab-icon">add</span>
+            </button>
+        </div>
+        
+        <button id="fab-fijos" class="fab-btn" onclick="abrirModalRecurrente()" title="Nueva regla fija" style="display:none; z-index:10000;">
+            <span class="material-icons">add</span>
+        </button>
+    </div>
+
+    <button class="nav-item" id="nav-recurrentes" onclick="irPestana('recurrentes'); cargarVistaRecurrentes();">
         <span class="material-icons">update</span> Fijos
     </button>
-    <button class="nav-item" id="nav-ajustes" onclick="irPestana('ajustes'); cargarSugerenciasAjustes(); document.getElementById('fab-container').style.display='none';">
+    <button class="nav-item" id="nav-ajustes" onclick="irPestana('ajustes'); cargarSugerenciasAjustes();">
         <span class="material-icons">tune</span> Ajustes
     </button>
 </nav>
 
     <style>
-        /* Contenedor en la esquina */
-        #fab-container {
-            position: fixed;
-            bottom: 80px; 
-            right: 20px;
-            width: 60px;
-            height: 60px;
-            z-index: 10000;
-            margin: 0;
-            padding: 0;
+	
+        /* ═══════════════════════════════════════════════
+           FAB CENTRAL — Posicionado dentro del nav-center-slot
+        ═══════════════════════════════════════════════ */
+        .nav-center-slot .fab-container,
+        .nav-center-slot #fab-fijos {
+            position: absolute;
+            bottom: 8px; 
         }
 
-        /* Botón principal morado semitransparente */
+        .nav-center-slot .fab-container {
+            width: 58px;
+            height: 58px;
+            z-index: 9001;
+            left: 50%; transform: translateX(-50%);
+        }
+
         #fab-main {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: rgba(142, 36, 170, 0.5) !important;
+            width: 58px !important;
+            height: 58px !important;
+            border-radius: 50% !important;
+            background: rgba(142, 36, 170, 0.85) !important;
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             color: white;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            border: 2px solid rgba(255,255,255,0.25) !important;
+            box-shadow: 0 -4px 20px rgba(191,90,242,0.5), 0 4px 15px rgba(0,0,0,0.4) !important;
             display: flex;
             align-items: center;
             justify-content: center;
-            position: absolute;
-            bottom: 0;
-            right: 0;
             z-index: 10001;
             transition: all 0.3s ease;
+            transform: translateY(-22px);
         }
-
         #fab-main:hover, #fab-main:active {
             background: rgba(142, 36, 170, 1) !important;
-            box-shadow: 0 6px 20px rgba(142, 36, 170, 0.6);
-            transform: scale(1.05);
+            box-shadow: 0 -6px 28px rgba(191,90,242,0.7), 0 6px 20px rgba(0,0,0,0.5) !important;
+            transform: translateY(-26px) scale(1.06) !important;
         }
+        .fab-container.open #fab-main {
+            transform: translateY(-22px) rotate(45deg) !important;
+            background: rgba(60,60,60,0.9) !important;
+            box-shadow: none !important;
+        }
+        #fab-main .material-icons { font-size: 30px; }
 
-        #fab-main .material-icons {
-            font-size: 32px;
+        /* Botón + de FIJOS — mismo aspecto pero azul */
+        #fab-fijos {
+            width: 58px !important;
+            height: 58px !important;
+            border-radius: 50% !important;
+            background: rgba(10, 132, 255, 0.85) !important;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.25) !important;
+            box-shadow: 0 -4px 20px rgba(0,184,255,0.5), 0 4px 15px rgba(0,0,0,0.4) !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            transition: all 0.3s ease;
+            transform: translateY(-22px);
+            left: 50%; margin-left: -29px;
+            cursor: pointer;
         }
-
-        /* Recalcular hacia dónde salen los mini-botones para que no se salgan de la pantalla */
-        .fab-container.open .btn-pagos {
-            transform: scale(1) translate(-75px, 0px) !important; /* Sale hacia la izquierda */
+        #fab-fijos:hover, #fab-fijos:active {
+            background: rgba(10, 132, 255, 1) !important;
+            box-shadow: 0 -6px 28px rgba(0,184,255,0.7), 0 6px 20px rgba(0,0,0,0.5) !important;
+            transform: translateY(-26px) scale(1.06) !important;
         }
-        .fab-container.open .btn-traspasos {
-            transform: scale(1) translate(-55px, -55px) !important; /* Sale en diagonal arriba-izq */
-        }
-        .fab-container.open .btn-ingresos {
-            transform: scale(1) translate(0px, -75px) !important; /* Sale hacia arriba */
-        }
-	/* --- INICIO CORRECCIÓN BOTONES (+) PANTALLAS GRANDES V3 --- */
-@media (min-width: 850px) {
-    /* Movemos las CAJAS completas de ambos botones al centro-derecha */
-    #fab-container,
-    .boton-flotante-fijos {
-        right: auto !important;
-        /* 50% es el centro, +320px lo pone en el margen derecho de tu app */
-        left: calc(50% + 320px) !important; 
-    }
-    
-    /* Nos aseguramos de que el botón interno vuelva a su sitio natural */
-    #fab-main {
-        left: auto !important;
-        right: 0 !important;
-    }
-}
-/* --- FIN CORRECCIÓN BOTONES V3 --- */	
+        #fab-fijos .material-icons { font-size: 30px; }
 
 #modal-extracto {
         display: none;
@@ -2469,25 +2497,6 @@ select:focus > option:checked {
             </div>
     </div>
 </div>
-
-    <div class="fab-container" id="fab-container">
-        <div id="fab-overlay" class="fab-overlay" onclick="toggleFab()"></div>
-
-        <button class="fab-action btn-pagos" onclick="accionFab('pagos')">
-            <span class="material-icons">remove</span>
-                  </button>
-        <button class="fab-action btn-traspasos" onclick="accionFab('traspasos')">
-            <span class="material-icons">swap_horiz</span>
-                    </button>
-        <button class="fab-action btn-ingresos" onclick="accionFab('ingresos')">
-            <span class="material-icons">add</span>
-                   </button>
-
-        <button id="fab-main" class="fab-btn" onclick="toggleFab()" title="Añadir movimiento">
-            <span class="material-icons" id="fab-icon">add</span>
-        </button>
-    </div>
-        </div>
 
         <input type="file" id="file-input" accept=".xlsx, .xls" style="display:none">
 
@@ -4287,37 +4296,32 @@ function renderizar() {
         }
     }
 	
-    function irPestana(p) {
+  function irPestana(p) {
     document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
-
     const tab = document.getElementById('tab-' + p);
     if (tab) tab.classList.add('active');
-
     const nav = document.getElementById('nav-' + p);
     if (nav) nav.classList.add('active');
 
-    // --- LÓGICA DE ACTUALIZACIÓN DE GRÁFICOS ---
+    // ── CONTROL DE BOTONES (+) SEGÚN PESTAÑA ──────────────────────────
+    const fabMovs = document.getElementById('fab-container');
+    const fabFijos = document.getElementById('fab-fijos');
     
-    // CASO 1: PESTAÑA INICIO (Ahora incluye el Scoring)
-    if (p === 'inicio') {
-        setTimeout(() => {
-            actualizarDashboard();
-            }, 100);
-    }
-
-    // CASO 2: PESTAÑA PATRIMONIO
-    if (p === 'patri') {
-        setTimeout(() => {
-            actualizarPatrimonio();
-            if (typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
-            if (typeof renderTreeMap === 'function') renderTreeMap();
-        }, 100);
-    }
-    
-    // CASO 3: AJUSTES (Cargar sugerencias)
-    if (p === 'ajustes') {
-        cargarSugerenciasAjustes();
+    if (p === 'movs') {
+        // Pestaña Diario → FAB morado con abanico
+        if (fabMovs) fabMovs.style.display = 'block';
+        if (fabFijos) fabFijos.style.display = 'none';
+        // Cerrar abanico si estaba abierto
+        if (fabMovs) fabMovs.classList.remove('open');
+    } else if (p === 'recurrentes') {
+        // Pestaña Fijos → FAB azul simple
+        if (fabMovs) fabMovs.style.display = 'none';
+        if (fabFijos) fabFijos.style.display = 'flex';
+    } else {
+        // Otras pestañas (Inicio, Ajustes, Patrimonio...)
+        if (fabMovs) fabMovs.style.display = 'none';
+        if (fabFijos) fabFijos.style.display = 'none';
     }
 }
     
