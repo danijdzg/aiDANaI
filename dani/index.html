@@ -3645,9 +3645,6 @@ let   pollingActivo = false;
 // ==========================================
 // 🔄 SISTEMA DE SINCRONIZACIÓN CON BACKOFF EXPONENCIAL
 // ==========================================
-// Si OneDrive falla, el delay se duplica en cada intento (60s → 120s → 240s → 300s).
-// Al recuperarse, vuelve a 60 s. Esto evita martillar la API de Microsoft en caso
-// de fallo prolongado y ahorra batería en móvil.
 window.iniciarPolling = function() {
     // Cancelar cualquier ciclo previo antes de crear uno nuevo
     detenerPolling();
@@ -3662,11 +3659,23 @@ window.iniciarPolling = function() {
 
             if (modoNube && !window.idEnEdicion) {
                 try {
-                    await cargarDesdeNube();
+                    // --- NUEVO: CHECK DEL BUZÓN DE SALIDA ---
+                    const buzonRaw = localStorage.getItem('aidanai_buzon');
+                    let buzon = buzonRaw ? JSON.parse(buzonRaw) : [];
+
+                    if (buzon.length > 0) {
+                        if(typeof window.mostrarEstado === 'function') window.mostrarEstado("Subiendo gastos del Buzón...", "loading");
+                        // Intenta subir todo el buzón a OneDrive. Si acierta, la función guardarUniversal se encarga de borrar el buzón.
+                        await window.guardarUniversal(buzon); 
+                    } else {
+                        // Si no hay gastos pendientes, comprobamos la nube normal por si la otra persona metió algo
+                        await cargarDesdeNube();
+                    }
+                    
                     // ✅ ÉXITO: resetear delay a base
                     pollingDelay = POLLING_BASE;
                 } catch (e) {
-                    // ❌ FALLO: duplicar delay hasta el techo
+                    // ❌ FALLO: duplicar delay hasta el techo (Backoff exponencial)
                     pollingDelay = Math.min(pollingDelay * 2, POLLING_MAX);
                     console.warn(`⏳ Polling falló. Próximo intento en ${pollingDelay/1000}s`, e.message || e);
                 }
@@ -5780,7 +5789,6 @@ async function guardarUniversal(nuevasFilas) {
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
     window.isSaving = true;
 
-    // Semáforo: Luz Amarilla (Procesando)
     if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('cargando');
 
     let wb = null; 
@@ -5788,11 +5796,10 @@ async function guardarUniversal(nuevasFilas) {
     try {
         console.log("🛡️ [SEGURIDAD] Iniciando protocolo de guardado completo...");
 
-        // 1. LIMPIEZA Y PREPARACIÓN DE DATOS (MOVIMIENTOS)
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
         let datosFinales = [...(window.datos || [])];
 
-        // Si llegan nuevas filas (desde el modal), las añadimos
+        // 1. GESTIÓN DE NUEVAS FILAS (Anti-duplicados)
         if (nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
             const filasProcesadas = nuevasFilas.map(f => {
@@ -5814,26 +5821,26 @@ async function guardarUniversal(nuevasFilas) {
                     descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
                     beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
                     ts: fechaFinal.getTime(),
-                    // ✅ FIX BUG-4: Antes recalculaba el tipo SOLO por el signo del importe,
-                    // perdiendo 'traspaso' cuando venía de ejecutarRecurrente/agregarDesdeRecurrente.
-                    // Ahora respeta el tipo original del objeto fuente.
                     tipo: f.tipo || f.TIPO || ((parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
                 };
             });
-            datosFinales.unshift(...filasProcesadas);
+            
+            // Añadir solo si no existen (Protección contra Buzón de Salida duplicando datos)
+            filasProcesadas.forEach(f => {
+                const indice = datosFinales.findIndex(m => m.id === f.id);
+                if (indice === -1) {
+                    datosFinales.unshift(f);
+                } else {
+                    // Si ya existe, lo actualizamos por si ha cambiado en modo offline
+                    datosFinales[indice] = f;
+                }
+            });
             datosFinales.sort((a, b) => b.ts - a.ts);
         }
 
-        // =========================================================================
-        // 🔒 PASO 2: ENCRIPTADO DE SEGURIDAD (LOCAL STORAGE)
-        // =========================================================================
-        // Obtenemos el PIN temporal de la sesión actual
+        // 2. ENCRIPTADO LOCAL (LOCAL STORAGE)
         const pinSession = sessionStorage.getItem('temp_pin_session');
-        
         if (pinSession && typeof CryptoSystem !== 'undefined') {
-            console.log("🔐 Encriptando datos locales con AES-GCM...");
-            
-            // Preparamos el objeto completo que queremos proteger
             const paqueteDeDatos = {
                 movimientos: datosFinales,
                 recurrentes: window.datosRecurrentes || [],
@@ -5845,49 +5852,24 @@ async function guardarUniversal(nuevasFilas) {
                 fechaGuardado: new Date().toISOString()
             };
 
-            // Encriptamos usando la función del Paso 1
             const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, pinSession);
-            
-            // Guardamos SOLO la versión encriptada
             localStorage.setItem('DATA_ENCRIPTADA', datosEncriptados);
-            
-            // 🗑️ LIMPIEZA DE RASTROS: Borramos las versiones en texto plano
-            // Esto asegura que si abren la consola, no vean los datos viejos
-            localStorage.removeItem('movimientos_v2'); 
-            localStorage.removeItem('presupuesto_data');
-            localStorage.removeItem('datos_recurrentes');
-            // Añade aquí cualquier otra key antigua que uses
-            
-            console.log("🔒 Datos locales asegurados correctamente.");
-        } else {
-            console.warn("⚠️ ADVERTENCIA: No hay PIN en sesión o falta CryptoSystem. Los datos locales NO se han encriptado.");
         }
-        // =========================================================================
 
-
-        // 2. CONSTRUIR EL LIBRO EXCEL (WORKBOOK) - Para la nube/descarga
-        // (Nota: El Excel se mantiene legible para que puedas usarlo en tu PC)
+        // 3. CONSTRUIR EL EXCEL PARA LA NUBE
         wb = XLSX.utils.book_new();
-        
-       // --- HOJA 1: MOVIMIENTOS ---
-        // ✅ MEJORA: Se añade columna TIPO explícita para no depender de inferencia por signo
-        // al recargar el Excel. Esto evita que traspasos con importe positivo se lean como ingresos.
         const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
             "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
             "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario,
             "Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
         })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
 
-        // 🟢 MAGIA FECHAS: Máscara visual DD/MM/AAAA para Excel
         Object.keys(hojaMovs).forEach(key => {
-            if (hojaMovs[key].t === 'd') { 
-                hojaMovs[key].z = 'dd/mm/yyyy'; 
-            }
+            if (hojaMovs[key].t === 'd') hojaMovs[key].z = 'dd/mm/yyyy'; 
         });
-
         XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
 
-        // --- HOJA 2: CONFIGURACION ---
+        // Hoja Configuracion
         const listaCuentas = Object.entries(window.mapaCuentas || {});
         const rawConceptos = window.listaConceptosConfig || [];
         const rawBeneficiarios = window.listaBeneficiariosConfig || [];
@@ -5906,19 +5888,13 @@ async function guardarUniversal(nuevasFilas) {
         }
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(datosConfig), "Configuracion");
 
-        // --- HOJA 3: RECURRENTES ---
+        // Hoja Recurrentes
         const listaRec = window.datosRecurrentes || [];
         const filasRec = listaRec.length > 0 ? listaRec.map(r => ({
-            "ID": r.id, 
-            "PROXIMA_FECHA": r.fechaProx, 
-            "FRECUENCIA": r.frecuencia,
-            "DIAS_SEMANA": r.diasSemana || "", 
-            "TIPO_REGLA": r.tipoRegla || "gasto",
-            "CUENTA": r.cuenta, 
-            "CUENTA_DESTINO": r.cuentaDestino || "",
-            "IMPORTE": r.importe, 
-            "CONCEPTO": r.concepto, 
-            "BENEFICIARIO": r.beneficiario || "",
+            "ID": r.id, "PROXIMA_FECHA": r.fechaProx, "FRECUENCIA": r.frecuencia,
+            "DIAS_SEMANA": r.diasSemana || "", "TIPO_REGLA": r.tipoRegla || "gasto",
+            "CUENTA": r.cuenta, "CUENTA_DESTINO": r.cuentaDestino || "",
+            "IMPORTE": r.importe, "CONCEPTO": r.concepto, "BENEFICIARIO": r.beneficiario || "",
             "DESCRIPCION": r.descripcion || ""
         })) : [];
 
@@ -5927,12 +5903,10 @@ async function guardarUniversal(nuevasFilas) {
         });
         XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
 
-
-        // 3. GUARDADO FINAL (NUBE O LOCAL)
+        // 4. SUBIDA A ONEDRIVE
         const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
         
         if (usarNube) {
-            // MODO NUBE (ONEDRIVE)
             let exito = false;
             let intentos = 0;
             const maxRetries = 2;
@@ -5941,25 +5915,19 @@ async function guardarUniversal(nuevasFilas) {
                 try {
                     intentos++;
                     if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
-                    console.log(`☁️ Subiendo a OneDrive (Intento ${intentos})...`);
                     
                     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
                     await oneDrive.saveFile(wbout, "aidanai.xlsx"); 
                     
                     exito = true;
                 } catch (e) {
-                    // 🔒 RESOLUCIÓN DE CONFLICTO: Si recibimos un 412, significa que otro
-                    // usuario o dispositivo guardó cambios mientras nosotros editábamos.
-                    // Descargamos la versión más reciente de la nube, la procesamos para
-                    // actualizar window.datos y window.eTag, e intentamos guardar de nuevo.
                     if (e && e.code === 'CONFLICT_412') {
-                        console.warn("🔄 Conflicto 412 detectado. Sincronizando desde nube antes de reintentar...");
-                        if(typeof window.mostrarEstado === 'function') window.mostrarEstado("🔄 Conflicto: sincronizando con el otro dispositivo...", "loading");
+                        console.warn("🔄 Conflicto 412: Fusión inteligente en marcha...");
+                        if(typeof window.mostrarEstado === 'function') window.mostrarEstado("🔄 Otro usuario modificó el archivo. Fusionando datos...", "loading");
                         try {
                             const wbFresco = await oneDrive.loadFile();
-                            // Procesamos los datos frescos (esto actualiza window.datos y el eTag)
                             if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
-                            // Ahora mezclamos: volvemos a añadir los nuevos movimientos pendientes encima
+                            
                             if (nuevasFilas) {
                                 const filasProcesadas = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
                                 filasProcesadas.forEach(f => {
@@ -5968,50 +5936,44 @@ async function guardarUniversal(nuevasFilas) {
                                     }
                                 });
                                 datosFinales = [...window.datos];
-                                // Reconstruimos el libro Excel con los datos ya fusionados
-                                const CLEAN2 = (txt) => String(txt || "").toUpperCase().trim();
+                                // Reconstruir libro tras la fusión
                                 wb = XLSX.utils.book_new();
                                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datosFinales.map(d => ({
                                     "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
-                                    "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario
-                                })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"] }), "Movimientos");
+                                    "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario, "Tipo": d.tipo
+                                })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] }), "Movimientos");
+                                
+                                const dc2 = [["CUENTA","TIPO","ES_INVERSION","CONCEPTO","BENEFICIARIO"]];
                                 const lc2 = Object.entries(window.mapaCuentas||{}), rc2 = window.listaConceptosConfig||[], rb2 = window.listaBeneficiariosConfig||[];
                                 const mf2 = Math.max(lc2.length, rc2.length, rb2.length);
-                                const dc2 = [["CUENTA","TIPO","ES_INVERSION","CONCEPTO","BENEFICIARIO"]];
-                                for(let i=0;i<mf2;i++){const c=lc2[i];dc2.push([c?CLEAN2(c[0]):"",c?CLEAN2(c[1].tipo):"",c?(c[1].esInversion?"SI":"NO"):"",rc2[i]?CLEAN2(rc2[i]):"",rb2[i]?CLEAN2(rb2[i]):""]);}
+                                for(let i=0;i<mf2;i++){const c=lc2[i];dc2.push([c?CLEAN(c[0]):"",c?CLEAN(c[1].tipo):"",c?(c[1].esInversion?"SI":"NO"):"",rc2[i]?CLEAN(rc2[i]):"",rb2[i]?CLEAN(rb2[i]):""]);}
                                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dc2), "Configuracion");
+                                
                                 const lr2 = window.datosRecurrentes||[];
                                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lr2.map(r=>({ID:r.id,PROXIMA_FECHA:r.fechaProx,FRECUENCIA:r.frecuencia,DIAS_SEMANA:r.diasSemana||"",TIPO_REGLA:r.tipoRegla||"gasto",CUENTA:r.cuenta,CUENTA_DESTINO:r.cuentaDestino||"",IMPORTE:r.importe,CONCEPTO:r.concepto,BENEFICIARIO:r.beneficiario||"",DESCRIPCION:r.descripcion||""})),{header:["ID","PROXIMA_FECHA","FRECUENCIA","DIAS_SEMANA","TIPO_REGLA","CUENTA","CUENTA_DESTINO","IMPORTE","CONCEPTO","BENEFICIARIO","DESCRIPCION"]}), "Recurrentes");
                             }
-                            if(typeof window.mostrarEstado === 'function') window.mostrarEstado("🔄 Datos fusionados. Reintentando guardado...", "loading");
-                            // Breve pausa antes de reintentar
                             await new Promise(r => setTimeout(r, 800));
                         } catch(syncErr) {
-                            console.error("❌ Fallo al sincronizar tras conflicto:", syncErr);
-                            throw new Error("No se pudo resolver el conflicto de sincronización.");
+                            throw new Error("No se pudo resolver el conflicto.");
                         }
                     } else {
-                        console.warn(`⚠️ Fallo intento ${intentos}: ${e.message}`);
                         if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500));
                     }
                 }
             }
             if (!exito) throw new Error("Fallo conexión OneDrive.");
             
-            console.log("✅ Nube sincronizada.");
+            // Si sube con éxito, limpiamos el buzón de salida completamente
+            localStorage.removeItem('aidanai_buzon');
+
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('ok');
             if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
-
         } else {
-            // MODO LOCAL (DESCARGA DE ARCHIVO)
-            console.log("💾 Generando descarga local...");
             XLSX.writeFile(wb, "aidanai.xlsx"); 
-            
             if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('local');
-            console.log("✅ Descarga local OK.");
         }
 
-        // 4. ACTUALIZAR INTERFAZ
+        // 5. ACTUALIZAR UI LOCAL
         window.datos = datosFinales;
         if (typeof renderizar === 'function') renderizar();
         if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
@@ -6021,10 +5983,28 @@ async function guardarUniversal(nuevasFilas) {
     } catch (errorCritico) {
         console.error("🚨 ERROR CRÍTICO AL GUARDAR:", errorCritico);
         
-        alert("⚠️ ATENCIÓN: LA NUBE NO RESPONDE.\n\nSe va a descargar una copia 'aidanai.xlsx' en tu ordenador.");
-        if (wb) XLSX.writeFile(wb, "aidanai_COPIA_SEGURIDAD.xlsx");
-        
-        if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+        // --- NUEVO: BUZÓN DE SALIDA (OFFLINE QUEUE) ---
+        if (nuevasFilas) {
+            const buzonAnterior = JSON.parse(localStorage.getItem('aidanai_buzon') || '[]');
+            const filasArray = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
+            
+            filasArray.forEach(f => {
+                if (!buzonAnterior.find(b => b.id === (f.id || f.ID))) {
+                    buzonAnterior.push(f);
+                }
+            });
+            
+            localStorage.setItem('aidanai_buzon', JSON.stringify(buzonAnterior));
+            
+            if (typeof window.mostrarNotificacion === 'function') {
+                window.mostrarNotificacion("📶 Sin conexión. Guardado en el Buzón de Salida.", "warning");
+            }
+            if (typeof window.actualizarSemaforo === 'function') {
+                window.actualizarSemaforo('naranja', 'PENDIENTE DE SUBIR');
+            }
+        } else {
+            if (typeof window.actualizarSemaforo === 'function') window.actualizarSemaforo('error');
+        }
     } finally {
         window.isSaving = false;
         if (btnModal) btnModal.innerHTML = 'GUARDAR';
