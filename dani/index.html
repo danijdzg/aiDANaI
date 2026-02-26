@@ -7466,6 +7466,9 @@ window.cambiarPinSeguridad = async function() {
 
     // 5. Actualizar sesión activa
     PinSecurity.setSession(newVal);
+    
+    // --- NUEVO: ACTUALIZAR LA LLAVE DE LA HUELLA DACTILAR ---
+    localStorage.setItem('aidanai_bio_key', btoa(newVal));
 
     // 6. Re-encriptar el caché local con la nueva contraseña
     try {
@@ -8812,13 +8815,15 @@ async function checkPin() {
 
     if (esCorrecto) {
         // 2. CRÍTICO: Guardamos el PIN en la sesión temporal.
-        // Si no hacemos esto, CryptoSystem no tendrá la "llave" para desencriptar los datos locales.
         PinSecurity.setSession(pinActual);
+        
+        // --- NUEVO: GUARDAMOS UNA COPIA OFUSCADA PARA LA HUELLA ---
+        localStorage.setItem('aidanai_bio_key', btoa(pinActual));
         
         // 3. Desbloqueamos la app
         desbloquearApp();
     } else {
-        // Lógica visual de error (se mantiene igual que la tenías)
+        // Lógica visual de error
         const msg = document.getElementById('auth-message');
         msg.innerText = "❌ PIN INCORRECTO";
         msg.style.color = "#ff5252";
@@ -8836,6 +8841,16 @@ async function checkPin() {
 }
 
 async function desbloquearApp() {
+    // --- NUEVO: RESCATE DE LLAVE SI USAMOS HUELLA ---
+    if (!PinSecurity.getSession()) {
+        const bioKey = localStorage.getItem('aidanai_bio_key');
+        if (bioKey) {
+            PinSecurity.setSession(atob(bioKey));
+        } else {
+            PinSecurity.setSession('1234'); // Salvavidas por defecto
+        }
+    }
+
     const overlay = document.getElementById('auth-overlay');
     const msg = document.getElementById('auth-message');
     msg.innerText = "✅ Identidad confirmada";
