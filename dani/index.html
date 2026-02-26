@@ -2382,7 +2382,8 @@ input:checked + .slider:before {
     
     <div class="cockpit-header">
         <button class="btn-close-cockpit" onclick="cerrarModalRecurrente()">✕</button>
-        <span class="cockpit-title">NUEVA REGLA FIJA</span>
+        <span id="titulo-modal-rec" class="cockpit-title">NUEVA REGLA FIJA</span>
+        <input type="hidden" id="rec-id-edit">
         <div style="width: 24px;"></div> </div>
 
     <div class="cockpit-hero">
@@ -2456,7 +2457,7 @@ input:checked + .slider:before {
     </div>
 
     <div class="cockpit-footer">
-        <button class="btn-launch" onclick="crearReglaRecurrente()">
+        <button id="btn-guardar-rec" class="btn-launch" onclick="crearReglaRecurrente()">
             GUARDAR FIJO <span class="material-icons">update</span>
         </button>
     </div>
@@ -7535,47 +7536,6 @@ window.actualizarSemaforo = function(estado) {
     }
 };
 
-// VIGILANTE INVISIBLE (Pregunta cada 60 segundos)
-setInterval(async () => {
-    // Si la app está trabajando, no molestamos
-    if (window.estadoConexion === 'cargando') return; 
-    
-    // Comprobar WiFi del dispositivo
-    if (!navigator.onLine) {
-        window.actualizarSemaforo('desconectado');
-        return;
-    }
-
-    // Preguntar a la API de OneDrive
-    try {
-        if (window.modoNube && window.OneDriveManager && window.OneDriveManager.client) {
-            await window.OneDriveManager.client.api('/me').get();
-            // Si antes había error pero ahora responde, vuelve a verde
-            if (window.estadoConexion === 'desconectado') {
-                window.actualizarSemaforo('ok'); 
-            }
-        }
-    } catch (error) {
-        window.actualizarSemaforo('desconectado');
-    }
-}, 60000);
-
-// PROTEGER Y BLOQUEAR AL GUARDAR
-setTimeout(() => {
-    const funcionesAProteger = ['guardarManual', 'guardarUniversal'];
-    funcionesAProteger.forEach(nombreFuncion => {
-        if (typeof window[nombreFuncion] === 'function') {
-            const funcionOriginal = window[nombreFuncion];
-            window[nombreFuncion] = async function(...args) {
-                if (window.estadoConexion === 'desconectado') {
-                    alert("🛑 OPERACIÓN BLOQUEADA:\n\nEstás desconectado de la nube. Por seguridad no se guardará nada para evitar la pérdida de datos.");
-                    return; // Bloquea y no guarda
-                }
-                return await funcionOriginal.apply(this, args);
-            };
-        }
-    });
-}, 1500);
 
 // ==========================================
 // 🧮 LÓGICA DE CALCULADORA (LIBERADA Y GLOBAL)
@@ -7709,6 +7669,13 @@ window.abrirModalRecurrente = function() {
 window.cerrarModalRecurrente = function() {
     const modal = document.getElementById('modal-form-recurrente');
     if (modal) modal.classList.remove('active'); // La apaga correctamente
+    
+    // Limpieza de seguridad al cerrar
+    if(document.getElementById('rec-id-edit')) document.getElementById('rec-id-edit').value = "";
+    const titulo = document.getElementById('titulo-modal-rec');
+    if(titulo) titulo.innerText = "NUEVA REGLA FIJA";
+    const btnGuardar = document.getElementById('btn-guardar-rec');
+    if(btnGuardar) btnGuardar.innerHTML = 'GUARDAR FIJO <span class="material-icons">update</span>';
 };
 
 window.setRecType = function(tipo) {
@@ -7893,9 +7860,11 @@ function renderizarRecurrentes() {
                     <div style="font-size:18px; font-weight:bold; color:${color};">
                         ${signo}${Math.abs(regla.importe).toFixed(2)} €
                     </div>
-                    <div style="margin-top:8px;">
-                        <button onclick="ejecutarRecurrente('${regla.id}')" style="background:#222; border:1px solid #444; color:#fff; padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;">▶️ Ejecutar</button>
-                        <button onclick="borrarRecurrente('${regla.id}')" style="background:#222; border:1px solid var(--c-danger); color:var(--c-danger); padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer; margin-left:5px;">🗑️</button>
+                    <div style="margin-top:8px; display:flex; gap:5px; justify-content:flex-end;">
+                        <button onclick="ejecutarRecurrente('${regla.id}')" style="background:#222; border:1px solid #444; color:#fff; padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Ejecutar ahora">▶️ Ejecutar</button>
+                        <button onclick="editarRecurrente('${regla.id}')" style="background:#222; border:1px solid #00B8FF; color:#00B8FF; padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Editar">✏️</button>
+                        <button onclick="duplicarRecurrente('${regla.id}')" style="background:#222; border:1px solid #FFF; color:#FFF; padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Duplicar">📋</button>
+                        <button onclick="borrarRecurrente('${regla.id}')" style="background:#222; border:1px solid var(--c-danger); color:var(--c-danger); padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Borrar">🗑️</button>
                     </div>
                 </div>
             </div>
@@ -7913,7 +7882,8 @@ window.borrarRecurrente = async function(id) {
 }
 
 async function crearReglaRecurrente() {
-    // 1. Recoger datos del formulario
+    // 1. Recoger datos
+    const idEdit = document.getElementById('rec-id-edit') ? document.getElementById('rec-id-edit').value : "";
     const tipo = document.getElementById('rec-tipo').value;
     const frec = document.getElementById('rec-frecuencia').value;
     const fecha = document.getElementById('rec-fecha').value;
@@ -7923,71 +7893,72 @@ async function crearReglaRecurrente() {
     const benef = document.getElementById('rec-beneficiario').value;
     const desc = document.getElementById('rec-descripcion').value;
     
-    // 2. Tratamiento especial del importe (quitamos símbolos y comas)
+    // 2. Importe
     let impRaw = document.getElementById('rec-importe').value || "";
     impRaw = impRaw.replace('€', '').replace(',', '.').trim();
     let imp = parseFloat(impRaw);
 
-    // 3. Validaciones con avisos claros
-    if(!fecha) return window.mostrarNotificacion("📅 Falta la FECHA de inicio", "warning");
+    // 3. Validaciones
+    if(!fecha) return window.mostrarNotificacion("📅 Falta la FECHA", "warning");
     if(!cta) return window.mostrarNotificacion("🏦 Selecciona una CUENTA", "warning");
     if(!conc) return window.mostrarNotificacion("🏷️ Falta el CONCEPTO", "warning");
-    if(isNaN(imp) || imp === 0) return window.mostrarNotificacion("🔢 Importe no válido (Toca los números)", "warning");
-    
+    if(isNaN(imp) || imp === 0) return window.mostrarNotificacion("🔢 Importe no válido", "warning");
     if (tipo === 'traspaso') {
         if (!ctaDest) return window.mostrarNotificacion("➡️ Falta la Cuenta Destino", "warning");
-        if (cta === ctaDest) return alert("❌ La cuenta origen y destino son la misma.");
+        if (cta === ctaDest) return alert("❌ Origen y destino son la misma.");
     }
 
-    // 4. Preparar el importe final (siempre positivo aquí, el tipo define el signo después)
+    // 4. Preparar el importe
     imp = Math.abs(imp);
-    
-    // Si es Gasto, lo guardamos como negativo internamente
     let importeGuardar = (tipo === 'gasto') ? -imp : imp;
 
-    // 5. Recoger días seleccionados (si es diario)
+    // 5. Días de la semana
     let diasStr = "";
     if (frec === 'Diario') {
         const checks = document.querySelectorAll('#bloque-dias-semana input:checked');
         const dias = Array.from(checks).map(c => c.value);
-        if (dias.length === 0) return window.mostrarNotificacion("📆 Selecciona algún día de la semana", "warning");
+        if (dias.length === 0) return window.mostrarNotificacion("📆 Selecciona un día", "warning");
         diasStr = dias.join(',');
     }
 
-    // 6. Crear el objeto regla
-    const nuevaRegla = {
-        id: 'REC-' + Date.now(),
-        fechaProx: fecha,
-        frecuencia: frec,
-        diasSemana: diasStr,
-        cuenta: cta,
-        cuentaDestino: (tipo === 'traspaso') ? ctaDest : "",
-        importe: importeGuardar,
-        concepto: conc,
-        beneficiario: benef,
-        descripcion: desc,
-        tipoRegla: tipo
-    };
-
-    // 7. Inicializar lista si no existe y guardar
+    // 6. Actualizar o Crear
     if(!window.datosRecurrentes) window.datosRecurrentes = [];
-    window.datosRecurrentes.push(nuevaRegla);
     
-    // Feedback visual inmediato
+    if (idEdit) {
+        // MODO EDICIÓN
+        const index = window.datosRecurrentes.findIndex(r => r.id === idEdit);
+        if(index !== -1) {
+            window.datosRecurrentes[index] = {
+                id: idEdit, fechaProx: fecha, frecuencia: frec, diasSemana: diasStr,
+                cuenta: cta, cuentaDestino: (tipo === 'traspaso') ? ctaDest : "",
+                importe: importeGuardar, concepto: conc, beneficiario: benef,
+                descripcion: desc, tipoRegla: tipo
+            };
+        }
+    } else {
+        // MODO CREACIÓN
+        const nuevaRegla = {
+            id: 'REC-' + Date.now(), fechaProx: fecha, frecuencia: frec, diasSemana: diasStr,
+            cuenta: cta, cuentaDestino: (tipo === 'traspaso') ? ctaDest : "",
+            importe: importeGuardar, concepto: conc, beneficiario: benef,
+            descripcion: desc, tipoRegla: tipo
+        };
+        window.datosRecurrentes.push(nuevaRegla);
+    }
+    
     mostrarEstado("💾 Guardando regla...", "loading");
     
     try {
         await guardarTodoConRecurrentes();
-        
-        // Limpieza y cierre
         cerrarModalRecurrente();
         
-        // Limpiar campos para la próxima
+        // Limpiar para el futuro
+        if(document.getElementById('rec-id-edit')) document.getElementById('rec-id-edit').value = "";
         document.getElementById('rec-importe').value = "";
         document.getElementById('rec-descripcion').value = "";
         
         cargarVistaRecurrentes();
-        mostrarEstado("✅ Regla fija creada correctamente", "success");
+        mostrarEstado("✅ Regla fija guardada", "success");
         if(typeof vibrar === 'function') vibrar('success');
 
     } catch (e) {
@@ -7995,6 +7966,56 @@ async function crearReglaRecurrente() {
         window.mostrarNotificacion("❌ Error guardando: " + e.message, "error");
         mostrarEstado("❌ Error de guardado", "error");
     }
+}
+
+// --- FUNCIONES DE ACCIÓN PARA LOS BOTONES NUEVOS ---
+window.editarRecurrente = function(id) {
+    cargarDatosEnModalRecurrente(id, true);
+};
+
+window.duplicarRecurrente = function(id) {
+    cargarDatosEnModalRecurrente(id, false);
+};
+
+function cargarDatosEnModalRecurrente(id, esEdicion) {
+    const regla = window.datosRecurrentes.find(r => r.id === id);
+    if(!regla) return window.mostrarNotificacion("❌ No se encontró la regla", "error");
+
+    abrirModalRecurrente();
+    setRecType(regla.tipoRegla || 'gasto');
+
+    // Retardo para asegurar que el modal ha cargado los datos del desplegable
+    setTimeout(() => {
+        document.getElementById('rec-importe').value = Math.abs(regla.importe).toFixed(2).replace('.', ',') + ' €';
+        document.getElementById('rec-frecuencia').value = regla.frecuencia;
+        document.getElementById('rec-fecha').value = new Date(regla.fechaProx).toISOString().split('T')[0];
+        document.getElementById('rec-cuenta').value = regla.cuenta;
+        if(regla.cuentaDestino) document.getElementById('rec-cuenta-destino').value = regla.cuentaDestino;
+        document.getElementById('rec-concepto').value = regla.concepto;
+        document.getElementById('rec-beneficiario').value = regla.beneficiario || "";
+        document.getElementById('rec-descripcion').value = regla.descripcion || "";
+
+        toggleDiasSemana();
+        if(regla.frecuencia === 'Diario' && regla.diasSemana) {
+            const diasArr = regla.diasSemana.split(',');
+            const checks = document.querySelectorAll('#bloque-dias-semana input[type="checkbox"]');
+            checks.forEach(chk => { chk.checked = diasArr.includes(chk.value); });
+        }
+
+        const tituloModal = document.getElementById('titulo-modal-rec');
+        const inputIdEdit = document.getElementById('rec-id-edit');
+        const btnGuardar = document.getElementById('btn-guardar-rec');
+
+        if(esEdicion) {
+            if(tituloModal) tituloModal.innerText = "EDITAR REGLA FIJA";
+            if(inputIdEdit) inputIdEdit.value = regla.id;
+            if(btnGuardar) btnGuardar.innerHTML = 'ACTUALIZAR FIJO <span class="material-icons">update</span>';
+        } else {
+            if(tituloModal) tituloModal.innerText = "NUEVA REGLA FIJA (COPIA)";
+            if(inputIdEdit) inputIdEdit.value = ""; // Al vaciarlo, guarda como nuevo
+            if(btnGuardar) btnGuardar.innerHTML = 'GUARDAR COPIA <span class="material-icons">content_copy</span>';
+        }
+    }, 50);
 }
 
 // --- MOTOR DE CALENDARIO (NUEVO) ---
@@ -8427,25 +8448,8 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 2. BANNER DE INSTALACIÓN PWA (Android Chrome / Edge)
-    //    El evento beforeinstallprompt lo dispara el navegador
-    //    cuando detecta que la app cumple los criterios PWA.
-    //    En iOS no existe — mostramos instrucciones manuales.
-    // ─────────────────────────────────────────────────────────────
+   
     let deferredPrompt = null;
-
-    window.addEventListener('beforeinstallprompt', e => {
-        e.preventDefault();
-        deferredPrompt = e;
-        // Solo mostramos si el usuario no lo ha descartado esta sesión
-        if (!sessionStorage.getItem('pwa_banner_dismissed')) {
-            setTimeout(() => {
-                const banner = document.getElementById('pwa-install-banner');
-                if (banner) banner.style.display = 'block';
-            }, 3000); // Espera 3s para no interrumpir el arranque
-        }
-    });
 
     window.pwaTriggerInstall = async function() {
         const banner = document.getElementById('pwa-install-banner');
@@ -8468,12 +8472,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         deferredPrompt = null;
     };
 
-    window.pwaDismissBanner = function() {
-        const banner = document.getElementById('pwa-install-banner');
-        if (banner) banner.style.display = 'none';
-        sessionStorage.setItem('pwa_banner_dismissed', '1');
-    };
-
+   
     // Ocultamos el banner cuando ya está instalada
     window.addEventListener('appinstalled', () => {
         const banner = document.getElementById('pwa-install-banner');
@@ -8882,66 +8881,6 @@ async function desbloquearApp() {
 
 // 💥 Disparar la seguridad JUSTO AL CARGAR LA APP
 window.addEventListener('DOMContentLoaded', iniciarAutenticacion);
-
-document.addEventListener('DOMContentLoaded', () => {
-    // 1. Reordenar: Mover "Descripción" justo debajo de "Importe"
-    const inputImporte = document.getElementById('mov-importe');
-    const inputDescripcion = document.getElementById('mov-descripcion');
-    
-    if (inputImporte && inputDescripcion) {
-        const contenedorImporte = inputImporte.closest('div'); // Busca la "caja" que envuelve al importe
-        const contenedorDescripcion = inputDescripcion.closest('div'); // Busca la "caja" de la descripción
-        
-        // Coloca la caja de descripción justo después de la caja de importe
-        if (contenedorImporte && contenedorDescripcion) {
-            contenedorImporte.parentNode.insertBefore(contenedorDescripcion, contenedorImporte.nextSibling);
-        }
-    }
-
-    // 2. Inteligencia: Autocompletar basado en el historial
-    if (inputDescripcion) {
-        inputDescripcion.addEventListener('input', (e) => {
-            const textoEscrito = e.target.value.toLowerCase().trim();
-            
-            // Solo buscamos si has escrito al menos 3 letras
-            if (textoEscrito.length < 3) return;
-            
-            // Buscamos en los datos que la app ya ha cargado desde el Excel
-            // (Asumimos que la lista de datos está en una variable global como window.datos.movimientos o similar, 
-            // ajustaremos esto si tu app usa un nombre diferente, pero probaremos con la estructura estándar).
-            let historial = [];
-            if (window.datosApp && window.datosApp.movimientos) historial = window.datosApp.movimientos;
-            else if (window.movimientosGlobales) historial = window.movimientosGlobales;
-            else if (window.movimientos) historial = window.movimientos;
-
-            // Encontrar el último movimiento que tenga exactamente esa misma descripción
-            const movimientoPasado = historial.find(m => 
-                m.DESCRIPCION && m.DESCRIPCION.toLowerCase() === textoEscrito
-            );
-
-            // Si encontramos uno igual, copiamos sus datos a los selectores
-            if (movimientoPasado) {
-                const selectConcepto = document.getElementById('mov-concepto');
-                const selectCuenta = document.getElementById('mov-cuenta');
-                const selectBeneficiario = document.getElementById('mov-beneficiario');
-
-                if (selectConcepto && movimientoPasado.CONCEPTO) selectConcepto.value = movimientoPasado.CONCEPTO;
-                if (selectCuenta && movimientoPasado.CUENTA) selectCuenta.value = movimientoPasado.CUENTA;
-                if (selectBeneficiario && movimientoPasado.BENEFICIARIO) selectBeneficiario.value = movimientoPasado.BENEFICIARIO;
-                
-                // Efecto visual: iluminar brevemente los campos autocompletados para avisar al usuario
-                [selectConcepto, selectCuenta, selectBeneficiario].forEach(campo => {
-                    if(campo) {
-                        campo.style.transition = "background-color 0.3s";
-                        campo.style.backgroundColor = "#e8f5e9"; // Un verde muy suave
-                        setTimeout(() => campo.style.backgroundColor = "", 800);
-                    }
-                });
-            }
-        });
-    }
-});
-
 
 document.addEventListener('DOMContentLoaded', () => {
     
