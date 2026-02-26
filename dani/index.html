@@ -2305,15 +2305,8 @@ input:checked + .slider:before {
                             <div class="kpi-box"><span class="kpi-label">AHORRO</span><span class="kpi-value val-std-pos" id="d-aho">0.00%</span></div>
                         </div>
                     </div>
-                    
-                    <div class="master-card" style="margin-top: 20px;">
-                        <div class="card-header" style="border-bottom: 1px solid rgba(191, 90, 242, 0.3); padding-bottom: 8px; margin-bottom: 8px;">
-                            <span class="card-title" style="color: #BF5AF2 !important;">PRÓXIMOS 30 DÍAS</span>
-                        </div>
-                        <div id="dash-recurrentes-list" style="min-height: 40px; display:flex; flex-direction:column; gap:5px;">
-                            <div style="text-align:center; font-size:10px; color:#666; padding:10px;">Cargando previsiones...</div>
-                        </div>
-                    </div>
+
+                    <div id="contenedor-alertas-7d"></div>
 
                     <div class="master-card orange-card" style="margin-top: 20px;">
                         <div class="patri-breakdown" style="background:transparent; border:none; margin:0; padding:0;">
@@ -7061,129 +7054,6 @@ window.actualizarDashboard = function() {
         generarAnalisisIA(datosUsuario);
     }
 
-// --- LÓGICA NUEVA: TARJETA PRÓXIMOS 30 DÍAS (CON FILTRO DE USUARIO) ---
-    const divRecurrentes = document.getElementById('dash-recurrentes-list');
-    
-    if (divRecurrentes && window.datosRecurrentes) {
-        const hoy = new Date();
-        hoy.setHours(0,0,0,0);
-        
-        const limite = new Date(hoy);
-        limite.setDate(hoy.getDate() + 30); // 30 días vista
-        limite.setHours(23,59,59,999);
-
-        // 1. Filtrar reglas
-        const proximos = window.datosRecurrentes.filter(r => {
-            if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(r)) return false;
-            if (!r.fechaProx) return false;
-            
-            let fechaR = new Date(r.fechaProx);
-            if (isNaN(fechaR.getTime())) return false;
-            
-            // Truco: Ponemos la hora a mediodía para evitar problemas de zona horaria
-            fechaR.setHours(12,0,0,0); 
-            return fechaR >= hoy && fechaR <= limite;
-        }).sort((a,b) => new Date(a.fechaProx) - new Date(b.fechaProx));
-
-        // 2. Pintar resultados
-        if (proximos.length === 0) {
-            const nombreUsuario = (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos') ? filtroUsuarioActual : '';
-            divRecurrentes.innerHTML = `<div style="text-align:center; font-size:11px; color:#666; padding:10px; font-style:italic;">✅ Nada previsto (30 días) ${nombreUsuario}</div>`;
-        } else {
-            let htmlRec = '';
-            
-            // Cargar saldos REALES actuales para la simulación
-            let saldosSimulados = {};
-            if (window.mapaCuentas) {
-                Object.keys(window.mapaCuentas).forEach(k => {
-                    saldosSimulados[k] = window.mapaCuentas[k].saldoActual || 0;
-                });
-            }
-
-            proximos.forEach(p => {
-                const fObj = new Date(p.fechaProx);
-                const dia = fObj.getDate();
-                const mes = fObj.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
-                
-                // Colores
-                let colorImporte = '#39FF14'; // Verde por defecto (ingresos)
-                if (p.tipoRegla === 'traspaso') {
-                    colorImporte = '#0A84FF'; // Azul (traspasos)
-                } else if (p.tipoRegla === 'gasto' || p.importe < 0) {
-                    colorImporte = '#FF2E4D'; // Rojo (gastos)
-                }
-
-                const importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(Math.abs(p.importe));
-
-                // 1ª y 2ª LÍNEA: Lógica de Textos y Saldos Simulados
-                let importeNum = parseFloat(p.importe) || 0;
-                let linea1 = '';
-                let linea2 = '';
-
-                if (p.tipoRegla === 'traspaso') {
-                    let cuentaDest = p.cuentaDestino || 'N/A';
-                    
-                    // Restamos de origen y sumamos a destino
-                    let saldoOrig = (saldosSimulados[p.cuenta] || 0) - Math.abs(importeNum);
-                    let saldoDest = (saldosSimulados[cuentaDest] || 0) + Math.abs(importeNum);
-                    
-                    // Guardamos el nuevo saldo para el siguiente cálculo en el bucle
-                    saldosSimulados[p.cuenta] = saldoOrig;
-                    saldosSimulados[cuentaDest] = saldoDest;
-                    
-                    let fmtOrig = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoOrig);
-                    let fmtDest = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoDest);
-                    
-                    // TRASPASOS: Letra más pequeña (11px), condensada (-0.4px) para que no se corte.
-                    // Flechas con colores rojo (salida) y verde (entrada).
-                    let estiloTraspaso = `font-size:11px; font-weight:700; color:${colorImporte}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-0.4px;`;
-                    
-                    linea1 = `<span style="${estiloTraspaso}"><span style="color:#FF2E4D; margin-right:3px; font-size:12px;">⬇</span>${p.cuenta} (${fmtOrig}€)</span>`;
-                    linea2 = `<span style="${estiloTraspaso}"><span style="color:#39FF14; margin-right:3px; font-size:12px;">⬆</span>${cuentaDest} (${fmtDest}€)</span>`;
-                } else {
-                    // Si es gasto (negativo) se restará solo, si es ingreso (positivo) se sumará
-                    let saldoNuevo = (saldosSimulados[p.cuenta] || 0) + importeNum;
-                    saldosSimulados[p.cuenta] = saldoNuevo;
-                    let fmtNuevo = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoNuevo);
-                    
-                    let descTexto = p.descripcion ? ` / ${p.descripcion}` : '';
-                    let textoConcepto = `${p.concepto}${descTexto}`.toUpperCase(); // Todo en mayúsculas
-                    
-                    // GASTOS/INGRESOS: L1 Concepto/Desc (Blanco), L2 Cuenta y Saldo (Color del importe)
-                    linea1 = `<span style="font-size:13px; font-weight:700; color:#eee; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${textoConcepto}</span>`;
-                    linea2 = `<span style="font-size:13px; font-weight:700; color:${colorImporte}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.cuenta} (${fmtNuevo}€)</span>`;
-                }
-
-                htmlRec += `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); border-radius:8px; padding:8px; margin-bottom:6px; border-left: 3px solid ${colorImporte};">
-                    
-                    <div style="display:flex; gap:10px; align-items:center; overflow:hidden;">
-                        <div style="background:#111; border:1px solid #333; padding:4px 8px; border-radius:6px; text-align:center; min-width:35px; flex-shrink:0;">
-                            <div style="font-size:9px; color:#aaa; line-height:1; margin-bottom:2px;">${mes}</div>
-                            <div style="font-size:14px; font-weight:800; color:#fff; line-height:1;">${dia}</div>
-                        </div>
-                        <div style="display:flex; flex-direction:column; overflow:hidden;">
-                            ${linea1}
-                            ${linea2}
-                        </div>
-                    </div>
-
-                    <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                        <div style="font-size:14px; font-weight:800; color:${colorImporte}; text-shadow:0 0 10px ${colorImporte}40;">
-                            ${importeFmt}€
-                        </div>
-                        <button onclick="window.agregarDesdeRecurrente('${p.id}', '${p.fechaProx}')" 
-                                style="background:${colorImporte}; border:none; color:#000; width:28px; height:28px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 10px ${colorImporte}; font-weight:bold;">
-                            <span class="material-icons" style="font-size:18px;">add</span>
-                        </button>
-                    </div>
-                </div>`;
-            });
-            divRecurrentes.innerHTML = htmlRec;
-        }
-    }
-};
-
 // ==========================================
 // 🚀 3. CAMBIO DE USUARIO (CON RETARDO TÁCTICO)
 // ==========================================
@@ -9073,9 +8943,9 @@ document.addEventListener('DOMContentLoaded', () => {
             html += '</ul></div>';
             alertaDiv.innerHTML = html;
 
-            const tabInicio = document.getElementById('tab-inicio');
-            if (tabInicio) {
-                tabInicio.insertBefore(alertaDiv, tabInicio.firstChild);
+            const contenedorAlertas = document.getElementById('contenedor-alertas-7d');
+            if (contenedorAlertas) {
+                contenedorAlertas.appendChild(alertaDiv);
             }
         }
     }
