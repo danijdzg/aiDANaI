@@ -9161,22 +9161,48 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     window.showToast = window.mostrarEstado;
 
-    // 4. VIGILANTE INVISIBLE
+   // 4. VIGILANTE INVISIBLE (POLLING INTELIGENTE)
     setInterval(async () => {
-        if (window.estadoSemaforo === 'naranja') return; 
+        if (window.estadoSemaforo === 'naranja') return; // Si está guardando, no molestamos
         if (!navigator.onLine) {
             window.actualizarSemaforo('rojo');
             return;
         }
         try {
-            if (window.OneDriveManager && window.OneDriveManager.client) {
+            // Comprobamos si tenemos conexión y sabemos cuál es nuestro archivo Excel
+            if (window.OneDriveManager && window.OneDriveManager.client && window.OneDriveManager.fileId) {
+                
+                // Pedimos SOLO la "huella dactilar" (cTag) del archivo, pesa poquísimo
+                const fileMeta = await window.OneDriveManager.client.api(`/me/drive/items/${window.OneDriveManager.fileId}`)
+                    .select('cTag')
+                    .get();
+                
+                window.actualizarSemaforo('verde');
+                
+                // Si es la primera vez que miramos, guardamos la huella
+                if (!window.lastCTag) {
+                    window.lastCTag = fileMeta.cTag;
+                } 
+                // Si la huella ha cambiado, alguien (o tú en otro dispositivo) ha modificado el Excel
+                else if (window.lastCTag !== fileMeta.cTag) {
+                    console.log("Detectado cambio en la nube. Actualizando app silenciosamente...");
+                    window.lastCTag = fileMeta.cTag; // Actualizamos la huella
+                    
+                    // Recargamos los datos desde la nube para que tengas lo último
+                    if(typeof window.cargarDesdeNube === 'function') {
+                        await window.cargarDesdeNube();
+                    }
+                }
+            } else if (window.OneDriveManager && window.OneDriveManager.client) {
+                // Si aún no tenemos el archivo cargado, solo comprobamos la conexión básica
                 await window.OneDriveManager.client.api('/me').get();
                 window.actualizarSemaforo('verde');
             }
         } catch (error) {
+            console.warn("Fallo temporal de conexión en el vigilante:", error);
             window.actualizarSemaforo('rojo');
         }
-    }, 60000);
+    }, 30000); // Comprobamos cada 30 segundos (es súper rápido y no gasta datos)
 
     // 5. PROTEGER AL GUARDAR
     setTimeout(() => {
