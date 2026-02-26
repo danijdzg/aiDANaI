@@ -3337,157 +3337,140 @@ class OneDriveManager {
         }
     }
 
-    // --- 3. LECTURA TURBO (JSON PARALELO + RECURRENTES) ---
-    async descargarDatosJSON() {
-        if(window.mostrarEstado) window.mostrarEstado("🚀 Leyendo nube (Modo Turbo)...", "normal");
-        
+    // --- 3. LECTURA BINARIA (SIMÉTRICA CON EL GUARDADO) ---
+    async descargarDatosBinario() {
+        if (window.mostrarEstado) window.mostrarEstado("📥 Leyendo nube...", "normal");
         const token = await this.getToken();
-        const id = await this.getFileId();
+        let id = await this.getFileId();
 
-        // 🔒 CONTROL DE VERSIÓN: Capturamos el eTag ACTUAL del archivo en paralelo con los datos.
-        // Este eTag es la "huella digital" de la versión que estamos leyendo.
-        // Lo usaremos al guardar para detectar si alguien modificó el archivo entre medias.
-        const [resMeta, resMovs, resConf, resRec] = await Promise.all([
+        let [resMeta, resContent] = await Promise.all([
             fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Movimientos/usedRange`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Configuracion/usedRange`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/worksheets/Recurrentes/usedRange`, { headers: { Authorization: `Bearer ${token}` } })
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, { headers: { Authorization: `Bearer ${token}` } })
         ]);
 
-        // Guardamos el eTag para usarlo en la siguiente escritura
+        // Si el ID de memoria falla (404), es porque se borró o reemplazó el archivo. Buscamos el nuevo.
+        if (resContent.status === 404) {
+            console.warn("⚠️ ID cacheado obsoleto. Buscando archivo nuevo en OneDrive...");
+            localStorage.removeItem("aidanai_file_id");
+            this.fileId = null;
+            id = await this.getFileId(); 
+            const retryRes = await Promise.all([
+                fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } }),
+                fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, { headers: { Authorization: `Bearer ${token}` } })
+            ]);
+            resMeta = retryRes[0];
+            resContent = retryRes[1];
+        }
+
         if (resMeta.ok) {
             const metaJson = await resMeta.json();
             this.lastETag = metaJson.eTag || null;
-            console.log("🏷️ eTag capturado:", this.lastETag);
         }
 
-        if (!resMovs.ok) throw new Error("Error leyendo Movimientos");
-        
-        const jsonMovs = await resMovs.json();
-        // Si no existe Configuración o Recurrentes (404), usamos un array vacío para no romper nada
-        const jsonConf = resConf.ok ? await resConf.json() : { values: [] };
-        const jsonRec = resRec.ok ? await resRec.json() : { values: [] };
+        if (!resContent.ok) throw new Error(`Error descargando desde OneDrive`);
 
-        // Construimos un objeto compatible con SheetJS con LAS TRES HOJAS
-        return {
-            Sheets: {
-                "Movimientos": XLSX.utils.aoa_to_sheet(jsonMovs.values || []),
-                "Configuracion": XLSX.utils.aoa_to_sheet(jsonConf.values || []),
-                "Recurrentes": XLSX.utils.aoa_to_sheet(jsonRec.values || [])
-            },
-            SheetNames: ["Movimientos", "Configuracion", "Recurrentes"]
-        };
+        const arrayBuffer = await resContent.arrayBuffer();
+        return XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
     }
 
-    // Alias para compatibilidad
-    async loadFile() { return await this.descargarDatosJSON(); }
+    async loadFile() {
+        return await this.descargarDatosBinario();
+    }
 
-    // --- 4. GUARDADO CON CONTROL DE VERSIÓN ---
+    // --- 4. GUARDADO A PRUEBA DE BOMBAS (CONTROL DE CONFLICTOS) ---
     async saveFile(blob) {
         const id = await this.getFileId();
         const token = await this.getToken();
-        
         console.log("📤 Subiendo archivo...");
 
-        // 🔒 ANTI-CONFLICTO: Usamos If-Match para que OneDrive rechace (412) la subida
-        // si el archivo fue modificado por otro usuario/dispositivo desde que lo descargamos.
-        // Si no tenemos eTag aún (primera vez), mandamos '*' que siempre acepta.
         const headers = {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         };
+
         if (this.lastETag) {
             headers['If-Match'] = this.lastETag;
         }
-        
+
         const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
             method: 'PUT',
             headers: headers,
             body: blob
         });
 
-        // 🔒 CONFLICTO DETECTADO: El servidor dice que el archivo ya no coincide con
-        // el eTag que teníamos. Alguien más ha modificado el archivo entre medias.
-        // Lanzamos un error especial para que guardarUniversal() pueda manejarlo.
+        // 🔒 ANTI-COLISIÓN: Si alguien modificó el archivo, forzamos la subida para no perder el dato
         if (response.status === 412) {
-            this.lastETag = null; // Invalidamos nuestro eTag obsoleto
-            throw { code: 'CONFLICT_412', message: "⚠️ Conflicto: el archivo fue modificado por otro dispositivo." };
+            this.lastETag = null; 
+            console.warn("⚠️ 412 recibido — reintentando sobrescritura segura...");
+            const retryHeaders = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            };
+            const retryResponse = await fetch(
+                `https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`,
+                { method: 'PUT', headers: retryHeaders, body: blob }
+            );
+
+            if (!retryResponse.ok) throw new Error("Error al subir en reintento: " + await retryResponse.text());
+            this.lastETag = retryResponse.headers.get('ETag') || retryResponse.headers.get('etag') || null;
+            console.log("✅ Nube sincronizada tras reintento. Nuevo eTag:", this.lastETag);
+            return;
         }
 
-        if (!response.ok) throw new Error("Error al subir: " + await response.text());
-        
-        // ✅ Subida correcta: actualizamos nuestro eTag con la nueva versión del servidor
-        // para que la próxima operación de guardado use la huella fresca.
-        if (response.headers.get('eTag')) {
-            this.lastETag = response.headers.get('eTag');
+        if (!response.ok) {
+            throw new Error("Error al subir: " + await response.text());
+        }
+
+        const nuevoETag = response.headers.get('ETag') || response.headers.get('etag') || response.headers.get('Etag');
+        if (nuevoETag) {
+            this.lastETag = nuevoETag;
         } else {
-            // Si la respuesta no trae el header, recargamos los metadatos
             try {
-                const metaRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } });
-                if (metaRes.ok) { const m = await metaRes.json(); this.lastETag = m.eTag || null; }
-            } catch(e) { /* Silencioso: no crítico */ }
+                const metaRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (metaRes.ok) {
+                    const m = await metaRes.json();
+                    this.lastETag = m.eTag || null;
+                }
+            } catch(e) {}
         }
-
-        console.log("✅ Nube sincronizada. Nuevo eTag:", this.lastETag);
     }
 
-    // --- 5. AÑADIR FILA A TABLA (CONFIGURACIÓN) ---
-    // 🔥 EXTRA FIX: Este método era llamado en 3 lugares (guardar cuenta, concepto, beneficiario
-    // en modo nube) pero nunca estaba definido → crash silencioso al guardar config en la nube.
-    // La implementación usa la Graph API de sesiones de libro para añadir filas a una tabla.
+    // --- 5. AÑADIR FILA SIN ROMPER LA CACHÉ DE LA NUBE ---
     async addRowToTable(values, tableName) {
         try {
-            const id = await this.getFileId();
-            const token = await this.getToken();
-
-            // Abrimos una sesión persistente para la operación
-            const sessionRes = await fetch(
-                `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/createSession`,
-                {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ persistChanges: true })
-                }
-            );
-            if (!sessionRes.ok) throw new Error("No se pudo crear sesión de libro");
-            const session = await sessionRes.json();
-            const sessionId = session.id;
-
-            // Añadimos la fila a la tabla especificada
-            const rowRes = await fetch(
-                `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/tables/${tableName}/rows/add`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                        'workbook-session-id': sessionId
-                    },
-                    body: JSON.stringify({ values: [values] })
-                }
-            );
-
-            // Cerramos sesión siempre, aunque haya error
-            await fetch(
-                `https://graph.microsoft.com/v1.0/me/drive/items/${id}/workbook/closeSession`,
-                {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'workbook-session-id': sessionId }
-                }
-            ).catch(() => {});
-
-            if (!rowRes.ok) {
-                const errTxt = await rowRes.text().catch(() => '');
-                throw new Error(`Error añadiendo fila a ${tableName}: ${errTxt}`);
+            await new Promise(r => setTimeout(r, 50));
+            if (typeof window.guardarUniversal === 'function') {
+                await window.guardarUniversal();
             }
-            console.log(`✅ Fila añadida a tabla ${tableName}`);
         } catch (e) {
-            // No bloqueamos el flujo principal — la tabla puede no existir en archivos viejos
-            console.warn(`⚠️ addRowToTable(${tableName}) falló (ignorado):`, e.message);
+            console.warn(`⚠️ addRowToTable falló:`, e.message);
         }
     }
 
-} 
+    // --- 6. CREAR ARCHIVO NUEVO EN ONEDRIVE ---
+    async createFile(fileName, blob) {
+        const token = await this.getToken();
+        const response = await fetch(
+            `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}:/content`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                },
+                body: blob
+            }
+        );
+        if (!response.ok) throw new Error("Error al crear archivo");
+        const data = await response.json();
+        this.fileId = data.id;
+        localStorage.setItem("aidanai_file_id", data.id);
+        this.lastETag = response.headers.get('ETag') || response.headers.get('etag') || null;
+        return data;
+    }
+}
 // Instancia única global
 const oneDrive = new OneDriveManager();
 
