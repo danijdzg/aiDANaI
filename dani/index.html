@@ -7837,13 +7837,17 @@ function cargarVistaRecurrentes() {
 }
 
 // ==========================================
-// 🔄 RENDERIZAR RECURRENTES (5PX MARGEN + BORDES DE COLOR ORIGINALES)
+// 🔄 RENDERIZAR RECURRENTES (CAJA GIGANTE ELIMINADA + FECHAS + BORDES)
 // ==========================================
 window.renderizarRecurrentes = function() {
     const contenedor = document.getElementById('lista-recurrentes-pendientes');
     if (!contenedor) return; 
 
-    // Fondo transparente general
+    // Restauramos el espaciado normal de tu pantalla
+    if (contenedor.parentElement) {
+        contenedor.parentElement.style.padding = "20px";
+    }
+    contenedor.style.margin = "0";
     contenedor.style.backgroundColor = "transparent";
     contenedor.innerHTML = '';
     
@@ -7861,27 +7865,28 @@ window.renderizarRecurrentes = function() {
         return dateA - dateB;
     });
 
-    let htmlFinal = `<div style="padding-bottom: 100px; padding-top: 15px;">`;
+    // 🌟 LA MAGIA AQUÍ: Usamos una etiqueta <section> en lugar de <div>
+    // Esto hace que la regla CSS de tu código que dibujaba la caja gigante la ignore por completo.
+    let htmlFinal = `<section style="padding-bottom: 100px; padding-top: 5px;">`;
 
     listaCompleta.forEach(r => {
         const importeNum = parseFloat(r.importe || 0);
         const esTraspaso = (r.tipoRegla || '').toLowerCase() === 'traspaso';
         const idRecurrente = r.id || r.ID;
         
-        // --- LÓGICA DE COLORES (USANDO TUS TONOS EXACTOS) ---
+        // --- LÓGICA DE COLORES ORIGINALES ---
         let colorPrincipal = '#FFFFFF';
         let signo = '';
         
         if (esTraspaso) {
-            colorPrincipal = '#0A84FF'; // Azul original
+            colorPrincipal = '#0A84FF'; // Azul
         } else if (importeNum < 0) {
-            colorPrincipal = '#FF2E4D'; // Rojo original
+            colorPrincipal = '#FF2E4D'; // Rojo
         } else {
-            colorPrincipal = '#39FF14'; // Verde original
+            colorPrincipal = '#39FF14'; // Verde
             signo = '+';
         }
 
-        // --- EXTRACCIÓN DE DATOS ---
         const cuentaOrigen = r.cuenta || 'Sin Cuenta';
         const cuentaDestino = r.cuentaDestino || '';
         const concepto = r.concepto || 'Varios';
@@ -7892,7 +7897,7 @@ window.renderizarRecurrentes = function() {
         let infoCuenta = cuentaOrigen;
         if(esTraspaso && cuentaDestino) infoCuenta = `${cuentaOrigen} ➔ ${cuentaDestino}`;
 
-        // --- FORMATEO DE FECHA ---
+        // --- 🛡️ FORMATEO FECHA ESTRICTO DD/MM/AAAA ---
         let fechaStr = 'Sin Fecha';
         if (r.fechaProx) {
             if (typeof r.fechaProx === 'number') {
@@ -7901,19 +7906,38 @@ window.renderizarRecurrentes = function() {
             } else if (r.fechaProx instanceof Date) {
                 fechaStr = ('0' + r.fechaProx.getDate()).slice(-2) + '/' + ('0' + (r.fechaProx.getMonth() + 1)).slice(-2) + '/' + r.fechaProx.getFullYear();
             } else {
-                const str = String(r.fechaProx);
+                let str = String(r.fechaProx).trim();
                 if (str.includes('-')) {
                     const parts = str.split('-');
-                    fechaStr = parts.length >= 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : str;
+                    if (parts.length >= 3) {
+                        if (parts[0].length === 4) {
+                            fechaStr = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+                        } else {
+                            fechaStr = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
+                        }
+                    } else {
+                        fechaStr = str;
+                    }
+                } else if (str.includes('/')) {
+                    const parts = str.split('/');
+                    if (parts.length >= 3) {
+                        if (parts[0].length === 4) {
+                            fechaStr = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+                        } else {
+                            fechaStr = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
+                        }
+                    } else {
+                        fechaStr = str;
+                    }
                 } else {
-                    fechaStr = str; 
+                    fechaStr = str;
                 }
             }
         }
 
-        // --- HTML DE LA TARJETA (CON BORDES DE COLOR, MÁRGENES DE 5PX LATERIALES Y PADDING INTERIOR) ---
+        // --- TARJETAS INDIVIDUALES (Ahora libres de la caja gigante) ---
         htmlFinal += `
-            <div class="movimiento-item" style="background-color: #000000; border: 2px solid ${colorPrincipal}; border-radius: 12px; margin: 0 5px 15px 5px; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
+            <div class="movimiento-item" style="background-color: #000000; border: 2px solid ${colorPrincipal}; border-radius: 12px; margin: 0 0 15px 0; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-weight: 900; font-size: 16px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;">
@@ -7961,7 +7985,7 @@ window.renderizarRecurrentes = function() {
         `;
     });
     
-    htmlFinal += `</div>`;
+    htmlFinal += `</section>`;
     contenedor.innerHTML = htmlFinal;
 };
 
