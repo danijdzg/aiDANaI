@@ -7838,13 +7838,13 @@ function cargarVistaRecurrentes() {
 }
 
 // ==========================================
-// 🔄 RENDERIZAR RECURRENTES (CORRECCIÓN DE ETIQUETAS + DISEÑO AMOled)
+// 🔄 RENDERIZAR RECURRENTES (LIMPIO SIN ICONOS + FRECUENCIA AMARILLA + BOTONES)
 // ==========================================
 window.renderizarRecurrentes = function() {
     const contenedor = document.getElementById('lista-recurrentes-pendientes');
     if (!contenedor) return; 
 
-    // Fondo transparente para el contenedor general
+    // Fondo transparente general
     contenedor.style.backgroundColor = "transparent";
     contenedor.innerHTML = '';
     
@@ -7855,7 +7855,7 @@ window.renderizarRecurrentes = function() {
         return;
     }
 
-    // 1. Ordenar por Próxima Fecha (los más cercanos primero) usando el nombre correcto: fechaProx
+    // Ordenar por Próxima Fecha
     listaCompleta.sort((a, b) => {
         const dateA = new Date(a.fechaProx || '2099-01-01');
         const dateB = new Date(b.fechaProx || '2099-01-01');
@@ -7864,22 +7864,21 @@ window.renderizarRecurrentes = function() {
 
     let htmlFinal = `<div style="padding-bottom: 100px; padding-top: 15px;">`;
 
-    // 2. Crear cada tarjeta con las reglas de color estrictas
     listaCompleta.forEach(r => {
-        // Usamos los nombres reales internos que carga la app
         const importeNum = parseFloat(r.importe || 0);
         const esTraspaso = (r.tipoRegla || '').toLowerCase() === 'traspaso';
+        const idRecurrente = r.id || r.ID; // El ID para que los botones funcionen
         
         // --- LÓGICA DE COLORES ---
-        let colorBordeEImporte = '#FFFFFF';
+        let colorPrincipal = '#FFFFFF';
         let signo = '';
         
         if (esTraspaso) {
-            colorBordeEImporte = '#0a84ff'; // AZUL para traspasos
+            colorPrincipal = '#0a84ff'; // AZUL para traspasos
         } else if (importeNum < 0) {
-            colorBordeEImporte = '#ff453a'; // ROJO para gastos
+            colorPrincipal = '#ff453a'; // ROJO para gastos
         } else {
-            colorBordeEImporte = '#32d74b'; // VERDE para ingresos
+            colorPrincipal = '#32d74b'; // VERDE para ingresos
             signo = '+';
         }
 
@@ -7894,47 +7893,68 @@ window.renderizarRecurrentes = function() {
         let infoCuenta = cuentaOrigen;
         if(esTraspaso && cuentaDestino) infoCuenta = `${cuentaOrigen} ➔ ${cuentaDestino}`;
 
-        // Formatear Fecha
-        const fechaRaw = r.fechaProx || 'Sin Fecha';
-        let fechaStr = fechaRaw;
-        if (fechaRaw.includes('-')) {
-            const parts = fechaRaw.split('-');
-            if(parts.length >= 3) fechaStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        // --- FORMATEO DE FECHA ---
+        let fechaStr = 'Sin Fecha';
+        if (r.fechaProx) {
+            if (typeof r.fechaProx === 'number') {
+                const d = new Date(Math.round((r.fechaProx - 25569) * 86400 * 1000));
+                fechaStr = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+            } else if (r.fechaProx instanceof Date) {
+                fechaStr = ('0' + r.fechaProx.getDate()).slice(-2) + '/' + ('0' + (r.fechaProx.getMonth() + 1)).slice(-2) + '/' + r.fechaProx.getFullYear();
+            } else {
+                const str = String(r.fechaProx);
+                if (str.includes('-')) {
+                    const parts = str.split('-');
+                    fechaStr = parts.length >= 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : str;
+                } else {
+                    fechaStr = str; 
+                }
+            }
         }
 
         // --- HTML DE LA TARJETA ---
         htmlFinal += `
-            <div class="movimiento-item" style="background-color: #000000; border: 2px solid ${colorBordeEImporte}; border-radius: 14px; margin: 0 15px 15px 15px; padding: 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+            <div class="movimiento-item" style="background-color: #000000; border: 2px solid ${colorPrincipal}; border-radius: 12px; margin: 0 12px 14px 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #FFD60A; font-weight: 900; font-size: 14px; letter-spacing: 0.5px;">
-                        📅 ${fechaStr}
+                    <span style="font-weight: 900; font-size: 16px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;">
+                        ${concepto}
                     </span>
-                    <span style="font-size: 11px; font-weight: bold; color: #FFFFFF; border: 1px solid #FFFFFF; padding: 3px 8px; border-radius: 6px;">
-                        🔄 ${frec.toUpperCase()}
-                    </span>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;">
-                    <span style="font-weight: 800; font-size: 16px; color: #FFFFFF;">${concepto}</span>
-                    <span style="font-size: 13px; color: #FFFFFF; font-weight: 600;">
-                        <span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">person</span>${beneficiario}
+                    <span style="font-size: 20px; font-weight: 900; color: ${colorPrincipal}; flex-shrink: 0;">
+                        ${esTraspaso ? '' : signo}${importeNum.toFixed(2)} €
                     </span>
                 </div>
 
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span style="font-size: 13px; color: #FFFFFF; display: flex; align-items: center; gap: 6px;">
-                        <span class="material-icons" style="font-size: 14px;">account_balance_wallet</span>
-                        <span style="font-weight: 700;">${infoCuenta}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: #FFD60A; font-weight: 900; font-size: 13px;">📅 ${fechaStr}</span>
+                        <span style="color: #FFD60A; font-weight: 800; font-size: 11px; letter-spacing: 0.5px;">
+                            🔄 ${frec.toUpperCase()}
+                        </span>
+                    </div>
+                    <span style="font-size: 13px; color: ${colorPrincipal}; font-weight: 800; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%;">
+                        ${infoCuenta}
                     </span>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; padding-top: 4px;">
-                    <span style="font-size: 13px; color: #FFFFFF; max-width: 60%; line-height: 1.3; font-style: italic; opacity: 0.9;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; color: #FFFFFF; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;">
+                        ${beneficiario}
+                    </span>
+                    <span style="font-size: 12px; color: #FFFFFF; font-style: italic; max-width: 50%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                         ${desc}
                     </span>
-                    <span style="font-size: 20px; font-weight: 900; color: ${colorBordeEImporte};">
-                        ${esTraspaso ? '' : signo}${importeNum.toFixed(2)} €
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 8px;">
+                    <span onclick="window.editarRecurrente('${idRecurrente}')" style="color: #0a84ff; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        ✏️ EDITAR
+                    </span>
+                    <span onclick="window.duplicarRecurrente('${idRecurrente}')" style="color: #32d74b; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        📄 DUPLICAR
+                    </span>
+                    <span onclick="window.borrarRecurrente('${idRecurrente}')" style="color: #ff453a; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        🗑️ BORRAR
                     </span>
                 </div>
                 
