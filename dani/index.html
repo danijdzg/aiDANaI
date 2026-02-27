@@ -1912,7 +1912,7 @@ select:focus > option:checked {
     /* Diseño de las tarjetas estilo Apple */
     #lista-recurrentes-pendientes > div, 
     #lista-recurrentes-futuros > div {
-        background-color: #1c1c1e; /* Fondo oscuro y limpio */
+        background-color: #000000; /* Fondo negro */
         border-radius: 16px; /* Bordes bien redondeados */
         padding: 18px;
         margin-bottom: 14px;
@@ -7838,99 +7838,117 @@ function cargarVistaRecurrentes() {
 }
 
 // ==========================================
-// 🎨 PINTAR LISTA DE RECURRENTES (FALTABA ESTO)
+// 🔄 RENDERIZAR RECURRENTES (ESTILO AMOLED + FULL INFO)
 // ==========================================
-function renderizarRecurrentes() {
+window.renderizarRecurrentes = function() {
     const contenedor = document.getElementById('lista-recurrentes-pendientes');
     if (!contenedor) return; 
 
+    // Aseguramos que el contenedor no tenga fondos raros
+    contenedor.style.backgroundColor = "transparent";
     contenedor.innerHTML = '';
     
-    // 1. FILTRADO INTELIGENTE: Aplicamos el mismo filtro que al resto de la app
     const listaCompleta = window.datosRecurrentes || [];
-    const reglasFiltradas = listaCompleta.filter(r => {
-        // Si existe la función de filtro (la que usas en el Dashboard), la usamos
-        if (typeof pasaFiltroPropietario === 'function') {
-            return pasaFiltroPropietario(r);
-        }
-        return true; // Si no hay filtro definido, mostramos todo por seguridad
-    });
     
-    // 2. Comprobar si hay datos DESPUÉS de filtrar
-    if (reglasFiltradas.length === 0) {
-        contenedor.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">No hay reglas fijas para este usuario</div>';
+    if (listaCompleta.length === 0) {
+        contenedor.innerHTML = `<div style="text-align:center; padding: 40px 20px; color: #888;">No tienes movimientos fijos configurados.</div>`;
         return;
     }
 
-    // 3. Ordenar por fecha próxima
-    reglasFiltradas.sort((a, b) => new Date(a.fechaProx) - new Date(b.fechaProx));
+    // 1. Ordenar por Próxima Fecha
+    listaCompleta.sort((a, b) => {
+        const dateA = new Date(a.PROXIMA_FECHA || a.proxima_fecha || '2099-01-01');
+        const dateB = new Date(b.PROXIMA_FECHA || b.proxima_fecha || '2099-01-01');
+        return dateA - dateB;
+    });
 
-    // 4. Pintar tarjetas
-    reglasFiltradas.forEach(regla => {
-        // Icono y Color según tipo
-        let icono = '💸';
-        let color = '#fff';
-        let signo = '';
-        
-        if (regla.tipoRegla === 'ingreso') {
-            icono = '💰'; color = 'var(--c-success)'; signo = '+';
-        } else if (regla.tipoRegla === 'traspaso') {
-            icono = '🔁'; color = 'var(--c-transfer)';
-        } else {
-            // Gasto
-            icono = '💸'; color = 'var(--c-danger)'; signo = '-';
+    // 2. Agrupar por Próxima Fecha
+    const grupos = {};
+    listaCompleta.forEach(r => {
+        const fechaRaw = r.PROXIMA_FECHA || r.proxima_fecha || 'Sin Fecha';
+        let fechaStr = fechaRaw;
+        // Formatear a DD/MM/AAAA para la pantalla
+        if (fechaRaw.includes('-')) {
+            const parts = fechaRaw.split('-');
+            if(parts.length >= 3) fechaStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
+        if(!grupos[fechaStr]) grupos[fechaStr] = [];
+        grupos[fechaStr].push(r);
+    });
 
-        const div = document.createElement('div');
-        div.className = 'card-movimiento'; 
+    let htmlFinal = `<div style="padding-bottom: 100px; padding-top: 10px;">`;
+
+    // 3. Generar el HTML con la línea amarilla y las tarjetas
+    for (const [fecha, reglas] of Object.entries(grupos)) {
         
-        // --- DETECTOR DE VENCIMIENTO ---
-        const hoy = new Date();
-        const fechaRegla = new Date(regla.fechaProx);
-        hoy.setHours(0,0,0,0);
-        fechaRegla.setHours(0,0,0,0);
-
-        let estiloExtra = "";
-        let avisoVence = "";
-
-        if (fechaRegla <= hoy) {
-            estiloExtra = "box-shadow: 0 0 10px #FFD60A; border: 1px solid #FFD60A;";
-            avisoVence = `<span style="color:#000; background:#FFD60A; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:10px; margin-right:5px;">¡EJECUTAR!</span>`;
-        }
-        // -------------------------------
-
-        div.style = 'border-left: 4px solid ' + color + '; ' + estiloExtra;
-        div.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div style="flex:1;">
-                    <div style="font-size:16px; font-weight:bold; color:#fff;">
-                        ${avisoVence} ${icono} ${regla.concepto}
-                    </div>
-                    <div style="font-size:12px; color:#aaa; margin-top:4px;">
-                        ${regla.beneficiario || ''} • 
-                        <span style="color:${color}">${regla.frecuencia}</span>
-                    </div>
-                    <div style="font-size:11px; color:#666; margin-top:2px;">
-                        Prox: <strong>${new Date(regla.fechaProx).toLocaleDateString()}</strong>
-                        ${regla.cuentaDestino ? `<br>➔ A: ${regla.cuentaDestino}` : ''}
-                    </div>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-size:18px; font-weight:bold; color:${color};">
-                        ${signo}${Math.abs(regla.importe).toFixed(2)} €
-                    </div>
-                    <div style="margin-top:8px; display:flex; gap:5px; justify-content:flex-end;">
-                        <button onclick="ejecutarRecurrente('${regla.id}')" style="background:#222; border:1px solid #444; color:#fff; padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Ejecutar ahora">▶️ Ejecutar</button>
-                        <button onclick="editarRecurrente('${regla.id}')" style="background:#222; border:1px solid #00B8FF; color:#00B8FF; padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Editar">✏️</button>
-                        <button onclick="duplicarRecurrente('${regla.id}')" style="background:#222; border:1px solid #FFF; color:#FFF; padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Duplicar">📋</button>
-                        <button onclick="borrarRecurrente('${regla.id}')" style="background:#222; border:1px solid var(--c-danger); color:var(--c-danger); padding:4px 8px; border-radius:4px; font-size:12px; cursor:pointer;" title="Borrar">🗑️</button>
-                    </div>
-                </div>
+        // CABECERA: LÍNEA AMARILLA NEÓN
+        htmlFinal += `
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #FFD60A; padding: 15px 0px 6px 0px; margin: 15px 15px 10px 15px; background: transparent;">
+                <span style="color: #FFD60A; font-weight: 800; font-size: 13px; letter-spacing: 1px;">
+                    PRÓXIMA FECHA: ${fecha}
+                </span>
+                <span style="font-size: 12px; font-weight: 600; color: #FFD60A;">
+                    ${reglas.length} Fijos
+                </span>
             </div>
         `;
-        contenedor.appendChild(div);
-    });
-}
+
+        // TARJETAS EXHAUSTIVAS
+        reglas.forEach(r => {
+            const importeNum = parseFloat(r.IMPORTE || r.importe || 0);
+            const colorImporte = importeNum < 0 ? '#ff453a' : '#32d74b';
+            const signo = importeNum > 0 ? '+' : '';
+            const esTraspaso = (r.TIPO_REGLA || r.tipo_regla || '').toLowerCase() === 'traspaso';
+            
+            const cuentaOrigen = r.CUENTA || r.cuenta || 'Sin Cuenta';
+            const cuentaDestino = r.CUENTA_DESTINO || r.cuenta_destino || '';
+            const concepto = r.CONCEPTO || r.concepto || 'Varios';
+            const beneficiario = r.BENEFICIARIO || r.beneficiario || '-';
+            const desc = r.DESCRIPCION || r.descripcion || '';
+            const frec = r.FRECUENCIA || r.frecuencia || 'Mensual';
+            const id = r.ID || r.id;
+
+            let infoCuenta = cuentaOrigen;
+            if(esTraspaso) infoCuenta = `${cuentaOrigen} ➔ ${cuentaDestino}`;
+
+            htmlFinal += `
+                <div class="movimiento-item" style="background-color: #1c1c1e; border-radius: 14px; margin: 0 15px 12px 15px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 10px;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 800; font-size: 15px; color: #ffffff;">${concepto}</span>
+                        <span style="font-size: 10px; font-weight: 900; color: #000; background: #FFD60A; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px;">
+                            🔄 ${frec.toUpperCase()}
+                        </span>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                        <span style="font-size: 12px; color: #aaa; display: flex; align-items: center; gap: 6px;">
+                            <span class="material-icons" style="font-size: 14px; color: #888;">account_balance_wallet</span>
+                            <span style="font-weight: 600; color: #ddd;">${infoCuenta}</span>
+                        </span>
+                        <span style="font-size: 12px; color: #aaa; display: flex; align-items: center; gap: 6px;">
+                            <span class="material-icons" style="font-size: 14px; color: #888;">person</span>
+                            ${beneficiario}
+                        </span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; padding-top: 2px;">
+                        <span style="font-size: 12px; color: #888; max-width: 60%; line-height: 1.3; font-style: italic;">
+                            ${desc}
+                        </span>
+                        <span style="font-size: 18px; font-weight: 900; color: ${esTraspaso ? '#0a84ff' : colorImporte};">
+                            ${esTraspaso ? '' : signo}${importeNum.toFixed(2)} €
+                        </span>
+                    </div>
+                    
+                </div>
+            `;
+        });
+    }
+    
+    htmlFinal += `</div>`;
+    contenedor.innerHTML = htmlFinal;
+};
 
 // Función auxiliar para borrar
 window.borrarRecurrente = async function(id) {
