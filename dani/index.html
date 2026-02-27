@@ -3325,39 +3325,38 @@ class OneDriveManager {
         this.lastETag = null;
     }
 
-    // --- 1. GESTIÓN DE TOKEN ---
+    // ==========================================
+    // 🛡️ OBTENER TOKEN (CON RENOVACIÓN SILENCIOSA ANTI-CADUCIDAD)
+    // ==========================================
     async getToken() {
-        if (!this.msalInstance) {
-             console.error("MSAL no inicializado, recuperando...");
-             this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+        const cuentas = this.msalInstance.getAllAccounts();
+        if (cuentas.length === 0) {
+            throw new Error("No hay ninguna sesión iniciada en OneDrive.");
         }
-
-        const accounts = this.msalInstance.getAllAccounts();
-        const account = accounts[0];
         
-        if (!account) {
-            throw new Error("No hay cuenta activa. Pulsa CONECTAR NUBE.");
-        }
-
         const request = {
-            scopes: ["User.Read", "Files.ReadWrite.All"],
-            account: account
+            scopes: ["Files.ReadWrite", "User.Read"],
+            account: cuentas[0]
         };
 
         try {
-            // Intento silencioso
+            // 1. Intentamos renovar el 'pase VIP' de forma silenciosa e invisible
             const response = await this.msalInstance.acquireTokenSilent(request);
             return response.accessToken;
         } catch (error) {
-            console.warn("⚠️ Token silencioso falló. Probando Popup...", error);
+            console.warn("⚠️ El token silencioso caducó o falló. Forzando reconexión...", error);
             try {
-                // Intento interactivo
+                // 2. Si falla lo silencioso (ej. llevas días sin abrirla y Microsoft exige verte), pedimos el pase visiblemente
                 const response = await this.msalInstance.acquireTokenPopup(request);
                 return response.accessToken;
             } catch (popupError) {
-                console.error("❌ Error token:", popupError);
-                if(typeof mostrarEstado === 'function') mostrarEstado("❌ Error de conexión: Inicia sesión", "error");
-                throw popupError;
+                console.error("❌ Imposible renovar la sesión:", popupError);
+                
+                // Si todo falla, forzamos a que el botón rojo de desconectado aparezca
+                if (typeof mostrarEstado === 'function') {
+                    mostrarEstado("Sesión caducada. Por favor, vuelve a entrar.", "error");
+                }
+                throw new Error("Sesión caducada de Microsoft. Debes volver a iniciar sesión.");
             }
         }
     }
