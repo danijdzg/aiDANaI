@@ -4807,116 +4807,128 @@ function generarUUID() {
 }
 
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO (BLINDADO CON ROLLBACK)
+// 🛡️ GUARDAR MOVIMIENTO (BLINDADO + FECHA ESPAÑOLA + 8 COLUMNAS)
 // ==========================================
 window.guardarManual = async function() {
     console.log("--- 🔄 Ejecutando Guardado Manual Blindado ---");
 
-    const btnGuardar = document.getElementById('btn-modal-action'); 
+    const btnGuardar = document.getElementById('btn-modal-action');
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
 
-    // 🛡️ BACKUP DE SEGURIDAD ANTES DE TOCAR NADA
-    // Guardamos una foto exacta de la lista actual por si Microsoft/Nube falla
     const copiaDatosSeguridad = [...window.datos];
 
     try {
-        // Bloqueo visual del botón
         if (btnGuardar) {
             btnGuardar.innerHTML = '⏳ Guardando...';
             btnGuardar.disabled = true;
-            btnGuardar.style.backgroundColor = "#ff9800"; 
+            btnGuardar.style.backgroundColor = "#ff9800";
         }
 
-        // 1. DETECTAR EL MODO ACTUAL ANTES QUE NADA
-        const modoActual = window.modoTransaccionActual || 'gasto'; 
-
-        // 2. RECOGER DATOS
+        const modoActual = window.modoTransaccionActual || 'gasto';
         const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
-        
-        const elId = document.getElementById('m-id'); 
+
+        const elId = document.getElementById('m-id');
         const idExistente = elId ? elId.value : "";
-        
-        const fecha = document.getElementById('m-fecha').value;
+
+        // 📅 1. OBTENER Y FORMATEAR LA FECHA (El arreglo del bug)
+        const fechaCruda = document.getElementById('m-fecha').value; // Ej: "2026-02-26"
+        if (!fechaCruda) throw new Error("❌ Falta la FECHA");
+
+        let fechaFormateada = fechaCruda;
+        if (fechaCruda.includes('-')) {
+            const partes = fechaCruda.split('-');
+            if (partes[0].length === 4) { // Si el año está primero, le damos la vuelta
+                fechaFormateada = `${partes[2]}/${partes[1]}/${partes[0]}`; 
+            }
+        }
+
+        // Necesitamos la fecha cruda solo para cálculos internos (ordenar historial)
+        const timestampInterno = new Date(fechaCruda + 'T12:00:00').getTime();
+
         const cuentaOrigen = document.getElementById('m-cuenta').value;
-        
         const elDestino = document.getElementById('m-cuenta-destino');
         const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
-        
-        let concepto = document.getElementById('m-concepto').value;
-        if (modoActual === 'traspaso') {
-            concepto = "TRASPASO"; 
-        }
 
-        const importeStr = document.getElementById('m-cantidad').value; 
+        let concepto = document.getElementById('m-concepto').value;
+        if (modoActual === 'traspaso') concepto = "TRASPASO";
+
+        const importeStr = document.getElementById('m-cantidad').value;
         const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
         const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
 
-        // 3. VALIDACIONES
-        if (!fecha) throw new Error("❌ Falta la FECHA");
         if (!cuentaOrigen) throw new Error("❌ Falta la CUENTA");
         if (!importeStr) throw new Error("❌ Falta el IMPORTE");
-        if (!concepto) throw new Error("❌ Falta el CONCEPTO (Selecciona uno)");
+        if (!concepto) throw new Error("❌ Falta el CONCEPTO");
 
         let importeLimpio = importeStr.replace('€', '').replace(',', '.').trim();
         let importeNum = parseFloat(importeLimpio);
-        
+
         if (isNaN(importeNum) || importeNum === 0) throw new Error("❌ El importe no es válido");
-        
-        importeNum = Math.abs(importeNum); 
+
+        importeNum = Math.abs(importeNum);
 
         const detectarDueno = (nombreCuenta) => {
             const c = String(nombreCuenta).toUpperCase().trim();
             if (c.startsWith("D-")) return "DANI";
             if (c.startsWith("N-")) return "NORMA";
-            return "PROPIO"; 
+            return "PROPIO";
         };
 
         let movimientosParaLocal = [];
 
-        // 🅰️ CAMINO A: ES UN TRASPASO
+        // 🅰️ TRASPASO
         if (modoActual === 'traspaso') {
-            if (!cuentaDestino) throw new Error("❌ Selecciona una CUENTA DESTINO");
-            if (cuentaOrigen === cuentaDestino) throw new Error("❌ Origen y Destino son iguales");
+            if (!cuentaDestino) throw new Error("❌ Selecciona CUENTA DESTINO");
+            if (cuentaOrigen === cuentaDestino) throw new Error("❌ Origen y Destino iguales");
 
-            const idSalida = generarID();
-            const idEntrada = generarID();
+            // 🗺️ MAPEO ESTRICTO DE 8 COLUMNAS EXACTAS
+            movimientosParaLocal.push({
+                id: generarID(),
+                fecha: fechaFormateada,       // <--- Aquí guardamos la fecha bien: DD/MM/AAAA
+                cuenta: cuentaOrigen,
+                concepto: "TRASPASO",
+                importe: -importeNum,
+                descripcion: `>> A: ${cuentaDestino} | ${desc}`,
+                beneficiario: detectarDueno(cuentaOrigen),
+                tipo: 'traspaso',             // <--- Columna 8 explícita
+                ts: timestampInterno
+            });
 
-            const movSalida = {
-                id: idSalida, fecha: fecha, cuenta: cuentaOrigen, concepto: "TRASPASO",
-                importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-                beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: new Date(fecha + 'T12:00:00').getTime()
-            };
-
-            const movEntrada = {
-                id: idEntrada, fecha: fecha, cuenta: cuentaDestino, concepto: "TRASPASO",
-                importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-                beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: new Date(fecha + 'T12:00:00').getTime()
-            };
-
-            movimientosParaLocal.push(movSalida, movEntrada);
-        } 
-        // 🅱️ CAMINO B: GASTO O INGRESO
+            movimientosParaLocal.push({
+                id: generarID(),
+                fecha: fechaFormateada,       // <--- Aquí guardamos la fecha bien: DD/MM/AAAA
+                cuenta: cuentaDestino,
+                concepto: "TRASPASO",
+                importe: importeNum,
+                descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
+                beneficiario: detectarDueno(cuentaDestino),
+                tipo: 'traspaso',             // <--- Columna 8 explícita
+                ts: timestampInterno
+            });
+        }
+        // 🅱️ GASTO O INGRESO
         else {
             if (modoActual === 'gasto' || modoActual === 'pago') {
-                importeNum = -Math.abs(importeNum); 
-            } else {
-                importeNum = Math.abs(importeNum);  
+                importeNum = -Math.abs(importeNum);
             }
-            
-            const idFinal = idExistente || generarID();
-            let benefFinal = benefManual;
-            if(!benefFinal) benefFinal = detectarDueno(cuentaOrigen);
 
-            const nuevoMov = {
-                id: idFinal, fecha: fecha, cuenta: cuentaOrigen, concepto: concepto,
-                importe: importeNum, descripcion: desc, beneficiario: benefFinal,
-                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: new Date(fecha + 'T12:00:00').getTime()
-            };
+            let benefFinal = benefManual || detectarDueno(cuentaOrigen);
 
-            movimientosParaLocal.push(nuevoMov);
+            // 🗺️ MAPEO ESTRICTO DE 8 COLUMNAS EXACTAS
+            movimientosParaLocal.push({
+                id: idExistente || generarID(),
+                fecha: fechaFormateada,       // <--- Aquí guardamos la fecha bien: DD/MM/AAAA
+                cuenta: cuentaOrigen,
+                concepto: concepto,
+                importe: importeNum,
+                descripcion: desc,
+                beneficiario: benefFinal,
+                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', // <--- Columna 8 explícita
+                ts: timestampInterno
+            });
         }
 
-        // 🛡️ ACTUALIZACIÓN OPTIMISTA EN MEMORIA
+        // 🛡️ REVERSIÓN OPTIMISTA EN MEMORIA
         if (idExistente) {
             const movOriginal = window.datos.find(m => m.id === idExistente);
             if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
@@ -4929,19 +4941,18 @@ window.guardarManual = async function() {
                 window.datos = window.datos.filter(m => m.id !== idExistente);
             }
         }
+
         movimientosParaLocal.forEach(m => window.datos.push(m));
 
-        // Refrescamos pantalla para que el usuario lo vea (Sensación de velocidad)
         if (typeof renderizar === 'function') renderizar();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
 
         // 🚀 SUBIDA A LA NUBE
         await window.guardarUniversal();
 
-        // Si llegamos aquí, la nube contestó OK.
         window.cerrarModal();
         if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado con éxito", "success");
-        
+
         if (typeof vibrar === 'function') {
             if (modoActual === 'traspaso') vibrar('clonar');
             else vibrar('ingreso');
@@ -4949,20 +4960,18 @@ window.guardarManual = async function() {
 
     } catch (error) {
         console.error("❌ Error al guardar:", error);
-        
-        // 🛡️ SISTEMA DE REVERSIÓN (ROLLBACK) - ¡NUEVA MAGIA!
-        // Si falló, restauramos los datos exactos que teníamos y forzamos repintado
+
         window.datos = [...copiaDatosSeguridad];
         if (typeof renderizar === 'function') renderizar();
         if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
-        
+
         if(window.mostrarNotificacion) {
-            window.mostrarNotificacion("⚠️ Fallo en la nube. Cambios revertidos para proteger tus datos.", "error");
+            window.mostrarNotificacion("⚠️ Fallo en la nube. Cambios revertidos.", "error");
         } else {
             alert("⚠️ Error en la nube. Cambios revertidos para proteger tus datos.");
         }
-        
+
     } finally {
         if (btnGuardar) {
             btnGuardar.innerHTML = textoOriginal;
@@ -7402,7 +7411,8 @@ function descargarBackupLocal() {
             "Concepto": mov.concepto,
             "Importe": mov.importe,
             "Descripcion": mov.descripcion || mov.detalle || "", 
-            "Beneficiario": mov.beneficiario
+            "Beneficiario": mov.beneficiario,
+			"Tipo": mov.tipo || ""
         }));
 
         const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
