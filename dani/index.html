@@ -7090,79 +7090,78 @@ window.actualizarDashboard = function() {
             }
 
             proximos.forEach(p => {
+                // 1. Formato de fecha compacto (dd/mm)
                 const fObj = new Date(p.fechaProx);
-                const dia = fObj.getDate();
-                const mes = fObj.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
+                const diaStr = String(fObj.getDate()).padStart(2, '0');
+                const mesStr = String(fObj.getMonth() + 1).padStart(2, '0');
+                const fechaCorta = `${diaStr}/${mesStr}`;
                 
-                // Colores
-                let colorImporte = '#39FF14'; // Verde por defecto (ingresos)
+                // 2. Colores AMOLED
+                let colorImporte = '#32d74b'; // Verde (ingresos)
                 if (p.tipoRegla === 'traspaso') {
-                    colorImporte = '#0A84FF'; // Azul (traspasos)
+                    colorImporte = '#0a84ff'; // Azul (traspasos)
                 } else if (p.tipoRegla === 'gasto' || p.importe < 0) {
-                    colorImporte = '#FF2E4D'; // Rojo (gastos)
+                    colorImporte = '#ff453a'; // Rojo (gastos)
                 }
 
-                const importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(Math.abs(p.importe));
-
-                // 1ª y 2ª LÍNEA: Lógica de Textos y Saldos Simulados
                 let importeNum = parseFloat(p.importe) || 0;
-                let linea1 = '';
-                let linea2 = '';
+                let importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(importeNum));
 
+                let contenido = '';
+
+                // 3. Generar el contenido (Traspasos a 2 filas, Resto a 1 fila)
                 if (p.tipoRegla === 'traspaso') {
                     let cuentaDest = p.cuentaDestino || 'N/A';
                     
-                    // Restamos de origen y sumamos a destino
+                    // Cálculos de saldo simulado
                     let saldoOrig = (saldosSimulados[p.cuenta] || 0) - Math.abs(importeNum);
                     let saldoDest = (saldosSimulados[cuentaDest] || 0) + Math.abs(importeNum);
-                    
-                    // Guardamos el nuevo saldo para el siguiente cálculo en el bucle
                     saldosSimulados[p.cuenta] = saldoOrig;
                     saldosSimulados[cuentaDest] = saldoDest;
                     
                     let fmtOrig = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoOrig);
                     let fmtDest = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoDest);
                     
-                    // TRASPASOS: Letra más pequeña (11px), condensada (-0.4px) para que no se corte.
-                    // Flechas con colores rojo (salida) y verde (entrada).
-                    let estiloTraspaso = `font-size:11px; font-weight:700; color:${colorImporte}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-0.4px;`;
-                    
-                    linea1 = `<span style="${estiloTraspaso}"><span style="color:#FF2E4D; margin-right:3px; font-size:12px;">⬇</span>${p.cuenta} (${fmtOrig}€)</span>`;
-                    linea2 = `<span style="${estiloTraspaso}"><span style="color:#39FF14; margin-right:3px; font-size:12px;">⬆</span>${cuentaDest} (${fmtDest}€)</span>`;
+                    contenido = `
+                        <div style="display:flex; flex-direction:column; width:100%; gap:6px; color:${colorImporte}; font-size:12px; font-weight:800; letter-spacing:0.2px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${p.cuenta} (${fmtOrig}€)</span>
+                                <span style="flex-shrink:0; margin-left:8px;">-${importeFmt}€</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${cuentaDest} (${fmtDest}€)</span>
+                                <span style="flex-shrink:0; margin-left:8px;">+${importeFmt}€</span>
+                            </div>
+                        </div>
+                    `;
                 } else {
-                    // Si es gasto (negativo) se restará solo, si es ingreso (positivo) se sumará
                     let saldoNuevo = (saldosSimulados[p.cuenta] || 0) + importeNum;
                     saldosSimulados[p.cuenta] = saldoNuevo;
                     let fmtNuevo = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoNuevo);
                     
-                    let descTexto = p.descripcion ? ` / ${p.descripcion}` : '';
-                    let textoConcepto = `${p.concepto}${descTexto}`.toUpperCase(); // Todo en mayúsculas
+                    let descTexto = p.descripcion ? ` - ${p.descripcion}` : '';
+                    let textoPrincipal = `${p.concepto}${descTexto}`.toUpperCase();
+                    let signoM = importeNum < 0 ? '-' : '+';
                     
-                    // GASTOS/INGRESOS: L1 Concepto/Desc (Blanco), L2 Cuenta y Saldo (Color del importe)
-                    linea1 = `<span style="font-size:13px; font-weight:700; color:#eee; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${textoConcepto}</span>`;
-                    linea2 = `<span style="font-size:13px; font-weight:700; color:${colorImporte}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.cuenta} (${fmtNuevo}€)</span>`;
+                    contenido = `
+                        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; color:${colorImporte}; font-size:12px; font-weight:800; letter-spacing:0.2px;">
+                            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${textoPrincipal} | ${p.cuenta} (${fmtNuevo}€)</span>
+                            <span style="flex-shrink:0; margin-left:8px;">${signoM}${importeFmt}€</span>
+                        </div>
+                    `;
                 }
 
+                // 4. Montar la tarjeta final
                 htmlRec += `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); border-radius:8px; padding:8px; margin-bottom:6px; border-left: 3px solid ${colorImporte};">
+                <div style="display:flex; align-items:center; background:rgba(255,255,255,0.05); border-radius:10px; padding:12px; margin-bottom:8px; border-left: 4px solid ${colorImporte}; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
                     
-                    <div style="display:flex; gap:10px; align-items:center; overflow:hidden;">
-                        <div style="background:#111; border:1px solid #333; padding:4px 8px; border-radius:6px; text-align:center; min-width:35px; flex-shrink:0;">
-                            <div style="font-size:9px; color:#aaa; line-height:1; margin-bottom:2px;">${mes}</div>
-                            <div style="font-size:14px; font-weight:800; color:#fff; line-height:1;">${dia}</div>
-                        </div>
-                        <div style="display:flex; flex-direction:column; overflow:hidden;">
-                            ${linea1}
-                            ${linea2}
-                        </div>
+                    <div style="flex-grow:1; display:flex; flex-direction:column; overflow:hidden; padding-right:12px;">
+                        ${contenido}
                     </div>
 
-                    <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                        <div style="font-size:14px; font-weight:800; color:${colorImporte}; text-shadow:0 0 10px ${colorImporte}40;">
-                            ${importeFmt}€
-                        </div>
+                    <div style="flex-shrink:0;">
                         <button onclick="window.agregarDesdeRecurrente('${p.id}', '${p.fechaProx}')" 
-                                style="background:${colorImporte}; border:none; color:#000; width:28px; height:28px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 10px ${colorImporte}; font-weight:bold;">
+                                style="background:${colorImporte}; border:none; color:#000000; width:30px; height:30px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 10px ${colorImporte}; font-weight:bold;">
                             <span class="material-icons" style="font-size:18px;">add</span>
                         </button>
                     </div>
@@ -7838,7 +7837,7 @@ function cargarVistaRecurrentes() {
 }
 
 // ==========================================
-// 🔄 RENDERIZAR RECURRENTES (LIMPIO SIN ICONOS + FRECUENCIA AMARILLA + BOTONES)
+// 🔄 RENDERIZAR RECURRENTES (5PX MARGEN + BORDES DE COLOR ORIGINALES)
 // ==========================================
 window.renderizarRecurrentes = function() {
     const contenedor = document.getElementById('lista-recurrentes-pendientes');
@@ -7867,18 +7866,18 @@ window.renderizarRecurrentes = function() {
     listaCompleta.forEach(r => {
         const importeNum = parseFloat(r.importe || 0);
         const esTraspaso = (r.tipoRegla || '').toLowerCase() === 'traspaso';
-        const idRecurrente = r.id || r.ID; // El ID para que los botones funcionen
+        const idRecurrente = r.id || r.ID;
         
-        // --- LÓGICA DE COLORES ---
+        // --- LÓGICA DE COLORES (USANDO TUS TONOS EXACTOS) ---
         let colorPrincipal = '#FFFFFF';
         let signo = '';
         
         if (esTraspaso) {
-            colorPrincipal = '#0a84ff'; // AZUL para traspasos
+            colorPrincipal = '#0A84FF'; // Azul original
         } else if (importeNum < 0) {
-            colorPrincipal = '#ff453a'; // ROJO para gastos
+            colorPrincipal = '#FF2E4D'; // Rojo original
         } else {
-            colorPrincipal = '#32d74b'; // VERDE para ingresos
+            colorPrincipal = '#39FF14'; // Verde original
             signo = '+';
         }
 
@@ -7912,9 +7911,9 @@ window.renderizarRecurrentes = function() {
             }
         }
 
-        // --- HTML DE LA TARJETA ---
+        // --- HTML DE LA TARJETA (CON BORDES DE COLOR, MÁRGENES DE 5PX LATERIALES Y PADDING INTERIOR) ---
         htmlFinal += `
-            <div class="movimiento-item" style="background-color: #000000; border: 2px solid ${colorPrincipal}; border-radius: 12px; margin: 0 12px 14px 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+            <div class="movimiento-item" style="background-color: #000000; border: 2px solid ${colorPrincipal}; border-radius: 12px; margin: 0 5px 15px 5px; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
                 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-weight: 900; font-size: 16px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;">
@@ -7946,14 +7945,14 @@ window.renderizarRecurrentes = function() {
                     </span>
                 </div>
                 
-                <div style="display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 8px;">
-                    <span onclick="window.editarRecurrente('${idRecurrente}')" style="color: #0a84ff; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px dotted rgba(255,255,255,0.15); padding-top: 8px;">
+                    <span onclick="window.editarRecurrente('${idRecurrente}')" style="color: #0A84FF; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                         ✏️ EDITAR
                     </span>
-                    <span onclick="window.duplicarRecurrente('${idRecurrente}')" style="color: #32d74b; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                    <span onclick="window.duplicarRecurrente('${idRecurrente}')" style="color: #39FF14; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                         📄 DUPLICAR
                     </span>
-                    <span onclick="window.borrarRecurrente('${idRecurrente}')" style="color: #ff453a; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                    <span onclick="window.borrarRecurrente('${idRecurrente}')" style="color: #FF2E4D; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                         🗑️ BORRAR
                     </span>
                 </div>
@@ -9045,8 +9044,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --------------------------------------------------------
-    // 2. MEJORA DE ALERTAS: PRÓXIMOS 7 DÍAS
+  // --------------------------------------------------------
+    // 2. MEJORA DE ALERTAS: PRÓXIMOS 7 DÍAS (1-FILA CON COLORES ORIGINALES APP)
     // --------------------------------------------------------
     function revisarRecibosProximos() {
         let recurrentes = window.datosRecurrentes || [];
@@ -9065,7 +9064,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario(r)) return false;
             
             return fechaRec >= hoy && fechaRec <= limite;
-        });
+        }).sort((a,b) => new Date(a.fechaProx) - new Date(b.fechaProx));
 
         const alertaAntigua = document.getElementById('alerta-recibos-7d');
         if (alertaAntigua) alertaAntigua.remove();
@@ -9076,25 +9075,98 @@ document.addEventListener('DOMContentLoaded', () => {
             alertaDiv.className = 'tarjeta-alerta-animada';
             
             let html = '<div class="contenido-alerta-amoled">';
+            
+            // CABECERA
             html += '<div style="display:flex; align-items:center; margin-bottom:12px;"><span class="material-icons" style="color: #FFD60A; margin-right:8px; font-size:22px; filter: drop-shadow(0 0 5px rgba(255,214,10,0.5));">notification_important</span><h3 style="margin:0; font-size:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; color: #FFD60A;">Próximos 7 días</h3></div>';
             
-            html += '<ul style="margin: 0; padding-left: 0; list-style: none; font-size: 13px; font-weight: 600;">';
+            // CONTENEDOR DE TARJETAS
+            html += '<div style="display:flex; flex-direction:column; gap:8px;">';
             
+            // 🛡️ CARGAR SALDOS REALES PARA SIMULARLOS
+            let saldosSimulados = {};
+            if (window.mapaCuentas) {
+                Object.keys(window.mapaCuentas).forEach(k => {
+                    saldosSimulados[k] = window.mapaCuentas[k].saldoActual || 0;
+                });
+            }
+
             proximos.forEach(p => {
-                const f = new Date(p.fechaProx);
-                const dia = String(f.getDate()).padStart(2, '0');
-                const mes = String(f.getMonth() + 1).padStart(2, '0');
-                const imp = Math.abs(p.importe).toFixed(2);
+                // 1. FECHA
+                const fObj = new Date(p.fechaProx);
+                const diaStr = String(fObj.getDate()).padStart(2, '0');
+                const mesStr = String(fObj.getMonth() + 1).padStart(2, '0');
+                const fechaCorta = `${diaStr}/${mesStr}`;
                 
-                html += '<li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">';
-                html += '<div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 70%;">';
-                html += '<strong style="color: #888; font-size: 11px; margin-right: 8px;">' + dia + '/' + mes + '</strong>';
-                html += '<span style="color: #fff;">' + p.concepto + '</span>';
-                html += '</div>';
-                html += '<span style="font-size: 14px; font-weight: 800; color: #FF9800; flex-shrink:0;">' + imp + '€</span>';
-                html += '</li>';
+                // 2. COLORES (AQUÍ ESTÁ LA CORRECCIÓN: Usando tus hex original)
+                let colorImporte = '#32D74B'; // Tu Verde original
+                if (p.tipoRegla === 'traspaso') {
+                    colorImporte = '#0a84ff'; // Tu Azul original
+                } else if (p.tipoRegla === 'gasto' || p.importe < 0) {
+                    colorImporte = '#FF453A'; // Tu Rojo original
+                }
+
+                let importeNum = parseFloat(p.importe) || 0;
+                let importeFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(importeNum));
+
+                let contenido = '';
+
+                // 3. GENERAR CONTENIDO (2 filas traspaso, 1 fila resto)
+                if (p.tipoRegla === 'traspaso') {
+                    let cuentaDest = p.cuentaDestino || 'N/A';
+                    
+                    let saldoOrig = (saldosSimulados[p.cuenta] || 0) - Math.abs(importeNum);
+                    let saldoDest = (saldosSimulados[cuentaDest] || 0) + Math.abs(importeNum);
+                    saldosSimulados[p.cuenta] = saldoOrig;
+                    saldosSimulados[cuentaDest] = saldoDest;
+                    
+                    let fmtOrig = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoOrig);
+                    let fmtDest = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoDest);
+
+                    contenido = `
+                        <div style="display:flex; flex-direction:column; width:100%; gap:4px; color:${colorImporte}; font-size:11px; font-weight:800; letter-spacing:0.2px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${p.cuenta} (${fmtOrig}€)</span>
+                                <span style="flex-shrink:0; margin-left:6px;">-${importeFmt}€</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${cuentaDest} (${fmtDest}€)</span>
+                                <span style="flex-shrink:0; margin-left:6px;">+${importeFmt}€</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    let saldoNuevo = (saldosSimulados[p.cuenta] || 0) + importeNum;
+                    saldosSimulados[p.cuenta] = saldoNuevo;
+                    let fmtNuevo = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoNuevo);
+                    
+                    let descTexto = p.descripcion ? ` - ${p.descripcion}` : '';
+                    let textoPrincipal = `${p.concepto}${descTexto}`.toUpperCase();
+                    let signoM = importeNum < 0 ? '-' : '+';
+
+                    contenido = `
+                        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; color:${colorImporte}; font-size:11px; font-weight:800; letter-spacing:0.2px;">
+                            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${textoPrincipal} | ${p.cuenta} (${fmtNuevo}€)</span>
+                            <span style="flex-shrink:0; margin-left:6px;">${signoM}${importeFmt}€</span>
+                        </div>
+                    `;
+                }
+
+                // 4. MONTAR TARJETA INDIVIDUAL
+                html += `
+                <div style="display:flex; align-items:center; background:rgba(255,255,255,0.05); border-radius:8px; padding:10px; border-left: 3px solid ${colorImporte};">
+                    <div style="flex-grow:1; display:flex; flex-direction:column; overflow:hidden; padding-right:8px;">
+                        ${contenido}
+                    </div>
+                    <div style="flex-shrink:0;">
+                        <button onclick="window.agregarDesdeRecurrente('${p.id || p.ID}', '${p.fechaProx}')" 
+                                style="background:${colorImporte}; border:none; color:#000000; width:26px; height:26px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 8px ${colorImporte}80; font-weight:bold;">
+                            <span class="material-icons" style="font-size:16px;">add</span>
+                        </button>
+                    </div>
+                </div>`;
             });
-            html += '</ul></div>';
+            
+            html += '</div></div>'; // Cierra gap y amoled
             alertaDiv.innerHTML = html;
 
             const contenedorAlertas = document.getElementById('contenedor-alertas-7d');
