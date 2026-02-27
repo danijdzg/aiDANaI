@@ -7838,7 +7838,7 @@ function cargarVistaRecurrentes() {
 }
 
 // ==========================================
-// 🔄 RENDERIZAR RECURRENTES (NEGRO AMOLED + BORDES DE COLOR + INFO BLANCA)
+// 🔄 RENDERIZAR RECURRENTES (CORRECCIÓN DE ETIQUETAS + DISEÑO AMOled)
 // ==========================================
 window.renderizarRecurrentes = function() {
     const contenedor = document.getElementById('lista-recurrentes-pendientes');
@@ -7855,10 +7855,10 @@ window.renderizarRecurrentes = function() {
         return;
     }
 
-    // 1. Ordenar por Próxima Fecha (los más cercanos primero)
+    // 1. Ordenar por Próxima Fecha (los más cercanos primero) usando el nombre correcto: fechaProx
     listaCompleta.sort((a, b) => {
-        const dateA = new Date(a.PROXIMA_FECHA || a.proxima_fecha || '2099-01-01');
-        const dateB = new Date(b.PROXIMA_FECHA || b.proxima_fecha || '2099-01-01');
+        const dateA = new Date(a.fechaProx || '2099-01-01');
+        const dateB = new Date(b.fechaProx || '2099-01-01');
         return dateA - dateB;
     });
 
@@ -7866,8 +7866,9 @@ window.renderizarRecurrentes = function() {
 
     // 2. Crear cada tarjeta con las reglas de color estrictas
     listaCompleta.forEach(r => {
-        const importeNum = parseFloat(r.IMPORTE || r.importe || 0);
-        const esTraspaso = (r.TIPO_REGLA || r.tipo_regla || '').toLowerCase() === 'traspaso';
+        // Usamos los nombres reales internos que carga la app
+        const importeNum = parseFloat(r.importe || 0);
+        const esTraspaso = (r.tipoRegla || '').toLowerCase() === 'traspaso';
         
         // --- LÓGICA DE COLORES ---
         let colorBordeEImporte = '#FFFFFF';
@@ -7883,18 +7884,18 @@ window.renderizarRecurrentes = function() {
         }
 
         // --- EXTRACCIÓN DE DATOS ---
-        const cuentaOrigen = r.CUENTA || r.cuenta || 'Sin Cuenta';
-        const cuentaDestino = r.CUENTA_DESTINO || r.cuenta_destino || '';
-        const concepto = r.CONCEPTO || r.concepto || 'Varios';
-        const beneficiario = r.BENEFICIARIO || r.beneficiario || '-';
-        const desc = r.DESCRIPCION || r.descripcion || '';
-        const frec = r.FRECUENCIA || r.frecuencia || 'Mensual';
+        const cuentaOrigen = r.cuenta || 'Sin Cuenta';
+        const cuentaDestino = r.cuentaDestino || '';
+        const concepto = r.concepto || 'Varios';
+        const beneficiario = r.beneficiario || '-';
+        const desc = r.descripcion || '';
+        const frec = r.frecuencia || 'Mensual';
 
         let infoCuenta = cuentaOrigen;
-        if(esTraspaso) infoCuenta = `${cuentaOrigen} ➔ ${cuentaDestino}`;
+        if(esTraspaso && cuentaDestino) infoCuenta = `${cuentaOrigen} ➔ ${cuentaDestino}`;
 
         // Formatear Fecha
-        const fechaRaw = r.PROXIMA_FECHA || r.proxima_fecha || 'Sin Fecha';
+        const fechaRaw = r.fechaProx || 'Sin Fecha';
         let fechaStr = fechaRaw;
         if (fechaRaw.includes('-')) {
             const parts = fechaRaw.split('-');
