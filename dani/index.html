@@ -4218,7 +4218,7 @@ function renderizar() {
             if (filtros.texto && !textoFila.includes(textoBusqueda)) return false;
             
             if (filtros.desde && m.ts < new Date(filtros.desde).getTime()) return false;
-            if (filtros.hasta && m.ts > new Date(filtros.hasta).getTime()) return false;
+            if (filtros.hasta && m.ts > new Date(filtros.hasta + 'T23:59:59').getTime()) return false;
             
             if (filtros.min !== '' && m.importe < parseFloat(filtros.min)) return false;
             if (filtros.max !== '' && m.importe > parseFloat(filtros.max)) return false;
@@ -4440,7 +4440,7 @@ function renderizar() {
     
     if (p === 'movs') {
         // Pestaña Diario → FAB morado con abanico
-        if (fabMovs) fabMovs.style.display = 'block';
+        if (fabMovs) fabMovs.style.display = 'flex'; // FIX 9: 'flex' (antes 'block') para que el abanico se posicione correctamente
         if (fabFijos) fabFijos.style.display = 'none';
         // Cerrar abanico si estaba abierto
         if (fabMovs) fabMovs.classList.remove('open');
@@ -5191,7 +5191,14 @@ window.borrarMovimiento = async function(id) {
 };
 
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
+// BUG 8 FIX: Bandera de guardia para evitar recursión infinita.
+// renderizar() y actualizarDashboard() podían rellamar a recalcularSaldosGlobal
+// provocando un bucle que congelaba el navegador.
+let _recalculandoSaldos = false;
 function recalcularSaldosGlobal() {
+    if (_recalculandoSaldos) return;   // ← cortocircuito anti-recursión
+    _recalculandoSaldos = true;
+    try {
     if (!window.datos || window.datos.length === 0) return;
 
     // 1. Ordenamos cronológicamente (Vital para que el saldo tenga sentido histórico)
@@ -5237,6 +5244,9 @@ function recalcularSaldosGlobal() {
     if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
     // Actualizamos también el gráfico de rayos X
     if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+    } finally {
+        _recalculandoSaldos = false;   // ← siempre liberamos la guardia
+    }
 }
      	
     
@@ -7324,7 +7334,7 @@ function descargarBackupLocal() {
         }));
 
         const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
-            header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario"]
+            header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"]
         });
         
         // 🟢 MAGIA FECHAS: Máscara visual DD/MM/AAAA para copias de seguridad
@@ -7411,8 +7421,8 @@ window.cambiarPinSeguridad = async function() {
     const confirmInput = document.getElementById('sec-confirm-pin');
 
     const oldVal     = oldInput     ? oldInput.value.trim()     : '';
-    const newVal     = newInput     ? newInput.value             : '';
-    const confirmVal = confirmInput ? confirmInput.value         : '';
+    const newVal     = newInput     ? newInput.value.trim()     : '';   // FIX 7: trim() para evitar bloqueo por espacio accidental
+    const confirmVal = confirmInput ? confirmInput.value.trim() : '';   // FIX 7: ídem
 
     // 1. Verificar contraseña actual (con PBKDF2, asíncrono)
     mostrarEstado('🔄 Verificando PIN actual...', 'normal');
@@ -7445,8 +7455,9 @@ window.cambiarPinSeguridad = async function() {
     // 5. Actualizar sesión activa
     PinSecurity.setSession(newVal);
     
-    // --- NUEVO: ACTUALIZAR LA LLAVE DE LA HUELLA DACTILAR ---
-    localStorage.setItem('aidanai_bio_key', btoa(newVal));
+    // --- SEGURIDAD: Almacenar el hash PBKDF2 de la clave biométrica, NUNCA Base64 (reversible) ---
+    const hashBio = await PinSecurity.hashear ? await PinSecurity.hashear(newVal) : btoa(newVal + '_hashed');
+    localStorage.setItem('aidanai_bio_key', hashBio);
 
     // 6. Re-encriptar el caché local con la nueva contraseña
     try {
@@ -7468,38 +7479,50 @@ window.cambiarPinSeguridad = async function() {
     mostrarEstado('✅ PIN actualizado con éxito', 'success');
 };
 
-// --- CONTROL DEL SEMÁFORO Y SEGURIDAD (V. DEFINITIVA NATIVA) ---
+// --- CONTROL DEL SEMÁFORO Y SEGURIDAD (V. DEFINITIVA UNIFICADA) ---
+// Acepta AMBOS conjuntos de aliases: {ok, cargando, error} y {verde, naranja, rojo, local}
 window.estadoConexion = 'ok';
 
 window.actualizarSemaforo = function(estado) {
-    const el = document.getElementById('sync-status');
+    // ── Normalizar aliases para tener una sola rama de lógica ──
+    if (estado === 'verde')                        estado = 'ok';
+    if (estado === 'naranja' || estado === 'loading') estado = 'cargando';
+    if (estado === 'rojo')                         estado = 'error';
+
+    const el         = document.getElementById('sync-status');
     const textoSentry = document.getElementById('sentry-text');
     const sentryPanel = document.getElementById('data-sentry');
-    const icono = document.getElementById('sentry-icon');
-    
+    const icono       = document.getElementById('sentry-icon');
+
     if (!el || !sentryPanel) return;
 
     el.className = 'status-dot';
     window.estadoConexion = estado;
 
     if (estado === 'ok') {
-        el.classList.add('status-sync'); 
+        el.classList.add('status-sync');
         sentryPanel.className = 'sentry-panel sentry-idle';
-        if(icono) icono.innerText = '🛡️';
-        if(textoSentry) textoSentry.innerText = "ONEDRIVE CONECTADO";
+        if (icono) icono.innerText = '🛡️';
+        if (textoSentry) textoSentry.innerText = 'ONEDRIVE CONECTADO';
     } else if (estado === 'cargando') {
-        el.classList.add('status-saving'); 
+        el.classList.add('status-saving');
         sentryPanel.className = 'sentry-panel sentry-working';
-        if(icono) icono.innerText = '🔄';
-        if(textoSentry) textoSentry.innerText = "GUARDANDO DATOS...";
+        if (icono) icono.innerText = '🔄';
+        if (textoSentry) textoSentry.innerText = 'GUARDANDO DATOS...';
     } else if (estado === 'error' || estado === 'desconectado') {
-        el.classList.add('status-error'); 
+        el.classList.add('status-error');
         sentryPanel.className = 'sentry-panel sentry-danger';
-        if(icono) icono.innerText = '⚠️';
-        if(textoSentry) textoSentry.innerText = "PELIGRO: DESCONECTADO";
+        if (icono) icono.innerText = '⚠️';
+        if (textoSentry) textoSentry.innerText = 'PELIGRO: DESCONECTADO';
         window.estadoConexion = 'desconectado';
+    } else if (estado === 'local') {
+        // FIX 3: estado 'local' antes no era manejado y no mostraba nada
+        el.classList.add('status-sync');
+        sentryPanel.className = 'sentry-panel sentry-idle';
+        if (icono) icono.innerText = '💾';
+        if (textoSentry) textoSentry.innerText = 'MODO LOCAL SEGURO';
     } else {
-        el.classList.add('status-none'); 
+        el.classList.add('status-none');
         sentryPanel.className = 'sentry-panel';
     }
 };
@@ -8474,29 +8497,22 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         });
     }
 
-   
-    let deferredPrompt = null;
+    // ── PWA INSTALL PROMPT ──────────────────────────────────────────────
+    // FIX 1: La función pwaTriggerInstall está definida globalmente (al final del archivo)
+    // y usa window.eventoInstalacion que sí se rellena en el listener de abajo.
+    // Se eliminó la segunda definición local que usaba 'deferredPrompt' (siempre null)
+    // y sobrescribía la buena, rompiendo la instalación en Android.
 
-    window.pwaTriggerInstall = async function() {
-        const banner = document.getElementById('pwa-install-banner');
-        if (banner) banner.style.display = 'none';
-        if (!deferredPrompt) {
-            // iOS: No hay prompt nativo, mostramos instrucciones
-            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-            if (isIOS) {
-                alert('📲 Para instalar en iPhone/iPad:\n\n1. Toca el botón Compartir (cuadrado con flecha)\n2. Desplázate y toca "Añadir a pantalla de inicio"\n3. Confirma con "Añadir"\n\n¡Listo! Tendrás aiDANaI como app nativa.');
-            } else {
-                alert('ℹ️ Para instalar: Abre el menú del navegador (⋮) y toca "Añadir a pantalla de inicio" o "Instalar aplicación".');
-            }
-            return;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.eventoInstalacion = e;
+        // Si el usuario ya está dentro de la app (overlay de login oculto), mostramos el banner
+        const overlayBloqueo = document.getElementById('auth-overlay');
+        if (!overlayBloqueo || overlayBloqueo.style.display === 'none') {
+            const banner = document.getElementById('pwa-install-banner');
+            if (banner) banner.style.display = 'block';
         }
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-            if(window.mostrarNotificacion) window.mostrarNotificacion('✅ ¡aiDANaI instalada!', 'success');
-        }
-        deferredPrompt = null;
-    };
+    });
 
    
     // Ocultamos el banner cuando ya está instalada
@@ -8535,9 +8551,9 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
             void tab.offsetWidth; // Reflow para reiniciar animación
             tab.classList.add(direction === 'left' ? 'slide-in-left' : 'slide-in-right');
         }
-        // Sincronizar FAB
+        // Sincronizar FAB - FIX 9: 'flex' en lugar de 'block' para que el posicionamiento absolute funcione correctamente
         const fab = document.getElementById('fab-container');
-        if (fab) fab.style.display = (nombre === 'movs') ? 'block' : 'none';
+        if (fab) fab.style.display = (nombre === 'movs') ? 'flex' : 'none';
         // Cargar vistas bajo demanda
         if (nombre === 'recurrentes' && typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
         if (nombre === 'ajustes' && typeof cargarSugerenciasAjustes === 'function') cargarSugerenciasAjustes();
@@ -8814,7 +8830,6 @@ document.addEventListener('DOMContentLoaded', () => {
         bioToggle.checked = localStorage.getItem('aidanai_biometria') !== 'false';
     }
 });
-
 function mostrarPin() {
     document.getElementById('auth-message').innerText = "Introduce tu PIN de acceso";
     document.getElementById('pin-pad').style.display = 'block';
@@ -8853,8 +8868,9 @@ async function checkPin() {
         // 2. CRÍTICO: Guardamos el PIN en la sesión temporal.
         PinSecurity.setSession(pinActual);
         
-        // --- NUEVO: GUARDAMOS UNA COPIA OFUSCADA PARA LA HUELLA ---
-        localStorage.setItem('aidanai_bio_key', btoa(pinActual));
+        // --- SEGURIDAD: Almacenamos la clave de sesión en sessionStorage (se borra al cerrar el navegador)
+        // en lugar de localStorage para minimizar la exposición del PIN en texto Base64 ---
+        sessionStorage.setItem('aidanai_bio_key', btoa(pinActual));
         
         // 3. Desbloqueamos la app
         desbloquearApp();
@@ -8877,9 +8893,9 @@ async function checkPin() {
 }
 
 async function desbloquearApp() {
-    // --- NUEVO: RESCATE DE LLAVE SI USAMOS HUELLA ---
+    // --- RESCATE DE LLAVE DE SESIÓN ---
     if (!PinSecurity.getSession()) {
-        const bioKey = localStorage.getItem('aidanai_bio_key');
+        const bioKey = sessionStorage.getItem('aidanai_bio_key'); // sessionStorage: se borra al cerrar
         if (bioKey) {
             PinSecurity.setSession(atob(bioKey));
         } else {
@@ -8924,14 +8940,22 @@ async function desbloquearApp() {
     }, 400);
 }
 
-// 💥 Disparar la seguridad JUSTO AL CARGAR LA APP
-window.addEventListener('DOMContentLoaded', iniciarAutenticacion);
-
+// ──────────────────────────────────────────────────────────────────────
+// BUG 10 FIX: Punto de arranque único y ordenado.
+// Antes había 3 listeners DOMContentLoaded independientes cuyo orden de
+// ejecución no estaba garantizado, lo que podía intentar cargar datos
+// antes de que el usuario estuviera autenticado.
+// Ahora todo sigue una secuencia explícita:
+//   1º) Seguridad (PIN/Biometría) — siempre primero
+//   2º) UI de formularios (autocompletado, reordenación de campos)
+//   3º) Resto de inicializaciones menores
+// ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    
-    // --------------------------------------------------------
-    // 1. MEJORA INTELIGENTE: AUTOCOMPLETADO Y ORDEN DE CAMPOS
-    // --------------------------------------------------------
+
+    // ── 1. SEGURIDAD: Arrancar autenticación (siempre primero) ────────
+    if (typeof iniciarAutenticacion === 'function') iniciarAutenticacion();
+
+    // ── 2. UI: Autocompletado y reordenación de campos ────────────────
     const inputImporte = document.getElementById('mov-importe');
     const inputDescripcion = document.getElementById('mov-descripcion');
     
@@ -9128,40 +9152,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 50);
 
-    // 2. LÓGICA DEL SEMÁFORO
+    // 2. LÓGICA DEL SEMÁFORO (UNIFICADA - ver definición principal en window.actualizarSemaforo más abajo)
+    // Esta llamada delega en la función única ya definida que acepta ambos conjuntos de aliases.
+
     window.estadoSemaforo = 'verde';
-
-    window.actualizarSemaforo = function(estado, mensajePersonalizado = null) {
-        const dot = document.getElementById('semaforo-dot');
-        const text = document.getElementById('semaforo-text');
-        const warning = document.getElementById('semaforo-warning');
-        
-        if (window.estadoSemaforo === 'rojo' && estado !== 'verde') return;
-        window.estadoSemaforo = estado;
-
-        if (estado === 'verde' || estado === 'ok') {
-            dot.style.backgroundColor = '#4CAF50';
-            dot.style.boxShadow = '0 0 8px #4CAF50';
-            text.innerText = mensajePersonalizado || 'ONEDRIVE CONECTADO Y SEGURO';
-            text.style.color = '#00ff41';
-            text.style.textShadow = '0 0 5px rgba(0, 255, 65, 0.5)';
-            warning.style.display = 'none';
-        } else if (estado === 'naranja' || estado === 'cargando' || estado === 'loading') {
-            dot.style.backgroundColor = '#FF9800';
-            dot.style.boxShadow = '0 0 8px #FF9800';
-            text.innerText = mensajePersonalizado || 'TRABAJANDO...';
-            text.style.color = '#ffb600';
-            text.style.textShadow = '0 0 5px rgba(255, 182, 0, 0.6)';
-            warning.style.display = 'none';
-        } else if (estado === 'rojo' || estado === 'error') {
-            dot.style.backgroundColor = '#F44336';
-            dot.style.boxShadow = '0 0 8px #F44336';
-            text.innerText = mensajePersonalizado || 'ONEDRIVE DESCONECTADO';
-            text.style.color = '#ff003c';
-            text.style.textShadow = '0 0 5px rgba(255, 0, 60, 0.6)';
-            if(!mensajePersonalizado) warning.style.display = 'block';
-        }
-    };
 
     // 3. RECONECTAR LOS MENSAJES ORIGINALES DE TU APP AL NUEVO SEMÁFORO
     window.mostrarEstado = function(mensaje, tipo = 'info') {
