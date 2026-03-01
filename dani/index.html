@@ -3197,148 +3197,137 @@ function mostrarFuerzaSettings(pw) {
 }
 
 // ==========================================
-// 🧠 CEREBRO IA FINANCIERO 3.0 (MODE: PRO)
+// 🧠 CEREBRO IA FINANCIERO 4.0 (ALGORITMO PREDICTIVO)
 // ==========================================
 window.generarAnalisisIA = function(movimientos) {
     const output = document.getElementById('ai-output');
-    if (!output) return; 
+    if (!output) return;
 
     if (!movimientos || movimientos.length === 0) {
-        output.innerHTML = '<span class="ai-line">> ESPERANDO DATOS...</span>';
+        output.innerHTML = '<span class="ai-line">> ESPERANDO DATOS DE MATRIZ...</span><span class="blink-cursor">_</span>';
         return;
     }
 
-    // --- 1. CONFIGURACIÓN Y FECHAS ---
     const hoy = new Date();
     const mesActual = hoy.getMonth();
     const anioActual = hoy.getFullYear();
-    let html = '';
+    const diaHoy = hoy.getDate();
+    const diasMes = new Date(anioActual, mesActual + 1, 0).getDate();
+    const porcentajeMes = diaHoy / diasMes; // Ej: día 15 de 30 = 0.50 (50%)
 
-    // Función auxiliar para detectar inversiones (busca en tu config o adivina)
-    const esInversion = (cta) => {
-        if (typeof mapaCuentas !== 'undefined' && mapaCuentas[cta]) {
-            // Comprueba si está marcado como inversión (soporta varios formatos)
-            const c = mapaCuentas[cta];
-            return c.esInversion === true || c.esInversion === 'Si' || c.TIPO === 'BOLSA' || c.TIPO === 'CRIPTOMONEDAS';
-        }
-        // Si no hay mapa, adivinamos por nombre
-        return (cta || '').toLowerCase().match(/inver|fondo|bolsa|cripto/);
-    };
-
-    // --- 2. PROCESAMIENTO DE DATOS ---
     let gastosMes = 0;
     let ingresosMes = 0;
     let liquidezTotal = 0;
-    // FIX 7: El patrimonio real NO es la suma de todos los movimientos históricos.
-    // Es la suma de los saldos actuales de cada cuenta (ya calculados por recalcularSaldosGlobal).
-    // Además respetamos el filtro de propietario activo.
     let patrimonioTotal = 0;
-    if (window.mapaCuentas && Object.keys(window.mapaCuentas).length > 0) {
-        Object.keys(window.mapaCuentas).forEach(cta => {
-            const info = window.mapaCuentas[cta];
-            const saldo = info.saldoActual || 0;
-            // Aplicar filtro de propietario si está activo
-            const movFake = { cuenta: cta, beneficiario: '' };
-            if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(movFake)) return;
-            patrimonioTotal += saldo;
-            if (!esInversion(cta)) liquidezTotal += saldo;
-        });
-    }
-    let gastosUltimos3Meses = 0;
+    let inversionTotal = 0;
 
-    // Recorremos los movimientos para estadísticas de flujo (ingresos/gastos del mes)
-    // ──────────────────────────────────────────────────────────────
-    // PUNTO 1 FIX: Los conceptos se almacenan en MAYÚSCULAS ('TRASPASO', 'INICIAL').
-    // Las comparaciones anteriores usaban 'Traspaso' e 'Inicial' (mixedCase),
-    // provocando que traspasos e iniciales SIEMPRE se sumaran como gastos/ingresos reales.
-    // Ahora normalizamos con toUpperCase() antes de comparar.
-    // ──────────────────────────────────────────────────────────────
-
-    // PUNTO 6 FIX: tresMesesAtras se calculaba DENTRO del forEach (new Date() × 2.872 veces).
-    // Ahora se calcula una sola vez antes del bucle.
+    // Ventana histórica para medias (últimos 3 meses cerrados)
     const tresMesesAtras = new Date();
     tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
     const tsInicioMesActual = new Date(anioActual, mesActual, 1).getTime();
 
+    let gastosPorConceptoMes = {};
+    let gastosPorConceptoHistorico = {};
+
+    // 1. CÁLCULOS BASE Y PATRIMONIO
+    const esInversion = (cta) => {
+        if (typeof window.mapaCuentas !== 'undefined' && window.mapaCuentas[cta]) {
+            const c = window.mapaCuentas[cta];
+            return c.esInversion === true || c.esInversion === 'Si' || c.esInversion === 'SI';
+        }
+        return false;
+    };
+
+    if (window.mapaCuentas) {
+        Object.keys(window.mapaCuentas).forEach(cta => {
+            const info = window.mapaCuentas[cta];
+            const saldo = info.saldoActual || 0;
+            // Respetar filtro de usuario activo (Dani/Norma/Ambos)
+            if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: cta, beneficiario: '' })) return;
+            
+            patrimonioTotal += saldo;
+            if (esInversion(cta)) inversionTotal += saldo;
+            else liquidezTotal += saldo;
+        });
+    }
+
+    // 2. EXTRACCIÓN Y CLASIFICACIÓN DE DATOS
     movimientos.forEach(m => {
-        if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return;
+        if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario(m)) return;
+        
         const fecha = new Date(m.ts || m.fecha);
         const conceptoUp = String(m.concepto || '').toUpperCase().trim();
         const esInterno = conceptoUp === 'TRASPASO' || conceptoUp === 'INICIAL';
 
-        if (fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) {
-            if (!esInterno) {
+        if (!esInterno) {
+            // Evaluamos el Mes Actual
+            if (fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) {
                 if (m.importe < 0) {
-                    gastosMes += Math.abs(m.importe);
+                    const gasto = Math.abs(m.importe);
+                    gastosMes += gasto;
+                    gastosPorConceptoMes[conceptoUp] = (gastosPorConceptoMes[conceptoUp] || 0) + gasto;
                 } else if (m.importe > 0) {
                     ingresosMes += m.importe;
                 }
             }
-        }
-
-        // Datos de los ÚLTIMOS 3 MESES (para medias)
-        if (fecha > tresMesesAtras && fecha.getTime() < tsInicioMesActual && m.importe < 0 && !esInterno) {
-            gastosUltimos3Meses += Math.abs(m.importe);
+            
+            // Evaluamos el Histórico (Últimos 3 meses, sin contar el actual)
+            if (fecha > tresMesesAtras && fecha.getTime() < tsInicioMesActual && m.importe < 0) {
+                gastosPorConceptoHistorico[conceptoUp] = (gastosPorConceptoHistorico[conceptoUp] || 0) + Math.abs(m.importe);
+            }
         }
     });
 
-    // --- 3. CÁLCULO DE METRICA "RUNWAY" (SUPERVIVENCIA) ---
-    // ¿Cuántos meses aguantas si dejas de ingresar hoy?
-    const mediaGastoMensual = gastosUltimos3Meses / 3;
-    let runway = 0;
-    if (mediaGastoMensual > 0) {
-        runway = (liquidezTotal / mediaGastoMensual).toFixed(1);
-    }
+    // Formateador de moneda elegante sin decimales
+    const fmt = (num) => new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR', maximumFractionDigits:0}).format(num);
+    let html = '';
 
-    // Formateador de moneda
-    const fmt = (num) => new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(num);
+    // --- 3. MOTOR DE INSIGHTS INTELIGENTES ---
 
-    // --- 4. GENERACIÓN DE INSIGHTS (SALIDA) ---
-
-    // A) SALUD FINANCIERA (RUNWAY)
-    if (runway > 6) {
-        html += `<span class="ai-line">> FORTALEZA: Tienes liquidez para <span class="ai-highlight">${runway} meses</span> de vida sin ingresos. <span class="ai-info">[ROBUSTO]</span></span>`;
-    } else if (runway < 2) {
-        html += `<span class="ai-line">> ALERTA: Tu "Runway" es bajo (${runway} meses). Prioriza fondo de emergencia.</span>`;
-    } else {
-        html += `<span class="ai-line">> ESTADO: Tienes cobertura para ${runway} meses. Objetivo recomendado: 6 meses.</span>`;
-    }
-
-    // B) TASA DE AHORRO DEL MES
+    // A) TERMOSTATO DE VELOCIDAD (Pacing)
     if (ingresosMes > 0) {
-        const ahorro = ingresosMes - gastosMes;
-        const tasa = ((ahorro / ingresosMes) * 100).toFixed(0);
-        let color = tasa > 20 ? 'ai-highlight' : (tasa > 0 ? 'ai-info' : 'ai-alert');
-        html += `<span class="ai-line">> RENDIMIENTO MES: Ahorro del <span class="${color}">${tasa}%</span> (${fmt(ahorro)}).</span>`;
+        const porcentajeGastado = gastosMes / ingresosMes;
+        if (porcentajeGastado > porcentajeMes + 0.15) {
+            html += `<span class="ai-line">> ⚠️ <span class="ai-alert">RITMO ACELERADO:</span> Estamos a día ${diaHoy} (${Math.round(porcentajeMes*100)}% del mes) pero ya has consumido el ${Math.round(porcentajeGastado*100)}% de los ingresos. Sugiero contención.</span>`;
+        } else if (porcentajeGastado < porcentajeMes - 0.10) {
+            html += `<span class="ai-line">> ⚡ <span class="ai-highlight">DISCIPLINA TÁCTICA:</span> Tu ritmo de gasto es muy inferior al avance del mes. Mantén el rumbo para un ahorro récord.</span>`;
+        } else {
+             html += `<span class="ai-line">> ⚖️ <span class="ai-info">RITMO ESTABLE:</span> Tus salidas de capital están sincronizadas con el progreso del mes.</span>`;
+        }
+    } else if (gastosMes > 0 && ingresosMes === 0) {
+         html += `<span class="ai-line">> 📉 <span class="ai-alert">DÉFICIT TEMPORAL:</span> Aún sin ingresos este mes, pero con salidas de ${fmt(gastosMes)}. Tirando de reservas.</span>`;
     }
 
-    // C) PROYECCIÓN DE GASTO (VELOCIDAD)
-    const diaHoy = hoy.getDate();
-    const diasMes = new Date(anioActual, mesActual + 1, 0).getDate();
-    if (diaHoy > 1) {
-        const proyeccion = (gastosMes / diaHoy) * diasMes;
-        const desviacion = mediaGastoMensual > 0 ? ((proyeccion / mediaGastoMensual) - 1) * 100 : 0;
-        
-        if (desviacion > 10) {
-            html += `<span class="ai-line">> TENDENCIA: Proyectas gastar <span class="ai-alert">${fmt(proyeccion)}</span>. Un ${desviacion.toFixed(0)}% más que tu media. ¡Frena!</span>`;
-        } else {
-            html += `<span class="ai-line">> CONTROL: Gasto proyectado (${fmt(proyeccion)}) dentro de lo normal.</span>`;
+    // B) DETECTOR DE ANOMALÍAS POR CATEGORÍA
+    let anomaliaDetectada = false;
+    for (const [concepto, gastoMes] of Object.entries(gastosPorConceptoMes)) {
+        const gastoMedioHistorico = (gastosPorConceptoHistorico[concepto] || 0) / 3;
+        // Filtro: Solo avisar si la desviación es mayor al 30% Y es un gasto superior a 50€ (evitar ruido de céntimos)
+        if (gastoMedioHistorico > 0 && gastoMes > 50 && gastoMes > (gastoMedioHistorico * 1.3)) {
+            const exceso = Math.round(((gastoMes / gastoMedioHistorico) - 1) * 100);
+            html += `<span class="ai-line">> 🔎 <span class="ai-info">ANOMALÍA EN ${concepto}:</span> Has gastado ${fmt(gastoMes)}, un ${exceso}% por encima de tu media trimestral (${fmt(gastoMedioHistorico)}).</span>`;
+            anomaliaDetectada = true;
+            break; // Mostramos solo la anomalía más urgente para no saturar
         }
     }
 
-    // D) DATO CURIOSO (GASTOS HORMIGA o MAYOR GASTO)
-    // Buscamos el mayor gasto hormiga recurrente
-    const hormigas = movimientos.filter(m => 
-        new Date(m.ts || m.fecha).getMonth() === mesActual && 
-        Math.abs(m.importe) < 10 && m.importe < 0
-    );
-    const totalHormiga = hormigas.reduce((s, m) => s + Math.abs(m.importe), 0);
+    // C) OPTIMIZACIÓN DE CAPITAL (Dinero Perezoso vs Riesgo de Liquidez)
+    const gastos3Meses = Object.values(gastosPorConceptoHistorico).reduce((a, b) => a + b, 0);
+    const mediaGastoMensual = gastos3Meses / 3;
     
-    if (totalHormiga > 30) {
-        html += `<span class="ai-line">> OJO DE HALCÓN: Has gastado <span class="ai-alert">${fmt(totalHormiga)}</span> en compras de <10€.</span>`;
-    } else {
-        // Si no hay hormigas, mostramos patrimonio
-        html += `<span class="ai-line">> PATRIMONIO NETO: <span class="ai-highlight">${fmt(patrimonioTotal)}</span>.</span>`;
+    if (mediaGastoMensual > 0) {
+        const mesesCobertura = liquidezTotal / mediaGastoMensual;
+        if (mesesCobertura > 8) {
+            // Calcula cuánto sobra después de dejar 6 meses blindados
+            const excesoLiquidez = liquidezTotal - (mediaGastoMensual * 6); 
+            html += `<span class="ai-line">> 💡 <span class="ai-highlight">CAPITAL OCIOSO:</span> Tienes ${mesesCobertura.toFixed(1)} meses de colchón. Podrías invertir ${fmt(excesoLiquidez)} manteniendo una cobertura de seguridad férrea de 6 meses.</span>`;
+        } else if (mesesCobertura < 2) {
+            html += `<span class="ai-line">> 🛡️ <span class="ai-alert">ALERTA LIQUIDEZ:</span> Tu efectivo actual cubre solo ${mesesCobertura.toFixed(1)} meses de tu ritmo de vida. Prioriza reponer el fondo de emergencia.</span>`;
+        } else if (!anomaliaDetectada) {
+             html += `<span class="ai-line">> 🛡️ <span class="ai-highlight">SISTEMA SANO:</span> Tienes una cobertura operativa óptima (${mesesCobertura.toFixed(1)} meses). Operando dentro de parámetros seguros.</span>`;
+        }
+    } else if (!anomaliaDetectada) {
+        html += `<span class="ai-line">> 📊 <span class="ai-info">CALIBRANDO MATRIZ:</span> Registra más datos para obtener comparativas y predicciones históricas precisas.</span>`;
     }
 
     html += `<span class="blink-cursor">_</span>`;
