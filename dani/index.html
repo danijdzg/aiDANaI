@@ -2882,6 +2882,77 @@ window.mostrarNotificacion = function(mensaje, tipo = 'info') {
         console.warn = function() {}; // Silenciamos las advertencias leves
         console.info = function() {}; // Silenciamos la información técnica
     }
+// ==========================================
+    // 🛡️ MONITOR MAESTRO DE ESTADO (SENTRY + SEMÁFORO)
+    // Función global unificada para el motor V8
+    // ==========================================
+    window.mostrarEstado = function(mensaje, tipo = 'info') {
+        // 1. Detección inteligente de elementos DOM (soporta HTML antiguo y nuevo)
+        const textoUI = document.getElementById('semaforo-text') || document.getElementById('sentry-text');
+        const dotUI   = document.getElementById('semaforo-dot') || document.getElementById('sync-status');
+        const iconUI  = document.getElementById('sentry-icon'); // Opcional, por retrocompatibilidad
+
+        if (!textoUI) {
+            console.warn("Monitor de estado no detectado en el DOM. Mensaje ignorado:", mensaje);
+            return;
+        }
+
+        // 2. Limpiar animaciones previas para evitar parpadeos
+        if (window.sentryTimeout) clearTimeout(window.sentryTimeout);
+
+        // 3. Lógica de colores, texto y estados
+        if (tipo === 'error' || tipo === 'err') {
+            textoUI.innerHTML = '⚠️ ' + mensaje.toUpperCase();
+            textoUI.style.color = '#ff5252'; // Rojo Alerta
+            if (dotUI) { dotUI.style.backgroundColor = '#ff5252'; dotUI.style.boxShadow = '0 0 10px #ff5252'; }
+            if (iconUI) iconUI.innerText = '⚠️';
+            window.estadoConexion = 'error';
+        } 
+        else if (tipo === 'success' || tipo === 'ok') {
+            textoUI.innerHTML = '✅ ' + mensaje.toUpperCase();
+            textoUI.style.color = '#00ff41'; // Verde Éxito
+            if (dotUI) { dotUI.style.backgroundColor = '#4CAF50'; dotUI.style.boxShadow = '0 0 10px #4CAF50'; }
+            if (iconUI) iconUI.innerText = '✅';
+            window.estadoConexion = 'ok';
+        } 
+        else if (tipo === 'loading') {
+            textoUI.innerHTML = '🔄 ' + mensaje.toUpperCase();
+            textoUI.style.color = '#FFD60A'; // Amarillo Trabajo
+            if (dotUI) { dotUI.style.backgroundColor = '#FFD60A'; dotUI.style.boxShadow = '0 0 10px #FFD60A'; }
+            if (iconUI) iconUI.innerText = '🔄';
+            window.estadoConexion = 'cargando';
+            
+            return; // CORTOCIRCUITO: Si está cargando, NO activamos la cuenta atrás de borrado
+        } 
+        else { // Mensajes neutros (info)
+            textoUI.innerHTML = 'ℹ️ ' + mensaje.toUpperCase();
+            textoUI.style.color = '#00B8FF'; // Azul Info
+            if (dotUI) { dotUI.style.backgroundColor = '#00B8FF'; dotUI.style.boxShadow = '0 0 10px #00B8FF'; }
+            if (iconUI) iconUI.innerText = 'ℹ️';
+        }
+
+        // 4. Protocolo de "Retorno a la Calma" (Vuelve a estado seguro tras 4 segundos)
+        if (tipo !== 'error' && tipo !== 'loading') {
+            window.sentryTimeout = setTimeout(() => {
+                const enNube = (window.modoNube || (typeof window.oneDrive !== 'undefined' && window.oneDrive.msalInstance && window.oneDrive.msalInstance.getAllAccounts().length > 0));
+                
+                // Restauramos el texto al estado de conexión actual
+                textoUI.innerHTML = enNube ? '🛡️ NUBE BLINDADA' : '💾 MODO LOCAL SEGURO';
+                textoUI.style.color = '#00ff41'; // Verde de sistema sano
+                
+                // Restauramos el punto (Semáforo)
+                if (dotUI) {
+                    dotUI.style.backgroundColor = '#4CAF50';
+                    dotUI.style.boxShadow = '0 0 10px #4CAF50';
+                }
+                if (iconUI) iconUI.innerText = '🛡️';
+                
+            }, 4000);
+        }
+    };
+
+    // Alias para evitar que otras funciones externas rompan al llamar al nombre viejo
+    window.showToast = window.mostrarEstado;	
 /* ============================================================
    🚀 SPACE ENGINE V2 — Súper Ligero y Espectacular
    ============================================================ */
@@ -3724,69 +3795,6 @@ const Security = {
         actualizarDashboard();
     }
 
-
-// ==========================================
-// 🛡️ SENTRY: CONTROLADOR DE INTEGRIDAD DE DATOS
-// ==========================================
-window.mostrarEstado = function(mensaje, tipo = 'info') {
-    // 1. Localizar el Monitor Sentry
-    const sentry = document.getElementById('data-sentry');
-    const icon = document.getElementById('sentry-icon');
-    const text = document.getElementById('sentry-text');
-
-    // PROTECCIÓN CONTRA EL ERROR DE "NO ENCUENTRO ELEMENTO"
-    // Si por alguna razón el HTML no cargó bien, lo creamos al vuelo.
-    if (!sentry) {
-        console.warn("Sentry no detectado, intentando inyección de emergencia...");
-        return; 
-    }
-
-    // 2. Limpiar temporizadores anteriores
-    if (window.sentryTimeout) clearTimeout(window.sentryTimeout);
-
-    // 3. ANALIZAR LA AMENAZA / ESTADO
-    
-    // CASO A: ERROR (Crítico)
-    if (tipo === 'error' || tipo === 'err') {
-        sentry.className = 'sentry-panel sentry-danger';
-        icon.innerText = '☠️';
-        text.innerText = 'FALLO: ' + mensaje;
-    } 
-    // CASO B: ÉXITO (Confirmación)
-    else if (tipo === 'success' || tipo === 'ok') {
-        sentry.className = 'sentry-panel sentry-idle'; // Usamos estilo verde
-        icon.innerText = '🔒';
-        text.innerText = mensaje.toUpperCase();
-    } 
-    // CASO C: TRABAJANDO (Cargando/Guardando)
-    else if (tipo === 'loading') {
-        sentry.className = 'sentry-panel sentry-working';
-        icon.innerText = '🔄';
-        text.innerText = mensaje.toUpperCase();
-        return; // Si está cargando, no ponemos temporizador de borrado
-    } 
-    // CASO D: INFORMACIÓN GENERAL
-    else {
-        sentry.className = 'sentry-panel sentry-working';
-        icon.innerText = 'ℹ️';
-        text.innerText = mensaje.toUpperCase();
-    }
-
-    // 4. PROTOCOLO DE RETORNO A LA CALMA
-    // Después de 5 segundos, si no es un error crítico, volvemos a "VIGILANDO"
-    if (tipo !== 'error' && tipo !== 'loading') {
-        window.sentryTimeout = setTimeout(() => {
-            sentry.className = 'sentry-panel sentry-idle';
-            icon.innerText = '🛡️';
-            // Si usamos OneDrive, decimos que está en la nube
-            const enNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance.getAllAccounts().length > 0));
-            text.innerText = enNube ? 'NUBE BLINDADA' : 'MODO LOCAL SEGURO';
-        }, 5000);
-    }
-};
-
-// Redirección de seguridad para mantener compatibilidad
-window.showToast = window.mostrarEstado;
 
 // --- VARIABLES DE POLLING CON BACKOFF EXPONENCIAL ---
 let pollingTimeout  = null;   // handle del setTimeout activo
@@ -5312,70 +5320,6 @@ function recalcularSaldosGlobal() {
         }
     }
  
-// ==========================================
-// 🎢 MOTOR DE ANIMACIÓN DE NÚMEROS (CountUp)
-// ==========================================
-const cacheValores = {}; // Memoria para recordar el valor anterior
-
-function animarCifra(id, valorFinal, tipo = 'moneda') {
-    const elemento = document.getElementById(id);
-    if (!elemento) return;
-
-    // 1. Determinar punto de partida (para que no empiece siempre de 0)
-    const valorInicial = cacheValores[id] || 0;
-    const variacion = valorFinal - valorInicial;
-    
-    // Si el cambio es minúsculo, no animamos
-    if (Math.abs(variacion) < 0.01) {
-        elemento.innerText = formatear(valorFinal, tipo);
-        return;
-    }
-
-    // 2. Configuración de la animación
-    const duracion = 1500; // 1.5 segundos (muy elegante)
-    const startTime = performance.now();
-
-    // Función de Easing (Ease Out Expo): Empieza rápido, frena suave al final
-    const easeOutExpo = (x) => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
-
-    function step(currentTime) {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duracion, 1);
-        
-        // Calcular valor actual basado en la curva de aceleración
-        const valorActual = valorInicial + (variacion * easeOutExpo(progress));
-
-        // Pintar en pantalla
-        elemento.innerText = formatear(valorActual, tipo);
-
-        // Continuar o terminar
-        if (progress < 1) {
-            requestAnimationFrame(step);
-        } else {
-            cacheValores[id] = valorFinal; // Guardamos el valor final para la próxima
-        }
-    }
-
-    // Arrancar
-    requestAnimationFrame(step);
-}
-
-// Ayudante de formato interno
-function formatear(val, tipo) {
-    if (tipo === 'moneda') {
-        return new Intl.NumberFormat('es-ES', { 
-            style: 'currency', 
-            currency: 'EUR', 
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2 
-        }).format(val);
-    } else if (tipo === 'porcentaje') {
-        return val.toFixed(2) + '%';
-    } else if (tipo === 'numero') {
-        return val.toFixed(1); // Para los "Meses" de cobertura
-    }
-    return val;
-}
  
         // 2. Calcular KPIs visuales (Ingresos/Gastos del periodo seleccionado)
         let ing = 0, gas = 0;
@@ -6548,26 +6492,6 @@ async function cargarDesdeCacheAsync() {
     return false;
 }
 
-// Alias síncrono por compatibilidad con código antiguo
-function cargarDesdeCache() {
-    try {
-        const cacheDatos = localStorage.getItem('aidanai_datos_cache');
-        if (cacheDatos) {
-            window.datos = JSON.parse(cacheDatos).map(m => ({
-                ...m,
-                // 🔥 EXTRA FIX: UUID seguro + alias fantasma eliminado
-                id: m.id || m.ID || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'CACHE-' + Date.now() + '-' + Math.random().toString(36).slice(2)),
-                fecha: new Date(m.fecha)
-            }));
-            window.mapaCuentas = JSON.parse(localStorage.getItem('aidanai_config_cache') || '{}');
-            // NOTA: "datos = window.datos" eliminado — era un alias fantasma sin efecto
-            if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-            if (typeof mostrarEstado === 'function') mostrarEstado('⚡ Datos listos (Local)', 'ok');
-            return true;
-        }
-    } catch (e) { window.datos = []; }
-    return false;
-}
 
 // ==========================================
 // 🚀 ARRANQUE DE LA APLICACIÓN (CORREGIDO BLOQUEO POPUP)
@@ -9187,24 +9111,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Esta llamada delega en la función única ya definida que acepta ambos conjuntos de aliases.
 
     window.estadoSemaforo = 'verde';
-
-    // 3. RECONECTAR LOS MENSAJES ORIGINALES DE TU APP AL NUEVO SEMÁFORO
-    window.mostrarEstado = function(mensaje, tipo = 'info') {
-        if (tipo === 'error' || tipo === 'err') {
-            window.actualizarSemaforo('rojo', '⚠️ ' + mensaje.toUpperCase());
-        } else if (tipo === 'success' || tipo === 'ok') {
-            window.actualizarSemaforo('verde', '✅ ' + mensaje.toUpperCase());
-        } else {
-            window.actualizarSemaforo('naranja', '🔄 ' + mensaje.toUpperCase());
-        }
-
-        if (tipo !== 'error' && tipo !== 'loading') {
-            setTimeout(() => {
-                const enNube = (window.modoNube || (typeof window.oneDrive !== 'undefined' && window.oneDrive.msalInstance.getAllAccounts().length > 0));
-                window.actualizarSemaforo('verde', enNube ? 'NUBE BLINDADA' : 'MODO LOCAL SEGURO');
-            }, 4000);
-        }
-    };
   
 // --- INICIO LÓGICA DE INSTALACIÓN PWA ---
 window.eventoInstalacion = null;
