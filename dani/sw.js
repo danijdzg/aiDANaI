@@ -52,8 +52,8 @@ self.addEventListener('fetch', e => {
             
             // Si no está en caché, ve a la red
             return fetch(e.request).then(response => {
-                // Guardamos en caché para la próxima vez (solo respuestas válidas)
-                if (response && response.status === 200 && response.type !== 'opaque') {
+                // Guardamos en caché para la próxima vez (solo respuestas válidas HTTP/HTTPS, ignorando extensiones)
+                if (e.request.url.startsWith('http') && response && response.status === 200 && response.type !== 'opaque') {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
                 }
