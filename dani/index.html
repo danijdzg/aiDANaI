@@ -4943,17 +4943,17 @@ window.guardarManual = async function() {
         const elId = document.getElementById('m-id');
         const idExistente = elId ? elId.value : "";
 
-        // 📅 1. OBTENER Y FORMATEAR LA FECHA (El arreglo del bug)
+       // 📅 1. OBTENER Y FORMATEAR LA FECHA (Transformación a Fecha Real)
         const fechaCruda = document.getElementById('m-fecha').value; // Ej: "2026-02-26"
         if (!fechaCruda) throw new Error("❌ Falta la FECHA");
 
-        let fechaFormateada = fechaCruda;
+        // Creamos un objeto Fecha real para que Excel y OneDrive lo entiendan perfectamente
+        let fechaParaExcel = new Date();
         if (fechaCruda.includes('-')) {
             const partes = fechaCruda.split('-');
-            if (partes[0].length === 4) { // Si el año está primero, le damos la vuelta
-                fechaFormateada = `${partes[2]}/${partes[1]}/${partes[0]}`; 
-            }
+            fechaParaExcel = new Date(partes[0], partes[1] - 1, partes[2]); 
         }
+        const fechaFormateada = fechaParaExcel; // Mantenemos el nombre de variable para no romper tu código de abajo
 
         // Necesitamos la fecha cruda solo para cálculos internos (ordenar historial)
         const timestampInterno = new Date(fechaCruda + 'T12:00:00').getTime();
@@ -6009,10 +6009,12 @@ window.guardarUniversal = async function(nuevasFilas) {
         }
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(datosConfig), "Configuracion");
 
-        // Hoja Recurrentes
+       // Hoja Recurrentes
         const listaRec = window.datosRecurrentes || [];
         const filasRec = listaRec.length > 0 ? listaRec.map(r => ({
-            "ID": r.id, "PROXIMA_FECHA": r.fechaProx, "FRECUENCIA": r.frecuencia,
+            "ID": r.id, 
+            "PROXIMA_FECHA": new Date(r.fechaProx), // Transformamos a Fecha Real
+            "FRECUENCIA": r.frecuencia,
             "DIAS_SEMANA": r.diasSemana || "", "TIPO_REGLA": r.tipoRegla || "gasto",
             "CUENTA": r.cuenta, "CUENTA_DESTINO": r.cuentaDestino || "",
             "IMPORTE": r.importe, "CONCEPTO": r.concepto, "BENEFICIARIO": r.beneficiario || "",
@@ -6022,6 +6024,12 @@ window.guardarUniversal = async function(nuevasFilas) {
         const wsRec = XLSX.utils.json_to_sheet(filasRec, {
             header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"]
         });
+        
+        // 🟢 MAGIA FECHAS: Máscara visual DD/MM/AAAA para recurrentes en OneDrive
+        Object.keys(wsRec).forEach(key => {
+            if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
+        });
+
         XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
 
         // --- 5. SUBIDA A ONEDRIVE ---
