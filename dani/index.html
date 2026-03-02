@@ -2372,11 +2372,26 @@ header, .header-row-top {
                     <div class="master-card blue-card" onclick="irPestana('patri')" style="margin-top: 15px;">
                         <div class="card-header" style="border:none; padding-bottom:0; margin-bottom:5px"><span class="card-title">PATRIMONIO NETO</span></div>
                         <div style="text-align:center; margin-bottom:5px"><span class="kpi-value val-std-blue" id="d-patri-total" style="font-size:38px">0,00 €</span></div>
-                        <div class="patri-breakdown">
-                            <div class="patri-col"><span class="kpi-label">LIQUIDEZ</span><span class="val-breakdown" id="d-patri-liq">0,00 €</span></div>
-                            <div class="patri-col"><span class="kpi-label">CAPITAL INV.</span><span class="val-breakdown" id="d-patri-inv">0,00 €</span></div>
+                        
+                        <div class="patri-breakdown" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div class="patri-col" style="margin: 0;">
+                                <span class="kpi-label">LIQUIDEZ</span>
+                                <span class="val-breakdown" id="d-patri-liq">0,00 €</span>
+                            </div>
+                            <div class="patri-col" style="margin: 0;">
+                                <span class="kpi-label">INVERSIÓN</span>
+                                <span class="val-breakdown" id="d-patri-inv">0,00 €</span>
+                            </div>
+                            <div class="patri-col" style="margin: 0;">
+                                <span class="kpi-label">AUTOCUSTODIA</span>
+                                <span class="val-breakdown" id="d-patri-auto">0,00 €</span>
+                            </div>
+                            <div class="patri-col" style="margin: 0;">
+                                <span class="kpi-label">PROPIEDAD</span>
+                                <span class="val-breakdown" id="d-patri-prop">0,00 €</span>
+                            </div>
                         </div>
-                    </div>
+                        </div>
 
                     <div class="master-card" style="margin-top: 20px;">
                         <div class="card-header">
@@ -5358,6 +5373,7 @@ function recalcularSaldosGlobal() {
         // 3. --- CORRECCIÓN: CÁLCULO DE PATRIMONIO Y GASTO MEDIO REAL ---
         // Calculamos saldos totales (Liquidez e Inversión) iterando TODO el historial del propietario
         let totalPatrimonio = 0, totalLiquidez = 0, totalInversion = 0;
+        let totalAutocustodia = 0, totalPropiedad = 0;
         
         // Variables para calcular el Gasto Mensual Promedio Histórico
         let gastoTotalHistorico = 0;
@@ -5371,8 +5387,14 @@ function recalcularSaldosGlobal() {
             const ctaKey = m.cuenta.trim().toUpperCase();
             // CORRECCIÓN: Usamos 'SIN CLASIFICAR' para cuentas desconocidas en el Dashboard
             const config = (typeof mapaCuentas !== 'undefined' && mapaCuentas[ctaKey]) ? mapaCuentas[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
+            const tipoStr = (config.tipo || '').toUpperCase();
             
-            if(config.esInversion) {
+            // Repartimos el saldo en los 4 montones según el tipo
+            if (tipoStr === 'AUTOCUSTODIA') {
+                totalAutocustodia += m.importe;
+            } else if (tipoStr === 'PROPIEDAD' || tipoStr === 'INMUEBLE') {
+                totalPropiedad += m.importe;
+            } else if (config.esInversion) {
                 totalInversion += m.importe; 
             } else { 
                 totalLiquidez += m.importe; 
@@ -5397,6 +5419,8 @@ function recalcularSaldosGlobal() {
         }
         animarValor('d-patri-liq', totalLiquidez, '', ' €');
         animarValor('d-patri-inv', totalInversion, '', ' €');
+        animarValor('d-patri-auto', totalAutocustodia, '', ' €');
+        animarValor('d-patri-prop', totalPropiedad, '', ' €');
 
         // 4. --- LÓGICA FINANCIERA CORREGIDA (COBERTURA Y LIBERTAD) ---
         
@@ -6922,6 +6946,8 @@ window.actualizarDashboard = function() {
     let totalPatrimonio = 0;
     let totalLiquidez = 0;
     let totalInversion = 0;
+    let totalAutocustodia = 0;
+    let totalPropiedad = 0;
     
     // Usamos 'datosUsuario' (todo el historial) para calcular saldos actuales reales
     // Pero es más seguro iterar sobre las CUENTAS y sus saldos actuales
@@ -6936,11 +6962,20 @@ window.actualizarDashboard = function() {
 
             const c = window.mapaCuentas[k];
             const saldo = c.saldoActual || 0;
+            // Buscamos el tipo de cuenta. Si no tiene, lo dejamos en blanco
+            const tipo = (c.tipo || '').toUpperCase();
             
             totalPatrimonio += saldo;
-            if (c.esInversion) {
+            
+            // Repartimos el saldo en los 4 montones según el tipo
+            if (tipo === 'AUTOCUSTODIA') {
+                totalAutocustodia += saldo;
+            } else if (tipo === 'PROPIEDAD' || tipo === 'INMUEBLE') {
+                totalPropiedad += saldo;
+            } else if (c.esInversion) {
                 totalInversion += saldo;
             } else {
+                // Si no es nada de lo anterior, es Liquidez (tu dinero en el banco)
                 totalLiquidez += saldo;
             }
         });
@@ -6954,6 +6989,8 @@ window.actualizarDashboard = function() {
     }
     animarValor('d-patri-liq', totalLiquidez, '', ' €');
     animarValor('d-patri-inv', totalInversion, '', ' €');
+    animarValor('d-patri-auto', totalAutocustodia, '', ' €');
+    animarValor('d-patri-prop', totalPropiedad, '', ' €');
 
     // 7. CÁLCULO DE KPIs FINANCIEROS AVANZADOS (MEJORADO: ÚLTIMOS 12 MESES)
     // Usamos solo el último año para que el promedio de gastos sea realista y actual.
