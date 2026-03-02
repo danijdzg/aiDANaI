@@ -2516,14 +2516,22 @@ header, .header-row-top {
         </div>
     </div>
 
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; padding:15px; border-top:1px solid #222;">
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:5px; padding:15px; border-top:1px solid #222;">
         <div style="text-align:center;">
-            <span style="font-size:9px; color:var(--c-transfer); font-weight:bold;">RATIO LIQUIDEZ</span>
-            <div id="kpi-ratio-liq" style="font-size:18px; font-weight:800; color:#fff;">0%</div>
+            <span style="font-size:9px; color:#00F0FF; font-weight:bold;">LIQUIDEZ</span>
+            <div id="kpi-ratio-liq" style="font-size:13px; font-weight:800; color:#fff;">0%</div>
         </div>
         <div style="text-align:center; border-left:1px solid #333;">
-            <span style="font-size:9px; color:var(--c-accent); font-weight:bold;">EXPOSICIÓN RIESGO</span>
-            <div id="kpi-ratio-inv" style="font-size:18px; font-weight:800; color:#fff;">0%</div>
+            <span style="font-size:9px; color:#F72585; font-weight:bold;">INVERSIÓN</span>
+            <div id="kpi-ratio-inv" style="font-size:13px; font-weight:800; color:#fff;">0%</div>
+        </div>
+        <div style="text-align:center; border-left:1px solid #333;">
+            <span style="font-size:9px; color:#39FF14; font-weight:bold;">CUSTODIA</span>
+            <div id="kpi-ratio-auto" style="font-size:13px; font-weight:800; color:#fff;">0%</div>
+        </div>
+        <div style="text-align:center; border-left:1px solid #333;">
+            <span style="font-size:9px; color:#FFD60A; font-weight:bold;">PROPIEDAD</span>
+            <div id="kpi-ratio-prop" style="font-size:13px; font-weight:800; color:#fff;">0%</div>
         </div>
     </div>
 </div>
@@ -6311,24 +6319,25 @@ window.renderizarSunburstPatrimonio = function() {
     
     const childrenLiquidez = [];
     const childrenInversion = [];
+    const childrenAutocustodia = [];
+    const childrenPropiedad = [];
 
     // --- PALETA DE COLORES "CYBERPUNK NEÓN" MEJORADA ---
-    // Liquidez: Cianes, Azules Eléctricos y Turquesas
-    const cLiq = ['#00F0FF', '#00B8FF', '#0066FF', '#00FFFF', '#2DE2E6', '#03DAC6']; 
-    // Inversión: Fucsias, Violetas, Morados y Rosas Neón
-    const cInv = ['#F72585', '#B5179E', '#7209B7', '#560BAD', '#FF00CC', '#FF4081'];
+    const cLiq = ['#00F0FF', '#00B8FF', '#0066FF', '#00FFFF', '#2DE2E6', '#03DAC6']; // Cianes/Azules
+    const cInv = ['#F72585', '#B5179E', '#7209B7', '#560BAD', '#FF00CC', '#FF4081']; // Fucsias/Morados
+    const cAuto = ['#39FF14', '#00FF41', '#32D74B', '#00FA9A', '#7CFC00', '#00FF00']; // Verdes Neón
+    const cProp = ['#FFD60A', '#FF9F1C', '#FFB703', '#FCA311', '#FB8500', '#FFC300']; // Naranjas/Oro
 
-    let idxLiq = 0; 
-    let idxInv = 0;
     let totalLiquidez = 0; 
     let totalInversion = 0;
+    let totalAutocustodia = 0;
+    let totalPropiedad = 0;
 
     Object.keys(saldos).forEach(cta => {
         const valor = saldos[cta];
         patrimonioNetoReal += valor; 
 
-        if (Math.abs(valor) < 0.01) return; // FIX 12: Igual que TreeMap — solo ignorar saldos prácticamente cero (±0.01€)
-        // Antes era "valor < 1" que ocultaba cuentas con saldo positivo entre 0 y 1€ (ej: 0.50€ en una cuenta de cripto)
+        if (Math.abs(valor) < 0.01) return; // Ignorar saldos a cero
 
         activosBrutos += valor;
 
@@ -6336,48 +6345,48 @@ window.renderizarSunburstPatrimonio = function() {
                      ? window.mapaCuentas[cta] 
                      : { tipo: 'SIN CLASIFICAR', esInversion: false };
 
+        const tipoStr = String(config.tipo || '').toUpperCase().trim();
         const nombreLimpio = cta.replace('D-', '').replace('N-', '');
         
-        if (config.esInversion) {
+        // Repartimos en 4 montones usando la misma lógica
+        if (tipoStr === 'AUTOCUSTODIA') {
+            totalAutocustodia += valor;
+            childrenAutocustodia.push({
+                name: nombreLimpio, value: valor,
+                itemStyle: { color: cAuto[childrenAutocustodia.length % cAuto.length], shadowBlur: 20, shadowColor: cAuto[childrenAutocustodia.length % cAuto.length] }
+            });
+        } else if (tipoStr === 'PROPIEDAD' || tipoStr === 'INMUEBLE') {
+            totalPropiedad += valor;
+            childrenPropiedad.push({
+                name: nombreLimpio, value: valor,
+                itemStyle: { color: cProp[childrenPropiedad.length % cProp.length], shadowBlur: 20, shadowColor: cProp[childrenPropiedad.length % cProp.length] }
+            });
+        } else if (config.esInversion) {
             totalInversion += valor;
             childrenInversion.push({
-                name: nombreLimpio,
-                value: valor,
-                itemStyle: { 
-                    color: cInv[idxInv % cInv.length],
-                    shadowBlur: 20, shadowColor: cInv[idxInv % cInv.length] 
-                }
+                name: nombreLimpio, value: valor,
+                itemStyle: { color: cInv[childrenInversion.length % cInv.length], shadowBlur: 20, shadowColor: cInv[childrenInversion.length % cInv.length] }
             });
-            idxInv++;
         } else {
             totalLiquidez += valor;
             childrenLiquidez.push({
-                name: nombreLimpio,
-                value: valor,
-                itemStyle: { 
-                    color: cLiq[idxLiq % cLiq.length],
-                    shadowBlur: 20, shadowColor: cLiq[idxLiq % cLiq.length] 
-                }
+                name: nombreLimpio, value: valor,
+                itemStyle: { color: cLiq[childrenLiquidez.length % cLiq.length], shadowBlur: 20, shadowColor: cLiq[childrenLiquidez.length % cLiq.length] }
             });
-            idxLiq++;
         }
     });
 
     childrenLiquidez.sort((a, b) => b.value - a.value);
     childrenInversion.sort((a, b) => b.value - a.value);
+    childrenAutocustodia.sort((a, b) => b.value - a.value);
+    childrenPropiedad.sort((a, b) => b.value - a.value);
 
-    const dataTree = [
-        {
-            name: 'LIQUIDEZ',
-            itemStyle: { color: '#00F0FF' },
-            children: childrenLiquidez
-        },
-        {
-            name: 'INVERSIÓN',
-            itemStyle: { color: '#F72585' },
-            children: childrenInversion
-        }
-    ];
+    // Solo añadimos los trozos si hay dinero dentro (para que no salgan rayas vacías feas)
+    const dataTree = [];
+    if (childrenLiquidez.length > 0) dataTree.push({ name: 'LIQUIDEZ', itemStyle: { color: '#00F0FF' }, children: childrenLiquidez });
+    if (childrenInversion.length > 0) dataTree.push({ name: 'INVERSIÓN', itemStyle: { color: '#F72585' }, children: childrenInversion });
+    if (childrenAutocustodia.length > 0) dataTree.push({ name: 'AUTOCUSTODIA', itemStyle: { color: '#39FF14' }, children: childrenAutocustodia });
+    if (childrenPropiedad.length > 0) dataTree.push({ name: 'PROPIEDAD', itemStyle: { color: '#FFD60A' }, children: childrenPropiedad });
 
     // 3. ACTUALIZAR TEXTO CENTRAL
     const elLabelTotal = document.querySelector('#sunburst-center-info div:first-child');
@@ -6395,11 +6404,15 @@ window.renderizarSunburstPatrimonio = function() {
 
     const elRatioLiq = document.getElementById('kpi-ratio-liq');
     const elRatioInv = document.getElementById('kpi-ratio-inv');
+    const elRatioAuto = document.getElementById('kpi-ratio-auto');
+    const elRatioProp = document.getElementById('kpi-ratio-prop');
+    
     if (activosBrutos > 0) {
         if(elRatioLiq) elRatioLiq.innerText = ((totalLiquidez / activosBrutos) * 100).toFixed(0) + '%';
         if(elRatioInv) elRatioInv.innerText = ((totalInversion / activosBrutos) * 100).toFixed(0) + '%';
+        if(elRatioAuto) elRatioAuto.innerText = ((totalAutocustodia / activosBrutos) * 100).toFixed(0) + '%';
+        if(elRatioProp) elRatioProp.innerText = ((totalPropiedad / activosBrutos) * 100).toFixed(0) + '%';
     }
-
     // 4. CONFIGURACIÓN DEL GRÁFICO (MODO NEÓN)
     const option = {
         backgroundColor: 'transparent',
