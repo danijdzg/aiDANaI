@@ -3289,14 +3289,14 @@ function mostrarFuerzaSettings(pw) {
 }
 
 // ==========================================
-// 🧠 CEREBRO IA FINANCIERO 5.0 (DEEP LEARNING FINANCIAL ENGINE)
+// 🧠 CEREBRO IA FINANCIERO 6.0 (QUANTITATIVE ALGORITHMS)
 // ==========================================
 window.generarAnalisisIA = function(movimientos) {
     const output = document.getElementById('ai-output');
     if (!output) return;
 
     if (!movimientos || movimientos.length === 0) {
-        output.innerHTML = '<span class="ai-line">> ESPERANDO MATRIZ DE DATOS...</span><span class="blink-cursor">_</span>';
+        output.innerHTML = '<span class="ai-line">> [SYS] ESPERANDO MATRIZ DE DATOS...</span><span class="blink-cursor">_</span>';
         return;
     }
 
@@ -3319,7 +3319,8 @@ window.generarAnalisisIA = function(movimientos) {
     let inversionTotal = 0;
     
     let gastosPorConceptoMes = {};
-    let gastosPorConceptoHistorico = {}; // Suma de los últimos 3 meses
+    let gastosPorConceptoHistorico = {}; 
+    let gastosMenoresA20 = 0; // Para detectar "Gastos Hormiga"
 
     const esInversion = (cta) => {
         if (window.mapaCuentas && window.mapaCuentas[cta]) {
@@ -3329,12 +3330,10 @@ window.generarAnalisisIA = function(movimientos) {
         return (cta || '').toLowerCase().match(/inver|fondo|bolsa|cripto/);
     };
 
-    // Cálculos de saldos actuales (Patrimonio, Liquidez, Inversión)
     if (window.mapaCuentas) {
         Object.keys(window.mapaCuentas).forEach(cta => {
             const info = window.mapaCuentas[cta];
             const saldo = info.saldoActual || 0;
-            // Filtro de propietario
             if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: cta, beneficiario: '' })) return;
             
             patrimonioTotal += saldo;
@@ -3343,7 +3342,6 @@ window.generarAnalisisIA = function(movimientos) {
         });
     }
 
-    // Ventana histórica: Últimos 3 meses cerrados (calculado correctamente usando timestamps)
     const tresMesesAtras = new Date();
     tresMesesAtras.setMonth(mesActual - 3);
     const tsTresMesesAtras = tresMesesAtras.getTime();
@@ -3358,17 +3356,16 @@ window.generarAnalisisIA = function(movimientos) {
         const esInterno = conceptoUp === 'TRASPASO' || conceptoUp === 'INICIAL';
 
         if (!esInterno) {
-            // Mes Actual
             if (fechaObj.getMonth() === mesActual && fechaObj.getFullYear() === anioActual) {
                 if (m.importe < 0) {
                     const gasto = Math.abs(m.importe);
                     gastosMes += gasto;
                     gastosPorConceptoMes[conceptoUp] = (gastosPorConceptoMes[conceptoUp] || 0) + gasto;
+                    if (gasto <= 20) gastosMenoresA20 += gasto; // Gastos hormiga <= 20€
                 } else if (m.importe > 0) {
                     ingresosMes += m.importe;
                 }
             }
-            // Histórico (3 meses anteriores)
             else if (fechaMs >= tsTresMesesAtras && fechaMs < tsInicioMesActual) {
                 if (m.importe < 0) {
                     gastosPorConceptoHistorico[conceptoUp] = (gastosPorConceptoHistorico[conceptoUp] || 0) + Math.abs(m.importe);
@@ -3380,89 +3377,82 @@ window.generarAnalisisIA = function(movimientos) {
     const gastos3MesesTotal = Object.values(gastosPorConceptoHistorico).reduce((a, b) => a + b, 0);
     const mediaGastoMensual = gastos3MesesTotal / 3;
 
-    // --- 3. MOTOR ANALÍTICO (ALGORITMOS FINANCIEROS AVANZADOS) ---
+    // --- 3. MOTOR ANALÍTICO (ALGORITMOS FINANCIEROS QUANT) ---
 
-    // A) MODELO DE VELOCIDAD (PACING & BURN RATE)
+    // A) MODELO DE FLUJO DE CAJA (BURN RATE)
     if (ingresosMes > 0) {
         const pctGastado = gastosMes / ingresosMes;
         if (pctGastado > avanceMes + 0.15) {
-            html += `<span class="ai-line">> ⚠️ <span class="ai-alert">RIESGO DE FLUJO DE CAJA:</span> Día ${diaHoy} (${(avanceMes*100).toFixed(0)}% del mes) y ya has quemado el ${(pctGastado*100).toFixed(0)}% de tus ingresos. Frena el gasto para evitar déficit operativo.</span>`;
+            html += `<span class="ai-line">> [🔥 BURN RATE] <span class="ai-alert">ALERTA DE DÉFICIT:</span> Has consumido el ${(pctGastado*100).toFixed(0)}% de tus ingresos, pero el mes solo ha avanzado un ${(avanceMes*100).toFixed(0)}%. Tu velocidad de gasto descapitalizará tus reservas. Frena el consumo.</span>`;
         } else if (pctGastado < avanceMes - 0.10) {
-            const retencion = ((avanceMes - pctGastado)/avanceMes) * 100;
-            html += `<span class="ai-line">> ⚡ <span class="ai-highlight">OPTIMIZACIÓN DE FLUJO:</span> Llevas un ritmo de gasto ${retencion.toFixed(0)}% inferior a lo estadísticamente esperado. Excelente retención de capital.</span>`;
+            html += `<span class="ai-line">> [⚡ FLUJO ÓPTIMO] <span class="ai-highlight">ALTA RETENCIÓN:</span> Consumo ${( ((avanceMes - pctGastado)/avanceMes) * 100 ).toFixed(0)}% por debajo de la media esperada. Capital excedentario detectado. Recomendación: Mover a activos de inversión.</span>`;
         } else {
-            html += `<span class="ai-line">> ⚖️ <span class="ai-info">FLUJO EQUILIBRADO:</span> Tu salida de capital está sincronizada con el progreso del mes calendario.</span>`;
+            html += `<span class="ai-line">> [⚖️ FLUJO CAJA] <span class="ai-info">SINCRONIZADO:</span> Velocidad de consumo estable y acorde al calendario.</span>`;
         }
     } else if (gastosMes > 0) {
-         html += `<span class="ai-line">> 📉 <span class="ai-alert">DÉFICIT ACTIVO:</span> Operando sin ingresos este mes. Tasa de quema de reservas actual: ${fmt(gastosMes)}.</span>`;
+         html += `<span class="ai-line">> [📉 ALERTA ROJA] <span class="ai-alert">DÉFICIT ACTIVO:</span> Sin ingresos registrados este mes. Velocidad de quema de ahorros: ${fmt(gastosMes/diaHoy)}/día.</span>`;
     }
 
-    // B) LEY DE PARETO (CONCENTRACIÓN DE GASTO 80/20)
+    // B) DETECCIÓN DE MICRO-FUGAS (GASTOS HORMIGA)
+    if (gastosMenoresA20 > (gastosMes * 0.05) && gastosMenoresA20 > 50) { 
+        const proyeccionAnualFugas = gastosMenoresA20 * 12;
+        const oportunidadInvertida = proyeccionAnualFugas * 1.07; // 7% rentabilidad media SP500
+        html += `<span class="ai-line">> [🐜 MICRO-FUGAS] <span class="ai-info">CAPITAL DRENADO:</span> Has gastado ${fmt(gastosMenoresA20)} en transacciones <20€. Anualizado e invertido al 7%, supone un coste de oportunidad de <span class="ai-highlight">${fmt(oportunidadInvertida)} a 1 año</span>. Optimiza compras compulsivas.</span>`;
+    }
+
+    // C) LEY DE PARETO (CONCENTRACIÓN DE RIESGO 80/20)
     const categoriasOrdenadas = Object.entries(gastosPorConceptoMes).sort((a,b) => b[1] - a[1]);
     if (categoriasOrdenadas.length > 2 && gastosMes > 0) {
-        let sumaTop = 0;
-        let numCatPareto = 0;
-        let nombresCat = [];
+        let sumaTop = 0; let numCatPareto = 0; let nombresCat = [];
         for (let [cat, imp] of categoriasOrdenadas) {
-            sumaTop += imp;
-            numCatPareto++;
-            nombresCat.push(cat);
-            if (sumaTop >= (gastosMes * 0.70)) break; // Buscamos los causantes del ~70-80% del gasto
+            sumaTop += imp; numCatPareto++; nombresCat.push(cat);
+            if (sumaTop >= (gastosMes * 0.70)) break; 
         }
-        // Si menos de la mitad de las categorías causan el 70% del gasto
-        if (numCatPareto <= Math.ceil(categoriasOrdenadas.length / 2)) {
-            html += `<span class="ai-line">> 🎯 <span class="ai-info">ANÁLISIS PARETO:</span> El ${((sumaTop/gastosMes)*100).toFixed(0)}% de tus gastos se concentran en solo ${numCatPareto} categoría(s): ${nombresCat.join(', ')}. Auditar estas partidas tendrá un impacto masivo en tu ahorro.</span>`;
+        if (numCatPareto <= Math.ceil(categoriasOrdenadas.length / 3)) {
+            html += `<span class="ai-line">> [🎯 PARETO V2] <span class="ai-info">CONCENTRACIÓN VULNERABLE:</span> El ${((sumaTop/gastosMes)*100).toFixed(0)}% de tu gasto mensual colapsa en: ${nombresCat.join(', ')}. Reducir un 10% estas partidas tiene más impacto que eliminar el resto.</span>`;
         }
     }
 
-    // C) DETECCIÓN DE ANOMALÍAS DE COMPORTAMIENTO (DESVIACIÓN ESTÁNDAR)
-    let mayorAnomalia = { concepto: '', desvio: 0, imp: 0, media: 0 };
-    for (const [concepto, gastoActual] of Object.entries(gastosPorConceptoMes)) {
-        const mediaHist = (gastosPorConceptoHistorico[concepto] || 0) / 3;
-        // Solo alertamos de desviaciones > 30% en conceptos que superen 30€ de media (para evitar ruido)
-        if (mediaHist > 30 && gastoActual > mediaHist * 1.3) { 
-            const desvio = (gastoActual - mediaHist) / mediaHist;
-            if (desvio > mayorAnomalia.desvio) {
-                mayorAnomalia = { concepto, desvio, imp: gastoActual, media: mediaHist };
-            }
-        }
-    }
-    if (mayorAnomalia.desvio > 0) {
-        const exceso = mayorAnomalia.imp - mayorAnomalia.media;
-        html += `<span class="ai-line">> 🔎 <span class="ai-alert">ANOMALÍA DETECTADA:</span> Fuerte desviación en ${mayorAnomalia.concepto}. Has gastado ${fmt(mayorAnomalia.imp)} (+${fmt(exceso)} sobre tu media histórica de ${fmt(mayorAnomalia.media)}). ¿Gasto aislado o inflación de estilo de vida?</span>`;
-    }
-
-    // D) COSTE DE OPORTUNIDAD E INFLACIÓN (CASH DRAG)
+    // D) DEPRECIACIÓN POR INFLACIÓN (CASH DRAG) VS FONDO EMERGENCIA
     if (mediaGastoMensual > 0) {
-        const mesesCobertura = liquidezTotal / mediaGastoMensual;
-        if (mesesCobertura > 7) {
-            const excesoLiquidez = liquidezTotal - (mediaGastoMensual * 6); // Dejamos 6 meses de seguridad intactos
-            const perdidaInflacion = excesoLiquidez * 0.03; // Suponemos 3% inflación
-            const gananciaInversion = excesoLiquidez * 0.05; // Suponemos 5% interés compuesto
-            if (excesoLiquidez > 1000) {
-                 html += `<span class="ai-line">> 💡 <span class="ai-highlight">ALERTA "CASH-DRAG":</span> Tienes ${fmt(excesoLiquidez)} de liquidez inactiva (sobrante de tu fondo de emergencia de 6 meses). La inflación te roba ~${fmt(perdidaInflacion)} al año. Una cartera conservadora al 5% generaría ~${fmt(gananciaInversion)} anuales extra.</span>`;
+        const cobertura = liquidezTotal / mediaGastoMensual;
+        if (cobertura > 8) {
+            const excesoLiquidez = liquidezTotal - (mediaGastoMensual * 6); 
+            const perdidaInflacion = excesoLiquidez * 0.035; // 3.5% inflación estática
+            if (excesoLiquidez > 2000) {
+                 html += `<span class="ai-line">> [💸 CASH DRAG] <span class="ai-alert">INFLACIÓN DESTRUCTORA:</span> Tienes ${fmt(excesoLiquidez)} inactivos (sobrepasando tu red de seguridad). La inflación te está evaporando silenciosamente <span class="ai-alert">${fmt(perdidaInflacion)} este año</span>. Asigna el capital.</span>`;
             }
-        } else if (mesesCobertura < 2) {
-             html += `<span class="ai-line">> 🛡️ <span class="ai-alert">RIESGO DE LIQUIDEZ:</span> Tu fondo de emergencia cubre solo ${mesesCobertura.toFixed(1)} meses. Riesgo alto ante imprevistos. Prioriza la acumulación de capital líquido.</span>`;
+        } else if (cobertura < 3) {
+             html += `<span class="ai-line">> [🛡️ RIESGO SISTÉMICO] <span class="ai-alert">FONDO DE EMERGENCIA CRÍTICO:</span> Tu liquidez solo soporta ${cobertura.toFixed(1)} meses sin ingresos. Nivel de exposición extremo. Prioridad ABSOLUTA: Acumular efectivo hasta los 6 meses.</span>`;
         }
     }
 
-    // E) PROYECCIÓN DE RIQUEZA AL 5% (INTERÉS COMPUESTO)
+    // E) ALGORITMO QUANT: PREVISIÓN FIRE (INDEPENDENCIA FINANCIERA)
     const ahorroMensualProyectado = ingresosMes - gastosMes;
-    if (ahorroMensualProyectado > 100 && ingresosMes > 0 && patrimonioTotal > 0) {
-        // Fórmula de valor futuro con aportaciones periódicas
-        const tasaMensual = Math.pow(1 + 0.05, 1/12) - 1;
-        const meses10Años = 120;
+    if (ahorroMensualProyectado > 150 && ingresosMes > 0 && inversionTotal > 0 && mediaGastoMensual > 0) {
+        const objetivoFIRE = mediaGastoMensual * 300; // Regla del 4% (25 veces gasto anual)
+        const capitalFaltante = objetivoFIRE - (inversionTotal + liquidezTotal);
         
-        const valorFuturoCapital = patrimonioTotal * Math.pow(1 + tasaMensual, meses10Años);
-        const valorFuturoAportaciones = ahorroMensualProyectado * ((Math.pow(1 + tasaMensual, meses10Años) - 1) / tasaMensual);
-        const patrimonioProyectado = valorFuturoCapital + valorFuturoAportaciones;
-        
-        html += `<span class="ai-line">> 📈 <span class="ai-info">MODELO PREDICTIVO (10 AÑOS):</span> Si inviertes tu patrimonio y mantienes este ritmo de ahorro (${fmt(ahorroMensualProyectado)}/mes) a un 5% de rentabilidad anualizada, tu patrimonio bruto alcanzará <span class="ai-highlight">${fmt(patrimonioProyectado)}</span> en una década.</span>`;
+        if (capitalFaltante > 0) {
+            // Ecuación logarítmica para prever años hasta la independencia (6% retorno real)
+            const r = 0.06 / 12; 
+            const A = ahorroMensualProyectado;
+            const V = inversionTotal + liquidezTotal;
+            const P = objetivoFIRE;
+            
+            const mesesParaFIRE = Math.log((P * r + A) / (V * r + A)) / Math.log(1 + r);
+            const aniosParaFIRE = (mesesParaFIRE / 12).toFixed(1);
+            
+            html += `<span class="ai-line">> [🚀 PROYECCIÓN FIRE] <span class="ai-highlight">VECTOR DE LIBERTAD:</span> A este ritmo de ahorro (${fmt(ahorroMensualProyectado)}/mes) e inversión (6% real), alcanzarás tu Independencia Financiera (${fmt(objetivoFIRE)}) en exactamente <span style="font-size:16px; text-shadow:0 0 10px #39ff14;">${aniosParaFIRE} años</span>. Mantén el rumbo.</span>`;
+        } else {
+            html += `<span class="ai-line">> [👑 ESTADO FIRE] <span class="ai-highlight">INDEPENDENCIA ABSOLUTA:</span> Tu patrimonio supera las 25x de tus gastos. Tu capital genera suficiente gravedad para sostener tu nivel de vida de por vida.</span>`;
+        }
+    } else if (ahorroMensualProyectado > 0 && ingresosMes > 0 && inversionTotal === 0) {
+         html += `<span class="ai-line">> [📉 ESTANCAMIENTO] <span class="ai-info">ALERTA DE PATRIMONIO:</span> Estás ahorrando pero no invirtiendo. Tu riqueza no escalará sin el interés compuesto. Capital pasivo detectado.</span>`;
     }
 
     if (html === '') {
-        html += `<span class="ai-line">> 📊 <span class="ai-info">RECOPILANDO MATRIZ DE DATOS...</span> El modelo requiere un mayor volumen de movimientos para generar predicciones probabilísticas de alto nivel.</span>`;
+        html += `<span class="ai-line">> [🧠 RED NEURONAL] <span class="ai-info">RECOPILANDO MATRICES...</span> El modelo requiere más datos históricos para generar previsiones probabilísticas de grado institucional.</span>`;
     }
 
     html += `<span class="blink-cursor">_</span>`;
