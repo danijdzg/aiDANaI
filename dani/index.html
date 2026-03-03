@@ -2550,6 +2550,14 @@ body.modo-caja-fuerte .btn-ojo {
                             <div class="patri-col"><span class="kpi-label"><span class="material-icons freedom-icon">flag</span> LIBERTAD</span><span class="green-val-freedom" id="d-libertad">0.00%</span></div>
                         </div>
                     </div>
+
+                    <button onclick="abrirSimulador()" style="width: 100%; margin-top: 15px; background: rgba(255, 214, 10, 0.1); border: 1px solid var(--c-warning); color: var(--c-warning); padding: 12px; border-radius: 12px; font-weight: 900; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; letter-spacing: 1px; transition: transform 0.2s;">
+                        <span class="material-icons">rocket_launch</span> SIMULAR GASTO (MÁQUINA DEL TIEMPO)
+                    </button>
+
+                    <div id="banner-simulacion" style="display:none; background: #FF2E4D; color: white; padding: 12px; text-align: center; font-weight: bold; border-radius: 12px; margin-top: 15px; cursor: pointer; box-shadow: 0 0 15px rgba(255,46,77,0.4);" onclick="cerrarSimulador()">
+                        ⚠️ MODO SIMULACIÓN ACTIVO: -0 € (Toca para cancelar)
+                    </div>
  			
 				<div id="box-grafico" class="chart-container" style="margin-top: 15px;"><div id="chartPatrimonio" style="width:100%;height:100%;"></div></div>
 				<div class="master-card green-card" style="margin-top: 20px; margin-bottom: 30px;">
@@ -7115,11 +7123,17 @@ window.actualizarDashboard = function() {
             } else if (c.esInversion) {
                 totalInversion += saldo;
             } else {
-                // Si no es nada de lo anterior, es Liquidez (tu dinero en el banco)
-                totalLiquidez += saldo;
-            }
-        });
-    }
+            // Si no es nada de lo anterior, es Liquidez (tu dinero en el banco)
+            totalLiquidez += saldo;
+        }
+    });
+}
+
+// --- 🚀 MÁQUINA DEL TIEMPO (SIMULADOR DE IMPACTO) ---
+if (window.simuladorImpacto && window.simuladorImpacto > 0) {
+    totalLiquidez -= window.simuladorImpacto;
+    totalPatrimonio -= window.simuladorImpacto;
+}
 
     // Actualizar Tarjeta Patrimonio (Azul)
     const elPatri = document.getElementById('d-patri-total');
@@ -9605,6 +9619,67 @@ window.salirAppSeguro = async function() {
     </div>
     <div id="spotlight-results"></div>
 </div>
+<div id="modal-simulador" class="modal-backdrop-pro" style="display: none; z-index: 30000;">
+    <div class="modal-card-pro" style="border: 1px solid var(--c-warning); box-shadow: 0 0 30px rgba(255, 214, 10, 0.2);">
+        <div class="modal-icon-pro">🚀</div>
+        <h3 style="color: var(--c-warning); margin-bottom: 10px; font-weight: 900; letter-spacing: 1px;">MÁQUINA DEL TIEMPO</h3>
+        <p style="margin-bottom: 20px; color: #ccc;">¿Qué pasará con tu salud financiera si haces un desembolso importante hoy?</p>
+        
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+            <label style="display: block; color: var(--c-warning); font-size: 10px; font-weight: 800; margin-bottom: 5px; text-transform: uppercase;">IMPORTE A SIMULAR</label>
+            <input type="number" id="input-simulador" placeholder="Ej: 15000" style="width: 100%; background: transparent; border: none; color: white; font-size: 32px; font-weight: 900; text-align: center; outline: none; font-family: 'Inter', sans-serif;" autocomplete="off">
+        </div>
 
+        <div class="modal-actions-pro">
+            <button class="btn-secondary-pro" onclick="document.getElementById('modal-simulador').style.display='none'">Cancelar</button>
+            <button class="btn-primary-pro" style="background: var(--c-warning); color: #000;" onclick="activarSimulador()">Simular</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.simuladorImpacto = 0;
+
+    window.abrirSimulador = function() {
+        document.getElementById('input-simulador').value = '';
+        document.getElementById('modal-simulador').style.display = 'flex';
+        setTimeout(() => document.getElementById('input-simulador').focus(), 100);
+    };
+
+    window.activarSimulador = function() {
+        const input = document.getElementById('input-simulador').value;
+        const cantidad = parseFloat(input);
+        
+        if (isNaN(cantidad) || cantidad <= 0) {
+            if(window.mostrarNotificacion) window.mostrarNotificacion('⚠️ Introduce un importe válido', 'warning');
+            return;
+        }
+
+        window.simuladorImpacto = cantidad;
+        document.getElementById('modal-simulador').style.display = 'none';
+        
+        // Mostrar el banner rojo indicando peligro
+        const banner = document.getElementById('banner-simulacion');
+        banner.style.display = 'block';
+        banner.innerHTML = `⚠️ MODO SIMULACIÓN ACTIVO: -${new Intl.NumberFormat('es-ES').format(cantidad)} € (Toca para apagar)`;
+        
+        // Recalcular toda la app con la trampa matemática
+        window.actualizarDashboard();
+        
+        if(window.mostrarNotificacion) window.mostrarNotificacion('🚀 Viajando en el tiempo...', 'info');
+        if(typeof vibrar === 'function') vibrar('tecla');
+    };
+
+    window.cerrarSimulador = function() {
+        window.simuladorImpacto = 0;
+        document.getElementById('banner-simulacion').style.display = 'none';
+        
+        // Devolvemos la app a la realidad
+        window.actualizarDashboard();
+        
+        if(window.mostrarNotificacion) window.mostrarNotificacion('✅ Simulación terminada', 'success');
+        if(typeof vibrar === 'function') vibrar('tecla');
+    };
+</script>
 </body>
 </html>
