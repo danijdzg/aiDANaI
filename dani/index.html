@@ -2308,7 +2308,33 @@ body.modo-caja-fuerte .btn-ojo {
     color: #fff; 
     box-shadow: 0 0 10px #ff3b30;
 }
-
+/* =========================================
+   SPOTLIGHT FINANCIERO (BUSCADOR GLOBAL)
+   ========================================= */
+#spotlight-modal {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); 
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    z-index: 99999; display: flex; flex-direction: column; align-items: center; padding-top: 8vh;
+    opacity: 0; visibility: hidden; transition: all 0.3s ease;
+}
+#spotlight-modal.active { opacity: 1; visibility: visible; }
+.spotlight-close { 
+    position: absolute; top: 20px; right: 20px; color: #fff; background: none; 
+    border: none; font-size: 32px; cursor: pointer; transition: transform 0.2s;
+}
+.spotlight-close:active { transform: scale(0.8); }
+.spotlight-input-container { width: 90%; max-width: 600px; position: relative; }
+.spotlight-input { 
+    width: 100%; background: rgba(30, 30, 30, 0.9); border: 2px solid var(--c-accent); color: #fff; 
+    font-size: 20px; padding: 15px 20px 15px 50px; border-radius: 15px; outline: none; 
+    box-shadow: 0 10px 30px rgba(191, 90, 242, 0.2); box-sizing: border-box;
+}
+.spotlight-input:focus { box-shadow: 0 10px 40px rgba(191, 90, 242, 0.5); }
+.spotlight-icon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--c-accent); font-size: 28px; }
+#spotlight-results { width: 90%; max-width: 600px; margin-top: 20px; max-height: 65vh; overflow-y: auto; padding-bottom: 20px; }
+.spotlight-resumen { background: rgba(191, 90, 242, 0.15); border: 1px solid var(--c-accent); padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: center; }
+.spotlight-item { background: rgba(20, 20, 20, 0.9); border-bottom: 1px solid #333; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -2373,6 +2399,10 @@ body.modo-caja-fuerte .btn-ojo {
     <div class="app-layout">
 <header>
 <div class="top-right-controls">
+        <button class="btn-ojo" onclick="abrirSpotlight()" title="Buscador Inteligente">
+            <span class="material-icons" style="font-size: 16px;">search</span>
+        </button>
+        
         <button id="btn-caja-fuerte" class="btn-ojo" onclick="toggleCajaFuerte()" title="Ocultar saldos">
             <span class="material-icons" id="icono-ojo" style="font-size: 16px;">visibility</span>
         </button>
@@ -9454,6 +9484,106 @@ window.salirAppSeguro = async function() {
     }
 };
 
+// ==========================================
+    // 🔍 SPOTLIGHT FINANCIERO (BUSCADOR GLOBAL)
+    // ==========================================
+    window.abrirSpotlight = function() {
+        document.getElementById('spotlight-modal').classList.add('active');
+        document.getElementById('spotlight-input').value = '';
+        document.getElementById('spotlight-results').innerHTML = '';
+        // Enfocamos el teclado automáticamente tras un instante
+        setTimeout(() => document.getElementById('spotlight-input').focus(), 100);
+    };
+
+    window.cerrarSpotlight = function() {
+        document.getElementById('spotlight-modal').classList.remove('active');
+    };
+
+    window.buscarSpotlight = function(texto) {
+        const resultadosDiv = document.getElementById('spotlight-results');
+        if (!texto || texto.length < 2) {
+            resultadosDiv.innerHTML = ''; // Si hay menos de 2 letras, limpiamos
+            return;
+        }
+        
+        const busqueda = texto.toLowerCase();
+        
+        // 1. Buscamos en Concepto, Descripción y Beneficiario
+        const encontrados = window.datos.filter(m => 
+            (m.concepto && m.concepto.toLowerCase().includes(busqueda)) ||
+            (m.descripcion && m.descripcion.toLowerCase().includes(busqueda)) ||
+            (m.beneficiario && m.beneficiario.toLowerCase().includes(busqueda))
+        );
+
+        if (encontrados.length === 0) {
+            resultadosDiv.innerHTML = '<div style="color:#888; text-align:center; padding: 20px; font-style: italic;">No se han encontrado movimientos.</div>';
+            return;
+        }
+
+        // 2. Ordenamos los resultados: los más recientes arriba
+        encontrados.sort((a, b) => {
+            const fechaA = a.ts || new Date(a.fecha).getTime();
+            const fechaB = b.ts || new Date(b.fecha).getTime();
+            return fechaB - fechaA;
+        });
+
+        // 3. Calculamos la suma total de ingresos y gastos
+        let totalIngresos = 0;
+        let totalGastos = 0;
+        encontrados.forEach(m => {
+            if (m.importe > 0) totalIngresos += m.importe;
+            else totalGastos += m.importe;
+        });
+
+        const formatea = (num) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(num);
+
+        // 4. Pintamos el cuadro de resumen
+        let html = `
+            <div class="spotlight-resumen">
+                <div style="color: var(--c-text-muted); font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Resumen de "${texto}"</div>
+                <div style="display: flex; justify-content: space-around; font-size: 22px; font-weight: bold;">
+                    <span style="color: #4CAF50; text-shadow: 0 0 10px rgba(76, 175, 80, 0.3);">+${formatea(totalIngresos)}</span>
+                    <span style="color: #ff3b30; text-shadow: 0 0 10px rgba(255, 59, 48, 0.3);">${formatea(totalGastos)}</span>
+                </div>
+                <div style="font-size: 11px; color: #888; margin-top: 8px;">${encontrados.length} movimientos encontrados en tu histórico</div>
+            </div>
+        `;
+
+        // 5. Pintamos la lista de movimientos debajo
+        encontrados.forEach(m => {
+            const colorImporte = m.importe > 0 ? '#4CAF50' : '#ff3b30';
+            const partesFecha = m.fecha.split('-');
+            const fechaFormat = partesFecha.length === 3 ? `${partesFecha[2]}/${partesFecha[1]}/${partesFecha[0].substring(2)}` : m.fecha;
+            
+            html += `
+                <div class="spotlight-item">
+                    <div style="flex: 1; overflow: hidden;">
+                        <div style="font-weight: 600; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
+                            ${m.concepto || ''} ${m.beneficiario ? '• ' + m.beneficiario : ''}
+                        </div>
+                        <div style="color: #888; font-size: 11px; margin-top: 3px;">
+                            ${fechaFormat} | ${m.cuenta || ''}
+                        </div>
+                    </div>
+                    <div style="color: ${colorImporte}; font-weight: bold; font-size: 15px; margin-left: 10px;">
+                        ${m.importe > 0 ? '+' : ''}${formatea(m.importe)}
+                    </div>
+                </div>
+            `;
+        });
+
+        resultadosDiv.innerHTML = html;
+    };
 </script>
+
+<div id="spotlight-modal">
+    <button class="spotlight-close" onclick="cerrarSpotlight()"><span class="material-icons">close</span></button>
+    <div class="spotlight-input-container">
+        <span class="material-icons spotlight-icon">search</span>
+        <input type="text" id="spotlight-input" class="spotlight-input" placeholder="Buscar concepto, tienda..." oninput="buscarSpotlight(this.value)" autocomplete="off">
+    </div>
+    <div id="spotlight-results"></div>
+</div>
+
 </body>
 </html>
