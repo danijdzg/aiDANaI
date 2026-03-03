@@ -2560,7 +2560,7 @@ body.modo-caja-fuerte .btn-ojo {
                     </div>
  			
 				<div id="box-grafico" class="chart-container" style="margin-top: 15px;"><div id="chartPatrimonio" style="width:100%;height:100%;"></div></div>
-				<div class="master-card green-card" style="margin-top: 20px; margin-bottom: 30px;">
+				<div class="master-card green-card" style="margin-top: 20px; margin-bottom: 20px;">
                     <div class="card-header">
                         <span class="card-title" style="color: var(--c-success)!important">SCORING FINANCIERO</span>
                     </div>
@@ -2572,6 +2572,16 @@ body.modo-caja-fuerte .btn-ojo {
                         </div>
                     </div>
                 </div>	
+
+                <div class="master-card" style="margin-top: 0px; margin-bottom: 30px; border-color: #BF5AF2; box-shadow: 0 8px 25px rgba(191, 90, 242, 0.1);">
+                    <div class="card-header" style="border-bottom: none;">
+                        <span class="card-title" style="color: #BF5AF2!important">🚀 PROYECTOR F.I.R.E.</span>
+                        <div style="font-size:11px; color:#aaa; text-align:center; margin-top:5px; font-weight:600;" id="fire-subtitle">Calculando intersección de libertad...</div>
+                    </div>
+                    <div class="chart-container visible" style="width: 100%; height: 260px; border: none; background: transparent; box-shadow: none; padding: 0; margin: 0;">
+                        <div id="chart-FIRE" style="width: 100%; height: 100%;"></div>
+                    </div>
+                </div>
 				<div class="ai-terminal" style="margin-top: 25px; margin-bottom: 30px;">
     <div class="ai-header">
         <span>> ANALISIS IA</span>
@@ -7212,26 +7222,33 @@ if (window.simuladorImpacto && window.simuladorImpacto > 0) {
     animarValor('d-libertad', pctLibertad, '', '%', 2);
 
     // C) AHORRO ESTRUCTURAL (Tasa media de ahorro del último año)
-    let tasaAhorroEstructural = 0;
-    if (ingresoTotalUltimoAno > 0) {
-        tasaAhorroEstructural = ((ingresoTotalUltimoAno - gastoTotalUltimoAno) / ingresoTotalUltimoAno) * 100;
-    }
+        let tasaAhorroEstructural = 0;
+        let ahorroMensualMedio = 0;
+        if (ingresoTotalUltimoAno > 0) {
+            tasaAhorroEstructural = ((ingresoTotalUltimoAno - gastoTotalUltimoAno) / ingresoTotalUltimoAno) * 100;
+            ahorroMensualMedio = (ingresoTotalUltimoAno - gastoTotalUltimoAno) / 12;
+        }
 
-    // 8. RENDERIZADO DE GRÁFICOS
-    if (typeof renderizarGraficoEvolucion === 'function') {
-        renderizarGraficoEvolucion(datosUsuario);
-    }
-    
-    // Pentágono de Scoring (Ahora usa la tasa estructural estable)
-    if (typeof renderizarRadarScoring === 'function') {
-        renderizarRadarScoring({
-            meses: mesesCobertura,
-            tasaAhorro: tasaAhorroEstructural, // <--- AQUÍ ESTABA EL ERROR (antes usaba la del mes)
-            inversiones: totalInversion,
-            patrimonio: totalPatrimonio || 1,
-            libertad: pctLibertad
-        });
-    }
+        // 8. RENDERIZADO DE GRÁFICOS
+        if (typeof renderizarGraficoEvolucion === 'function') {
+            renderizarGraficoEvolucion(datosUsuario);
+        }
+
+        // 🗺️ Proyector FIRE (El Mapa del Tesoro)
+        if (typeof renderizarProyectorFIRE === 'function') {
+            renderizarProyectorFIRE(totalLiquidez + totalInversion, ahorroMensualMedio, gastoMensualMedio);
+        }
+
+        // Pentágono de Scoring
+        if (typeof renderizarRadarScoring === 'function') {
+            renderizarRadarScoring({
+                meses: mesesCobertura,
+                tasaAhorro: tasaAhorroEstructural,
+                inversiones: totalInversion,
+                patrimonio: totalPatrimonio || 1,
+                libertad: pctLibertad
+            });
+        }
 
     // Análisis IA (Llamamos al cerebro nuevo)
     if (typeof generarAnalisisIA === 'function') {
@@ -9680,6 +9697,123 @@ window.salirAppSeguro = async function() {
         if(window.mostrarNotificacion) window.mostrarNotificacion('✅ Simulación terminada', 'success');
         if(typeof vibrar === 'function') vibrar('tecla');
     };
+// ==========================================
+    // 🗺️ PROYECTOR FIRE PREDICTIVO (NICHO 2)
+    // ==========================================
+    window.renderizarProyectorFIRE = function(totalCapital, ahorroMensual, gastoMensual) {
+        const container = document.getElementById('chart-FIRE');
+        const subtitulo = document.getElementById('fire-subtitle');
+        if (!container) return;
+
+        if (window.echartFIRE) {
+            window.echartFIRE.dispose();
+        }
+        window.echartFIRE = echarts.init(container);
+
+        // Seguridad: Si hay déficit o no hay capacidad de ahorro, no se puede predecir
+        if (gastoMensual <= 0 || ahorroMensual <= 0) {
+            subtitulo.innerText = "Tasa de ahorro negativa o insuficiente para proyectar.";
+            subtitulo.style.color = "#FF2E4D";
+            container.innerHTML = '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:#666; font-size:12px; text-align:center; padding:20px; font-weight:bold;">Aumenta tus ingresos por encima de tus gastos para generar la gravedad necesaria para escapar del sistema.</div>';
+            return;
+        }
+
+        const objetivoFIRE = gastoMensual * 300; // Regla del 4% (25 años de gastos)
+        const interesAnualEstimado = 0.06; // 6% anual de rendimiento del mercado (descontando inflación)
+        const interesMensual = interesAnualEstimado / 12;
+
+        let capitalSimulado = totalCapital > 0 ? totalCapital : 0;
+        let meses = 0;
+        const maxMeses = 12 * 45; // Tope de 45 años de proyección
+
+        let datosCapital = [];
+        let datosObjetivo = [];
+        let fechasX = [];
+
+        let fechaActual = new Date();
+        const anoActual = fechaActual.getFullYear();
+
+        // Calcular la proyección mes a mes (Interés compuesto)
+        while (capitalSimulado < objetivoFIRE && meses <= maxMeses) {
+            if (meses % 12 === 0) { // Guardamos un punto en el gráfico cada año
+                fechasX.push(anoActual + (meses / 12));
+                datosCapital.push(Math.round(capitalSimulado));
+                datosObjetivo.push(Math.round(objetivoFIRE));
+            }
+            capitalSimulado = capitalSimulado * (1 + interesMensual) + ahorroMensual;
+            meses++;
+        }
+
+        // Punto de Impacto Final (El día de la Libertad)
+        if (meses <= maxMeses) {
+            const anoFinal = anoActual + (meses / 12);
+            fechasX.push(anoFinal.toFixed(1) + " FIRE");
+            datosCapital.push(Math.round(capitalSimulado));
+            datosObjetivo.push(Math.round(objetivoFIRE));
+            
+            const anosFIRE = (meses / 12).toFixed(1);
+            subtitulo.innerHTML = `Intersección de Libertad en <strong style="color:#BF5AF2; font-size:14px; text-shadow: 0 0 10px rgba(191, 90, 242, 0.6);">${anosFIRE} años</strong>`;
+        } else {
+            subtitulo.innerText = `Al ritmo actual, la libertad financiera está fuera del rango vital (>45 años).`;
+            subtitulo.style.color = "#FFD60A";
+        }
+
+        const formatea = (num) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(num);
+
+        const option = {
+            backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'axis',
+                backgroundColor: 'rgba(0,0,0,0.9)',
+                borderColor: '#BF5AF2',
+                textStyle: { color: '#fff' },
+                valueFormatter: (value) => formatea(value)
+            },
+            grid: { left: '15%', right: '5%', top: '10%', bottom: '15%' },
+            xAxis: {
+                type: 'category',
+                boundaryGap: false,
+                data: fechasX,
+                axisLabel: { color: '#888', fontSize: 10, fontWeight: 'bold' },
+                axisLine: { lineStyle: { color: '#333' } }
+            },
+            yAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: '#222', type: 'dashed' } },
+                axisLabel: { 
+                    color: '#888', fontSize: 9,
+                    formatter: (value) => (value >= 1000) ? (value / 1000) + 'k' : value
+                }
+            },
+            series: [
+                {
+                    name: 'Tu Capital',
+                    type: 'line',
+                    data: datosCapital,
+                    smooth: true,
+                    symbol: 'none',
+                    lineStyle: { color: '#BF5AF2', width: 3, shadowColor: 'rgba(191, 90, 242, 0.5)', shadowBlur: 10 },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(191, 90, 242, 0.4)' },
+                            { offset: 1, color: 'rgba(191, 90, 242, 0)' }
+                        ])
+                    },
+                    z: 2
+                },
+                {
+                    name: 'Objetivo FIRE (25x)',
+                    type: 'line',
+                    data: datosObjetivo,
+                    symbol: 'none',
+                    lineStyle: { color: '#FFD60A', width: 2, type: 'dashed' },
+                    z: 1
+                }
+            ]
+        };
+
+        window.echartFIRE.setOption(option);
+    };	
 </script>
 </body>
 </html>
