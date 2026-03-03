@@ -4299,7 +4299,16 @@ function renderizar() {
         if (campo === 'ts') {
             const valA = a.ts || 0;
             const valB = b.ts || 0;
-            return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
+            if (valA !== valB) {
+                return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
+            }
+            
+            // LÓGICA DE EXTRACTO BANCARIO (Mismo día y cuenta)
+            if (a.cuenta !== b.cuenta) return a.cuenta.localeCompare(b.cuenta);
+            
+            // Invertimos el orden visual: El último movimiento calculado (saldo final) queda arriba
+            // y la resta hacia abajo cuadra a la perfección.
+            return window.ordenActivo.asc ? (b.importe - a.importe) : (a.importe - b.importe);
         }
         if(campo === 'detalle') campo = 'descripcion'; 
         
@@ -5268,7 +5277,12 @@ function recalcularSaldosGlobal() {
     if (!window.datos || window.datos.length === 0) return;
 
     // 1. Ordenamos cronológicamente (Vital para que el saldo tenga sentido histórico)
-    window.datos.sort((a, b) => a.ts - b.ts);
+    window.datos.sort((a, b) => {
+        if (a.ts !== b.ts) return a.ts - b.ts;
+        if (a.cuenta !== b.cuenta) return a.cuenta.localeCompare(b.cuenta);
+        // El motor calcula ingresos primero (mayor a menor) para construir el saldo
+        return b.importe - a.importe; 
+    });
 
     // 2. Reiniciamos los saldos en la configuración
     let saldosTemporales = {};
