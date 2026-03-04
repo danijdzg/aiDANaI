@@ -2416,6 +2416,14 @@ body.modo-caja-fuerte .btn-ojo {
 .green-bg { background-color: #30D158; box-shadow: 0 4px 15px rgba(48, 209, 88, 0.6); }
 .blue-bg { background-color: #0A84FF; box-shadow: 0 4px 15px rgba(10, 132, 255, 0.6); }
 .red-bg { background-color: #FF3B30; box-shadow: 0 4px 15px rgba(255, 59, 48, 0.6); }
+/* --- ESTILOS DEL SEMÁFORO Y NUEVOS ICONOS --- */
+.status-indicator {
+    width: 12px; height: 12px; border-radius: 50%;
+    background-color: #FF3B30; box-shadow: 0 0 8px #FF3B30; transition: 0.3s;
+}
+.status-indicator.green { background-color: #30D158; box-shadow: 0 0 8px #30D158; }
+.status-indicator.orange { background-color: #FF9F0A; box-shadow: 0 0 8px #FF9F0A; }
+
 </style>
 </head>
 <body>
@@ -2479,27 +2487,34 @@ body.modo-caja-fuerte .btn-ojo {
 
     <div class="app-layout">
 <header>
-    <div class="header-ultra-compact" style="display: flex; justify-content: space-between; align-items: center; width: 100%; overflow-x: auto;">
+    <div class="header-ultra-compact">
         
-        <div class="h-group">
+        <div class="h-group" style="display: flex; align-items: center; gap: 8px;">
+            <div id="semaforo-dot" style="width: 12px; height: 12px; border-radius: 50%; background-color: #4CAF50; box-shadow: 0 0 8px #4CAF50; transition: background-color 0.3s ease; flex-shrink: 0;"></div>
+            
+            <span id="semaforo-text" style="display: none !important;"></span>
+            <div id="semaforo-warning" style="display: none !important;"></div>
+
             <button id="btn-identity-toggle" class="btn-ciclo green-bg" onclick="toggleUsuario()">DN</button>
         </div>
 
         <div class="h-group h-center">
-            <button class="btn-mini-head" id="mode-local" onclick="cambiarModo('local')">
+            <button class="btn-mini-head tool-yellow" id="mode-local" onclick="cambiarModo('local')">
                 <span class="material-icons">folder</span>
             </button>
-            <button class="btn-mini-head" id="mode-cloud" onclick="cambiarModo('cloud')">
+            <button class="btn-mini-head tool-blue" id="mode-cloud" onclick="cambiarModo('cloud')">
                 <span class="material-icons">cloud</span>
             </button>
+            
             <input type="file" id="file-input" accept=".xlsx, .xls" style="display: none;">
-            <button id="btn-load-local" class="btn-mini-head" onclick="document.getElementById('file-input').click()">
+            
+            <button id="btn-load-local" class="btn-mini-head tool-purple" onclick="document.getElementById('file-input').click()">
                 <span class="material-icons">upload</span>
             </button>
-            <button id="btn-load-cloud" class="btn-mini-head" style="display:none" onclick="iniciarCargaNube()">
+            <button id="btn-load-cloud" class="btn-mini-head tool-blue" style="display:none" onclick="iniciarCargaNube()">
                 <span class="material-icons">cloud_sync</span>
             </button>
-            <button id="btn-guardar" class="btn-mini-head" onclick="guardarUniversal()" style="display:none">
+            <button id="btn-guardar" class="btn-mini-head tool-green" onclick="guardarUniversal()" style="display:none">
                 <span class="material-icons">save</span>
             </button>
         </div>
@@ -3000,16 +3015,6 @@ body.modo-caja-fuerte .btn-ojo {
     </div>
 </div>
 
-<div id="semaforo-container" style="width: 100%; min-height: 25px; background-color: #000000; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; flex-direction: column; justify-content: center; padding: 4px 0;">
-    <div style="display: flex; align-items: center; justify-content: flex-start; padding-left: 15px; font-size: 10px; font-family: 'Courier New', monospace; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
-        <div id="semaforo-dot" style="width: 10px; height: 10px; border-radius: 50%; background-color: #4CAF50; margin-right: 8px; box-shadow: 0 0 8px #4CAF50; transition: background-color 0.3s ease;"></div>
-        <span id="semaforo-text" style="color: #00ff41; text-shadow: 0 0 5px rgba(0, 255, 65, 0.5);">OneDrive Conectado y Seguro</span>
-    </div>
-    <div id="semaforo-warning" style="display: none; background: rgba(255, 0, 60, 0.9); color: white; margin-top: 4px; padding: 4px 10px; text-align: left; font-size: 11px; font-weight: bold; font-family: 'Inter', sans-serif; border-radius: 4px; width: calc(100% - 30px); margin-left: 15px; box-sizing: border-box;">
-        ⚠️ DESCONECTADO: Tus datos están en peligro. No guardes nada.
-    </div>
-</div>
-
  <script>
 
 	// --- FUNCIÓN UTILIDAD: MOSTRAR TOAST ---
@@ -3050,76 +3055,52 @@ window.mostrarNotificacion = function(mensaje, tipo = 'info') {
         console.info = function() {}; // Silenciamos la información técnica
     }
 // ==========================================
-    // 🛡️ MONITOR MAESTRO DE ESTADO (SENTRY + SEMÁFORO)
-    // Función global unificada para el motor V8
-    // ==========================================
-    window.mostrarEstado = function(mensaje, tipo = 'info') {
-        // 1. Detección inteligente de elementos DOM (soporta HTML antiguo y nuevo)
-        const textoUI = document.getElementById('semaforo-text') || document.getElementById('sentry-text');
-        const dotUI   = document.getElementById('semaforo-dot') || document.getElementById('sync-status');
-        const iconUI  = document.getElementById('sentry-icon'); // Opcional, por retrocompatibilidad
+// 🛡️ MONITOR MAESTRO DE ESTADO (SOLO PUNTO DE COLOR)
+// ==========================================
+window.mostrarEstado = function(mensaje, tipo = 'info') {
+    // 1. Buscamos SOLO el puntito de color, ignoramos cualquier texto
+    const dotUI = document.getElementById('semaforo-dot') || document.getElementById('sync-status') || document.getElementById('connection-status');
 
-        if (!textoUI) {
-            console.warn("Monitor de estado no detectado en el DOM. Mensaje ignorado:", mensaje);
-            return;
-        }
+    if (!dotUI) return; // Si no hay punto en pantalla, no hacemos nada
 
-        // 2. Limpiar animaciones previas para evitar parpadeos
-        if (window.sentryTimeout) clearTimeout(window.sentryTimeout);
+    // 2. Limpiar animaciones previas
+    if (window.sentryTimeout) clearTimeout(window.sentryTimeout);
 
-        // 3. Lógica de colores, texto y estados
-        if (tipo === 'error' || tipo === 'err') {
-            textoUI.innerHTML = '⚠️ ' + mensaje.toUpperCase();
-            textoUI.style.color = '#ff5252'; // Rojo Alerta
-            if (dotUI) { dotUI.style.backgroundColor = '#ff5252'; dotUI.style.boxShadow = '0 0 10px #ff5252'; }
-            if (iconUI) iconUI.innerText = '⚠️';
-            window.estadoConexion = 'error';
-        } 
-        else if (tipo === 'success' || tipo === 'ok') {
-            textoUI.innerHTML = '✅ ' + mensaje.toUpperCase();
-            textoUI.style.color = '#00ff41'; // Verde Éxito
-            if (dotUI) { dotUI.style.backgroundColor = '#4CAF50'; dotUI.style.boxShadow = '0 0 10px #4CAF50'; }
-            if (iconUI) iconUI.innerText = '✅';
-            window.estadoConexion = 'ok';
-        } 
-        else if (tipo === 'loading') {
-            textoUI.innerHTML = '🔄 ' + mensaje.toUpperCase();
-            textoUI.style.color = '#FFD60A'; // Amarillo Trabajo
-            if (dotUI) { dotUI.style.backgroundColor = '#FFD60A'; dotUI.style.boxShadow = '0 0 10px #FFD60A'; }
-            if (iconUI) iconUI.innerText = '🔄';
-            window.estadoConexion = 'cargando';
-            
-            return; // CORTOCIRCUITO: Si está cargando, NO activamos la cuenta atrás de borrado
-        } 
-        else { // Mensajes neutros (info)
-            textoUI.innerHTML = 'ℹ️ ' + mensaje.toUpperCase();
-            textoUI.style.color = '#00B8FF'; // Azul Info
-            if (dotUI) { dotUI.style.backgroundColor = '#00B8FF'; dotUI.style.boxShadow = '0 0 10px #00B8FF'; }
-            if (iconUI) iconUI.innerText = 'ℹ️';
-        }
+    // 3. Lógica pura de colores para el semáforo
+    if (tipo === 'error' || tipo === 'err') {
+        dotUI.style.backgroundColor = '#ff5252'; // Rojo Alerta
+        dotUI.style.boxShadow = '0 0 10px #ff5252';
+        window.estadoConexion = 'error';
+    } 
+    else if (tipo === 'success' || tipo === 'ok') {
+        dotUI.style.backgroundColor = '#4CAF50'; // Verde Éxito
+        dotUI.style.boxShadow = '0 0 10px #4CAF50';
+        window.estadoConexion = 'ok';
+    } 
+    else if (tipo === 'loading') {
+        dotUI.style.backgroundColor = '#FFD60A'; // Amarillo Trabajo
+        dotUI.style.boxShadow = '0 0 10px #FFD60A';
+        window.estadoConexion = 'cargando';
+        return; // No iniciamos cuenta atrás si está trabajando
+    } 
+    else { 
+        dotUI.style.backgroundColor = '#00B8FF'; // Azul Info
+        dotUI.style.boxShadow = '0 0 10px #00B8FF';
+    }
 
-        // 4. Protocolo de "Retorno a la Calma" (Vuelve a estado seguro tras 4 segundos)
-        if (tipo !== 'error' && tipo !== 'loading') {
-            window.sentryTimeout = setTimeout(() => {
-                const enNube = (window.modoNube || (typeof window.oneDrive !== 'undefined' && window.oneDrive.msalInstance && window.oneDrive.msalInstance.getAllAccounts().length > 0));
-                
-                // Restauramos el texto al estado de conexión actual
-                textoUI.innerHTML = enNube ? '🛡️ NUBE BLINDADA' : '💾 MODO LOCAL SEGURO';
-                textoUI.style.color = '#00ff41'; // Verde de sistema sano
-                
-                // Restauramos el punto (Semáforo)
-                if (dotUI) {
-                    dotUI.style.backgroundColor = '#4CAF50';
-                    dotUI.style.boxShadow = '0 0 10px #4CAF50';
-                }
-                if (iconUI) iconUI.innerText = '🛡️';
-                
-            }, 4000);
-        }
-    };
+    // 4. Retorno a la Calma (Vuelve a verde tras 4 segundos)
+    if (tipo !== 'error' && tipo !== 'loading') {
+        window.sentryTimeout = setTimeout(() => {
+            if (dotUI) {
+                dotUI.style.backgroundColor = '#4CAF50';
+                dotUI.style.boxShadow = '0 0 10px #4CAF50';
+            }
+        }, 4000);
+    }
+};
 
-    // Alias para evitar que otras funciones externas rompan al llamar al nombre viejo
-    window.showToast = window.mostrarEstado;	
+// Alias para evitar que otras funciones externas rompan
+window.showToast = window.mostrarEstado;
 /* ============================================================
    🚀 SPACE ENGINE V2 — Súper Ligero y Espectacular
    ============================================================ */
@@ -3889,21 +3870,19 @@ const Security = {
     });
 	}
 
-    function cambiarModo(modo) {
+   function cambiarModo(modo) {
         modoNube = (modo === 'cloud');
         
-        // Cambio visual de los botones (Gris vs Azul)
-        document.getElementById('mode-local').className = modoNube ? 'source-option' : 'source-option active';
-        document.getElementById('mode-cloud').className = modoNube ? 'source-option active cloud' : 'source-option';
+        // 🐛 FIX: Mantenemos tus clases perfectas y solo añadimos 'active' para iluminar el seleccionado
+        document.getElementById('mode-local').className = modoNube ? 'btn-mini-head tool-yellow' : 'btn-mini-head tool-yellow active';
+        document.getElementById('mode-cloud').className = modoNube ? 'btn-mini-head tool-blue active' : 'btn-mini-head tool-blue';
         
-        // Mostrar/Ocultar botones de acción
+        // Mostrar/Ocultar botones de acción según el modo
         document.getElementById('btn-load-local').style.display = modoNube ? 'none' : 'flex';
         document.getElementById('btn-load-cloud').style.display = modoNube ? 'flex' : 'none';
         
         // El botón de guardar cambia según el modo
         if (modoNube) {
-            // En la nube se guarda automático (o con el botón universal si prefieres dejarlo visible)
-            // En tu código original se ocultaba, pero si quieres forzar guardado manual, puedes cambiar 'none' a 'flex'
             const btnGuardar = document.getElementById('btn-guardar');
             if (btnGuardar) btnGuardar.style.display = 'none'; 
         } else {
@@ -3911,10 +3890,6 @@ const Security = {
             if (btnGuardar) btnGuardar.style.display = 'flex';
         }
         
-        // --- CORRECCIÓN: NO BORRAMOS LOS DATOS AQUÍ ---
-        // Antes había una línea "datos = []" que borraba todo al cambiar de modo.
-        // La hemos quitado para que lo que cargues de la nube SE QUEDE en pantalla.
-
         renderizar();
         actualizarDashboard();
     }
@@ -9382,15 +9357,6 @@ if (typeof window.echartsPatchAplicado === 'undefined') {
 document.addEventListener('DOMContentLoaded', () => {
     window.AppInitializer.iniciar();
 });
-
-// 1. INYECTAR EL SEMÁFORO EN EL ENCABEZADO LIMPIAMENTE
-    setTimeout(() => {
-        const cabecera = document.querySelector('header');
-        const semaforo = document.getElementById('semaforo-container');
-        if (cabecera && semaforo) {
-            cabecera.appendChild(semaforo);
-        }
-    }, 50);
 
     // 2. LÓGICA DEL SEMÁFORO (UNIFICADA - ver definición principal en window.actualizarSemaforo más abajo)
     // Esta llamada delega en la función única ya definida que acepta ambos conjuntos de aliases.
