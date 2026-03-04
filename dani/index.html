@@ -5074,19 +5074,20 @@ window.cargarParaEditar = function(id) {
         const modal = document.getElementById('modal-manual');
         if (modal) modal.classList.remove('active');
         
-        // 2. Limpieza SEGURA (Si no encuentra la caja, no se rompe)
-    const idsALimpiar = ['m-id', 'm-desc', 'm-importe', 'inpImporte', 'm-concepto', 'm-beneficiario'];
+        // 2. Limpieza SEGURA
+    const idsALimpiar = ['m-id', 'm-desc', 'm-importe', 'm-cantidad', 'm-concepto', 'm-beneficiario'];
     idsALimpiar.forEach(id => {
         const elemento = document.getElementById(id);
         if (elemento) elemento.value = "";
     });
 
-    // Reset del interruptor recurrente
-    const chkRecurrente = document.getElementById('m-es-recurrente');
-    if (chkRecurrente) {
-        chkRecurrente.checked = false;
+    // --- NUEVO: APAGAR INTERRUPTOR RECURRENTE ---
+    const chk = document.getElementById('m-es-recurrente');
+    if (chk) {
+        chk.checked = false;
         document.getElementById('m-opciones-recurrente').style.display = 'none';
     }
+    // --- FIN NUEVO ---
 
     // 3. Ocultar botones extra
         const acciones = document.getElementById('extra-actions');
@@ -5128,27 +5129,28 @@ function generarUUID() {
 // 🛡️ GUARDAR MOVIMIENTO (BLINDADO + FECHA ESPAÑOLA + 8 COLUMNAS)
 // ==========================================
 window.guardarManual = async function() {
-    console.log("--- 🔄 Ejecutando Guardado Manual Blindado ---");
     const btnGuardar = document.getElementById('btn-modal-action');
-    const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
-    const copiaDatosSeguridad = [...window.datos];
+    const originalText = btnGuardar ? btnGuardar.innerHTML : 'GUARDAR';
 
-    try {
-        if (btnGuardar) {
-            btnGuardar.innerHTML = '⏳ Guardando...';
-            btnGuardar.disabled = true;
-            btnGuardar.style.backgroundColor = "#ff9800";
-        }
-        
-        // --- NUEVO: INTERCEPTOR RECURRENTE ---
-        const esRecurrente = document.getElementById('m-es-recurrente') && document.getElementById('m-es-recurrente').checked;
-        if (esRecurrente) {
+    // --- NUEVO: INTERCEPTOR RECURRENTE ---
+    const chkRecurrente = document.getElementById('m-es-recurrente');
+    if (chkRecurrente && chkRecurrente.checked) {
+        if (btnGuardar) btnGuardar.innerHTML = '⏳ GUARDANDO REGLA...';
+        try {
             await window.guardarComoRecurrenteUnificado();
-            return; // Cortamos la operación aquí, no se guarda hoy
+        } catch(e) {
+            console.error(e);
+            if(window.mostrarNotificacion) window.mostrarNotificacion(e.message, "error");
+        } finally {
+            if (btnGuardar) btnGuardar.innerHTML = originalText;
         }
-        // --- FIN INTERCEPTOR ---
+        return; // Cortamos aquí para que NO se anote como movimiento de hoy
+    }
+    // --- FIN INTERCEPTOR ---
 
-        const modoActual = window.modoTransaccionActual || 'gasto';
+    const idExistente = document.getElementById('m-id').value;
+    const modoActual = window.modoTransaccionActual || 'gasto';
+    const fechaCruda = document.getElementById('m-fecha').value;
         const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
 
         const elId = document.getElementById('m-id');
@@ -8619,17 +8621,17 @@ window.pedirConfirmacion = function(titulo, mensaje, icono = "🤔") {
     });
 };
 // === INICIO LÓGICA UNIFICADA RECURRENTES ===
-function alternarRecurrenteUnificado() {
+window.alternarRecurrenteUnificado = function() {
     const estaMarcado = document.getElementById('m-es-recurrente').checked;
     const panelOpciones = document.getElementById('m-opciones-recurrente');
     panelOpciones.style.display = estaMarcado ? 'block' : 'none';
-}
+};
 
-function alternarDiasDiarioUnificado() {
+window.alternarDiasDiarioUnificado = function() {
     const frecuencia = document.getElementById('m-frecuencia-recurrente').value;
     const cajaDias = document.getElementById('m-dias-semana-box');
     cajaDias.style.display = (frecuencia === 'Diario') ? 'block' : 'none';
-}
+};
 
 window.guardarComoRecurrenteUnificado = async function() {
     const tipo = window.modoTransaccionActual || 'gasto';
@@ -8648,12 +8650,13 @@ window.guardarComoRecurrenteUnificado = async function() {
 
     if(!fecha) throw new Error("❌ Falta la FECHA");
     if(!cta) throw new Error("❌ Selecciona una CUENTA");
+    if(tipo === 'traspaso' && !ctaDest) throw new Error("❌ Selecciona CUENTA DESTINO");
     if(!conc && tipo !== 'traspaso') throw new Error("❌ Falta el CONCEPTO");
     if(isNaN(imp) || imp === 0) throw new Error("❌ Importe no válido");
 
     imp = Math.abs(imp);
+    // Gastos en negativo, Ingresos y Traspasos en positivo
     let importeGuardar = (tipo === 'gasto' || tipo === 'pago') ? -imp : imp;
-    if (tipo === 'traspaso') importeGuardar = imp; // En la tabla recurrentes el importe del traspaso se guarda en positivo
 
     let diasStr = "";
     if (frec === 'Diario') {
@@ -8681,12 +8684,12 @@ window.guardarComoRecurrenteUnificado = async function() {
     
     window.datosRecurrentes.push(nuevaRegla);
     
-    // Subir a la nube de manera segura usando tu sistema principal
+    // Subir a la nube de manera segura
     if (typeof window.guardarUniversal === 'function') {
         await window.guardarUniversal();
     }
     
-    window.cerrarModal();
+    if (typeof window.cerrarModal === 'function') window.cerrarModal();
     if (typeof window.cargarVistaRecurrentes === 'function') window.cargarVistaRecurrentes();
     if (typeof window.mostrarEstado === 'function') window.mostrarEstado("✅ Regla fija creada", "success");
     if (typeof window.vibrar === 'function') window.vibrar('success');
