@@ -2962,7 +2962,42 @@ body.modo-caja-fuerte .btn-ojo {
             <label class="input-label-mini">BENEFICIARIO (OPCIONAL)</label>
             <select id="m-beneficiario" class="input-field-cockpit"><option>Selecciona...</option></select>
         </div>
-    </div>
+
+        <div class="cockpit-input-box span-2-cols" style="border: 1px dashed var(--c-accent); background: rgba(191, 90, 242, 0.05);">
+            <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0; cursor: pointer; color: #fff; width: 100%;">
+                <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold;">
+                    <i class="material-icons" style="color: var(--c-accent);">repeat</i> Hacer recurrente
+                </span>
+                <input type="checkbox" id="m-es-recurrente" onchange="alternarRecurrenteUnificado()" style="width: 20px; height: 20px; accent-color: var(--c-accent);">
+            </label>
+            
+            <div id="m-opciones-recurrente" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1);">
+                <label class="input-label-mini">FRECUENCIA DE REPETICIÓN</label>
+                <select id="m-frecuencia-recurrente" onchange="alternarDiasDiarioUnificado()" class="input-field-cockpit" style="margin-bottom: 10px;">
+                    <option value="Mensual">Mensual</option>
+                    <option value="Diario">Diario</option>
+                    <option value="Semanal">Semanal</option>
+                    <option value="Anual">Anual</option>
+                </select>
+                
+                <div id="m-dias-semana-box" style="display: none;">
+                    <label class="input-label-mini">¿QUÉ DÍAS EXACTAMENTE?</label>
+                    <div class="dias-semana-wrapper" style="background: transparent; margin-bottom: 10px;">
+                        <label class="day-check"><input type="checkbox" class="chk-dia-unificado" value="1"><span>L</span></label>
+                        <label class="day-check"><input type="checkbox" class="chk-dia-unificado" value="2"><span>M</span></label>
+                        <label class="day-check"><input type="checkbox" class="chk-dia-unificado" value="3"><span>X</span></label>
+                        <label class="day-check"><input type="checkbox" class="chk-dia-unificado" value="4"><span>J</span></label>
+                        <label class="day-check"><input type="checkbox" class="chk-dia-unificado" value="5"><span>V</span></label>
+                        <label class="day-check"><input type="checkbox" class="chk-dia-unificado" value="6"><span>S</span></label>
+                        <label class="day-check"><input type="checkbox" class="chk-dia-unificado" value="0"><span>D</span></label>
+                    </div>
+                </div>
+                <p style="color: var(--c-warning); font-size: 10px; margin: 0; line-height: 1.3; font-weight: bold;">
+                    ⚠️ Si marcas esto, el importe NO se anotará hoy. Se guardará como regla futura.
+                </p>
+            </div>
+        </div>
+        </div>
 
     <div class="cockpit-footer">
         <div id="extra-actions" style="display:none; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
@@ -5040,14 +5075,20 @@ window.cargarParaEditar = function(id) {
         if (modal) modal.classList.remove('active');
         
         // 2. Limpieza SEGURA (Si no encuentra la caja, no se rompe)
-        const idsALimpiar = ['m-id', 'm-desc', 'm-importe', 'inpImporte', 'm-concepto', 'm-beneficiario'];
-        
-        idsALimpiar.forEach(id => {
-            const elemento = document.getElementById(id);
-            if (elemento) elemento.value = "";
-        });
+    const idsALimpiar = ['m-id', 'm-desc', 'm-importe', 'inpImporte', 'm-concepto', 'm-beneficiario'];
+    idsALimpiar.forEach(id => {
+        const elemento = document.getElementById(id);
+        if (elemento) elemento.value = "";
+    });
 
-        // 3. Ocultar botones extra
+    // Reset del interruptor recurrente
+    const chkRecurrente = document.getElementById('m-es-recurrente');
+    if (chkRecurrente) {
+        chkRecurrente.checked = false;
+        document.getElementById('m-opciones-recurrente').style.display = 'none';
+    }
+
+    // 3. Ocultar botones extra
         const acciones = document.getElementById('extra-actions');
         if (acciones) acciones.style.display = 'none';
 
@@ -5088,10 +5129,8 @@ function generarUUID() {
 // ==========================================
 window.guardarManual = async function() {
     console.log("--- 🔄 Ejecutando Guardado Manual Blindado ---");
-
     const btnGuardar = document.getElementById('btn-modal-action');
     const textoOriginal = btnGuardar ? btnGuardar.innerText : "GUARDAR";
-
     const copiaDatosSeguridad = [...window.datos];
 
     try {
@@ -5100,6 +5139,14 @@ window.guardarManual = async function() {
             btnGuardar.disabled = true;
             btnGuardar.style.backgroundColor = "#ff9800";
         }
+        
+        // --- NUEVO: INTERCEPTOR RECURRENTE ---
+        const esRecurrente = document.getElementById('m-es-recurrente') && document.getElementById('m-es-recurrente').checked;
+        if (esRecurrente) {
+            await window.guardarComoRecurrenteUnificado();
+            return; // Cortamos la operación aquí, no se guarda hoy
+        }
+        // --- FIN INTERCEPTOR ---
 
         const modoActual = window.modoTransaccionActual || 'gasto';
         const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
@@ -8571,7 +8618,80 @@ window.pedirConfirmacion = function(titulo, mensaje, icono = "🤔") {
         btnNo.onclick = () => cerrar(false);
     });
 };
+// === INICIO LÓGICA UNIFICADA RECURRENTES ===
+function alternarRecurrenteUnificado() {
+    const estaMarcado = document.getElementById('m-es-recurrente').checked;
+    const panelOpciones = document.getElementById('m-opciones-recurrente');
+    panelOpciones.style.display = estaMarcado ? 'block' : 'none';
+}
 
+function alternarDiasDiarioUnificado() {
+    const frecuencia = document.getElementById('m-frecuencia-recurrente').value;
+    const cajaDias = document.getElementById('m-dias-semana-box');
+    cajaDias.style.display = (frecuencia === 'Diario') ? 'block' : 'none';
+}
+
+window.guardarComoRecurrenteUnificado = async function() {
+    const tipo = window.modoTransaccionActual || 'gasto';
+    const frec = document.getElementById('m-frecuencia-recurrente').value;
+    const fecha = document.getElementById('m-fecha').value;
+    const cta = document.getElementById('m-cuenta').value;
+    const elDestino = document.getElementById('m-cuenta-destino');
+    const ctaDest = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
+    const conc = document.getElementById('m-concepto').value;
+    const benef = document.getElementById('m-beneficiario').value;
+    const desc = document.getElementById('m-desc').value;
+    
+    let impRaw = document.getElementById('m-cantidad').value || "";
+    impRaw = impRaw.replace('€', '').replace(',', '.').trim();
+    let imp = parseFloat(impRaw);
+
+    if(!fecha) throw new Error("❌ Falta la FECHA");
+    if(!cta) throw new Error("❌ Selecciona una CUENTA");
+    if(!conc && tipo !== 'traspaso') throw new Error("❌ Falta el CONCEPTO");
+    if(isNaN(imp) || imp === 0) throw new Error("❌ Importe no válido");
+
+    imp = Math.abs(imp);
+    let importeGuardar = (tipo === 'gasto' || tipo === 'pago') ? -imp : imp;
+    if (tipo === 'traspaso') importeGuardar = imp; // En la tabla recurrentes el importe del traspaso se guarda en positivo
+
+    let diasStr = "";
+    if (frec === 'Diario') {
+        const checks = document.querySelectorAll('.chk-dia-unificado:checked');
+        const dias = Array.from(checks).map(c => c.value);
+        if (dias.length === 0) throw new Error("❌ Selecciona al menos un día");
+        diasStr = dias.join(',');
+    }
+
+    if(!window.datosRecurrentes) window.datosRecurrentes = [];
+    
+    const nuevaRegla = {
+        id: 'REC-' + Date.now(),
+        fechaProx: fecha,
+        frecuencia: frec,
+        diasSemana: diasStr,
+        cuenta: cta,
+        cuentaDestino: (tipo === 'traspaso') ? ctaDest : "",
+        importe: importeGuardar,
+        concepto: (tipo === 'traspaso') ? 'TRASPASO' : conc,
+        beneficiario: benef,
+        descripcion: desc,
+        tipoRegla: tipo
+    };
+    
+    window.datosRecurrentes.push(nuevaRegla);
+    
+    // Subir a la nube de manera segura usando tu sistema principal
+    if (typeof window.guardarUniversal === 'function') {
+        await window.guardarUniversal();
+    }
+    
+    window.cerrarModal();
+    if (typeof window.cargarVistaRecurrentes === 'function') window.cargarVistaRecurrentes();
+    if (typeof window.mostrarEstado === 'function') window.mostrarEstado("✅ Regla fija creada", "success");
+    if (typeof window.vibrar === 'function') window.vibrar('success');
+};
+// === FIN LÓGICA UNIFICADA RECURRENTES ===
 // --- FUNCIÓN MEJORADA: AGREGAR RECURRENTE (SIN ALERTAS ANTIGUAS) ---
 window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
     // 1. Usar el nuevo modal Premium
