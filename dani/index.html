@@ -3894,7 +3894,6 @@ const Security = {
         actualizarDashboard();
     }
 
-
 // ──────────────────────────────────────────────────────────────────────
 // 🛡️ MOTOR DE SINCRONIZACIÓN BLINDADO (MUTEX & POLLING)
 // ──────────────────────────────────────────────────────────────────────
@@ -4593,49 +4592,104 @@ function renderizar() {
     }
 }
 
-function renderizarUltimosMovimientos() {
+// ==========================================
+// 📊 ÚLTIMOS MOVIMIENTOS (TARJETA COMPLETA 2 LÍNEAS)
+// ==========================================
+window.renderizarUltimosMovimientos = function() {
     const contenedor = document.getElementById('lista-ultimos-movs');
     if (!contenedor) return;
 
-    // Si no hay datos todavía, mostramos un mensaje
+    // 1. Si no hay datos todavía, mostramos un mensaje
     if (!window.datos || window.datos.length === 0) {
         contenedor.innerHTML = '<div style="text-align:center; padding:15px; color:#666; font-size:12px;">No hay movimientos registrados.</div>';
         return;
     }
 
-    // Ordenar todos los movimientos por fecha (del más reciente al más antiguo)
-    const ordenados = [...window.datos].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    // 2. Ordenar todos los movimientos por fecha (del más reciente al más antiguo)
+    // Aplicamos el filtro de propietario (para que no te salgan los de la otra persona si estás en tu perfil)
+    const datosFiltrados = window.datos.filter(m => typeof pasaFiltroPropietario === 'function' ? pasaFiltroPropietario(m) : true);
+    const ordenados = [...datosFiltrados].sort((a, b) => (b.ts || new Date(b.fecha).getTime()) - (a.ts || new Date(a.fecha).getTime()));
     
     // Recortar solo los 5 primeros
     const ultimos5 = ordenados.slice(0, 5);
 
-    // Limpiar la cajita y empezar a dibujar
+    // 3. Limpiar la cajita y empezar a dibujar
     contenedor.innerHTML = '';
-    
     ultimos5.forEach(m => {
-        const esIngreso = m.importe > 0;
-        const colorImporte = esIngreso ? 'var(--c-success)' : '#fff'; // Verde para ingresos, blanco para gastos
-        const colorBorde = esIngreso ? 'var(--c-success)' : 'var(--c-danger)'; // Verde o Rojo para la línea lateral
-        const signo = esIngreso ? '+' : '';
-        const importeFormateado = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(m.importe);
+        // --- COLORES Y SIGNOS ---
+        const esTraspaso = m.tipo === 'traspaso' || (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO'));
+        let colorImporte = '#fff';
+        let colorBorde = 'var(--c-danger)';
+        let signo = '';
         
-        // Formatear fecha (ej: "05 mar")
-        const fechaFormateada = new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-        const cuentaLimpia = (m.cuenta || '').replace('D-', '').replace('N-', '');
+        if (esTraspaso) {
+            colorImporte = 'var(--c-transfer)';
+            colorBorde = 'var(--c-transfer)';
+        } else if (m.importe >= 0) {
+            colorImporte = 'var(--c-success)';
+            colorBorde = 'var(--c-success)';
+            signo = '+';
+        } else {
+            colorImporte = '#fff';
+            colorBorde = 'var(--c-danger)';
+        }
 
+        // --- FORMATEO DE DINERO ---
+        const formateadorDinero = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const importeFormateado = formateadorDinero.format(m.importe) + ' €';
+        
+        let saldoStr = '-';
+        if (m.saldo !== undefined && m.saldo !== null) {
+            saldoStr = formateadorDinero.format(m.saldo) + ' €';
+        } else if (window.mapaCuentas && window.mapaCuentas[m.cuenta]) {
+            saldoStr = formateadorDinero.format(window.mapaCuentas[m.cuenta].saldoActual || 0) + ' €';
+        }
+
+        // --- TEXTOS LIMPIOS Y FECHAS ---
+        const f = new Date(m.ts || m.fecha);
+        const fechaFormateada = isNaN(f.getTime()) ? '?' : f.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).toUpperCase();
+        const cuentaLimpia = (m.cuenta || '').replace('D-', '').replace('N-', '');
+        
+        // Seguridad para no romper el HTML
+        const escapeHTML = (str) => typeof Security !== 'undefined' ? Security.escapeHTML(str) : str;
+        
+        const descStr = m.descripcion || m.detalle || '';
+        let conceptoCompleto = escapeHTML(m.concepto || 'VARIOS');
+        if (descStr) {
+            conceptoCompleto += ` <span style="font-weight:400; color:#aaa;">- ${escapeHTML(descStr)}</span>`;
+        }
+        
+        const benefStr = m.beneficiario ? ` &bull; <span style="color:#FFD60A; opacity:0.9;">${escapeHTML(m.beneficiario)}</span>` : '';
+
+        // --- DIBUJO ESTRUCTURA DE 2 LÍNEAS EXACTAS ---
         contenedor.innerHTML += `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border-left: 3px solid ${colorBorde}; transition: background 0.2s;">
-                <div style="display:flex; flex-direction:column; overflow:hidden;">
-                    <span style="font-size:12px; font-weight:bold; color:#eee; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${m.concepto || 'Sin concepto'}</span>
-                    <span style="font-size:10px; color:#888; text-transform:uppercase;">${fechaFormateada} &bull; ${cuentaLimpia}</span>
-                </div>
-                <div style="font-size:14px; font-weight:900; color:${colorImporte}; white-space:nowrap; padding-left:10px;">
+        <div onclick="if(typeof window.editarMovimiento === 'function') window.editarMovimiento('${m.id}')" 
+             style="cursor:pointer; display:flex; flex-direction:column; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border-left: 3px solid ${colorBorde}; transition: transform 0.1s, background 0.2s; gap: 4px; margin-bottom: 2px;"
+             onmousedown="this.style.transform='scale(0.98)'; this.style.background='rgba(255,255,255,0.08)'" 
+             onmouseup="this.style.transform='scale(1)'; this.style.background='rgba(255,255,255,0.03)'" 
+             onmouseleave="this.style.transform='scale(1)'; this.style.background='rgba(255,255,255,0.03)'">
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
+                <span style="font-size:13px; font-weight:800; color:#eee; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
+                    ${conceptoCompleto}
+                </span>
+                <span style="font-size:14px; font-weight:900; color:${colorImporte}; white-space:nowrap; flex-shrink:0;">
                     ${signo}${importeFormateado}
-                </div>
+                </span>
             </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
+                <span style="font-size:10px; color:#888; text-transform:uppercase; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
+                    ${fechaFormateada} &bull; ${cuentaLimpia}${benefStr}
+                </span>
+                <span style="font-size:11px; font-weight:bold; color:#aaa; white-space:nowrap; flex-shrink:0;">
+                    ${saldoStr}
+                </span>
+            </div>
+        </div>
         `;
     });
-}
+};
 	
 function irPestana(p) {
     // 1. Apagamos todas las pestañas y botones
@@ -9477,85 +9531,137 @@ window.salirAppSeguro = async function() {
         document.getElementById('spotlight-modal').classList.remove('active');
     };
 
-    window.buscarSpotlight = function(texto) {
-        const resultadosDiv = document.getElementById('spotlight-results');
-        if (!texto || texto.length < 2) {
-            resultadosDiv.innerHTML = ''; 
-            return;
+   window.buscarSpotlight = function(texto) {
+    const resultadosDiv = document.getElementById('spotlight-results');
+    if (!texto || texto.length < 2) {
+        resultadosDiv.innerHTML = '';
+        return;
+    }
+    
+    const busqueda = texto.toLowerCase();
+    const listaBusqueda = window.datos || [];
+    
+    // 1. Buscamos de forma segura en las propiedades correctas
+    const encontrados = listaBusqueda.filter(m => {
+        const c = m.concepto ? String(m.concepto).toLowerCase() : '';
+        const d = m.descripcion ? String(m.descripcion).toLowerCase() : '';
+        const b = m.beneficiario ? String(m.beneficiario).toLowerCase() : '';
+        
+        return c.includes(busqueda) || d.includes(busqueda) || b.includes(busqueda);
+    });
+
+    if (encontrados.length === 0) {
+        resultadosDiv.innerHTML = '<div style="color:#888; text-align:center; padding: 20px; font-style: italic;">No se han encontrado movimientos.</div>';
+        return;
+    }
+
+    // 2. Ordenamos: los más recientes arriba
+    encontrados.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+    // 3. Sumar Ingresos y Gastos
+    let totalIngresos = 0;
+    let totalGastos = 0;
+    encontrados.forEach(m => {
+        const importe = parseFloat(m.importe) || 0;
+        if (importe > 0) totalIngresos += importe;
+        else totalGastos += importe;
+    });
+
+    const formatea = (num) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(num);
+
+    // 4. Pintar Resumen
+    let html = `
+    <div class="spotlight-resumen">
+        <div style="color: #aaa; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Resumen de "${texto}"</div>
+        <div style="display: flex; justify-content: space-around; font-size: 22px; font-weight: bold;">
+            <span style="color: var(--c-success); text-shadow: 0 0 10px rgba(57, 255, 20, 0.3);">+${formatea(totalIngresos)}</span>
+            <span style="color: var(--c-danger); text-shadow: 0 0 10px rgba(255, 46, 77, 0.3);">${formatea(totalGastos)}</span>
+        </div>
+        <div style="font-size: 11px; color: #888; margin-top: 8px;">${encontrados.length} movimientos encontrados</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:5px;">
+    `;
+
+    // 5. Pintar la lista de movimientos debajo (CON EL NUEVO DISEÑO PREMIUM)
+    encontrados.forEach(m => {
+        // --- COLORES Y SIGNOS ---
+        const esTraspaso = m.tipo === 'traspaso' || (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO'));
+        let colorImporte = '#fff';
+        let colorBorde = 'var(--c-danger)';
+        let signo = '';
+        
+        if (esTraspaso) {
+            colorImporte = 'var(--c-transfer)';
+            colorBorde = 'var(--c-transfer)';
+        } else if (m.importe >= 0) {
+            colorImporte = 'var(--c-success)';
+            colorBorde = 'var(--c-success)';
+            signo = '+';
+        } else {
+            colorImporte = '#fff';
+            colorBorde = 'var(--c-danger)';
+        }
+
+        // --- FORMATEO DE DINERO ---
+        const formateadorDinero = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const importeFormateado = formateadorDinero.format(m.importe) + ' €';
+        
+        let saldoStr = '-';
+        if (m.saldo !== undefined && m.saldo !== null) {
+            saldoStr = formateadorDinero.format(m.saldo) + ' €';
+        } else if (window.mapaCuentas && window.mapaCuentas[m.cuenta]) {
+            saldoStr = formateadorDinero.format(window.mapaCuentas[m.cuenta].saldoActual || 0) + ' €';
+        }
+
+        // --- TEXTOS LIMPIOS Y FECHAS ---
+        const f = new Date(m.ts || m.fecha);
+        const fechaFormateada = isNaN(f.getTime()) ? '?' : f.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).toUpperCase();
+        const cuentaLimpia = (m.cuenta || '').replace('D-', '').replace('N-', '');
+        
+        // Seguridad para no romper el HTML
+        const escapeHTML = (str) => typeof Security !== 'undefined' ? Security.escapeHTML(str) : str;
+        
+        const descStr = m.descripcion || m.detalle || '';
+        let conceptoCompleto = escapeHTML(m.concepto || 'VARIOS');
+        if (descStr) {
+            conceptoCompleto += ` <span style="font-weight:400; color:#aaa;">- ${escapeHTML(descStr)}</span>`;
         }
         
-        const busqueda = texto.toLowerCase();
-        const listaBusqueda = window.datos || [];
-        
-        // 1. Buscamos de forma segura en las propiedades correctas
-        const encontrados = listaBusqueda.filter(m => {
-            const c = m.concepto ? String(m.concepto).toLowerCase() : '';
-            const d = m.descripcion ? String(m.descripcion).toLowerCase() : '';
-            const b = m.beneficiario ? String(m.beneficiario).toLowerCase() : '';
-            return c.includes(busqueda) || d.includes(busqueda) || b.includes(busqueda);
-        });
+        const benefStr = m.beneficiario ? ` &bull; <span style="color:#FFD60A; opacity:0.9;">${escapeHTML(m.beneficiario)}</span>` : '';
 
-        if (encontrados.length === 0) {
-            resultadosDiv.innerHTML = '<div style="color:#888; text-align:center; padding: 20px; font-style: italic;">No se han encontrado movimientos.</div>';
-            return;
-        }
-
-        // 2. Ordenamos: los más recientes arriba
-        encontrados.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-
-        // 3. Sumar Ingresos y Gastos
-        let totalIngresos = 0;
-        let totalGastos = 0;
-        encontrados.forEach(m => {
-            const importe = parseFloat(m.importe) || 0;
-            if (importe > 0) totalIngresos += importe;
-            else totalGastos += importe;
-        });
-
-        const formatea = (num) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(num);
-
-        // 4. Pintar Resumen
-        let html = `
-            <div class="spotlight-resumen">
-                <div style="color: #aaa; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Resumen de "${texto}"</div>
-                <div style="display: flex; justify-content: space-around; font-size: 22px; font-weight: bold;">
-                    <span style="color: #4CAF50; text-shadow: 0 0 10px rgba(76, 175, 80, 0.3);">+${formatea(totalIngresos)}</span>
-                    <span style="color: #ff3b30; text-shadow: 0 0 10px rgba(255, 59, 48, 0.3);">${formatea(totalGastos)}</span>
-                </div>
-                <div style="font-size: 11px; color: #888; margin-top: 8px;">${encontrados.length} movimientos encontrados</div>
+        // --- DIBUJO ESTRUCTURA DE 2 LÍNEAS EXACTAS ---
+        html += `
+        <div onclick="cerrarSpotlight(); if(typeof window.editarMovimiento === 'function') window.editarMovimiento('${m.id}')" 
+             style="cursor:pointer; display:flex; flex-direction:column; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border-left: 3px solid ${colorBorde}; transition: transform 0.1s, background 0.2s;"
+             onmousedown="this.style.transform='scale(0.98)'; this.style.background='rgba(255,255,255,0.08)'" 
+             onmouseup="this.style.transform='scale(1)'; this.style.background='rgba(255,255,255,0.03)'" 
+             onmouseleave="this.style.transform='scale(1)'; this.style.background='rgba(255,255,255,0.03)'">
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; width: 100%; margin-bottom: 4px;">
+                <span style="font-size:13px; font-weight:800; color:#eee; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
+                    ${conceptoCompleto}
+                </span>
+                <span style="font-size:14px; font-weight:900; color:${colorImporte}; white-space:nowrap; flex-shrink:0;">
+                    ${signo}${importeFormateado}
+                </span>
             </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
+                <span style="font-size:10px; color:#888; text-transform:uppercase; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
+                    ${fechaFormateada} &bull; ${cuentaLimpia}${benefStr}
+                </span>
+                <span style="font-size:11px; font-weight:bold; color:#aaa; white-space:nowrap; flex-shrink:0;">
+                    ${saldoStr}
+                </span>
+            </div>
+        </div>
         `;
+    });
+    
+    html += `</div>`; // Cierra el contenedor flexible
 
-        // 5. Pintar la lista de movimientos debajo (LÓGICA DE FECHAS ARREGLADA)
-        encontrados.forEach(m => {
-            const importe = parseFloat(m.importe) || 0;
-            const colorImporte = importe > 0 ? '#4CAF50' : '#ff3b30';
-            
-            let fechaFormat = "Sin fecha";
-            if (m.ts) {
-                const d = new Date(m.ts);
-                fechaFormat = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + String(d.getFullYear()).slice(-2);
-            }
-            
-            html += `
-                <div class="spotlight-item" onclick="cerrarSpotlight(); window.editarMovimiento('${m.id}')" style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='#222'" onmouseout="this.style.background='rgba(20, 20, 20, 0.9)'">
-                    <div style="flex: 1; overflow: hidden;">
-                        <div style="font-weight: 600; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: #fff;">
-                            ${m.concepto || ''} ${m.beneficiario ? '• ' + m.beneficiario : ''}
-                        </div>
-                        <div style="color: #888; font-size: 11px; margin-top: 3px;">
-                            ${fechaFormat} | ${m.cuenta || ''}
-                        </div>
-                    </div>
-                    <div style="color: ${colorImporte}; font-weight: bold; font-size: 15px; margin-left: 10px;">
-                        ${importe > 0 ? '+' : ''}${formatea(importe)}
-                    </div>
-                </div>
-            `;
-        });
-
-        resultadosDiv.innerHTML = html;
-    };
+    resultadosDiv.innerHTML = html;
+};
 </script>
 
 <div id="spotlight-modal">
