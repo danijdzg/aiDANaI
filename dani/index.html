@@ -7308,21 +7308,37 @@ if (window.simuladorImpacto && window.simuladorImpacto > 0) {
     if (gastoMensualMedio < 1) gastoMensualMedio = 1; 
 
     // Cálculo final de meses de vida (Runway)
-    let mesesCobertura = totalLiquidez / gastoMensualMedio;
-    
-    const elCob = document.getElementById('d-cobertura');
-    if(elCob) {
-        animarValor('d-cobertura', mesesCobertura, '', ' Meses', 1);
-        // Semáforo visual
-        elCob.style.color = mesesCobertura < 3 ? "var(--c-danger)" : (mesesCobertura < 6 ? "var(--c-warning)" : "var(--c-success)");
-    }
+        let mesesCobertura = totalLiquidez / gastoMensualMedio;
+        if (mesesCobertura < 0) mesesCobertura = 0;
+        const elCob = document.getElementById('d-cobertura');
+        if(elCob) {
+            let mesesC = Math.floor(mesesCobertura);
+            let diasC = Math.round((mesesCobertura - mesesC) * 30.44);
+            if (diasC === 30) { mesesC += 1; diasC = 0; } // Ajuste por si el redondeo llega a 30
+            elCob.innerText = `${mesesC} mes${mesesC !== 1 ? 'es' : ''} y ${diasC} día${diasC !== 1 ? 's' : ''}`;
+            elCob.style.fontSize = "19px";
+            // Fijamos el color azul brillante del patrimonio
+            elCob.style.color = "var(--c-primary, #0A84FF)"; 
+        }
 
-    // B) LIBERTAD: (Inversión Total * 4% anual) / Gasto Anual Promedio (Realista)
-    let rentaPasivaAnual = totalInversion * 0.04;
-    let gastoAnualProyectado = gastoMensualMedio * 12;
-    let pctLibertad = (rentaPasivaAnual / gastoAnualProyectado) * 100;
-    
-    animarValor('d-libertad', pctLibertad, '', '%', 2);
+        // B) LIBERTAD: Tiempo que tu patrimonio puede mantener tu nivel de gasto actual
+        let mesesLibertad = totalPatrimonio / gastoMensualMedio;
+        if (mesesLibertad < 0) mesesLibertad = 0;
+        let aniosLib = Math.floor(mesesLibertad / 12);
+        let mesesLib = Math.floor(mesesLibertad % 12);
+
+        // Mantenemos el cálculo original en porcentaje para no romper el Pentágono de Scoring
+        let rentaPasivaAnual = totalInversion * 0.04;
+        let gastoAnualProyectado = gastoMensualMedio * 12;
+        let pctLibertad = (rentaPasivaAnual / gastoAnualProyectado) * 100;
+        
+        const elLib = document.getElementById('d-libertad');
+        if(elLib) {
+            elLib.innerText = `${aniosLib} año${aniosLib !== 1 ? 's' : ''} y ${mesesLib} mes${mesesLib !== 1 ? 'es' : ''}`;
+            elLib.style.fontSize = "19px";
+            // Fijamos el color azul brillante del patrimonio
+            elLib.style.color = "var(--c-primary, #0A84FF)"; 
+        }
 
     // C) AHORRO ESTRUCTURAL (Tasa media de ahorro del último año)
         let tasaAhorroEstructural = 0;
