@@ -6025,101 +6025,100 @@ function renderizarGraficoEvolucion(movimientos) {
     }
     if (boxGrafico) boxGrafico.classList.add('visible');
 
-    // 1. PREPARACIÓN DE DATOS (igual que antes, suavizado por día)
+    // 1. PREPARACIÓN DE DATOS
     const movs = [...movimientos].sort((a, b) => a.ts - b.ts);
     const historiaMap = new Map();
     let saldoAcumulado = 0;
-
     movs.forEach(m => {
         saldoAcumulado += m.importe;
         const fechaKey = new Date(m.ts).toISOString().split('T')[0];
         historiaMap.set(fechaKey, saldoAcumulado);
     });
 
-    const labels     = Array.from(historiaMap.keys());
+    const labels = Array.from(historiaMap.keys());
     const dataPoints = Array.from(historiaMap.values());
 
-    // 2. DESTRUIR INSTANCIA ANTERIOR (ECharts usa dispose())
+    // 2. DESTRUIR INSTANCIA ANTERIOR
     if (window.chartInstance) {
         window.chartInstance.dispose();
     }
 
-    // 3. CREAR GRÁFICO CON ECHARTS (misma estética que antes)
+    // 3. CREAR GRÁFICO (MODO MONTAÑA RUSA Y EFECTO NEÓN)
     window.chartInstance = echarts.init(container, null, { renderer: 'canvas' });
 
     window.chartInstance.setOption({
         backgroundColor: 'transparent',
-        grid: { top: 10, right: 55, bottom: 10, left: 10, containLabel: false },
-        xAxis: {
-            type: 'category',
-            data: labels,
-            show: false   // Eje X invisible para limpieza total (igual que antes)
+        grid: { top: 15, right: 45, bottom: 15, left: 10, containLabel: false },
+        xAxis: { 
+            type: 'category', 
+            data: labels, 
+            show: false 
         },
-        yAxis: {
-            type: 'value',
+        yAxis: { 
+            type: 'value', 
             position: 'right',
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.03)' } },
+            scale: true, // 🚀 MAGIA: Esto hace que el gráfico NO empiece en 0, magnificando el esfuerzo
+            splitLine: { 
+                lineStyle: { color: 'rgba(255,255,255,0.08)', type: 'dashed' } 
+            },
             axisLine: { show: false },
             axisTick: { show: false },
-            axisLabel: {
-                color: '#666',
-                fontSize: 10,
-                fontFamily: 'Inter',
-                formatter: v => Math.abs(v) >= 1000 ? (v / 1000).toFixed(0) + 'k' : v
+            axisLabel: { 
+                color: '#aaa', fontSize: 10, fontFamily: 'Inter', fontWeight: 'bold',
+                formatter: v => Math.abs(v) >= 1000 ? (v / 1000).toFixed(0) + 'k' : v 
             }
         },
         series: [{
             type: 'line',
             data: dataPoints,
-            smooth: 0.4,                   // Curva Bezier equivalente a tension:0.4
-            symbol: 'none',                // Sin puntos visibles
-            lineStyle: { color: '#00B8FF', width: 2 },
-            emphasis: {
-                // Punto visible al hacer hover
-                scale: true,
-                itemStyle: {
-                    color: '#000000',
-                    borderColor: '#00B8FF',
-                    borderWidth: 2
-                }
+            smooth: 0.4, 
+            symbol: 'none', 
+            lineStyle: { 
+                color: '#BF5AF2', // Morado neón premium (más elegante)
+                width: 3,
+                shadowColor: 'rgba(191, 90, 242, 0.6)', // Brillo espectacular
+                shadowBlur: 15,
+                shadowOffsetY: 5
             },
-            areaStyle: {
-                // Gradiente idéntico al de Chart.js
+            emphasis: { 
+                scale: true,
+                itemStyle: { color: '#000000', borderColor: '#BF5AF2', borderWidth: 3 }
+            },
+            areaStyle: { 
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0, color: 'rgba(0,184,255,0.4)' },
-                    { offset: 1, color: 'rgba(0,184,255,0.0)' }
+                    { offset: 0, color: 'rgba(191, 90, 242, 0.5)' },
+                    { offset: 1, color: 'rgba(191, 90, 242, 0.0)' }
                 ])
             }
         }],
         tooltip: {
             trigger: 'axis',
-            axisPointer: { type: 'none' },
-            backgroundColor: 'rgba(20,20,20,0.95)',
-            borderColor: 'transparent',
-            borderRadius: 8,
-            padding: 12,
+            axisPointer: { type: 'line', lineStyle: { color: 'rgba(191, 90, 242, 0.4)', width: 2, type: 'dashed' } },
+            backgroundColor: 'rgba(10,10,10,0.95)',
+            borderColor: 'rgba(191, 90, 242, 0.3)',
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: 15,
             textStyle: { color: '#fff', fontSize: 14, fontWeight: 'bold', fontFamily: 'Inter' },
             formatter: params => {
                 const p = params[0];
-                const fecha = new Date(p.name).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                const fecha = new Date(p.name).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
                 const valor = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(p.value);
-                return `<span style="color:#888;font-size:11px">${fecha}</span><br/>${valor}`;
+                return `<div style="font-size:10px; color:#aaa; text-transform:uppercase; margin-bottom:4px; letter-spacing:1px;">${fecha}</div>
+                        <div style="font-size:18px; color:#BF5AF2; text-shadow:0 0 10px rgba(191,90,242,0.4);">${valor}</div>`;
             }
         }
     });
 
-    // PUNTO 3 FIX: ResizeObserver memory leak.
-    // Cada llamada a esta función creaba un nuevo observer sin desconectar el anterior.
-    // Con el tiempo (cambios de pestaña, guardados, filtros) se acumulaban decenas de
-    // observers activos sobre el mismo elemento, degradando el rendimiento.
-    // Solución: almacenar la referencia en window y desconectar antes de crear uno nuevo.
     if (window._chartResizeObs) {
         window._chartResizeObs.disconnect();
         window._chartResizeObs = null;
     }
+    
     window._chartResizeObs = new ResizeObserver(() => {
         if (window.chartInstance) window.chartInstance.resize();
     });
+    
     window._chartResizeObs.observe(container);
 }
     
