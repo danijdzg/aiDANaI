@@ -4147,10 +4147,8 @@ async function cargarDesdeNube() {
     }
 }
 
-// 3. LÓGICA DE CARGA LOCAL (Desde input file)
-// Esta es la función correcta que define 'reader' internamente
+// 3. LÓGICA DE CARGA LOCAL
 function leerExcel(blob) {
-    console.log("📖 Procesando archivo local..."); // Debug para ver si entra
     mostrarEstado('Leyendo archivo local...', 'normal');
     
     const reader = new FileReader();
@@ -4180,11 +4178,9 @@ function leerExcel(blob) {
 }
 
 // ==========================================
-// 🧠 PROCESADOR MAESTRO V7 + RECURRENTES (FUSIÓN)
+// 🧠 PROCESADOR MAESTRO (FUSIÓN)
 // ==========================================
 window.procesarLibroLeido = function(wb) {
-    console.log("📖 Procesando Excel (Motor V7 + Recurrentes)...");
-
     // 1. LIMPIEZA Y PREPARACIÓN
     window.mapaCuentas = {};
     window.listaCuentasConfig = [];
@@ -5216,7 +5212,7 @@ function generarUUID() {
 }
 
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO (BLINDADO + FECHA ESPAÑOLA + 8 COLUMNAS)
+// 🛡️ GUARDAR MOVIMIENTO (BLINDADO + PARTIDA DOBLE MÁGICA)
 // ==========================================
 window.guardarManual = async function() {
     const btnGuardar = document.getElementById('btn-modal-action');
@@ -5238,36 +5234,33 @@ window.guardarManual = async function() {
     }
     // --- FIN INTERCEPTOR ---
 
-        const modoActual = window.modoTransaccionActual || 'gasto';
-        const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
-        
-        // Guardamos una copia de seguridad antes de intentar procesar nada
-        const copiaDatosSeguridad = [...(window.datos || [])]; 
+    const modoActual = window.modoTransaccionActual || 'gasto';
+    const generarID = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
+    
+    // Guardamos una copia de seguridad antes de intentar procesar nada
+    const copiaDatosSeguridad = [...(window.datos || [])]; 
 
-        try {  // <--- AQUÍ ESTÁ EL 'TRY' QUE FALTABA
-            const elId = document.getElementById('m-id');
-            const idExistente = elId ? elId.value : "";
+    try {
+        const elId = document.getElementById('m-id');
+        const idExistente = elId ? elId.value : "";
 
-           // 📅 1. OBTENER Y FORMATEAR LA FECHA (Transformación a Fecha Real)
-            const fechaCruda = document.getElementById('m-fecha').value; // Ej: "2026-02-26"
-            if (!fechaCruda) throw new Error("❌ Falta la FECHA");
+        // 📅 1. OBTENER Y FORMATEAR LA FECHA
+        const fechaCruda = document.getElementById('m-fecha').value;
+        if (!fechaCruda) throw new Error("❌ Falta la FECHA");
 
-        // Creamos un objeto Fecha real para que Excel y OneDrive lo entiendan perfectamente
         let fechaParaExcel = new Date();
         if (fechaCruda.includes('-')) {
             const partes = fechaCruda.split('-');
             fechaParaExcel = new Date(partes[0], partes[1] - 1, partes[2]); 
         }
-        const fechaFormateada = fechaParaExcel; // Mantenemos el nombre de variable para no romper tu código de abajo
-
-        // Necesitamos la fecha cruda solo para cálculos internos (ordenar historial)
+        const fechaFormateada = fechaParaExcel;
         const timestampInterno = new Date(fechaCruda + 'T12:00:00').getTime();
 
         const cuentaOrigen = document.getElementById('m-cuenta').value;
         const elDestino = document.getElementById('m-cuenta-destino');
-        const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
+        let cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
 
-        let concepto = document.getElementById('m-concepto').value;
+        let concepto = (document.getElementById('m-concepto').value || "").trim();
         if (modoActual === 'traspaso') concepto = "TRASPASO";
 
         const importeStr = document.getElementById('m-cantidad').value;
@@ -5294,37 +5287,50 @@ window.guardarManual = async function() {
 
         let movimientosParaLocal = [];
 
-        // 🅰️ TRASPASO
-        if (modoActual === 'traspaso') {
-            if (!cuentaDestino) throw new Error("❌ Selecciona CUENTA DESTINO");
-            if (cuentaOrigen === cuentaDestino) throw new Error("❌ Origen y Destino iguales");
+        // ✨ MAGIA DE TRASPASOS: Detectamos si es traspaso por el modo o por el concepto
+        const esTraspaso = (modoActual === 'traspaso' || concepto.toUpperCase() === 'TRASPASO');
 
-            // 🗺️ MAPEO ESTRICTO DE 8 COLUMNAS EXACTAS
+        if (esTraspaso) {
+            // Si la pantalla no tenía el campo de destino visible, preguntamos al usuario
+            if (!cuentaDestino) {
+                cuentaDestino = prompt("Has indicado que es un TRASPASO.\n¿A qué cuenta va el dinero? (Ej: D-BBVA, D-EFECTIVO...)");
+                if (!cuentaDestino) throw new Error("❌ Cancelado: Se necesita cuenta destino para guardar");
+                cuentaDestino = cuentaDestino.toUpperCase().trim();
+            }
+
+            if (cuentaOrigen.toUpperCase() === cuentaDestino.toUpperCase()) {
+                throw new Error("❌ La cuenta origen y destino no pueden ser la misma");
+            }
+
+            concepto = "TRASPASO";
+
+            // Asiento 1: Salida de la cuenta de origen
             movimientosParaLocal.push({
-                id: generarID(),
-                fecha: fechaFormateada,       // <--- Aquí guardamos la fecha bien: DD/MM/AAAA
+                id: idExistente ? (idExistente.includes('-A') ? idExistente : idExistente + "-A") : generarID() + "-A",
+                fecha: fechaFormateada,
                 cuenta: cuentaOrigen,
                 concepto: "TRASPASO",
                 importe: -importeNum,
                 descripcion: `>> A: ${cuentaDestino} | ${desc}`,
                 beneficiario: detectarDueno(cuentaOrigen),
-                tipo: 'traspaso',             // <--- Columna 8 explícita
+                tipo: 'traspaso',
                 ts: timestampInterno
             });
 
+            // Asiento 2: Entrada a la cuenta destino
             movimientosParaLocal.push({
-                id: generarID(),
-                fecha: fechaFormateada,       // <--- Aquí guardamos la fecha bien: DD/MM/AAAA
+                id: idExistente ? (idExistente.includes('-A') ? idExistente.replace('-A', '-B') : idExistente + "-B") : generarID() + "-B",
+                fecha: fechaFormateada,
                 cuenta: cuentaDestino,
                 concepto: "TRASPASO",
                 importe: importeNum,
                 descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
                 beneficiario: detectarDueno(cuentaDestino),
-                tipo: 'traspaso',             // <--- Columna 8 explícita
+                tipo: 'traspaso',
                 ts: timestampInterno
             });
         }
-        // 🅱️ GASTO O INGRESO
+        // 🅱️ GASTO O INGRESO NORMAL
         else {
             if (modoActual === 'gasto' || modoActual === 'pago') {
                 importeNum = -Math.abs(importeNum);
@@ -5332,21 +5338,20 @@ window.guardarManual = async function() {
 
             let benefFinal = benefManual || detectarDueno(cuentaOrigen);
 
-            // 🗺️ MAPEO ESTRICTO DE 8 COLUMNAS EXACTAS
             movimientosParaLocal.push({
                 id: idExistente || generarID(),
-                fecha: fechaFormateada,       // <--- Aquí guardamos la fecha bien: DD/MM/AAAA
+                fecha: fechaFormateada,
                 cuenta: cuentaOrigen,
                 concepto: concepto,
                 importe: importeNum,
                 descripcion: desc,
                 beneficiario: benefFinal,
-                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', // <--- Columna 8 explícita
+                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
                 ts: timestampInterno
             });
         }
 
-        // 🛡️ REVERSIÓN OPTIMISTA EN MEMORIA
+        // 🛡️ REVERSIÓN OPTIMISTA EN MEMORIA (Seguridad al editar)
         if (idExistente) {
             const movOriginal = window.datos.find(m => m.id === idExistente);
             if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
@@ -5368,31 +5373,32 @@ window.guardarManual = async function() {
         // 🚀 SUBIDA A LA NUBE
         await window.guardarUniversal();
 
-        window.cerrarModal();
+        if (typeof window.cerrarModal === 'function') window.cerrarModal();
         if (typeof mostrarEstado === 'function') mostrarEstado("✅ Guardado con éxito", "success");
 
         if (typeof vibrar === 'function') {
-            if (modoActual === 'traspaso') vibrar('clonar');
+            if (esTraspaso) vibrar('clonar');
             else vibrar('ingreso');
         }
 
     } catch (error) {
         console.error("❌ Error al guardar:", error);
 
+        // Si algo falla, restauramos la copia de seguridad instantáneamente
         window.datos = [...copiaDatosSeguridad];
         if (typeof renderizar === 'function') renderizar();
         if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
 
         if(window.mostrarNotificacion) {
-            window.mostrarNotificacion("⚠️ Fallo en la nube. Cambios revertidos.", "error");
+            window.mostrarNotificacion(error.message || "⚠️ Fallo en la nube. Cambios revertidos.", "error");
         } else {
-            alert("⚠️ Error en la nube. Cambios revertidos para proteger tus datos.");
+            alert(error.message || "⚠️ Error. Cambios revertidos para proteger tus datos.");
         }
 
     } finally {
         if (btnGuardar) {
-            btnGuardar.innerHTML = textoOriginal;
+            btnGuardar.innerHTML = originalText; // 🐛 ¡Arreglado el bug del textoOriginal!
             btnGuardar.disabled = false;
             btnGuardar.style.backgroundColor = "";
         }
@@ -5597,11 +5603,10 @@ function recalcularSaldosGlobal() {
             // CAMBIO: Si la cuenta es nueva, la marcamos como SIN CLASIFICAR para que destaque
             window.mapaCuentas[cta] = { tipo: 'SIN CLASIFICAR', esInversion: false };
         }
-        window.mapaCuentas[cta].saldoActual = saldosTemporales[cta];
+       window.mapaCuentas[cta].saldoActual = saldosTemporales[cta];
     });
-    console.log("🧮 Saldos recalculados correctamente.");
 
-    // 5. ACTUALIZAR PANTALLA (Lo que le faltaba a tu función original)
+    // 5. ACTUALIZAR PANTALLA
     if(typeof renderizar === 'function') renderizar();
     if(typeof actualizarDashboard === 'function') actualizarDashboard();
     if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
@@ -7190,20 +7195,9 @@ window.toggleCustomDates = function() {
 };
 
 // =========================================================
-// 🚀 1. VARIABLE GLOBAL DE ESTADO
-// =========================================================
-// 🔥 EXTRA FIX: ELIMINADA declaración duplicada de filtroUsuarioActual aquí.
-// Ya existe una declaración en el bloque de inicio de la aplicación.
-// Tener dos var del mismo nombre en el mismo scope global resetea el valor a 'todos'
-// cada vez que el intérprete procesaba esta línea, borrando cualquier filtro activo.
-
-
-// =========================================================
 // 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (VERSIÓN CORREGIDA)
 // =========================================================
 window.actualizarDashboard = function() {
-    console.log("📊 Recalculando Dashboard...");
-
     // 1. SEGURIDAD: Si no hay datos, salimos sin romper nada
     if (!window.datos || window.datos.length === 0) {
         animarValor('d-ing', 0);
@@ -7501,10 +7495,8 @@ window.toggleUsuario = function() {
     if(typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 
     // 5. ACTUALIZACIÓN DE GRÁFICOS (CON RETARDO)
-    setTimeout(() => {
-        console.log("🎨 Repintando gráficos para: " + filtroUsuarioActual);
-        
-        if(typeof renderizarGraficoEvolucion === 'function') {
+        setTimeout(() => {
+            if(typeof renderizarGraficoEvolucion === 'function') {
             let datosParaGrafico = window.datosPropietario || window.datos;
             renderizarGraficoEvolucion(datosParaGrafico);
         }
@@ -8262,7 +8254,6 @@ function calcularSiguienteFecha(fechaActual, frecuencia, diasSemana) {
     // Siempre devolvemos en formato YYYY-MM-DD (compatible con Excel y Date())
     return fecha.toISOString().split('T')[0];
 }
-
 async function ejecutarRecurrente(idRec) {
     // 1. Localizar la regla
     const regla = window.datosRecurrentes.find(r => r.id === idRec);
@@ -8283,9 +8274,6 @@ async function ejecutarRecurrente(idRec) {
     let movimientosAGuardar = [];
 
     // 3. Lógica según tipo (Traspaso vs Normal)
-    // ✅ FIX BUG-7: Enriquecer cada movimiento con tipoCuenta y esInversion directamente
-    // desde mapaCuentas. Sin esto, el filtro "Todos los Tipos" del Diario los ocultaba
-    // hasta la próxima recarga completa porque recalcularSaldosGlobal no los tenía aún.
     const obtenerInfoCuenta = (nombreCuenta) => {
         const clave = String(nombreCuenta || '').toUpperCase().trim();
         const info = (window.mapaCuentas && window.mapaCuentas[clave]) ? window.mapaCuentas[clave] : null;
@@ -8309,7 +8297,7 @@ async function ejecutarRecurrente(idRec) {
             cuenta: regla.cuenta,
             concepto: regla.concepto,
             importe: -Math.abs(regla.importe), // Sale dinero
-            descripcion: `>> A: ${regla.cuentaDestino} | ${regla.descripcion || 'Fijo'}`,
+            descripcion: `>> A: ${regla.cuentaDestino} | ${regla.descripcion || ''}`,
             beneficiario: regla.beneficiario || 'Traspaso',
             tipo: 'traspaso',
             tipoCuenta: infoOrigen.tipoCuenta,
@@ -8323,7 +8311,7 @@ async function ejecutarRecurrente(idRec) {
             cuenta: regla.cuentaDestino,
             concepto: regla.concepto,
             importe: Math.abs(regla.importe), // Entra dinero
-            descripcion: `<< DE: ${regla.cuenta} | ${regla.descripcion || 'Fijo'}`,
+            descripcion: `<< DE: ${regla.cuenta} | ${regla.descripcion || ''}`,
             beneficiario: regla.beneficiario || 'Traspaso',
             tipo: 'traspaso',
             tipoCuenta: infoDestino.tipoCuenta,
@@ -8340,11 +8328,9 @@ async function ejecutarRecurrente(idRec) {
             cuenta: regla.cuenta,
             concepto: regla.concepto,
             importe: regla.importe, // El signo ya viene correcto de la regla
-            descripcion: `${regla.descripcion || ''} (Recurrente)`,
+            descripcion: regla.descripcion || '', // ¡Limpio, sin coletillas!
             beneficiario: regla.beneficiario,
             tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto'),
-            // ✅ FIX BUG-7 (cont): tipoCuenta y esInversion para que el filtro del
-            // Diario los clasifique correctamente desde el instante de la inserción.
             tipoCuenta: infoCtaSimple.tipoCuenta,
             esInversion: infoCtaSimple.esInversion
         });
@@ -9201,8 +9187,6 @@ window.AppState = {
 // ──────────────────────────────────────────────────────────────────────
 window.AppInitializer = {
     iniciar: async function() {
-        console.log("⚙️ [AppInitializer] Secuencia de arranque unificada iniciada...");
-        
         // 1. MOTOR GRÁFICO DE FONDO (SpaceEngine)
         if (typeof SpaceEngine !== 'undefined') SpaceEngine.start();
 
