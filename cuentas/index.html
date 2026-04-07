@@ -9409,54 +9409,28 @@ else dot.classList.remove('filled');
 });
 }
 async function checkPin() {
-    // --- 🚨 MODO RESCATE DE EMERGENCIA ---
-    // Si la app se queda bloqueada, teclea 0000 para resetear el PIN
-    if (pinActual === '0000') {
-        localStorage.removeItem('aidanai_pw_v3');
-        localStorage.removeItem('aidanai_vault_key'); 
-        alert("🚨 MODO RESCATE ACTIVADO 🚨\nSe ha borrado la memoria corrupta del PIN.\nTu nuevo PIN de acceso es el por defecto: 1234\nPor favor, usa 1234 para entrar y luego cámbialo en Ajustes.");
-        clearPin();
-        return;
-    }
-
-    // 1. Preguntamos al motor criptográfico si el PIN es correcto
-    let esCorrecto = await PinSecurity.verificar(pinActual);
-
-    // --- 🛠️ PARCHE DE COMPATIBILIDAD (PIN ANTIGUO) ---
-    // Si falla, comprobamos si es porque tienes un PIN guardado de la versión anterior
-    if (!esCorrecto) {
-        const stored = localStorage.getItem('aidanai_pw_v3');
-        try {
-            // Si el formato antiguo coincide con lo que el usuario ha escrito...
-            if (stored && atob(stored) === pinActual) {
-                // Lo dejamos entrar y lo actualizamos al formato nuevo automáticamente
-                await PinSecurity.guardarNuevo(pinActual); 
-                esCorrecto = true;
-            }
-        } catch (e) {
-            // Si da error, significa que simplemente el PIN escrito era incorrecto
-        }
-    }
-
-    if (esCorrecto) {
-        // 2. Guardamos el PIN de forma segura SOLAMENTE en la memoria JS.
-        PinSecurity.setSession(pinActual);
-        // 3. Desbloqueamos la app
-        desbloquearApp();
-    } else {
-        // Lógica visual de error
-        const msg = document.getElementById('auth-message');
-        msg.innerText = "❌ PIN INCORRECTO";
-        msg.style.color = "#ff5252";
-        document.querySelector('.pin-display').style.transform = "translateX(-10px)";
-        setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(10px)", 50);
-        setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(0)", 100);
-        setTimeout(() => {
-            msg.innerText = "Inténtalo de nuevo";
-            msg.style.color = "#FFFFFF";
-            clearPin();
-        }, 1000);
-    }
+// 1. Preguntamos al motor criptográfico si el PIN es correcto (PBKDF2)
+const esCorrecto = await PinSecurity.verificar(pinActual);
+if (esCorrecto) {
+// 2. Guardamos el PIN de forma segura SOLAMENTE en la memoria JS.
+PinSecurity.setSession(pinActual);
+// ❌ ELIMINADA la vulnerabilidad: sessionStorage.setItem('aidanai_bio_key', btoa(pinActual));
+// 3. Desbloqueamos la app
+desbloquearApp();
+} else {
+// Lógica visual de error
+const msg = document.getElementById('auth-message');
+msg.innerText = "❌ PIN INCORRECTO";
+msg.style.color = "#ff5252";
+document.querySelector('.pin-display').style.transform = "translateX(-10px)";
+setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(10px)", 50);
+setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(0)", 100);
+setTimeout(() => {
+msg.innerText = "Inténtalo de nuevo";
+msg.style.color = "#FFFFFF";
+clearPin();
+}, 1000);
+}
 }
 async function desbloquearApp() {
 // --- RESCATE DE LLAVE DE SESIÓN SEGURO ---
@@ -10867,7 +10841,6 @@ document.addEventListener("visibilitychange", function() {
         document.body.style.filter = "none";
     }
 });
-
 // --- 2. PROTECCIÓN DE GUARDADO ANTI-CIERRES ---
 window.addEventListener("beforeunload", function(e) {
     if (window.AppState && window.AppState.isSaving) {
@@ -10876,23 +10849,6 @@ window.addEventListener("beforeunload", function(e) {
         return e.returnValue;
     }
 });
-
-// --- 2.5 CONTROL DEL INTERRUPTOR (TOGGLE) DE BIOMETRÍA ---
-document.addEventListener('DOMContentLoaded', () => {
-    const toggleBiometria = document.getElementById('toggle-biometria');
-    if (toggleBiometria) {
-        // Leemos de la memoria si ya estaba activado
-        toggleBiometria.checked = localStorage.getItem('usar_biometria') === 'true';
-    }
-});
-
-window.cambiarAjusteBiometria = function(checkbox) {
-    if (checkbox.checked) {
-        localStorage.setItem('usar_biometria', 'true');
-    } else {
-        localStorage.setItem('usar_biometria', 'false');
-    }
-};
 
 // --- 3. MOTOR DE BIOMETRÍA (HUELLA / FACE ID) ---
 window.registrarHuellaMovil = async function() {
@@ -10935,12 +10891,6 @@ window.registrarHuellaMovil = async function() {
             localStorage.setItem('aidanai_vault_key', btoa(PinSecurity.getSession()));
         }
         
-        // --- AQUÍ CONECTAMOS CON TU INTERRUPTOR VISUAL ---
-        const toggleBtn = document.getElementById('toggle-biometria');
-        if (toggleBtn) toggleBtn.checked = true;
-        localStorage.setItem('usar_biometria', 'true');
-        // ------------------------------------------------
-
         alert("✅ ¡Huella registrada con éxito! Se guardará en la nube.");
         
         if (typeof guardarUniversal === 'function' && window.modoNube) {
@@ -10948,23 +10898,13 @@ window.registrarHuellaMovil = async function() {
         }
     } catch (e) {
         console.error("Error biometría:", e);
-        
-        // --- SI FALLA O CANCELA, APAGAMOS EL INTERRUPTOR ---
-        const toggleBtn = document.getElementById('toggle-biometria');
-        if (toggleBtn) toggleBtn.checked = false;
-        localStorage.setItem('usar_biometria', 'false');
-        // ---------------------------------------------------
-
         alert("⚠️ El móvil ha bloqueado la acción. Motivo: " + e.message);
     }
 };
 
 window.usarHuellaMovil = async function() {
     const bioId = localStorage.getItem('aidanai_huella_id');
-    // Si la biometría no está activada en el interruptor o no hay huella, mostramos PIN
-    const estaActivada = localStorage.getItem('usar_biometria') === 'true';
-    
-    if (!bioId || !estaActivada) {
+    if (!bioId) {
         if (typeof mostrarPin === 'function') mostrarPin();
         return;
     }
