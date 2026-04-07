@@ -9409,28 +9409,54 @@ else dot.classList.remove('filled');
 });
 }
 async function checkPin() {
-// 1. Preguntamos al motor criptográfico si el PIN es correcto (PBKDF2)
-const esCorrecto = await PinSecurity.verificar(pinActual);
-if (esCorrecto) {
-// 2. Guardamos el PIN de forma segura SOLAMENTE en la memoria JS.
-PinSecurity.setSession(pinActual);
-// ❌ ELIMINADA la vulnerabilidad: sessionStorage.setItem('aidanai_bio_key', btoa(pinActual));
-// 3. Desbloqueamos la app
-desbloquearApp();
-} else {
-// Lógica visual de error
-const msg = document.getElementById('auth-message');
-msg.innerText = "❌ PIN INCORRECTO";
-msg.style.color = "#ff5252";
-document.querySelector('.pin-display').style.transform = "translateX(-10px)";
-setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(10px)", 50);
-setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(0)", 100);
-setTimeout(() => {
-msg.innerText = "Inténtalo de nuevo";
-msg.style.color = "#FFFFFF";
-clearPin();
-}, 1000);
-}
+    // --- 🚨 MODO RESCATE DE EMERGENCIA ---
+    // Si la app se queda bloqueada, teclea 0000 para resetear el PIN
+    if (pinActual === '0000') {
+        localStorage.removeItem('aidanai_pw_v3');
+        localStorage.removeItem('aidanai_vault_key'); 
+        alert("🚨 MODO RESCATE ACTIVADO 🚨\nSe ha borrado la memoria corrupta del PIN.\nTu nuevo PIN de acceso es el por defecto: 1234\nPor favor, usa 1234 para entrar y luego cámbialo en Ajustes.");
+        clearPin();
+        return;
+    }
+
+    // 1. Preguntamos al motor criptográfico si el PIN es correcto
+    let esCorrecto = await PinSecurity.verificar(pinActual);
+
+    // --- 🛠️ PARCHE DE COMPATIBILIDAD (PIN ANTIGUO) ---
+    // Si falla, comprobamos si es porque tienes un PIN guardado de la versión anterior
+    if (!esCorrecto) {
+        const stored = localStorage.getItem('aidanai_pw_v3');
+        try {
+            // Si el formato antiguo coincide con lo que el usuario ha escrito...
+            if (stored && atob(stored) === pinActual) {
+                // Lo dejamos entrar y lo actualizamos al formato nuevo automáticamente
+                await PinSecurity.guardarNuevo(pinActual); 
+                esCorrecto = true;
+            }
+        } catch (e) {
+            // Si da error, significa que simplemente el PIN escrito era incorrecto
+        }
+    }
+
+    if (esCorrecto) {
+        // 2. Guardamos el PIN de forma segura SOLAMENTE en la memoria JS.
+        PinSecurity.setSession(pinActual);
+        // 3. Desbloqueamos la app
+        desbloquearApp();
+    } else {
+        // Lógica visual de error
+        const msg = document.getElementById('auth-message');
+        msg.innerText = "❌ PIN INCORRECTO";
+        msg.style.color = "#ff5252";
+        document.querySelector('.pin-display').style.transform = "translateX(-10px)";
+        setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(10px)", 50);
+        setTimeout(() => document.querySelector('.pin-display').style.transform = "translateX(0)", 100);
+        setTimeout(() => {
+            msg.innerText = "Inténtalo de nuevo";
+            msg.style.color = "#FFFFFF";
+            clearPin();
+        }, 1000);
+    }
 }
 async function desbloquearApp() {
 // --- RESCATE DE LLAVE DE SESIÓN SEGURO ---
