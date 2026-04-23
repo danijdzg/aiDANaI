@@ -735,8 +735,51 @@ async function syncToCloud() {
 
 // Funciones de Autenticación para la UI
 async function signInWithMicrosoft() {
-    try { await oneDrive.login(); } 
-    catch (e) { console.error(e); }
+    const btn = document.getElementById('btn-signin');
+    if (btn && btn.disabled) return; // Evitar doble clic
+    
+    if (btn) {
+        btn.textContent = "Redirigiendo...";
+        btn.disabled = true;
+    }
+
+    try {
+        await oneDrive.login();
+    } catch (error) {
+        console.error("Error iniciando login:", error);
+        
+        // --- SOLUCIÓN AUTOMÁTICA AL ERROR INTERACTION_IN_PROGRESS ---
+        if (error.errorCode === "interaction_in_progress" || (error.message && error.message.includes("interaction_in_progress"))) {
+            console.log("Limpiando caché atascada de MSAL...");
+            
+            // 1. Limpiamos las claves de MSAL en SessionStorage
+            Object.keys(sessionStorage).forEach(key => {
+                if (key.includes("msal") || key.includes("interaction")) {
+                    sessionStorage.removeItem(key);
+                }
+            });
+            
+            // 2. Limpiamos las claves de MSAL en LocalStorage
+            Object.keys(localStorage).forEach(key => {
+                if (key.includes("msal") || key.includes("interaction")) {
+                    localStorage.removeItem(key);
+                }
+            });
+
+            // 3. Aviso usando tu sistema showToast y recarga
+            showToast("Limpiando sesión atascada. Recargando app...", true);
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+            return;
+        }
+        
+        // Si es otro error, restauramos el botón
+        if (btn) {
+            btn.textContent = "Login con Microsoft";
+            btn.disabled = false;
+        }
+    }
 }
 window.signInWithMicrosoft = signInWithMicrosoft;
 async function checkAuthState() {
