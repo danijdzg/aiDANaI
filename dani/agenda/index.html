@@ -46,7 +46,12 @@
     --on-background: #f0f4f8;
     --on-surface: #f0f4f8;
     --outline: #1a1a24;
-
+	/* Variables recuperadas vitales para el funcionamiento visual */
+    --accent-cyan: #00f0ff;
+    --accent-google: #ea4335;
+    --shadow-layered: 0 10px 30px rgba(0,0,0,0.8);
+    --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-circ: cubic-bezier(0.785, 0.135, 0.15, 0.86);
     /* Acentos funcionales de tu agenda original mapeados a neón */
     --accent-task: #39ff14; /* green */
     --accent-event-normal: #b800ff; /* purple */
@@ -316,8 +321,6 @@ h1, h2, h3, .section-title, .agenda-date-header {
         .completed-tasks-section summary .material-icons { transition: transform 0.2s; }
         .completed-tasks-section[open] > summary .material-icons { transform: rotate(180deg); }
         .completed-tasks-list { padding: 0 12px 12px 12px; }
-        .starry-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: radial-gradient(1px 1px at 10% 20%,#fff,transparent),radial-gradient(1px 1px at 80% 30%,#fff,transparent),radial-gradient(2px 2px at 50% 50%,#fff,transparent),radial-gradient(1px 1px at 30% 80%,#fff,transparent),radial-gradient(2px 2px at 90% 90%,#fff,transparent); background-size: 300px 300px; animation: twinkle 15s linear infinite; opacity: 0.7; z-index: 1; }
-        @keyframes twinkle { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .login-view__logo { max-width: 90px; height: auto; border-radius: 18px; margin-bottom: 16px; box-shadow: 0 0 25px rgba(255, 255, 255, 0.1); }
         .login-view__title { margin-bottom: 4px; font-size: 20px; font-weight: 800; }
         .login-view__tagline { font-size: 15px; color: var(--secondary-color); margin-bottom: 20px; }
@@ -467,14 +470,26 @@ class OneDriveManager {
     }
     async _inicializarMsal() {
         if (typeof msal === 'undefined') {
-            await new Promise(resolve => {
+            await new Promise((resolve) => {
+                let intentos = 0;
                 const check = setInterval(() => {
-                    if (typeof msal !== 'undefined') { clearInterval(check); resolve(); }
+                    intentos++;
+                    // Si carga, o si pasa de 50 intentos (5 segundos), rompemos el bucle
+                    if (typeof msal !== 'undefined' || intentos > 50) { 
+                        clearInterval(check); 
+                        resolve(); 
+                    }
                 }, 100);
             });
         }
-        this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-        try { await this.msalInstance.handleRedirectPromise(); } catch (e) { console.error(e); }
+        
+        // Solo intentamos iniciar si la librería cargó con éxito
+        if (typeof msal !== 'undefined') {
+            this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+            try { await this.msalInstance.handleRedirectPromise(); } catch (e) { console.error(e); }
+        } else {
+            console.error("❌ MSAL bloqueado por la red o adblocker.");
+        }
     }
     async getToken() {
         await this._msalReady;
@@ -662,30 +677,39 @@ async function signInWithMicrosoft() {
 }
 window.signInWithMicrosoft = signInWithMicrosoft;
 async function checkAuthState() {
-    await oneDrive._msalReady;
-    const cuentas = oneDrive.msalInstance.getAllAccounts();
-    
-    if (cuentas.length > 0) {
-        currentUser = cuentas[0];
-        showToast(`Hola, ${currentUser.name}`);
+    try {
+        await oneDrive._msalReady;
         
-        try {
-            let fid = await oneDrive.getFileId();
-            if (fid) {
-                const contenido = await oneDrive.descargarArchivo(fid);
-                ExcelManager.cargarLibro(contenido);
-            } else {
-                saveData(); 
+        // Comprobamos si MSAL realmente existe (por si falló la carga)
+        const cuentas = (oneDrive.msalInstance) ? oneDrive.msalInstance.getAllAccounts() : [];
+        
+        if (cuentas.length > 0) {
+            currentUser = cuentas[0];
+            showToast(`Hola, ${currentUser.name}`);
+            
+            try {
+                let fid = await oneDrive.getFileId();
+                if (fid) {
+                    const contenido = await oneDrive.descargarArchivo(fid);
+                    ExcelManager.cargarLibro(contenido);
+                } else {
+                    saveData(); 
+                }
+            } catch (error) {
+                console.error("Error descargando Excel:", error);
+                const localDb = localStorage.getItem('agenda_db');
+                if(localDb) db = JSON.parse(localDb);
             }
-        } catch (error) {
-            console.error(error);
-            const localDb = localStorage.getItem('agenda_db');
-            if(localDb) db = JSON.parse(localDb);
+            
+            startMainApp(); // ¡VITAL! Arranca las vistas
+            renderApp(); 
+            
+        } else {
+            showLoginScreen(); // Muestra el login si no hay cuentas
         }
-        startMainApp(); // <-- ¡VITAL PARA QUE ARRANQUEN LAS VISTAS!
-        renderApp(); 
-    } else {
-        showLoginScreen();
+    } catch (error) {
+        console.error("Error crítico de autenticación:", error);
+        showLoginScreen(); // 🛡️ Si TODO falla, fuerza la pantalla de login para que no quede en negro
     }
 }
 
