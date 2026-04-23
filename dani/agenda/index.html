@@ -662,19 +662,26 @@ const oneDrive = new OneDriveManager();
 // ==========================================
 const ExcelManager = {
     generarLibro() {
-        const wb = XLSX.utils.book_new();
-        // Procesamos items para serializar arrays internos como subtasks
-        const itemsParaExcel = db.items.map(i => ({
-            ...i,
-            subtasks: i.subtasks ? JSON.stringify(i.subtasks) : "[]"
-        }));
-        
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemsParaExcel), "Items");
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(db.taskLists), "TaskLists");
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([db.config]), "Config");
+    const wb = XLSX.utils.book_new();
+    
+    // 1. Escudos protectores: si algo es undefined, usamos un array/objeto vacío por defecto
+    const itemsSeguros = db.items || [];
+    const taskListsSeguras = db.taskLists || [{ id: 'default', name: 'General' }];
+    const configSegura = db.config || {};
 
-        return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    },
+    // 2. Procesamos items para serializar arrays internos como subtasks
+    const itemsParaExcel = itemsSeguros.map(i => ({
+        ...i,
+        subtasks: i.subtasks ? JSON.stringify(i.subtasks) : "[]"
+    }));
+    
+    // 3. Creamos las hojas del Excel
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemsParaExcel), "Items");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskListsSeguras), "TaskLists");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([configSegura]), "Config");
+
+    return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+},
     cargarLibro(arrayBuffer) {
         const wb = XLSX.read(arrayBuffer, { type: 'array' });
         
@@ -828,7 +835,15 @@ const VIEW_ORDER = ['today', 'calendar', 'tasks', 'help'];
 
 let appState = { currentView: 'today', lastView: 'today', calendar: { currentMonth: new Date().getMonth(), currentYear: new Date().getFullYear(), selectedDate: dateToYYYYMMDD(new Date()), displayMode: 'month' }, tasks: { selectedListId: 'default' } };
 let flatpickrInstance = null, currentUser = null, unsubscribeFromDb = null, saveTimeout = null;
-let db = {}; let activeTimers = {}; let newlyCreatedItemId = null; let originalButtonTexts = new Map();
+// Definimos la estructura base para usuarios nuevos
+let db = {
+    items: [],
+    taskLists: [{ id: 'default', name: 'General' }],
+    config: { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null }
+}; 
+let activeTimers = {}; 
+let newlyCreatedItemId = null; 
+let originalButtonTexts = new Map();
 let isGoogleSignedIn = false, isAppInitialized = false, isViewSwitching = false, isSyncingWithGoogle = false;
 let isTutorialReady = true;
 
