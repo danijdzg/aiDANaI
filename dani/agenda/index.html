@@ -341,7 +341,7 @@ h1, h2, h3, .section-title, .agenda-date-header {
 <body>
     <div id="mobile-app-wrapper">
 
-        <div id="login-screen" class="login-view">
+        <div id="login-screen" class="login-view login-view--visible">
             <div class="login-view__card" style="background: var(--card-bg); border-color: var(--border-color);">
                 <h2 id="login-title" class="login-view__title" style="font-family: var(--hud-font); color: var(--accent-cyan);">Agenda aiDANaI</h2>
                 <p id="auth-status" class="login-view__tagline" style="color: var(--text-secondary);">Inicia sesión para sincronizar con OneDrive.</p>
@@ -594,7 +594,17 @@ const ExcelManager = {
 // ==========================================
 let isSyncing = false;
 
-// Esta función reemplaza a tu antigua saveData() de Firebase
+// Función unificada para guardar y programar notificaciones
+function saveDataAndSchedule() { 
+    scheduleAllNotifications(); 
+    // Ejecutamos saveData y capturamos cualquier error para que la app no colapse
+    saveData().catch(error => { 
+        console.error("Error al guardar los datos:", error);
+        showToast("Error al guardar los datos localmente.", true); 
+        renderApp(); 
+    }); 
+}
+
 async function saveData() {
     // 1. Guardado local primero
     localStorage.setItem('agenda_db', JSON.stringify(db));
@@ -674,9 +684,37 @@ async function signInWithMicrosoft() {
     }
 }
 window.signInWithMicrosoft = signInWithMicrosoft;
-async function checkAuthState() {
+function _loadLocalDb() {
+    // Carga datos guardados localmente. Siempre se ejecuta para que la app funcione offline/sin sesión.
     try {
-        await oneDrive._msalReady;
+        const localDb = localStorage.getItem('agenda_db');
+        if (localDb) {
+            const parsed = JSON.parse(localDb);
+            if (parsed && typeof parsed === 'object') {
+                db.items = parsed.items || [];
+                db.taskLists = parsed.taskLists || [{ id: 'default', name: 'General' }];
+                db.config = parsed.config || { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null };
+            }
+        }
+    } catch (parseError) {
+        console.warn("Base de datos local corrupta. Limpiando para evitar pantalla negra.");
+        localStorage.removeItem('agenda_db');
+        db = { items: [], taskLists: [{ id: 'default', name: 'General' }], config: { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null } };
+    }
+}
+
+async function checkAuthState() {
+    // FIX #1: SIEMPRE cargamos datos locales y arrancamos la app INMEDIATAMENTE,
+    // sin bloquear en espera de Microsoft/MSAL.
+    _loadLocalDb();
+    startMainApp();
+    renderApp();
+
+    // Después, en segundo plano, intentamos conectar con Microsoft/OneDrive.
+    try {
+        // FIX #5: Timeout de seguridad: si MSAL tarda más de 6s (ej: bloqueado por adblocker), seguimos en modo local.
+        const msalTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('MSAL timeout')), 6000));
+        await Promise.race([oneDrive._msalReady, msalTimeout]);
         
         const cuentas = (oneDrive.msalInstance) ? oneDrive.msalInstance.getAllAccounts() : [];
         
@@ -689,42 +727,20 @@ async function checkAuthState() {
                 if (fid) {
                     const contenido = await oneDrive.descargarArchivo(fid);
                     ExcelManager.cargarLibro(contenido);
-                } else {
-                    saveData(); 
+                    renderApp(); // Re-renderizar con datos de la nube
                 }
             } catch (error) {
-                console.error("Error conectando con OneDrive:", error);
-                
-                // 🛡️ ESCUDO SENIOR: Reconstrucción segura de datos locales
-                try {
-                    const localDb = localStorage.getItem('agenda_db');
-                    if (localDb) {
-                        const parsed = JSON.parse(localDb);
-                        if (parsed && typeof parsed === 'object') {
-                            // Garantizamos que los arrays existan siempre para que la app no colapse
-                            db.items = parsed.items || [];
-                            db.taskLists = parsed.taskLists || [{ id: 'default', name: 'General' }];
-                            db.config = parsed.config || { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null };
-                        }
-                    }
-                } catch (parseError) {
-                    console.warn("Base de datos local corrupta. Limpiando para evitar pantalla negra.");
-                    localStorage.removeItem('agenda_db');
-                    // Reiniciamos con la estructura limpia
-                    db = { items: [], taskLists: [{ id: 'default', name: 'General' }], config: { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null } };
-                }
+                console.error("Error conectando con OneDrive, usando datos locales:", error);
             }
-            
-            startMainApp(); // Arranca el menú inferior y las vistas
-            renderApp();    // Dibuja tus tareas de forma segura
-            
         } else {
-            // No hay cuentas, forzamos mostrar la tarjeta de login
-            showLoginScreen(); 
+            // No hay sesión de Microsoft: la app ya funciona en modo local.
+            console.log("Sin sesión de Microsoft. App en modo local. Mostrando botón de login.");
+            // Mostramos el banner de login sin bloquear la app
+            const loginScreen = document.getElementById('login-screen');
+            if (loginScreen) loginScreen.classList.add('login-view--visible');
         }
     } catch (error) {
-        console.error("Error crítico de autenticación:", error);
-        showLoginScreen(); 
+        console.warn("MSAL no disponible o timeout. Continuando en modo local:", error.message);
     }
 }
 function initApp() { 
@@ -803,7 +819,7 @@ const showLoginScreen = () => {
     gebi('login-screen').classList.add('login-view--visible'); 
 };
 
-function renderApp() { if (!db || !currentUser || !isAppInitialized) return; updateNav(appState.currentView); renderCurrentView(); }
+function renderApp() { if (!db || !isAppInitialized) return; updateNav(appState.currentView); renderCurrentView(); }
 function renderCurrentView() { const { currentView } = appState; if (currentView === 'today') renderTodayView(); if (currentView === 'calendar') renderCalendarView(); if (currentView === 'tasks') renderTaskListView(); if (currentView === 'search') renderSearchView(gebi('search-input').value); }
 function updateNav(currentView) { qsa('.nav-item[data-view]').forEach(item => { item.classList.toggle('active', item.dataset.view === currentView); }); }
 function renderTodayView() { const hours = new Date().getHours(); const greeting = hours < 12 ? "Buenos días" : hours < 20 ? "Buenas tardes" : "Buenas noches"; gebi('today-greeting').textContent = greeting; const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999); const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1); const tomorrowEnd = new Date(todayEnd); tomorrowEnd.setDate(tomorrowEnd.getDate() + 1); const todayEvents = db.items.filter(i => i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= todayStart && new Date(i.dueDate) <= todayEnd).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)); const pendingTasks = db.items.filter(i => i.type === 'task' && !i.isComplete).sort((a,b) => a.createdAt - b.createdAt); const tomorrowEvents = db.items.filter(i => i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= tomorrowStart && new Date(i.dueDate) <= tomorrowEnd).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)); const renderListWithEmptyState = (containerId, emptyStateId, titleId, items) => { const container = gebi(containerId); const emptyState = gebi(emptyStateId); const title = gebi(titleId); container.innerHTML = ''; if (items.length > 0) { items.forEach(item => container.appendChild(createUniversalListItemNode(item))); emptyState.style.display = 'none'; title.style.display = 'flex'; } else { emptyState.style.display = 'block'; title.style.display = 'none'; } }; renderListWithEmptyState('today-events-list', 'empty-today-events', 'today-events-title', todayEvents); renderListWithEmptyState('today-tasks-list', 'empty-today-tasks', 'today-tasks-title', pendingTasks); renderListWithEmptyState('tomorrow-events-list', 'empty-tomorrow-events', 'tomorrow-events-title', tomorrowEvents); }
@@ -899,7 +915,6 @@ async function handleItemComplete(localId, isComplete) {
     }
 }
 async function handleDeleteItem(localId) { if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } triggerHapticFeedback('medium'); const itemEl = document.querySelector(`.list-item-swipe-container[data-id="${localId}"]`); const index = db.items.findIndex(i => i.localId === localId); if (index === -1) return; const itemToDelete = { ...db.items[index] }; try { if (isGoogleSignedIn && itemToDelete.googleCalendarEventId) { isSyncingWithGoogle = true; await borrarEventoEnGoogle(itemToDelete); } const performDeleteAndUpdate = () => { const finalChildIndex = db.items.findIndex(i => i.parentId === localId); if (finalChildIndex > -1) db.items.splice(finalChildIndex, 1); const finalParentIndex = db.items.findIndex(i => i.localId === localId); if (finalParentIndex > -1) db.items.splice(finalParentIndex, 1); saveDataAndSchedule(); if (!itemEl) renderApp(); }; if (itemEl) { itemEl.classList.add('item-exiting'); itemEl.addEventListener('animationend', performDeleteAndUpdate, { once: true }); } else { performDeleteAndUpdate(); renderApp(); } } catch (error) { showToast("Error al eliminar evento de Google. Inténtalo de nuevo.", true); if (itemEl) itemEl.style.transform = 'translateX(0)'; } finally { if (isSyncingWithGoogle) isSyncingWithGoogle = false; } }
-function saveDataAndSchedule() { scheduleAllNotifications(); saveData().catch(error => { showToast(`Error al sincronizar con Firebase.`, true); renderApp(); }); }
 function handleDeleteFromModal() { const localId = gebi('item-local-id').value; const item = db.items.find(i => i.localId === localId); if (item) { showCustomConfirm(`¿Eliminar este ítem permanentemente: "${item.description}"?`, () => { closeModal('add-item-modal'); handleDeleteItem(localId); }); } }
 function calculateNextDueDate(currentDueDate, recurrenceRule) { const nextDate = new Date(currentDueDate); switch (recurrenceRule) { case 'daily': nextDate.setDate(nextDate.getDate() + 1); break; case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break; case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break; case 'yearly': nextDate.setFullYear(nextDate.getFullYear() + 1); break; default: return null; } return nextDate; }
 async function handleQuickAddSubmit(e) { e.preventDefault(); if (isSyncingWithGoogle) { showToast("Sincronización en curso, por favor espera.", true); return; } const input = gebi('quick-add-input').value.trim(); if (!input) return; let parsedData = parseNaturalLanguage(input); let itemToSave = { ...parsedData, localId: uuid(), isComplete: false, createdAt: Date.now(), updatedAt: Date.now(), listId: parsedData.type === 'task' ? appState.tasks.selectedListId : null, }; if (isGoogleSignedIn && itemToSave.type === 'agenda') { showToast("Sincronizando con Google...", false); isSyncingWithGoogle = true; try { const googleId = await crearEventoEnGoogle(itemToSave); if (googleId) itemToSave.googleCalendarEventId = googleId; } catch (err) { console.error("Falló la creación rápida en Google, guardando localmente:", err); showToast("Falló la sincronización. El ítem se ha guardado localmente.", true); } finally { isSyncingWithGoogle = false; } } handleItemSave(itemToSave, true); closeModal('quick-add-modal'); }
