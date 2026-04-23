@@ -10,17 +10,16 @@
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 	<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 	<script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
-    
-    <!-- CARGA ROBUSTA DE SCRIPT: Se usa 'onload' para garantizar que el script esté listo antes de usarse. -->
-    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js" onload="onDriverJsLoaded()"></script>
-    <!-- Configuración PWA -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+	<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
-    <link rel="apple-touch-icon" href="aiDANaI.webp">
-    <style>
+     <style>
         /* ============================ */
         /* 1. VARIABLES Y ESTILO BASE */
         /* ============================ */
@@ -266,10 +265,6 @@ h1, h2, h3, .section-title, .agenda-date-header {
         .empty-state { text-align: center; padding: 40px 24px; color: var(--secondary-color); }
         .empty-state .material-icons { font-size: 48px; margin-bottom: 8px; }
         .empty-state .btn { margin-top: 16px; }
-        .intro-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; background-color: #000; transition: opacity 0.5s ease-out; }
-        .intro-screen.visible { display: flex; }
-        #welcomeImage { width: 250px; height: auto; opacity: 0; animation: growAndFade 2.5s ease-in-out forwards; }
-        @keyframes growAndFade { 0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(8); opacity: 0; } }
         .login-view { position: fixed; inset: 0; z-index: 1040; display: none; flex-direction: column; justify-content: center; align-items: center; padding: 1rem; opacity: 0; transition: opacity .5s, background-color 0.3s; background-color: var(--background); }
         .login-view--visible { display: flex; opacity: 1; }
         .login-view__card { background-color: var(--surface); padding: 2rem 1.5rem; border-radius: 18px; box-shadow: var(--shadow-layered); width: 100%; max-width: 380px; text-align: center; animation: pop-in 0.3s ease-out; border: 1px solid var(--outline); z-index: 10; }
@@ -337,7 +332,6 @@ h1, h2, h3, .section-title, .agenda-date-header {
     </style>
 </head>
 <body>
-    <div id="welcomeScreen" class="intro-screen"><img src="aiDANaI.webp" id="welcomeImage" alt="Logo Agenda aiDANaI"></div>
     <div id="login-screen" class="login-view">
     <div class="login-view__card" style="background: var(--card-bg); border-color: var(--border-color);">
         <h2 id="login-title" class="login-view__title" style="font-family: var(--hud-font); color: var(--accent-cyan);">Agenda aiDANaI</h2>
@@ -744,7 +738,7 @@ async function signInWithMicrosoft() {
     try { await oneDrive.login(); } 
     catch (e) { console.error(e); }
 }
-
+window.signInWithMicrosoft = signInWithMicrosoft;
 async function checkAuthState() {
     await oneDrive._msalReady;
     const cuentas = oneDrive.msalInstance.getAllAccounts();
@@ -793,7 +787,7 @@ let appState = { currentView: 'today', lastView: 'today', calendar: { currentMon
 let flatpickrInstance = null, currentUser = null, unsubscribeFromDb = null, saveTimeout = null;
 let db = {}; let activeTimers = {}; let newlyCreatedItemId = null; let originalButtonTexts = new Map();
 let isGoogleSignedIn = false, isAppInitialized = false, isViewSwitching = false, isSyncingWithGoogle = false;
-let isTutorialReady = false;
+let isTutorialReady = true;
 
 const gebi = id => document.getElementById(id);
 const qsa = selector => document.querySelectorAll(selector);
@@ -814,16 +808,8 @@ function handleThemeToggle() { const currentTheme = document.documentElement.get
 function renderThemeSelector() { const container = gebi('theme-selector'); if (!container) return; container.innerHTML = Object.entries(THEMES).map(([id, theme]) => `<button class="theme-option" data-theme="${id}" style="background-color: ${theme.bg}; color: ${theme.color}; border: 2px solid ${theme.color}; padding: 16px 8px; border-radius: 12px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.2s;">${theme.name}</button>`).join(''); container.querySelectorAll('.theme-option').forEach(btn => { btn.addEventListener('click', () => { handleThemeChange(btn.dataset.theme, `Tema '${THEMES[btn.dataset.theme].name}' aplicado.`); }); }); }
 
 function initApp() { 
-    const welcomeScreen = gebi('welcomeScreen'); 
-    const welcomeImage = gebi('welcomeImage'); 
-    welcomeScreen.classList.add('visible'); 
-    welcomeImage.addEventListener('animationend', () => { 
-        welcomeScreen.style.opacity = '0'; 
-        welcomeScreen.addEventListener('transitionend', () => { 
-            welcomeScreen.style.display = 'none'; 
-            checkAuthState(); 
-        }, { once: true }); 
-    }, { once: true }); 
+    // Ahora arranca directamente sin esperar a la imagen
+    checkAuthState(); 
     
     attachGlobalEventListeners(); 
     initializeDatePicker(); 
@@ -968,15 +954,6 @@ function handleDeleteTaskList(id) { const listName = db.taskLists.find(l => l.id
 function renderSubtasksInModal(subtasks = []) { const container = gebi('subtasks-container'); container.innerHTML = ''; subtasks.forEach(subtask => { const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = subtask.id; el.innerHTML = ` <input type="checkbox" ${subtask.isComplete ? 'checked' : ''}> <input type="text" value="${subtask.description}"> <button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button> `; el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); }; container.appendChild(el); }); }
 function handleAddSubtask() { const input = gebi('new-subtask-input'); const description = input.value.trim(); if (description) { const container = gebi('subtasks-container'); const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = uuid(); el.innerHTML = ` <input type="checkbox"> <input type="text" value="${description}"> <button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button> `; el.querySelector('.delete-subtask-btn').onclick = () => { el.remove(); }; container.appendChild(el); input.value = ''; input.focus(); } }
 function handleSubtaskToggle(taskId, subtaskId) { const taskIndex = db.items.findIndex(i => i.localId === taskId); if (taskIndex === -1) return; const updatedTask = JSON.parse(JSON.stringify(db.items[taskIndex])); const subtaskIndex = updatedTask.subtasks.findIndex(st => st.id === subtaskId); if (subtaskIndex === -1) return; updatedTask.subtasks[subtaskIndex].isComplete = !updatedTask.subtasks[subtaskIndex].isComplete; const allSubtasksComplete = updatedTask.subtasks.every(st => st.isComplete); updatedTask.isComplete = allSubtasksComplete; if (allSubtasksComplete) { if (!updatedTask.completedAt) updatedTask.completedAt = Date.now(); } else { updatedTask.completedAt = null; } updatedTask.updatedAt = Date.now(); db.items[taskIndex] = updatedTask; renderApp(); saveData().catch(error => { showToast('Error al actualizar la subtarea.', true); renderApp(); }); }
-
-window.onDriverJsLoaded = function() {
-    console.log("Driver.js ha cargado exitosamente.");
-    isTutorialReady = true;
-    if (isAppInitialized && !db.config.tutorialCompleted) {
-        startOnboardingTutorial();
-    }
-}
-
 function startOnboardingTutorial() {
     if (typeof driver !== 'function') {
         console.error("Se intentó iniciar el tutorial, pero Driver.js no está disponible.");
