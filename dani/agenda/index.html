@@ -146,9 +146,7 @@ h1, h2, h3, .section-title, .agenda-date-header {
     border-color: var(--primary-color);
     border-left-color: var(--primary-color);
 }
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html { height: -webkit-fill-available; }
-        body { font-family: var(--font-main); background-color: var(--background); color: var(--on-background); line-height: 1.5; overflow: hidden; min-height: 100vh; min-height: -webkit-fill-available; height: 100vh; transition: background-color 0.3s, color 0.3s; font-size: 15px; }
+ 
         *:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; border-radius: 6px; }
         #google-sync-btn.loading .material-icons { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -697,28 +695,38 @@ async function checkAuthState() {
             } catch (error) {
                 console.error("Error conectando con OneDrive:", error);
                 
-                // 🛡️ ESCUDO CONTRA PANTALLA NEGRA: Si el local storage está corrupto, lo borramos y seguimos
+                // 🛡️ ESCUDO SENIOR: Reconstrucción segura de datos locales
                 try {
                     const localDb = localStorage.getItem('agenda_db');
-                    if(localDb) db = JSON.parse(localDb);
+                    if (localDb) {
+                        const parsed = JSON.parse(localDb);
+                        if (parsed && typeof parsed === 'object') {
+                            // Garantizamos que los arrays existan siempre para que la app no colapse
+                            db.items = parsed.items || [];
+                            db.taskLists = parsed.taskLists || [{ id: 'default', name: 'General' }];
+                            db.config = parsed.config || { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null };
+                        }
+                    }
                 } catch (parseError) {
                     console.warn("Base de datos local corrupta. Limpiando para evitar pantalla negra.");
                     localStorage.removeItem('agenda_db');
+                    // Reiniciamos con la estructura limpia
+                    db = { items: [], taskLists: [{ id: 'default', name: 'General' }], config: { theme: 'cyberpunk-night', tutorialCompleted: false, googleSyncToken: null } };
                 }
             }
             
             startMainApp(); // Arranca el menú inferior y las vistas
-            renderApp();    // Dibuja tus tareas
+            renderApp();    // Dibuja tus tareas de forma segura
             
         } else {
-            showLoginScreen(); // Muestra la tarjeta cyan de Microsoft
+            // No hay cuentas, forzamos mostrar la tarjeta de login
+            showLoginScreen(); 
         }
     } catch (error) {
         console.error("Error crítico de autenticación:", error);
-        showLoginScreen(); // Si todo falla, siempre te deja intentar loguearte
+        showLoginScreen(); 
     }
 }
-
 function initApp() { 
     checkAuthState(); 
     
