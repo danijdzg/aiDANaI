@@ -680,7 +680,6 @@ async function checkAuthState() {
     try {
         await oneDrive._msalReady;
         
-        // Comprobamos si MSAL realmente existe (por si falló la carga)
         const cuentas = (oneDrive.msalInstance) ? oneDrive.msalInstance.getAllAccounts() : [];
         
         if (cuentas.length > 0) {
@@ -696,25 +695,51 @@ async function checkAuthState() {
                     saveData(); 
                 }
             } catch (error) {
-                console.error("Error descargando Excel:", error);
-                const localDb = localStorage.getItem('agenda_db');
-                if(localDb) db = JSON.parse(localDb);
+                console.error("Error conectando con OneDrive:", error);
+                
+                // 🛡️ ESCUDO CONTRA PANTALLA NEGRA: Si el local storage está corrupto, lo borramos y seguimos
+                try {
+                    const localDb = localStorage.getItem('agenda_db');
+                    if(localDb) db = JSON.parse(localDb);
+                } catch (parseError) {
+                    console.warn("Base de datos local corrupta. Limpiando para evitar pantalla negra.");
+                    localStorage.removeItem('agenda_db');
+                }
             }
             
-            startMainApp(); // ¡VITAL! Arranca las vistas
-            renderApp(); 
+            startMainApp(); // Arranca el menú inferior y las vistas
+            renderApp();    // Dibuja tus tareas
             
         } else {
-            showLoginScreen(); // Muestra el login si no hay cuentas
+            showLoginScreen(); // Muestra la tarjeta cyan de Microsoft
         }
     } catch (error) {
         console.error("Error crítico de autenticación:", error);
-        showLoginScreen(); // 🛡️ Si TODO falla, fuerza la pantalla de login para que no quede en negro
+        showLoginScreen(); // Si todo falla, siempre te deja intentar loguearte
     }
 }
 
-// Reemplaza tu antigua llamada checkAuthState() dentro de initApp()
-// para que use esta nueva lógica.     
+function initApp() { 
+    checkAuthState(); 
+    
+    attachGlobalEventListeners(); 
+    initializeDatePicker(); 
+    updateSyncStatus(); 
+   
+    // 🔥 DESTRUCTOR DE CACHÉ: Elimina el Service Worker antiguo que bloqueaba tu app
+    if ('serviceWorker' in navigator) { 
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) {
+                registration.unregister(); 
+            }
+        }).then(() => {
+            // Registra el nuevo y limpio
+            navigator.serviceWorker.register('./service-worker.js')
+                .then(reg => console.log('Service Worker actualizado y registrado con éxito:', reg))
+                .catch(err => console.log('Error en el registro del Service Worker:', err)); 
+        });
+    }
+}
 
 const CONSTANTS = { VIEWS: { TODAY: 'today', CALENDAR: 'calendar', TASKS: 'tasks', HELP: 'help', SEARCH: 'search' }, ITEM_TYPES: { AGENDA: 'agenda', TASK: 'task' }, ANIMATION_CLASSES: { ITEM_ENTERING: 'item-entering', ITEM_EXITING: 'item-exiting' } };
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -1219,8 +1244,6 @@ async function syncWithGoogleCalendar(forceFullSync = false) {
         syncButton.classList.remove('loading');
     }
 }
-
-document.addEventListener('DOMContentLoaded', initApp);
 
     </script>
 </body>
