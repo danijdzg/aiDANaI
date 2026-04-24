@@ -500,12 +500,10 @@
 
     </div>
 
-    <script type="module">
-
+    <script>
 // ==========================================
 // 1. CONFIGURACIÓN DE MICROSOFT (MSAL)
 // ==========================================
-// Soporta dinámicamente entornos localhost o GitHub Pages
 const currentUrl = window.location.origin + window.location.pathname;
 
 const MSAL_CONFIG = {
@@ -515,7 +513,7 @@ const MSAL_CONFIG = {
         redirectUri: currentUrl 
     },
     cache: {
-        cacheLocation: "localStorage", // Retiene sesión al recargar/cerrar
+        cacheLocation: "localStorage",
         storeAuthStateInCookie: false
     }
 };
@@ -538,7 +536,6 @@ class OneDriveManager {
         
         try {
             this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-            // Crítico: procesar promesas de redirección antes de continuar
             await this.msalInstance.handleRedirectPromise();
             this.isReady = true;
             return true;
@@ -588,6 +585,7 @@ class OneDriveManager {
         const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
             headers: { Authorization: `Bearer ${token}` }
         });
+        if (!res.ok) throw new Error("Error en la respuesta HTTP al descargar: " + res.status);
         return await res.arrayBuffer();
     }
 
@@ -601,6 +599,7 @@ class OneDriveManager {
             },
             body: arrayBuffer
         });
+        if (!res.ok) throw new Error("Error en la respuesta HTTP al subir: " + res.status);
         const data = await res.json();
         this.fileId = data.id;
         localStorage.setItem("agenda_file_id", data.id);
@@ -619,7 +618,6 @@ const ExcelManager = {
         const taskListsSeguras = db.taskLists || [{ id: 'default', name: 'General' }];
         const configSegura = db.config || {};
         
-        // Registrar tiempo de última actualización en el Excel para evitar sobre-escrituras ciegas
         configSegura.lastCloudUpdate = Date.now();
         db.config = configSegura;
 
@@ -637,22 +635,19 @@ const ExcelManager = {
     cargarLibro(arrayBuffer) {
         const wb = XLSX.read(arrayBuffer, { type: 'array' });
         
-        // Carga Configuración
         let cloudConfig = {};
         if (wb.SheetNames.includes("Config")) {
             const conf = XLSX.utils.sheet_to_json(wb.Sheets["Config"]);
             if (conf.length > 0) cloudConfig = conf[0];
         }
 
-        // CONTROL DE CONFLICTO: Si lo local es más nuevo que la nube, NO sobrescribimos con lo viejo
         const localUpdateTime = db.config?.lastLocalUpdate || 0;
         const cloudUpdateTime = cloudConfig?.lastCloudUpdate || 0;
         
         if (localUpdateTime > cloudUpdateTime + 5000) {
             console.log("Los datos locales son más recientes. Forzando sincronización local hacia la nube.");
-            // En vez de cargar la versión vieja de la nube, disparamos un guardado hacia arriba
             setTimeout(() => syncToCloud(), 1000);
-            return false; // No cargar la data
+            return false; 
         }
 
         db.config = cloudConfig;
@@ -665,6 +660,10 @@ const ExcelManager = {
                 isAllDay: (i.isAllDay === true || i.isAllDay === "true" || i.isAllDay === "TRUE" || i.isAllDay === 1),
                 isImportant: (i.isImportant === true || i.isImportant === "true" || i.isImportant === "TRUE" || i.isImportant === 1),
                 notificationEnabled: (i.notificationEnabled === true || i.notificationEnabled === "true" || i.notificationEnabled === "TRUE" || i.notificationEnabled === 1),
+                notificationShown: (i.notificationShown === true || i.notificationShown === "true" || i.notificationShown === "TRUE" || i.notificationShown === 1),
+                createdAt: parseInt(i.createdAt) || Date.now(),
+                updatedAt: parseInt(i.updatedAt) || Date.now(),
+                completedAt: i.completedAt ? parseInt(i.completedAt) : null,
                 subtasks: (i.subtasks && typeof i.subtasks === 'string') ? JSON.parse(i.subtasks) : []
             }));
         }
@@ -689,7 +688,6 @@ function saveDataAndSchedule() {
 }
 
 async function saveData() {
-    // Marcamos el momento de actualización local (fundamental para el control de conflictos)
     db.config = db.config || {};
     db.config.lastLocalUpdate = Date.now();
     localStorage.setItem('agenda_db', JSON.stringify(db));
@@ -752,7 +750,6 @@ async function signInWithMicrosoft() {
         if (btn) { btn.textContent = "Login con Microsoft"; btn.disabled = false; }
     }
 }
-window.signInWithMicrosoft = signInWithMicrosoft;
 
 function _loadLocalDb() {
     try {
@@ -789,7 +786,6 @@ async function checkAuthState() {
     if (cuentas.length > 0) {
         currentUser = cuentas[0];
         startMainApp();
-        renderApp();
         showToast(`Hola, ${currentUser.name || currentUser.username}`);
         try {
             let fid = await oneDrive.getFileId();
@@ -820,12 +816,12 @@ function initApp() {
     const btnSkip = document.getElementById('btn-skip-login');
     if (btnSkip) {
         btnSkip.addEventListener('click', function() {
+            _loadLocalDb(); 
             startMainApp();
             renderApp();
         });
     }
 
-    // Instalación PWA (Service Worker)
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
             for (let registration of registrations) { registration.unregister(); }
@@ -866,6 +862,7 @@ let db = {
 let activeTimers = {};
 let newlyCreatedItemId = null;
 let isAppInitialized = false, isViewSwitching = false;
+window.isSwiping = false; // Flag para colisiones touch
 
 // ==========================================
 // 6. UTILIDADES
@@ -904,7 +901,10 @@ function triggerHapticFeedback(type = 'light') {
 }
 function debounce(func, delay = 250) {
     let timeout;
-    return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); };
+    return function(...args) { 
+        clearTimeout(timeout); 
+        timeout = setTimeout(() => func.apply(this, args), delay); 
+    };
 }
 function showToast(message, isError = false) {
     const container = gebi('toast-container');
@@ -927,6 +927,7 @@ const startMainApp = () => {
     appRoot.querySelector('.view.active')?.classList.remove('active');
     const newActiveView = appRoot.querySelector(`#${appState.currentView}View`);
     if (newActiveView) newActiveView.classList.add('active');
+    renderApp();
     scheduleAllNotifications();
 };
 
@@ -995,7 +996,7 @@ function renderMonthGrid(currentMonth, currentYear, selectedDate, items) {
     
     const calendarDays = gebi('calendarDays'); calendarDays.innerHTML = '';
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-    const offset = (firstDayOfMonth.getDay() + 6) % 7; // El Lunes es el primer día
+    const offset = (firstDayOfMonth.getDay() + 6) % 7; 
     const startDate = new Date(firstDayOfMonth); startDate.setDate(startDate.getDate() - offset);
     const todayStr = dateToYYYYMMDD(new Date());
     
@@ -1189,9 +1190,9 @@ function createTaskItemNode(item) {
         <div class="item-icon item-checkbox" data-action="complete-item">
             <span class="material-icons">${item.isComplete ? 'check_circle' : 'radio_button_unchecked'}</span>
         </div>
-        <div class="item-content">
+        <div class="item-content" data-action="edit-item">
             <div style="display: flex; flex-direction: column; align-items: flex-start; width: 100%;">
-                <div class="item-title" data-action="edit-item">${item.description}</div>
+                <div class="item-title">${item.description}</div>
                 <div class="item-metadata-container" style="margin-top: 4px;">
                     <span class="material-icons event-meta-icon onedrive-icon" title="Sincronizado">cloud_done</span>
                 </div>
@@ -1210,6 +1211,7 @@ function attachGlobalEventListeners() {
     const safeAddListener = (id, event, handler) => { const el = gebi(id); if (el) el.addEventListener(event, handler); };
 
     document.body.addEventListener('click', e => {
+        if (window.isSwiping) return; 
         const actionTarget = e.target.closest('[data-action]');
         if (actionTarget) {
             const action = actionTarget.dataset.action;
@@ -1225,6 +1227,7 @@ function attachGlobalEventListeners() {
                 if (item) { triggerHapticFeedback('success'); handleItemComplete(itemId, !item.isComplete); }
             }
             if (action === 'toggle-subtask') {
+                e.stopPropagation(); 
                 const taskId = actionTarget.dataset.taskId;
                 const subtaskId = actionTarget.dataset.subtaskId;
                 if (taskId && subtaskId) { triggerHapticFeedback('success'); handleSubtaskToggle(taskId, subtaskId); }
@@ -1235,8 +1238,10 @@ function attachGlobalEventListeners() {
                         const cuentas = oneDrive.msalInstance.getAllAccounts();
                         if (cuentas.length > 0) { oneDrive.msalInstance.logoutRedirect({ account: cuentas[0] }); }
                     }
+                    oneDrive.fileId = null;
                     localStorage.removeItem("agenda_file_id");
                     localStorage.removeItem("agenda_db");
+                    window.location.reload();
                 });
             }
             if (action === 'quick-add') openModal('quick-add-modal');
@@ -1272,7 +1277,6 @@ function attachGlobalEventListeners() {
     safeAddListener('add-list-form', 'submit', handleAddTaskList);
     safeAddListener('add-subtask-btn', 'click', handleAddSubtask);
     
-    // Evitar recarga al pulsar enter en sub-tareas
     safeAddListener('new-subtask-input', 'keydown', e => { 
         if (e.key === 'Enter') { 
             e.preventDefault(); 
@@ -1483,7 +1487,7 @@ async function handleItemComplete(localId, isComplete) {
         if (updatedItem.type === 'task' && updatedItem.subtasks) updatedItem.subtasks.forEach(st => st.isComplete = true);
         db.items[itemIndex] = updatedItem;
         
-        if (item.type === 'agenda' && item.recurrenceRule !== 'none') {
+        if (item.type === 'agenda' && item.recurrenceRule && item.recurrenceRule !== 'none') {
             const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule);
             if (nextDueDate) {
                 const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now(), updatedAt: Date.now(), parentId: item.localId };
@@ -1492,7 +1496,7 @@ async function handleItemComplete(localId, isComplete) {
             }
         }
     } else {
-        if (item.recurrenceRule !== 'none') {
+        if (item.recurrenceRule && item.recurrenceRule !== 'none') {
             const childItemIndex = db.items.findIndex(i => i.parentId === localId);
             if (childItemIndex > -1) db.items.splice(childItemIndex, 1);
         }
@@ -1510,7 +1514,6 @@ async function handleDeleteItem(localId) {
     if (index === -1) return;
     
     const performDeleteAndUpdate = () => {
-        // Limpiar temporizadores para notificaciones borradas
         if (activeTimers[localId]) {
             clearTimeout(activeTimers[localId]);
             delete activeTimers[localId];
@@ -1574,15 +1577,22 @@ function openAdvancedFromQuickAdd() {
 
 function parseNaturalLanguage(text) {
     let cleanText = text.toLowerCase(); let date = new Date(); let dateFound = false; let isAllDay = true;
-    const timeRegex = /(?:a las|a la|)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?/i;
+    
+    const timeRegex = /(?:a las|a la)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?\b|(\d{1,2})(?::(\d{2}))\s*(am|pm|de la mañana|de la tarde|de la noche)/i;
     const timeMatch = cleanText.match(timeRegex);
     
     if (timeMatch) {
-        isAllDay = false; let hour = parseInt(timeMatch[1], 10); const minute = parseInt(timeMatch[2], 10) || 0;
-        const period = timeMatch[3] ? timeMatch[3].toLowerCase() : '';
+        isAllDay = false; 
+        let hour = parseInt(timeMatch[1] || timeMatch[4], 10); 
+        const minute = parseInt(timeMatch[2] || timeMatch[5], 10) || 0;
+        const period = (timeMatch[3] || timeMatch[6] || '').toLowerCase();
+        
         if ((period.includes('pm') || period.includes('tarde') || period.includes('noche')) && hour < 12) hour += 12;
         if ((period.includes('am') || period.includes('mañana')) && hour === 12) hour = 0;
-        date.setHours(hour, minute, 0, 0); cleanText = cleanText.replace(timeMatch[0], '').trim(); dateFound = true;
+        
+        date.setHours(hour, minute, 0, 0); 
+        cleanText = cleanText.replace(timeMatch[0], '').trim(); 
+        dateFound = true;
     } else { date.setHours(0, 0, 0, 0); }
     
     const numericDateRegex = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
@@ -1680,21 +1690,6 @@ function handleAddSubtask() {
     }
 }
 
-function handleSubtaskToggle(taskId, subtaskId) {
-    const taskIndex = db.items.findIndex(i => i.localId === taskId); if (taskIndex === -1) return;
-    const updatedTask = JSON.parse(JSON.stringify(db.items[taskIndex]));
-    const subtaskIndex = updatedTask.subtasks.findIndex(st => st.id === subtaskId); if (subtaskIndex === -1) return;
-    
-    updatedTask.subtasks[subtaskIndex].isComplete = !updatedTask.subtasks[subtaskIndex].isComplete;
-    const allSubtasksComplete = updatedTask.subtasks.every(st => st.isComplete);
-    updatedTask.isComplete = allSubtasksComplete;
-    if (allSubtasksComplete) { if (!updatedTask.completedAt) updatedTask.completedAt = Date.now(); } else { updatedTask.completedAt = null; }
-    
-    updatedTask.updatedAt = Date.now(); db.items[taskIndex] = updatedTask;
-    renderApp();
-    saveData().catch(error => { showToast('Error al actualizar la subtarea.', true); renderApp(); });
-}
-
 function initializeDatePicker() {
     try {
         if (typeof flatpickr === 'undefined') { console.warn('flatpickr no disponible aun.'); return; }
@@ -1738,7 +1733,7 @@ function attachSwipeListeners(cardEl) {
     cardEl.dataset.hammer = 'true';
     const mc = new Hammer.Manager(cardEl);
     mc.add(new Hammer.Pan({ threshold: 10, pointers: 1 }));
-    mc.on('panstart', () => { cardEl.style.transition = 'none'; });
+    mc.on('panstart', () => { window.isSwiping = true; cardEl.style.transition = 'none'; });
     
     mc.on('pan', e => {
         if (e.target.closest('.subtasks-list-view')) { cardEl.style.transform = 'translateX(0)'; return; }
@@ -1749,6 +1744,7 @@ function attachSwipeListeners(cardEl) {
     });
     
     mc.on('panend', e => {
+        setTimeout(() => window.isSwiping = false, 50);
         cardEl.style.transition = 'transform 0.3s var(--ease-out-quint)';
         const threshold = cardEl.offsetWidth * 0.35; const id = cardEl.dataset.id;
         const item = db.items.find(i => i.localId === id);
