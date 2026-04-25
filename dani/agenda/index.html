@@ -210,7 +210,6 @@
             background-color: var(--secondary-bg); border: 1px solid var(--border-color);
             border-left: 3px solid var(--text-muted); color: var(--text-primary); 
             font-family: var(--ui-font); font-size: 16px; outline: none;
-            /* Soporte para el icono de calendario nativo en dark mode */
             color-scheme: dark;
         }
         input:focus, textarea:focus, select:focus {
@@ -450,8 +449,8 @@
     
     let eventos = [];
     let tareas = [];
-    let filtroUsuario = 'Todos'; // 'Todos', 'Dani', 'Norma'
-    let fechaNavegacion = new Date(); // Fecha actual del calendario
+    let filtroUsuario = 'Todos'; 
+    let fechaNavegacion = new Date(); 
 
     // ==========================================
     // 2. INICIALIZACIÓN DE LA UI
@@ -472,7 +471,13 @@
         cargarDatosLocales();
         updateConnectionStatus();
         showTab('agenda');
-        if (typeof oneDrive !== 'undefined') checkAuthState();
+        
+        // Bloqueo de seguridad: Validar que no se está abriendo vía "file://"
+        if (window.location.protocol === 'file:') {
+            showNotification("⚠️ Atención: OneDrive no funcionará abriendo el archivo localmente. Usa un servidor local.", "warning");
+        } else if (typeof oneDrive !== 'undefined') {
+            checkAuthState();
+        }
     }
 
     function cargarDatosLocales() {
@@ -534,7 +539,6 @@
     function renderAgenda() {
         const dateStr = formatearFecha(fechaNavegacion);
         
-        // Actualizar título fecha
         const hoyStr = formatearFecha(new Date());
         let tituloDisplay = fechaNavegacion.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
         if (dateStr === hoyStr) tituloDisplay = "HOY - " + tituloDisplay;
@@ -544,13 +548,11 @@
         const ul = document.getElementById('lista-eventos');
         ul.innerHTML = '';
 
-        // Filtrar eventos por día y usuario
         let eventosDelDia = eventos.filter(e => e.fecha === dateStr);
         if (filtroUsuario !== 'Todos') {
             eventosDelDia = eventosDelDia.filter(e => e.usuario === filtroUsuario || e.usuario === 'Ambos');
         }
 
-        // Ordenar por hora
         eventosDelDia.sort((a, b) => (a.hora || '24:00').localeCompare(b.hora || '24:00'));
 
         if (eventosDelDia.length === 0) {
@@ -655,7 +657,6 @@
         const li = document.createElement('li');
         li.className = `item-card ${t.usuario.toLowerCase()} ${t.completada ? 'completada' : ''}`;
         
-        // Formatear fecha límite si existe
         let limiteStr = '';
         if (t.fecha) {
             const fObj = new Date(t.fecha);
@@ -760,16 +761,22 @@
     // ==========================================
     // 7. MOTOR CLOUD: MICROSOFT MSAL & ONEDRIVE
     // ==========================================
+    
+    // --- AQUÍ ESTÁ LA SOLUCIÓN AL ERROR DE REDIRECT URI ---
+    // Usamos window.location.href.split('?')[0].split('#')[0] para asegurar
+    // que la URL capturada es exactamente la misma raíz sin variables extra.
+    const baseUrlLimpia = window.location.href.split('?')[0].split('#')[0];
+    
     const MSAL_CONFIG = {
         auth: {
             clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
             authority: "https://login.microsoftonline.com/common",
-            redirectUri: window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1)
+            redirectUri: baseUrlLimpia
         },
         cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false }
     };
     
-    const ARCHIVO_EXCEL = "aidanai-agenda.xlsx"; // EL ARCHIVO SOLICITADO
+    const ARCHIVO_EXCEL = "aidanai-agenda.xlsx";
 
     class OneDriveManager {
         constructor() {
@@ -845,7 +852,7 @@
             
             if (wb.SheetNames.includes("Eventos")) {
                 let dataEv = XLSX.utils.sheet_to_json(wb.Sheets["Eventos"]);
-                eventos = dataEv.filter(e => e.id); // Filtrar filas vacías de seguridad
+                eventos = dataEv.filter(e => e.id); 
             }
             if (wb.SheetNames.includes("Tareas")) {
                 let dataTa = XLSX.utils.sheet_to_json(wb.Sheets["Tareas"]);
@@ -866,6 +873,12 @@
     async function signInWithMicrosoft() {
         const btn = document.getElementById('btn-signin');
         if (!btn || btn.disabled) return;
+        
+        if (window.location.protocol === 'file:') {
+            showNotification("❌ Abre el archivo desde un servidor local (http), no desde file://", "error");
+            return;
+        }
+
         btn.textContent = "Conectando..."; btn.disabled = true;
         try { await oneDrive.login(); } 
         catch (e) {
@@ -935,7 +948,7 @@
         const cuentas = typeof oneDrive !== 'undefined' && oneDrive.msalInstance ? oneDrive.msalInstance.getAllAccounts() : [];
         if (cuentas.length > 0 && window.AppState.cloudReady) {
             clearTimeout(window.syncTimeout);
-            window.syncTimeout = setTimeout(syncToCloud, 2500); // 2.5s debounce
+            window.syncTimeout = setTimeout(syncToCloud, 2500); 
         }
     }
 </script>
