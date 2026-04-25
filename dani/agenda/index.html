@@ -808,9 +808,9 @@ async function checkAuthState() {
 }
 
 function initApp() {
+    initializeDatePicker(); // FIX: inicializar flatpickr PRIMERO antes de adjuntar listeners
     checkAuthState();
     attachGlobalEventListeners();
-    initializeDatePicker();
     updateSyncStatus();
 
     const btnSkip = document.getElementById('btn-skip-login');
@@ -845,7 +845,7 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const DIAS_SEMANA_LARGOS = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'];
 const DIAS_SEMANA_CORTOS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-const VIEW_ORDER = ['today', 'calendar', 'tasks'];
+const VIEW_ORDER = ['today', 'calendar', 'tasks', 'search'];
 
 let appState = {
     currentView: 'today',
@@ -937,7 +937,11 @@ function renderCurrentView() {
     if (currentView === 'today') renderTodayView();
     if (currentView === 'calendar') renderCalendarView();
     if (currentView === 'tasks') renderTaskListView();
-    if (currentView === 'search') renderSearchView(gebi('search-input').value);
+    // FIX: solo renderizar search si hay un query válido; evitar crash con input null
+    if (currentView === 'search') {
+        const searchInput = gebi('search-input');
+        renderSearchView(searchInput ? searchInput.value : '');
+    }
 }
 function updateNav(currentView) {
     qsa('.nav-item[data-view]').forEach(item => item.classList.toggle('active', item.dataset.view === currentView));
@@ -1141,7 +1145,10 @@ function createEventItemNode(item) {
     const itemColor = item.isImportant ? 'var(--accent-event-important)' : 'var(--accent-event-normal)';
     itemEl.style.borderLeftColor = itemColor;
     const time = item.isAllDay ? 'Todo el día' : (item.dueDate ? dateToHHMM(new Date(item.dueDate)) : '');
-    const syncIconHtml = `<span class="material-icons event-meta-icon onedrive-icon" title="Sincronizado">cloud_done</span>`;
+    const hasMsalSession = !!(oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0);
+    const syncIconHtml = hasMsalSession
+        ? `<span class="material-icons event-meta-icon onedrive-icon" title="Sincronizado con OneDrive">cloud_done</span>`
+        : `<span class="material-icons event-meta-icon local-only-icon" title="Solo local">cloud_off</span>`;
     
     itemEl.innerHTML = `
         <div class="item-card-swipe-background"><span class="material-icons">check_circle</span><span class="material-icons">delete</span></div>
@@ -1194,7 +1201,9 @@ function createTaskItemNode(item) {
             <div style="display: flex; flex-direction: column; align-items: flex-start; width: 100%;">
                 <div class="item-title">${item.description}</div>
                 <div class="item-metadata-container" style="margin-top: 4px;">
-                    <span class="material-icons event-meta-icon onedrive-icon" title="Sincronizado">cloud_done</span>
+                    ${!!(oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0)
+                        ? '<span class="material-icons event-meta-icon onedrive-icon" title="Sincronizado con OneDrive">cloud_done</span>'
+                        : '<span class="material-icons event-meta-icon local-only-icon" title="Solo local">cloud_off</span>'}
                 </div>
             </div>
             ${progressHtml}
@@ -1525,7 +1534,7 @@ async function handleDeleteItem(localId) {
         if (finalParentIndex > -1) db.items.splice(finalParentIndex, 1);
         
         saveDataAndSchedule();
-        if (!itemEl) renderApp();
+        renderApp(); // FIX: renderApp siempre, no solo cuando !itemEl
     };
     
     if (itemEl) {
@@ -1571,8 +1580,10 @@ async function handleQuickAddSubmit(e) {
 }
 
 function openAdvancedFromQuickAdd() {
-    const itemToEdit = parseNaturalLanguage(gebi('quick-add-input').value);
-    openAddItemModal(itemToEdit);
+    const parsedItem = parseNaturalLanguage(gebi('quick-add-input').value);
+    // FIX: asignar un localId temporal para que openAddItemModal lo trate como item nuevo correctamente
+    parsedItem.localId = null; // null fuerza a openAddItemModal a generar un uuid nuevo
+    openAddItemModal(parsedItem);
 }
 
 function parseNaturalLanguage(text) {
@@ -1721,12 +1732,26 @@ function handleDateSelectionFromPicker(e) {
 function toggleSearchBar() {
     const searchContainer = gebi('search-container');
     const isActive = searchContainer.classList.toggle('active');
-    if (isActive) { gebi('search-input').focus(); if (appState.currentView !== 'search') appState.lastView = appState.currentView; }
-    else { gebi('search-input').value = ''; executeSearch(''); }
+    if (isActive) { 
+        // FIX: guardar lastView antes de cambiar vista
+        if (appState.currentView !== 'search') appState.lastView = appState.currentView;
+        gebi('search-input').focus(); 
+    } else { 
+        gebi('search-input').value = ''; 
+        // Volver a la vista anterior al cerrar búsqueda
+        if (appState.currentView === 'search') switchView(appState.lastView || 'today');
+    }
 }
 
-function handleSearchSubmit(event) { event.preventDefault(); executeSearch(gebi('search-input').value); }
-function executeSearch(query) { if (query.trim() !== '') switchView('search'); else { if (appState.currentView === 'search') switchView(appState.lastView || 'today'); } }
+function handleSearchSubmit(event) { event.preventDefault(); const q = gebi('search-input')?.value || ''; executeSearch(q); }
+function executeSearch(query) { 
+    if (query.trim() !== '') { 
+        if (appState.currentView !== 'search') appState.lastView = appState.currentView;
+        switchView('search'); 
+    } else { 
+        if (appState.currentView === 'search') switchView(appState.lastView || 'today'); 
+    } 
+}
 
 function attachSwipeListeners(cardEl) {
     if (!cardEl || cardEl.dataset.hammer) return;
@@ -1753,7 +1778,10 @@ function attachSwipeListeners(cardEl) {
         if (e.deltaX > threshold) { 
             triggerHapticFeedback('success'); handleItemComplete(id, true); cardEl.style.transform = 'translateX(0)'; 
         } else if (e.deltaX < -threshold) {
-            showCustomConfirm(`¿Eliminar "${item.description}"?`, () => { handleDeleteItem(id); }, () => { cardEl.style.transform = 'translateX(0)'; });
+            showCustomConfirm(`¿Eliminar "${item.description}"?`, () => { handleDeleteItem(id); }, () => { 
+                cardEl.style.transition = 'transform 0.3s var(--ease-out-quint)';
+                cardEl.style.transform = 'translateX(0)'; 
+            });
         } else { cardEl.style.transform = 'translateX(0)'; }
         
         setTimeout(() => cardEl.classList.remove('swiping-right', 'swiping-left'), 300);
@@ -1775,9 +1803,11 @@ function updateSyncStatus() {
     let icon = indicator.querySelector('.material-icons');
     if (!icon) { icon = document.createElement('span'); icon.classList.add('material-icons'); indicator.appendChild(icon); }
     
+    // FIX: no usar indicator.className directamente; preservar clases base y solo cambiar la de estado
+    indicator.classList.remove('online', 'offline');
     const isOnline = navigator.onLine;
-    if (isOnline) { indicator.className = 'online'; icon.textContent = 'cloud_done'; indicator.title = "Conectado y sincronizado."; }
-    else { indicator.className = 'offline'; icon.textContent = 'cloud_off'; indicator.title = "Sin conexión. Los cambios se guardarán localmente."; }
+    if (isOnline) { indicator.classList.add('online'); icon.textContent = 'cloud_done'; indicator.title = "Conectado y sincronizado."; }
+    else { indicator.classList.add('offline'); icon.textContent = 'cloud_off'; indicator.title = "Sin conexión. Los cambios se guardarán localmente."; }
 }
 
 async function requestNotificationPermission() {
@@ -1814,6 +1844,28 @@ function scheduleAllNotifications() {
     Object.values(activeTimers).forEach(clearTimeout);
     activeTimers = {};
     db.items.forEach(scheduleNotification);
+}
+
+// ==========================================
+// FIX: handleSubtaskToggle - FUNCIÓN FALTANTE
+// ==========================================
+function handleSubtaskToggle(taskId, subtaskId) {
+    const itemIndex = db.items.findIndex(i => i.localId === taskId);
+    if (itemIndex === -1) return;
+    const item = db.items[itemIndex];
+    if (!item.subtasks) return;
+    const subtaskIndex = item.subtasks.findIndex(st => st.id === subtaskId);
+    if (subtaskIndex === -1) return;
+    item.subtasks[subtaskIndex].isComplete = !item.subtasks[subtaskIndex].isComplete;
+    const allComplete = item.subtasks.length > 0 && item.subtasks.every(st => st.isComplete);
+    if (allComplete && !item.isComplete) {
+        item.isComplete = true;
+        item.completedAt = Date.now();
+        showToast(`"${item.description}" completado automáticamente.`);
+    }
+    db.items[itemIndex] = { ...item, updatedAt: Date.now() };
+    renderApp();
+    saveDataAndSchedule();
 }
 
 // ==========================================
