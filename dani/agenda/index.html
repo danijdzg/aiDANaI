@@ -16,12 +16,6 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
-    
     <style>
         /* ============================ */
         /* 1. VARIABLES Y ESTILO BASE   */
@@ -130,7 +124,8 @@
 
         .view-toggle { display: flex; background-color: var(--surface-variant); border-radius: 10px; overflow: hidden; margin: 0 8px; }
         .view-toggle .btn-toggle { background: none; border: none; color: var(--secondary-color); padding: 6px 10px; cursor: pointer; transition: all 0.2s; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-        .view-toggle .btn-toggle.active { background-color: var(--primary-color); color: var(--on-primary); box-shadow: 0 2px 6px color-mix(in srgb, var(--primary-color) 20%, transparent); }
+        /* CORREGIDO: Compatible global (sin color-mix) */
+        .view-toggle .btn-toggle.active { background-color: var(--primary-color); color: var(--on-primary); box-shadow: 0 2px 6px rgba(0, 240, 255, 0.2); }
         .view-toggle .btn-toggle:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
         .view-toggle .btn-toggle:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
         .view-toggle .btn-toggle .material-icons { font-size: 20px; }
@@ -230,16 +225,20 @@
         
         .form-group { margin-bottom: 16px; }
         .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--secondary-color); }
+        
+        /* CORREGIDO: Eliminar color-mix() inseguro en inputs */
         .form-input, .form-select, .form-textarea { width: 100%; padding: 12px; border: 1.5px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--on-surface); font-size: 14px; font-family: var(--font-main); transition: border-color 0.2s, box-shadow 0.2s; }
-        .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent); }
+        .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.2); }
         .form-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; }
         
         .btn-icon { width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
         .btn-icon:active { transform: scale(0.9); }
         .btn-icon .material-icons { font-size: 24px; }
+        
+        /* CORREGIDO: Eliminar color-mix() inseguro en botones */
         #delete-item-btn { background-color: transparent; color: var(--accent-delete); }
-        #delete-item-btn:hover { background-color: color-mix(in srgb, var(--accent-delete) 10%, transparent); }
-        #save-item-btn { background-color: var(--primary-color); color: var(--on-primary); box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-color) 30%, transparent); }
+        #delete-item-btn:hover { background-color: rgba(255, 0, 60, 0.1); }
+        #save-item-btn { background-color: var(--primary-color); color: var(--on-primary); box-shadow: 0 4px 12px rgba(0, 240, 255, 0.3); }
         #save-item-btn:hover { background-color: var(--primary-variant); }
         
         .btn { padding: 10px 20px; border: none; border-radius: 24px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-main); }
@@ -259,7 +258,8 @@
         .empty-state .material-icons { font-size: 48px; margin-bottom: 8px; }
         .empty-state .btn { margin-top: 16px; }
         
-        .login-view { position: absolute; inset: 0; z-index: 1040; display: none; flex-direction: column; justify-content: center; align-items: center; padding: 1rem; background-color: var(--background); }
+        /* CORREGIDO: Bug Crítico - 'inset' se colapsa a tamaño 0 en Safari Antiguo / Android WebView. */
+        .login-view { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 1040; display: none; flex-direction: column; justify-content: center; align-items: center; padding: 1rem; background-color: var(--background); }
         .login-view--visible { display: flex; }
         .login-view__card { background-color: var(--surface); padding: 2rem 1.5rem; border-radius: 18px; box-shadow: var(--shadow-layered); width: 100%; max-width: 380px; text-align: center; animation: pop-in 0.3s ease-out; border: 1px solid var(--outline); z-index: 10; }
         @keyframes pop-in { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -281,21 +281,14 @@
         .completed-tasks-section[open] > summary .material-icons { transform: rotate(180deg); }
         .completed-tasks-list { padding: 0 12px 12px 12px; }
         
-        .login-view__logo { max-width: 90px; height: auto; border-radius: 18px; margin-bottom: 16px; box-shadow: 0 0 25px rgba(255, 255, 255, 0.1); }
         .login-view__title { margin-bottom: 4px; font-size: 20px; font-weight: 800; }
         .login-view__tagline { font-size: 15px; color: var(--secondary-color); margin-bottom: 20px; }
-        .login-view__actions { display: flex; justify-content: flex-end; margin-bottom: 16px; }
-        .login-view__link { font-size: 14px; color: var(--primary-color); text-decoration: none; font-weight: 600; transition: color 0.2s; }
-        .login-view__link:hover { color: var(--primary-variant); text-decoration: underline; }
         .login-view__footer { margin-top: 16px; width: 100%; }
         .btn--full { width: 100%; }
-        .spinner { display: inline-block; width: 1em; height: 1em; border: .15em solid currentColor; border-radius: 50%; border-top-color: transparent; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 8px; }
-        .btn--loading { pointer-events: none; opacity: .8; }
     </style>
 </head>
 <body>
     <div id="mobile-app-wrapper">
-
         <div id="login-screen" class="login-view login-view--visible">
             <div class="login-view__card" style="background: var(--card-bg); border-color: var(--border-color);">
                 <h2 id="login-title" class="login-view__title" style="font-family: var(--hud-font); color: var(--accent-cyan);">Agenda aiDANaI</h2>
@@ -500,7 +493,23 @@
 
     </div>
 
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js" defer></script>
+
     <script>
+// ==========================================
+// FIX CRÍTICO: Wrapper Seguro de LocalStorage
+// En navegadores restrictivos o modo incógnito, acceder a localStorage mata la app.
+// ==========================================
+const SafeStorage = {
+    get: (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } },
+    set: (key, val) => { try { localStorage.setItem(key, val); } catch(e) { console.warn("Storage bloqueado"); } },
+    remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
+};
+
 // ==========================================
 // 1. CONFIGURACIÓN DE MICROSOFT (MSAL)
 // ==========================================
@@ -523,7 +532,7 @@ const MSAL_CONFIG = {
 // ==========================================
 class OneDriveManager {
     constructor() {
-        this.fileId = localStorage.getItem("agenda_file_id");
+        this.fileId = SafeStorage.get("agenda_file_id");
         this.msalInstance = null;
         this.isReady = false;
     }
@@ -574,7 +583,7 @@ class OneDriveManager {
         if (res.ok) {
             const data = await res.json();
             this.fileId = data.id;
-            localStorage.setItem("agenda_file_id", data.id);
+            SafeStorage.set("agenda_file_id", data.id);
             return data.id;
         }
         return null;
@@ -602,7 +611,7 @@ class OneDriveManager {
         if (!res.ok) throw new Error("Error en la respuesta HTTP al subir: " + res.status);
         const data = await res.json();
         this.fileId = data.id;
-        localStorage.setItem("agenda_file_id", data.id);
+        SafeStorage.set("agenda_file_id", data.id);
         return data;
     }
 }
@@ -613,6 +622,7 @@ const oneDrive = new OneDriveManager();
 // ==========================================
 const ExcelManager = {
     generarLibro() {
+        if (typeof XLSX === 'undefined') throw new Error("SheetJS no está cargado. No se puede generar Excel.");
         const wb = XLSX.utils.book_new();
         const itemsSeguros = db.items || [];
         const taskListsSeguras = db.taskLists || [{ id: 'default', name: 'General' }];
@@ -633,6 +643,7 @@ const ExcelManager = {
     },
 
     cargarLibro(arrayBuffer) {
+        if (typeof XLSX === 'undefined') return false;
         const wb = XLSX.read(arrayBuffer, { type: 'array' });
         
         let cloudConfig = {};
@@ -663,12 +674,13 @@ const ExcelManager = {
                 notificationShown: (i.notificationShown === true || i.notificationShown === "true" || i.notificationShown === "TRUE" || i.notificationShown === 1),
                 createdAt: parseInt(i.createdAt) || Date.now(),
                 updatedAt: parseInt(i.updatedAt) || Date.now(),
-                completedAt: i.completedAt ? parseInt(i.completedAt) : null,
+                completedAt: (i.completedAt && i.completedAt !== "null" && !isNaN(parseInt(i.completedAt))) ? parseInt(i.completedAt) : null,
                 subtasks: (i.subtasks && typeof i.subtasks === 'string') ? JSON.parse(i.subtasks) : []
             }));
         }
         if (wb.SheetNames.includes("TaskLists")) {
-            db.taskLists = XLSX.utils.sheet_to_json(wb.Sheets["TaskLists"]);
+            let parsedLists = XLSX.utils.sheet_to_json(wb.Sheets["TaskLists"]);
+            db.taskLists = parsedLists.length > 0 ? parsedLists : [{ id: 'default', name: 'General' }];
         }
         return true;
     }
@@ -690,7 +702,7 @@ function saveDataAndSchedule() {
 async function saveData() {
     db.config = db.config || {};
     db.config.lastLocalUpdate = Date.now();
-    localStorage.setItem('agenda_db', JSON.stringify(db));
+    SafeStorage.set('agenda_db', JSON.stringify(db));
     
     if (oneDrive.msalInstance) {
         const cuentas = oneDrive.msalInstance.getAllAccounts();
@@ -740,8 +752,10 @@ async function signInWithMicrosoft() {
         console.error("Error iniciando login:", error);
         if (error.errorCode === "interaction_in_progress" || (error.message && error.message.includes("interaction_in_progress"))) {
             console.log("Limpiando caché atascada de MSAL...");
-            Object.keys(sessionStorage).forEach(key => { if (key.includes("msal") || key.includes("interaction")) sessionStorage.removeItem(key); });
-            Object.keys(localStorage).forEach(key => { if (key.includes("msal") || key.includes("interaction")) localStorage.removeItem(key); });
+            try {
+                Object.keys(sessionStorage).forEach(key => { if (key.includes("msal") || key.includes("interaction")) sessionStorage.removeItem(key); });
+                Object.keys(localStorage).forEach(key => { if (key.includes("msal") || key.includes("interaction")) localStorage.removeItem(key); });
+            } catch(e) {}
             showToast("Limpiando sesión atascada. Recargando app...", true);
             setTimeout(() => window.location.reload(), 2000);
             return;
@@ -753,7 +767,7 @@ async function signInWithMicrosoft() {
 
 function _loadLocalDb() {
     try {
-        const localDb = localStorage.getItem('agenda_db');
+        const localDb = SafeStorage.get('agenda_db');
         if (localDb) {
             const parsed = JSON.parse(localDb);
             if (parsed && typeof parsed === 'object') {
@@ -764,7 +778,7 @@ function _loadLocalDb() {
         }
     } catch (parseError) {
         console.warn("Base de datos local corrupta. Limpiando.");
-        localStorage.removeItem('agenda_db');
+        SafeStorage.remove('agenda_db');
         db = { items: [], taskLists: [{ id: 'default', name: 'General' }], config: { theme: 'cyberpunk-night', tutorialCompleted: false } };
     }
 }
@@ -808,7 +822,7 @@ async function checkAuthState() {
 }
 
 function initApp() {
-    initializeDatePicker(); // FIX: inicializar flatpickr PRIMERO antes de adjuntar listeners
+    initializeDatePicker(); 
     checkAuthState();
     attachGlobalEventListeners();
     updateSyncStatus();
@@ -823,13 +837,17 @@ function initApp() {
     }
 
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-            for (let registration of registrations) { registration.unregister(); }
-        }).then(() => {
-            navigator.serviceWorker.register('./service-worker.js')
-                .then(reg => console.log('Service Worker registrado:', reg))
-                .catch(err => console.log('Error en Service Worker:', err));
-        });
+        try {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                for (let registration of registrations) { registration.unregister(); }
+            }).then(() => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('Service Worker registrado:', reg))
+                    .catch(err => console.log('Error en Service Worker:', err));
+            });
+        } catch(e) {
+            console.warn("ServiceWorker bloqueado localmente", e);
+        }
     }
 }
 
@@ -862,7 +880,7 @@ let db = {
 let activeTimers = {};
 let newlyCreatedItemId = null;
 let isAppInitialized = false, isViewSwitching = false;
-window.isSwiping = false; // Flag para colisiones touch
+window.isSwiping = false;
 
 // ==========================================
 // 6. UTILIDADES
@@ -937,7 +955,6 @@ function renderCurrentView() {
     if (currentView === 'today') renderTodayView();
     if (currentView === 'calendar') renderCalendarView();
     if (currentView === 'tasks') renderTaskListView();
-    // FIX: solo renderizar search si hay un query válido; evitar crash con input null
     if (currentView === 'search') {
         const searchInput = gebi('search-input');
         renderSearchView(searchInput ? searchInput.value : '');
@@ -1248,8 +1265,8 @@ function attachGlobalEventListeners() {
                         if (cuentas.length > 0) { oneDrive.msalInstance.logoutRedirect({ account: cuentas[0] }); }
                     }
                     oneDrive.fileId = null;
-                    localStorage.removeItem("agenda_file_id");
-                    localStorage.removeItem("agenda_db");
+                    SafeStorage.remove("agenda_file_id");
+                    SafeStorage.remove("agenda_db");
                     window.location.reload();
                 });
             }
@@ -1422,6 +1439,12 @@ function toggleModalOptionsVisibility() {
 
 async function handleItemFormSubmit(e) {
     e.preventDefault();
+    
+    if (gebi('item-type').value === 'agenda' && (!flatpickrInstance.selectedDates || flatpickrInstance.selectedDates.length === 0)) {
+        showToast("Por favor, selecciona una fecha y hora para el evento.", true);
+        return;
+    }
+
     const localId = gebi('item-local-id').value;
     const existingItem = db.items.find(i => i.localId === localId);
     const subtasks = Array.from(qsa('#subtasks-container .subtask-item')).map(el => ({
@@ -1510,6 +1533,7 @@ async function handleItemComplete(localId, isComplete) {
             if (childItemIndex > -1) db.items.splice(childItemIndex, 1);
         }
         const updatedItem = { ...item, isComplete: false, completedAt: null, updatedAt: Date.now() };
+        if (updatedItem.type === 'task' && updatedItem.subtasks) updatedItem.subtasks.forEach(st => st.isComplete = false);
         db.items[itemIndex] = updatedItem;
     }
     renderApp();
@@ -1534,7 +1558,7 @@ async function handleDeleteItem(localId) {
         if (finalParentIndex > -1) db.items.splice(finalParentIndex, 1);
         
         saveDataAndSchedule();
-        renderApp(); // FIX: renderApp siempre, no solo cuando !itemEl
+        renderApp();
     };
     
     if (itemEl) {
@@ -1542,7 +1566,6 @@ async function handleDeleteItem(localId) {
         itemEl.addEventListener('animationend', performDeleteAndUpdate, { once: true });
     } else {
         performDeleteAndUpdate();
-        renderApp();
     }
 }
 
@@ -1581,8 +1604,7 @@ async function handleQuickAddSubmit(e) {
 
 function openAdvancedFromQuickAdd() {
     const parsedItem = parseNaturalLanguage(gebi('quick-add-input').value);
-    // FIX: asignar un localId temporal para que openAddItemModal lo trate como item nuevo correctamente
-    parsedItem.localId = null; // null fuerza a openAddItemModal a generar un uuid nuevo
+    parsedItem.localId = null;
     openAddItemModal(parsedItem);
 }
 
@@ -1707,7 +1729,7 @@ function initializeDatePicker() {
         if (flatpickr.l10ns && flatpickr.l10ns.es) flatpickr.localize(flatpickr.l10ns.es);
         const el = document.getElementById('item-datetime');
         if (!el) { console.warn('Elemento #item-datetime no encontrado.'); return; }
-        flatpickrInstance = flatpickr(el, { enableTime: true, dateFormat: 'Y-m-d H:i', time_24hr: true, minuteIncrement: 15 });
+        flatpickrInstance = flatpickr(el, { enableTime: true, dateFormat: 'Y-m-d H:i', time_24hr: true, minuteIncrement: 15, locale: "es" });
     } catch (e) { console.error('Error inicializando flatpickr:', e); }
 }
 
@@ -1733,12 +1755,10 @@ function toggleSearchBar() {
     const searchContainer = gebi('search-container');
     const isActive = searchContainer.classList.toggle('active');
     if (isActive) { 
-        // FIX: guardar lastView antes de cambiar vista
         if (appState.currentView !== 'search') appState.lastView = appState.currentView;
         gebi('search-input').focus(); 
     } else { 
         gebi('search-input').value = ''; 
-        // Volver a la vista anterior al cerrar búsqueda
         if (appState.currentView === 'search') switchView(appState.lastView || 'today');
     }
 }
@@ -1754,6 +1774,9 @@ function executeSearch(query) {
 }
 
 function attachSwipeListeners(cardEl) {
+    // FIX: Si falla HammerJS por problema de red, no rompe la UI
+    if (typeof Hammer === 'undefined') return; 
+    
     if (!cardEl || cardEl.dataset.hammer) return;
     cardEl.dataset.hammer = 'true';
     const mc = new Hammer.Manager(cardEl);
@@ -1776,7 +1799,7 @@ function attachSwipeListeners(cardEl) {
         if (!item) { cardEl.style.transform = 'translateX(0)'; return; }
         
         if (e.deltaX > threshold) { 
-            triggerHapticFeedback('success'); handleItemComplete(id, true); cardEl.style.transform = 'translateX(0)'; 
+            triggerHapticFeedback('success'); handleItemComplete(id, !item.isComplete); cardEl.style.transform = 'translateX(0)'; 
         } else if (e.deltaX < -threshold) {
             showCustomConfirm(`¿Eliminar "${item.description}"?`, () => { handleDeleteItem(id); }, () => { 
                 cardEl.style.transition = 'transform 0.3s var(--ease-out-quint)';
@@ -1803,7 +1826,6 @@ function updateSyncStatus() {
     let icon = indicator.querySelector('.material-icons');
     if (!icon) { icon = document.createElement('span'); icon.classList.add('material-icons'); indicator.appendChild(icon); }
     
-    // FIX: no usar indicator.className directamente; preservar clases base y solo cambiar la de estado
     indicator.classList.remove('online', 'offline');
     const isOnline = navigator.onLine;
     if (isOnline) { indicator.classList.add('online'); icon.textContent = 'cloud_done'; indicator.title = "Conectado y sincronizado."; }
@@ -1846,9 +1868,6 @@ function scheduleAllNotifications() {
     db.items.forEach(scheduleNotification);
 }
 
-// ==========================================
-// FIX: handleSubtaskToggle - FUNCIÓN FALTANTE
-// ==========================================
 function handleSubtaskToggle(taskId, subtaskId) {
     const itemIndex = db.items.findIndex(i => i.localId === taskId);
     if (itemIndex === -1) return;
@@ -1856,13 +1875,19 @@ function handleSubtaskToggle(taskId, subtaskId) {
     if (!item.subtasks) return;
     const subtaskIndex = item.subtasks.findIndex(st => st.id === subtaskId);
     if (subtaskIndex === -1) return;
+    
     item.subtasks[subtaskIndex].isComplete = !item.subtasks[subtaskIndex].isComplete;
     const allComplete = item.subtasks.length > 0 && item.subtasks.every(st => st.isComplete);
+    
     if (allComplete && !item.isComplete) {
         item.isComplete = true;
         item.completedAt = Date.now();
         showToast(`"${item.description}" completado automáticamente.`);
+    } else if (!allComplete && item.isComplete) {
+        item.isComplete = false;
+        item.completedAt = null;
     }
+    
     db.items[itemIndex] = { ...item, updatedAt: Date.now() };
     renderApp();
     saveDataAndSchedule();
