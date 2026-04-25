@@ -3,1901 +3,941 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Agenda aiDANaI</title>
-    
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
-    <link rel="manifest" href="manifest.json">
+    <title>Aidanai Agenda</title>
     <meta name="theme-color" content="#000000">
-
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Aidanai">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
+
     <style>
-        /* ============================ */
-        /* 1. VARIABLES Y ESTILO BASE   */
-        /* ============================ */
         :root {
-            --primary-bg: #000000; --secondary-bg: #0a0a0f; --card-bg: #0d0d14;
-            --border-color: #1a1a24; --text-primary: #f0f4f8; --text-secondary: #94a3b8;
-            --text-muted: #475569; --primary-color: #00f0ff; --primary-variant: #00a8b3;
-            --secondary-color: #94a3b8; --background: #000000; --surface: #0d0d14;
-            --surface-variant: #0a0a0f; --on-primary: #000000; --on-background: #f0f4f8;
-            --on-surface: #f0f4f8; --outline: #1a1a24; --accent-cyan: #00f0ff;
-            --shadow-layered: 0 10px 30px rgba(0,0,0,0.8);
-            --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
-            --ease-in-out-circ: cubic-bezier(0.785, 0.135, 0.15, 0.86);
-            --accent-task: #39ff14; --accent-event-normal: #b800ff;
-            --accent-event-important: #ff003c; --accent-delete: #ff003c;
-            --accent-complete: #39ff14; --accent-edit: #00f0ff;
-            --hud-font: 'Orbitron', sans-serif; --ui-font: 'Inter', sans-serif;
-            --font-main: var(--ui-font); --nav-height: 64px;
+            --primary-bg: #000000;
+            --secondary-bg: #0a0a0f;
+            --card-bg: #0d0d14;
+            --border-color: #1a1a24;
+            
+            --text-primary: #f0f4f8;
+            --text-secondary: #94a3b8;
+            --text-muted: #475569;
+
+            --accent-cyan: #00f0ff;     /* Color de Dani */
+            --accent-magenta: #ff003c;  /* Color de Norma */
+            --accent-green: #39ff14;    /* Color de Ambos */
+            --accent-yellow: #fcee0a; 
+            --accent-purple: #b800ff; 
+
+            --hud-font: 'Orbitron', sans-serif;
+            --ui-font: 'Inter', sans-serif;
+            --nav-height: 64px;
         }
 
+        body::after {
+            content: " ";
+            display: block;
+            position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.12) 50%);
+            z-index: 99999;
+            background-size: 100% 3px;
+            pointer-events: none;
+            opacity: 0.25;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body, html {
-            background-color: #000000; display: flex; justify-content: center; align-items: center; 
-            height: 100%; margin: 0; overflow: hidden; font-family: var(--font-main); 
-            color: var(--text-primary); -webkit-tap-highlight-color: transparent;
+            height: 100%; margin: 0;
+            background-color: #000000;
+            display: flex; justify-content: center; align-items: center;
+            overflow: hidden; 
+            font-family: var(--ui-font);
+            -webkit-tap-highlight-color: transparent;
+            color: var(--text-primary);
         }
 
         #mobile-app-wrapper {
-            width: 100%; max-width: 400px; height: 100%; max-height: 800px; position: relative; 
-            background-color: var(--primary-bg); overflow: hidden; transform: translateZ(0); 
-            display: flex; flex-direction: column;
+            width: 100%; max-width: 400px;
+            height: 100%; max-height: 800px;
+            position: relative;
+            background-color: #000000;
+            overflow: hidden; 
         }
 
         @media (min-width: 500px) and (min-height: 810px) {
             #mobile-app-wrapper {
-                border-radius: 35px; height: 800px; border: 2px solid var(--border-color);
-                box-shadow: 0 0 0 8px #000000, 0 0 0 12px var(--primary-color), 
-                            0 25px 50px rgba(0,0,0,0.95), 0 0 60px rgba(0, 240, 255, 0.15);
+                height: 800px; 
+                border: 1px solid var(--border-color);
+                box-shadow: 0 0 0 8px #000, 0 0 0 10px var(--accent-purple), 0 25px 50px rgba(0,0,0,0.95), 0 0 60px rgba(184, 0, 255, 0.12); 
             }
         }
 
-        h1, h2, h3, .section-title, .agenda-date-header { font-family: var(--hud-font); text-transform: uppercase; }
-
-        .btn, .fab {
-            font-family: var(--hud-font); font-weight: 800; text-transform: uppercase; letter-spacing: 1px; 
-            border-radius: 0; box-shadow: 4px 4px 0px rgba(0, 240, 255, 0.2); transition: all 0.15s ease;
+        #app-container {
+            display: none;
+            flex-direction: column; 
+            height: 100%; width: 100%; 
+            background-color: #000000;
+            position: relative;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 90px !important;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
         }
 
-        .btn-primary { background-color: var(--primary-color); color: #000; }
-        .fab { background-color: var(--primary-color); color: #000; }
-
-        .form-input, .form-select, .form-textarea {
-            background-color: var(--secondary-bg); border: 1px solid var(--border-color); 
-            border-left: 3px solid var(--text-muted); color: var(--text-primary); border-radius: 0;
+        /* Splash Screen */
+        #splash-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 9999;
         }
-        .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--primary-color); border-left-color: var(--primary-color); }
-        *:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; border-radius: 6px; }
+        #splash-logo {
+            width: 100px; height: 100px; 
+            background: var(--secondary-bg);
+            border: 2px solid var(--accent-purple);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 20px rgba(184, 0, 255, 0.4);
+            margin-bottom: 20px;
+            transform: rotate(45deg);
+        }
+        #splash-logo span { transform: rotate(-45deg); font-size: 40px; }
+        #splash-title {
+            font-family: var(--hud-font); font-size: 1.8rem; font-weight: 900; 
+            color: var(--accent-purple); text-transform: uppercase;
+            letter-spacing: 2px; text-shadow: 0 0 10px rgba(184, 0, 255, 0.5);
+            text-align: center;
+        }
+        #loading-bar { width: 200px; height: 4px; background: var(--border-color); margin-top: 30px; }
+        #loading-progress {
+            height: 100%; width: 0%;
+            background: var(--accent-purple);
+            box-shadow: 0 0 10px var(--accent-purple);
+            animation: loadingProgress 2s ease-in-out forwards; 
+        }
+        @keyframes loadingProgress { to { width: 100%; } }
+        @keyframes splashFadeOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.1); pointer-events: none; } }
+        #splash-screen.fade-out { animation: splashFadeOut 0.6s ease-in forwards; }
 
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .item-entering { animation: fade-in-down 0.4s var(--ease-out-quint) forwards; }
-        @keyframes fade-out-up { from { opacity: 1; transform: scale(1); max-height: 200px; margin-top: 6px; padding-top: 8px; padding-bottom: 8px; } to { opacity: 0; transform: scale(0.95); max-height: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; border-width: 0; } }
-        .item-exiting { overflow: hidden; animation: fade-out-up 0.35s var(--ease-in-out-circ) forwards; }
+        /* Header & Auth */
+        header {
+            background: rgba(0, 0, 0, 0.97); 
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-bottom: 2px solid var(--accent-purple);
+            padding: 15px 16px; 
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 1000; 
+        }
+        header h1 {
+            font-family: var(--hud-font); font-size: 1.1rem; font-weight: 700; 
+            color: var(--text-primary); letter-spacing: 1px; text-transform: uppercase;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .header-status { display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        .status-text { font-family: var(--hud-font); font-size: 0.65rem; color: var(--accent-green); text-transform: uppercase; }
+        
+        .auth-bar {
+            background: var(--secondary-bg); padding: 8px 16px; 
+            border-bottom: 1px solid var(--border-color);
+            display: flex; flex-direction: column; gap: 8px; text-align: center;
+            position: sticky; top: 0; z-index: 999; 
+        }
+        #auth-status { color: var(--text-secondary); font-size: 0.8rem; font-family: var(--hud-font); }
+        
+        /* Botones */
+        button {
+            background-color: var(--accent-purple);
+            color: #000 !important;
+            font-family: var(--hud-font); font-weight: 800; font-size: 0.85rem;
+            text-transform: uppercase; letter-spacing: 1px;
+            border: none; border-radius: 0;
+            padding: 12px 15px; cursor: pointer;
+            box-shadow: 4px 4px 0px rgba(184, 0, 255, 0.2);
+            transition: all 0.15s ease;
+            min-height: 44px; touch-action: manipulation;
+        }
+        button:active { transform: translate(2px, 2px); box-shadow: 0px 0px 0px transparent; }
+        button.secondary { background-color: transparent !important; color: var(--text-primary) !important; border: 1px solid var(--text-muted); box-shadow: none; }
+        button.danger { background-color: var(--accent-magenta); box-shadow: 4px 4px 0px rgba(255, 0, 60, 0.2); }
+        button.dani-btn { background-color: var(--accent-cyan); box-shadow: 4px 4px 0px rgba(0, 240, 255, 0.2); }
+        button.ambos-btn { background-color: var(--accent-green); box-shadow: 4px 4px 0px rgba(57, 255, 20, 0.2); }
 
-        #app-root { display: none; max-width: 420px; margin: 0 auto; height: 100%; background: var(--background); position: relative; flex-direction: column; padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
-        #app-root.visible { display: flex; }
-        .main-content { flex: 1; display: flex; position: relative; overflow: hidden; }
-        .view { display: none; width: 100%; flex-direction: column; height: 100%; overflow-y: auto; padding: 16px; position: absolute; top: 0; left: 0; transition: transform 0.4s var(--ease-in-out-circ), opacity 0.4s var(--ease-in-out-circ); }
-        .view.active { display: flex; z-index: 1; }
-        .view.is-animating { display: flex; }
-        #calendarView { padding: 0; overflow-y: auto; }
+        /* Navegación Inferior */
+        nav.main-nav { 
+            position: fixed; bottom: 0; left: 0; right: 0;
+            z-index: 9999 !important; border-top: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.99); backdrop-filter: blur(16px);
+            display: flex; justify-content: space-around;
+            padding-bottom: env(safe-area-inset-bottom); height: var(--nav-height);
+        }
+        nav.main-nav button { 
+            background: transparent; color: var(--text-muted) !important;
+            box-shadow: none; flex-grow: 1; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; gap: 3px;
+            border-top: 3px solid transparent; padding: 6px 4px; min-height: var(--nav-height);
+        }
+        nav.main-nav button .nav-label { font-family: var(--hud-font); font-size: 0.5rem; text-transform: uppercase; opacity: 0.7; }
+        nav.main-nav button.active .nav-label { opacity: 1; }
 
-        @keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes slideOutToLeft { from { transform: translateX(0); } to { transform: translateX(-100%); } }
-        @keyframes slideInFromLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-        @keyframes slideOutToRight { from { transform: translateX(0); } to { transform: translateX(100%); } }
-        .view-enter-from-right { animation: slideInFromRight 0.4s var(--ease-in-out-circ) forwards; opacity: 1; z-index: 2;}
-        .view-exit-to-left { animation: slideOutToLeft 0.4s var(--ease-in-out-circ) forwards; opacity: 0.5; z-index: 1;}
-        .view-enter-from-left { animation: slideInFromLeft 0.4s var(--ease-in-out-circ) forwards; opacity: 1; z-index: 2;}
-        .view-exit-to-right { animation: slideOutToRight 0.4s var(--ease-in-out-circ) forwards; opacity: 0.5; z-index: 1;}
+        #btn-agenda.active  { color: var(--accent-yellow) !important; border-top-color: var(--accent-yellow); background: linear-gradient(180deg, rgba(252,238,10,0.08) 0%, transparent 100%); }
+        #btn-tareas.active  { color: var(--accent-purple) !important; border-top-color: var(--accent-purple); background: linear-gradient(180deg, rgba(184,0,255,0.08) 0%, transparent 100%); }
+        #btn-nuevo.active   { color: var(--accent-green) !important; border-top-color: var(--accent-green); background: linear-gradient(180deg, rgba(57,255,20,0.08) 0%, transparent 100%); }
+        #btn-perfil.active  { color: var(--accent-cyan) !important; border-top-color: var(--accent-cyan); background: linear-gradient(180deg, rgba(0,240,255,0.08) 0%, transparent 100%); }
 
-        .bottom-nav { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 420px; background: rgba(28, 28, 28, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid rgba(56, 56, 66, 0.5); display: flex; padding: 2px 0 calc(2px + env(safe-area-inset-bottom)) 0; z-index: 100; }
-        .nav-item { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px 0; cursor: pointer; transition: color 0.2s, background-color 0.2s, transform 0.1s ease-out; color: var(--secondary-color); border: none; background: transparent; border-radius: 8px; }
-        .nav-item.active { color: var(--primary-color); }
-        .nav-item:active { transform: scale(0.92); }
-        .nav-item .material-icons { font-size: 24px; margin: 0; }
-        .nav-item#onedrive-sync-btn.synced { color: #00f0ff; }
-        .nav-item#onedrive-sync-btn.syncing .material-icons { animation: spin 1s linear infinite; }
+        /* Contenidos */
+        .tab-content { padding: 16px; display: none; }
+        .tab-content.active { display: block; animation: fadeInTab 0.25s ease-out; }
+        @keyframes fadeInTab { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .tab-content h2 { 
+            font-family: var(--hud-font); font-size: 1.3rem; text-transform: uppercase;
+            border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 20px;
+        }
 
-        .calendar-container { flex-shrink: 0; padding: 8px 16px; border-bottom: 1px solid var(--outline); }
-        .calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-        .calendar-title-container { position: relative; display: inline-flex; align-items: center; }
-        #calendar-title-btn { font-size: 16px; font-weight: 700; background: none; border: none; color: var(--on-background); padding: 4px 6px; border-radius: 8px; cursor: pointer; transition: background-color 0.2s, transform 0.1s ease-out; }
-        #calendar-title-btn:hover { background-color: var(--surface-variant); }
-        #calendar-title-btn:active { transform: scale(0.95); }
-        .calendar-nav { display: flex; align-items: center; gap: 2px; }
-        .icon-button { background: none; border: none; color: var(--secondary-color); cursor: pointer; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s; }
-        .icon-button:active { transform: scale(0.9); background-color: var(--surface-variant); }
-        .icon-button .material-icons { font-size: 22px; }
-        .icon-button:hover { background-color: var(--surface-variant); color: var(--on-surface); }
-        
-        #sync-status-indicator { position: absolute; top: 2px; right: -20px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
-        #sync-status-indicator .material-icons { font-size: 14px; transition: color 0.3s; }
-        #sync-status-indicator.online .material-icons { color: var(--accent-complete); }
-        #sync-status-indicator.offline .material-icons { color: var(--secondary-color); }
+        /* Formularios */
+        input[type="text"], input[type="date"], input[type="time"], textarea, select {
+            width: 100%; padding: 12px; margin-bottom: 15px; 
+            background-color: var(--secondary-bg); border: 1px solid var(--border-color);
+            border-left: 3px solid var(--text-muted); color: var(--text-primary); 
+            font-family: var(--ui-font); font-size: 16px; outline: none;
+            /* Soporte para el icono de calendario nativo en dark mode */
+            color-scheme: dark;
+        }
+        input:focus, textarea:focus, select:focus {
+            border-color: var(--accent-purple); border-left: 3px solid var(--accent-purple);
+        }
+        label {
+            display: block; margin-bottom: 5px; font-family: var(--hud-font); font-size: 0.75rem;
+            color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;
+        }
 
-        .view-toggle { display: flex; background-color: var(--surface-variant); border-radius: 10px; overflow: hidden; margin: 0 8px; }
-        .view-toggle .btn-toggle { background: none; border: none; color: var(--secondary-color); padding: 6px 10px; cursor: pointer; transition: all 0.2s; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-        /* CORREGIDO: Compatible global (sin color-mix) */
-        .view-toggle .btn-toggle.active { background-color: var(--primary-color); color: var(--on-primary); box-shadow: 0 2px 6px rgba(0, 240, 255, 0.2); }
-        .view-toggle .btn-toggle:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
-        .view-toggle .btn-toggle:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
-        .view-toggle .btn-toggle .material-icons { font-size: 20px; }
-        .view-toggle .btn-toggle:active { transform: scale(0.95); }
+        /* Tarjetas de Agenda y Tareas */
+        .item-list { list-style: none; }
+        .item-card {
+            background-color: var(--card-bg); border: 1px solid var(--border-color);
+            margin-bottom: 10px; padding: 16px; border-left: 4px solid var(--text-muted);
+            position: relative;
+        }
+        .item-card.dani { border-left-color: var(--accent-cyan); }
+        .item-card.norma { border-left-color: var(--accent-magenta); }
+        .item-card.ambos { border-left-color: var(--accent-green); }
+        .item-card.completada { opacity: 0.5; text-decoration: line-through; }
 
-        #calendarView[data-display-mode="month"] #weekly-view-container { display: none; }
-        #calendarView[data-display-mode="month"] #calendar-grid { display: block; }
-        #calendarView[data-display-mode="month"] #agendaListContainer { display: block; }
-        #calendarView[data-display-mode="week"] #calendar-grid { display: none; }
-        #calendarView[data-display-mode="week"] #agendaListContainer { display: none; }
-        #calendarView[data-display-mode="week"] #weekly-view-container { display: flex; flex-direction: column; }
+        .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .item-title { font-family: var(--hud-font); font-size: 1.05rem; color: var(--text-primary); }
+        .item-time { font-size: 0.8rem; color: var(--accent-yellow); font-family: var(--hud-font); }
+        .item-desc { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; margin-bottom: 10px; }
+        
+        .badge-user {
+            font-family: var(--hud-font); font-size: 0.6rem; padding: 3px 6px; font-weight: 900;
+            text-transform: uppercase; display: inline-block; margin-bottom: 8px; color: #000;
+        }
+        .badge-dani { background: var(--accent-cyan); }
+        .badge-norma { background: var(--accent-magenta); }
+        .badge-ambos { background: var(--accent-green); }
 
-        .calendar-grid { background: var(--surface); border-radius: 12px; padding: 6px; box-shadow: var(--shadow-layered); }
-        .calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; }
-        .weekday { text-align: center; font-size: 12px; font-weight: 500; color: var(--secondary-color); padding: 4px; }
-        .calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-        .calendar-day { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; position: relative; font-size: 14px; transition: all 0.2s; padding: 4px 0; }
-        .day-number { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
-        .calendar-day.today .day-number { background: var(--primary-color); color: var(--on-primary); font-weight: 700; }
-        .calendar-day.selected .day-number { background: var(--primary-variant); color: var(--on-primary); }
-        .calendar-day.other-month { color: var(--outline); pointer-events: none; }
-        .calendar-day .event-dots-container { position: absolute; bottom: 4px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; }
-        .event-dot { width: 4px; height: 4px; border-radius: 50%; }
-        .event-dot.important { background-color: var(--accent-event-important); }
-        .event-dot.normal { background-color: var(--accent-event-normal); }
+        .item-actions { display: flex; gap: 8px; margin-top: 10px; }
+        .item-actions button { padding: 6px 10px; font-size: 0.7rem; min-height: auto; box-shadow: none; border: 1px solid var(--border-color); }
 
-        .agenda-list-container { flex-grow: 1; overflow-y: auto; padding: 8px 16px 80px 16px; }
-        .agenda-date-header { font-weight: 700; letter-spacing: 0.3px; font-size: 12px; color: var(--primary-color); padding: 8px 12px; background-color: var(--surface-variant); position: sticky; top: 0; z-index: 1; border-radius: 8px; margin-top: 8px; margin-bottom: 4px; }
-        #today-greeting { font-size: 22px; font-weight: 700; margin-bottom: 24px; }
-        .section-title { font-size: 16px; font-weight: 500; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; letter-spacing: 0.2px; margin-top: 24px; }
-        
-        .weekly-view-container { flex-grow: 1; padding: 8px 16px 80px 16px; overflow-y: auto; height: 100%; }
-        .weekly-day-section { margin-bottom: 16px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-layered); padding-bottom: 8px; }
-        .weekly-day-header { font-weight: 700; letter-spacing: 0.3px; font-size: 14px; color: var(--primary-color); padding: 12px 16px; background-color: var(--surface-variant); border-top-left-radius: 12px; border-top-right-radius: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-        .weekly-day-header .material-icons { font-size: 18px; }
-        .weekly-day-events { padding: 0 16px; }
-        .weekly-day-events .empty-state { padding: 12px; font-size: 13px; }
+        /* Tareas específicas (Checkbox) */
+        .task-checkbox-wrapper { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .task-checkbox { width: 24px; height: 24px; accent-color: var(--accent-purple); }
 
-        #search-container { padding: 4px 16px 8px; transition: max-height 0.4s ease-out, opacity 0.4s ease-out; max-height: 0; opacity: 0; overflow: hidden; }
-        #search-container.active { max-height: 60px; opacity: 1; }
-        #search-form { display: flex; gap: 8px; align-items: center; }
-        #search-input { flex-grow: 1; padding: 10px 16px; border: 1.5px solid var(--outline); border-radius: 24px; background: var(--surface-variant); color: var(--on-surface); font-size: 14px; }
-        #search-input:focus { outline: none; border-color: var(--primary-color); }
+        /* Date Picker Top Bar */
+        .date-navigator {
+            display: flex; justify-content: space-between; align-items: center;
+            background: var(--secondary-bg); padding: 10px; border: 1px solid var(--border-color);
+            margin-bottom: 15px; border-left: 3px solid var(--accent-yellow);
+        }
+        .date-navigator button { min-height: auto; padding: 5px 10px; background: transparent; color: var(--text-primary) !important; box-shadow: none; border: 1px solid var(--border-color); }
+        .date-navigator h3 { font-family: var(--hud-font); font-size: 0.9rem; color: var(--accent-yellow); margin: 0; text-transform: uppercase;}
 
-        .fab { position: absolute; bottom: calc(65px + env(safe-area-inset-bottom)); right: 20px; width: 56px; height: 56px; border-radius: 50%; background-color: var(--primary-color); color: var(--on-primary); border: none; box-shadow: var(--shadow-layered); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 150; transition: background-color 0.2s, transform 0.2s var(--ease-out-quint); }
-        .fab:hover { background-color: var(--primary-variant); transform: scale(1.05); }
-        .fab:active { transform: scale(0.9); }
-        .fab .material-icons { font-size: 28px; }
+        /* Modal */
+        .modal { 
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+            z-index: 100000; align-items: flex-end; display: none; 
+            background-color: rgba(0, 0, 0, 0.88); backdrop-filter: blur(6px);
+        }
+        .modal[style*="display: block"] { display: flex !important; }
+        .modal-content { 
+            width: 100%; background-color: var(--primary-bg); border-top: 2px solid var(--accent-purple);
+            padding: 24px 20px calc(24px + env(safe-area-bottom)); max-height: 90vh; overflow-y: auto;
+            animation: slideUpSheet 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes slideUpSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-content h3 { font-family: var(--hud-font); text-transform: uppercase; color: var(--accent-purple); border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; margin-bottom: 20px; }
+        .close-button { color: var(--text-muted); position: absolute; top: 15px; right: 20px; font-size: 30px; font-family: var(--hud-font); touch-action: manipulation; cursor: pointer;}
 
-        .list-item-swipe-container { display: flex; align-items: flex-start; background: var(--surface); border-radius: 8px; margin-bottom: 6px; box-shadow: var(--shadow-layered); transition: transform 0.3s var(--ease-out-quint), opacity 0.3s, border-left-color 0.3s, background-color 0.1s; user-select: none; position: relative; padding: 8px 10px; border-left: 4px solid transparent; }
-        .list-item-swipe-container:active { background-color: var(--surface-variant); transform: scale(0.98); }
-        .list-item-swipe-container .item-icon { color: var(--secondary-color); margin-right: 8px; padding-top: 2px; font-size: 22px; display: flex; align-items: center; justify-content: center; z-index: 2; position: relative; }
-        .list-item-swipe-container .item-checkbox .material-icons { font-size: 24px; cursor: pointer; transition: color 0.2s, transform 0.2s var(--ease-out-quint); color: var(--secondary-color); }
-        .list-item-swipe-container .item-checkbox:active .material-icons { transform: scale(0.85); }
-        .list-item-swipe-container.completed .item-checkbox .material-icons { color: var(--accent-complete); }
-        .list-item-swipe-container .item-content { flex: 1; cursor: pointer; min-width: 0; display: flex; flex-direction: column; justify-content: center; z-index: 2; position: relative; }
-        
-        .item-card-swipe-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; color: white; opacity: 0; transition: opacity 0.2s; z-index: 1; pointer-events: none; }
-        .list-item-swipe-container.swiping-right .item-card-swipe-background { background-color: var(--accent-complete); justify-content: flex-start; opacity: 1; }
-        .list-item-swipe-container.swiping-left .item-card-swipe-background { background-color: var(--accent-delete); justify-content: flex-end; opacity: 1; }
-        .list-item-swipe-container.swiping-right .item-card-swipe-background .material-icons:first-child,
-        .list-item-swipe-container.swiping-left .item-card-swipe-background .material-icons:last-child { animation: bounceIn 0.3s ease-out; }
-        @keyframes bounceIn { 0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); } }
-        
-        .list-item-swipe-container.completed { opacity: 0.6; }
-        .list-item-swipe-container.completed .item-title { text-decoration: line-through; text-decoration-color: var(--secondary-color); }
-        .item-title { font-weight: 500; font-size: 14px; white-space: normal; word-break: break-word; line-height: 1.3; font-family: var(--font-main); }
-        .event-time { font-size: 13px; font-weight: 700; color: var(--secondary-color); padding-top: 1px; }
-        .event-meta-icon { font-size: 16px; color: var(--secondary-color); flex-shrink: 0; }
-        .item-metadata-container { display: flex; align-items: center; gap: 8px; margin-top: 2px; color: var(--secondary-color); }
-        
-        .onedrive-icon { color: var(--accent-cyan) !important; }
-        .local-only-icon { color: var(--secondary-color) !important; }
-        
-        .task-progress-container { margin-top: 8px; }
-        .progress-bar-wrapper { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary-color); }
-        .progress-bar { flex-grow: 1; background: var(--outline); border-radius: 4px; height: 4px; overflow: hidden; }
-        .progress-bar-fill { width: 0%; height: 100%; background: var(--primary-color); transition: width 0.3s; }
-        .subtasks-list-view { margin-top: 6px; padding-left: 4px; display: flex; flex-direction: column; gap: 4px; }
-        .subtask-list-view-item { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background-color 0.2s; }
-        .subtask-list-view-item:hover { background-color: var(--surface-variant); }
-        .subtask-list-view-item .material-icons { font-size: 18px; color: var(--secondary-color); transition: color 0.2s; }
-        .subtask-list-view-item.completed { text-decoration: line-through; color: var(--secondary-color); }
-        .subtask-list-view-item.completed .material-icons { color: var(--accent-complete); }
-        
-        #quick-add-feedback { margin-top: -8px; margin-bottom: 8px; padding: 0 4px; min-height: 28px; transition: all 0.2s; }
-        .feedback-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 16px; font-size: 13px; font-weight: 500; background-color: var(--surface-variant); color: var(--on-surface); animation: fade-in-down 0.3s var(--ease-out-quint); }
-        .feedback-chip .material-icons { font-size: 18px; }
-        .feedback-chip.type-agenda { color: var(--primary-color); }
-        .feedback-chip.type-task { color: var(--accent-task); }
-
-        .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: flex-end; justify-content: center; z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.4s var(--ease-out-quint); }
-        .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal { background: var(--surface); border-radius: 24px 24px 0 0; padding: 16px 24px 24px 24px; width: 100%; max-width: 420px; max-height: 95vh; overflow-y: auto; box-shadow: var(--shadow-layered); transform: translateY(100%); transition: transform 0.4s var(--ease-out-quint); }
-        .modal-overlay.active .modal { transform: translateY(0); }
-        .modal-grabber { width: 40px; height: 5px; background-color: var(--outline); border-radius: 2.5px; margin: 0 auto 16px; flex-shrink: 0; }
-        
-        .form-group { margin-bottom: 16px; }
-        .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--secondary-color); }
-        
-        /* CORREGIDO: Eliminar color-mix() inseguro en inputs */
-        .form-input, .form-select, .form-textarea { width: 100%; padding: 12px; border: 1.5px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--on-surface); font-size: 14px; font-family: var(--font-main); transition: border-color 0.2s, box-shadow 0.2s; }
-        .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.2); }
-        .form-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; }
-        
-        .btn-icon { width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-        .btn-icon:active { transform: scale(0.9); }
-        .btn-icon .material-icons { font-size: 24px; }
-        
-        /* CORREGIDO: Eliminar color-mix() inseguro en botones */
-        #delete-item-btn { background-color: transparent; color: var(--accent-delete); }
-        #delete-item-btn:hover { background-color: rgba(255, 0, 60, 0.1); }
-        #save-item-btn { background-color: var(--primary-color); color: var(--on-primary); box-shadow: 0 4px 12px rgba(0, 240, 255, 0.3); }
-        #save-item-btn:hover { background-color: var(--primary-variant); }
-        
-        .btn { padding: 10px 20px; border: none; border-radius: 24px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-main); }
-        .btn:active { transform: scale(0.95); opacity: 0.9; }
-        .btn-primary { background: var(--primary-color); color: var(--on-primary); }
-        .btn-secondary { background: transparent; color: var(--secondary-color); border: 1.5px solid var(--outline); }
-        .btn-link { background: none; border: none; color: var(--primary-color); font-weight: 500; cursor: pointer; }
-        
-        #task-options-group { display: none; }
-        .subtask-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-        .subtask-item input[type="checkbox"] { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--primary-color); }
-        .subtask-item input[type="text"] { flex-grow: 1; font-size: 14px; border: none; background: transparent; border-bottom: 1px solid var(--outline); border-radius: 0; padding: 4px 0; color: var(--on-surface); }
-        .subtask-item input[type="text"]:focus { outline: none; border-bottom-color: var(--primary-color); }
-        .subtask-item .delete-subtask-btn { color: var(--secondary-color); font-size: 20px; }
-        
-        .empty-state { text-align: center; padding: 40px 24px; color: var(--secondary-color); }
-        .empty-state .material-icons { font-size: 48px; margin-bottom: 8px; }
-        .empty-state .btn { margin-top: 16px; }
-        
-        /* CORREGIDO: Bug Crítico - 'inset' se colapsa a tamaño 0 en Safari Antiguo / Android WebView. */
-        .login-view { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 1040; display: none; flex-direction: column; justify-content: center; align-items: center; padding: 1rem; background-color: var(--background); }
-        .login-view--visible { display: flex; }
-        .login-view__card { background-color: var(--surface); padding: 2rem 1.5rem; border-radius: 18px; box-shadow: var(--shadow-layered); width: 100%; max-width: 380px; text-align: center; animation: pop-in 0.3s ease-out; border: 1px solid var(--outline); z-index: 10; }
-        @keyframes pop-in { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        
-        #toast-container { position: absolute; bottom: calc(60px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
-        .toast { background-color: rgba(30, 30, 36, 0.85); backdrop-filter: blur(5px); color: white; padding: 10px 18px; border-radius: 12px; box-shadow: var(--shadow-layered); display: flex; align-items: center; animation: toastFadeIn 0.4s var(--ease-out-quint), toastFadeOut 0.4s 2.6s var(--ease-out-quint); font-size: 14px; }
-        @keyframes toastFadeIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        @keyframes toastFadeOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(10px) scale(0.95); } }
-        
-        .tasks-header { display: flex; align-items: center; justify-content: space-between; padding: 0 0 16px 0; }
-        .tasks-header .form-select { flex-grow: 1; }
-        .tasks-header .icon-button { flex-shrink: 0; margin-left: 8px; }
-        
-        .completed-tasks-section { background: var(--surface); padding: 0; border-radius: 10px; margin-top: 24px; border: 1px solid var(--outline); }
-        .completed-tasks-section summary { font-weight: 500; cursor: pointer; display: flex; justify-content: space-between; align-items: center; list-style: none; padding: 12px; }
-        .completed-tasks-section summary::-webkit-details-marker { display: none; }
-        .completed-tasks-section summary .section-title { margin: 0; font-size: 16px; }
-        .completed-tasks-section summary .material-icons { transition: transform 0.2s; }
-        .completed-tasks-section[open] > summary .material-icons { transform: rotate(180deg); }
-        .completed-tasks-list { padding: 0 12px 12px 12px; }
-        
-        .login-view__title { margin-bottom: 4px; font-size: 20px; font-weight: 800; }
-        .login-view__tagline { font-size: 15px; color: var(--secondary-color); margin-bottom: 20px; }
-        .login-view__footer { margin-top: 16px; width: 100%; }
-        .btn--full { width: 100%; }
+        /* Botón de salir */
+        .btn-exit { background: transparent !important; color: var(--accent-magenta) !important; border: 1px solid var(--accent-magenta) !important; font-family: var(--hud-font); font-size: 0.65rem; font-weight: 700; padding: 3px 8px; box-shadow: none; vertical-align: middle; margin-left: 6px; }
     </style>
 </head>
 <body>
-    <div id="mobile-app-wrapper">
-        <div id="login-screen" class="login-view login-view--visible">
-            <div class="login-view__card" style="background: var(--card-bg); border-color: var(--border-color);">
-                <h2 id="login-title" class="login-view__title" style="font-family: var(--hud-font); color: var(--accent-cyan);">Agenda aiDANaI</h2>
-                <p id="auth-status" class="login-view__tagline" style="color: var(--text-secondary);">Inicia sesión para sincronizar con OneDrive.</p>
-                <div class="login-view__footer" style="display:flex; flex-direction:column; gap:10px;">
-                    <button type="button" id="btn-signin" class="btn btn-primary btn--full" onclick="signInWithMicrosoft()">Login con Microsoft</button>
-                    <button type="button" id="btn-skip-login" class="btn btn-secondary btn--full">Continuar sin cuenta</button>
-                </div>
+<div id="mobile-app-wrapper">
+    <div id="splash-screen">
+        <div id="splash-logo"><span>📅</span></div>
+        <h1 id="splash-title">Aidanai<br><span style="color:var(--text-primary); font-size:1.2rem;">Nexus</span></h1>
+        <div id="loading-bar"><div id="loading-progress"></div></div>
+    </div>
+
+    <div id="app-container">
+        <header>
+            <h1>📅 Aidanai Agenda</h1>
+            <div class="header-status"> 
+                <div class="status-dot"></div><span class="status-text">Online</span>
             </div>
+        </header>
+
+        <div class="auth-bar">
+            <span id="auth-status">Modo Local. Conecta para sincronizar.</span>
+            <button id="btn-signin" onclick="signInWithMicrosoft()">Login OneDrive</button>
         </div>
 
-        <div id="app-root">
-            <nav class="bottom-nav">
-                <button class="nav-item active" data-view="today" title="Hoy"><span class="material-icons">home</span></button>
-                <button class="nav-item" data-view="calendar" title="Agenda"><span class="material-icons">calendar_today</span></button>
-                <button class="nav-item" data-view="tasks" title="Tareas"><span class="material-icons">task_alt</span></button>
-                <button class="nav-item" id="onedrive-sync-btn" title="Sincronizar con OneDrive"><span class="material-icons">cloud_sync</span></button>
-                <button class="nav-item" data-action="logout" title="Salir de la App"><span class="material-icons">logout</span></button>
-            </nav>
-
-            <main class="main-content" id="main-content-area">
-                <div id="todayView" class="view active">
-                    <h1 id="today-greeting"></h1>
-                    <h3 class="section-title" id="today-events-title">Eventos de Hoy</h3>
-                    <div id="today-events-list"></div>
-                    <div id="empty-today-events" class="empty-state" style="display: none;">
-                        <span class="material-icons">celebration</span>
-                        <p>No tienes eventos para hoy. ¡Disfruta del día!</p>
-                        <button class="btn btn-primary" data-action="quick-add">Añadir Evento o Tarea</button>
-                    </div>
-                    <h3 class="section-title" id="today-tasks-title">Tareas Pendientes</h3>
-                    <div id="today-tasks-list"></div>
-                    <div id="empty-today-tasks" class="empty-state" style="display: none;">
-                        <span class="material-icons">check_circle</span>
-                        <p>¡Ninguna tarea pendiente! Bien hecho.</p>
-                        <button class="btn btn-primary" data-action="quick-add">Añadir Nueva Tarea</button>
-                    </div>
-                    <h3 class="section-title" id="tomorrow-events-title">Mañana te espera...</h3>
-                    <div id="tomorrow-events-list"></div>
-                    <div id="empty-tomorrow-events" class="empty-state" style="display: none;"><span class="material-icons">event_upcoming</span><p>Nada programado para mañana todavía.</p></div>
-                </div>
-
-                <div id="calendarView" class="view">
-                    <div class="calendar-container">
-                        <div class="calendar-header">
-                            <div class="calendar-title-container">
-                                <button id="calendar-title-btn" title="Seleccionar mes y año"></button>
-                                <span id="sync-status-indicator"></span>
-                            </div>
-                            <div class="calendar-nav">
-                                <button id="search-toggle-btn" class="icon-button" title="Buscar"><span class="material-icons">search</span></button>
-                                <div class="view-toggle">
-                                    <button id="month-view-btn" class="btn-toggle active" data-mode="month" title="Vista Mensual"><span class="material-icons">calendar_month</span></button>
-                                    <button id="week-view-btn" class="btn-toggle" data-mode="week" title="Vista Semanal"><span class="material-icons">view_week</span></button>
-                                </div>
-                                <button id="today-btn" class="icon-button" title="Ir a Hoy en el Calendario"><span class="material-icons">today</span></button>
-                                <button id="prev-nav-btn" class="icon-button" title="Mes anterior"><span class="material-icons">chevron_left</span></button>
-                                <button id="next-nav-btn" class="icon-button" title="Mes siguiente"><span class="material-icons">chevron_right</span></button>
-                            </div>
-                        </div>
-                        <div id="search-container">
-                            <form id="search-form">
-                                <input type="search" id="search-input" placeholder="Buscar y pulsar Enter...">
-                                <button type="submit" class="btn btn-primary" style="padding: 8px 12px; border-radius: 50%; width: 40px; height: 40px;"><span class="material-icons">search</span></button>
-                            </form>
-                        </div>
-                        <div id="calendar-grid" class="calendar-grid">
-                            <div class="calendar-weekdays" id="calendarWeekdays"></div>
-                            <div class="calendar-days" id="calendarDays"></div>
-                        </div>
-                    </div>
-                    <div class="agenda-list-container" id="agendaListContainer"><div id="agendaList"></div></div>
-                    <div id="weekly-view-container" class="weekly-view-container"></div>
-                </div>
-
-                <div id="tasksView" class="view">
-                    <div class="tasks-header">
-                        <select id="task-list-filter" class="form-select"></select>
-                        <button id="manage-lists-btn" class="icon-button" title="Gestionar Listas"><span class="material-icons">playlist_add</span></button>
-                    </div>
-                    <div id="tasks-content"></div>
-                    <div id="emptyTasks" class="empty-state" style="display: none;">
-                        <span class="material-icons">check_circle_outline</span>
-                        <p>No tienes tareas en esta lista.</p>
-                        <button class="btn btn-primary" data-action="quick-add">Añadir tu primera tarea</button>
-                    </div>
-                </div>
-
-                <div id="searchView" class="view">
-                    <h3 class="section-title" id="search-results-title">Resultados de la Búsqueda</h3>
-                    <div id="searchResultsList"></div>
-                    <div id="emptySearch" class="empty-state" style="display: none;"><span class="material-icons">search_off</span><p>No se encontraron resultados.</p></div>
-                </div>
-            </main>
-
-            <button id="fab-add-item" class="fab" title="Añadir ítem">
-                <span class="material-icons">add</span>
+        <nav class="main-nav">
+            <button id="btn-agenda" onclick="showTab('agenda')">
+                <span class="material-icons">event_note</span>
+                <span class="nav-label">Agenda</span>
             </button>
+            <button id="btn-tareas" onclick="showTab('tareas')">
+                <span class="material-icons">check_box</span>
+                <span class="nav-label">Tareas</span>
+            </button>
+            <button id="btn-nuevo" onclick="showTab('nuevo')">
+                <span class="material-icons">add_circle_outline</span>
+                <span class="nav-label">Añadir</span>
+            </button>
+            <button id="btn-perfil" onclick="showTab('perfil')">
+                <span class="material-icons">tune</span>
+                <span class="nav-label">Filtro</span>
+            </button>
+        </nav>
+
+        <div id="agenda" class="tab-content">
+            <h2><span style="color:var(--accent-yellow)">❚</span> Calendario</h2>
+            <div class="date-navigator">
+                <button onclick="cambiarDia(-1)"><span class="material-icons">chevron_left</span></button>
+                <h3 id="fecha-actual-display">Hoy</h3>
+                <input type="date" id="fecha-picker" style="display:none;" onchange="seleccionarFecha(this.value)">
+                <button onclick="document.getElementById('fecha-picker').showPicker()"><span class="material-icons">calendar_today</span></button>
+                <button onclick="cambiarDia(1)"><span class="material-icons">chevron_right</span></button>
+            </div>
+            <ul id="lista-eventos" class="item-list"></ul>
         </div>
 
-        <div id="quick-add-modal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-grabber"></div>
-                <form id="quick-add-form">
-                    <div class="form-group">
-                        <label class="form-label" for="quick-add-input">Creación Rápida ✨</label>
-                        <textarea class="form-textarea" id="quick-add-input" placeholder="Ej: 'Reunión con el equipo mañana a las 10:30'..." rows="3"></textarea>
-                        <div id="quick-add-feedback"></div>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn-link" id="open-advanced-editor-btn">Editar Detalles</button>
-                        <div>
-                            <button type="button" class="btn btn-secondary" id="cancel-quick-add-btn">Cancelar</button>
-                            <button type="submit" class="btn btn-primary" id="save-quick-add-btn">Añadir</button>
-                        </div>
-                    </div>
-                </form>
+        <div id="tareas" class="tab-content">
+            <h2><span style="color:var(--accent-purple)">❚</span> Tareas Pendientes</h2>
+            <ul id="lista-tareas-pendientes" class="item-list"></ul>
+            
+            <h2 style="margin-top: 30px; font-size: 1rem;"><span style="color:var(--text-muted)">❚</span> Completadas</h2>
+            <ul id="lista-tareas-completadas" class="item-list"></ul>
+        </div>
+
+        <div id="nuevo" class="tab-content">
+            <h2><span style="color:var(--accent-green)">❚</span> Creación Rápida</h2>
+            <div style="display:flex; flex-direction:column; gap:15px; margin-top:20px;">
+                <button onclick="abrirModalEvento()" style="padding: 20px; font-size: 1.1rem; background: var(--accent-yellow); color: #000 !important;">
+                    <span class="material-icons" style="vertical-align: middle; margin-right: 5px;">event</span> Nuevo Evento
+                </button>
+                <button onclick="abrirModalTarea()" style="padding: 20px; font-size: 1.1rem;">
+                    <span class="material-icons" style="vertical-align: middle; margin-right: 5px;">assignment_turned_in</span> Nueva Tarea
+                </button>
             </div>
         </div>
 
-        <div id="add-item-modal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-grabber"></div>
-                <form id="add-item-form">
-                    <input type="hidden" id="item-local-id">
-                    <div class="form-group"><label class="form-label" for="item-description">Descripción</label><textarea class="form-textarea" id="item-description" placeholder="Describe el ítem..." rows="3"></textarea></div>
-                    <div class="form-group"><label class="form-label" for="item-type">Tipo</label><select class="form-select" id="item-type"><option value="agenda">Evento (con fecha)</option><option value="task">Tarea (sin fecha)</option></select></div>
-                    <div id="task-options-group">
-                        <div class="form-group"><label class="form-label" for="item-task-list">Lista de Tareas</label><select class="form-select" id="item-task-list"></select></div>
-                        <div class="form-group">
-                            <label class="form-label">Sub-tareas</label>
-                            <div id="subtasks-container"></div>
-                            <div id="add-subtask-controls" style="display: flex; gap: 8px;">
-                                <input type="text" id="new-subtask-input" class="form-input" placeholder="Añadir sub-tarea y pulsar Enter...">
-                                <button type="button" id="add-subtask-btn" class="btn-icon" style="background:var(--primary-color); color: var(--on-primary); flex-shrink:0;"><span class="material-icons">add</span></button>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="datetime-notification-group">
-                        <div class="form-group"><label class="form-label" for="item-datetime">Fecha y Hora</label><input type="text" class="form-input" id="item-datetime" placeholder="Selecciona fecha y hora..."></div>
-                        <div id="event-options" style="margin-top: 12px;">
-                            <div class="form-group" style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="item-all-day"><label for="item-all-day">Todo el día</label></div>
-                            <div class="form-group" style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="item-important"><label for="item-important">Marcar como importante (Rojo)</label></div>
-                            <div class="form-group" style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="item-notification-enabled"><label for="item-notification-enabled">Activar notificación</label></div>
-                            <div class="form-group" id="reminder-time-group" style="display: none; margin-top: 12px;">
-                                <label class="form-label" for="item-reminder">Avisarme...</label>
-                                <select class="form-select" id="item-reminder"><option value="0">Justo a la hora</option><option value="5">5 minutos antes</option><option value="15">15 minutos antes</option><option value="30">30 minutos antes</option><option value="60">1 hora antes</option></select>
-                            </div>
-                            <div class="form-group" style="margin-top: 12px;"><label class="form-label" for="item-recurrence">Repetir</label><select class="form-select" id="item-recurrence"><option value="none">No repetir</option><option value="daily">Diariamente</option><option value="weekly">Semanalmente</option><option value="monthly">Mensualmente</option><option value="yearly">Anualmente</option></select></div>
-                        </div>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn-icon" id="delete-item-btn" style="display: none;" title="Eliminar"><span class="material-icons">delete</span></button>
-                        <button type="button" class="btn btn-secondary" id="cancel-item-btn">Cancelar</button>
-                        <button type="submit" class="btn-icon" id="save-item-btn" title="Guardar"><span class="material-icons">check</span></button>
-                    </div>
-                </form>
+        <div id="perfil" class="tab-content">
+            <h2><span style="color:var(--accent-cyan)">❚</span> Filtro de Vista</h2>
+            <p style="color:var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">Selecciona de quién quieres ver la agenda y las tareas actualmente.</p>
+            
+            <div style="display:grid; gap:15px;">
+                <button class="dani-btn" onclick="setFiltroUsuario('Dani')">Ver solo Dani</button>
+                <button class="danger" onclick="setFiltroUsuario('Norma')" style="background-color: var(--accent-magenta);">Ver solo Norma</button>
+                <button class="ambos-btn" onclick="setFiltroUsuario('Todos')">Ver Todo</button>
             </div>
-        </div>
-
-        <div id="manage-lists-modal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-grabber"></div>
-                <h3 class="section-title">Gestionar Listas de Tareas</h3>
-                <div id="task-lists-editor"></div>
-                <form id="add-list-form" style="display:flex; gap:8px; margin-top:16px;">
-                    <input type="text" id="new-list-name" class="form-input" placeholder="Nombre de nueva lista..." required>
-                    <button type="submit" class="btn btn-primary">Añadir</button>
-                </form>
-                <div class="form-actions" style="justify-content:flex-end;">
-                    <button type="button" class="btn btn-secondary" id="close-manage-lists-btn">Cerrar</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="date-picker-modal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-grabber"></div>
-                <form id="date-picker-form">
-                    <div class="form-group"><label class="form-label">Mes</label><select id="month-select" class="form-select"></select></div>
-                    <div class="form-group"><label class="form-label">Año</label><input type="number" id="year-select" min="2020" max="2030" step="1" class="form-input"></div>
-                    <div style="display:flex; gap:12px; margin-top:24px;">
-                        <button type="button" class="btn btn-secondary" id="cancel-date-picker-btn">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Ir</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div id="toast-container"></div>
-
-        <div id="custom-confirm-modal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-grabber"></div>
-                <p id="confirm-message" style="margin-bottom: 24px; text-align: center; font-size: 16px;"></p>
-                <div class="form-actions" style="justify-content: center; gap: 16px;">
-                    <button type="button" class="btn btn-secondary" id="confirm-cancel-btn">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="confirm-ok-btn">Confirmar</button>
-                </div>
+            <div style="margin-top: 30px; padding: 15px; background: var(--secondary-bg); border-left: 3px solid var(--accent-purple);">
+                <p style="font-family: var(--hud-font); font-size: 0.8rem; color: var(--accent-purple);">ESTADO ACTUAL:</p>
+                <h3 id="filtro-actual-text" style="margin-top: 5px;">Mostrando TODO</h3>
             </div>
         </div>
 
     </div>
 
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js" defer></script>
+    <div id="modal-evento" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('modal-evento')">&times;</span>
+            <h3 id="modal-evento-title" style="color:var(--accent-yellow);">Añadir Evento</h3>
+            <input type="hidden" id="evento-id">
+            
+            <label>Título:</label>
+            <input type="text" id="evento-titulo" placeholder="Ej: Cena con amigos">
+            
+            <div style="display:flex; gap:10px;">
+                <div style="flex:1;">
+                    <label>Fecha:</label>
+                    <input type="date" id="evento-fecha">
+                </div>
+                <div style="flex:1;">
+                    <label>Hora:</label>
+                    <input type="time" id="evento-hora">
+                </div>
+            </div>
 
-    <script>
-// ==========================================
-// FIX CRÍTICO: Wrapper Seguro de LocalStorage
-// En navegadores restrictivos o modo incógnito, acceder a localStorage mata la app.
-// ==========================================
-const SafeStorage = {
-    get: (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } },
-    set: (key, val) => { try { localStorage.setItem(key, val); } catch(e) { console.warn("Storage bloqueado"); } },
-    remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
-};
+            <label>¿A quién aplica?</label>
+            <select id="evento-usuario">
+                <option value="Ambos">Ambos</option>
+                <option value="Dani">Dani</option>
+                <option value="Norma">Norma</option>
+            </select>
 
-// ==========================================
-// 1. CONFIGURACIÓN DE MICROSOFT (MSAL)
-// ==========================================
-const currentUrl = window.location.origin + window.location.pathname;
+            <label>Notas / Ubicación:</label>
+            <textarea id="evento-notas" rows="3"></textarea>
+            
+            <button onclick="guardarEvento()" style="background:var(--accent-yellow); color:#000; width:100%;">Guardar Evento</button>
+        </div>
+    </div>
 
-const MSAL_CONFIG = {
-    auth: {
-        clientId: "2a1e29f1-6b47-4ba2-a48e-adc4339e4514",
-        authority: "https://login.microsoftonline.com/common",
-        redirectUri: currentUrl 
-    },
-    cache: {
-        cacheLocation: "localStorage",
-        storeAuthStateInCookie: false
-    }
-};
+    <div id="modal-tarea" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('modal-tarea')">&times;</span>
+            <h3 id="modal-tarea-title">Añadir Tarea</h3>
+            <input type="hidden" id="tarea-id">
+            
+            <label>Descripción de la tarea:</label>
+            <input type="text" id="tarea-titulo" placeholder="Ej: Comprar pan">
+            
+            <label>Fecha Límite (Opcional):</label>
+            <input type="date" id="tarea-fecha">
 
-// ==========================================
-// 2. MOTOR ONEDRIVE MANAGER
-// ==========================================
-class OneDriveManager {
-    constructor() {
-        this.fileId = SafeStorage.get("agenda_file_id");
-        this.msalInstance = null;
-        this.isReady = false;
-    }
+            <label>Asignado a:</label>
+            <select id="tarea-usuario">
+                <option value="Ambos">Ambos</option>
+                <option value="Dani">Dani</option>
+                <option value="Norma">Norma</option>
+            </select>
+            
+            <button onclick="guardarTarea()" style="width:100%;">Guardar Tarea</button>
+        </div>
+    </div>
 
-    async init() {
-        if (typeof msal === 'undefined') {
-            console.error("❌ MSAL no cargó. Revisa tu conexión a internet o adblocker.");
-            return false;
-        }
-        
-        try {
-            this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-            await this.msalInstance.handleRedirectPromise();
-            this.isReady = true;
-            return true;
-        } catch (e) {
-            console.error("Error inicializando MSAL:", e);
-            return false;
-        }
-    }
+    <div id="confirm-delete-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('confirm-delete-modal')">&times;</span>
+            <h3 style="color:var(--accent-magenta);">Eliminar</h3>
+            <p id="confirm-delete-message" style="margin-bottom:20px; color: var(--text-secondary);"></p>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="secondary" onclick="closeModal('confirm-delete-modal')">Cancelar</button>
+                <button class="danger" id="confirm-delete-btn">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-    async getToken() {
-        if (!this.isReady) await this.init();
-        if (!this.msalInstance) throw new Error("MSAL no inicializado.");
-        const cuentas = this.msalInstance.getAllAccounts();
-        if (cuentas.length === 0) throw new Error("No hay sesión iniciada.");
-        
-        const request = { scopes: ["Files.ReadWrite.All", "User.Read"], account: cuentas[0] };
-        try { 
-            const response = await this.msalInstance.acquireTokenSilent(request);
-            return response.accessToken;
-        } catch (error) { 
-            console.warn("Fallo token silencioso, redirigiendo...", error);
-            await this.msalInstance.acquireTokenRedirect(request); 
-        }
-    }
-
-    async login() {
-        if (!this.isReady) await this.init();
-        await this.msalInstance.loginRedirect({ scopes: ["User.Read", "Files.ReadWrite.All"] });
-    }
-
-    async getFileId() {
-        const token = await this.getToken();
-        const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/agenda-aidanai.xlsx", {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-            const data = await res.json();
-            this.fileId = data.id;
-            SafeStorage.set("agenda_file_id", data.id);
-            return data.id;
-        }
-        return null;
-    }
-
-    async descargarArchivo(id) {
-        const token = await this.getToken();
-        const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!res.ok) throw new Error("Error en la respuesta HTTP al descargar: " + res.status);
-        return await res.arrayBuffer();
-    }
-
-    async subirArchivo(arrayBuffer) {
-        const token = await this.getToken();
-        const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/agenda-aidanai.xlsx:/content", {
-            method: "PUT",
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            },
-            body: arrayBuffer
-        });
-        if (!res.ok) throw new Error("Error en la respuesta HTTP al subir: " + res.status);
-        const data = await res.json();
-        this.fileId = data.id;
-        SafeStorage.set("agenda_file_id", data.id);
-        return data;
-    }
-}
-const oneDrive = new OneDriveManager();
-
-// ==========================================
-// 3. GESTOR DE EXCEL
-// ==========================================
-const ExcelManager = {
-    generarLibro() {
-        if (typeof XLSX === 'undefined') throw new Error("SheetJS no está cargado. No se puede generar Excel.");
-        const wb = XLSX.utils.book_new();
-        const itemsSeguros = db.items || [];
-        const taskListsSeguras = db.taskLists || [{ id: 'default', name: 'General' }];
-        const configSegura = db.config || {};
-        
-        configSegura.lastCloudUpdate = Date.now();
-        db.config = configSegura;
-
-        const itemsParaExcel = itemsSeguros.map(i => ({
-            ...i,
-            subtasks: i.subtasks ? JSON.stringify(i.subtasks) : "[]"
-        }));
-        
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemsParaExcel), "Items");
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskListsSeguras), "TaskLists");
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([configSegura]), "Config");
-        return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    },
-
-    cargarLibro(arrayBuffer) {
-        if (typeof XLSX === 'undefined') return false;
-        const wb = XLSX.read(arrayBuffer, { type: 'array' });
-        
-        let cloudConfig = {};
-        if (wb.SheetNames.includes("Config")) {
-            const conf = XLSX.utils.sheet_to_json(wb.Sheets["Config"]);
-            if (conf.length > 0) cloudConfig = conf[0];
-        }
-
-        const localUpdateTime = db.config?.lastLocalUpdate || 0;
-        const cloudUpdateTime = cloudConfig?.lastCloudUpdate || 0;
-        
-        if (localUpdateTime > cloudUpdateTime + 5000) {
-            console.log("Los datos locales son más recientes. Forzando sincronización local hacia la nube.");
-            setTimeout(() => syncToCloud(), 1000);
-            return false; 
-        }
-
-        db.config = cloudConfig;
-
-        if (wb.SheetNames.includes("Items")) {
-            const dataItems = XLSX.utils.sheet_to_json(wb.Sheets["Items"]);
-            db.items = dataItems.map(i => ({
-                ...i,
-                isComplete: (i.isComplete === true || i.isComplete === "true" || i.isComplete === "TRUE" || i.isComplete === 1),
-                isAllDay: (i.isAllDay === true || i.isAllDay === "true" || i.isAllDay === "TRUE" || i.isAllDay === 1),
-                isImportant: (i.isImportant === true || i.isImportant === "true" || i.isImportant === "TRUE" || i.isImportant === 1),
-                notificationEnabled: (i.notificationEnabled === true || i.notificationEnabled === "true" || i.notificationEnabled === "TRUE" || i.notificationEnabled === 1),
-                notificationShown: (i.notificationShown === true || i.notificationShown === "true" || i.notificationShown === "TRUE" || i.notificationShown === 1),
-                createdAt: parseInt(i.createdAt) || Date.now(),
-                updatedAt: parseInt(i.updatedAt) || Date.now(),
-                completedAt: (i.completedAt && i.completedAt !== "null" && !isNaN(parseInt(i.completedAt))) ? parseInt(i.completedAt) : null,
-                subtasks: (i.subtasks && typeof i.subtasks === 'string') ? JSON.parse(i.subtasks) : []
-            }));
-        }
-        if (wb.SheetNames.includes("TaskLists")) {
-            let parsedLists = XLSX.utils.sheet_to_json(wb.Sheets["TaskLists"]);
-            db.taskLists = parsedLists.length > 0 ? parsedLists : [{ id: 'default', name: 'General' }];
-        }
-        return true;
-    }
-};
-
-// ==========================================
-// 4. SINCRONIZACIÓN Y GUARDADO
-// ==========================================
-let isSyncing = false;
-
-function saveDataAndSchedule() {
-    scheduleAllNotifications();
-    saveData().catch(error => {
-        console.error("Error al guardar los datos:", error);
-        showToast("Error al guardar los datos localmente.", true);
-    });
-}
-
-async function saveData() {
-    db.config = db.config || {};
-    db.config.lastLocalUpdate = Date.now();
-    SafeStorage.set('agenda_db', JSON.stringify(db));
+<script>
+    // ==========================================
+    // 1. ESTADO DE LA APLICACIÓN Y DATOS
+    // ==========================================
+    const DB_EVENTOS_KEY = 'aidanai_agenda_eventos_v1';
+    const DB_TAREAS_KEY = 'aidanai_agenda_tareas_v1';
     
-    if (oneDrive.msalInstance) {
-        const cuentas = oneDrive.msalInstance.getAllAccounts();
-        if (cuentas.length > 0) {
-            clearTimeout(window.syncTimeout);
-            window.syncTimeout = setTimeout(() => { syncToCloud(); }, 2000);
+    let eventos = [];
+    let tareas = [];
+    let filtroUsuario = 'Todos'; // 'Todos', 'Dani', 'Norma'
+    let fechaNavegacion = new Date(); // Fecha actual del calendario
+
+    // ==========================================
+    // 2. INICIALIZACIÓN DE LA UI
+    // ==========================================
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => { document.getElementById('splash-screen').classList.add('fade-out'); }, 1500);
+        setTimeout(() => {
+            document.getElementById('splash-screen').style.display = 'none';
+            document.getElementById('app-container').style.display = 'flex';
+            iniciarApp();
+        }, 2100);
+
+        window.addEventListener('online', () => { updateConnectionStatus(); showNotification("🟢 Conexión recuperada"); syncToCloud(); });
+        window.addEventListener('offline', () => { updateConnectionStatus(); showNotification("🔴 Modo Offline"); });
+    });
+
+    function iniciarApp() {
+        cargarDatosLocales();
+        updateConnectionStatus();
+        showTab('agenda');
+        if (typeof oneDrive !== 'undefined') checkAuthState();
+    }
+
+    function cargarDatosLocales() {
+        eventos = JSON.parse(localStorage.getItem(DB_EVENTOS_KEY) || '[]');
+        tareas = JSON.parse(localStorage.getItem(DB_TAREAS_KEY) || '[]');
+        renderAll();
+    }
+
+    function guardarDatosLocales() {
+        localStorage.setItem(DB_EVENTOS_KEY, JSON.stringify(eventos));
+        localStorage.setItem(DB_TAREAS_KEY, JSON.stringify(tareas));
+        dispararSyncNube();
+    }
+
+    function renderAll() {
+        renderAgenda();
+        renderTareas();
+    }
+
+    // ==========================================
+    // 3. NAVEGACIÓN Y TABS
+    // ==========================================
+    function showTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('nav.main-nav button').forEach(b => b.classList.remove('active'));
+        
+        document.getElementById(tabId).classList.add('active');
+        document.getElementById(`btn-${tabId}`).classList.add('active');
+        
+        if (tabId === 'agenda') renderAgenda();
+        if (tabId === 'tareas') renderTareas();
+    }
+
+    function setFiltroUsuario(usuario) {
+        filtroUsuario = usuario;
+        document.getElementById('filtro-actual-text').textContent = `Mostrando: ${usuario.toUpperCase()}`;
+        showNotification(`Filtro aplicado: ${usuario}`);
+        renderAll();
+    }
+
+    // ==========================================
+    // 4. LÓGICA DE AGENDA (CALENDARIO)
+    // ==========================================
+    function formatearFecha(dateObj) {
+        return dateObj.toISOString().split('T')[0];
+    }
+
+    function cambiarDia(delta) {
+        fechaNavegacion.setDate(fechaNavegacion.getDate() + delta);
+        renderAgenda();
+    }
+
+    function seleccionarFecha(fechaStr) {
+        if (!fechaStr) return;
+        fechaNavegacion = new Date(fechaStr);
+        renderAgenda();
+    }
+
+    function renderAgenda() {
+        const dateStr = formatearFecha(fechaNavegacion);
+        
+        // Actualizar título fecha
+        const hoyStr = formatearFecha(new Date());
+        let tituloDisplay = fechaNavegacion.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+        if (dateStr === hoyStr) tituloDisplay = "HOY - " + tituloDisplay;
+        document.getElementById('fecha-actual-display').textContent = tituloDisplay.toUpperCase();
+        document.getElementById('fecha-picker').value = dateStr;
+
+        const ul = document.getElementById('lista-eventos');
+        ul.innerHTML = '';
+
+        // Filtrar eventos por día y usuario
+        let eventosDelDia = eventos.filter(e => e.fecha === dateStr);
+        if (filtroUsuario !== 'Todos') {
+            eventosDelDia = eventosDelDia.filter(e => e.usuario === filtroUsuario || e.usuario === 'Ambos');
         }
-    }
-}
 
-async function syncToCloud() {
-    if (isSyncing || !navigator.onLine || !oneDrive.msalInstance) return;
-    isSyncing = true;
-    const syncBtn = gebi('onedrive-sync-btn');
-    if (syncBtn) syncBtn.classList.add('syncing');
-    showToast("Guardando en OneDrive...");
+        // Ordenar por hora
+        eventosDelDia.sort((a, b) => (a.hora || '24:00').localeCompare(b.hora || '24:00'));
 
-    try {
-        if (!oneDrive.fileId) await oneDrive.getFileId();
-        const nuevoExcel = ExcelManager.generarLibro();
-        await oneDrive.subirArchivo(nuevoExcel);
-        showToast("✅ OneDrive actualizado");
-        if (syncBtn) { syncBtn.classList.remove('syncing'); syncBtn.classList.add('synced'); }
-    } catch (error) {
-        console.error("Error al subir:", error);
-        showToast("❌ Error al guardar en OneDrive", true);
-        if (syncBtn) syncBtn.classList.remove('syncing');
-    } finally {
-        isSyncing = false;
-    }
-}
-
-async function handleOnedriveSync() {
-    if (!oneDrive.msalInstance) { showToast("Sin sesión de Microsoft.", true); return; }
-    const cuentas = oneDrive.msalInstance.getAllAccounts();
-    if (cuentas.length === 0) { showToast("Inicia sesión primero.", true); return; }
-    await syncToCloud();
-}
-
-async function signInWithMicrosoft() {
-    const btn = document.getElementById('btn-signin');
-    if (btn && btn.disabled) return;
-    if (btn) { btn.textContent = "Redirigiendo..."; btn.disabled = true; }
-    try {
-        await oneDrive.login();
-    } catch (error) {
-        console.error("Error iniciando login:", error);
-        if (error.errorCode === "interaction_in_progress" || (error.message && error.message.includes("interaction_in_progress"))) {
-            console.log("Limpiando caché atascada de MSAL...");
-            try {
-                Object.keys(sessionStorage).forEach(key => { if (key.includes("msal") || key.includes("interaction")) sessionStorage.removeItem(key); });
-                Object.keys(localStorage).forEach(key => { if (key.includes("msal") || key.includes("interaction")) localStorage.removeItem(key); });
-            } catch(e) {}
-            showToast("Limpiando sesión atascada. Recargando app...", true);
-            setTimeout(() => window.location.reload(), 2000);
+        if (eventosDelDia.length === 0) {
+            ul.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:20px;">Sin eventos programados.</p>';
             return;
         }
-        showToast("Error de conexión. Intenta de nuevo.", true);
-        if (btn) { btn.textContent = "Login con Microsoft"; btn.disabled = false; }
-    }
-}
 
-function _loadLocalDb() {
-    try {
-        const localDb = SafeStorage.get('agenda_db');
-        if (localDb) {
-            const parsed = JSON.parse(localDb);
-            if (parsed && typeof parsed === 'object') {
-                db.items = parsed.items || [];
-                db.taskLists = parsed.taskLists || [{ id: 'default', name: 'General' }];
-                db.config = parsed.config || { theme: 'cyberpunk-night', tutorialCompleted: false };
-            }
-        }
-    } catch (parseError) {
-        console.warn("Base de datos local corrupta. Limpiando.");
-        SafeStorage.remove('agenda_db');
-        db = { items: [], taskLists: [{ id: 'default', name: 'General' }], config: { theme: 'cyberpunk-night', tutorialCompleted: false } };
-    }
-}
-
-async function checkAuthState() {
-    _loadLocalDb();
-    
-    const isMsalReady = await oneDrive.init();
-    
-    if (!isMsalReady) {
-        console.warn("MSAL no disponible o bloqueado. Iniciando sin conexión.");
-        const loginScreen = document.getElementById('login-screen');
-        if (loginScreen) loginScreen.classList.add('login-view--visible');
-        return;
-    }
-
-    const cuentas = oneDrive.msalInstance.getAllAccounts();
-
-    if (cuentas.length > 0) {
-        currentUser = cuentas[0];
-        startMainApp();
-        showToast(`Hola, ${currentUser.name || currentUser.username}`);
-        try {
-            let fid = await oneDrive.getFileId();
-            if (fid) {
-                const contenido = await oneDrive.descargarArchivo(fid);
-                const loaded = ExcelManager.cargarLibro(contenido);
-                if (loaded) {
-                    renderApp();
-                    showToast("✅ Datos cargados desde OneDrive");
-                }
-            }
-        } catch (error) {
-            console.error("Error conectando con OneDrive, usando datos locales:", error);
-            showToast("Usando datos locales (OneDrive no disponible)", true);
-        }
-    } else {
-        const loginScreen = document.getElementById('login-screen');
-        if (loginScreen) loginScreen.classList.add('login-view--visible');
-    }
-}
-
-function initApp() {
-    initializeDatePicker(); 
-    checkAuthState();
-    attachGlobalEventListeners();
-    updateSyncStatus();
-
-    const btnSkip = document.getElementById('btn-skip-login');
-    if (btnSkip) {
-        btnSkip.addEventListener('click', function() {
-            _loadLocalDb(); 
-            startMainApp();
-            renderApp();
+        eventosDelDia.forEach(ev => {
+            const li = document.createElement('li');
+            li.className = `item-card ${ev.usuario.toLowerCase()}`;
+            li.innerHTML = `
+                <div class="item-header">
+                    <div>
+                        <span class="badge-user badge-${ev.usuario.toLowerCase()}">${ev.usuario}</span>
+                        <div class="item-title">${ev.titulo}</div>
+                    </div>
+                    <div class="item-time">${ev.hora || 'Todo el día'}</div>
+                </div>
+                ${ev.notas ? `<div class="item-desc">${ev.notas}</div>` : ''}
+                <div class="item-actions">
+                    <button class="secondary" onclick="editarEvento('${ev.id}')">Editar</button>
+                    <button class="danger" onclick="prepararBorrado('evento', '${ev.id}')">Borrar</button>
+                </div>
+            `;
+            ul.appendChild(li);
         });
     }
 
-    if ('serviceWorker' in navigator) {
-        try {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                for (let registration of registrations) { registration.unregister(); }
-            }).then(() => {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(reg => console.log('Service Worker registrado:', reg))
-                    .catch(err => console.log('Error en Service Worker:', err));
-            });
-        } catch(e) {
-            console.warn("ServiceWorker bloqueado localmente", e);
-        }
-    }
-}
-
-// ==========================================
-// 5. CONSTANTES Y ESTADO DE LA APP
-// ==========================================
-const CONSTANTS = {
-    VIEWS: { TODAY: 'today', CALENDAR: 'calendar', TASKS: 'tasks', HELP: 'help', SEARCH: 'search' },
-    ITEM_TYPES: { AGENDA: 'agenda', TASK: 'task' },
-    ANIMATION_CLASSES: { ITEM_ENTERING: 'item-entering', ITEM_EXITING: 'item-exiting' }
-};
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const DIAS_SEMANA_LARGOS = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'];
-const DIAS_SEMANA_CORTOS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-const VIEW_ORDER = ['today', 'calendar', 'tasks', 'search'];
-
-let appState = {
-    currentView: 'today',
-    lastView: 'today',
-    calendar: { currentMonth: new Date().getMonth(), currentYear: new Date().getFullYear(), selectedDate: dateToYYYYMMDD(new Date()), displayMode: 'month' },
-    tasks: { selectedListId: 'default' }
-};
-let flatpickrInstance = null, currentUser = null;
-let db = {
-    items: [],
-    taskLists: [{ id: 'default', name: 'General' }],
-    config: { theme: 'cyberpunk-night', tutorialCompleted: false }
-};
-let activeTimers = {};
-let newlyCreatedItemId = null;
-let isAppInitialized = false, isViewSwitching = false;
-window.isSwiping = false;
-
-// ==========================================
-// 6. UTILIDADES
-// ==========================================
-const gebi = id => document.getElementById(id);
-const qsa = selector => document.querySelectorAll(selector);
-
-function dateToYYYYMMDD(date) {
-    if (!date || isNaN(date.getTime())) return '';
-    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
-}
-function dateToHHMM(date) {
-    if (!date || isNaN(date.getTime())) return "00:00";
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-}
-function yyyymmddToDate(dateStr) {
-    if (!dateStr) return new Date();
-    const parts = dateStr.split('-');
-    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-}
-function uuid() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
-function triggerHapticFeedback(type = 'light') {
-    if ('vibrate' in navigator) {
-        switch (type) {
-            case 'light': navigator.vibrate(10); break;
-            case 'medium': navigator.vibrate(40); break;
-            case 'success': navigator.vibrate([20, 50, 20]); break;
-            default: navigator.vibrate(10);
-        }
-    }
-}
-function debounce(func, delay = 250) {
-    let timeout;
-    return function(...args) { 
-        clearTimeout(timeout); 
-        timeout = setTimeout(() => func.apply(this, args), delay); 
-    };
-}
-function showToast(message, isError = false) {
-    const container = gebi('toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    if (isError) toast.style.backgroundColor = 'var(--accent-delete)';
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-}
-
-const startMainApp = () => {
-    if (isAppInitialized) return;
-    isAppInitialized = true;
-    gebi('login-screen').classList.remove('login-view--visible');
-    const appRoot = gebi('app-root');
-    appRoot.classList.add('visible');
-    updateNav(appState.currentView);
-    appRoot.querySelector('.view.active')?.classList.remove('active');
-    const newActiveView = appRoot.querySelector(`#${appState.currentView}View`);
-    if (newActiveView) newActiveView.classList.add('active');
-    renderApp();
-    scheduleAllNotifications();
-};
-
-function renderApp() { if (!db || !isAppInitialized) return; updateNav(appState.currentView); renderCurrentView(); }
-function renderCurrentView() {
-    const { currentView } = appState;
-    if (currentView === 'today') renderTodayView();
-    if (currentView === 'calendar') renderCalendarView();
-    if (currentView === 'tasks') renderTaskListView();
-    if (currentView === 'search') {
-        const searchInput = gebi('search-input');
-        renderSearchView(searchInput ? searchInput.value : '');
-    }
-}
-function updateNav(currentView) {
-    qsa('.nav-item[data-view]').forEach(item => item.classList.toggle('active', item.dataset.view === currentView));
-}
-
-// ==========================================
-// 7. VISTAS
-// ==========================================
-function renderTodayView() {
-    const hours = new Date().getHours();
-    const greeting = hours < 12 ? "Buenos días" : hours < 20 ? "Buenas tardes" : "Buenas noches";
-    gebi('today-greeting').textContent = greeting;
-    
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-    const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const tomorrowEnd = new Date(todayEnd); tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
-    
-    const todayEvents = db.items.filter(i => i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= todayStart && new Date(i.dueDate) <= todayEnd).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-    const pendingTasks = db.items.filter(i => i.type === 'task' && !i.isComplete).sort((a, b) => a.createdAt - b.createdAt);
-    const tomorrowEvents = db.items.filter(i => i.type === 'agenda' && !i.isComplete && i.dueDate && new Date(i.dueDate) >= tomorrowStart && new Date(i.dueDate) <= tomorrowEnd).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-    
-    const renderListWithEmptyState = (containerId, emptyStateId, titleId, items) => {
-        const container = gebi(containerId); const emptyState = gebi(emptyStateId); const title = gebi(titleId);
-        container.innerHTML = '';
-        if (items.length > 0) { 
-            items.forEach(item => container.appendChild(createUniversalListItemNode(item))); 
-            emptyState.style.display = 'none'; title.style.display = 'flex'; 
-        } else { 
-            emptyState.style.display = 'block'; title.style.display = 'none'; 
-        }
-    };
-    renderListWithEmptyState('today-events-list', 'empty-today-events', 'today-events-title', todayEvents);
-    renderListWithEmptyState('today-tasks-list', 'empty-today-tasks', 'today-tasks-title', pendingTasks);
-    renderListWithEmptyState('tomorrow-events-list', 'empty-tomorrow-events', 'tomorrow-events-title', tomorrowEvents);
-}
-
-function renderCalendarView() {
-    const { calendar } = appState; const { items } = db;
-    const { currentMonth, currentYear, selectedDate, displayMode } = calendar;
-    gebi('calendar-title-btn').textContent = `${MESES_CORTOS[currentMonth]} ${currentYear}`;
-    gebi('calendarView').dataset.displayMode = displayMode;
-    qsa('.view-toggle .btn-toggle').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === displayMode));
-    
-    if (displayMode === 'month') { 
-        renderMonthGrid(currentMonth, currentYear, selectedDate, items); 
-        renderAgendaFromSelectedDay(items, selectedDate); 
-    } else { 
-        renderWeekGrid(currentMonth, currentYear, selectedDate, items); 
-    }
-}
-
-function renderMonthGrid(currentMonth, currentYear, selectedDate, items) {
-    const weekdaysContainer = gebi('calendarWeekdays');
-    if (weekdaysContainer.innerHTML.length < 5) weekdaysContainer.innerHTML = DIAS_SEMANA_CORTOS.map(day => `<div class="weekday">${day}</div>`).join('');
-    
-    const calendarDays = gebi('calendarDays'); calendarDays.innerHTML = '';
-    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-    const offset = (firstDayOfMonth.getDay() + 6) % 7; 
-    const startDate = new Date(firstDayOfMonth); startDate.setDate(startDate.getDate() - offset);
-    const todayStr = dateToYYYYMMDD(new Date());
-    
-    const dailyEventMarkers = new Map();
-    items.filter(it => it.type === 'agenda' && it.dueDate && !it.isComplete).forEach(it => {
-        const dateStr = dateToYYYYMMDD(new Date(it.dueDate));
-        if (!dailyEventMarkers.has(dateStr)) dailyEventMarkers.set(dateStr, { hasImportant: false, hasNormal: false });
-        const marker = dailyEventMarkers.get(dateStr);
-        if (it.isImportant) marker.hasImportant = true; else marker.hasNormal = true;
-    });
-    
-    for (let i = 0; i < 42; i++) {
-        const cellDate = new Date(startDate); cellDate.setDate(startDate.getDate() + i);
-        const dateStr = dateToYYYYMMDD(cellDate);
-        const dayEl = document.createElement('div');
-        dayEl.className = 'calendar-day'; dayEl.dataset.date = dateStr;
+    function abrirModalEvento(id = null) {
+        const esNuevo = !id;
+        document.getElementById('modal-evento-title').textContent = esNuevo ? 'Añadir Evento' : 'Editar Evento';
         
-        if (cellDate.getMonth() !== currentMonth) dayEl.classList.add('other-month');
-        if (dateStr === todayStr) dayEl.classList.add('today');
-        if (dateStr === selectedDate) dayEl.classList.add('selected');
-        
-        let dotsHtml = '';
-        if (dailyEventMarkers.has(dateStr)) {
-            const markers = dailyEventMarkers.get(dateStr);
-            dotsHtml = `<div class="event-dots-container">${markers.hasImportant ? '<span class="event-dot important"></span>' : ''}${markers.hasNormal ? '<span class="event-dot normal"></span>' : ''}</div>`;
+        if (esNuevo) {
+            document.getElementById('evento-id').value = '';
+            document.getElementById('evento-titulo').value = '';
+            document.getElementById('evento-fecha').value = formatearFecha(fechaNavegacion);
+            document.getElementById('evento-hora').value = '';
+            document.getElementById('evento-usuario').value = filtroUsuario === 'Todos' ? 'Ambos' : filtroUsuario;
+            document.getElementById('evento-notas').value = '';
+        } else {
+            const ev = eventos.find(e => e.id === id);
+            document.getElementById('evento-id').value = ev.id;
+            document.getElementById('evento-titulo').value = ev.titulo;
+            document.getElementById('evento-fecha').value = ev.fecha;
+            document.getElementById('evento-hora').value = ev.hora;
+            document.getElementById('evento-usuario').value = ev.usuario;
+            document.getElementById('evento-notas').value = ev.notas;
         }
-        
-        dayEl.innerHTML = `<span class="day-number">${cellDate.getDate()}</span>${dotsHtml}`;
-        dayEl.dataset.action = 'selectDate';
-        calendarDays.appendChild(dayEl);
+        openModal('modal-evento');
     }
-}
 
-function renderWeekGrid(currentMonth, currentYear, selectedDateStr, items) {
-    const weeklyViewContainer = gebi('weekly-view-container'); weeklyViewContainer.innerHTML = '';
-    const selectedDate = yyyymmddToDate(selectedDateStr);
-    const startOfWeek = new Date(selectedDate);
-    startOfWeek.setDate(selectedDate.getDate() - ((selectedDate.getDay() + 6) % 7));
-    
-    for (let i = 0; i < 7; i++) {
-        const day = new Date(startOfWeek); day.setDate(startOfWeek.getDate() + i);
-        const dayStr = dateToYYYYMMDD(day);
-        const eventsForDay = items.filter(item => item.type === 'agenda' && !item.isComplete && item.dueDate && dateToYYYYMMDD(new Date(item.dueDate)) === dayStr).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    function guardarEvento() {
+        const id = document.getElementById('evento-id').value || 'ev_' + Date.now();
+        const titulo = document.getElementById('evento-titulo').value.trim();
+        const fecha = document.getElementById('evento-fecha').value;
         
-        const daySection = document.createElement('div');
-        daySection.className = 'weekly-day-section';
-        daySection.innerHTML = `<div class="weekly-day-header"><span class="material-icons">${dayStr === dateToYYYYMMDD(new Date()) ? 'today' : 'event'}</span> ${DIAS_SEMANA_LARGOS[day.getDay() === 0 ? 6 : day.getDay() - 1]} ${day.getDate()} de ${MESES[day.getMonth()]}</div><div class="weekly-day-events" id="weekly-events-${dayStr}"></div>`;
-        weeklyViewContainer.appendChild(daySection);
-        
-        const eventsListContainer = gebi(`weekly-events-${dayStr}`);
-        if (eventsForDay.length > 0) eventsForDay.forEach(item => eventsListContainer.appendChild(createUniversalListItemNode(item)));
-        else eventsListContainer.innerHTML = `<div class="empty-state"><p>Nada programado.</p></div>`;
-    }
-}
+        if (!titulo || !fecha) { showNotification("⚠️ Título y Fecha obligatorios", "warning"); return; }
 
-function renderAgendaFromSelectedDay(items, selectedDateStr) {
-    const agendaList = gebi('agendaList'); agendaList.innerHTML = '';
-    if (!selectedDateStr) return;
-    
-    const selectedDate = yyyymmddToDate(selectedDateStr); selectedDate.setHours(0, 0, 0, 0);
-    const itemsForDayAndBeyond = items.filter(item => item.type === 'agenda' && !item.isComplete && item.dueDate && new Date(item.dueDate) >= selectedDate).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-    
-    if (itemsForDayAndBeyond.length === 0) {
-        agendaList.innerHTML = `<div class="empty-state" style="padding-top: 24px;"><span class="material-icons">event_available</span><div>Nada programado a partir de este día.</div></div>`;
-        return;
+        const nuevoEvento = {
+            id: id,
+            titulo: titulo,
+            fecha: fecha,
+            hora: document.getElementById('evento-hora').value,
+            usuario: document.getElementById('evento-usuario').value,
+            notas: document.getElementById('evento-notas').value.trim()
+        };
+
+        const idx = eventos.findIndex(e => e.id === id);
+        if (idx >= 0) eventos[idx] = nuevoEvento;
+        else eventos.push(nuevoEvento);
+
+        guardarDatosLocales();
+        closeModal('modal-evento');
+        showTab('agenda');
+        showNotification("Evento guardado");
     }
-    
-    let lastHeaderDate = null;
-    itemsForDayAndBeyond.forEach(item => {
-        const itemDate = new Date(item.dueDate); const itemDateStr = dateToYYYYMMDD(itemDate);
-        if (itemDateStr !== lastHeaderDate) {
-            const header = document.createElement('div');
-            header.className = 'agenda-date-header';
-            header.textContent = itemDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-            agendaList.appendChild(header); lastHeaderDate = itemDateStr;
+
+    // ==========================================
+    // 5. LÓGICA DE TAREAS
+    // ==========================================
+    function renderTareas() {
+        const ulPendientes = document.getElementById('lista-tareas-pendientes');
+        const ulCompletadas = document.getElementById('lista-tareas-completadas');
+        ulPendientes.innerHTML = ''; ulCompletadas.innerHTML = '';
+
+        let tareasFiltro = tareas;
+        if (filtroUsuario !== 'Todos') {
+            tareasFiltro = tareasFiltro.filter(t => t.usuario === filtroUsuario || t.usuario === 'Ambos');
         }
-        agendaList.appendChild(createUniversalListItemNode(item));
-    });
-}
 
-function renderTaskListView() {
-    const filter = gebi('task-list-filter');
-    filter.innerHTML = db.taskLists.map(list => `<option value="${list.id}">${list.name}</option>`).join('');
-    filter.value = appState.tasks.selectedListId;
-    
-    const tasksContainer = gebi('tasks-content'); tasksContainer.innerHTML = '';
-    const listId = appState.tasks.selectedListId;
-    
-    const pendingTasks = db.items.filter(i => i.type === 'task' && !i.isComplete && (i.listId || 'default') === listId).sort((a, b) => a.createdAt - b.createdAt);
-    const completedTasks = db.items.filter(i => i.type === 'task' && i.isComplete && (i.listId || 'default') === listId).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
-    
-    if (pendingTasks.length > 0) {
-        const title = document.createElement('h3'); title.className = 'section-title'; title.textContent = 'Tareas Pendientes';
-        tasksContainer.appendChild(title); pendingTasks.forEach(item => tasksContainer.appendChild(createUniversalListItemNode(item)));
-    }
-    
-    if (completedTasks.length > 0) {
-        const details = document.createElement('details'); details.className = 'completed-tasks-section';
-        const summary = document.createElement('summary');
-        summary.innerHTML = `<h3 class="section-title">Tareas Completadas (${completedTasks.length})</h3><span class="material-icons">expand_more</span>`;
-        const completedList = document.createElement('div'); completedList.className = 'completed-tasks-list';
-        completedTasks.slice(0, 20).forEach(item => completedList.appendChild(createUniversalListItemNode(item)));
-        details.appendChild(summary); details.appendChild(completedList); tasksContainer.appendChild(details);
-    }
-    
-    const isAllEmpty = pendingTasks.length === 0 && completedTasks.length === 0;
-    gebi('emptyTasks').style.display = isAllEmpty ? 'block' : 'none';
-}
+        const pendientes = tareasFiltro.filter(t => !t.completada);
+        const completadas = tareasFiltro.filter(t => t.completada);
 
-function renderSearchView(query) {
-    const resultsList = gebi('searchResultsList'); resultsList.innerHTML = '';
-    const emptyState = gebi('emptySearch'); const lowerCaseQuery = query.toLowerCase();
-    
-    const results = db.items.filter(item => item.description.toLowerCase().includes(lowerCaseQuery));
-    
-    if (results.length > 0) { 
-        emptyState.style.display = 'none'; 
-        results.sort((a, b) => (a.createdAt < b.createdAt) ? 1 : -1).forEach(item => resultsList.appendChild(createUniversalListItemNode(item))); 
-    } else { 
-        emptyState.style.display = 'block'; 
-    }
-}
+        if (pendientes.length === 0) ulPendientes.innerHTML = '<p style="color:var(--text-muted);">No hay tareas pendientes. ¡Buen trabajo!</p>';
+        if (completadas.length === 0) ulCompletadas.innerHTML = '<p style="color:var(--text-muted);">Aún no has completado tareas.</p>';
 
-// ==========================================
-// 8. CREACIÓN DE NODOS DE LISTA
-// ==========================================
-function createUniversalListItemNode(item) {
-    const node = item.type === 'task' ? createTaskItemNode(item) : createEventItemNode(item);
-    if (newlyCreatedItemId && item.localId === newlyCreatedItemId) {
-        node.classList.add(CONSTANTS.ANIMATION_CLASSES.ITEM_ENTERING);
-        node.addEventListener('animationend', () => node.classList.remove(CONSTANTS.ANIMATION_CLASSES.ITEM_ENTERING), { once: true });
-        newlyCreatedItemId = null;
+        pendientes.forEach(t => ulPendientes.appendChild(crearElementoTarea(t)));
+        completadas.forEach(t => ulCompletadas.appendChild(crearElementoTarea(t)));
     }
-    return node;
-}
 
-function createEventItemNode(item) {
-    const itemEl = document.createElement('div');
-    itemEl.className = `list-item-swipe-container type-agenda ${item.isComplete ? 'completed' : ''}`;
-    itemEl.dataset.id = item.localId;
-    
-    const itemColor = item.isImportant ? 'var(--accent-event-important)' : 'var(--accent-event-normal)';
-    itemEl.style.borderLeftColor = itemColor;
-    const time = item.isAllDay ? 'Todo el día' : (item.dueDate ? dateToHHMM(new Date(item.dueDate)) : '');
-    const hasMsalSession = !!(oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0);
-    const syncIconHtml = hasMsalSession
-        ? `<span class="material-icons event-meta-icon onedrive-icon" title="Sincronizado con OneDrive">cloud_done</span>`
-        : `<span class="material-icons event-meta-icon local-only-icon" title="Solo local">cloud_off</span>`;
-    
-    itemEl.innerHTML = `
-        <div class="item-card-swipe-background"><span class="material-icons">check_circle</span><span class="material-icons">delete</span></div>
-        <div class="item-icon"><span class="material-icons" style="color: ${itemColor};">event</span></div>
-        <div class="item-content" data-action="edit-item">
-            <div class="item-title">${item.description}</div>
-            <div class="item-metadata-container">
-                <span class="event-time">${time}</span>
-                ${syncIconHtml}
-                ${item.recurrenceRule && item.recurrenceRule !== 'none' ? '<span class="material-icons event-meta-icon">repeat</span>' : ''}
+    function crearElementoTarea(t) {
+        const li = document.createElement('li');
+        li.className = `item-card ${t.usuario.toLowerCase()} ${t.completada ? 'completada' : ''}`;
+        
+        // Formatear fecha límite si existe
+        let limiteStr = '';
+        if (t.fecha) {
+            const fObj = new Date(t.fecha);
+            limiteStr = `<span style="font-size:0.75rem; color:var(--accent-magenta);">📅 Vence: ${fObj.toLocaleDateString('es-ES')}</span>`;
+        }
+
+        li.innerHTML = `
+            <div class="task-checkbox-wrapper">
+                <input type="checkbox" class="task-checkbox" ${t.completada ? 'checked' : ''} onchange="toggleTarea('${t.id}')">
+                <div style="flex-grow:1;">
+                    <span class="badge-user badge-${t.usuario.toLowerCase()}">${t.usuario}</span>
+                    <div class="item-title">${t.titulo}</div>
+                    ${limiteStr}
+                </div>
+                <button class="secondary" style="padding:4px 8px; font-size:16px;" onclick="prepararBorrado('tarea', '${t.id}')"><span class="material-icons">delete</span></button>
             </div>
-        </div>`;
-    
-    attachSwipeListeners(itemEl);
-    return itemEl;
-}
+        `;
+        return li;
+    }
 
-function createTaskItemNode(item) {
-    const itemEl = document.createElement('div');
-    itemEl.dataset.id = item.localId;
-    itemEl.className = `list-item-swipe-container type-task ${item.isComplete ? 'completed' : ''}`;
-    itemEl.style.borderLeftColor = 'var(--accent-task)';
+    function abrirModalTarea() {
+        document.getElementById('tarea-id').value = '';
+        document.getElementById('tarea-titulo').value = '';
+        document.getElementById('tarea-fecha').value = '';
+        document.getElementById('tarea-usuario').value = filtroUsuario === 'Todos' ? 'Ambos' : filtroUsuario;
+        openModal('modal-tarea');
+    }
+
+    function guardarTarea() {
+        const titulo = document.getElementById('tarea-titulo').value.trim();
+        if (!titulo) { showNotification("⚠️ Descripción obligatoria", "warning"); return; }
+
+        const nuevaTarea = {
+            id: 'ta_' + Date.now(),
+            titulo: titulo,
+            fecha: document.getElementById('tarea-fecha').value,
+            usuario: document.getElementById('tarea-usuario').value,
+            completada: false
+        };
+
+        tareas.push(nuevaTarea);
+        guardarDatosLocales();
+        closeModal('modal-tarea');
+        showTab('tareas');
+        showNotification("Tarea añadida");
+    }
+
+    function toggleTarea(id) {
+        const t = tareas.find(x => x.id === id);
+        if (t) {
+            t.completada = !t.completada;
+            guardarDatosLocales();
+            renderTareas();
+        }
+    }
+
+    // ==========================================
+    // 6. UTILIDADES UI / BORRADOS
+    // ==========================================
+    function editarEvento(id) { abrirModalEvento(id); }
+
+    let targetDeleteType = null; let targetDeleteId = null;
+    function prepararBorrado(tipo, id) {
+        targetDeleteType = tipo; targetDeleteId = id;
+        document.getElementById('confirm-delete-message').textContent = `¿Seguro que quieres eliminar est${tipo==='tarea'?'a tarea':'e evento'}?`;
+        openModal('confirm-delete-modal');
+    }
+
+    document.getElementById('confirm-delete-btn').addEventListener('click', () => {
+        if (targetDeleteType === 'evento') eventos = eventos.filter(e => e.id !== targetDeleteId);
+        if (targetDeleteType === 'tarea') tareas = tareas.filter(t => t.id !== targetDeleteId);
+        guardarDatosLocales();
+        closeModal('confirm-delete-modal');
+        showNotification("Eliminado correctamente");
+    });
+
+    function openModal(id) { document.getElementById(id).style.display = 'block'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function updateConnectionStatus() {
+        const dot = document.querySelector('.status-dot');
+        const text = document.querySelector('.status-text');
+        if (navigator.onLine) { dot.style.background = 'var(--accent-green)'; text.textContent = 'Online'; } 
+        else { dot.style.background = 'var(--accent-magenta)'; text.textContent = 'Offline'; }
+    }
+
+    function showNotification(msg, type = 'info') {
+        let toast = document.getElementById('cloud-toast');
+        if (!toast) {
+            toast = document.createElement('div'); toast.id = 'cloud-toast';
+            document.getElementById('mobile-app-wrapper').appendChild(toast);
+        }
+        let borderColor = "var(--border-color)";
+        if (type === 'error') borderColor = "var(--accent-magenta)";
+        if (type === 'warning') borderColor = "var(--accent-yellow)";
+
+        toast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:var(--card-bg); color:var(--text-primary); padding:12px 24px; border-radius:30px; border:1px solid ${borderColor}; box-shadow:0 10px 30px rgba(0,0,0,0.8); z-index:100000; font-size:14px; font-weight:500; display:flex; align-items:center; gap:10px; transition:all 0.4s; opacity:0; pointer-events:none; white-space:nowrap;`;
+        toast.innerHTML = msg; toast.style.opacity = "1"; toast.style.bottom = "40px";
+        if (window.toastTimeout) clearTimeout(window.toastTimeout);
+        if (!msg.includes("⏳")) window.toastTimeout = setTimeout(() => { toast.style.opacity = "0"; toast.style.bottom = "30px"; }, 3500);
+    }
+
+    // ==========================================
+    // 7. MOTOR CLOUD: MICROSOFT MSAL & ONEDRIVE
+    // ==========================================
+    const MSAL_CONFIG = {
+        auth: {
+            clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb",
+            authority: "https://login.microsoftonline.com/common",
+            redirectUri: window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1)
+        },
+        cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false }
+    };
     
-    let progressHtml = '';
-    if (item.subtasks && item.subtasks.length > 0) {
-        const completedCount = item.subtasks.filter(st => st.isComplete).length;
-        const progressPercent = (completedCount / item.subtasks.length) * 100;
-        const subtasksListViewHtml = item.subtasks.map(st => `
-            <div class="subtask-list-view-item ${st.isComplete ? 'completed' : ''}" data-action="toggle-subtask" data-task-id="${item.localId}" data-subtask-id="${st.id}">
-                <span class="material-icons">${st.isComplete ? 'check_circle' : 'radio_button_unchecked'}</span>
-                <span>${st.description}</span>
-            </div>`).join('');
+    const ARCHIVO_EXCEL = "aidanai-agenda.xlsx"; // EL ARCHIVO SOLICITADO
+
+    class OneDriveManager {
+        constructor() {
+            this.fileId = localStorage.getItem("aidanai_file_id");
+            this.msalInstance = null;
+            this._msalReady = this._inicializarMsal();
+        }
+        async _inicializarMsal() {
+            if (typeof msal === 'undefined') {
+                await new Promise(res => { const check = setInterval(() => { if(typeof msal !== 'undefined'){clearInterval(check);res();} }, 100); });
+            }
+            this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+            try { await this.msalInstance.handleRedirectPromise(); } catch (e) { console.error("MSAL Redirect Error:", e); }
+        }
+        async getToken() {
+            await this._msalReady;
+            const cuentas = this.msalInstance.getAllAccounts();
+            if (cuentas.length === 0) throw new Error("No hay sesión.");
+            const request = { scopes: ["Files.ReadWrite.All", "User.Read"], account: cuentas[0] };
+            try { return (await this.msalInstance.acquireTokenSilent(request)).accessToken; } 
+            catch (e) { await this.msalInstance.acquireTokenRedirect(request); }
+        }
+        async login() {
+            await this._msalReady;
+            await this.msalInstance.loginRedirect({ scopes: ["User.Read", "Files.ReadWrite.All"], prompt: "select_account" });
+        }
+        async getFileId() {
+            const token = await this.getToken();
+            const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${ARCHIVO_EXCEL}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) {
+                const data = await res.json();
+                this.fileId = data.id; localStorage.setItem("aidanai_file_id", data.id);
+                return data.id;
+            }
+            return null;
+        }
+        async descargarArchivo(id) {
+            const token = await this.getToken();
+            const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, { headers: { Authorization: `Bearer ${token}` } });
+            return await res.arrayBuffer();
+        }
+        async subirArchivo(arrayBuffer) {
+            const token = await this.getToken();
+            const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${ARCHIVO_EXCEL}:/content`, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+                body: arrayBuffer
+            });
+            if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+            const data = await res.json();
+            this.fileId = data.id; localStorage.setItem("aidanai_file_id", data.id);
+            return data;
+        }
+    }
+
+    const oneDrive = new OneDriveManager();
+
+    // ==========================================
+    // 8. MOTOR DE LECTURA/ESCRITURA EXCEL
+    // ==========================================
+    const ExcelManager = {
+        generarLibro() {
+            const wb = XLSX.utils.book_new();
+            const wsEventos = XLSX.utils.json_to_sheet(eventos.length ? eventos : [{id:"",titulo:"",fecha:"",hora:"",usuario:"",notas:""}]);
+            const wsTareas = XLSX.utils.json_to_sheet(tareas.length ? tareas : [{id:"",titulo:"",fecha:"",usuario:"",completada:""}]);
             
-        progressHtml = `
-            <div class="task-progress-container">
-                <div class="progress-bar-wrapper">
-                    <span>${completedCount} de ${item.subtasks.length}</span>
-                    <div class="progress-bar"><div class="progress-bar-fill" style="width: ${progressPercent}%;"></div></div>
-                </div>
-                <div class="subtasks-list-view">${subtasksListViewHtml}</div>
-            </div>`;
+            XLSX.utils.book_append_sheet(wb, wsEventos, "Eventos");
+            XLSX.utils.book_append_sheet(wb, wsTareas, "Tareas");
+            return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        },
+        cargarLibro(arrayBuffer) {
+            const wb = XLSX.read(arrayBuffer, { type: 'array' });
+            
+            if (wb.SheetNames.includes("Eventos")) {
+                let dataEv = XLSX.utils.sheet_to_json(wb.Sheets["Eventos"]);
+                eventos = dataEv.filter(e => e.id); // Filtrar filas vacías de seguridad
+            }
+            if (wb.SheetNames.includes("Tareas")) {
+                let dataTa = XLSX.utils.sheet_to_json(wb.Sheets["Tareas"]);
+                tareas = dataTa.filter(t => t.id).map(t => ({...t, completada: t.completada === true || t.completada === 'true'}));
+            }
+            
+            localStorage.setItem(DB_EVENTOS_KEY, JSON.stringify(eventos));
+            localStorage.setItem(DB_TAREAS_KEY, JSON.stringify(tareas));
+            renderAll();
+        }
+    };
+
+    // ==========================================
+    // 9. FLUJO DE LOGIN Y SINCRONIZACIÓN
+    // ==========================================
+    let isSyncing = false; window.AppState = { cloudReady: false };
+
+    async function signInWithMicrosoft() {
+        const btn = document.getElementById('btn-signin');
+        if (!btn || btn.disabled) return;
+        btn.textContent = "Conectando..."; btn.disabled = true;
+        try { await oneDrive.login(); } 
+        catch (e) {
+            if (e.errorCode === "interaction_in_progress" || e.message.includes("interaction_in_progress")) {
+                sessionStorage.clear();
+                showNotification("Limpiando caché. Recargando...", "warning");
+                setTimeout(() => window.location.reload(), 2000);
+            }
+            btn.textContent = "Login OneDrive"; btn.disabled = false;
+        }
     }
-    
-    itemEl.innerHTML = `
-        <div class="item-card-swipe-background"><span class="material-icons">check_circle</span><span class="material-icons">delete</span></div>
-        <div class="item-icon item-checkbox" data-action="complete-item">
-            <span class="material-icons">${item.isComplete ? 'check_circle' : 'radio_button_unchecked'}</span>
-        </div>
-        <div class="item-content" data-action="edit-item">
-            <div style="display: flex; flex-direction: column; align-items: flex-start; width: 100%;">
-                <div class="item-title">${item.description}</div>
-                <div class="item-metadata-container" style="margin-top: 4px;">
-                    ${!!(oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0)
-                        ? '<span class="material-icons event-meta-icon onedrive-icon" title="Sincronizado con OneDrive">cloud_done</span>'
-                        : '<span class="material-icons event-meta-icon local-only-icon" title="Solo local">cloud_off</span>'}
-                </div>
-            </div>
-            ${progressHtml}
-        </div>`;
-        
-    attachSwipeListeners(itemEl);
-    return itemEl;
-}
 
-// ==========================================
-// 9. MANEJADORES DE EVENTOS Y LOGICA DE NEGOCIO
-// ==========================================
-function attachGlobalEventListeners() {
-    const safeAddListener = (id, event, handler) => { const el = gebi(id); if (el) el.addEventListener(event, handler); };
+    function signOutUser() {
+        if (oneDrive.msalInstance) {
+            const cuentas = oneDrive.msalInstance.getAllAccounts();
+            if (cuentas.length > 0) oneDrive.msalInstance.logoutRedirect({ account: cuentas[0] });
+        }
+        localStorage.removeItem("aidanai_file_id");
+    }
 
-    document.body.addEventListener('click', e => {
-        if (window.isSwiping) return; 
-        const actionTarget = e.target.closest('[data-action]');
-        if (actionTarget) {
-            const action = actionTarget.dataset.action;
-            triggerHapticFeedback('light');
-            if (action === 'edit-item') {
-                const itemId = actionTarget.closest('.list-item-swipe-container').dataset.id;
-                const item = db.items.find(i => i.localId === itemId);
-                if (item) openAddItemModal(item);
-            }
-            if (action === 'complete-item') {
-                const itemId = actionTarget.closest('.list-item-swipe-container').dataset.id;
-                const item = db.items.find(i => i.localId === itemId);
-                if (item) { triggerHapticFeedback('success'); handleItemComplete(itemId, !item.isComplete); }
-            }
-            if (action === 'toggle-subtask') {
-                e.stopPropagation(); 
-                const taskId = actionTarget.dataset.taskId;
-                const subtaskId = actionTarget.dataset.subtaskId;
-                if (taskId && subtaskId) { triggerHapticFeedback('success'); handleSubtaskToggle(taskId, subtaskId); }
-            }
-            if (action === 'logout') {
-                showCustomConfirm("¿Seguro que quieres cerrar sesión?", () => {
-                    if (oneDrive.msalInstance) {
-                        const cuentas = oneDrive.msalInstance.getAllAccounts();
-                        if (cuentas.length > 0) { oneDrive.msalInstance.logoutRedirect({ account: cuentas[0] }); }
+    async function checkAuthState() {
+        await oneDrive._msalReady;
+        const cuentas = oneDrive.msalInstance.getAllAccounts();
+        if (cuentas.length > 0) {
+            document.getElementById('auth-status').innerHTML = `Hola, <b>${cuentas[0].name}</b> <button onclick="signOutUser()" class="btn-exit">Salir</button>`;
+            document.getElementById('btn-signin').style.display = "none";
+            
+            try {
+                showNotification("⏳ Buscando agenda...");
+                let fid = await oneDrive.getFileId();
+                if (fid) {
+                    if (localStorage.getItem('pending_sync') === 'true') {
+                        await oneDrive.subirArchivo(ExcelManager.generarLibro());
+                        localStorage.removeItem('pending_sync');
+                        showNotification("✅ Nube actualizada (offline recovery)");
+                    } else {
+                        const contenido = await oneDrive.descargarArchivo(fid);
+                        ExcelManager.cargarLibro(contenido);
+                        showNotification("✅ Agenda sincronizada");
                     }
-                    oneDrive.fileId = null;
-                    SafeStorage.remove("agenda_file_id");
-                    SafeStorage.remove("agenda_db");
-                    window.location.reload();
-                });
-            }
-            if (action === 'quick-add') openModal('quick-add-modal');
-            if (action === 'selectDate') { const dateStr = actionTarget.dataset.date; selectDate(dateStr); }
-        }
-    });
-
-    qsa('.nav-item[data-view]').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
-    safeAddListener('onedrive-sync-btn', 'click', handleOnedriveSync);
-    safeAddListener('prev-nav-btn', 'click', () => { appState.calendar.displayMode === 'month' ? changeMonth(-1) : changeWeek(-1); });
-    safeAddListener('next-nav-btn', 'click', () => { appState.calendar.displayMode === 'month' ? changeMonth(1) : changeWeek(1); });
-    safeAddListener('today-btn', 'click', goToToday);
-    safeAddListener('calendar-title-btn', 'click', openDatePickerModal);
-    safeAddListener('month-view-btn', 'click', () => setCalendarDisplayMode('month'));
-    safeAddListener('week-view-btn', 'click', () => setCalendarDisplayMode('week'));
-    safeAddListener('fab-add-item', 'click', () => { triggerHapticFeedback('medium'); openModal('quick-add-modal'); });
-    safeAddListener('quick-add-input', 'input', debounce(handleQuickAddInput));
-    safeAddListener('quick-add-form', 'submit', handleQuickAddSubmit);
-    safeAddListener('cancel-quick-add-btn', 'click', () => closeModal('quick-add-modal'));
-    safeAddListener('open-advanced-editor-btn', 'click', openAdvancedFromQuickAdd);
-    safeAddListener('add-item-form', 'submit', handleItemFormSubmit);
-    safeAddListener('cancel-item-btn', 'click', () => closeModal('add-item-modal'));
-    safeAddListener('item-type', 'change', toggleModalOptionsVisibility);
-    safeAddListener('item-notification-enabled', 'change', toggleModalOptionsVisibility);
-    safeAddListener('delete-item-btn', 'click', handleDeleteFromModal);
-    safeAddListener('date-picker-form', 'submit', handleDateSelectionFromPicker);
-    safeAddListener('cancel-date-picker-btn', 'click', () => closeModal('date-picker-modal'));
-    safeAddListener('search-toggle-btn', 'click', toggleSearchBar);
-    safeAddListener('search-form', 'submit', handleSearchSubmit);
-    safeAddListener('task-list-filter', 'change', handleTaskListFilterChange);
-    safeAddListener('manage-lists-btn', 'click', openManageListsModal);
-    safeAddListener('close-manage-lists-btn', 'click', () => closeModal('manage-lists-modal'));
-    safeAddListener('add-list-form', 'submit', handleAddTaskList);
-    safeAddListener('add-subtask-btn', 'click', handleAddSubtask);
-    
-    safeAddListener('new-subtask-input', 'keydown', e => { 
-        if (e.key === 'Enter') { 
-            e.preventDefault(); 
-            handleAddSubtask(); 
-        } 
-    });
-    
-    safeAddListener('item-all-day', 'change', toggleModalOptionsVisibility);
-    window.addEventListener('online', updateSyncStatus);
-    window.addEventListener('offline', updateSyncStatus);
-}
-
-function handleQuickAddInput(e) {
-    const text = e.target.value;
-    const feedbackContainer = gebi('quick-add-feedback');
-    if (!text.trim()) { feedbackContainer.innerHTML = ''; return; }
-    
-    const parsedData = parseNaturalLanguage(text);
-    let feedbackHtml = '';
-    
-    if (parsedData.type === 'agenda') {
-        const formattedDate = formatDateForFeedback(parsedData.dueDate);
-        feedbackHtml = `<div class="feedback-chip type-agenda"><span class="material-icons">event</span><span>Evento: ${formattedDate}</span></div>`;
-    } else {
-        feedbackHtml = `<div class="feedback-chip type-task"><span class="material-icons">task_alt</span><span>Tarea</span></div>`;
-    }
-    feedbackContainer.innerHTML = feedbackHtml;
-}
-
-function formatDateForFeedback(isoDate) {
-    if (!isoDate) return '';
-    const date = new Date(isoDate); const now = new Date(); const tomorrow = new Date();
-    tomorrow.setDate(now.getDate() + 1);
-    
-    let datePart;
-    if (date.toDateString() === now.toDateString()) datePart = 'Hoy';
-    else if (date.toDateString() === tomorrow.toDateString()) datePart = 'Mañana';
-    else datePart = date.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric' });
-    
-    const timePart = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-    return timePart !== '00:00' ? `${datePart}, ${timePart}` : datePart;
-}
-
-function switchView(view, isInitial = false) {
-    if (!view || view === appState.currentView || isViewSwitching) return;
-    if (view === 'search') appState.lastView = appState.currentView;
-    isViewSwitching = true;
-    
-    const oldViewName = appState.currentView; const newViewName = view;
-    appState.currentView = newViewName;
-    const oldViewEl = gebi(`${oldViewName}View`); const newViewEl = gebi(`${newViewName}View`);
-    
-    if (!newViewEl) { isViewSwitching = false; return; }
-    renderApp();
-    
-    if (isInitial || !oldViewEl) { newViewEl.classList.add('active'); isViewSwitching = false; return; }
-    
-    const oldViewIndex = VIEW_ORDER.indexOf(oldViewName); const newViewIndex = VIEW_ORDER.indexOf(newViewName);
-    let enterClass, exitClass;
-    
-    if (newViewIndex > oldViewIndex) { enterClass = 'view-enter-from-right'; exitClass = 'view-exit-to-left'; }
-    else { enterClass = 'view-enter-from-left'; exitClass = 'view-exit-to-right'; }
-    
-    if (newViewIndex === -1 || oldViewIndex === -1) { 
-        newViewEl.classList.add('active'); oldViewEl.classList.remove('active'); 
-        isViewSwitching = false; return; 
-    }
-    
-    newViewEl.classList.add(enterClass, 'active', 'is-animating');
-    oldViewEl.classList.add(exitClass, 'is-animating');
-    
-    newViewEl.addEventListener('animationend', () => {
-        oldViewEl.classList.remove('active', 'is-animating', exitClass);
-        newViewEl.classList.remove(enterClass, 'is-animating');
-        isViewSwitching = false;
-    }, { once: true });
-}
-
-function selectDate(dateStr) { appState.calendar.selectedDate = dateStr; renderApp(); }
-function changeMonth(delta) { const d = new Date(appState.calendar.currentYear, appState.calendar.currentMonth, 1); d.setMonth(d.getMonth() + delta); appState.calendar.currentMonth = d.getMonth(); appState.calendar.currentYear = d.getFullYear(); renderApp(); }
-function changeWeek(delta) { const d = yyyymmddToDate(appState.calendar.selectedDate); d.setDate(d.getDate() + (delta * 7)); appState.calendar.selectedDate = dateToYYYYMMDD(d); appState.calendar.currentMonth = d.getMonth(); appState.calendar.currentYear = d.getFullYear(); renderApp(); }
-function goToToday() { const today = new Date(); appState.calendar = { ...appState.calendar, currentMonth: today.getMonth(), currentYear: today.getFullYear(), selectedDate: dateToYYYYMMDD(today), displayMode: 'month' }; if (appState.currentView === 'calendar') renderApp(); else switchView('calendar'); }
-function setCalendarDisplayMode(mode) { if (appState.calendar.displayMode === mode) return; appState.calendar.displayMode = mode; renderApp(); }
-function openModal(modalId) { gebi(modalId)?.classList.add('active'); if (modalId === 'quick-add-modal') { const input = gebi('quick-add-input'); input.value = ''; setTimeout(() => input.focus(), 100); } }
-function closeModal(modalId) { gebi(modalId)?.classList.remove('active'); }
-
-function openAddItemModal(itemToEdit = null) {
-    const form = gebi('add-item-form'); form.reset();
-    closeModal('quick-add-modal');
-    gebi('delete-item-btn').style.display = itemToEdit ? 'block' : 'none';
-    
-    const localId = itemToEdit?.localId || uuid();
-    gebi('item-local-id').value = localId;
-    
-    const itemData = itemToEdit || parseNaturalLanguage(gebi('quick-add-input').value);
-    const defaultType = appState.currentView === 'tasks' ? 'task' : 'agenda';
-    
-    gebi('item-type').value = itemData?.type || defaultType;
-    gebi('item-description').value = itemData?.description || '';
-    
-    const taskListSelect = gebi('item-task-list');
-    taskListSelect.innerHTML = db.taskLists.map(list => `<option value="${list.id}">${list.name}</option>`).join('');
-    taskListSelect.value = itemData?.listId || appState.tasks.selectedListId;
-    
-    renderSubtasksInModal(itemData?.subtasks || []);
-    
-    const dateToShow = itemData?.dueDate ? new Date(itemData.dueDate) : yyyymmddToDate(appState.calendar.selectedDate);
-    if (flatpickrInstance) flatpickrInstance.setDate(dateToShow, false);
-    
-    gebi('item-all-day').checked = itemData?.isAllDay || false;
-    gebi('item-important').checked = itemData?.isImportant || false;
-    gebi('item-notification-enabled').checked = itemData?.notificationEnabled || false;
-    gebi('item-recurrence').value = itemData?.recurrenceRule || 'none';
-    gebi('item-reminder').value = itemData?.reminderMinutes || '0';
-    
-    toggleModalOptionsVisibility();
-    openModal('add-item-modal');
-    gebi('item-description').focus();
-}
-
-function toggleModalOptionsVisibility() {
-    const isAgenda = gebi('item-type').value === 'agenda';
-    const isAllDay = gebi('item-all-day').checked;
-    const isNotificationEnabled = gebi('item-notification-enabled').checked && !isAllDay;
-    
-    gebi('datetime-notification-group').style.display = isAgenda ? 'block' : 'none';
-    gebi('task-options-group').style.display = isAgenda ? 'none' : 'block';
-    
-    if (flatpickrInstance) flatpickrInstance.set('enableTime', !isAllDay);
-    gebi('item-notification-enabled').disabled = isAllDay;
-    if (isAllDay) gebi('item-notification-enabled').checked = false;
-    gebi('reminder-time-group').style.display = (isAgenda && isNotificationEnabled) ? 'block' : 'none';
-}
-
-async function handleItemFormSubmit(e) {
-    e.preventDefault();
-    
-    if (gebi('item-type').value === 'agenda' && (!flatpickrInstance.selectedDates || flatpickrInstance.selectedDates.length === 0)) {
-        showToast("Por favor, selecciona una fecha y hora para el evento.", true);
-        return;
-    }
-
-    const localId = gebi('item-local-id').value;
-    const existingItem = db.items.find(i => i.localId === localId);
-    const subtasks = Array.from(qsa('#subtasks-container .subtask-item')).map(el => ({
-        id: el.dataset.id,
-        description: el.querySelector('input[type="text"]').value,
-        isComplete: el.querySelector('input[type="checkbox"]').checked
-    }));
-    
-    let itemData = {
-        localId,
-        type: gebi('item-type').value,
-        description: gebi('item-description').value.trim(),
-        isComplete: existingItem?.isComplete || false,
-        createdAt: existingItem?.createdAt || Date.now(),
-        updatedAt: Date.now(),
-        isAllDay: gebi('item-type').value === 'agenda' ? gebi('item-all-day').checked : false,
-        isImportant: gebi('item-type').value === 'agenda' ? gebi('item-important').checked : false,
-        notificationEnabled: gebi('item-type').value === 'agenda' ? gebi('item-notification-enabled').checked : false,
-        reminderMinutes: gebi('item-type').value === 'agenda' && gebi('item-notification-enabled').checked ? parseInt(gebi('item-reminder').value, 10) : 0,
-        notificationShown: (existingItem && existingItem.dueDate === flatpickrInstance.selectedDates[0]?.toISOString()) ? existingItem.notificationShown : false,
-        recurrenceRule: gebi('item-type').value === 'agenda' ? gebi('item-recurrence').value : 'none',
-        dueDate: gebi('item-type').value === 'agenda' ? flatpickrInstance.selectedDates[0]?.toISOString() : null,
-        listId: gebi('item-type').value === 'task' ? gebi('item-task-list').value : null,
-        subtasks: gebi('item-type').value === 'task' ? subtasks : [],
-        parentId: existingItem?.parentId || null
-    };
-    
-    if (itemData.description.trim() === "") { showToast("La descripción no puede estar vacía.", true); return; }
-    if (itemData.notificationEnabled) requestNotificationPermission();
-    
-    const isNewItem = !existingItem;
-    handleItemSave(itemData, isNewItem);
-    closeModal('add-item-modal');
-}
-
-function handleItemSave(itemData, isNewItem = false) {
-    triggerHapticFeedback('medium');
-    const index = db.items.findIndex(i => i.localId === itemData.localId);
-    
-    if (index > -1) db.items[index] = { ...db.items[index], ...itemData };
-    else db.items.unshift(itemData);
-    
-    if (isNewItem) newlyCreatedItemId = itemData.localId;
-    handlePostSaveNavigation(itemData);
-    saveDataAndSchedule();
-}
-
-function handlePostSaveNavigation(itemData) {
-    if (!itemData) { renderApp(); return; }
-    if (itemData.type === 'agenda' && itemData.dueDate) {
-        const itemDate = new Date(itemData.dueDate);
-        appState.calendar.selectedDate = dateToYYYYMMDD(itemDate);
-        appState.calendar.currentMonth = itemDate.getMonth();
-        appState.calendar.currentYear = itemDate.getFullYear();
-        if (appState.currentView !== 'calendar') switchView('calendar');
-        else renderApp();
-    } else if (itemData.type === 'task') {
-        appState.tasks.selectedListId = itemData.listId || 'default';
-        if (appState.currentView !== 'tasks') switchView('tasks');
-        else renderApp();
-    } else { renderApp(); }
-}
-
-async function handleItemComplete(localId, isComplete) {
-    const itemIndex = db.items.findIndex(i => i.localId === localId);
-    if (itemIndex === -1) return;
-    const item = { ...db.items[itemIndex] };
-
-    if (isComplete) {
-        showToast(`"${item.description}" completado.`);
-        const updatedItem = { ...item, isComplete: true, completedAt: Date.now(), updatedAt: Date.now() };
-        if (updatedItem.type === 'task' && updatedItem.subtasks) updatedItem.subtasks.forEach(st => st.isComplete = true);
-        db.items[itemIndex] = updatedItem;
-        
-        if (item.type === 'agenda' && item.recurrenceRule && item.recurrenceRule !== 'none') {
-            const nextDueDate = calculateNextDueDate(new Date(item.dueDate), item.recurrenceRule);
-            if (nextDueDate) {
-                const nextEvent = { ...item, localId: uuid(), dueDate: nextDueDate.toISOString(), isComplete: false, completedAt: null, notificationShown: false, createdAt: Date.now(), updatedAt: Date.now(), parentId: item.localId };
-                db.items.unshift(nextEvent);
-                showToast(`Evento reprogramado para la próxima ocurrencia.`);
-            }
-        }
-    } else {
-        if (item.recurrenceRule && item.recurrenceRule !== 'none') {
-            const childItemIndex = db.items.findIndex(i => i.parentId === localId);
-            if (childItemIndex > -1) db.items.splice(childItemIndex, 1);
-        }
-        const updatedItem = { ...item, isComplete: false, completedAt: null, updatedAt: Date.now() };
-        if (updatedItem.type === 'task' && updatedItem.subtasks) updatedItem.subtasks.forEach(st => st.isComplete = false);
-        db.items[itemIndex] = updatedItem;
-    }
-    renderApp();
-    saveDataAndSchedule();
-}
-
-async function handleDeleteItem(localId) {
-    triggerHapticFeedback('medium');
-    const itemEl = document.querySelector(`.list-item-swipe-container[data-id="${localId}"]`);
-    const index = db.items.findIndex(i => i.localId === localId);
-    if (index === -1) return;
-    
-    const performDeleteAndUpdate = () => {
-        if (activeTimers[localId]) {
-            clearTimeout(activeTimers[localId]);
-            delete activeTimers[localId];
-        }
-
-        const finalChildIndex = db.items.findIndex(i => i.parentId === localId);
-        if (finalChildIndex > -1) db.items.splice(finalChildIndex, 1);
-        const finalParentIndex = db.items.findIndex(i => i.localId === localId);
-        if (finalParentIndex > -1) db.items.splice(finalParentIndex, 1);
-        
-        saveDataAndSchedule();
-        renderApp();
-    };
-    
-    if (itemEl) {
-        itemEl.classList.add('item-exiting');
-        itemEl.addEventListener('animationend', performDeleteAndUpdate, { once: true });
-    } else {
-        performDeleteAndUpdate();
-    }
-}
-
-function handleDeleteFromModal() {
-    const localId = gebi('item-local-id').value;
-    const item = db.items.find(i => i.localId === localId);
-    if (item) {
-        showCustomConfirm(`¿Eliminar este ítem permanentemente: "${item.description}"?`, () => {
-            closeModal('add-item-modal');
-            handleDeleteItem(localId);
-        });
-    }
-}
-
-function calculateNextDueDate(currentDueDate, recurrenceRule) {
-    const nextDate = new Date(currentDueDate);
-    switch (recurrenceRule) {
-        case 'daily': nextDate.setDate(nextDate.getDate() + 1); break;
-        case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break;
-        case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break;
-        case 'yearly': nextDate.setFullYear(nextDate.getFullYear() + 1); break;
-        default: return null;
-    }
-    return nextDate;
-}
-
-async function handleQuickAddSubmit(e) {
-    e.preventDefault();
-    const input = gebi('quick-add-input').value.trim();
-    if (!input) return;
-    let parsedData = parseNaturalLanguage(input);
-    let itemToSave = { ...parsedData, localId: uuid(), isComplete: false, createdAt: Date.now(), updatedAt: Date.now(), listId: parsedData.type === 'task' ? appState.tasks.selectedListId : null };
-    handleItemSave(itemToSave, true);
-    closeModal('quick-add-modal');
-}
-
-function openAdvancedFromQuickAdd() {
-    const parsedItem = parseNaturalLanguage(gebi('quick-add-input').value);
-    parsedItem.localId = null;
-    openAddItemModal(parsedItem);
-}
-
-function parseNaturalLanguage(text) {
-    let cleanText = text.toLowerCase(); let date = new Date(); let dateFound = false; let isAllDay = true;
-    
-    const timeRegex = /(?:a las|a la)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?\b|(\d{1,2})(?::(\d{2}))\s*(am|pm|de la mañana|de la tarde|de la noche)/i;
-    const timeMatch = cleanText.match(timeRegex);
-    
-    if (timeMatch) {
-        isAllDay = false; 
-        let hour = parseInt(timeMatch[1] || timeMatch[4], 10); 
-        const minute = parseInt(timeMatch[2] || timeMatch[5], 10) || 0;
-        const period = (timeMatch[3] || timeMatch[6] || '').toLowerCase();
-        
-        if ((period.includes('pm') || period.includes('tarde') || period.includes('noche')) && hour < 12) hour += 12;
-        if ((period.includes('am') || period.includes('mañana')) && hour === 12) hour = 0;
-        
-        date.setHours(hour, minute, 0, 0); 
-        cleanText = cleanText.replace(timeMatch[0], '').trim(); 
-        dateFound = true;
-    } else { date.setHours(0, 0, 0, 0); }
-    
-    const numericDateRegex = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
-    const numericDateMatch = cleanText.match(numericDateRegex);
-    
-    if (numericDateMatch) {
-        const day = parseInt(numericDateMatch[1], 10); const month = parseInt(numericDateMatch[2], 10) - 1;
-        let year = numericDateMatch[3] ? parseInt(numericDateMatch[3], 10) : new Date().getFullYear();
-        if (year < 100) year += 2000;
-        date.setFullYear(year, month, day); dateFound = true; cleanText = cleanText.replace(numericDateMatch[0], '').trim();
-    } else {
-        const dateRegex = /(\d{1,2})(?:\s+de\s+|\s*\/\s*)(\w+)/i; const dateMatch = dateRegex.exec(cleanText);
-        if (dateMatch) {
-            const day = parseInt(dateMatch[1], 10); const monthStr = dateMatch[2].toLowerCase();
-            const monthIndex = MESES.findIndex(m => m.toLowerCase().startsWith(monthStr));
-            if (monthIndex > -1) { date.setMonth(monthIndex, day); dateFound = true; cleanText = cleanText.replace(dateMatch[0], '').trim(); }
-        } else if (/\bhoy\b/i.test(cleanText)) { dateFound = true; cleanText = cleanText.replace(/\bhoy\b/i, '').trim(); }
-        else if (/\bmañana\b/i.test(cleanText)) { date.setDate(date.getDate() + 1); dateFound = true; cleanText = cleanText.replace(/\bmañana\b/i, '').trim(); }
-        else {
-            for (let i = 0; i < DIAS_SEMANA_LARGOS.length; i++) {
-                const dayName = DIAS_SEMANA_LARGOS[i];
-                if (cleanText.includes(dayName)) {
-                    const currentDay = (new Date().getDay() + 6) % 7; const targetDay = i;
-                    let dayDiff = targetDay - currentDay; if (dayDiff <= 0) dayDiff += 7;
-                    date.setDate(date.getDate() + dayDiff); dateFound = true;
-                    cleanText = cleanText.replace(new RegExp(`\\b(el\\s+)?${dayName}\\b`, 'i'), '').trim(); break;
+                } else {
+                    await oneDrive.subirArchivo(ExcelManager.generarLibro());
+                    showNotification("📁 Archivo 'aidanai-agenda.xlsx' creado en raíz");
                 }
-            }
+            } catch (e) { console.error(e); showNotification("❌ Error conectando a OneDrive", "error"); }
+            window.AppState.cloudReady = true;
         }
     }
-    const description = cleanText.charAt(0).toUpperCase() + cleanText.slice(1);
-    return { type: dateFound ? 'agenda' : 'task', description: description.replace(/,$/, '').trim(), dueDate: dateFound ? date.toISOString() : null, isAllDay: dateFound ? isAllDay : false };
-}
 
-function handleTaskListFilterChange(e) { appState.tasks.selectedListId = e.target.value; renderTaskListView(); }
+    async function syncToCloud() {
+        if (isSyncing || !window.AppState.cloudReady) return;
+        if (!navigator.onLine) { localStorage.setItem('pending_sync', 'true'); return; }
 
-function openManageListsModal() {
-    const editor = gebi('task-lists-editor'); editor.innerHTML = '';
-    db.taskLists.forEach(list => {
-        const el = document.createElement('div'); el.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
-        const input = document.createElement('input'); input.type = 'text'; input.value = list.name; input.className = 'form-input';
-        input.onchange = () => handleRenameTaskList(list.id, input.value);
-        if (list.id === 'default') input.disabled = true;
-        el.appendChild(input);
-        
-        if (list.id !== 'default') {
-            const deleteBtn = document.createElement('button'); deleteBtn.className = 'icon-button';
-            deleteBtn.innerHTML = '<span class="material-icons">delete</span>';
-            deleteBtn.onclick = () => handleDeleteTaskList(list.id); el.appendChild(deleteBtn);
+        isSyncing = true; showNotification("⏳ Guardando agenda en Nube...");
+        try {
+            if (!oneDrive.fileId) await oneDrive.getFileId();
+            await oneDrive.subirArchivo(ExcelManager.generarLibro());
+            localStorage.removeItem('pending_sync');
+            showNotification("✅ Agenda guardada");
+        } catch (e) {
+            localStorage.setItem('pending_sync', 'true');
+            showNotification("❌ Error subiendo datos", "error");
+        } finally { isSyncing = false; }
+    }
+
+    function dispararSyncNube() {
+        const cuentas = typeof oneDrive !== 'undefined' && oneDrive.msalInstance ? oneDrive.msalInstance.getAllAccounts() : [];
+        if (cuentas.length > 0 && window.AppState.cloudReady) {
+            clearTimeout(window.syncTimeout);
+            window.syncTimeout = setTimeout(syncToCloud, 2500); // 2.5s debounce
         }
-        editor.appendChild(el);
-    });
-    openModal('manage-lists-modal');
-}
-
-function handleAddTaskList(e) {
-    e.preventDefault();
-    const input = gebi('new-list-name'); const name = input.value.trim();
-    if (name) { const newList = { id: uuid(), name }; db.taskLists.push(newList); saveData().then(() => { input.value = ''; openManageListsModal(); renderTaskListView(); }).catch(err => showToast("Error al añadir lista", true)); }
-}
-
-function handleRenameTaskList(id, newName) {
-    const list = db.taskLists.find(l => l.id === id);
-    if (list && newName) { list.name = newName; saveData().then(() => { openManageListsModal(); renderTaskListView(); }).catch(err => showToast("Error al renombrar lista", true)); }
-}
-
-function handleDeleteTaskList(id) {
-    const listName = db.taskLists.find(l => l.id === id)?.name;
-    showCustomConfirm(`¿Seguro que quieres eliminar la lista "${listName}" y TODAS sus tareas? Esta acción es irreversible.`, () => {
-        db.taskLists = db.taskLists.filter(l => l.id !== id);
-        db.items = db.items.filter(i => i.listId !== id);
-        if (appState.tasks.selectedListId === id) appState.tasks.selectedListId = 'default';
-        saveData().then(() => { openManageListsModal(); renderTaskListView(); }).catch(err => showToast("Error al eliminar la lista.", true));
-    });
-}
-
-function renderSubtasksInModal(subtasks = []) {
-    const container = gebi('subtasks-container'); container.innerHTML = '';
-    subtasks.forEach(subtask => {
-        const el = document.createElement('div'); el.className = 'subtask-item'; el.dataset.id = subtask.id;
-        el.innerHTML = `<input type="checkbox" ${subtask.isComplete ? 'checked' : ''}><input type="text" value="${subtask.description}"><button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button>`;
-        el.querySelector('.delete-subtask-btn').onclick = () => el.remove();
-        container.appendChild(el);
-    });
-}
-
-function handleAddSubtask() {
-    const input = gebi('new-subtask-input'); const description = input.value.trim();
-    if (description) {
-        const container = gebi('subtasks-container'); const el = document.createElement('div');
-        el.className = 'subtask-item'; el.dataset.id = uuid();
-        el.innerHTML = `<input type="checkbox"><input type="text" value="${description}"><button type="button" class="icon-button delete-subtask-btn"><span class="material-icons">close</span></button>`;
-        el.querySelector('.delete-subtask-btn').onclick = () => el.remove();
-        container.appendChild(el); input.value = ''; input.focus();
     }
-}
-
-function initializeDatePicker() {
-    try {
-        if (typeof flatpickr === 'undefined') { console.warn('flatpickr no disponible aun.'); return; }
-        if (flatpickr.l10ns && flatpickr.l10ns.es) flatpickr.localize(flatpickr.l10ns.es);
-        const el = document.getElementById('item-datetime');
-        if (!el) { console.warn('Elemento #item-datetime no encontrado.'); return; }
-        flatpickrInstance = flatpickr(el, { enableTime: true, dateFormat: 'Y-m-d H:i', time_24hr: true, minuteIncrement: 15, locale: "es" });
-    } catch (e) { console.error('Error inicializando flatpickr:', e); }
-}
-
-function openDatePickerModal() {
-    openModal('date-picker-modal');
-    const monthSelect = gebi('month-select');
-    monthSelect.innerHTML = MESES.map((mes, i) => `<option value="${i}">${mes}</option>`).join('');
-    monthSelect.value = appState.calendar.currentMonth;
-    gebi('year-select').value = appState.calendar.currentYear;
-}
-
-function handleDateSelectionFromPicker(e) {
-    e.preventDefault();
-    appState.calendar.currentMonth = parseInt(gebi('month-select').value, 10);
-    appState.calendar.currentYear = parseInt(gebi('year-select').value, 10);
-    appState.calendar.selectedDate = dateToYYYYMMDD(new Date(appState.calendar.currentYear, appState.calendar.currentMonth, 1));
-    appState.calendar.displayMode = 'month';
-    switchView('calendar');
-    closeModal('date-picker-modal');
-}
-
-function toggleSearchBar() {
-    const searchContainer = gebi('search-container');
-    const isActive = searchContainer.classList.toggle('active');
-    if (isActive) { 
-        if (appState.currentView !== 'search') appState.lastView = appState.currentView;
-        gebi('search-input').focus(); 
-    } else { 
-        gebi('search-input').value = ''; 
-        if (appState.currentView === 'search') switchView(appState.lastView || 'today');
-    }
-}
-
-function handleSearchSubmit(event) { event.preventDefault(); const q = gebi('search-input')?.value || ''; executeSearch(q); }
-function executeSearch(query) { 
-    if (query.trim() !== '') { 
-        if (appState.currentView !== 'search') appState.lastView = appState.currentView;
-        switchView('search'); 
-    } else { 
-        if (appState.currentView === 'search') switchView(appState.lastView || 'today'); 
-    } 
-}
-
-function attachSwipeListeners(cardEl) {
-    // FIX: Si falla HammerJS por problema de red, no rompe la UI
-    if (typeof Hammer === 'undefined') return; 
-    
-    if (!cardEl || cardEl.dataset.hammer) return;
-    cardEl.dataset.hammer = 'true';
-    const mc = new Hammer.Manager(cardEl);
-    mc.add(new Hammer.Pan({ threshold: 10, pointers: 1 }));
-    mc.on('panstart', () => { window.isSwiping = true; cardEl.style.transition = 'none'; });
-    
-    mc.on('pan', e => {
-        if (e.target.closest('.subtasks-list-view')) { cardEl.style.transform = 'translateX(0)'; return; }
-        cardEl.style.transform = `translateX(${e.deltaX}px)`;
-        if (e.deltaX > 20) cardEl.classList.add('swiping-right');
-        else if (e.deltaX < -20) cardEl.classList.add('swiping-left');
-        else cardEl.classList.remove('swiping-right', 'swiping-left');
-    });
-    
-    mc.on('panend', e => {
-        setTimeout(() => window.isSwiping = false, 50);
-        cardEl.style.transition = 'transform 0.3s var(--ease-out-quint)';
-        const threshold = cardEl.offsetWidth * 0.35; const id = cardEl.dataset.id;
-        const item = db.items.find(i => i.localId === id);
-        if (!item) { cardEl.style.transform = 'translateX(0)'; return; }
-        
-        if (e.deltaX > threshold) { 
-            triggerHapticFeedback('success'); handleItemComplete(id, !item.isComplete); cardEl.style.transform = 'translateX(0)'; 
-        } else if (e.deltaX < -threshold) {
-            showCustomConfirm(`¿Eliminar "${item.description}"?`, () => { handleDeleteItem(id); }, () => { 
-                cardEl.style.transition = 'transform 0.3s var(--ease-out-quint)';
-                cardEl.style.transform = 'translateX(0)'; 
-            });
-        } else { cardEl.style.transform = 'translateX(0)'; }
-        
-        setTimeout(() => cardEl.classList.remove('swiping-right', 'swiping-left'), 300);
-    });
-}
-
-function showCustomConfirm(message, onConfirm, onCancel) {
-    const modalId = 'custom-confirm-modal';
-    gebi('confirm-message').textContent = message;
-    const confirmOkBtn = gebi('confirm-ok-btn'); const confirmCancelBtn = gebi('confirm-cancel-btn');
-    confirmOkBtn.onclick = null; confirmCancelBtn.onclick = null;
-    confirmOkBtn.onclick = () => { onConfirm(); closeModal(modalId); };
-    confirmCancelBtn.onclick = () => { if (onCancel) onCancel(); closeModal(modalId); };
-    openModal(modalId);
-}
-
-function updateSyncStatus() {
-    const indicator = gebi('sync-status-indicator'); if (!indicator) return;
-    let icon = indicator.querySelector('.material-icons');
-    if (!icon) { icon = document.createElement('span'); icon.classList.add('material-icons'); indicator.appendChild(icon); }
-    
-    indicator.classList.remove('online', 'offline');
-    const isOnline = navigator.onLine;
-    if (isOnline) { indicator.classList.add('online'); icon.textContent = 'cloud_done'; indicator.title = "Conectado y sincronizado."; }
-    else { indicator.classList.add('offline'); icon.textContent = 'cloud_off'; indicator.title = "Sin conexión. Los cambios se guardarán localmente."; }
-}
-
-async function requestNotificationPermission() {
-    if (!("Notification" in window)) { showToast("Este navegador no soporta notificaciones.", true); return 'denied'; }
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') showToast("¡Permiso de notificaciones concedido!");
-    else showToast("Permiso de notificaciones denegado.", true);
-    return permission;
-}
-
-function showNotification(item) {
-    if (Notification.permission !== "granted") return;
-    const body = `Tu evento "${item.description}" es ahora.`;
-    new Notification('Recordatorio de Agenda', { body: body, icon: './aiDANaI.webp', badge: './aiDANaI.webp' });
-    const index = db.items.findIndex(x => x.localId === item.localId);
-    if (index > -1) { db.items[index].notificationShown = true; saveData().catch(err => showToast("Error al guardar estado de notificación", true)); }
-}
-
-function scheduleNotification(item) {
-    if (activeTimers[item.localId]) clearTimeout(activeTimers[item.localId]);
-    if (!item.notificationEnabled || item.isComplete || !item.dueDate || item.notificationShown) return;
-    
-    const reminderOffsetMs = (parseInt(item.reminderMinutes, 10) || 0) * 60 * 1000;
-    const notificationTimeMs = new Date(item.dueDate).getTime() - reminderOffsetMs;
-    const delay = notificationTimeMs - Date.now();
-    
-    if (delay > 0) {
-        activeTimers[item.localId] = setTimeout(() => { showNotification(item); delete activeTimers[item.localId]; }, delay);
-    }
-}
-
-function scheduleAllNotifications() {
-    if (!db.items) return;
-    Object.values(activeTimers).forEach(clearTimeout);
-    activeTimers = {};
-    db.items.forEach(scheduleNotification);
-}
-
-function handleSubtaskToggle(taskId, subtaskId) {
-    const itemIndex = db.items.findIndex(i => i.localId === taskId);
-    if (itemIndex === -1) return;
-    const item = db.items[itemIndex];
-    if (!item.subtasks) return;
-    const subtaskIndex = item.subtasks.findIndex(st => st.id === subtaskId);
-    if (subtaskIndex === -1) return;
-    
-    item.subtasks[subtaskIndex].isComplete = !item.subtasks[subtaskIndex].isComplete;
-    const allComplete = item.subtasks.length > 0 && item.subtasks.every(st => st.isComplete);
-    
-    if (allComplete && !item.isComplete) {
-        item.isComplete = true;
-        item.completedAt = Date.now();
-        showToast(`"${item.description}" completado automáticamente.`);
-    } else if (!allComplete && item.isComplete) {
-        item.isComplete = false;
-        item.completedAt = null;
-    }
-    
-    db.items[itemIndex] = { ...item, updatedAt: Date.now() };
-    renderApp();
-    saveDataAndSchedule();
-}
-
-// ==========================================
-// ARRANQUE DE LA APP
-// ==========================================
-initApp();
-
-    </script>
+</script>
 </body>
 </html>
