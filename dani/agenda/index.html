@@ -520,6 +520,12 @@
                 <div class="status-pill"><div class="status-dot"></div><span class="status-text">Online</span></div>
                 <button class="header-icon-btn" id="btn-notif-header" onclick="toggleNotifPanel()"><span class="material-icons">notifications</span><span id="notif-badge">0</span></button>
             </div>
+            <div style="margin-top:12px;" id="install-container" style="display: none;">
+    <button class="notif-activate-btn" id="btn-install-app" style="color: var(--accent-yellow) !important; background: rgba(252,238,10,0.06) !important; border-color: rgba(252,238,10,0.25) !important;">
+        <span class="material-icons">install_mobile</span> Instalar App en el móvil
+    </button>
+</div>
+
         </header>
 
         <div class="auth-bar">
@@ -1298,6 +1304,44 @@ function dispararSyncNube() {
     const cuentas = typeof oneDrive !== 'undefined' && oneDrive.msalInstance ? oneDrive.msalInstance.getAllAccounts() : [];
     if (cuentas.length > 0 && window.AppState.cloudReady) { clearTimeout(window.syncTimeout); window.syncTimeout = setTimeout(syncToCloud, 500); }
 }
+// ══════════════════════════════════════════
+// LÓGICA DE INSTALACIÓN PWA (Añadir a inicio)
+// ══════════════════════════════════════════
+let promptDeInstalacion;
+const btnInstalar = document.getElementById('btn-install-app');
+const installContainer = document.getElementById('install-container');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Previene que aparezca el mini-infobar por defecto en el móvil
+    e.preventDefault();
+    // Guarda el evento para poder dispararlo luego
+    promptDeInstalacion = e;
+    // Muestra el botón de instalación en tus Ajustes
+    if(installContainer) installContainer.style.display = 'block';
+});
+
+if(btnInstalar) {
+    btnInstalar.addEventListener('click', async () => {
+        if (!promptDeInstalacion) return;
+        // Muestra el prompt nativo de Android
+        promptDeInstalacion.prompt();
+        // Espera a que el usuario responda
+        const { outcome } = await promptDeInstalacion.userChoice;
+        if (outcome === 'accepted') {
+            console.log('El usuario aceptó instalar la app');
+            installContainer.style.display = 'none';
+        }
+        // Limpiamos la variable
+        promptDeInstalacion = null;
+    });
+}
+
+// Opcional: Ocultar el botón si la app ya fue instalada
+window.addEventListener('appinstalled', () => {
+    if(installContainer) installContainer.style.display = 'none';
+    showNotification("✅ Aplicación instalada con éxito");
+});
+
 </script>
 </body>
 </html>
