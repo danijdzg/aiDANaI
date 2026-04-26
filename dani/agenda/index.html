@@ -14,8 +14,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
+    
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js" defer></script>
 
     <style>
         :root {
@@ -40,7 +41,7 @@
             --header-height: 58px;
         }
 
-        /* CRT Scanlines overlay */
+        /* CRT Scanlines overlay optimizado */
         body::after {
             content: " "; display: block; position: fixed;
             top: 0; left: 0; bottom: 0; right: 0;
@@ -52,6 +53,7 @@
                 rgba(0,0,0,0.08) 3px
             );
             z-index: 99999; pointer-events: none; opacity: 0.4;
+            will-change: transform;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -200,7 +202,6 @@
         }
         #btn-signin:hover { background: var(--accent-purple-dim); }
 
-        /* INSTALL BUTTON — se muestra bajo el auth-bar cuando PWA instalable */
         #install-container {
             display: none;
             padding: 6px 16px 8px;
@@ -279,7 +280,7 @@
         .cal-dot.ambos { background: var(--accent-green); box-shadow: 0 0 3px var(--accent-green); }
         .cal-dot.default { background: var(--text-muted); }
 
-        /* DAY HEADER */
+        /* DAY HEADER Y NUEVAS CLASES PARA TAREAS */
         .day-header-bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; }
         .day-date-num { font-family: var(--hud-font); font-size: 2.2rem; font-weight: 900; color: var(--text-primary); line-height: 1; }
         .day-date-label { font-family: var(--hud-font); font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; margin-top: 2px; }
@@ -290,6 +291,11 @@
         }
         .day-add-btn:hover { background: rgba(184,0,255,0.2); }
         .day-add-btn .material-icons { font-size: 20px; }
+
+        /* CLASES NUEVAS DE LIMPIEZA */
+        .tasks-header-bar { padding-bottom: 4px; }
+        .tasks-main-title { font-family: var(--hud-font); font-size: 1.3rem; font-weight: 900; color: var(--text-primary); }
+        .tasks-sub-title { font-family: var(--hud-font); font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; margin-top: 3px; }
 
         /* EVENT CARDS */
         .item-list { list-style: none; padding: 0 12px; margin: 0; }
@@ -469,9 +475,9 @@
         .save-btn.purple-btn { background: var(--accent-purple) !important; color: #fff !important; }
         .save-btn.purple-btn:hover { box-shadow: 0 0 20px rgba(184,0,255,0.4); }
 
-        /* MODAL */
+        /* MODAL - Uso de clase .show para visibilidad y animaciones */
         .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 100000; align-items: flex-end; display: none; background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px); }
-        .modal[style*="display: block"] { display: flex !important; }
+        .modal.show { display: flex !important; }
         .modal-content { width: 100%; background-color: var(--primary-bg); border-top: 1px solid var(--border-color); max-height: 92vh; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); animation: slideUpSheet 0.3s cubic-bezier(0.175,0.885,0.32,1.275); }
         @keyframes slideUpSheet { from { transform:translateY(100%); } to { transform:translateY(0); } }
         .modal-handle-bar { text-align: center; padding: 12px 0 4px; }
@@ -533,7 +539,6 @@
             </div>
         </header>
 
-        <!-- Botón instalar PWA — aparece solo cuando el navegador lo permite -->
         <div id="install-container">
             <button class="notif-activate-btn" id="btn-install-app"
                 style="color:var(--accent-yellow)!important;background:rgba(252,238,10,0.06)!important;border-color:rgba(252,238,10,0.25)!important;">
@@ -578,10 +583,10 @@
             </div>
 
             <div id="tareas" class="tab-content">
-                <div class="day-header-bar" style="padding-bottom:4px;">
+                <div class="day-header-bar tasks-header-bar">
                     <div>
-                        <div style="font-family:var(--hud-font);font-size:1.3rem;font-weight:900;color:var(--text-primary);">Mis Tareas</div>
-                        <div style="font-family:var(--hud-font);font-size:0.55rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;">Organiza tu tiempo</div>
+                        <div class="tasks-main-title">Mis Tareas</div>
+                        <div class="tasks-sub-title">Organiza tu tiempo</div>
                     </div>
                     <button class="day-add-btn" onclick="abrirModalTarea()"><span class="material-icons">add</span></button>
                 </div>
@@ -757,15 +762,25 @@ let fechaNavegacion = new Date();
 let calViewDate     = new Date();
 
 // ══════════════════════════════════════════
-// 2. INICIALIZACIÓN
+// 2. INICIALIZACIÓN CON SPLASH SCREEN INTELIGENTE
 // ══════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => document.getElementById('splash-screen').classList.add('fade-out'), 1600);
+document.addEventListener('DOMContentLoaded', async () => {
+    // Iniciar primero las funciones visuales y locales
+    iniciarApp();
+
+    // Esperamos a que MSAL cargue o a un timeout si falla
+    await Promise.all([
+        oneDrive._msalReady,
+        new Promise(resolve => setTimeout(resolve, 800))
+    ]);
+
+    const splash = document.getElementById('splash-screen');
+    splash.classList.add('fade-out');
+
     setTimeout(() => {
-        document.getElementById('splash-screen').style.display = 'none';
+        splash.style.display = 'none';
         document.getElementById('app-container').style.display = 'flex';
-        iniciarApp();
-    }, 2200);
+    }, 500); // Coincide con la animación CSS
 
     window.addEventListener('online',  () => { updateConnectionStatus(); showNotification("🟢 Conexión recuperada"); syncToCloud(); });
     window.addEventListener('offline', () => { updateConnectionStatus(); showNotification("🔴 Modo Offline"); });
@@ -1126,7 +1141,7 @@ document.addEventListener('touchmove', e => {
     }
 
     if (swipingDirection === 'h') {
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault(); // <-- NUEVA VALIDACIÓN PREVENTIVA DE ERRORES DE SCROLL
         currentX = deltaX;
         if (currentX > 80)  currentX = 80  + (currentX - 80)  * 0.2;
         if (currentX < -80) currentX = -80 + (currentX + 80) * 0.2;
@@ -1246,8 +1261,11 @@ function enviarNotificacionNativa(titulo, cuerpo) {
     }
 }
 
-function openModal(id)  { document.getElementById(id).style.display = 'block'; }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+// ══════════════════════════════════════════
+// CAMBIOS DE MODAL: USO DE CLASSLIST 
+// ══════════════════════════════════════════
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
 function updateConnectionStatus() {
     document.querySelectorAll('.status-dot').forEach(dot => {
@@ -1271,7 +1289,8 @@ function showNotification(msg, type = 'info') {
 // ══════════════════════════════════════════
 // MOTOR CLOUD: MSAL & ONEDRIVE
 // ══════════════════════════════════════════
-const REDIRECT_URI  = "https://danijdzg.github.io/aiDANaI/dani/agenda/";
+// SE HA CAMBIADO LA URL DINÁMICA
+const REDIRECT_URI  = window.location.origin + window.location.pathname;
 const MSAL_CONFIG   = {
     auth: { clientId: "51566b78-3b3d-4975-9db0-4a817fc34bfb", authority: "https://login.microsoftonline.com/consumers", redirectUri: REDIRECT_URI },
     cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false }
@@ -1301,11 +1320,9 @@ class OneDriveManager {
     }
     async login() {
         await this._msalReady;
-        // Intenta primero login silencioso con la cuenta por defecto
         try {
             await this.msalInstance.ssoSilent({ scopes: ["User.Read","Files.ReadWrite.All"], loginHint: "daninorma73@hotmail.com" });
         } catch(e) {
-            // Si falla el silencioso, lanza el flujo interactivo
             await this.msalInstance.loginRedirect({ scopes: ["User.Read","Files.ReadWrite.All"], loginHint: "daninorma73@hotmail.com" });
         }
     }
@@ -1454,3 +1471,4 @@ window.addEventListener('appinstalled', () => {
 </script>
 </body>
 </html>
+
