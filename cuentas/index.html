@@ -4083,24 +4083,33 @@ window.alert = function(mensaje) {
 // 2. CONFIGURACIÓN MSAL Y ONEDRIVE (UNIFICADO)
 // ==========================================
 
-// Vamos a forzar la URL EXACTA que espera Azure, letra por letra.
-let redirectExacta = "https://danijdzg.github.io/aiDANaI/cuentas/"; // Por defecto: Producción en GitHub
+// URI de redirección fija según entorno
+const redirectExacta = (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
+    ? "http://localhost:5500/"
+    : "https://danijdzg.github.io/aiDANaI/cuentas/";
 
-// Si detectamos que estás haciendo pruebas en tu ordenador (Live Server)
-if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
-    // Forzamos 'localhost' porque es lo que tienes registrado en Azure
-    redirectExacta = "http://localhost:5500/"; 
-}
-
+// ─────────────────────────────────────────────────────────────────────
+// SOLUCIÓN CUENTAS PERSONALES MICROSOFT (@hotmail, @outlook, @live)
+//
+// El problema: la cuenta daninorma73@hotmail.com es una cuenta personal
+// Microsoft (MSA). Con authority="common", MSAL redirige a login.live.com
+// que tiene un registro de apps SEPARADO y más estricto que Azure AD.
+//
+// Solución: usar el endpoint "consumers" en lugar de "common".
+// "consumers" acepta SOLO cuentas personales Microsoft y va siempre
+// a login.microsoftonline.com (nunca a login.live.com), donde tu
+// app SÍ está registrada correctamente.
+// ─────────────────────────────────────────────────────────────────────
 const MSAL_CONFIG = {
     auth: {
         clientId: "a5107de6-7c6c-4363-9d22-85bff059df61",
-        authority: "https://login.microsoftonline.com/consumers",
-        redirectUri: redirectExacta // Enviamos la cadena de texto blindada
+        authority: "https://login.microsoftonline.com/consumers", // <-- CLAVE: cuentas personales MSA
+        redirectUri: redirectExacta,
+        navigateToLoginRequestUrl: false
     },
     cache: {
         cacheLocation: "localStorage",
-        storeAuthStateInCookie: false
+        storeAuthStateInCookie: true  // Necesario para Safari / iOS PWA
     }
 };
 
@@ -4229,7 +4238,7 @@ class OneDriveManager {
         
         try {
             await this.msalInstance.loginRedirect({
-                scopes: ["User.Read", "Files.ReadWrite.All"],
+                scopes: ["User.Read", "Files.ReadWrite"],
                 prompt: "select_account"
             });
             return new Promise(() => {}); 
