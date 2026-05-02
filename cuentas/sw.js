@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_NAME = 'aidanai-v11'; // Subimos versión
+const CACHE_NAME = 'aidanai-v12'; // Versión bumpeada para limpiar caché con código MSAL antiguo // Subimos versión
 const CACHE_URLS = [
     './', 
     './index.html', 
@@ -40,7 +40,7 @@ self.addEventListener('fetch', e => {
     const url = e.request.url;
     
     // 🛑 REGLA 1: Llamadas a la nube NUNCA se cachean (Microsoft y Graph)
-    if (url.includes('graph.microsoft.com') || url.includes('login.microsoftonline.com') || url.includes('msauth')) {
+    if (url.includes('graph.microsoft.com') || url.includes('login.microsoftonline.com') || url.includes('login.live.com') || url.includes('msauth') || url.includes('login.microsoft.com')) {
         return; // Deja pasar a la red nativamente
     }
     
