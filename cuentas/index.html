@@ -9715,84 +9715,91 @@ window.guardarInversionesEnExcel = function(wb) {
     }
 };
 
-// Función para obtener precio actual de acciones (Alpha Vantage)
+// 1. ANULACIÓN DE ALPHA VANTAGE (Precios Manuales)
 window.obtenerPrecioAccion = async function(ticker) {
-    try {
-        // Usar demo key para MVP - en producción usar API key real
-        const apiKey = 'demo';
-        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${apiKey}`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (data['Global Quote'] && data['Global Quote']['05. price']) {
-            return parseFloat(data['Global Quote']['05. price']);
-        }
-        return null;
-    } catch (e) {
-        console.error(`Error obteniendo precio de ${ticker}:`, e);
-        return null;
-    }
+    // Retorna null de forma nativa para que el sistema NUNCA
+    // sobrescriba el precio que tú has introducido en tu Excel o interfaz.
+    return null; 
 };
 
-// Función para obtener precio de criptomonedas (CoinGecko)
+// 2. RESTRICCIÓN DE COINGECKO (Solo Bitcoin)
 window.obtenerPrecioCripto = async function(ticker) {
+    const t = String(ticker).toUpperCase().trim();
+    
+    // Cortafuegos: Si no es Bitcoin, devolvemos null (precio manual)
+    if (t !== 'BTC' && t !== 'BITCOIN') {
+        return null;
+    }
+    
     try {
-        const coinId = COINGECKO_IDS[ticker] || ticker.toLowerCase();
-        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=eur`;
-        
+        // Petición directa y exclusiva para Bitcoin
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur`;
         const response = await fetch(url);
         const data = await response.json();
         
-        if (data[coinId] && data[coinId].eur) {
-            return data[coinId].eur;
+        if (data && data.bitcoin && data.bitcoin.eur) {
+            return data.bitcoin.eur;
         }
         return null;
     } catch (e) {
-        console.error(`Error obteniendo precio de ${ticker}:`, e);
-        return null;
+        console.error(`Error de conexión con CoinGecko para BTC:`, e);
+        return null; // Fallback a precio manual en caso de caída de internet
     }
 };
 
-// Función para actualizar precios de todos los activos
+// 3. MOTOR DE ACTUALIZACIÓN ADAPTADO
 window.actualizarPreciosInversiones = async function(mostrarCarga = true) {
     if (mostrarCarga) {
         notify('Actualizando precios...', 'loading');
     }
     
     try {
+        let btcActualizado = false;
+
         for (let activo of window.carteraInversiones.activos) {
-            let precio = null;
+            let precioNuevo = null;
             
             if (activo.tipo === 'cripto') {
-                precio = await window.obtenerPrecioCripto(activo.ticker);
+                precioNuevo = await window.obtenerPrecioCripto(activo.ticker);
             } else {
-                precio = await window.obtenerPrecioAccion(activo.ticker);
+                precioNuevo = await window.obtenerPrecioAccion(activo.ticker);
             }
             
-            if (precio) {
-                activo.precioActual = precio;
-                activo.valorActual = activo.cantidad * precio;
-                activo.ganancia = (precio - activo.precioCompra) * activo.cantidad;
-                activo.gananciaPorcentaje = ((precio - activo.precioCompra) / activo.precioCompra) * 100;
-                activo.ultimaActualizacion = new Date().toISOString();
-                activo.fuente = activo.tipo === 'cripto' ? 'coingecko' : 'alpha-vantage';
+            // Si el precio devuelto NO es nulo (solo el BTC lo hará)
+            // Se actualiza el activo. Si es nulo, mantiene tu precio manual.
+            if (precioNuevo !== null) {
+                activo.precioActual = precioNuevo;
+                activo.fuente = 'coingecko';
+                btcActualizado = true;
+            } else {
+                // Aseguramos que la etiqueta interna marque que es manual
+                if (!activo.fuente) activo.fuente = 'manual';
             }
-            
-            // Pequeño delay para no saturar APIs
-            await new Promise(r => setTimeout(r, 500));
+
+            // Recalculamos los valores de esa posición basados en el precio actual
+            activo.valorActual = activo.cantidad * activo.precioActual;
+            activo.ganancia = (activo.precioActual - activo.precioCompra) * activo.cantidad;
+            activo.gananciaPorcentaje = activo.precioCompra > 0 
+                ? ((activo.precioActual - activo.precioCompra) / activo.precioCompra) * 100 
+                : 0;
+            activo.ultimaActualizacion = new Date().toISOString();
         }
         
+        // Refrescamos toda la UI de Inversiones con los nuevos (o antiguos) valores
         window.calcularKPIsInversiones();
         window.renderizarInversiones();
         
         if (mostrarCarga) {
-            notify('✅ Precios actualizados', 'success');
+            if (btcActualizado) {
+                notify('✅ Precio de BTC actualizado', 'success');
+            } else {
+                notify('✅ Carteras calculadas (Valores manuales)', 'success');
+            }
         }
     } catch (e) {
-        console.error('Error actualizando precios:', e);
+        console.error('Error actualizando la cartera:', e);
         if (mostrarCarga) {
-            notify('❌ Error al actualizar precios', 'error');
+            notify('❌ Error procesando la cartera', 'error');
         }
     }
 };

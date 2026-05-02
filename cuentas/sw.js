@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_NAME = 'aidanai-v10'; // Subimos versión
+const CACHE_NAME = 'aidanai-v11'; // Subimos versión
 const CACHE_URLS = [
     './', 
     './index.html', 
