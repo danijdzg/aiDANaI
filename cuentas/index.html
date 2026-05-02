@@ -4079,94 +4079,96 @@ window.alert = function(mensaje) {
         setTimeout(() => toast.remove(), 400); // Esperar a que acabe la transición CSS
     }, 3500);
 };
-// --- 1. CONFIGURACIÓN MSAL (Con la URL FIJA) ---
+// ==========================================
+// 2. CONFIGURACIÓN MSAL Y ONEDRIVE (UNIFICADO)
+// ==========================================
+
+// 1. Calculamos la URL exacta (funciona tanto en local como en GitHub Pages)
+let urlActual = window.location.origin + window.location.pathname;
+if (urlActual.endsWith('index.html')) {
+    urlActual = urlActual.replace('index.html', '');
+}
+if (!urlActual.endsWith('/')) {
+    urlActual += '/'; 
+}
+
 const MSAL_CONFIG = {
     auth: {
         clientId: "a5107de6-7c6c-4363-9d22-85bff059df61",
         authority: "https://login.microsoftonline.com/common",
-        // Ponemos la URL fija para evitar que el navegador juegue con ella
-        redirectUri: "https://danijdzg.github.io/aiDANaI/cuentas/" 
+        redirectUri: urlActual // <-- Dinámico: se adapta a localhost o a GitHub
     },
     cache: {
         cacheLocation: "localStorage",
         storeAuthStateInCookie: false
     }
 };
+
 // ──────────────────────────────────────────────────────────────────────
-// 🧠 MÓDULO DE ESTADO CENTRAL (AppState) - BLINDADO CONTRA CIERRES
+// 🧠 MÓDULO DE ESTADO CENTRAL (AppState)
 // ──────────────────────────────────────────────────────────────────────
 window.AppState = {
-isSaving: false,
-estadoSemaforo: 'verde',
-// Novedad: Comprobamos si hay movimientos pendientes en la recámara
-hayPendientes: function() {
-try {
-const sala = JSON.parse(localStorage.getItem('salaEsperaMovimientos') || '[]');
-return sala.length > 0;
-} catch(e) { return false; }
-},
-actualizarSemaforo: function(color) {
-this.estadoSemaforo = color;
-window.estadoSemaforo = color;
-const dot = document.getElementById('semaforo-dot');
-if (dot) {
-// Si hay internet pero hay cosas pendientes, forzamos estado naranja (Aviso)
-if (navigator.onLine && color === 'verde' && this.hayPendientes()) {
-color = 'naranja';
-}
-if (!navigator.onLine || color === 'rojo' || color === 'error') {
-dot.style.backgroundColor = '#FF2E4D'; // Rojo Error
-dot.style.boxShadow = '0 0 10px #FF2E4D';
-dot.classList.remove('parpadeo-neon');
-} else if (color === 'naranja' || color === 'cargando') {
-dot.style.backgroundColor = '#FF9F1C'; // Naranja Guardando
-dot.style.boxShadow = '0 0 15px #FF9F1C';
-dot.classList.add('parpadeo-neon');
-} else {
-dot.style.backgroundColor = '#39FF14'; // Verde Neón OK
-dot.style.boxShadow = '0 0 10px #39FF14';
-dot.classList.remove('parpadeo-neon');
-}
-}
-},
-setGuardando: function(estado) {
-this.isSaving = estado;
-window.isSaving = estado;
-if (estado) {
-this.actualizarSemaforo('cargando');
-} else {
-const conectado = navigator.onLine;
-this.actualizarSemaforo(conectado ? 'verde' : 'rojo');
-}
-}
+    isSaving: false,
+    estadoSemaforo: 'verde',
+    hayPendientes: function() {
+        try {
+            const sala = JSON.parse(localStorage.getItem('salaEsperaMovimientos') || '[]');
+            return sala.length > 0;
+        } catch(e) { return false; }
+    },
+    actualizarSemaforo: function(color) {
+        this.estadoSemaforo = color;
+        window.estadoSemaforo = color;
+        const dot = document.getElementById('semaforo-dot');
+        if (dot) {
+            if (navigator.onLine && color === 'verde' && this.hayPendientes()) {
+                color = 'naranja';
+            }
+            if (!navigator.onLine || color === 'rojo' || color === 'error') {
+                dot.style.backgroundColor = '#FF2E4D'; 
+                dot.style.boxShadow = '0 0 10px #FF2E4D';
+                dot.classList.remove('parpadeo-neon');
+            } else if (color === 'naranja' || color === 'cargando') {
+                dot.style.backgroundColor = '#FF9F1C'; 
+                dot.style.boxShadow = '0 0 15px #FF9F1C';
+                dot.classList.add('parpadeo-neon');
+            } else {
+                dot.style.backgroundColor = '#39FF14'; 
+                dot.style.boxShadow = '0 0 10px #39FF14';
+                dot.classList.remove('parpadeo-neon');
+            }
+        }
+    },
+    setGuardando: function(estado) {
+        this.isSaving = estado;
+        window.isSaving = estado;
+        if (estado) {
+            this.actualizarSemaforo('cargando');
+        } else {
+            const conectado = navigator.onLine;
+            this.actualizarSemaforo(conectado ? 'verde' : 'rojo');
+        }
+    }
 };
-// 🛡️ PROTECCIÓN ACTIVA CONTRA CIERRES ACCIDENTALES
+
 window.addEventListener('beforeunload', function (e) {
-if (window.AppState.isSaving || window.AppState.hayPendientes()) {
-const msg = "¡Espera! Se están guardando datos en la nube. Si sales ahora, los cambios quedarán en tu dispositivo hasta que vuelvas a abrir.";
-e.preventDefault();
-e.returnValue = msg;
-return msg;
-}
+    if (window.AppState.isSaving || window.AppState.hayPendientes()) {
+        const msg = "¡Espera! Se están guardando datos en la nube.";
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+    }
 });
-// Añadimos una animación CSS por código para que el punto naranja respire
+
 if (!document.getElementById('animacion-semaforo')) {
-const style = document.createElement('style');
-style.id = 'animacion-semaforo';
-style.innerHTML = `
-@keyframes latidoSemaforo {
-0% { transform: scale(0.9); opacity: 0.7; }
-50% { transform: scale(1.3); opacity: 1; }
-100% { transform: scale(0.9); opacity: 0.7; }
+    const style = document.createElement('style');
+    style.id = 'animacion-semaforo';
+    style.innerHTML = `@keyframes latidoSemaforo { 0% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.7; } } .parpadeo-neon { animation: latidoSemaforo 1s infinite ease-in-out; }`;
+    document.head.appendChild(style);
 }
-.parpadeo-neon {
-animation: latidoSemaforo 1s infinite ease-in-out;
-}
-`;
-document.head.appendChild(style);
-}
+
 // ==========================================
-// MOTOR ONEDRIVE "RAYOS X" (API VALUE READ)
+// MOTOR ONEDRIVE "RAYOS X" (CON REDIRECCIÓN)
 // ==========================================
 class OneDriveManager {
     constructor() {
@@ -4189,7 +4191,6 @@ class OneDriveManager {
         }
         this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
         
-        // Atrapar la vuelta del login si usamos redirección
         try {
             await this.msalInstance.handleRedirectPromise();
         } catch (err) {
@@ -4213,7 +4214,6 @@ class OneDriveManager {
         } catch (error) {
             console.warn("⚠️ El token silencioso caducó. Forzando reconexión...", error);
             try {
-                // Redirección si falla el token silencioso
                 await this.msalInstance.acquireTokenRedirect(request);
                 return new Promise(() => {}); // Pausar ejecución
             } catch (redirectError) {
@@ -4225,15 +4225,14 @@ class OneDriveManager {
 
     async login() {
         await this._msalReady;
-        sessionStorage.clear(); // Limpiar errores congelados
+        sessionStorage.clear(); 
         
         try {
-            // REDIRECCIÓN obligatoria en GitHub Pages para evitar bloqueos
             await this.msalInstance.loginRedirect({
                 scopes: ["User.Read", "Files.ReadWrite.All"],
                 prompt: "select_account"
             });
-            return new Promise(() => {}); // Pausar hasta que vuelva
+            return new Promise(() => {}); 
         } catch (e) {
             throw e;
         }
@@ -4262,7 +4261,7 @@ class OneDriveManager {
     }
 
     async descargarDatosBinario() {
-        if(window.mostrarEstado) notify("📥 Leyendo nube (Modo Binario)...", "loading");
+        if(window.mostrarEstado) notify("📥 Leyendo nube...", "loading");
         const token = await this.getToken();
         let id = await this.getFileId();
         let [resMeta, resContent] = await Promise.all([
@@ -4341,12 +4340,11 @@ class OneDriveManager {
             }
         } catch (e) {
             console.warn(`⚠️ addRowToTable falló:`, e.message);
-            if (typeof notify === 'function') notify('⚠️ Error al guardar en la nube. Revisa la conexión.', 'error');
+            if (typeof notify === 'function') notify('⚠️ Error al guardar en la nube.', 'error');
             throw e; 
         }
     }
 
-    // --- 6. CREAR ARCHIVO NUEVO EN ONEDRIVE ---
     async createFile(fileName, blob) {
         const token = await this.getToken();
         const response = await fetch(
@@ -4367,9 +4365,8 @@ class OneDriveManager {
         this.lastETag = response.headers.get('ETag') || response.headers.get('etag') || null;
         return data;
     }
-} // <--- FIN DE LA CLASE ONEDRIVEMANAGER
+} 
 
-// Instancia única global (SOLO SE DECLARA UNA VEZ)
 const oneDrive = new OneDriveManager();
 
 // ==========================================
