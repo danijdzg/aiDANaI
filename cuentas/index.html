@@ -4191,62 +4191,71 @@ this.msalInstance = null;
 this._msalReady = this._inicializarMsal();
 }
 async _inicializarMsal() {
-if (typeof msal === 'undefined') {
-await new Promise(resolve => {
-const check = setInterval(() => {
-if (typeof msal !== 'undefined') {
-clearInterval(check);
-resolve();
-}
-}, 100);
-});
-}
-this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+    if (typeof msal === 'undefined') {
+        await new Promise(resolve => {
+            const check = setInterval(() => {
+                if (typeof msal !== 'undefined') {
+                    clearInterval(check);
+                    resolve();
+                }
+            }, 100);
+        });
+    }
+    this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+    
+    // IMPORTANTE: Atrapa la respuesta si venimos redirigidos desde Microsoft
+    try {
+        await this.msalInstance.handleRedirectPromise();
+    } catch (err) {
+        console.error("Error al volver de Microsoft:", err);
+    }
 }
 // ==========================================
 // 🛡️ OBTENER TOKEN (CON RENOVACIÓN SILENCIOSA ANTI-CADUCIDAD)
 // ==========================================
 async getToken() {
-await this._msalReady;
-const cuentas = this.msalInstance.getAllAccounts();
-if (cuentas.length === 0) {
-throw new Error("No hay ninguna sesión iniciada en OneDrive.");
-}
-const request = {
-scopes: ["Files.ReadWrite", "User.Read"],
-account: cuentas[0]
-};
-try {
-// 1. Intentamos renovar el 'pase VIP' de forma silenciosa e invisible
-const response = await this.msalInstance.acquireTokenSilent(request);
-return response.accessToken;
-} catch (error) {
-console.warn("⚠️ El token silencioso caducó o falló. Forzando reconexión...", error);
-try {
-// 2. Si falla lo silencioso (ej. llevas días sin abrirla y Microsoft exige verte), pedimos el pase visiblemente
-const response = await this.msalInstance.acquireTokenPopup(request);
-return response.accessToken;
-} catch (popupError) {
-console.error("❌ Imposible renovar la sesión:", popupError);
-// Si todo falla, forzamos a que el botón rojo de desconectado aparezca
-notify("Sesión caducada. Por favor, vuelve a entrar.", "error");
-throw new Error("Sesión caducada de Microsoft. Debes volver a iniciar sesión.");
-}
-}
+    await this._msalReady;
+    const cuentas = this.msalInstance.getAllAccounts();
+    if (cuentas.length === 0) {
+        throw new Error("No hay ninguna sesión iniciada en OneDrive.");
+    }
+    const request = {
+        scopes: ["Files.ReadWrite", "User.Read"],
+        account: cuentas[0]
+    };
+    try {
+        const response = await this.msalInstance.acquireTokenSilent(request);
+        return response.accessToken;
+    } catch (error) {
+        console.warn("⚠️ El token silencioso caducó. Forzando reconexión...", error);
+        try {
+            // Si falla en silencio, redirigimos
+            await this.msalInstance.acquireTokenRedirect(request);
+            return new Promise(() => {});
+        } catch (redirectError) {
+            console.error("❌ Imposible renovar la sesión:", redirectError);
+            notify("Sesión caducada. Por favor, vuelve a entrar.", "error");
+            throw new Error("Sesión caducada de Microsoft. Debes volver a iniciar sesión.");
+        }
+    }
 }
 async login() {
-await this._msalReady;
-try {
-await this.msalInstance.handleRedirectPromise().catch(()=>{});
-const resp = await this.msalInstance.loginPopup({
-scopes: ["User.Read", "Files.ReadWrite.All"],
-prompt: "select_account"
-});
-return resp.accessToken;
-} catch (e) {
-if (e.message && e.message.includes("popup")) alert("Permite las ventanas emergentes.");
-throw e;
-}
+    await this._msalReady;
+    
+    // Desatascar MSAL: Limpiamos la caché de sesión por si se quedó congelado
+    sessionStorage.clear(); 
+    
+    try {
+        // Usamos Redirect en lugar de Popup para saltarnos el bloqueo COOP
+        await this.msalInstance.loginRedirect({
+            scopes: ["User.Read", "Files.ReadWrite.All"],
+            prompt: "select_account"
+        });
+        // La página se recargará hacia Microsoft, así que pausamos aquí la ejecución
+        return new Promise(() => {});
+    } catch (e) {
+        throw e;
+    }
 }
 // --- 2. LOCALIZADOR ---
 async getFileId() {
