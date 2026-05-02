@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>aiDANaI - Citas Inspiradoras</title>
+
+    <!-- ✅ [NUEVO] Icono para la pestaña del navegador (favicon) -->
+    <link rel="icon" type="image/png" href="icon-192.png">
+	
+	<meta name="theme-color" content="#000000"/>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,500&family=Poppins:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        /* El resto de tu CSS permanece exactamente igual, no es necesario pegarlo aquí para mantener la claridad */
+        :root {
+            --bg-color: #000000;
+            --text-color: #e0e0e0;
+            --quote-color: #ffffff;
+            --author-color: #c0c0c0;
+            --font-quote: 'Cormorant Garamond', serif;
+            --font-main: 'Poppins', sans-serif;
+            --orbit-radius: min(220px, 38vmin);  
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100vw; 
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            overflow: hidden;
+            position: fixed;
+        }
+
+        #starfield, #galaxy-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+        }
+        #galaxy-overlay { z-index: 1; pointer-events: none; background: radial-gradient(ellipse at 30% 50%, rgba(229, 57, 53, 0.15) 0%, rgba(229, 57, 53, 0.05) 20%, transparent 50%), radial-gradient(ellipse at 70% 50%, rgba(211, 47, 47, 0.12) 0%, rgba(211, 47, 47, 0.03) 25%, transparent 50%), radial-gradient(ellipse at 50% 30%, rgba(239, 83, 80, 0.1) 0%, transparent 40%); }
+
+        #main-content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            transition: filter 0.4s ease;
+        }
+        #main-content.blurred {
+            filter: blur(8px) brightness(0.7);
+        }
+
+        #search-container { position: fixed; top: calc(30px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: clamp(300px, 90%, 720px); z-index: 10; }
+        #search-form { display: flex; align-items: center; width: 100%; background-color: #000000; border-radius: 30px; padding: 8px 10px; box-shadow: 0 0 15px rgba(239, 83, 80, 0.6), 0 0 30px rgba(198, 40, 40, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.2); transition: box-shadow 0.3s ease; }
+		#search-form:focus-within { box-shadow: 0 0 25px rgba(239, 83, 80, 0.9), 0 0 50px rgba(198, 40, 40, 0.7), inset 0 0 0 1.5px rgba(255, 255, 255, 0.4); }
+        #search-form:focus-within { box-shadow: 0 0 25px rgba(102, 126, 234, 0.9), 0 0 50px rgba(118, 75, 162, 0.7), inset 0 0 0 1.5px rgba(255, 255, 255, 0.4); }
+        #search-input { flex-grow: 1; background: transparent; border: none; outline: none; color: #ffffff; font-size: 1rem; padding: 8px 12px; font-family: var(--font-main); margin-left: 10px; }
+        #search-input::placeholder { color: #a0a0a0; opacity: 1; }
+        #search-container .search-icon, #search-container .mic-icon, #search-container .camera-icon { width: 22px; height: 22px; stroke: #ffffff; stroke-width: 1.8; cursor: pointer; flex-shrink: 0; margin: 0 8px; transition: transform 0.2s; }
+        #search-container svg:hover { transform: scale(1.1); }
+        #ai-mode-button { display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #ef5350 0%, #d32f2f 100%); border: none; color: #ffffff; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-main); font-size: 0.85rem; font-weight: 500; transition: transform 0.3s ease, box-shadow 0.3s ease; white-space: nowrap; box-shadow: 0 4px 15px rgba(239, 83, 80, 0.4); }
+		#ai-mode-button:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(239, 83, 80, 0.6); }
+        #ai-mode-button:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
+        #ai-mode-button svg { width: 18px; height: 18px; stroke-width: 2.5; margin: 0; }
+
+        #quote-container { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: clamp(320px, 90%, 720px); background-color: #000000; border-radius: 20px; padding: 25px 30px calc(30px + env(safe-area-inset-bottom)); box-shadow: 0 0 15px rgba(239, 83, 80, 0.6), 0 0 30px rgba(198, 40, 40, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.2); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: opacity 0.4s ease, transform 0.3s ease, box-shadow 0.3s ease; }
+		#quote-container:hover { transform: translateX(-50%) scale(1.03); box-shadow: 0 0 25px rgba(239, 83, 80, 0.8), 0 0 45px rgba(198, 40, 40, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.3); }
+        #quote-container.fading { opacity: 0; }
+        #quote-text { font-family: var(--font-quote); font-size: clamp(1.2rem, 4vw, 1.8rem); font-weight: 500; color: var(--quote-color); line-height: 1.4; margin-bottom: 15px; text-shadow: 0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(200,200,255,0.3); }
+        #quote-author { font-size: clamp(0.85rem, 2.5vw, 1rem); font-weight: 500; color: var(--author-color); text-shadow: 0 0 5px rgba(255,255,255,0.5); }
+        
+        #menu-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+        
+@keyframes pulse-glow {
+    0% { box-shadow: 0 0 15px 5px rgba(239, 83, 80, 0.5), 0 0 20px 10px rgba(198, 40, 40, 0.4); }
+    50% { box-shadow: 0 0 25px 8px rgba(239, 83, 80, 0.7), 0 0 35px 15px rgba(198, 40, 40, 0.6); }
+    100% { box-shadow: 0 0 15px 5px rgba(239, 83, 80, 0.5), 0 0 20px 10px rgba(198, 40, 40, 0.4); }
+}
+
+        #fab-button {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            background-color: transparent;
+            position: relative;
+            z-index: 1001;
+            pointer-events: all;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #fab-button img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+            animation: pulse-glow 4s infinite ease-in-out;
+        }
+
+        #fab-button:hover img {
+            transform: scale(1.1);
+        }
+
+        #fab-button.active {
+            transform: scale(0.9) rotate(-360deg);
+        }
+        #fab-button.active img {
+            animation-play-state: paused;
+            box-shadow: 0 0 35px 10px rgba(255, 255, 255, 0.5); 
+        }
+
+        #orbital-menu {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.4s ease;
+            transform: rotate(0deg);
+        }
+        
+        #menu-container.active #orbital-menu {
+             transform: rotate(360deg);
+        }
+
+        .orbit-item {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            margin: -30px; 
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            text-decoration: none;
+            opacity: 0;
+            transform: scale(0);
+            pointer-events: none;
+            transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55), 
+                        opacity 0.3s ease;
+        }
+
+        #menu-container.active .orbit-item {
+            opacity: 1;
+            pointer-events: all;
+            transform: rotate(var(--angle)) translateY(var(--orbit-radius)) rotate(calc(-1 * var(--angle)));
+        }
+
+        #menu-container.active .orbit-item:nth-child(1) { transition-delay: 0.05s; }
+        #menu-container.active .orbit-item:nth-child(2) { transition-delay: 0.1s; }
+        #menu-container.active .orbit-item:nth-child(3) { transition-delay: 0.15s; }
+        #menu-container.active .orbit-item:nth-child(4) { transition-delay: 0.2s; }
+        #menu-container.active .orbit-item:nth-child(5) { transition-delay: 0.25s; }
+        #menu-container.active .orbit-item:nth-child(6) { transition-delay: 0.3s; }
+        #menu-container.active .orbit-item:nth-child(7) { transition-delay: 0.35s; }
+        #menu-container.active .orbit-item:nth-child(8) { transition-delay: 0.4s; }
+		#menu-container.active .orbit-item:nth-child(9) { transition-delay: 0.45s; }
+
+        .orbit-item:hover {
+            transform: rotate(var(--angle)) translateY(var(--orbit-radius)) rotate(calc(-1 * var(--angle))) scale(1.15) !important;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+        }
+
+        .orbit-item svg { width: 24px; height: 24px; stroke: white; stroke-width: 2; }
+        .orbit-item .label { font-size: 0.7rem; font-weight: 500; color: white; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.3s ease 0.2s; }
+        #menu-container.active .orbit-item .label { opacity: 1; }
+
+        #item-agenda { background: linear-gradient(135deg, #ffb74d, #ffa726); }
+        #item-cuentas { background: linear-gradient(135deg, #64b5f6, #42a5f5); }
+        #item-cuentas2 { background: linear-gradient(135deg, #7986cb, #5c6bc0); }
+        #item-cuentas3 { background: linear-gradient(135deg, #f06292, #ec407a); }
+        #item-gym { background: linear-gradient(135deg, #81c784, #66bb6a); }
+        #item-prompt { background: linear-gradient(135deg, #ff9800, #f57c00); }
+        #item-restaurantes { background: linear-gradient(135deg, #ef5350, #e53935); }
+        #item-DaniCalc { background: linear-gradient(135deg, #4db6ac, #26a69a); }
+		#item-prueba { background: linear-gradient(135deg, #9c27b0, #7b1fa2); } /* Un tono violeta/morado para diferenciarlo */
+
+@media (max-width: 450px), (max-height: 650px) {
+    :root {
+        --orbit-radius: min(170px, 36vmin);
+    }
+    #fab-button {
+        width: 130px;
+        height: 130px;
+    }
+    .orbit-item {
+        width: 50px;
+        height: 50px;
+        margin: -25px; 
+    }
+    .orbit-item svg {
+        width: 20px;
+        height: 20px;
+    }
+     .orbit-item .label {
+        font-size: 0.6rem;
+    }
+}
+    </style>
+</head>
+<body>
+    <!-- El resto de tu HTML (body) y JavaScript (script) permanecen exactamente iguales -->
+    <canvas id="starfield"></canvas>
+    <div id="galaxy-overlay"></div>
+
+    <div id="main-content">
+        <div id="search-container">
+            <form id="search-form" action="https://www.google.com/search" method="get" target="_blank">
+                <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="search-input" name="q" placeholder="Busca lo que quieras...">
+                <svg class="mic-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+                <svg class="camera-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                <button type="button" id="ai-mode-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v.01M12 21v-.01M4.22 4.22l.01.01M20.78 20.78l-.01-.01M4.22 20.78l.01-.01M20.78 4.22l-.01.01M3 12h.01M21 12h-.01"/><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+                    <span>Modo IA</span>
+                </button>
+            </form>
+        </div>
+        <div id="quote-container">
+            <p id="quote-text"></p>
+            <p id="quote-author"></p>
+        </div>
+    </div>
+    
+    <div id="menu-container">
+        <div id="orbital-menu">
+            <a href="https://aidanai-agenda.vercel.app/" class="orbit-item" id="item-agenda">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                <span class="label">AGENDA</span>
+            </a>
+			<a href="https://aidanai-ctas.vercel.app/" class="orbit-item" id="item-cuentas">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.31"></path><path d="M14 2v7.31"></path><path d="M8.5 2h7"></path><path d="M14 9.3a6.5 6.5 0 1 1-4 0"></path></svg>
+                <span class="label">CTASEXCEL</span>
+			</a>
+			<a href="https://danijdzg.github.io/aiDANaI/dani/DaniCalc/" class="orbit-item" id="item-DaniCalc">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <span class="label">DANICALC</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/cuentas/" class="orbit-item" id="item-cuentas">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"></path></svg>
+                <span class="label">Ctas</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/dani/ctas/" class="orbit-item" id="item-cuentas">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1-2-2V3h14v4h4z"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-6h-4a2 2 0 0 1-2-2V7Z"></path><path d="M21 12v6"></path></svg>
+                <span class="label">CtasMóvil</span>
+            </a>
+            <a href="https://danijdzg.github.io/dani/" class="orbit-item" id="item-cuentas">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span class="label">CtasPC</span>
+            </a>
+            <a href="https://aidanai-gym.vercel.app/" class="orbit-item" id="item-gym">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8L22 12L18 16"></path><path d="M6 8L2 12L6 16"></path><path d="M2 12H22"></path><path d="M17 5V19"></path><path d="M7 5V19"></path></svg>
+                <span class="label">GYM</span>
+            </a>
+            <a href="https://danijdzg.github.io/aiDANaI/dani/prompt/" class="orbit-item" id="item-prompt">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L12 6"></path><path d="M5 10L7.5 12.5L5 15"></path><path d="M19 10L16.5 12.5L19 15"></path><path d="M12 18L12 21"></path></svg>
+                <span class="label">Prompt</span>
+            </a>
+			            <a href="https://danijdzg.github.io/aiDANaI/dani/restaurantes/" class="orbit-item" id="item-restaurantes">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path></svg>
+                <span class="label">Rest.</span>
+            </a>
+			
+        </div>
+
+        <button id="fab-button">
+            <img src="icon-512.png" alt="Abrir menú">
+        </button>
+    </div>
+      
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+		 if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => console.log('Service Worker registrado con éxito:', registration))
+                .catch(error => console.log('Error al registrar el Service Worker:', error));
+        }
+
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+        let stars = []; let shootingStars = [];
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; initStars(); }
+        class Star { constructor() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; this.size = Math.random() * 2; this.speedX = (Math.random() - 0.5) * 0.3; this.speedY = (Math.random() - 0.5) * 0.3; this.opacity = Math.random(); this.twinkleSpeed = Math.random() * 0.02; this.twinkleDirection = Math.random() > 0.5 ? 1 : -1; } update() { this.x += this.speedX; this.y += this.speedY; if (this.x < 0) this.x = canvas.width; if (this.x > canvas.width) this.x = 0; if (this.y < 0) this.y = canvas.height; if (this.y > canvas.height) this.y = 0; this.opacity += this.twinkleSpeed * this.twinkleDirection; if (this.opacity >= 1 || this.opacity <= 0.3) { this.twinkleDirection *= -1; } } draw() { ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`; ctx.shadowBlur = this.size * 2; ctx.shadowColor = 'white'; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); } }
+        class ShootingStar { constructor() { this.reset(); } reset() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height * 0.5; this.length = Math.random() * 80 + 40; this.speed = Math.random() * 10 + 5; this.size = Math.random() * 1 + 1; this.opacity = 1; } update() { this.x += this.speed; this.y += this.speed * 0.5; this.opacity -= 0.015; if (this.opacity <= 0) { this.reset(); } } draw() { ctx.save(); ctx.strokeStyle = `rgba(255, 255, 255, ${this.opacity})`; ctx.lineWidth = this.size; ctx.shadowBlur = 10; ctx.shadowColor = 'white'; ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x - this.length, this.y - this.length * 0.5); ctx.stroke(); ctx.restore(); } }
+        function initStars() { stars = []; for (let i = 0; i < 200; i++) { stars.push(new Star()); } shootingStars = []; for (let i = 0; i < 3; i++) { shootingStars.push(new ShootingStar()); } }
+        function animate() { ctx.clearRect(0, 0, canvas.width, canvas.height); stars.forEach(star => { star.update(); star.draw(); }); shootingStars.forEach(shootingStar => { shootingStar.update(); shootingStar.draw(); }); requestAnimationFrame(animate); }
+        resizeCanvas(); animate(); window.addEventListener('resize', resizeCanvas);
+        const quotes = [{ text: "La creatividad es la inteligencia divirtiéndose.", author: "Albert Einstein" }, { text: "El único modo de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs" }, { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" }, { text: "No cuentes los días, haz que los días cuenten.", author: "Muhammad Ali" }, { text: "Un viaje de mil millas comienza con un solo paso.", author: "Lao Tse" }];
+        const quoteContainer = document.getElementById('quote-container'); const quoteTextEl = document.getElementById('quote-text'); const quoteAuthorEl = document.getElementById('quote-author');
+        let quoteInterval; let lastQuoteIndex = -1;
+        function updateQuote() { let randomIndex; do { randomIndex = Math.floor(Math.random() * quotes.length); } while (quotes.length > 1 && randomIndex === lastQuoteIndex); lastQuoteIndex = randomIndex; const randomQuote = quotes[randomIndex]; quoteContainer.classList.add('fading'); setTimeout(() => { quoteTextEl.textContent = `"${randomQuote.text}"`; quoteAuthorEl.textContent = `— ${randomQuote.author}`; quoteContainer.classList.remove('fading'); }, 400); }
+        function manualQuoteUpdate() { if (menuOpen) return; clearInterval(quoteInterval); updateQuote(); quoteInterval = setInterval(updateQuote, 3000); }
+        updateQuote(); quoteInterval = setInterval(updateQuote, 3000);
+        const aiModeButton = document.getElementById('ai-mode-button'); const searchInput = document.getElementById('search-input'); aiModeButton.addEventListener('click', (e) => { e.preventDefault(); const query = searchInput.value.trim(); if (query) { const aiSearchURL = `https://www.google.com/search?q=${encodeURIComponent(query)}&udm=14`; window.open(aiSearchURL, '_blank'); } else { searchInput.focus(); } }); document.querySelector('.mic-icon').addEventListener('click', () => alert('Búsqueda por voz no implementada.')); document.querySelector('.camera-icon').addEventListener('click', () => alert('Búsqueda por imagen no implementada.'));
+        
+        const mainContent = document.getElementById('main-content');
+        const menuContainer = document.getElementById('menu-container');
+        const fabButton = document.getElementById('fab-button');
+        const orbitItems = document.querySelectorAll('.orbit-item');
+        let menuOpen = false;
+
+        const angleStep = 360 / orbitItems.length;
+        orbitItems.forEach((item, index) => {
+            const angle = angleStep * index;
+            item.style.setProperty('--angle', `${angle}deg`);
+        });
+
+        function toggleMenu() {
+            menuOpen = !menuOpen;
+            mainContent.classList.toggle('blurred');
+            menuContainer.classList.toggle('active');
+            fabButton.classList.toggle('active');
+        }
+
+        fabButton.addEventListener('click', toggleMenu);
+        mainContent.addEventListener('click', () => {
+            if (menuOpen) {
+                toggleMenu();
+            } else {
+                if (event.target.closest('#quote-container')) {
+                    manualQuoteUpdate();
+                }
+            }
+        });
+    });
+    </script>
+</body>
+</html>
