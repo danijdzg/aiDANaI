@@ -43,8 +43,11 @@ self.addEventListener('activate', event => {
 
 // 3. FETCH: Estrategia Stale-While-Revalidate (Sirve rápido, actualiza en silencio)
 self.addEventListener('fetch', event => {
-  // Solo interceptamos peticiones GET (ignoramos envíos de formularios, etc.)
+  // Solo interceptamos peticiones GET
   if (event.request.method !== 'GET') return;
+  
+  // SOLUCIÓN: Ignorar peticiones de extensiones de Chrome u otros protocolos no soportados
+  if (!event.request.url.startsWith('http')) return;
 
   event.respondWith(
     caches.open(CACHE_NAME).then(cache => {
@@ -52,20 +55,15 @@ self.addEventListener('fetch', event => {
         
         // Petición a la red que se ejecuta en segundo plano
         const fetchedResponse = fetch(event.request).then(networkResponse => {
-          // Si la respuesta es válida, actualizamos la caché con la nueva versión
-          if (networkResponse && networkResponse.status === 200) {
+          // Si la respuesta es válida y es HTTP/HTTPS, actualizamos la caché
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'opaque') {
             cache.put(event.request, networkResponse.clone());
           }
           return networkResponse;
         }).catch(() => {
-          // Aquí podríamos devolver una página de "Estás offline" si lo deseamos en el futuro
           console.log('[Service Worker] Red no disponible, usando solo caché.');
         });
 
-        // La magia ocurre aquí: 
-        // 1. Devuelve la caché de inmediato si existe (carga instantánea).
-        // 2. Si no hay caché, espera a la red.
-        // Mientras tanto, la petición de red (fetchedResponse) actualiza la caché en silencio.
         return cachedResponse || fetchedResponse;
       });
     })
