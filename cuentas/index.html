@@ -2817,6 +2817,11 @@ Ahora no
         <label>PRECIO MEDIO COMPRA (€)</label>
         <input type="number" id="cartera-precio-compra" placeholder="0.00" step="any" inputmode="decimal" style="font-size:20px;" oninput="window.actualizarPreviewPnl()">
       </div>
+
+      <div class="precio-input-wrap">
+        <label>FECHA INVERSIÓN</label>
+        <input type="date" id="cartera-fecha-compra" style="font-size:16px; color:#fff; background:transparent; border:none; width:100%; outline:none;" oninput="window.actualizarPreviewPnl()">
+      </div>
       
       <!-- PRECIO ACTUAL (Con indicador API Binance) -->
       <div class="precio-input-wrap" id="caja-precio-actual" style="grid-column:span 2; border-color:rgba(57,255,20,0.4); box-shadow:0 0 12px rgba(57,255,20,0.1); transition: all 0.3s;">
@@ -5099,24 +5104,36 @@ window.datos.sort((a, b) => b.ts - a.ts);
 window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].sort();
 window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
 window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
-// ── MÓDULO CARTERA: Leer hoja CARTERA ──────────────────────────────────
-const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
-if (wsCarteraName) {
-  const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
-  window.datosCartera = rawCartera.map(r => ({
-    id:           String(r.ID || r.Id || r.id || uuid()),
-    ticker:       String(r.TICKER || r.Ticker || r.ticker || '').toUpperCase().trim(),
-    nombre:       String(r.NOMBRE || r.Nombre || r.nombre || '').trim(),
-    tipo:         String(r.TIPO   || r.Tipo   || r.tipo   || 'OTRO').toUpperCase().trim(),
-    cuenta:       String(r.CUENTA || r.Cuenta || r.cuenta || '').toUpperCase().trim(),
-    cantidad:     parseFloat(r.CANTIDAD     || r.Cantidad     || 0),
-    precioCompra: parseFloat(r.PRECIO_COMPRA  || r.PrecioCompra  || r.precio_compra  || 0),
-    precioActual: parseFloat(r.PRECIO_ACTUAL  || r.PrecioActual  || r.precio_actual  || 0),
-    notas:        String(r.NOTAS || r.Notas || r.notas || '').trim()
-  })).filter(p => p.ticker || p.nombre);
-} else {
-  window.datosCartera = window.datosCartera || [];
-}
+	// ── MÓDULO CARTERA: Leer hoja CARTERA ──────────────────────────────────
+	const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
+	if (wsCarteraName) {
+	  const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
+	  window.datosCartera = rawCartera.map(r => {
+        let fc = '';
+        const rawF = r.FECHA_COMPRA || r.FechaCompra || r.fecha_compra || '';
+        if (rawF instanceof Date) fc = rawF.toISOString().split('T')[0];
+        else if (typeof rawF === 'number' && rawF > 40000) {
+          const b = new Date(Math.round((rawF - 25569) * 86400 * 1000));
+          fc = b.toISOString().split('T')[0];
+        } else if (typeof rawF === 'string' && rawF) {
+          fc = rawF.includes('/') ? rawF.split('/').reverse().join('-') : rawF.split('T')[0];
+        }
+        return {
+          id:           String(r.ID || r.Id || r.id || uuid()),
+          ticker:       String(r.TICKER || r.Ticker || r.ticker || '').toUpperCase().trim(),
+          nombre:       String(r.NOMBRE || r.Nombre || r.nombre || '').trim(),
+          tipo:         String(r.TIPO   || r.Tipo   || r.tipo   || 'OTRO').toUpperCase().trim(),
+          cuenta:       String(r.CUENTA || r.Cuenta || r.cuenta || '').toUpperCase().trim(),
+          cantidad:     parseFloat(r.CANTIDAD     || r.Cantidad     || 0),
+          precioCompra: parseFloat(r.PRECIO_COMPRA  || r.PrecioCompra  || r.precio_compra  || 0),
+          precioActual: parseFloat(r.PRECIO_ACTUAL  || r.PrecioActual  || r.precio_actual  || 0),
+          fechaCompra:  fc,
+          notas:        String(r.NOTAS || r.Notas || r.notas || '').trim()
+        };
+      }).filter(p => p.ticker || p.nombre);
+	} else {
+	  window.datosCartera = window.datosCartera || [];
+	}
 // ── MÓDULO CARTERA: Leer hoja HISTORICO_CARTERA ────────────────────────
 const wsHistCarteraName = wb.SheetNames.find(n => /HISTORICO.*CARTERA|CARTERA.*HISTORICO/i.test(n.trim()));
 if (wsHistCarteraName) {
@@ -6797,19 +6814,20 @@ Object.keys(wsRec).forEach(key => {
 if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
 });
 XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
-// ── MÓDULO CARTERA: Guardar hoja CARTERA ──────────────────────────────
-const listaCartera = window.datosCartera || [];
-if (listaCartera.length > 0) {
-  const filasCartera = listaCartera.map(p => ({
-    "ID": p.id, "TICKER": p.ticker, "NOMBRE": p.nombre, "TIPO": p.tipo,
-    "CUENTA": p.cuenta, "CANTIDAD": p.cantidad,
-    "PRECIO_COMPRA": p.precioCompra, "PRECIO_ACTUAL": p.precioActual,
-    "NOTAS": p.notas || ""
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasCartera, {
-    header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","NOTAS"]
-  }), "Cartera");
-}
+	// ── MÓDULO CARTERA: Guardar hoja CARTERA ──────────────────────────────
+	const listaCartera = window.datosCartera || [];
+	if (listaCartera.length > 0) {
+	  const filasCartera = listaCartera.map(p => ({
+	    "ID": p.id, "TICKER": p.ticker, "NOMBRE": p.nombre, "TIPO": p.tipo,
+	    "CUENTA": p.cuenta, "CANTIDAD": p.cantidad,
+	    "PRECIO_COMPRA": p.precioCompra, "PRECIO_ACTUAL": p.precioActual,
+        "FECHA_COMPRA": p.fechaCompra || "",
+	    "NOTAS": p.notas || ""
+	  }));
+	  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasCartera, {
+	    header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","FECHA_COMPRA","NOTAS"]
+	  }), "Cartera");
+	}
 // ── MÓDULO CARTERA: Guardar hoja HISTORICO_CARTERA ────────────────────
 const listaHistCartera = window.historicoCartera || [];
 if (listaHistCartera.length > 0) {
@@ -11612,13 +11630,51 @@ window.calcularValoresCartera = function() {
   }
 
   const plusvalia   = totalValor - totalCoste;
-  const rentabilidad = totalCoste > 0 ? ((totalValor / totalCoste) - 1) * 100 : 0;
+      // Cálculo de rentabilidad anualizada (TWR/Anualizada simple)
+      let rentabilidad = 0;
+      if (totalCoste > 0) {
+        // Rentabilidad absoluta simple
+        const rentAbs = (totalValor / totalCoste) - 1;
+        
+        // Intentar anualizar si tenemos fechas de compra
+        let ponderadoAnual = 0;
+        let totalPesos = 0;
+        const hoy = new Date();
+        
+        window.datosCartera.forEach(p => {
+          const val = p.cantidad * p.precioActual;
+          const cos = p.cantidad * p.precioCompra;
+          if (cos > 0) {
+            const rPos = (val / cos) - 1;
+            const fCompra = p.fechaCompra ? new Date(p.fechaCompra) : null;
+            
+            if (fCompra && !isNaN(fCompra.getTime())) {
+              const diffTime = Math.abs(hoy - fCompra);
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              const years = diffDays / 365.25;
+              
+              // Si ha pasado más de un mes, intentamos anualizar
+              if (years > 0.08) {
+                const rAnual = Math.pow(1 + rPos, 1 / years) - 1;
+                ponderadoAnual += rAnual * cos;
+              } else {
+                ponderadoAnual += rPos * cos; // Para periodos cortos usamos la simple
+              }
+            } else {
+              ponderadoAnual += rPos * cos;
+            }
+            totalPesos += cos;
+          }
+        });
+        
+        rentabilidad = totalPesos > 0 ? (ponderadoAnual / totalPesos) * 100 : rentAbs * 100;
+      }
 
-  window.resumenCartera = {
-    totalValor, totalCoste, plusvalia, rentabilidad,
-    numPosiciones: window.datosCartera.length,
-    posiciones: window.datosCartera
-  };
+	  window.resumenCartera = {
+	    totalValor, totalCoste, plusvalia, rentabilidad,
+	    numPosiciones: window.datosCartera.length,
+	    posiciones: window.datosCartera
+	  };
 
   // Registrar punto en histórico (si el valor cambió)
   const hoy = new Date();
@@ -11751,11 +11807,20 @@ window.renderizarCartera = function() {
       </div>
       <div id="${groupId}">`;
     g.posiciones.sort((a,b) => (b.cantidad*b.precioActual) - (a.cantidad*a.precioActual)).forEach(pos => {
-      const valPos  = pos.cantidad * pos.precioActual;
-      const cosPos  = pos.cantidad * pos.precioCompra;
-      const pnlPos  = valPos - cosPos;
-      const rentPos = cosPos > 0 ? ((valPos / cosPos) - 1) * 100 : 0;
-      const pnlSig  = pnlPos >= 0 ? '+' : '';
+	      const valPos  = pos.cantidad * pos.precioActual;
+	      const cosPos  = pos.cantidad * pos.precioCompra;
+	      const pnlPos  = valPos - cosPos;
+          
+          let rentPos = cosPos > 0 ? ((valPos / cosPos) - 1) * 100 : 0;
+          const fCompra = pos.fechaCompra ? new Date(pos.fechaCompra) : null;
+          if (fCompra && !isNaN(fCompra.getTime())) {
+            const years = (new Date() - fCompra) / (1000 * 60 * 60 * 24 * 365.25);
+            if (years > 0.08) {
+              rentPos = (Math.pow(1 + (rentPos/100), 1/years) - 1) * 100;
+            }
+          }
+
+	      const pnlSig  = pnlPos >= 0 ? '+' : '';
       const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
       const cantStr = pos.cantidad >= 1 ? pos.cantidad.toFixed(2) : pos.cantidad.toFixed(6);
       html += `
@@ -11768,8 +11833,8 @@ window.renderizarCartera = function() {
         </div>
         <div style="text-align:right; flex-shrink:0;">
           <div class="cartera-valor" style="color:#fff;">${fmt2(valPos)}</div>
-          <div class="cartera-pnl ${pnlClass}">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%)</div>
-          <div style="font-size:9px; color:#555; margin-top:2px;">Compra: ${fmt2(pos.precioCompra)}</div>
+	          <div class="cartera-pnl ${pnlClass}">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%${pos.fechaCompra && (new Date() - new Date(pos.fechaCompra)) > 2592000000 ? ' an.' : ''})</div>
+	          <div style="font-size:9px; color:#555; margin-top:2px;">${pos.fechaCompra ? pos.fechaCompra.split('-').reverse().join('/') + ' · ' : ''}Compra: ${fmt2(pos.precioCompra)}</div>
         </div>
       </div>`;
     });
@@ -11905,13 +11970,13 @@ window.abrirModalNuevaPosicion = function() {
       sel.appendChild(opt);
     });
   }
-  // Limpiar campos
-  ['cartera-pos-id','cartera-ticker','cartera-nombre','cartera-notas'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
-  ['cartera-cantidad','cartera-precio-compra','cartera-precio-actual'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
+	  // Limpiar campos
+	  ['cartera-pos-id','cartera-ticker','cartera-nombre','cartera-notas','cartera-fecha-compra'].forEach(id => {
+	    const el = document.getElementById(id); if (el) el.value = '';
+	  });
+	  ['cartera-cantidad','cartera-precio-compra','cartera-precio-actual'].forEach(id => {
+	    const el = document.getElementById(id); if (el) el.value = '';
+	  });
   const extBtns = document.getElementById('cartera-extra-btns');
   if (extBtns) extBtns.style.display = 'none';
   const preview = document.getElementById('preview-pnl-cartera');
@@ -11932,10 +11997,11 @@ window.editarPosicion = function(id) {
     document.getElementById('cartera-nombre').value    = pos.nombre;
     document.getElementById('cartera-tipo').value      = pos.tipo;
     document.getElementById('cartera-cuenta').value    = pos.cuenta;
-    document.getElementById('cartera-cantidad').value  = pos.cantidad;
-    document.getElementById('cartera-precio-compra').value = pos.precioCompra;
-    document.getElementById('cartera-precio-actual').value = pos.precioActual;
-    document.getElementById('cartera-notas').value     = pos.notas || '';
+	    document.getElementById('cartera-cantidad').value  = pos.cantidad;
+	    document.getElementById('cartera-precio-compra').value = pos.precioCompra;
+	    document.getElementById('cartera-precio-actual').value = pos.precioActual;
+        document.getElementById('cartera-fecha-compra').value = pos.fechaCompra || '';
+	    document.getElementById('cartera-notas').value     = pos.notas || '';
     const titulo = document.getElementById('modal-cartera-titulo');
     if (titulo) titulo.innerText = 'EDITAR: ' + (pos.ticker || pos.nombre);
     const extBtns = document.getElementById('cartera-extra-btns');
@@ -11950,26 +12016,43 @@ window.cerrarModalCartera = function() {
 };
 
 // Preview de P&L en tiempo real mientras escribe el precio actual
-window.actualizarPreviewPnl = function() {
-  const cantidad   = parseFloat(document.getElementById('cartera-cantidad')?.value) || 0;
-  const pCompra    = parseFloat(document.getElementById('cartera-precio-compra')?.value) || 0;
-  const pActual    = parseFloat(document.getElementById('cartera-precio-actual')?.value) || 0;
-  const preview    = document.getElementById('preview-pnl-cartera');
+	window.actualizarPreviewPnl = function() {
+	  const cantidad   = parseFloat(document.getElementById('cartera-cantidad')?.value) || 0;
+	  const pCompra    = parseFloat(document.getElementById('cartera-precio-compra')?.value) || 0;
+	  const pActual    = parseFloat(document.getElementById('cartera-precio-actual')?.value) || 0;
+      const fCompraStr = document.getElementById('cartera-fecha-compra')?.value;
+	  const preview    = document.getElementById('preview-pnl-cartera');
   const elVal      = document.getElementById('preview-pnl-valor');
   const elPct      = document.getElementById('preview-pnl-pct');
   if (!preview || cantidad <= 0 || pCompra <= 0 || pActual <= 0) {
     if (preview) preview.style.display = 'none';
     return;
   }
-  const pnl  = (pActual - pCompra) * cantidad;
-  const pct  = ((pActual / pCompra) - 1) * 100;
-  const fmt2 = v => new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:2}).format(v);
-  const signo = pnl >= 0 ? '+' : '';
-  preview.style.display = 'block';
-  elVal.innerText   = signo + fmt2(pnl);
-  elVal.style.color = pnl >= 0 ? '#39FF14' : '#FF2E4D';
-  elPct.innerText   = signo + pct.toFixed(2) + '%';
-  elPct.style.color = pnl >= 0 ? '#39FF14' : '#FF2E4D';
+	  const pnl  = (pActual - pCompra) * cantidad;
+	  let pct    = ((pActual / pCompra) - 1) * 100;
+      
+      // Si hay fecha, mostramos rentabilidad anualizada en el preview
+      let labelRent = "RENTABILIDAD";
+      if (fCompraStr) {
+        const fCompra = new Date(fCompraStr);
+        const hoy = new Date();
+        if (!isNaN(fCompra.getTime())) {
+          const years = (hoy - fCompra) / (1000 * 60 * 60 * 24 * 365.25);
+          if (years > 0.08) {
+            pct = (Math.pow(1 + (pct/100), 1/years) - 1) * 100;
+            labelRent = "RENT. ANUALIZADA";
+          }
+        }
+      }
+
+	  const fmt2 = v => new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:2}).format(v);
+	  const signo = pnl >= 0 ? '+' : '';
+	  preview.style.display = 'block';
+      preview.querySelector('div').innerText = "PLUSVALÍA / " + labelRent;
+	  elVal.innerText   = signo + fmt2(pnl);
+	  elVal.style.color = pnl >= 0 ? '#39FF14' : '#FF2E4D';
+	  elPct.innerText   = signo + pct.toFixed(2) + '%';
+	  elPct.style.color = pnl >= 0 ? '#39FF14' : '#FF2E4D';
 };
 
 window.guardarPosicion = async function() {
@@ -11983,14 +12066,15 @@ window.guardarPosicion = async function() {
   if (cantidad <= 0)  { notify('La cantidad debe ser mayor que 0', 'warning'); return; }
   if (pActual <= 0)   { notify('Introduce el precio actual', 'warning'); return; }
 
-  const pos = {
-    id:           idExist || uuid(),
-    ticker, nombre,
-    tipo:         document.getElementById('cartera-tipo').value || 'OTRO',
-    cuenta:       document.getElementById('cartera-cuenta').value || '',
-    cantidad, precioCompra: pCompra, precioActual: pActual,
-    notas:        document.getElementById('cartera-notas').value || ''
-  };
+	  const pos = {
+	    id:           idExist || uuid(),
+	    ticker, nombre,
+	    tipo:         document.getElementById('cartera-tipo').value || 'OTRO',
+	    cuenta:       document.getElementById('cartera-cuenta').value || '',
+	    cantidad, precioCompra: pCompra, precioActual: pActual,
+        fechaCompra:  document.getElementById('cartera-fecha-compra').value || '',
+	    notas:        document.getElementById('cartera-notas').value || ''
+	  };
 
   window.datosCartera = window.datosCartera || [];
   const idx = window.datosCartera.findIndex(p => p.id === pos.id);
