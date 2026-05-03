@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_NAME = 'aidanai-v12'; // Versión bumpeada para limpiar caché con código MSAL antiguo // Subimos versión
+const CACHE_NAME = 'aidanai-v13'; // Versión bumpeada para limpiar caché con código MSAL antiguo // Subimos versión
 const CACHE_URLS = [
     './', 
     './index.html', 
