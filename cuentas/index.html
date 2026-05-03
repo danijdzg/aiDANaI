@@ -2767,7 +2767,7 @@ Ahora no
   <div style="height:20px;"></div>
 </div>
 
-<!-- ═══ MODAL EDITAR/AÑADIR POSICIÓN (CARTERA) ═══ -->
+<!-- ═══ MODAL EXCLUSIVO: POSICIÓN DE CARTERA ═══ -->
 <div id="modal-cartera-pos" class="modal-overlay">
   <div class="cockpit-header" style="border-bottom:1px solid rgba(57,255,20,0.2);">
     <button class="btn-close-cockpit" onclick="window.cerrarModalCartera()">✕</button>
@@ -2777,13 +2777,15 @@ Ahora no
   <div style="flex:1; overflow-y:auto; padding:16px;">
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
       
+      <!-- DESPLEGABLE DE TIPO DE ACTIVO -->
       <div class="precio-input-wrap" style="grid-column:span 2;">
         <label>TIPO DE ACTIVO</label>
         <select id="cartera-tipo" onchange="window.comportamientoTipoActivo()" style="background:transparent; border:none; color:#fff; font-size:16px; font-weight:600; outline:none; font-family:'Inter',sans-serif; padding:0; appearance:none; -webkit-appearance:none; width:100%;">
-          <!-- Se llena por JavaScript -->
+          <!-- Javascript lo rellenará con los 5 tipos -->
         </select>
       </div>
 
+      <!-- DESPLEGABLE DE CUENTA (Filtra según tipo) -->
       <div class="precio-input-wrap" style="grid-column:span 2;">
         <label>CUENTA ASOCIADA</label>
         <select id="cartera-cuenta" style="background:transparent; border:none; color:#fff; font-size:14px; font-weight:600; outline:none; font-family:'Inter',sans-serif; padding:0; appearance:none; -webkit-appearance:none; width:100%;">
@@ -2801,20 +2803,22 @@ Ahora no
         <input type="text" id="cartera-nombre" placeholder="Apple Inc..." style="font-size:16px;">
       </div>
       
+      <!-- CANTIDAD (Admite 6 decimales) -->
       <div class="precio-input-wrap">
         <label>CANTIDAD / UNIDADES</label>
-        <input type="number" id="cartera-cantidad" placeholder="0.000000" step="0.000001" inputmode="decimal" style="font-size:20px;">
+        <input type="number" id="cartera-cantidad" placeholder="0.000000" step="0.000001" inputmode="decimal" style="font-size:20px;" oninput="window.recalcularPrecioSiAplica()">
       </div>
       
       <div class="precio-input-wrap">
         <label>PRECIO MEDIO COMPRA (€)</label>
-        <input type="number" id="cartera-precio-compra" placeholder="0.00" step="any" inputmode="decimal" style="font-size:20px;">
+        <input type="number" id="cartera-precio-compra" placeholder="0.00" step="any" inputmode="decimal" style="font-size:20px;" oninput="window.actualizarPreviewPnl()">
       </div>
       
+      <!-- PRECIO ACTUAL (Con indicador de API) -->
       <div class="precio-input-wrap" id="caja-precio-actual" style="grid-column:span 2; border-color:rgba(57,255,20,0.4); box-shadow:0 0 12px rgba(57,255,20,0.1); transition: all 0.3s;">
         <label style="color:#39FF14 !important;" id="label-precio-actual">PRECIO ACTUAL (€) ← MANUAL</label>
         <input type="number" id="cartera-precio-actual" placeholder="0.00" step="any" inputmode="decimal" style="font-size:26px; color:#39FF14; font-weight:900;" oninput="window.actualizarPreviewPnl()">
-        <span id="aviso-precio-api" style="display: none; font-size: 9px; color: #888; font-style: italic; margin-top: 4px;">Este precio se actualiza automáticamente vía API (Binance)</span>
+        <span id="aviso-precio-api" style="display: none; font-size: 9px; color: #888; font-style: italic; margin-top: 4px;">Este precio se actualiza automáticamente multiplicando la cantidad por el tipo de cambio BTC/EUR de Binance</span>
       </div>
 
       <!-- Preview P&L en tiempo real -->
@@ -10260,11 +10264,15 @@ window.guardarUniversal = function() {
 // ============================================================================
 
 window.CATEGORIAS_CARTERA = ['BOLSA', 'PLANPENSIONES', 'CROWDFUNDING', 'CRIPTOMONEDAS', 'AUTOCUSTODIA'];
+window.precioLiveBTC = 0; // Variable global para cachear el precio de Binance
 
 // 1. ABRIR MODAL Y CARGAR LISTAS
 window.abrirModalNuevaPosicion = function(idEdit = null) {
   const modal = document.getElementById('modal-cartera-pos');
-  if (!modal) return;
+  if (!modal) {
+      console.error("Modal de cartera no encontrado en el DOM.");
+      return;
+  }
 
   // Llenar selector de TIPO solo con las 5 categorías permitidas
   const selectTipo = document.getElementById('cartera-tipo');
@@ -10294,13 +10302,13 @@ window.abrirModalNuevaPosicion = function(idEdit = null) {
       document.getElementById('cartera-pos-id').value = pos.id;
       document.getElementById('cartera-tipo').value = pos.tipo;
       
-      // Llamar funciones de actualización visual (bloquear API si aplica)
+      // Llamar funciones de actualización visual ANTES de asignar valores para preparar los inputs
       window.comportamientoTipoActivo(true); 
       
       document.getElementById('cartera-cuenta').value = pos.cuenta;
       document.getElementById('cartera-ticker').value = pos.ticker;
       document.getElementById('cartera-nombre').value = pos.nombre || '';
-      // Asignar respetando decimales de origen
+      // Asignar respetando decimales de origen (sin parseFloats que recorten)
       document.getElementById('cartera-cantidad').value = pos.cantidad;
       document.getElementById('cartera-precio-compra').value = pos.precioCompra;
       document.getElementById('cartera-precio-actual').value = pos.precioActual;
@@ -10365,9 +10373,12 @@ window.comportamientoTipoActivo = function(isEditing = false) {
         cajaPrecio.style.boxShadow = "0 0 12px rgba(10, 132, 255, 0.1)";
         labelPrecioActual.style.color = "#0A84FF";
         
-        // Disparar llamada a la API si estamos creando uno nuevo y no tiene precio
-        if (!isEditing && !inputPrecioActual.value) {
+        // Disparar llamada a la API si no tenemos cacheado el precio
+        if (window.precioLiveBTC === 0) {
             window.obtenerPrecioCriptoLive('BTC');
+        } else {
+            // Si ya lo tenemos, recalculamos el precio actual inmediatamente
+             window.recalcularPrecioSiAplica();
         }
 
     } else {
@@ -10389,17 +10400,30 @@ window.comportamientoTipoActivo = function(isEditing = false) {
     }
 };
 
+// 2b. RECALCULAR PRECIO AUTOMÁTICO SI ES CRIPTO
+window.recalcularPrecioSiAplica = function() {
+     const tipoSeleccionado = document.getElementById('cartera-tipo').value;
+     if (tipoSeleccionado === 'CRIPTOMONEDAS' || tipoSeleccionado === 'AUTOCUSTODIA') {
+         if (window.precioLiveBTC > 0) {
+             const inputPrecioActual = document.getElementById('cartera-precio-actual');
+             // Si el precio lo dicta la API, no hace falta multiplicar la cantidad para el "Precio Actual"
+             // El Precio Actual en Cartera representa el valor del activo unitario.
+             // El P&L ya multiplicará la cantidad por el precio actual unitario.
+             inputPrecioActual.value = window.precioLiveBTC.toFixed(2); 
+         }
+     }
+     window.actualizarPreviewPnl();
+};
+
+
 // Utilidad: Llamada API Binance para precargar precio en el modal
 window.obtenerPrecioCriptoLive = async function(tickerBase) {
     try {
         const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${tickerBase}EUR`);
         if (response.ok) {
             const data = await response.json();
-            const inputPrecio = document.getElementById('cartera-precio-actual');
-            if (inputPrecio) {
-                inputPrecio.value = parseFloat(data.price).toFixed(2);
-                window.actualizarPreviewPnl();
-            }
+            window.precioLiveBTC = parseFloat(data.price);
+            window.recalcularPrecioSiAplica();
         }
     } catch (e) {
         console.warn("No se pudo pre-cargar precio de Binance en el modal:", e);
@@ -10550,6 +10574,22 @@ window.guardarPosicion = async function() {
   }
 };
 
+window.borrarPosicion = async function(id) {
+    if(!confirm("¿Borrar posición permanentemente?")) return;
+    window.datosCartera = window.datosCartera.filter(p => p.id !== id);
+    window.cerrarModalCartera();
+    
+    if (typeof window.guardarUniversal === 'function') {
+        window.toggleBotonCarga('btn-guardar', true);
+        await window.guardarUniversal();
+        window.toggleBotonCarga('btn-guardar', false);
+    } else {
+         if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+         window.renderizarCartera();
+    }
+    window.notify("🗑️ Posición eliminada", "success");
+};
+
 // 7. RENDERIZADO VISUAL DE LA PESTAÑA CARTERA
 window.renderizarCartera = function() {
   const tbody = document.getElementById('lista-posiciones-cartera');
@@ -10621,7 +10661,7 @@ window.renderizarCartera = function() {
       if(pos.tipo === 'AUTOCUSTODIA') badgeClass = 'badge-custodia';
       if(pos.tipo === 'PLANPENSIONES') badgeClass = 'badge-pension';
 
-      // REPARACIÓN 3: Formateo elegante de hasta 6 decimales solo si son necesarios
+      // Mostramos hasta 6 decimales sin arrastrar ceros innecesarios
       let cantVisible = pos.cantidad.toFixed(6).replace(/\.?0+$/, '');
 
       htmlFinal += `
@@ -10711,6 +10751,9 @@ window.actualizarPreciosAutomatico = async function() {
     if (!response.ok) throw new Error("Fallo API Binance");
     const data = await response.json();
     const precioLiveBTC = parseFloat(data.price);
+    
+    // Almacenamos el precio en caché global para el modal
+    window.precioLiveBTC = precioLiveBTC;
 
     let cambiadas = 0;
     posicionesBTC.forEach(p => {
@@ -10761,7 +10804,6 @@ window.calcularValoresCartera = function() {
         }
     });
 };
-
 </script>
 <div id="spotlight-modal">
 <button class="spotlight-close" onclick="cerrarSpotlight()"><span class="material-icons">close</span></button>
