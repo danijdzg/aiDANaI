@@ -2767,8 +2767,8 @@ Ahora no
   <div style="height:20px;"></div>
 </div>
 
-<!-- ═══ MODAL EDITAR/AÑADIR POSICIÓN ═══ -->
-<div id="modal-cartera-pos">
+<!-- ═══ MODAL EDITAR/AÑADIR POSICIÓN (CARTERA) ═══ -->
+<div id="modal-cartera-pos" class="modal-overlay">
   <div class="cockpit-header" style="border-bottom:1px solid rgba(57,255,20,0.2);">
     <button class="btn-close-cockpit" onclick="window.cerrarModalCartera()">✕</button>
     <span class="cockpit-title" id="modal-cartera-titulo" style="color:#39FF14; text-shadow:0 0 8px rgba(57,255,20,0.4);">NUEVA POSICIÓN</span>
@@ -2780,7 +2780,7 @@ Ahora no
       <div class="precio-input-wrap" style="grid-column:span 2;">
         <label>TIPO DE ACTIVO</label>
         <select id="cartera-tipo" onchange="window.comportamientoTipoActivo()" style="background:transparent; border:none; color:#fff; font-size:16px; font-weight:600; outline:none; font-family:'Inter',sans-serif; padding:0; appearance:none; -webkit-appearance:none; width:100%;">
-          <!-- JavaScript lo rellenará -->
+          <!-- Se llena por JavaScript -->
         </select>
       </div>
 
@@ -2807,7 +2807,7 @@ Ahora no
       </div>
       
       <div class="precio-input-wrap">
-        <label>PRECIO COMPRA (€)</label>
+        <label>PRECIO MEDIO COMPRA (€)</label>
         <input type="number" id="cartera-precio-compra" placeholder="0.00" step="any" inputmode="decimal" style="font-size:20px;">
       </div>
       
@@ -2826,14 +2826,14 @@ Ahora no
       
       <div class="precio-input-wrap" style="grid-column:span 2;">
         <label>NOTAS (OPCIONAL)</label>
-        <input type="text" id="cartera-notas" placeholder="Ej: Comprado en Degiro, DCA mensual..." style="text-transform:none !important;">
+        <input type="text" id="cartera-notas" placeholder="Ej: DCA mensual..." style="text-transform:none !important;">
       </div>
     </div>
   </div>
   <div style="padding:15px; padding-bottom:calc(15px + env(safe-area-inset-bottom)); background:linear-gradient(0deg,#000 0%,transparent 100%);">
-    <div id="cartera-extra-btns" style="display:none; grid-template-columns:1fr; margin-bottom:12px;">
+    <div id="cartera-extra-btns" style="display:none; grid-template-columns:1fr; gap:10px; margin-bottom:12px;">
       <button onclick="window.borrarPosicion(document.getElementById('cartera-pos-id').value)" style="background:rgba(255,46,77,0.1); color:#FF2E4D; border:1px solid #FF2E4D; padding:12px; border-radius:12px; font-size:12px; font-weight:900; cursor:pointer;">
-        🗑️ BORRAR
+        🗑️ BORRAR POSICIÓN
       </button>
     </div>
     <button onclick="window.guardarPosicion()" style="width:100%; height:52px; background:#39FF14; color:#000; border:none; border-radius:18px; font-size:16px; font-weight:900; cursor:pointer; letter-spacing:1px; text-transform:uppercase; box-shadow:0 0 25px rgba(57,255,20,0.4);">
@@ -10255,7 +10255,7 @@ window.guardarUniversal = function() {
     window.guardarInversionesEnExcel(wb);
     originalGuardarUniversal();
 };
-/// ============================================================================
+// ============================================================================
 // 📈 MÓDULO CARTERA PROFESIONAL (VALIDACIONES + API BINANCE + RENTABILIDAD)
 // ============================================================================
 
@@ -10266,7 +10266,7 @@ window.abrirModalNuevaPosicion = function(idEdit = null) {
   const modal = document.getElementById('modal-cartera-pos');
   if (!modal) return;
 
-  // REPARACIÓN 1: Asegurarnos de que el selector se llene SIEMPRE al abrir
+  // Llenar selector de TIPO solo con las 5 categorías permitidas
   const selectTipo = document.getElementById('cartera-tipo');
   selectTipo.innerHTML = '';
   window.CATEGORIAS_CARTERA.forEach(cat => {
@@ -10274,6 +10274,7 @@ window.abrirModalNuevaPosicion = function(idEdit = null) {
     opt.value = cat;
     opt.style.background = '#111';
     
+    // Iconos bonitos según el tipo
     let icon = '💼';
     if(cat === 'BOLSA') icon = '📈';
     else if(cat === 'CRIPTOMONEDAS') icon = '🪙';
@@ -10293,13 +10294,13 @@ window.abrirModalNuevaPosicion = function(idEdit = null) {
       document.getElementById('cartera-pos-id').value = pos.id;
       document.getElementById('cartera-tipo').value = pos.tipo;
       
-      // Llamar funciones de actualización visual
+      // Llamar funciones de actualización visual (bloquear API si aplica)
       window.comportamientoTipoActivo(true); 
       
       document.getElementById('cartera-cuenta').value = pos.cuenta;
       document.getElementById('cartera-ticker').value = pos.ticker;
       document.getElementById('cartera-nombre').value = pos.nombre || '';
-      // REPARACIÓN 2: No limitar a 2 decimales en los inputs, permitimos máxima precisión
+      // Asignar respetando decimales de origen
       document.getElementById('cartera-cantidad').value = pos.cantidad;
       document.getElementById('cartera-precio-compra').value = pos.precioCompra;
       document.getElementById('cartera-precio-actual').value = pos.precioActual;
@@ -10311,7 +10312,7 @@ window.abrirModalNuevaPosicion = function(idEdit = null) {
     document.getElementById('modal-cartera-titulo').innerText = "NUEVA POSICIÓN";
     document.getElementById('cartera-pos-id').value = '';
     
-    // Selecciona el primer elemento por defecto y ejecuta la lógica
+    // Selecciona el primer elemento por defecto y resetea comportamiento
     document.getElementById('cartera-tipo').selectedIndex = 0;
     window.comportamientoTipoActivo(false);
     
@@ -10346,14 +10347,14 @@ window.comportamientoTipoActivo = function(isEditing = false) {
     // Primero actualizamos las cuentas disponibles según el tipo elegido
     window.actualizarSelectCuentasCartera();
 
-    // Lógica para Criptos y Autocustodia
+    // Lógica para Criptos y Autocustodia (Fija BTC y bloquea Precio Actual)
     if (tipoSeleccionado === 'CRIPTOMONEDAS' || tipoSeleccionado === 'AUTOCUSTODIA') {
         if (!isEditing) {
-            inputTicker.value = 'BTC'; // Prefijar BTC
+            inputTicker.value = 'BTC'; 
             inputNombre.value = 'Bitcoin';
         }
         
-        // Bloqueamos la edición del precio actual, ya que vendrá de Binance
+        // Bloqueamos la edición manual
         inputPrecioActual.readOnly = true;
         inputPrecioActual.style.opacity = '0.5';
         inputPrecioActual.placeholder = "Auto vía API";
@@ -10370,7 +10371,7 @@ window.comportamientoTipoActivo = function(isEditing = false) {
         }
 
     } else {
-        // Lógica para Bolsa, Fondos, Pensiones (Manual)
+        // Lógica para Bolsa, Fondos, Pensiones (Desbloquea Precio Actual)
         if (!isEditing && inputTicker.value === 'BTC') {
             inputTicker.value = '';
             inputNombre.value = '';
@@ -10388,7 +10389,7 @@ window.comportamientoTipoActivo = function(isEditing = false) {
     }
 };
 
-// Pequeña utilidad para precargar el precio de Binance en vivo en el modal
+// Utilidad: Llamada API Binance para precargar precio en el modal
 window.obtenerPrecioCriptoLive = async function(tickerBase) {
     try {
         const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${tickerBase}EUR`);
@@ -10412,12 +10413,11 @@ window.actualizarSelectCuentasCartera = function() {
   const oldVal = selectCuentas.value; // Guardar valor previo si existe
   selectCuentas.innerHTML = '<option value="">-- Selecciona Cuenta --</option>';
 
-  // Buscamos en mapaCuentas las cuentas que coincidan con la categoría elegida
   if (window.mapaCuentas) {
     Object.keys(window.mapaCuentas).forEach(nombreCuenta => {
       const infoCta = window.mapaCuentas[nombreCuenta];
       if (String(infoCta.tipo).toUpperCase() === tipoSeleccionado) {
-        // Obtenemos la liquidez total (dinero traspasado - dinero ya invertido)
+        // Mostramos el saldo disponible
         const saldoDisp = window.obtenerLiquidezDisponibleCuenta(nombreCuenta);
         const opt = document.createElement('option');
         opt.value = nombreCuenta;
@@ -10431,13 +10431,12 @@ window.actualizarSelectCuentasCartera = function() {
   if (oldVal) selectCuentas.value = oldVal;
 };
 
-// 4. FUNCIÓN PARA OBTENER LIQUIDEZ DISPONIBLE (LÍMITE INVERSIÓN)
+// 4. OBTENER LIQUIDEZ DISPONIBLE (LÍMITE INVERSIÓN)
 window.obtenerLiquidezDisponibleCuenta = function(nombreCuenta) {
-    // 1. Saldo actual de la cuenta del broker/wallet según tus transferencias
     const infoCta = window.mapaCuentas[nombreCuenta];
     let liquidez = infoCta ? (infoCta.saldoActual || 0) : 0;
     
-    // 2. Restamos todo el coste de adquisición que ya está invertido en esa cuenta
+    // Restamos el coste ya invertido en esa cuenta
     if (window.datosCartera) {
         window.datosCartera.forEach(pos => {
             if (pos.cuenta === nombreCuenta) {
@@ -10488,23 +10487,20 @@ window.guardarPosicion = async function() {
   const idEdit = document.getElementById('cartera-pos-id').value;
   const tipo = document.getElementById('cartera-tipo').value;
   const cuentaStr = document.getElementById('cartera-cuenta').value;
-  // Parseo exacto, soporte total 6 decimales
+  // Parseo numérico preciso
   const cantidad = parseFloat(document.getElementById('cartera-cantidad').value);
   const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value);
   const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
 
-  // Validaciones básicas
+  // Validaciones
   if (!cuentaStr) return window.notify("Debes seleccionar una cuenta asociada.", "warning");
   if (!ticker) return window.notify("El Ticker es obligatorio.", "warning");
   if (isNaN(cantidad) || cantidad <= 0) return window.notify("Introduce una cantidad válida.", "warning");
   if (isNaN(pCompra) || pCompra <= 0) return window.notify("Introduce un precio de compra válido.", "warning");
 
   const importeAInvertir = cantidad * pCompra;
-
-  // VALIDACIÓN ESTRICTA: Tope de Inversión
   let liquidezCuenta = window.obtenerLiquidezDisponibleCuenta(cuentaStr);
 
-  // Devolver el coste de la posición si se está editando para no bloquearse a sí mismo
   if (idEdit) {
      const posAnterior = window.datosCartera.find(p => p.id === idEdit);
      if (posAnterior && posAnterior.cuenta === cuentaStr) {
@@ -10512,7 +10508,7 @@ window.guardarPosicion = async function() {
      }
   }
 
-  // Comparamos con un pequeño colchón de 0.05 céntimos por culpa de los errores de redondeo de punto flotante de JS
+  // Tolerancia de redondeo de 5 céntimos
   if (importeAInvertir > (liquidezCuenta + 0.05)) { 
       window.notify(`⚠️ Fondos Insuficientes. Coste: ${importeAInvertir.toFixed(2)}€ | Saldo Disp.: ${liquidezCuenta.toFixed(2)}€`, "error");
       return; 
@@ -10526,7 +10522,7 @@ window.guardarPosicion = async function() {
     nombre: document.getElementById('cartera-nombre').value.trim(),
     tipo: tipo,
     cuenta: cuentaStr,
-    cantidad: cantidad, // Se guarda con precisión total
+    cantidad: cantidad, 
     precioCompra: pCompra,
     precioActual: pActual,
     notas: document.getElementById('cartera-notas').value.trim()
@@ -10544,32 +10540,14 @@ window.guardarPosicion = async function() {
   window.cerrarModalCartera();
   window.notify("✅ Posición guardada", "success");
   
-  // Guardado Universal se encarga de subir a la nube
   if (typeof window.guardarUniversal === 'function') {
     window.toggleBotonCarga('btn-guardar', true);
     await window.guardarUniversal();
     window.toggleBotonCarga('btn-guardar', false);
   } else {
-      // Fallback
       if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
       window.renderizarCartera();
   }
-};
-
-window.borrarPosicion = async function(id) {
-    if(!confirm("¿Borrar posición permanentemente?")) return;
-    window.datosCartera = window.datosCartera.filter(p => p.id !== id);
-    window.cerrarModalCartera();
-    
-    if (typeof window.guardarUniversal === 'function') {
-        window.toggleBotonCarga('btn-guardar', true);
-        await window.guardarUniversal();
-        window.toggleBotonCarga('btn-guardar', false);
-    } else {
-         if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-         window.renderizarCartera();
-    }
-    window.notify("🗑️ Posición eliminada", "success");
 };
 
 // 7. RENDERIZADO VISUAL DE LA PESTAÑA CARTERA
