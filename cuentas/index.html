@@ -2348,7 +2348,7 @@ body #fab-main:active {
         </div>
         <div style="color: #555; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">Toca para usar Huella / FaceID</div>
     </div>
-	<div style="display:flex; align-items:center; gap:6px; background:rgba(57,255,20,0.05); border:1px solid rgba(57,255,20,0.2); border-radius:20px; padding:5px 12px; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:6px; background:rgba(57,255,20,0.05); border:1px solid rgba(57,255,20,0.2); border-radius:20px; padding:5px 12px; margin-top:8px;">
   <div style="width:6px;height:6px;border-radius:50%;background:#39FF14;box-shadow:0 0 6px #39FF14;"></div>
   <span style="color:#39FF14;font-size:10px;font-weight:600;letter-spacing:1px;opacity:0.85;">SESIÓN CIFRADA</span>
 </div>
@@ -2701,11 +2701,16 @@ Ahora no
   <!-- POSICIONES POR SECCIÓN -->
   <div class="master-card" style="margin-top:15px; padding:0; overflow:hidden;" id="card-posiciones">
     <div style="padding:14px 14px 10px 14px; border-bottom:1px solid #1a1a1a;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
         <span class="card-title">MIS POSICIONES</span>
-        <button onclick="window.abrirModalNuevaPosicion()" style="background:rgba(57,255,20,0.1); border:1px solid rgba(57,255,20,0.4); color:#39FF14; padding:5px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:0.5px;">
-          + AÑADIR
-        </button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="btn-precios-live" onclick="window.actualizarPreciosAutomatico()" style="background:rgba(0,184,255,0.12); border:1px solid rgba(0,184,255,0.5); color:#00B8FF; padding:5px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:0.5px; display:flex; align-items:center; gap:4px;">
+            <span id="precios-live-icon">⚡</span> PRECIOS LIVE
+          </button>
+          <button onclick="window.abrirModalNuevaPosicion()" style="background:rgba(57,255,20,0.1); border:1px solid rgba(57,255,20,0.4); color:#39FF14; padding:5px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:0.5px;">
+            + AÑADIR
+          </button>
+        </div>
       </div>
     </div>
     <div id="lista-posiciones-cartera">
@@ -4080,302 +4085,309 @@ window.alert = function(mensaje) {
     }, 3500);
 };
 // ==========================================
-// 2. CONFIGURACIÓN MSAL Y ONEDRIVE (UNIFICADO)
+// 2. CONFIGURACIÓN DE SEGURIDAD (Tu ID real)
 // ==========================================
-
 // URI de redirección fija según entorno
 const redirectExacta = (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
     ? "http://localhost:5500/"
     : "https://danijdzg.github.io/aiDANaI/cuentas/";
 
-// ─────────────────────────────────────────────────────────────────────
-// SOLUCIÓN CUENTAS PERSONALES MICROSOFT (@hotmail, @outlook, @live)
-//
-// El problema: la cuenta daninorma73@hotmail.com es una cuenta personal
-// Microsoft (MSA). Con authority="common", MSAL redirige a login.live.com
-// que tiene un registro de apps SEPARADO y más estricto que Azure AD.
-//
-// Solución: usar el endpoint "consumers" en lugar de "common".
-// "consumers" acepta SOLO cuentas personales Microsoft y va siempre
-// a login.microsoftonline.com (nunca a login.live.com), donde tu
-// app SÍ está registrada correctamente.
-// ─────────────────────────────────────────────────────────────────────
 const MSAL_CONFIG = {
     auth: {
-        clientId: "2a1e29f1-6b47-4ba2-a48e-adc4339e4514",
-        authority: "https://login.microsoftonline.com/consumers", // <-- CLAVE: cuentas personales MSA
+        clientId: "2a1e29f1-6b47-4ba2-a48e-adc4339e4514", // Asegúrate de usar el ClientID correcto de tu app registrada
+        authority: "https://login.microsoftonline.com/consumers", 
         redirectUri: redirectExacta,
         navigateToLoginRequestUrl: false
     },
     cache: {
         cacheLocation: "localStorage",
-        storeAuthStateInCookie: true  // Necesario para Safari / iOS PWA
+        storeAuthStateInCookie: true  // Vital para Safari / iOS PWA
     }
 };
-
 // ──────────────────────────────────────────────────────────────────────
-// 🧠 MÓDULO DE ESTADO CENTRAL (AppState)
+// 🧠 MÓDULO DE ESTADO CENTRAL (AppState) - BLINDADO CONTRA CIERRES
 // ──────────────────────────────────────────────────────────────────────
 window.AppState = {
-    isSaving: false,
-    estadoSemaforo: 'verde',
-    hayPendientes: function() {
-        try {
-            const sala = JSON.parse(localStorage.getItem('salaEsperaMovimientos') || '[]');
-            return sala.length > 0;
-        } catch(e) { return false; }
-    },
-    actualizarSemaforo: function(color) {
-        this.estadoSemaforo = color;
-        window.estadoSemaforo = color;
-        const dot = document.getElementById('semaforo-dot');
-        if (dot) {
-            if (navigator.onLine && color === 'verde' && this.hayPendientes()) {
-                color = 'naranja';
-            }
-            if (!navigator.onLine || color === 'rojo' || color === 'error') {
-                dot.style.backgroundColor = '#FF2E4D'; 
-                dot.style.boxShadow = '0 0 10px #FF2E4D';
-                dot.classList.remove('parpadeo-neon');
-            } else if (color === 'naranja' || color === 'cargando') {
-                dot.style.backgroundColor = '#FF9F1C'; 
-                dot.style.boxShadow = '0 0 15px #FF9F1C';
-                dot.classList.add('parpadeo-neon');
-            } else {
-                dot.style.backgroundColor = '#39FF14'; 
-                dot.style.boxShadow = '0 0 10px #39FF14';
-                dot.classList.remove('parpadeo-neon');
-            }
-        }
-    },
-    setGuardando: function(estado) {
-        this.isSaving = estado;
-        window.isSaving = estado;
-        if (estado) {
-            this.actualizarSemaforo('cargando');
-        } else {
-            const conectado = navigator.onLine;
-            this.actualizarSemaforo(conectado ? 'verde' : 'rojo');
-        }
-    }
-};
-
-window.addEventListener('beforeunload', function (e) {
-    if (window.AppState.isSaving || window.AppState.hayPendientes()) {
-        const msg = "¡Espera! Se están guardando datos en la nube.";
-        e.preventDefault();
-        e.returnValue = msg;
-        return msg;
-    }
-});
-
-if (!document.getElementById('animacion-semaforo')) {
-    const style = document.createElement('style');
-    style.id = 'animacion-semaforo';
-    style.innerHTML = `@keyframes latidoSemaforo { 0% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.7; } } .parpadeo-neon { animation: latidoSemaforo 1s infinite ease-in-out; }`;
-    document.head.appendChild(style);
+isSaving: false,
+estadoSemaforo: 'verde',
+// Novedad: Comprobamos si hay movimientos pendientes en la recámara
+hayPendientes: function() {
+try {
+const sala = JSON.parse(localStorage.getItem('salaEsperaMovimientos') || '[]');
+return sala.length > 0;
+} catch(e) { return false; }
+},
+actualizarSemaforo: function(color) {
+this.estadoSemaforo = color;
+window.estadoSemaforo = color;
+const dot = document.getElementById('semaforo-dot');
+if (dot) {
+// Si hay internet pero hay cosas pendientes, forzamos estado naranja (Aviso)
+if (navigator.onLine && color === 'verde' && this.hayPendientes()) {
+color = 'naranja';
 }
-
+if (!navigator.onLine || color === 'rojo' || color === 'error') {
+dot.style.backgroundColor = '#FF2E4D'; // Rojo Error
+dot.style.boxShadow = '0 0 10px #FF2E4D';
+dot.classList.remove('parpadeo-neon');
+} else if (color === 'naranja' || color === 'cargando') {
+dot.style.backgroundColor = '#FF9F1C'; // Naranja Guardando
+dot.style.boxShadow = '0 0 15px #FF9F1C';
+dot.classList.add('parpadeo-neon');
+} else {
+dot.style.backgroundColor = '#39FF14'; // Verde Neón OK
+dot.style.boxShadow = '0 0 10px #39FF14';
+dot.classList.remove('parpadeo-neon');
+}
+}
+},
+setGuardando: function(estado) {
+this.isSaving = estado;
+window.isSaving = estado;
+if (estado) {
+this.actualizarSemaforo('cargando');
+} else {
+const conectado = navigator.onLine;
+this.actualizarSemaforo(conectado ? 'verde' : 'rojo');
+}
+}
+};
+// 🛡️ PROTECCIÓN ACTIVA CONTRA CIERRES ACCIDENTALES
+window.addEventListener('beforeunload', function (e) {
+if (window.AppState.isSaving || window.AppState.hayPendientes()) {
+const msg = "¡Espera! Se están guardando datos en la nube. Si sales ahora, los cambios quedarán en tu dispositivo hasta que vuelvas a abrir.";
+e.preventDefault();
+e.returnValue = msg;
+return msg;
+}
+});
+// Añadimos una animación CSS por código para que el punto naranja respire
+if (!document.getElementById('animacion-semaforo')) {
+const style = document.createElement('style');
+style.id = 'animacion-semaforo';
+style.innerHTML = `
+@keyframes latidoSemaforo {
+0% { transform: scale(0.9); opacity: 0.7; }
+50% { transform: scale(1.3); opacity: 1; }
+100% { transform: scale(0.9); opacity: 0.7; }
+}
+.parpadeo-neon {
+animation: latidoSemaforo 1s infinite ease-in-out;
+}
+`;
+document.head.appendChild(style);
+}
 // ==========================================
-// MOTOR ONEDRIVE "RAYOS X" (CON REDIRECCIÓN)
+// MOTOR ONEDRIVE "RAYOS X" (API VALUE READ)
 // ==========================================
 class OneDriveManager {
-    constructor() {
-        this.fileId = localStorage.getItem("aidanai_file_id");
+constructor() {
+this.fileId = localStorage.getItem("aidanai_file_id");
+this.lastETag = null;
+this.msalInstance = null;
+this._msalReady = this._inicializarMsal();
+}
+async _inicializarMsal() {
+if (typeof msal === 'undefined') {
+await new Promise(resolve => {
+const check = setInterval(() => {
+if (typeof msal !== 'undefined') {
+clearInterval(check);
+resolve();
+}
+}, 100);
+});
+}
+this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+}
+// ==========================================
+// 🛡️ OBTENER TOKEN (CON RENOVACIÓN SILENCIOSA ANTI-CADUCIDAD)
+// ==========================================
+async getToken() {
+await this._msalReady;
+const cuentas = this.msalInstance.getAllAccounts();
+if (cuentas.length === 0) {
+throw new Error("No hay ninguna sesión iniciada en OneDrive.");
+}
+const request = {
+scopes: ["Files.ReadWrite", "User.Read"],
+account: cuentas[0]
+};
+try {
+// 1. Intentamos renovar el 'pase VIP' de forma silenciosa e invisible
+const response = await this.msalInstance.acquireTokenSilent(request);
+return response.accessToken;
+} catch (error) {
+console.warn("⚠️ El token silencioso caducó o falló. Forzando reconexión...", error);
+try {
+// 2. Si falla lo silencioso (ej. llevas días sin abrirla y Microsoft exige verte), pedimos el pase visiblemente
+const response = await this.msalInstance.acquireTokenPopup(request);
+return response.accessToken;
+} catch (popupError) {
+console.error("❌ Imposible renovar la sesión:", popupError);
+// Si todo falla, forzamos a que el botón rojo de desconectado aparezca
+notify("Sesión caducada. Por favor, vuelve a entrar.", "error");
+throw new Error("Sesión caducada de Microsoft. Debes volver a iniciar sesión.");
+}
+}
+}
+async login() {
+await this._msalReady;
+try {
+await this.msalInstance.handleRedirectPromise().catch(()=>{});
+const resp = await this.msalInstance.loginPopup({
+scopes: ["User.Read", "Files.ReadWrite.All"],
+prompt: "select_account"
+});
+return resp.accessToken;
+} catch (e) {
+if (e.message && e.message.includes("popup")) alert("Permite las ventanas emergentes.");
+throw e;
+}
+}
+// --- 2. LOCALIZADOR ---
+async getFileId() {
+if (this.fileId) return this.fileId;
+const cached = localStorage.getItem("aidanai_file_id");
+if(cached) { this.fileId = cached; return cached; }
+const token = await this.getToken();
+// Busca aidanai-ctas.xlsx en la raíz
+const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai-ctas.xlsx", {
+headers: { Authorization: `Bearer ${token}` }
+});
+if (res.ok) {
+const data = await res.json();
+this.fileId = data.id;
+localStorage.setItem("aidanai_file_id", data.id);
+return data.id;
+} else {
+// 🔒 ROBUSTEZ: Si el archivo no existe (404), limpiamos la caché para no quedar
+// atascados con un ID obsoleto (ej: tras borrar y recrear el archivo manualmente).
+localStorage.removeItem("aidanai_file_id");
+this.fileId = null;
+this.lastETag = null;
+throw new Error("❌ No encuentro 'aidanai.xlsx' en tu OneDrive. Asegúrate de que el archivo existe en la raíz.");
+}
+}
+// --- 3. LECTURA BINARIA (DESCARGA EXACTA DEL ARCHIVO) ---
+async descargarDatosBinario() {
+if(window.mostrarEstado) notify("📥 Leyendo nube (Modo Binario)...", "loading");
+const token = await this.getToken();
+let id = await this.getFileId();
+let [resMeta, resContent] = await Promise.all([
+fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } }),
+fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, { headers: { Authorization: `Bearer ${token}` } })
+]);
+// Si el ID cacheado falla, buscamos el archivo nuevo
+if (resContent.status === 404) {
+localStorage.removeItem("aidanai_file_id");
+this.fileId = null;
+id = await this.getFileId();
+const retryRes = await Promise.all([
+fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } }),
+fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, { headers: { Authorization: `Bearer ${token}` } })
+]);
+resMeta = retryRes[0];
+resContent = retryRes[1];
+}
+if (resMeta.ok) {
+const metaJson = await resMeta.json();
+this.lastETag = metaJson.eTag || null;
+}
+if (!resContent.ok) throw new Error(`Error descargando desde OneDrive`);
+const arrayBuffer = await resContent.arrayBuffer();
+// CLAVE: cellDates=true obliga a que se lea IGUAL que en el modo local
+return XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
+}
+async loadFile() { return await this.descargarDatosBinario(); }
+// --- 4. GUARDADO CON CONTROL DE VERSIÓN ---
+async saveFile(blob) {
+const id = await this.getFileId();
+const token = await this.getToken();
+const headers = {
+'Authorization': `Bearer ${token}`,
+'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+};
+if (this.lastETag) { headers['If-Match'] = this.lastETag; }
+// 🛡️ 1. CREAR EL CORTOCIRCUITO (8 segundos máximo)
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 8000);
+try {
+    // 🛡️ 2. TU FETCH ORIGINAL (Añadiendo el 'signal' al final)
+    const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+        method: 'PUT', 
+        headers: headers, 
+        body: blob,
+        signal: controller.signal // <--- La conexión con el cortocircuito
+    });
+    // 🛡️ 3. SI RESPONDE A TIEMPO, DESACTIVAMOS EL TIMEOUT
+    clearTimeout(timeoutId);
+    // --- TU LÓGICA DE ETAG INTACTA ---
+    if (response.status === 412) {
         this.lastETag = null;
-        this.msalInstance = null;
-        this._msalReady = this._inicializarMsal();
+        throw { code: 'CONFLICT_412', message: "⚠️ Conflicto detectado" };
     }
-
-    async _inicializarMsal() {
-        if (typeof msal === 'undefined') {
-            await new Promise(resolve => {
-                const check = setInterval(() => {
-                    if (typeof msal !== 'undefined') {
-                        clearInterval(check);
-                        resolve();
-                    }
-                }, 100);
-            });
-        }
-        this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-        
+    if (!response.ok) throw new Error("Error al subir");
+    if (response.headers.get('eTag')) {
+        this.lastETag = response.headers.get('eTag');
+    } else {
         try {
-            await this.msalInstance.handleRedirectPromise();
-        } catch (err) {
-            console.error("Error al volver de Microsoft:", err);
-        }
+            const metaRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } });
+            if (metaRes.ok) { const m = await metaRes.json(); this.lastETag = m.eTag || null; }
+        } catch(e) { }
     }
-
-    async getToken() {
-        await this._msalReady;
-        const cuentas = this.msalInstance.getAllAccounts();
-        if (cuentas.length === 0) {
-            throw new Error("No hay ninguna sesión iniciada en OneDrive.");
-        }
-        const request = {
-            scopes: ["Files.ReadWrite", "User.Read"],
-            account: cuentas[0]
-        };
-        try {
-            const response = await this.msalInstance.acquireTokenSilent(request);
-            return response.accessToken;
-        } catch (error) {
-            console.warn("⚠️ El token silencioso caducó. Forzando reconexión...", error);
-            try {
-                await this.msalInstance.acquireTokenRedirect(request);
-                return new Promise(() => {}); // Pausar ejecución
-            } catch (redirectError) {
-                console.error("❌ Imposible renovar la sesión:", redirectError);
-                throw new Error("Sesión caducada de Microsoft. Debes volver a iniciar sesión.");
-            }
-        }
+    // ----------------------------------
+} catch (error) {
+    // 🛡️ 4. CAPTURAR EL CORTE O LOS ERRORES
+    clearTimeout(timeoutId); // Limpiamos la memoria por seguridad
+    if (error.name === 'AbortError') {
+        console.error("⏳ TIMEOUT: OneDrive no respondió en 8s.");
+        // Lanzamos un error amigable para que lo gestione la función padre
+        throw new Error("Red inestable. Subida cancelada por seguridad."); 
+    } else {
+        // Re-lanzamos cualquier otro error (como tu CONFLICT_412) para no romper tu lógica actual
+        throw error; 
     }
-
-    async login() {
-        await this._msalReady;
-        sessionStorage.clear(); 
-        
-        try {
-            await this.msalInstance.loginRedirect({
-                scopes: ["User.Read", "Files.ReadWrite"],
-                prompt: "select_account"
-            });
-            return new Promise(() => {}); 
-        } catch (e) {
-            throw e;
-        }
-    }
-
-    async getFileId() {
-        if (this.fileId) return this.fileId;
-        const cached = localStorage.getItem("aidanai_file_id");
-        if(cached) { this.fileId = cached; return cached; }
-        const token = await this.getToken();
-        
-        const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/root:/aidanai-ctas.xlsx", {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-            const data = await res.json();
-            this.fileId = data.id;
-            localStorage.setItem("aidanai_file_id", data.id);
-            return data.id;
-        } else {
-            localStorage.removeItem("aidanai_file_id");
-            this.fileId = null;
-            this.lastETag = null;
-            throw new Error("❌ No encuentro 'aidanai-ctas.xlsx' en tu OneDrive.");
-        }
-    }
-
-    async descargarDatosBinario() {
-        if(window.mostrarEstado) notify("📥 Leyendo nube...", "loading");
-        const token = await this.getToken();
-        let id = await this.getFileId();
-        let [resMeta, resContent] = await Promise.all([
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, { headers: { Authorization: `Bearer ${token}` } })
-        ]);
-        
-        if (resContent.status === 404) {
-            localStorage.removeItem("aidanai_file_id");
-            this.fileId = null;
-            id = await this.getFileId();
-            const retryRes = await Promise.all([
-                fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } }),
-                fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, { headers: { Authorization: `Bearer ${token}` } })
-            ]);
-            resMeta = retryRes[0];
-            resContent = retryRes[1];
-        }
-        
-        if (resMeta.ok) {
-            const metaJson = await resMeta.json();
-            this.lastETag = metaJson.eTag || null;
-        }
-        if (!resContent.ok) throw new Error(`Error descargando desde OneDrive`);
-        const arrayBuffer = await resContent.arrayBuffer();
-        return XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
-    }
-
-    async loadFile() { return await this.descargarDatosBinario(); }
-
-    async saveFile(blob) {
-        const id = await this.getFileId();
-        const token = await this.getToken();
-        const headers = {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        };
-        if (this.lastETag) { headers['If-Match'] = this.lastETag; }
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        try {
-            const response = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
-                method: 'PUT', headers: headers, body: blob, signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            if (response.status === 412) {
-                this.lastETag = null;
-                throw { code: 'CONFLICT_412', message: "⚠️ Conflicto detectado" };
-            }
-            if (!response.ok) throw new Error("Error al subir");
-            if (response.headers.get('eTag')) {
-                this.lastETag = response.headers.get('eTag');
-            } else {
-                try {
-                    const metaRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } });
-                    if (metaRes.ok) { const m = await metaRes.json(); this.lastETag = m.eTag || null; }
-                } catch(e) { }
-            }
-        } catch (error) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
-                throw new Error("Red inestable. Subida cancelada por seguridad."); 
-            } else {
-                throw error; 
-            }
-        }
-    }
-
-    async addRowToTable(values, tableName) {
-        try {
-            await new Promise(r => setTimeout(r, 50));
-            if (typeof window.guardarUniversal === 'function') {
-                await window.guardarUniversal();
-            }
-        } catch (e) {
-            console.warn(`⚠️ addRowToTable falló:`, e.message);
-            if (typeof notify === 'function') notify('⚠️ Error al guardar en la nube.', 'error');
-            throw e; 
-        }
-    }
-
-    async createFile(fileName, blob) {
-        const token = await this.getToken();
-        const response = await fetch(
-            `https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}:/content`,
-            {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                },
-                body: blob
-            }
-        );
-        if (!response.ok) throw new Error("Error al crear archivo");
-        const data = await response.json();
-        this.fileId = data.id;
-        localStorage.setItem("aidanai_file_id", data.id);
-        this.lastETag = response.headers.get('ETag') || response.headers.get('etag') || null;
-        return data;
-    }
-} 
-
+}
+}
+// --- 5. AÑADIR FILA SIN ROMPER LA CACHÉ DE LA NUBE ---
+async addRowToTable(values, tableName) {
+try {
+await new Promise(r => setTimeout(r, 50));
+if (typeof window.guardarUniversal === 'function') {
+await window.guardarUniversal();
+}
+} catch (e) {
+console.warn(`⚠️ addRowToTable falló:`, e.message);
+if (typeof notify === 'function') {
+notify('⚠️ Error al guardar en la nube. Revisa la conexión.', 'error');
+}
+throw e; // Propagar para que el llamador pueda reaccionar
+}
+}
+// --- 6. CREAR ARCHIVO NUEVO EN ONEDRIVE ---
+async createFile(fileName, blob) {
+const token = await this.getToken();
+const response = await fetch(
+`https://graph.microsoft.com/v1.0/me/drive/root:/${fileName}:/content`,
+{
+method: 'PUT',
+headers: {
+'Authorization': `Bearer ${token}`,
+'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+},
+body: blob
+}
+);
+if (!response.ok) throw new Error("Error al crear archivo");
+const data = await response.json();
+this.fileId = data.id;
+localStorage.setItem("aidanai_file_id", data.id);
+this.lastETag = response.headers.get('ETag') || response.headers.get('etag') || null;
+return data;
+}
+}
+// Instancia única global
 const oneDrive = new OneDriveManager();
 // ==========================================
 // 🚀 ARRANQUE SEGURO (CON PREGUNTA)
@@ -4406,7 +4418,7 @@ if(barra) barra.innerText = "✅ Sincronizado";
     } else {
         console.warn("No se pudo mostrar el modal porque 'modal-fuente-datos' no existe en el DOM.");
     }
-	}
+        }
 }
 // ✅ AÑADIR AL SCOPE GLOBAL (FUERA DE iniciarSistema)
 
@@ -4417,7 +4429,7 @@ if(barra) barra.innerText = "✅ Sincronizado";
 window.cerrarModalFuente = function() {
     const modal = document.getElementById('modal-fuente-datos');
     if (modal) {
-        modal.classList.remove('active');
+        modal.style.display = 'none';
     }
 };
 
@@ -4425,24 +4437,53 @@ window.cerrarModalFuente = function() {
  * Fuerza el uso de la caché local si el usuario decide no cargar un nuevo Excel.
  * Expuesto en window para acceso directo desde el onclick del HTML.
  */
+/**
+ * Intenta cargar los datos del Excel guardados en caché cifrada (localStorage).
+ * Devuelve true si había datos, false si no.
+ */
+window.cargarDatosDesdeCache = async function() {
+    try {
+        const claveCache = localStorage.getItem('aidanai_pw_v3');
+        const blob = localStorage.getItem('aidanai_cache_datos');
+        if (!blob || !claveCache) return false;
+        // Intentamos descifrar con el hash de PIN almacenado
+        const datos = await CryptoSystem.desencriptar(blob, claveCache);
+        if (datos && datos.movimientos && datos.movimientos.length > 0) {
+            window.datos = datos.movimientos;
+            window.mapaCuentas = datos.mapaCuentas || {};
+            window.listaCuentasConfig = datos.listaCuentasConfig || [];
+            window.listaConceptosConfig = datos.listaConceptosConfig || [];
+            window.listaBeneficiariosConfig = datos.listaBeneficiariosConfig || [];
+            window.datosCartera = datos.datosCartera || [];
+            window.historicoCartera = datos.historicoCartera || [];
+            window.datosRecurrentes = datos.datosRecurrentes || [];
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.warn("Cache no disponible o cifrado diferente:", e.message);
+        return false;
+    }
+};
+
 window.usarCacheSiExiste = async function() {
     window.cerrarModalFuente();
-    
-    // Aquí mantenemos la lógica de inicialización basada en caché que tenías,
-    // pero asegurándonos de manejar posibles estados nulos si la caché no existe.
     try {
-        const hayDatos = await cargarDatosDesdeCache(); // Suponiendo que esta es tu función de carga
+        const hayDatos = await window.cargarDatosDesdeCache();
         if (!hayDatos) {
-            console.warn("No hay datos en caché para usar.");
-            // Opcional: Mostrar un Toast al usuario indicando que debe subir un Excel.
+            if (typeof notify === 'function') notify("Sin caché local. Carga un Excel.", "warning");
+            // Dejamos la app operativa pero sin datos
+            window.datos = window.datos || [];
+            window.UIEvents.emitir('datos:actualizados');
             return;
         }
-        
-        // Si hay datos, disparamos el renderizado principal
-        procesarYRenderizar(window.datos); 
-        
+        if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+        window.UIEvents.emitir('datos:actualizados');
+        if (typeof notify === 'function') notify("✅ Datos cargados desde caché local", "success");
     } catch (error) {
         console.error("Error al intentar usar la caché:", error);
+        window.datos = window.datos || [];
+        window.UIEvents.emitir('datos:actualizados');
     }
 };
 // --- FUNCIONES PERFIL FINANCIERO ---
@@ -9080,7 +9121,7 @@ document.addEventListener('visibilitychange', () => {
                     window.mostrarPin();
                 }
                 }
-				}
+                                }
     }
 });
 // --- 4. INYECCIÓN DINÁMICA DE AJUSTES EN LA INTERFAZ ---
@@ -9099,7 +9140,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <div style="color: #888; font-size: 12px; margin-top: 4px; line-height: 1.4;">Usa tu Huella o FaceID para mayor rapidez</div>
                     </div>
                     <label style="position: relative; display: inline-block; width: 50px; height: 28px; flex-shrink: 0;">
-					<input type="checkbox" id="toggle-biometria-dinamico" style="opacity: 0; width: 0; height: 0;" onchange="window.toggleBiometriaUI(this)">
+                                        <input type="checkbox" id="toggle-biometria-dinamico" style="opacity: 0; width: 0; height: 0;" onchange="window.toggleBiometriaUI(this)">
                         <span id="slider-biometria" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px;">
                             <span id="dot-biometria" style="position: absolute; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%;"></span>
                         </span>
@@ -9119,9 +9160,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Lo inyectamos al final de la pestaña de configuración
         configTab.insertAdjacentHTML('beforeend', seguridadHTML);
         // // Sincronizar estado visual del toggle al cargar
-		setTimeout(() => {
-		const biometriaActiva = localStorage.getItem('aidanai_biometria') === 'true';
-		const toggle = document.getElementById('toggle-biometria-dinamico');
+                setTimeout(() => {
+                const biometriaActiva = localStorage.getItem('aidanai_biometria') === 'true';
+                const toggle = document.getElementById('toggle-biometria-dinamico');
             const slider = document.getElementById('slider-biometria');
             const dot = document.getElementById('dot-biometria');
             if (toggle && slider && dot) {
@@ -9714,91 +9755,84 @@ window.guardarInversionesEnExcel = function(wb) {
     }
 };
 
-// 1. ANULACIÓN DE ALPHA VANTAGE (Precios Manuales)
+// Función para obtener precio actual de acciones (Alpha Vantage)
 window.obtenerPrecioAccion = async function(ticker) {
-    // Retorna null de forma nativa para que el sistema NUNCA
-    // sobrescriba el precio que tú has introducido en tu Excel o interfaz.
-    return null; 
-};
-
-// 2. RESTRICCIÓN DE COINGECKO (Solo Bitcoin)
-window.obtenerPrecioCripto = async function(ticker) {
-    const t = String(ticker).toUpperCase().trim();
-    
-    // Cortafuegos: Si no es Bitcoin, devolvemos null (precio manual)
-    if (t !== 'BTC' && t !== 'BITCOIN') {
-        return null;
-    }
-    
     try {
-        // Petición directa y exclusiva para Bitcoin
-        const url = `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur`;
+        // Usar demo key para MVP - en producción usar API key real
+        const apiKey = 'demo';
+        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${apiKey}`;
+        
         const response = await fetch(url);
         const data = await response.json();
         
-        if (data && data.bitcoin && data.bitcoin.eur) {
-            return data.bitcoin.eur;
+        if (data['Global Quote'] && data['Global Quote']['05. price']) {
+            return parseFloat(data['Global Quote']['05. price']);
         }
         return null;
     } catch (e) {
-        console.error(`Error de conexión con CoinGecko para BTC:`, e);
-        return null; // Fallback a precio manual en caso de caída de internet
+        console.error(`Error obteniendo precio de ${ticker}:`, e);
+        return null;
     }
 };
 
-// 3. MOTOR DE ACTUALIZACIÓN ADAPTADO
+// Función para obtener precio de criptomonedas (CoinGecko)
+window.obtenerPrecioCripto = async function(ticker) {
+    try {
+        const coinId = COINGECKO_IDS[ticker] || ticker.toLowerCase();
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=eur`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data[coinId] && data[coinId].eur) {
+            return data[coinId].eur;
+        }
+        return null;
+    } catch (e) {
+        console.error(`Error obteniendo precio de ${ticker}:`, e);
+        return null;
+    }
+};
+
+// Función para actualizar precios de todos los activos
 window.actualizarPreciosInversiones = async function(mostrarCarga = true) {
     if (mostrarCarga) {
         notify('Actualizando precios...', 'loading');
     }
     
     try {
-        let btcActualizado = false;
-
         for (let activo of window.carteraInversiones.activos) {
-            let precioNuevo = null;
+            let precio = null;
             
             if (activo.tipo === 'cripto') {
-                precioNuevo = await window.obtenerPrecioCripto(activo.ticker);
+                precio = await window.obtenerPrecioCripto(activo.ticker);
             } else {
-                precioNuevo = await window.obtenerPrecioAccion(activo.ticker);
+                precio = await window.obtenerPrecioAccion(activo.ticker);
             }
             
-            // Si el precio devuelto NO es nulo (solo el BTC lo hará)
-            // Se actualiza el activo. Si es nulo, mantiene tu precio manual.
-            if (precioNuevo !== null) {
-                activo.precioActual = precioNuevo;
-                activo.fuente = 'coingecko';
-                btcActualizado = true;
-            } else {
-                // Aseguramos que la etiqueta interna marque que es manual
-                if (!activo.fuente) activo.fuente = 'manual';
+            if (precio) {
+                activo.precioActual = precio;
+                activo.valorActual = activo.cantidad * precio;
+                activo.ganancia = (precio - activo.precioCompra) * activo.cantidad;
+                activo.gananciaPorcentaje = ((precio - activo.precioCompra) / activo.precioCompra) * 100;
+                activo.ultimaActualizacion = new Date().toISOString();
+                activo.fuente = activo.tipo === 'cripto' ? 'coingecko' : 'alpha-vantage';
             }
-
-            // Recalculamos los valores de esa posición basados en el precio actual
-            activo.valorActual = activo.cantidad * activo.precioActual;
-            activo.ganancia = (activo.precioActual - activo.precioCompra) * activo.cantidad;
-            activo.gananciaPorcentaje = activo.precioCompra > 0 
-                ? ((activo.precioActual - activo.precioCompra) / activo.precioCompra) * 100 
-                : 0;
-            activo.ultimaActualizacion = new Date().toISOString();
+            
+            // Pequeño delay para no saturar APIs
+            await new Promise(r => setTimeout(r, 500));
         }
         
-        // Refrescamos toda la UI de Inversiones con los nuevos (o antiguos) valores
         window.calcularKPIsInversiones();
         window.renderizarInversiones();
         
         if (mostrarCarga) {
-            if (btcActualizado) {
-                notify('✅ Precio de BTC actualizado', 'success');
-            } else {
-                notify('✅ Carteras calculadas (Valores manuales)', 'success');
-            }
+            notify('✅ Precios actualizados', 'success');
         }
     } catch (e) {
-        console.error('Error actualizando la cartera:', e);
+        console.error('Error actualizando precios:', e);
         if (mostrarCarga) {
-            notify('❌ Error procesando la cartera', 'error');
+            notify('❌ Error al actualizar precios', 'error');
         }
     }
 };
@@ -11414,6 +11448,107 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 800);
 });
 
+// ── MÓDULO 5: ACTUALIZACIÓN AUTOMÁTICA DE PRECIOS (LIVE) ──────────────
+window.actualizarPreciosAutomatico = async function() {
+  const posiciones = window.datosCartera || [];
+  if (posiciones.length === 0) {
+    notify("No hay posiciones en cartera", "warning");
+    return;
+  }
+
+  const btn = document.getElementById('btn-precios-live');
+  const icon = document.getElementById('precios-live-icon');
+  if (btn) btn.style.opacity = '0.5';
+  if (icon) icon.textContent = '⏳';
+  notify("Consultando precios de mercado...", "loading");
+
+  const bolsa  = posiciones.filter(p => p.tipo === 'BOLSA' || p.tipo === 'FONDO');
+  const cripto = posiciones.filter(p => p.tipo === 'CRIPTO');
+
+  let actualizados = 0;
+  let errores = 0;
+
+  // Detectar base URL del API (funciona tanto en localhost como en producción)
+  const apiBase = window.location.origin;
+
+  try {
+    // ── Bolsa / Fondos vía Yahoo Finance proxy ──────────────────────────
+    if (bolsa.length > 0) {
+      const tickers = bolsa.map(p => p.ticker).filter(Boolean).join(',');
+      if (tickers) {
+        try {
+          const resp = await fetch(`${apiBase}/api/precios/bolsa?tickers=${encodeURIComponent(tickers)}`);
+          if (resp.ok) {
+            const { precios } = await resp.json();
+            bolsa.forEach(pos => {
+              const precio = precios[pos.ticker.toUpperCase()];
+              if (precio && precio > 0) {
+                pos.precioActual = precio;
+                actualizados++;
+              } else {
+                errores++;
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Error precios bolsa:", e);
+          errores += bolsa.length;
+        }
+      }
+    }
+
+    // ── Cripto vía CoinGecko proxy ──────────────────────────────────────
+    if (cripto.length > 0) {
+      const tickers = cripto.map(p => p.ticker).filter(Boolean).join(',');
+      if (tickers) {
+        try {
+          const resp = await fetch(`${apiBase}/api/precios/cripto?tickers=${encodeURIComponent(tickers)}`);
+          if (resp.ok) {
+            const { precios } = await resp.json();
+            cripto.forEach(pos => {
+              const precio = precios[pos.ticker.toUpperCase()];
+              if (precio && precio > 0) {
+                pos.precioActual = precio;
+                actualizados++;
+              } else {
+                errores++;
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Error precios cripto:", e);
+          errores += cripto.length;
+        }
+      }
+    }
+  } finally {
+    if (btn) btn.style.opacity = '1';
+    if (icon) icon.textContent = '⚡';
+  }
+
+  if (actualizados === 0 && errores === 0) {
+    notify("No hay tickers BOLSA/CRIPTO configurados", "warning");
+    return;
+  }
+
+  // Recalcular y renderizar con los nuevos precios
+  if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+  if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
+
+  // Guardar automáticamente si hay conexión
+  if (typeof window.guardarUniversal === 'function') {
+    try { await window.guardarUniversal(); } catch(e) { /* silencioso */ }
+  }
+
+  if (errores > 0 && actualizados === 0) {
+    notify(`❌ Sin precios. Verifica los tickers (${errores} fallidos)`, "error");
+  } else if (errores > 0) {
+    notify(`⚡ ${actualizados} precios actualizados (${errores} no disponibles)`, "success");
+  } else {
+    notify(`✅ ${actualizados} precios actualizados en tiempo real`, "success");
+  }
+  if (typeof vibrar === 'function') vibrar('success');
+};
 // ── FIN MOTOR CARTERA ─────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(reg => {
