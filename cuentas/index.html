@@ -10337,19 +10337,36 @@ window.actualizarSelectCuentasCartera = function() {
     Object.keys(window.mapaCuentas).forEach(nombreCuenta => {
       const infoCta = window.mapaCuentas[nombreCuenta];
       if (String(infoCta.tipo).toUpperCase() === tipoSeleccionado) {
-        const saldoDisp = (infoCta.saldoActual || 0).toFixed(2);
+        // Obtenemos la liquidez total (dinero traspasado - dinero ya invertido)
+        const saldoDisp = window.obtenerLiquidezDisponibleCuenta(nombreCuenta);
         const opt = document.createElement('option');
         opt.value = nombreCuenta;
         opt.style.background = '#111';
-        // Mostramos el nombre y su saldo disponible (Liquidez)
-        opt.innerText = `${nombreCuenta} (Saldo Disp: ${saldoDisp}€)`;
+        opt.innerText = `${nombreCuenta} (Saldo: ${saldoDisp.toFixed(2)}€)`;
         selectCuentas.appendChild(opt);
       }
     });
   }
 };
 
-// 3. PREVIEW EN TIEMPO REAL (P&L)
+// 3. FUNCIÓN PARA OBTENER LIQUIDEZ DISPONIBLE (LÍMITE INVERSIÓN)
+window.obtenerLiquidezDisponibleCuenta = function(nombreCuenta) {
+    // 1. Saldo actual según el libro mayor de movimientos
+    const infoCta = window.mapaCuentas[nombreCuenta];
+    let liquidez = infoCta ? (infoCta.saldoActual || 0) : 0;
+    
+    // 2. Restamos todo lo que ya está invertido en activos de esa misma cuenta
+    if (window.datosCartera) {
+        window.datosCartera.forEach(pos => {
+            if (pos.cuenta === nombreCuenta) {
+                liquidez -= (pos.cantidad * pos.precioCompra);
+            }
+        });
+    }
+    return liquidez;
+};
+
+// 4. PREVIEW EN TIEMPO REAL (P&L)
 window.actualizarPreviewPnl = function() {
   const previewBox = document.getElementById('preview-pnl-cartera');
   const previewVal = document.getElementById('preview-pnl-valor');
@@ -10384,7 +10401,7 @@ window.actualizarPreviewPnl = function() {
   }
 };
 
-// 4. GUARDAR POSICIÓN (CON VALIDACIÓN DE TOPE DE INVERSIÓN)
+// 5. GUARDAR POSICIÓN (CON VALIDACIÓN DE TOPE DE INVERSIÓN)
 window.guardarPosicion = async function() {
   const idEdit = document.getElementById('cartera-pos-id').value;
   const tipo = document.getElementById('cartera-tipo').value;
@@ -10402,12 +10419,10 @@ window.guardarPosicion = async function() {
   const importeAInvertir = cantidad * pCompra;
 
   // VALIDACIÓN ESTRICTA: Tope de Inversión
-  // Calculamos cuánto dinero libre (Liquidez) hay realmente en esa cuenta del broker
-  const infoCta = window.mapaCuentas[cuentaStr];
-  let liquidezCuenta = infoCta ? (infoCta.saldoActual || 0) : 0;
+  // Calculamos la liquidez base disponible en la cuenta
+  let liquidezCuenta = window.obtenerLiquidezDisponibleCuenta(cuentaStr);
 
-  // Si estamos editando, le "devolvemos" temporalmente la liquidez que ya había consumido esta posición
-  // para poder comparar correctamente si el nuevo importe cabe.
+  // Si estamos editando, le "devolvemos" a la liquidez calculada lo que la posición actual ya había ocupado
   if (idEdit) {
      const posAnterior = window.datosCartera.find(p => p.id === idEdit);
      if (posAnterior && posAnterior.cuenta === cuentaStr) {
@@ -10415,13 +10430,13 @@ window.guardarPosicion = async function() {
      }
   }
 
-  // Verificamos si hay suficiente saldo
-  if (importeAInvertir > liquidezCuenta) {
-      window.notify(`⚠️ Tope excedido. Inversión: ${importeAInvertir.toFixed(2)}€ | Saldo en ${cuentaStr}: ${liquidezCuenta.toFixed(2)}€`, "error");
-      return; // Cortamos el guardado
+  // Verificamos si hay suficiente saldo para cubrir el coste total
+  if (importeAInvertir > (liquidezCuenta + 0.05)) { // 0.05 de holgura para posibles redondeos
+      window.notify(`⚠️ Fondos Insuficientes. Inversión: ${importeAInvertir.toFixed(2)}€ | Saldo Disp.: ${liquidezCuenta.toFixed(2)}€`, "error");
+      return; 
   }
 
-  const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || pCompra; // Por defecto el de compra
+  const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || pCompra; 
 
   const nuevaPos = {
     id: idEdit || uuid(),
@@ -10447,16 +10462,16 @@ window.guardarPosicion = async function() {
   window.cerrarModalCartera();
   window.notify("✅ Posición guardada", "success");
   
-  // Guardamos en la nube
+  // Guardado Universal se encarga de llamar a calcularValoresCartera() internamente
   if (typeof window.guardarUniversal === 'function') {
     window.toggleBotonCarga('btn-guardar', true);
     await window.guardarUniversal();
     window.toggleBotonCarga('btn-guardar', false);
+  } else {
+      // Fallback
+      if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+      window.renderizarCartera();
   }
-  
-  // Refrescamos todo
-  if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-  window.renderizarCartera();
 };
 
 window.borrarPosicion = async function(id) {
@@ -10468,13 +10483,14 @@ window.borrarPosicion = async function(id) {
         window.toggleBotonCarga('btn-guardar', true);
         await window.guardarUniversal();
         window.toggleBotonCarga('btn-guardar', false);
+    } else {
+         if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+         window.renderizarCartera();
     }
-    if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-    window.renderizarCartera();
     window.notify("🗑️ Posición eliminada", "success");
 };
 
-// 5. RENDERIZADO VISUAL DE LA PESTAÑA CARTERA
+// 6. RENDERIZADO VISUAL DE LA PESTAÑA CARTERA
 window.renderizarCartera = function() {
   const tbody = document.getElementById('lista-posiciones-cartera');
   if (!tbody) return;
@@ -10483,7 +10499,6 @@ window.renderizarCartera = function() {
     document.getElementById('cartera-sin-datos').style.display = 'block';
     document.getElementById('card-posiciones').style.display = 'none';
     
-    // Reset KPIs
     document.getElementById('inv-total-valor').innerText = "0,00 €";
     document.getElementById('inv-total-pnl').innerText = "0,00 €";
     document.getElementById('inv-coste-total').innerText = "0,00 €";
@@ -10514,7 +10529,6 @@ window.renderizarCartera = function() {
     let costeCta = 0;
     let valorCta = 0;
     
-    // Calculamos totales de la cuenta primero
     agrupadoPorCta[cta].forEach(p => {
       costeCta += (p.cantidad * p.precioCompra);
       valorCta += (p.cantidad * p.precioActual);
@@ -10533,7 +10547,6 @@ window.renderizarCartera = function() {
       </div>
     `;
 
-    // Posiciones de la cuenta
     agrupadoPorCta[cta].forEach(pos => {
       const costePos = pos.cantidad * pos.precioCompra;
       const valorPos = pos.cantidad * pos.precioActual;
@@ -10543,7 +10556,6 @@ window.renderizarCartera = function() {
       const claseColor = pnlPos >= 0 ? 'pos' : 'neg';
       const signo = pnlPos > 0 ? '+' : '';
 
-      // Badge Tipo
       let badgeClass = 'badge-bolsa';
       if(pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'CRIPTO') badgeClass = 'badge-cripto';
       if(pos.tipo === 'AUTOCUSTODIA') badgeClass = 'badge-custodia';
@@ -10570,7 +10582,7 @@ window.renderizarCartera = function() {
 
   tbody.innerHTML = htmlFinal;
 
-  // Actualizar KPIs Superiores
+  // Actualizar KPIs
   const pnlGlobal = valorTotalGlobal - costeTotalGlobal;
   const pctGlobal = costeTotalGlobal > 0 ? (pnlGlobal / costeTotalGlobal) * 100 : 0;
 
@@ -10581,18 +10593,14 @@ window.renderizarCartera = function() {
       elPnl.innerText = (pnlGlobal > 0 ? '+' : '') + fmtEur.format(pnlGlobal);
       elPnl.style.color = pnlGlobal >= 0 ? '#39FF14' : '#FF2E4D';
   }
-  
   window.animarCifra('inv-coste-total', costeTotalGlobal, 'moneda');
-  
   const elRent = document.getElementById('inv-rent-total');
   if (elRent) {
       window.animarCifra('inv-rent-total', pctGlobal, 'porcentaje');
       elRent.style.color = pctGlobal >= 0 ? '#39FF14' : '#FF2E4D';
   }
-
   document.getElementById('inv-num-pos').innerText = window.datosCartera.length;
 
-  // Sincronizar tarjeta del Dashboard Inicial si existe
   const cardDash = document.getElementById('card-cartera-dashboard');
   if(cardDash) {
       cardDash.style.display = 'block';
@@ -10611,38 +10619,35 @@ window.renderizarCartera = function() {
   }
 };
 
-// 6. MAGIA: API BINANCE (PRECIOS LIVE DE BITCOIN)
+// 7. MAGIA: API BINANCE (PRECIOS LIVE DE BITCOIN)
 window.actualizarPreciosAutomatico = async function() {
   const btn = document.getElementById('btn-precios-live');
-  const icon = document.getElementById('precios-live-icon');
-  
   if(!btn) return;
   const originalHtml = btn.innerHTML;
   btn.innerHTML = `<span class="material-icons" style="font-size:12px; animation: spin 1s linear infinite;">sync</span> CONSULTANDO...`;
   btn.style.pointerEvents = 'none';
 
   try {
-    // Solo tocamos las que sean BTC en Cripto/Autocustodia
+    // Buscar posiciones válidas para actualizar (Categoría Crypto/Autocustodia y Ticker asociado a BTC)
     const posicionesBTC = window.datosCartera.filter(p => 
-        (p.tipo === 'CRIPTO' || p.tipo === 'CRIPTOMONEDAS' || p.tipo === 'AUTOCUSTODIA') && 
+        (p.tipo === 'CRIPTOMONEDAS' || p.tipo === 'CRIPTO' || p.tipo === 'AUTOCUSTODIA') && 
         (p.ticker === 'BTC' || p.ticker === 'BTCEUR' || p.nombre.toUpperCase().includes('BITCOIN'))
     );
 
     if (posicionesBTC.length === 0) {
-        window.notify("No hay posiciones de BTC/Cripto para actualizar.", "warning");
+        window.notify("No hay posiciones de BTC para actualizar.", "warning");
         return;
     }
 
-    // Llamada pública a Binance
+    // Llamada API Binance
     const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCEUR');
     if (!response.ok) throw new Error("Fallo API Binance");
     const data = await response.json();
     const precioLiveBTC = parseFloat(data.price);
 
     let cambiadas = 0;
-    // Actualizar las posiciones localmente
     posicionesBTC.forEach(p => {
-        if (Math.abs(p.precioActual - precioLiveBTC) > 0.01) { // Solo si hay diferencia
+        if (Math.abs(p.precioActual - precioLiveBTC) > 0.01) { 
             p.precioActual = precioLiveBTC;
             cambiadas++;
         }
@@ -10650,12 +10655,12 @@ window.actualizarPreciosAutomatico = async function() {
 
     if (cambiadas > 0) {
         window.notify(`✅ Precios BTC actualizados a ${precioLiveBTC.toFixed(2)}€`, "success");
-        // Refrescar Pestaña Cartera Visualmente
-        window.renderizarCartera();
-        
-        // ¡Opcional! Guardado en la nube silencioso para fijar el precio
+        // Forzamos guardado para consolidar los nuevos precios y actualizar P&L global
         if (typeof window.guardarUniversal === 'function') {
-            window.guardarUniversal(); 
+            await window.guardarUniversal(); 
+        } else {
+             if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+             window.renderizarCartera();
         }
     } else {
          window.notify("✅ Precios ya estaban al día", "success");
@@ -10668,6 +10673,26 @@ window.actualizarPreciosAutomatico = async function() {
     btn.innerHTML = originalHtml;
     btn.style.pointerEvents = 'auto';
   }
+};
+
+// 8. CONSOLIDADOR DE VALORES CARTERA -> PATRIMONIO
+window.calcularValoresCartera = function() {
+    if (!window.datosCartera || window.datosCartera.length === 0) return;
+    
+    // Obtenemos el valor real de mercado sumando todas las posiciones por cuenta
+    const valorMercadoPorCuenta = {};
+    window.datosCartera.forEach(pos => {
+        if(!valorMercadoPorCuenta[pos.cuenta]) valorMercadoPorCuenta[pos.cuenta] = 0;
+        valorMercadoPorCuenta[pos.cuenta] += (pos.cantidad * pos.precioActual);
+    });
+
+    // Sobreescribimos el saldo de la cuenta en el mapa principal, añadiéndole la liquidez que no está invertida
+    Object.keys(valorMercadoPorCuenta).forEach(cta => {
+        if (window.mapaCuentas[cta]) {
+            const liquidezLibre = window.obtenerLiquidezDisponibleCuenta(cta);
+            window.mapaCuentas[cta].saldoActual = liquidezLibre + valorMercadoPorCuenta[cta];
+        }
+    });
 };
 
 </script>
