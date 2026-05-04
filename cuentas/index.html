@@ -10357,28 +10357,61 @@ window.cerrarModalCartera = function() {
 // 2. CONTROL DINÁMICO DEL FORMULARIO SEGÚN TIPO ACTIVO
 window.comportamientoTipoActivo = function() {
     const tipo = document.getElementById('cartera-tipo').value;
+    const inputTicker = document.getElementById('cartera-ticker');
     const inputPrecioActual = document.getElementById('cartera-precio-actual');
     const labelPrecioActual = document.getElementById('label-precio-actual');
     const avisoApi = document.getElementById('aviso-precio-api');
-    const inputTicker = document.getElementById('cartera-ticker');
 
-    // Si es BTC (Cripto o Autocustodia)
+    // 1. Detectamos si es BTC (Criptomonedas o Autocustodia)
     if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
-        if (!inputTicker.value) inputTicker.value = 'BTC'; // Autocompletar el ticker
+        // Autocompletamos el Ticker
+        if (inputTicker) inputTicker.value = 'BTC';
         
-        labelPrecioActual.innerText = 'PRECIO ACTUAL (€) ← AUTO (BINANCE)';
-        labelPrecioActual.style.color = '#0A84FF'; // Azul para indicar automatización
-        inputPrecioActual.readOnly = true; // Bloqueamos escritura manual
-        avisoApi.style.display = 'block';
+        // Modificamos la UI para indicar que es automático
+        if (labelPrecioActual) {
+            labelPrecioActual.innerText = 'PRECIO ACTUAL (€) ← AUTO (BINANCE)';
+            labelPrecioActual.style.color = '#0A84FF'; // Azul tecnológico
+        }
+        if (avisoApi) avisoApi.style.display = 'block';
         
-        // Llamada a la API
-        obtenerPrecioBinance('BTCEUR', inputPrecioActual);
+        // Bloqueamos el input manual y mostramos estado de carga
+        inputPrecioActual.readOnly = true;
+        inputPrecioActual.value = 'Cargando...';
+
+        // 2. Conectamos con la API pública de Binance para el par BTCEUR
+        fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCEUR')
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.price) {
+                    inputPrecioActual.value = parseFloat(data.price).toFixed(2);
+                    
+                    // 3. Forzamos el recálculo matemático de la plusvalía
+                    if (typeof window.actualizarPreviewPnl === 'function') {
+                        window.actualizarPreviewPnl();
+                    }
+                }
+            })
+            .catch(err => {
+                console.error('Error al obtener precio de Binance:', err);
+                inputPrecioActual.value = '';
+                inputPrecioActual.readOnly = false; // Lo devolvemos a manual si falla la red
+                if (typeof window.notify === 'function') {
+                    window.notify('Fallo al conectar con Binance. Introduce el precio manual.', 'error');
+                }
+            });
+            
     } else {
-        // Resto de activos (Bolsa, etc.) vuelven a modo manual
-        labelPrecioActual.innerText = 'PRECIO ACTUAL (€) ← MANUAL';
-        labelPrecioActual.style.color = '#39FF14'; 
+        // 4. Si es cualquier otro activo (Bolsa, Plan de pensiones, etc.), restauramos el modo manual
+        if (labelPrecioActual) {
+            labelPrecioActual.innerText = 'PRECIO ACTUAL (€) ← MANUAL';
+            labelPrecioActual.style.color = '#39FF14'; // Verde neón original
+        }
+        if (avisoApi) avisoApi.style.display = 'none';
+        
         inputPrecioActual.readOnly = false;
-        avisoApi.style.display = 'none';
+        
+        // Si quieres que al cambiar a Bolsa se borre el "BTC", puedes descomentar esto:
+        // if (inputTicker && inputTicker.value === 'BTC') inputTicker.value = '';
     }
 };
 
