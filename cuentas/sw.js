@@ -40,8 +40,18 @@ self.addEventListener('fetch', e => {
     const url = e.request.url;
     
     // 🛑 REGLA 1: Llamadas a la nube NUNCA se cachean (Microsoft y Graph)
-    if (url.includes('graph.microsoft.com') || url.includes('login.microsoftonline.com') || url.includes('login.live.com') || url.includes('msauth') || url.includes('login.microsoft.com')) {
-        return; // Deja pasar a la red nativamente
+    if (
+        url.includes('graph.microsoft.com') || 
+        url.includes('login.microsoftonline.com') || 
+        url.includes('login.live.com') || 
+        url.includes('msauth') || 
+        url.includes('alcdn.msauth.net') ||  // MSAL library auth calls
+        url.includes('login.microsoft.com') ||
+        url.includes('api.binance.com') ||   // API de precios en tiempo real
+        url.includes('api.coingecko.com') || // API de precios crypto
+        url.includes('www.alphavantage.co')  // API de precios acciones
+    ) {
+        return; // Deja pasar a la red nativamente (datos en tiempo real / auth)
     }
     
     // 🟢 REGLA 2: Stale-While-Revalidate (La app vuela y se actualiza en la sombra)
@@ -54,11 +64,15 @@ self.addEventListener('fetch', e => {
                 }
                 return networkResponse;
             }).catch(() => {
-                // Si falla la red, no pasa nada si ya tenemos la caché
+                // Si falla la red y no hay caché, devolver respuesta offline
+                return new Response('Sin conexión', { 
+                    status: 503, 
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+                });
             });
             
             // Devuelve la caché de inmediato si existe, si no, espera a la red
-            return cachedResponse || fetchPromise.then(res => res || new Response('Sin conexión', { status: 503 }));
+            return cachedResponse || fetchPromise;
         })
     );
 });
