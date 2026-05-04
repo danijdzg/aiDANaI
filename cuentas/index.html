@@ -2807,10 +2807,10 @@ Ahora no
         <input type="text" id="cartera-nombre" placeholder="Apple Inc..." style="font-size:16px;">
       </div>
       
-      <!-- CANTIDAD (Admite 6 decimales) -->
+      <!-- CANTIDAD (Admite 9 decimales) -->
       <div class="precio-input-wrap">
         <label>CANTIDAD / UNIDADES</label>
-        <input type="number" id="cartera-cantidad" placeholder="0.000000" step="0.000001" inputmode="decimal" style="font-size:20px;" oninput="window.recalcularPrecioSiAplica()">
+        <input type="number" id="cartera-cantidad" placeholder="0.000000000" step="0.000000001" inputmode="decimal" style="font-size:20px;" oninput="window.recalcularPrecioSiAplica()">
       </div>
       
       <div class="precio-input-wrap">
@@ -10355,6 +10355,8 @@ window.cerrarModalCartera = function() {
 };
 
 // 2. CONTROL DINÁMICO DEL FORMULARIO SEGÚN TIPO ACTIVO
+window.precioActualBTC = 0; // Guardamos el precio unitario en memoria
+
 window.comportamientoTipoActivo = function() {
     const tipo = document.getElementById('cartera-tipo').value;
     const inputTicker = document.getElementById('cartera-ticker');
@@ -10362,57 +10364,43 @@ window.comportamientoTipoActivo = function() {
     const labelPrecioActual = document.getElementById('label-precio-actual');
     const avisoApi = document.getElementById('aviso-precio-api');
 
-    // 1. Detectamos si es BTC (Criptomonedas o Autocustodia)
     if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
-        // Autocompletamos el Ticker
         if (inputTicker) inputTicker.value = 'BTC';
         
-        // Modificamos la UI para indicar que es automático
-        if (labelPrecioActual) {
-            labelPrecioActual.innerText = 'PRECIO ACTUAL (€) ← AUTO (BINANCE)';
-            labelPrecioActual.style.color = '#0A84FF'; // Azul tecnológico
-        }
-        if (avisoApi) avisoApi.style.display = 'block';
+        labelPrecioActual.innerText = 'PRECIO ACTUAL 1 BTC (€) ← AUTO';
+        labelPrecioActual.style.color = '#0A84FF'; // Azul tecnológico
+        inputPrecioActual.readOnly = true; // Bloqueamos escritura
+        avisoApi.style.display = 'block';
         
-        // Bloqueamos el input manual y mostramos estado de carga
-        inputPrecioActual.readOnly = true;
-        inputPrecioActual.value = 'Cargando...';
-
-        // 2. Conectamos con la API pública de Binance para el par BTCEUR
-        fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCEUR')
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.price) {
-                    inputPrecioActual.value = parseFloat(data.price).toFixed(2);
-                    
-                    // 3. Forzamos el recálculo matemático de la plusvalía
-                    if (typeof window.actualizarPreviewPnl === 'function') {
-                        window.actualizarPreviewPnl();
-                    }
-                }
-            })
-            .catch(err => {
-                console.error('Error al obtener precio de Binance:', err);
-                inputPrecioActual.value = '';
-                inputPrecioActual.readOnly = false; // Lo devolvemos a manual si falla la red
-                if (typeof window.notify === 'function') {
-                    window.notify('Fallo al conectar con Binance. Introduce el precio manual.', 'error');
-                }
-            });
-            
+        obtenerPrecioBinance('BTCEUR', inputPrecioActual);
     } else {
-        // 4. Si es cualquier otro activo (Bolsa, Plan de pensiones, etc.), restauramos el modo manual
-        if (labelPrecioActual) {
-            labelPrecioActual.innerText = 'PRECIO ACTUAL (€) ← MANUAL';
-            labelPrecioActual.style.color = '#39FF14'; // Verde neón original
-        }
-        if (avisoApi) avisoApi.style.display = 'none';
-        
+        labelPrecioActual.innerText = 'PRECIO ACTUAL UNIDAD (€) ← MANUAL';
+        labelPrecioActual.style.color = '#39FF14'; 
         inputPrecioActual.readOnly = false;
-        
-        // Si quieres que al cambiar a Bolsa se borre el "BTC", puedes descomentar esto:
-        // if (inputTicker && inputTicker.value === 'BTC') inputTicker.value = '';
+        avisoApi.style.display = 'none';
     }
+};
+
+window.obtenerPrecioBinance = async function(par, inputElement) {
+    try {
+        inputElement.value = "Cargando...";
+        const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${par}`);
+        const data = await response.json();
+        
+        if (data && data.price) {
+            window.precioActualBTC = parseFloat(data.price);
+            inputElement.value = window.precioActualBTC.toFixed(2);
+            window.actualizarPreviewPnl(); 
+        }
+    } catch (error) {
+        console.error("Fallo la API de Binance:", error);
+        inputElement.value = "0.00";
+        if (typeof notify === 'function') notify("Error conectando con Binance", "error");
+    }
+};
+
+window.recalcularPrecioSiAplica = function() {
+    window.actualizarPreviewPnl();
 };
 
 window.obtenerPrecioBinance = async function(par, inputElement) {
@@ -11995,20 +11983,24 @@ window.actualizarPreviewPnl = function() {
     const divValor = document.getElementById('preview-pnl-valor');
     const divPct = document.getElementById('preview-pnl-pct');
 
-    // Solo calculamos si hay datos suficientes
-    if (cantidad > 0 && precioCompra > 0 && precioActual > 0) {
+    if (cantidad > 0 && precioActual > 0) {
         const costeTotalInvertido = cantidad * precioCompra;
-        const valorMercadoActual = cantidad * precioActual;
+        const valorMercadoActual = cantidad * precioActual; // Aquí multiplicamos Cantidad * BTC/Eur
         
-        // Matemáticas puras de la plusvalía
         const pnl = valorMercadoActual - costeTotalInvertido;
-        const pct = (pnl / costeTotalInvertido) * 100;
-
-        // Pintado Neón en la UI
-        divValor.innerText = pnl > 0 ? `+${pnl.toFixed(2)} €` : `${pnl.toFixed(2)} €`;
-        divValor.style.color = pnl >= 0 ? '#39FF14' : '#FF2E4D';
+        let pct = 0;
         
-        divPct.innerText = pnl > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`;
+        if (costeTotalInvertido > 0) {
+            pct = (pnl / costeTotalInvertido) * 100;
+        }
+
+        // Mostramos el Valor Total y el beneficio/pérdida
+        divValor.innerHTML = `
+            <div style="font-size:14px; color:#fff; font-weight:700;">Valor Total: ${valorMercadoActual.toFixed(2)} €</div>
+            <div style="color:${pnl >= 0 ? '#39FF14' : '#FF2E4D'}; margin-top:4px;">PNL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} €</div>
+        `;
+        
+        divPct.innerText = pnl >= 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`;
         divPct.style.color = pnl >= 0 ? '#39FF14' : '#FF2E4D';
         
         cajaPreview.style.display = 'block';
