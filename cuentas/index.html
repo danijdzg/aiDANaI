@@ -8793,45 +8793,46 @@ btnNo.onclick = () => cerrar(false);
 };
 // === INICIO LÓGICA UNIFICADA RECURRENTES ===
 window.alternarRecurrenteUnificado = function() {
-const estaMarcado = document.getElementById('m-es-recurrente').checked;
-const panelOpciones = document.getElementById('m-opciones-recurrente');
-panelOpciones.style.display = estaMarcado ? 'block' : 'none';
+    const estaMarcado = document.getElementById('m-es-recurrente').checked;
+    const panelOpciones = document.getElementById('m-opciones-recurrente');
+    if (panelOpciones) panelOpciones.style.display = estaMarcado ? 'block' : 'none';
 };
+
 window.alternarDiasDiarioUnificado = function() {
-const frecuencia = document.getElementById('m-frecuencia-recurrente').value;
-const cajaDias = document.getElementById('m-dias-semana-box');
-cajaDias.style.display = (frecuencia === 'Diario') ? 'block' : 'none';
+    const frecuencia = document.getElementById('m-frecuencia-recurrente').value;
+    const cajaDias = document.getElementById('m-dias-semana-box');
+    if (cajaDias) cajaDias.style.display = (frecuencia === 'Diario') ? 'block' : 'none';
 };
+
 window.guardarComoRecurrenteUnificado = async function() {
-const tipo = window.modoTransaccionActual || 'gasto';
-const frec = document.getElementById('m-frecuencia-recurrente').value;
-const fecha = document.getElementById('m-fecha').value;
-const cta = document.getElementById('m-cuenta').value;
-const elDestino = document.getElementById('m-cuenta-destino');
-const ctaDest = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
-const conc = document.getElementById('m-concepto').value;
-const benef = document.getElementById('m-beneficiario').value;
-const desc = document.getElementById('m-desc').value;
-const idEdit = document.getElementById('m-id').value; // <-- Capturamos si estamos editando
-let impRaw = document.getElementById('m-cantidad').value || "";
-impRaw = impRaw.replace('€', '').replace(',', '.').trim();
-let imp = parseFloat(impRaw);
-if(!fecha) throw new Error("❌ Falta la FECHA");
-if(!cta) throw new Error("❌ Selecciona una CUENTA");
-if(tipo === 'traspaso' && !ctaDest) throw new Error("❌ Selecciona CUENTA DESTINO");
-if(!conc && tipo !== 'traspaso') throw new Error("❌ Falta el CONCEPTO");
-if(isNaN(imp) || imp === 0) throw new Error("❌ Importe no válido");
-imp = Math.abs(imp);
-// Gastos en negativo, Ingresos y Traspasos en positivo
-let importeGuardar = (tipo === 'gasto' || tipo === 'pago') ? -imp : imp;
-let diasStr = "";
-if (frec === 'Diario') {
-const checks = document.querySelectorAll('.chk-dia-unificado:checked');
-const dias = Array.from(checks).map(c => c.value);
-if (dias.length === 0) throw new Error("❌ Selecciona al menos un día");
-diasStr = dias.join(',');
-}
-if (!window.datosRecurrentes) window.datosRecurrentes = [];
+    const idEdit = document.getElementById('m-id').value;
+    const importeStr = document.getElementById('m-cantidad').value;
+    const fecha = document.getElementById('m-fecha').value;
+    const cta = document.getElementById('m-cuenta').value;
+    const ctaDest = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
+    const conc = document.getElementById('m-concepto').value;
+    const benef = document.getElementById('m-beneficiario').value;
+    const desc = document.getElementById('m-desc').value;
+    const frec = document.getElementById('m-frecuencia-recurrente').value;
+    
+    let diasStr = '';
+    if (frec === 'Diario') {
+        const checks = document.querySelectorAll('.chk-dia-unificado:checked');
+        diasStr = Array.from(checks).map(c => c.value).join(',');
+    }
+
+    if (!importeStr || !fecha || !cta || !conc) {
+        throw new Error("Rellena los campos obligatorios para la regla");
+    }
+
+    let importeNum = parseFloat(importeStr.replace('€', '').replace(',', '.').trim());
+    if (isNaN(importeNum) || importeNum === 0) throw new Error("Importe inválido");
+
+    let tipo = window.modoTransaccionActual || 'gasto';
+    let importeGuardar = tipo === 'gasto' ? -Math.abs(importeNum) : Math.abs(importeNum);
+
+    if (!window.datosRecurrentes) window.datosRecurrentes = [];
+    
     const reglaObj = {
         id: idEdit || ('REC-' + Date.now()), 
         fechaProx: fecha,
@@ -8846,7 +8847,6 @@ if (!window.datosRecurrentes) window.datosRecurrentes = [];
         importe: importeGuardar
     };
 
-    // Actualizar si es edición, o añadir si es nuevo
     if (idEdit) {
         const idx = window.datosRecurrentes.findIndex(r => r.id === idEdit);
         if (idx !== -1) {
@@ -8859,7 +8859,7 @@ if (!window.datosRecurrentes) window.datosRecurrentes = [];
     }
 
     await guardarTodoConRecurrentes();
-    cerrarModal();
+    if(typeof cerrarModal === 'function') cerrarModal();
     notify("✅ Regla fija guardada", "success");
     if(typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 };
