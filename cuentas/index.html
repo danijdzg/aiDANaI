@@ -12230,38 +12230,97 @@ window.editarPosicion = function(id) {
 
 
 window.guardarPosicion = async function() {
-  const idExist = document.getElementById('cartera-pos-id').value;
-  const ticker  = (document.getElementById('cartera-ticker').value || '').trim().toUpperCase();
-  const nombre  = (document.getElementById('cartera-nombre').value || '').trim();
-  if (!ticker && !nombre) { notify('Introduce un ticker o nombre', 'warning'); return; }
-  const cantidad   = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
-  const pCompra    = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-  const pActual    = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
-  if (cantidad <= 0)  { notify('La cantidad debe ser mayor que 0', 'warning'); return; }
-  if (pActual <= 0)   { notify('Introduce el precio actual', 'warning'); return; }
+    const id = document.getElementById('cartera-pos-id').value;
+    const tipo = document.getElementById('cartera-tipo').value;
+    const cuenta = document.getElementById('cartera-cuenta').value;
+    const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
+    const nombre = document.getElementById('cartera-nombre').value;
+    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value);
+    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value);
+    const pActual = parseFloat(document.getElementById('cartera-precio-actual').value);
+    const fecha = document.getElementById('cartera-fecha-compra').value;
+    const notas = document.getElementById('cartera-notas').value;
 
-	  const pos = {
-	    id:           idExist || uuid(),
-	    ticker, nombre,
-	    tipo:         document.getElementById('cartera-tipo').value || 'OTRO',
-	    cuenta:       document.getElementById('cartera-cuenta').value || '',
-	    cantidad, precioCompra: pCompra, precioActual: pActual,
-        fechaCompra:  document.getElementById('cartera-fecha-compra').value || '',
-	    notas:        document.getElementById('cartera-notas').value || ''
-	  };
+    // Validación defensiva básica (Ya existía)
+    if(!tipo || !ticker || isNaN(cantidad) || isNaN(pCompra) || isNaN(pActual)) {
+        window.mostrarToast("Completa los campos vitales (Tipo, Ticker, Cantidad y Precios)", "error");
+        return;
+    }
 
-  window.datosCartera = window.datosCartera || [];
-  const idx = window.datosCartera.findIndex(p => p.id === pos.id);
-  if (idx > -1) window.datosCartera[idx] = pos;
-  else          window.datosCartera.push(pos);
+    // 👇 --- INICIO DEL NUEVO CONTROL DE SALDO INVERTIDO --- 👇
+    if (cuenta) {
+        // 1. Calcular el dinero total aportado a esta cuenta (según el diario de movimientos)
+        let dineroAportado = 0;
+        if (window.datos) {
+            window.datos.forEach(m => {
+                if (m.cuenta === cuenta) {
+                    dineroAportado += parseFloat(m.importe) || 0;
+                }
+            });
+        }
 
-  window.calcularValoresCartera();
-  window.renderizarCartera();
-  window.cerrarModalCartera();
+        // 2. Calcular el coste de las posiciones YA guardadas en esta misma cuenta
+        let costeOtrasPosiciones = 0;
+        if (window.datosCartera) {
+            window.datosCartera.forEach(p => {
+                // Excluimos la posición actual si la estamos editando
+                if (p.cuenta === cuenta && p.id !== id) { 
+                    costeOtrasPosiciones += (parseFloat(p.cantidad) * parseFloat(p.precioCompra)) || 0;
+                }
+            });
+        }
 
-  if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-  notify('✅ Posición guardada', 'success');
-  if (typeof vibrar === 'function') vibrar('ingreso');
+        // 3. Coste de la posición que intentas guardar
+        const costeNuevaPosicion = cantidad * pCompra;
+
+        // 4. Verificación (Damos un margen de 0.05€ por si hay bailes de céntimos/decimales)
+        if ((costeOtrasPosiciones + costeNuevaPosicion) > (dineroAportado + 0.05)) {
+            const diferencia = (costeOtrasPosiciones + costeNuevaPosicion) - dineroAportado;
+            const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+            
+            // Lanzamos tu alerta roja en formato burbuja (Toast) bloqueando el guardado
+            window.mostrarToast(`❌ Límite excedido. Has aportado ${fmt.format(dineroAportado)} a la cuenta, pero intentas asignar ${fmt.format(costeOtrasPosiciones + costeNuevaPosicion)}. Faltan ${fmt.format(diferencia)}.`, "error");
+            return; 
+        }
+    }
+    // 👆 --- FIN DEL NUEVO CONTROL --- 👆
+
+    if (!window.datosCartera) window.datosCartera = [];
+
+    // UUID fallback si no existe
+    const generarId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`;
+
+    const posicion = {
+        id: id || generarId(),
+        tipo, cuenta, ticker, nombre, cantidad,
+        precioCompra: pCompra,
+        precioActual: pActual,
+        fechaCompra: fecha,
+        notas
+    };
+
+    if (id) {
+        const idx = window.datosCartera.findIndex(p => p.id === id);
+        if (idx > -1) window.datosCartera[idx] = posicion;
+        else window.datosCartera.push(posicion);
+    } else {
+        window.datosCartera.push(posicion);
+    }
+
+    window.cerrarModalCartera();
+    
+    // Cascada de actualización UI
+    window.calcularValoresCartera();
+    window.renderizarCartera();
+    if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
+    
+    // Sincronizar a la nube de manera blindada
+    if (typeof window.guardarUniversal === 'function') {
+        await window.guardarUniversal();
+    }
+    
+    window.mostrarToast(`Posición ${ticker} guardada`, "success");
+    if("vibrate" in navigator) navigator.vibrate(40);
 };
 
 // Guardar SOLO el precio actual (acceso rápido)
