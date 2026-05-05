@@ -9352,47 +9352,95 @@ window.guardarComoRecurrenteUnificado = async function() {
     if(typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 };
 // === FIN LÓGICA UNIFICADA RECURRENTES ===
-// --- FUNCIÓN MEJORADA: AGREGAR RECURRENTE (SIN ALERTAS ANTIGUAS) ---
+// --- FUNCIÓN MEJORADA: AGREGAR RECURRENTE (CON SOPORTE PARA TRASPASOS) ---
 window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
-// 1. Usar el nuevo modal Premium
-const confirmado = await window.pedirConfirmacion(
-"Añadir Gasto Fijo",
-"¿Quieres añadir este movimiento hoy y actualizar la fecha?",
-"📅"
-);
-if (!confirmado) return; // Si cancela, no hacemos nada.
-// 2. Buscar datos originales
-const regla = window.datosRecurrentes.find(r => r.id === idRecurrente);
-if (!regla) {
-notify("❌ Regla original perdida", "error");;
-return;
-}
-if(window.mostrarEstado) notify("⏳ Creando movimiento...", "loading");
-const nuevoMovimiento = {
-id: uuid(),
-fecha: new Date(fechaPrevista),
-cuenta: regla.cuenta,
-concepto: regla.concepto,
-importe: regla.importe,
-descripcion: regla.descripcion || "",
-beneficiario: regla.beneficiario || "",
-// ✅ FIX BUG-6A: ts ausente → recalcularSaldosGlobal no podía ordenar este
-// movimiento cronológicamente hasta la próxima recarga completa.
-ts: new Date(fechaPrevista + 'T12:00:00').getTime(),
-// ✅ FIX BUG-6B: Respetar el tipo original de la regla (igual que ejecutarRecurrente)
-tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto')
-};
-try {
-await window.guardarUniversal([nuevoMovimiento]);
-if(typeof calcularSiguienteFecha === 'function') {
-regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
-await guardarTodoConRecurrentes();
-cargarVistaRecurrentes();
-}
-} catch (e) {
-console.error(e);
-notify("❌ Error al procesar fijo", "error");;
-}
+    // 1. Usar el nuevo modal Premium
+    const confirmado = await window.pedirConfirmacion(
+        "Añadir Gasto Fijo",
+        "¿Quieres añadir este movimiento hoy y actualizar la fecha?",
+        "📅"
+    );
+    if (!confirmado) return; // Si cancela, no hacemos nada.
+
+    // 2. Buscar datos originales
+    const regla = window.datosRecurrentes.find(r => r.id === idRecurrente);
+    if (!regla) {
+        notify("❌ Regla original perdida", "error");
+        return;
+    }
+    
+    if(window.mostrarEstado) notify("⏳ Creando movimiento...", "loading");
+
+    // Función auxiliar para detectar el dueño (igual que en el resto de tu app)
+    const detectarDueno = (nombreCuenta) => {
+        const c = String(nombreCuenta).toUpperCase().trim();
+        if (c.startsWith("D-")) return "D";
+        if (c.startsWith("N-")) return "N";
+        return "DN";
+    };
+
+    const tsOperacion = new Date(fechaPrevista + 'T12:00:00').getTime();
+    let movimientosAGuardar = [];
+
+    const tipoReglaLimpio = String(regla.tipoRegla || '').toLowerCase().trim();
+    const destinoLimpio = String(regla.cuentaDestino || '').trim();
+
+    // 3. Lógica divisoria: Traspaso (2 movs) vs Gasto/Ingreso (1 mov)
+    if (tipoReglaLimpio === 'traspaso' || destinoLimpio.length > 1) {
+        // Movimiento 1: El dinero sale (Origen)
+        movimientosAGuardar.push({
+            id: uuid(),
+            fecha: new Date(fechaPrevista),
+            cuenta: regla.cuenta,
+            concepto: regla.concepto,
+            importe: -Math.abs(regla.importe), // Negativo
+            descripcion: `>> A: ${destinoLimpio} | ${regla.descripcion || ''}`,
+            beneficiario: detectarDueno(regla.cuenta),
+            ts: tsOperacion,
+            tipo: 'traspaso'
+        });
+
+        // Movimiento 2: El dinero entra (Destino)
+        movimientosAGuardar.push({
+            id: uuid(),
+            fecha: new Date(fechaPrevista),
+            cuenta: destinoLimpio,
+            concepto: regla.concepto,
+            importe: Math.abs(regla.importe), // Positivo
+            descripcion: `<< DE: ${regla.cuenta} | ${regla.descripcion || ''}`,
+            beneficiario: detectarDueno(destinoLimpio),
+            ts: tsOperacion,
+            tipo: 'traspaso'
+        });
+    } else {
+        // Movimiento Normal (Gasto o Ingreso)
+        movimientosAGuardar.push({
+            id: uuid(),
+            fecha: new Date(fechaPrevista),
+            cuenta: regla.cuenta,
+            concepto: regla.concepto,
+            importe: regla.importe,
+            descripcion: regla.descripcion || "",
+            beneficiario: regla.beneficiario || "",
+            ts: tsOperacion,
+            tipo: regla.tipoRegla || ((regla.importe >= 0) ? 'ingreso' : 'gasto')
+        });
+    }
+
+    try {
+        // Guardamos el array resultante (sea de 1 o de 2 movimientos)
+        await window.guardarUniversal(movimientosAGuardar);
+        
+        // Actualizamos la siguiente fecha de la regla
+        if(typeof calcularSiguienteFecha === 'function') {
+            regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
+            await guardarTodoConRecurrentes();
+            cargarVistaRecurrentes();
+        }
+    } catch (e) {
+        console.error(e);
+        notify("❌ Error al procesar fijo", "error");
+    }
 };
 (function initPWA() {
 'use strict';
