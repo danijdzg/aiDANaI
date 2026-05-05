@@ -10156,624 +10156,80 @@ btnFiltros.classList.add('filtros-activos');
 btnFiltros.classList.remove('filtros-activos');
 }
 };
+// ============================================================================
+// 📈 MÓDULO CARTERA DE INVERSIONES (VERSIÓN LIMPIA Y DEFINITIVA)
+// ============================================================================
 
+window.precioBTC_EUR_Cache = 0; // Caché del precio de Binance
 
-
-// ═══════════════════════════════════════════════════════════════
-// MÓDULO DE INVERSIONES - LÓGICA PRINCIPAL
-// ═══════════════════════════════════════════════════════════════
-
-// Inicializar estructura global
-window.carteraInversiones = {
-    activos: [],
-    kpis: {
-        valorTotalCartera: 0,
-        costoTotalInvertido: 0,
-        gananciaTotalAbsoluta: 0,
-        gananciaTotalPorcentaje: 0,
-        ultimaActualizacion: null,
-        porTipo: {}
-    },
-    historial: []
-};
-
-// Mapeo de tipos de activos
-const TIPOS_ACTIVOS = {
-    accion: { label: 'Acción', icon: '📈', color: '#0A84FF', apiProvider: 'alpha-vantage' },
-    etf: { label: 'ETF', icon: '📊', color: '#00B8FF', apiProvider: 'alpha-vantage' },
-    fondo: { label: 'Fondo', icon: '💼', color: '#39FF14', apiProvider: 'alpha-vantage' },
-    cripto: { label: 'Criptomoneda', icon: '₿', color: '#FFD60A', apiProvider: 'coingecko' }
-};
-
-// Mapeo de CoinGecko IDs
-const COINGECKO_IDS = {
-    'BTC': 'bitcoin', 'ETH': 'ethereum', 'BNB': 'binancecoin', 'XRP': 'ripple',
-    'ADA': 'cardano', 'SOL': 'solana', 'DOGE': 'dogecoin', 'USDT': 'tether',
-    'USDC': 'usd-coin', 'LTC': 'litecoin', 'LINK': 'chainlink', 'MATIC': 'matic-network'
-};
-
-// Función para cargar inversiones desde Excel
-window.cargarInversionesDesdeExcel = function(wb) {
-    try {
-        const wsInvName = wb.SheetNames.find(n => n.toUpperCase().includes('INVERSION'));
-        if (!wsInvName) {
-            console.log('No hay hoja de inversiones en el Excel');
-            return;
-        }
-        
-        const rawInv = XLSX.utils.sheet_to_json(wb.Sheets[wsInvName]);
-        window.carteraInversiones.activos = rawInv.map(r => ({
-            id: r.ID || generateUUID(),
-            ticker: String(r.TICKER || '').toUpperCase(),
-            tipo: String(r.TIPO || 'accion').toLowerCase(),
-            cantidad: parseFloat(r.CANTIDAD || 0),
-            precioCompra: parseFloat(r.PRECIO_COMPRA || 0),
-            fechaCompra: r.FECHA_COMPRA || '',
-            notas: r.NOTAS || '',
-            precioActual: 0,
-            valorActual: 0,
-            ganancia: 0,
-            gananciaPorcentaje: 0,
-            ultimaActualizacion: null,
-            fuente: null
-        }));
-        
-        console.log('Inversiones cargadas:', window.carteraInversiones.activos.length);
-    } catch (e) {
-        console.error('Error cargando inversiones:', e);
-    }
-};
-
-// Función para guardar inversiones en Excel
-window.guardarInversionesEnExcel = function(wb) {
-    try {
-        const activos = window.carteraInversiones.activos.map(a => ({
-            ID: a.id,
-            TICKER: a.ticker,
-            TIPO: a.tipo,
-            CANTIDAD: a.cantidad,
-            PRECIO_COMPRA: a.precioCompra,
-            FECHA_COMPRA: a.fechaCompra,
-            NOTAS: a.notas
-        }));
-        
-        const wsInv = XLSX.utils.json_to_sheet(activos);
-        wb.Sheets['INVERSIONES'] = wsInv;
-        
-        if (!wb.SheetNames.includes('INVERSIONES')) {
-            wb.SheetNames.push('INVERSIONES');
-        }
-        
-        console.log('Inversiones guardadas en Excel');
-    } catch (e) {
-        console.error('Error guardando inversiones:', e);
-    }
-};
-
-// Función para obtener precio actual de acciones (Alpha Vantage)
-window.obtenerPrecioAccion = async function(ticker) {
-    try {
-        // Usar demo key para MVP - en producción usar API key real
-        const apiKey = 'demo';
-        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${apiKey}`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (data['Global Quote'] && data['Global Quote']['05. price']) {
-            return parseFloat(data['Global Quote']['05. price']);
-        }
-        return null;
-    } catch (e) {
-        console.error(`Error obteniendo precio de ${ticker}:`, e);
-        return null;
-    }
-};
-
-// Función para obtener precio de criptomonedas (CoinGecko)
-window.obtenerPrecioCripto = async function(ticker) {
-    try {
-        const coinId = COINGECKO_IDS[ticker] || ticker.toLowerCase();
-        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=eur`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (data[coinId] && data[coinId].eur) {
-            return data[coinId].eur;
-        }
-        return null;
-    } catch (e) {
-        console.error(`Error obteniendo precio de ${ticker}:`, e);
-        return null;
-    }
-};
-
-// Función para actualizar precios de todos los activos
-window.actualizarPreciosInversiones = async function(mostrarCarga = true) {
-    if (mostrarCarga) {
-        notify('Actualizando precios...', 'loading');
-    }
-    
-    try {
-        for (let activo of window.carteraInversiones.activos) {
-            let precio = null;
-            
-            if (activo.tipo === 'cripto') {
-                precio = await window.obtenerPrecioCripto(activo.ticker);
-            } else {
-                precio = await window.obtenerPrecioAccion(activo.ticker);
-            }
-            
-            if (precio) {
-                activo.precioActual = precio;
-                activo.valorActual = activo.cantidad * precio;
-                activo.ganancia = (precio - activo.precioCompra) * activo.cantidad;
-                activo.gananciaPorcentaje = ((precio - activo.precioCompra) / activo.precioCompra) * 100;
-                activo.ultimaActualizacion = new Date().toISOString();
-                activo.fuente = activo.tipo === 'cripto' ? 'coingecko' : 'alpha-vantage';
-            }
-            
-            // Pequeño delay para no saturar APIs
-            await new Promise(r => setTimeout(r, 500));
-        }
-        
-        window.calcularKPIsInversiones();
-        window.renderizarInversiones();
-        
-        if (mostrarCarga) {
-            notify('✅ Precios actualizados', 'success');
-        }
-    } catch (e) {
-        console.error('Error actualizando precios:', e);
-        if (mostrarCarga) {
-            notify('❌ Error al actualizar precios', 'error');
-        }
-    }
-};
-
-// Función para calcular KPIs
-window.calcularKPIsInversiones = function() {
-    const kpis = window.carteraInversiones.kpis;
-    
-    kpis.valorTotalCartera = 0;
-    kpis.costoTotalInvertido = 0;
-    kpis.porTipo = {};
-    
-    for (let activo of window.carteraInversiones.activos) {
-        const costoActivo = activo.cantidad * activo.precioCompra;
-        
-        kpis.valorTotalCartera += activo.valorActual;
-        kpis.costoTotalInvertido += costoActivo;
-        
-        // Agrupar por tipo
-        if (!kpis.porTipo[activo.tipo]) {
-            kpis.porTipo[activo.tipo] = {
-                cantidad: 0,
-                valor: 0,
-                ganancia: 0,
-                gananciaPorcentaje: 0
-            };
-        }
-        
-        kpis.porTipo[activo.tipo].cantidad += activo.cantidad;
-        kpis.porTipo[activo.tipo].valor += activo.valorActual;
-        kpis.porTipo[activo.tipo].ganancia += activo.ganancia;
-    }
-    
-    kpis.gananciaTotalAbsoluta = kpis.valorTotalCartera - kpis.costoTotalInvertido;
-    kpis.gananciaTotalPorcentaje = kpis.costoTotalInvertido > 0 
-        ? (kpis.gananciaTotalAbsoluta / kpis.costoTotalInvertido) * 100 
-        : 0;
-    kpis.ultimaActualizacion = new Date().toISOString();
-};
-
-// Función para renderizar la vista de inversiones
-window.renderizarInversiones = function() {
-    const container = document.getElementById('tab-inversiones');
-    if (!container) return;
-    
-    const activos = window.carteraInversiones.activos;
-    const kpis = window.carteraInversiones.kpis;
-    
-    if (activos.length === 0) {
-        container.innerHTML = `
-            <div class="inv-header">
-                <h2>Cartera de Inversiones</h2>
-                <div class="inv-header-actions">
-                    <button class="inv-btn-add" onclick="window.abrirModalAgregarInversion()">
-                        <span class="material-icons" style="font-size:16px;">add</span> Agregar
-                    </button>
-                </div>
-            </div>
-            <div class="inv-empty-state">
-                <div class="inv-empty-icon">💼</div>
-                <div class="inv-empty-text">Aún no tienes inversiones registradas</div>
-                <button class="inv-btn-add" onclick="window.abrirModalAgregarInversion()">
-                    Agregar tu primera inversión
-                </button>
-            </div>
-        `;
-        return;
-    }
-    
-    // Renderizar KPIs
-    const kpiHtml = `
-        <div class="inv-kpi-grid">
-            <div class="inv-kpi-card">
-                <div class="inv-kpi-label">Valor Total</div>
-                <div class="inv-kpi-value">${FMT_EUR0.format(kpis.valorTotalCartera)}</div>
-            </div>
-            <div class="inv-kpi-card">
-                <div class="inv-kpi-label">Costo Invertido</div>
-                <div class="inv-kpi-value">${FMT_EUR0.format(kpis.costoTotalInvertido)}</div>
-            </div>
-            <div class="inv-kpi-card">
-                <div class="inv-kpi-label">Ganancia Absoluta</div>
-                <div class="inv-kpi-value ${kpis.gananciaTotalAbsoluta >= 0 ? 'positive' : 'negative'}">
-                    ${FMT_EUR0.format(kpis.gananciaTotalAbsoluta)}
-                </div>
-            </div>
-            <div class="inv-kpi-card">
-                <div class="inv-kpi-label">Rentabilidad %</div>
-                <div class="inv-kpi-value ${kpis.gananciaTotalPorcentaje >= 0 ? 'positive' : 'negative'}">
-                    ${kpis.gananciaTotalPorcentaje.toFixed(2)}%
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Renderizar tabla de activos
-    let tablaHtml = `
-        <div class="inv-table-wrap">
-            <table class="inv-table">
-                <thead>
-                    <tr>
-                        <th>Activo</th>
-                        <th>Cantidad</th>
-                        <th>Precio Act.</th>
-                        <th>Valor</th>
-                        <th>Ganancia</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-    
-    for (let activo of activos) {
-        const tipo = TIPOS_ACTIVOS[activo.tipo];
-        const gananciaClase = activo.ganancia >= 0 ? 'positive' : 'negative';
-        
-        tablaHtml += `
-            <tr onclick="window.editarInversion('${activo.id}')">
-                <td>
-                    <div class="inv-ticker">${tipo.icon} ${activo.ticker}</div>
-                    <div class="inv-tipo">${tipo.label}</div>
-                </td>
-                <td class="inv-amount">${activo.cantidad}</td>
-                <td class="inv-amount">${FMT_EUR2.format(activo.precioActual)}</td>
-                <td class="inv-amount">${FMT_EUR0.format(activo.valorActual)}</td>
-                <td class="inv-amount ${gananciaClase}">
-                    ${FMT_EUR0.format(activo.ganancia)}<br>
-                    <small>${activo.gananciaPorcentaje.toFixed(1)}%</small>
-                </td>
-            </tr>
-        `;
-    }
-    
-    tablaHtml += `
-                </tbody>
-            </table>
-        </div>
-    `;
-    
-    // Renderizar gráfico
-    const chartHtml = `
-        <div class="inv-chart-container">
-            <div class="inv-chart-title">Distribución de Cartera</div>
-            <div id="chart-cartera" class="inv-chart"></div>
-        </div>
-    `;
-    
-    // Timestamp
-    const timestamp = kpis.ultimaActualizacion 
-        ? new Date(kpis.ultimaActualizacion).toLocaleString('es-ES')
-        : 'Sin actualizar';
-    
-    const timestampHtml = `
-        <div class="inv-timestamp">
-            Última actualización: ${timestamp}
-        </div>
-    `;
-    
-    container.innerHTML = `
-        <div class="inv-header">
-            <h2>Cartera de Inversiones</h2>
-            <div class="inv-header-actions">
-                <button class="inv-btn-refresh" onclick="window.actualizarPreciosInversiones(true)">
-                    <span class="material-icons" style="font-size:14px;">refresh</span> Actualizar
-                </button>
-                <button class="inv-btn-add" onclick="window.abrirModalAgregarInversion()">
-                    <span class="material-icons" style="font-size:16px;">add</span> Agregar
-                </button>
-            </div>
-        </div>
-        ${kpiHtml}
-        ${tablaHtml}
-        ${chartHtml}
-        ${timestampHtml}
-    `;
-    
-    // Renderizar gráfico con ECharts
-    setTimeout(() => {
-        window.renderizarGraficoCartera();
-    }, 100);
-};
-
-// Función para renderizar gráfico de cartera
-window.renderizarGraficoCartera = function() {
-    const chartElement = document.getElementById('chart-cartera');
-    if (!chartElement || !window.echarts) return;
-    
-    const chart = echarts.init(chartElement);
-    const kpis = window.carteraInversiones.kpis;
-    
-    const data = Object.entries(kpis.porTipo).map(([tipo, datos]) => ({
-        value: datos.valor,
-        name: TIPOS_ACTIVOS[tipo]?.label || tipo
-    }));
-    
-    const option = {
-        tooltip: { trigger: 'item' },
-        legend: { orient: 'bottom', textStyle: { color: '#888' } },
-        series: [{
-            type: 'pie',
-            radius: '50%',
-            data: data,
-            itemStyle: {
-                borderColor: '#000',
-                borderWidth: 2
-            },
-            label: {
-                color: '#fff',
-                fontSize: 10
-            }
-        }]
-    };
-    
-    chart.setOption(option);
-};
-
-// Función para abrir modal de agregar inversión
-window.abrirModalAgregarInversion = function() {
-    const modal = document.getElementById('inv-modal-agregar');
-    if (modal) {
-        modal.classList.add('active');
-        document.getElementById('inv-form-id').value = '';
-        document.getElementById('inv-form-ticker').value = '';
-        document.getElementById('inv-form-tipo').value = 'accion';
-        document.getElementById('inv-form-cantidad').value = '';
-        document.getElementById('inv-form-precio').value = '';
-        document.getElementById('inv-form-fecha').value = new Date().toISOString().split('T')[0];
-        document.getElementById('inv-form-notas').value = '';
-    }
-};
-
-// Función para cerrar modal
-window.cerrarModalInversion = function() {
-    const modal = document.getElementById('inv-modal-agregar');
-    if (modal) {
-        modal.classList.remove('active');
-    }
-};
-
-// Función para guardar inversión
-window.guardarInversion = function() {
-    const id = document.getElementById('inv-form-id').value;
-    const ticker = document.getElementById('inv-form-ticker').value.toUpperCase();
-    const tipo = document.getElementById('inv-form-tipo').value;
-    const cantidad = parseFloat(document.getElementById('inv-form-cantidad').value);
-    const precio = parseFloat(document.getElementById('inv-form-precio').value);
-    const fecha = document.getElementById('inv-form-fecha').value;
-    const notas = document.getElementById('inv-form-notas').value;
-    
-    if (!ticker || !cantidad || !precio) {
-        notify('Completa todos los campos requeridos', 'error');
-        return;
-    }
-    
-    if (id) {
-        // Editar
-        const activo = window.carteraInversiones.activos.find(a => a.id === id);
-        if (activo) {
-            activo.ticker = ticker;
-            activo.tipo = tipo;
-            activo.cantidad = cantidad;
-            activo.precioCompra = precio;
-            activo.fechaCompra = fecha;
-            activo.notas = notas;
-        }
-    } else {
-        // Crear
-        window.carteraInversiones.activos.push({
-            id: generateUUID(),
-            ticker: ticker,
-            tipo: tipo,
-            cantidad: cantidad,
-            precioCompra: precio,
-            fechaCompra: fecha,
-            notas: notas,
-            precioActual: 0,
-            valorActual: 0,
-            ganancia: 0,
-            gananciaPorcentaje: 0,
-            ultimaActualizacion: null,
-            fuente: null
+// 1. ABRIR MODAL
+window.abrirModalNuevaPosicion = function(id = null) {
+    // Rellenar select de cuentas
+    const sel = document.getElementById('cartera-cuenta');
+    if (sel && window.mapaCuentas) {
+        sel.innerHTML = '<option value="">-- Sin asociar --</option>';
+        Object.keys(window.mapaCuentas).sort().forEach(cta => {
+            const opt = document.createElement('option');
+            opt.value = cta; opt.textContent = cta;
+            sel.appendChild(opt);
         });
     }
-    
-    window.cerrarModalInversion();
-    window.guardarUniversal();
-    window.actualizarPreciosInversiones(false);
-    notify('✅ Inversión guardada', 'success');
-};
 
-// Función para editar inversión
-window.editarInversion = function(id) {
-    const activo = window.carteraInversiones.activos.find(a => a.id === id);
-    if (!activo) return;
-    
-    document.getElementById('inv-form-id').value = id;
-    document.getElementById('inv-form-ticker').value = activo.ticker;
-    document.getElementById('inv-form-tipo').value = activo.tipo;
-    document.getElementById('inv-form-cantidad').value = activo.cantidad;
-    document.getElementById('inv-form-precio').value = activo.precioCompra;
-    document.getElementById('inv-form-fecha').value = activo.fechaCompra;
-    document.getElementById('inv-form-notas').value = activo.notas;
-    
-    window.abrirModalAgregarInversion();
-};
-
-// Función para eliminar inversión
-window.eliminarInversion = function(id) {
-    if (confirm('¿Estás seguro de que quieres eliminar esta inversión?')) {
-        window.carteraInversiones.activos = window.carteraInversiones.activos.filter(a => a.id !== id);
-        window.guardarUniversal();
-        window.renderizarInversiones();
-        notify('✅ Inversión eliminada', 'success');
-    }
-};
-
-// Función para generar UUID
-function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
+    // Limpiar campos
+    ['cartera-pos-id','cartera-ticker','cartera-nombre','cartera-notas','cartera-fecha-compra','cartera-cantidad','cartera-precio-compra','cartera-precio-actual'].forEach(idCampo => {
+        const el = document.getElementById(idCampo); 
+        if (el) el.value = '';
     });
-}
 
-// Nota: cargarInversionesDesdeExcel no se llama desde aquí porque
-// procesarLibroLeido ya lee la hoja CARTERA directamente (window.datosCartera).
+    document.getElementById('cartera-fecha-compra').value = new Date().toISOString().split('T')[0];
+    
+    const titulo = document.getElementById('modal-cartera-titulo');
+    if (titulo) titulo.innerText = 'NUEVA POSICIÓN';
+    
+    const extBtns = document.getElementById('cartera-extra-btns');
+    if (extBtns) extBtns.style.display = 'none';
 
-// Nota: La integración de carteraInversiones con guardarUniversal está gestionada
-// por el módulo CARTERA PROFESIONAL que sigue a continuación (window.datosCartera).
-// ============================================================================
-// 📈 MÓDULO CARTERA PROFESIONAL (VALIDACIONES + API BINANCE + RENTABILIDAD)
-// ============================================================================
-
-window.CATEGORIAS_CARTERA = ['BOLSA', 'PLANPENSIONES', 'CROWDFUNDING', 'CRIPTOMONEDAS', 'AUTOCUSTODIA'];
-window.precioLiveBTC = 0; // Caché del precio de Binance
-
-// 1. ABRIR MODAL Y CARGAR LISTAS
-// abrirModalNuevaPosicion: definición completa en módulo Cartera Profesional más abajo
-
-window.cerrarModalCartera = function() {
-  document.getElementById('modal-cartera-pos').classList.remove('active');
+    document.getElementById('modal-cartera-pos').classList.add('active');
+    window.comportamientoTipoActivo();
 };
 
-// 2. CONTROL DINÁMICO DEL FORMULARIO SEGÚN TIPO ACTIVO
-window.precioActualBTC = 0; // Guardamos el precio unitario en memoria
+// 2. CERRAR MODAL
+window.cerrarModalCartera = function() {
+    document.getElementById('modal-cartera-pos').classList.remove('active');
+};
 
+// 3. COMPORTAMIENTO DEL TIPO DE ACTIVO (Automático vs Manual)
 window.comportamientoTipoActivo = function() {
     const tipo = document.getElementById('cartera-tipo').value;
     const inputPrecio = document.getElementById('cartera-precio-actual');
     const cajaPrecio = document.getElementById('caja-precio-actual');
-    const avisoApi = document.getElementById('aviso-precio-api');
     const labelPrecio = document.getElementById('label-precio-actual');
+    const avisoApi = document.getElementById('aviso-precio-api');
+
+    if (!inputPrecio) return;
 
     if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
-        // MODO AUTOMÁTICO (BTC)
-        inputPrecio.disabled = true;
+        inputPrecio.readOnly = true;
         inputPrecio.value = window.precioBTC_EUR_Cache ? window.precioBTC_EUR_Cache.toFixed(2) : "";
         inputPrecio.placeholder = "Auto (Binance)";
-        
-        // Estética UI: Azul Neón para Cripto
         cajaPrecio.style.borderColor = "rgba(0, 184, 255, 0.5)";
-        cajaPrecio.style.boxShadow = "0 0 12px rgba(0, 184, 255, 0.2)";
         labelPrecio.innerText = "PRECIO ACTUAL BTC/EUR (AUTO)";
         labelPrecio.style.color = "#00B8FF";
         inputPrecio.style.color = "#00B8FF";
-        avisoApi.style.display = "block"; // Muestra el mensaje de Binance
+        if(avisoApi) avisoApi.style.display = "block";
     } else {
-        // MODO MANUAL (Bolsa, Pensiones, Crowdfunding)
-        inputPrecio.disabled = false;
+        inputPrecio.readOnly = false;
         inputPrecio.placeholder = "0.00";
-        
-        // Estética UI: Verde Neón para Manual
         cajaPrecio.style.borderColor = "rgba(57, 255, 20, 0.4)";
-        cajaPrecio.style.boxShadow = "0 0 12px rgba(57, 255, 20, 0.1)";
         labelPrecio.innerText = "PRECIO ACTUAL (€) ← MANUAL";
         labelPrecio.style.color = "#39FF14";
         inputPrecio.style.color = "#39FF14";
-        avisoApi.style.display = "none";
+        if(avisoApi) avisoApi.style.display = "none";
     }
-    
-    // Recalcular la vista previa de Plusvalía (P&L) abajo en el modal
     window.actualizarPreviewPnl();
 };
 
-window.obtenerPrecioBinance = async function(par, inputElement) {
-    try {
-        inputElement.value = "Cargando...";
-        const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${par}`);
-        const data = await response.json();
-        
-        if (data && data.price) {
-            window.precioActualBTC = parseFloat(data.price);
-            inputElement.value = window.precioActualBTC.toFixed(2);
-            window.actualizarPreviewPnl(); 
-        }
-    } catch (error) {
-        console.error("Fallo la API de Binance:", error);
-        inputElement.value = "0.00";
-        if (typeof notify === 'function') notify("Error conectando con Binance", "error");
-    }
-};
-
-window.recalcularPrecioSiAplica = function() {
-    window.actualizarPreviewPnl();
-};
-
-// obtenerPrecioBinance: definición única más arriba
-
-window.actualizarSelectCuentasCartera = function() {
-  const tipoSeleccionado = document.getElementById('cartera-tipo').value;
-  const selectCuentas = document.getElementById('cartera-cuenta');
-  const oldVal = selectCuentas.value;
-  selectCuentas.innerHTML = '<option value="">-- Selecciona Cuenta --</option>';
-
-  if (window.mapaCuentas) {
-    Object.keys(window.mapaCuentas).forEach(nombreCuenta => {
-      const infoCta = window.mapaCuentas[nombreCuenta];
-      if (String(infoCta.tipo).toUpperCase() === tipoSeleccionado) {
-        const saldoDisp = window.obtenerLiquidezDisponibleCuenta(nombreCuenta);
-        const opt = document.createElement('option');
-        opt.value = nombreCuenta;
-        opt.style.background = '#111';
-        opt.innerText = `${nombreCuenta} (Saldo Disp: ${saldoDisp.toFixed(2)}€)`;
-        selectCuentas.appendChild(opt);
-      }
-    });
-  }
-  if (oldVal) selectCuentas.value = oldVal;
-};
-
-// 4. LÍMITE INVERSIÓN
-window.obtenerLiquidezDisponibleCuenta = function(nombreCuenta) {
-    const infoCta = window.mapaCuentas[nombreCuenta];
-    let liquidez = infoCta ? (infoCta.saldoActual || 0) : 0;
-    
-    if (window.datosCartera) {
-        window.datosCartera.forEach(pos => {
-            if (pos.cuenta === nombreCuenta) {
-                liquidez -= (pos.cantidad * pos.precioCompra);
-            }
-        });
-    }
-    return liquidez;
-};
-
-// 5. PREVIEW P&L (Cantidades x Precio API)
+// 4. PREVIEW P&L
 window.actualizarPreviewPnl = function() {
     const previewDiv = document.getElementById('preview-pnl-cartera');
     const valDiv = document.getElementById('preview-pnl-valor');
@@ -10781,230 +10237,331 @@ window.actualizarPreviewPnl = function() {
     
     const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
     const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-    
-    // El precio actual se lee del input (si es bolsa) o de la variable global (si es cripto)
     const tipo = document.getElementById('cartera-tipo').value;
-    let pActual = 0;
     
+    let pActual = 0;
     if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
         pActual = window.precioBTC_EUR_Cache || 0;
     } else {
         pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
     }
 
-    if (cantidad > 0 && pCompra > 0 && pActual > 0) {
+    if (cantidad > 0 && pCompra > 0 && pActual > 0 && previewDiv) {
         previewDiv.style.display = 'block';
-        
         const costeTotal = cantidad * pCompra;
         const valorActual = cantidad * pActual;
         const pnlEuros = valorActual - costeTotal;
         const pnlPct = (pnlEuros / costeTotal) * 100;
         
-        const formateadorDinero = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
-        
-        valDiv.innerText = (pnlEuros >= 0 ? '+' : '') + formateadorDinero.format(pnlEuros);
+        const fmt = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+        valDiv.innerText = (pnlEuros >= 0 ? '+' : '') + fmt.format(pnlEuros);
         valDiv.style.color = pnlEuros >= 0 ? '#39FF14' : '#FF2E4D';
-        
         pctDiv.innerText = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
         pctDiv.style.color = pnlEuros >= 0 ? '#39FF14' : '#FF2E4D';
-    } else {
+    } else if (previewDiv) {
         previewDiv.style.display = 'none';
     }
 };
 
-// 6. GUARDAR POSICIÓN 
-// guardarPosicion: definición completa en módulo Cartera Profesional más abajo
+// 5. GUARDAR POSICIÓN (CON CONTROL DE SALDO)
+window.guardarPosicion = async function() {
+    const id = document.getElementById('cartera-pos-id').value;
+    const tipo = document.getElementById('cartera-tipo').value;
+    const cuenta = document.getElementById('cartera-cuenta').value;
+    const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
+    const nombre = document.getElementById('cartera-nombre').value;
+    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value);
+    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value);
+    const fecha = document.getElementById('cartera-fecha-compra').value;
+    const notas = document.getElementById('cartera-notas').value;
 
-// borrarPosicion: definición completa en módulo Cartera Profesional más abajo
+    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value);
+    if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
+        pActual = window.precioBTC_EUR_Cache || pCompra; // Fallback al precio de compra si la API aún no ha cargado
+    }
 
-window.renderizarCartera = function() {
-  const tbody = document.getElementById('lista-posiciones-cartera');
-  if (!tbody) return;
+    if(!tipo || !ticker || isNaN(cantidad) || isNaN(pCompra)) {
+        window.mostrarToast("Completa Tipo, Ticker, Cantidad y Precio de Compra", "error");
+        return;
+    }
 
-  if (!window.datosCartera || window.datosCartera.length === 0) {
-    document.getElementById('cartera-sin-datos').style.display = 'block';
-    document.getElementById('card-posiciones').style.display = 'none';
+    // --- CONTROL DE SALDO INVERTIDO ---
+    if (cuenta) {
+        let dineroAportado = 0;
+        if (window.datos) {
+            window.datos.forEach(m => {
+                if (m.cuenta === cuenta) dineroAportado += parseFloat(m.importe) || 0;
+            });
+        }
+        let costeOtrasPosiciones = 0;
+        if (window.datosCartera) {
+            window.datosCartera.forEach(p => {
+                if (p.cuenta === cuenta && p.id !== id) { 
+                    costeOtrasPosiciones += (parseFloat(p.cantidad) * parseFloat(p.precioCompra)) || 0;
+                }
+            });
+        }
+        const costeNuevaPosicion = cantidad * pCompra;
+        if ((costeOtrasPosiciones + costeNuevaPosicion) > (dineroAportado + 0.05)) {
+            const diferencia = (costeOtrasPosiciones + costeNuevaPosicion) - dineroAportado;
+            const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+            window.mostrarToast(`❌ Límite excedido. Has aportado ${fmt.format(dineroAportado)} a la cuenta, pero intentas asignar ${fmt.format(costeOtrasPosiciones + costeNuevaPosicion)}. Faltan ${fmt.format(diferencia)}.`, "error");
+            return; 
+        }
+    }
+
+    if (!window.datosCartera) window.datosCartera = [];
+    const generarId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`;
+
+    const posicion = {
+        id: id || generarId(),
+        tipo, cuenta, ticker, nombre, cantidad,
+        precioCompra: pCompra, precioActual: pActual, fechaCompra: fecha, notas
+    };
+
+    if (id) {
+        const idx = window.datosCartera.findIndex(p => p.id === id);
+        if (idx > -1) window.datosCartera[idx] = posicion;
+        else window.datosCartera.push(posicion);
+    } else {
+        window.datosCartera.push(posicion);
+    }
+
+    window.cerrarModalCartera();
+    window.calcularValoresCartera();
+    window.renderizarCartera();
+    if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
     
-    document.getElementById('inv-total-valor').innerText = "0,00 €";
-    document.getElementById('inv-total-pnl').innerText = "0,00 €";
-    document.getElementById('inv-coste-total').innerText = "0,00 €";
-    document.getElementById('inv-rent-total').innerText = "0,00%";
-    document.getElementById('inv-num-pos').innerText = "0";
-    return;
-  }
-
-  document.getElementById('cartera-sin-datos').style.display = 'none';
-  document.getElementById('card-posiciones').style.display = 'block';
-
-  let htmlFinal = '';
-  let costeTotalGlobal = 0;
-  let valorTotalGlobal = 0;
-
-  const agrupadoPorCta = {};
-  window.datosCartera.forEach(pos => {
-    const cta = pos.cuenta || 'Sin Cuenta';
-    if (!agrupadoPorCta[cta]) agrupadoPorCta[cta] = [];
-    agrupadoPorCta[cta].push(pos);
-  });
-
-  const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
-
-  Object.keys(agrupadoPorCta).forEach(cta => {
-    let costeCta = 0;
-    let valorCta = 0;
-    
-    agrupadoPorCta[cta].forEach(p => {
-      costeCta += (p.cantidad * p.precioCompra);
-      valorCta += (p.cantidad * p.precioActual);
-    });
-
-    costeTotalGlobal += costeCta;
-    valorTotalGlobal += valorCta;
-
-    const pnlCta = valorCta - costeCta;
-    const colorCta = pnlCta >= 0 ? '#39FF14' : '#FF2E4D';
-
-    htmlFinal += `
-      <div class="cartera-section-header">
-        <span class="cartera-section-title" style="color:var(--c-primary);">${cta}</span>
-        <span class="cartera-section-total" style="color:${colorCta}">${fmtEur.format(valorCta)}</span>
-      </div>
-    `;
-
-    agrupadoPorCta[cta].forEach(pos => {
-      const costePos = pos.cantidad * pos.precioCompra;
-      const valorPos = pos.cantidad * pos.precioActual;
-      const pnlPos = valorPos - costePos;
-      const pctPos = costePos > 0 ? (pnlPos / costePos) * 100 : 0;
-      
-      const claseColor = pnlPos >= 0 ? 'pos' : 'neg';
-      const signo = pnlPos > 0 ? '+' : '';
-
-      let badgeClass = 'badge-bolsa';
-      if(pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'CRIPTO') badgeClass = 'badge-cripto';
-      if(pos.tipo === 'AUTOCUSTODIA') badgeClass = 'badge-custodia';
-      if(pos.tipo === 'PLANPENSIONES') badgeClass = 'badge-pension';
-
-      // Mostramos hasta 6 decimales sin arrastrar ceros innecesarios
-      let cantVisible = pos.cantidad.toFixed(6).replace(/\.?0+$/, '');
-
-      htmlFinal += `
-        <div class="cartera-pos-row" onclick="window.abrirModalNuevaPosicion('${pos.id}')">
-          <div style="display:flex; flex-direction:column; gap:2px;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span class="cartera-ticker">${pos.ticker}</span>
-              <span class="cartera-tipo-badge ${badgeClass}">${pos.tipo}</span>
-            </div>
-            <span class="cartera-nombre">${pos.nombre || 'Sin descripción'}</span>
-            <span class="cartera-cantidad">${cantVisible} unds. a ${pos.precioCompra.toFixed(2)}€</span>
-          </div>
-          <div style="display:flex; flex-direction:column; align-items:flex-end;">
-            <span class="cartera-valor">${fmtEur.format(valorPos)}</span>
-            <span class="cartera-pnl ${claseColor}">${signo}${fmtEur.format(pnlPos)} (${signo}${pctPos.toFixed(2)}%)</span>
-          </div>
-        </div>
-      `;
-    });
-  });
-
-  tbody.innerHTML = htmlFinal;
-
-  const pnlGlobal = valorTotalGlobal - costeTotalGlobal;
-  const pctGlobal = costeTotalGlobal > 0 ? (pnlGlobal / costeTotalGlobal) * 100 : 0;
-
-  window.animarCifra('inv-total-valor', valorTotalGlobal, 'moneda');
-  
-  const elPnl = document.getElementById('inv-total-pnl');
-  if (elPnl) {
-      elPnl.innerText = (pnlGlobal > 0 ? '+' : '') + fmtEur.format(pnlGlobal);
-      elPnl.style.color = pnlGlobal >= 0 ? '#39FF14' : '#FF2E4D';
-  }
-  
-  window.animarCifra('inv-coste-total', costeTotalGlobal, 'moneda');
-  
-  const elRent = document.getElementById('inv-rent-total');
-  if (elRent) {
-      window.animarCifra('inv-rent-total', pctGlobal, 'porcentaje');
-      elRent.style.color = pctGlobal >= 0 ? '#39FF14' : '#FF2E4D';
-  }
-
-  document.getElementById('inv-num-pos').innerText = window.datosCartera.length;
-
-  const cardDash = document.getElementById('card-cartera-dashboard');
-  if(cardDash) {
-      cardDash.style.display = 'block';
-      window.animarCifra('dash-cartera-valor', valorTotalGlobal, 'moneda');
-      const dPnl = document.getElementById('dash-cartera-pnl');
-      if (dPnl) {
-          dPnl.innerText = (pnlGlobal > 0 ? '+' : '') + fmtEur.format(pnlGlobal);
-          dPnl.style.color = pnlGlobal >= 0 ? '#39FF14' : '#FF2E4D';
-      }
-      const dRent = document.getElementById('dash-cartera-rent');
-      if(dRent){
-           dRent.innerText = (pctGlobal > 0 ? '+' : '') + pctGlobal.toFixed(2) + '%';
-           dRent.style.color = pctGlobal >= 0 ? '#39FF14' : '#FF2E4D';
-      }
-      document.getElementById('dash-cartera-num').innerText = window.datosCartera.length;
-  }
+    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
+    window.mostrarToast(`Posición guardada`, "success");
+    if("vibrate" in navigator) navigator.vibrate(40);
 };
 
-// 8. MAGIA: API BINANCE
-window.precioBTC_EUR_Cache = 0; // Variable global para guardar el precio
+// 6. EDITAR Y BORRAR POSICIÓN
+window.editarPosicion = function(id) {
+    const pos = (window.datosCartera || []).find(p => p.id === id);
+    if (!pos) return;
+    window.abrirModalNuevaPosicion();
+    setTimeout(() => {
+        document.getElementById('cartera-pos-id').value = pos.id;
+        document.getElementById('cartera-ticker').value = pos.ticker;
+        document.getElementById('cartera-nombre').value = pos.nombre || '';
+        document.getElementById('cartera-tipo').value = pos.tipo;
+        document.getElementById('cartera-cuenta').value = pos.cuenta || '';
+        document.getElementById('cartera-cantidad').value = pos.cantidad;
+        document.getElementById('cartera-precio-compra').value = pos.precioCompra;
+        document.getElementById('cartera-precio-actual').value = pos.precioActual;
+        document.getElementById('cartera-fecha-compra').value = pos.fechaCompra || '';
+        document.getElementById('cartera-notas').value = pos.notas || '';
+        
+        const titulo = document.getElementById('modal-cartera-titulo');
+        if (titulo) titulo.innerText = 'EDITAR: ' + pos.ticker;
+        
+        const extBtns = document.getElementById('cartera-extra-btns');
+        if (extBtns) extBtns.style.display = 'grid';
+        
+        window.comportamientoTipoActivo();
+    }, 50);
+};
 
+window.borrarPosicion = async function(id) {
+    const confirmado = await window.pedirConfirmacion('¿Eliminar posición?', 'Se borrará de tu cartera y del Excel.', '🗑️');
+    if (!confirmado) return;
+    window.datosCartera = (window.datosCartera || []).filter(p => p.id !== id);
+    window.calcularValoresCartera();
+    window.renderizarCartera();
+    window.cerrarModalCartera();
+    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
+    window.mostrarToast('🗑️ Posición eliminada', 'success');
+};
+
+// 7. CÁLCULO DE VALORES GLOBALES
+window.calcularValoresCartera = function() {
+    if (!window.datosCartera) window.datosCartera = [];
+    let costeTotal = 0, valorTotal = 0;
+    const valorPorCuenta = {}; 
+
+    window.datosCartera.forEach(pos => {
+        if ((pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA') && window.precioBTC_EUR_Cache) {
+            pos.precioActual = window.precioBTC_EUR_Cache;
+        }
+        const coste = pos.cantidad * pos.precioCompra;
+        const valor = pos.cantidad * pos.precioActual;
+        costeTotal += coste;
+        valorTotal += valor;
+
+        if(pos.cuenta) {
+            const ctaLimpia = pos.cuenta.toUpperCase().trim();
+            valorPorCuenta[ctaLimpia] = (valorPorCuenta[ctaLimpia] || 0) + valor;
+        }
+    });
+
+    const pnlTotal = valorTotal - costeTotal;
+    const rentabilidad = costeTotal > 0 ? (pnlTotal / costeTotal) * 100 : 0;
+
+    // Actualizar UI
+    window.animarCifra('inv-total-valor', valorTotal, 'moneda');
+    window.animarCifra('inv-coste-total', costeTotal, 'moneda');
+    
+    const pnlSign = pnlTotal >= 0 ? '+' : '';
+    const colorStyle = pnlTotal >= 0 ? '#39FF14' : '#FF2E4D';
+    
+    const elPnl = document.getElementById('inv-total-pnl');
+    if (elPnl) {
+        elPnl.innerText = `${pnlSign}${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(pnlTotal)}`;
+        elPnl.style.color = colorStyle;
+    }
+    
+    const elRent = document.getElementById('inv-rent-total');
+    if (elRent) {
+        elRent.innerText = `${pnlSign}${rentabilidad.toFixed(2)}%`;
+        elRent.style.color = colorStyle;
+    }
+
+    const elNum = document.getElementById('inv-num-pos');
+    if (elNum) elNum.innerText = window.datosCartera.length;
+
+    // Dashboard
+    window.animarCifra('dash-cartera-valor', valorTotal, 'moneda');
+    const dashPnl = document.getElementById('dash-cartera-pnl');
+    if (dashPnl) {
+        dashPnl.innerText = `${pnlSign}${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(pnlTotal)}`;
+        dashPnl.style.color = colorStyle;
+    }
+    const dashRent = document.getElementById('dash-cartera-rent');
+    if (dashRent) {
+        dashRent.innerText = `${pnlSign}${rentabilidad.toFixed(2)}%`;
+        dashRent.style.color = colorStyle;
+    }
+    const dashNum = document.getElementById('dash-cartera-num');
+    if (dashNum) dashNum.innerText = window.datosCartera.length;
+
+    // Sobreescritura en Patrimonio (Rayos X)
+    if (window.mapaCuentas) {
+        Object.keys(valorPorCuenta).forEach(ctaKey => {
+            if(!window.mapaCuentas[ctaKey]) {
+                window.mapaCuentas[ctaKey] = { tipo: 'SIN CLASIFICAR', esInversion: true, saldoActual: 0 };
+            }
+            window.mapaCuentas[ctaKey].saldoActual = (window.mapaCuentas[ctaKey].saldoActual || 0) + valorPorCuenta[ctaKey];
+        });
+    }
+};
+
+// 8. API BINANCE (Actualización en vivo)
 window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
+    if (!window.datosCartera || window.datosCartera.length === 0) return;
+
     const btnIcon = document.getElementById('precios-live-icon');
     if (btnIcon && !modoSilencioso) btnIcon.innerText = "⏳";
-    
+    if (!modoSilencioso) window.mostrarToast("⚡ Consultando Binance...", "info");
+
     try {
-        // Llamada a Binance (No requiere API Key, es pública y gratuita)
         const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCEUR');
         const data = await response.json();
         
         if (data && data.price) {
             window.precioBTC_EUR_Cache = parseFloat(data.price);
-            if (!modoSilencioso) {
-                window.notify(`BTC actualizado: ${window.precioBTC_EUR_Cache.toLocaleString('de-DE')} €`, "success");
-            }
-            
             let hayCambios = false;
             
-            // Recorremos la cartera para actualizar SÓLO cripto y autocustodia
-            if (window.datosCartera) {
-                window.datosCartera.forEach(pos => {
-                    if (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA') {
-                        // Si el precio ha cambiado, lo actualizamos
-                        if (pos.precioActual !== window.precioBTC_EUR_Cache) {
-                            pos.precioActual = window.precioBTC_EUR_Cache;
-                            hayCambios = true;
-                        }
+            window.datosCartera.forEach(pos => {
+                if (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA') {
+                    if (pos.precioActual !== window.precioBTC_EUR_Cache) {
+                        pos.precioActual = window.precioBTC_EUR_Cache;
+                        hayCambios = true;
                     }
-                });
-            }
+                }
+            });
 
-            // Si tenemos el modal abierto ahora mismo con BTC, le ponemos el numerito visualmente
             const tipoSelect = document.getElementById('cartera-tipo');
             if (tipoSelect && (tipoSelect.value === 'CRIPTOMONEDAS' || tipoSelect.value === 'AUTOCUSTODIA')) {
-                document.getElementById('cartera-precio-actual').value = window.precioBTC_EUR_Cache.toFixed(2);
+                const inputAct = document.getElementById('cartera-precio-actual');
+                if(inputAct) inputAct.value = window.precioBTC_EUR_Cache.toFixed(2);
                 window.actualizarPreviewPnl();
             }
 
-            // Si hubo cambios en el portfolio real, recalculamos y guardamos en la nube
             if (hayCambios) {
-                if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-                if (typeof window.renderizarCartera === 'function') window.renderizarCartera(); // Refrescar pantalla
-                // Autoguardado silencioso para que el nuevo valor del Excel suba a OneDrive
+                window.calcularValoresCartera();
+                if (typeof window.renderizarCartera === 'function') window.renderizarCartera(); 
                 if (typeof window.guardarUniversal === 'function' && window.modoNube) {
                     window.guardarUniversal(); 
                 }
+                if (!modoSilencioso) window.mostrarToast(`✅ API: Precios sincronizados`, "success");
+            } else {
+                 if (!modoSilencioso) window.mostrarToast(`Todo al día`, "success");
             }
         }
     } catch (error) {
-        console.error("Fallo de red al consultar Binance:", error);
-        if (!modoSilencioso) window.notify("Error conectando con Binance", "error");
+        console.error("Fallo API Binance:", error);
+        if (!modoSilencioso) window.mostrarToast("Error conectando con Binance", "error");
     } finally {
         if (btnIcon && !modoSilencioso) btnIcon.innerText = "⚡";
     }
 };
+
+// 9. RENDERIZAR LISTA (UI)
+window.renderizarCartera = function() {
+    const lista = document.getElementById('lista-posiciones-cartera');
+    const sinDatos = document.getElementById('cartera-sin-datos');
+    const cardPos = document.getElementById('card-posiciones');
+    
+    if (!window.datosCartera || window.datosCartera.length === 0) {
+        if(lista) lista.innerHTML = '';
+        if(sinDatos) sinDatos.style.display = 'block';
+        if(cardPos) cardPos.style.display = 'none';
+        return;
+    }
+
+    if(sinDatos) sinDatos.style.display = 'none';
+    if(cardPos) cardPos.style.display = 'block';
+
+    let html = '';
+    const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+
+    window.datosCartera.forEach(pos => {
+        const coste = pos.cantidad * pos.precioCompra;
+        const valor = pos.cantidad * pos.precioActual;
+        const pnl = valor - coste;
+        const pnlColorClass = pnl >= 0 ? 'pos' : 'neg';
+        const pnlSign = pnl >= 0 ? '+' : '';
+        const pctRent = coste > 0 ? (pnl / coste) * 100 : 0;
+        
+        let badgeClass = 'badge-bolsa';
+        if (pos.tipo === 'CRIPTOMONEDAS') badgeClass = 'badge-cripto';
+        else if (pos.tipo === 'AUTOCUSTODIA') badgeClass = 'badge-custodia';
+        else if (pos.tipo === 'PLANPENSIONES') badgeClass = 'badge-pension';
+
+        html += `
+        <div class="cartera-pos-row" onclick="window.editarPosicion('${pos.id}')">
+            <div>
+                <div class="cartera-ticker">${pos.ticker} <span class="cartera-tipo-badge ${badgeClass}">${pos.tipo}</span></div>
+                <div class="cartera-nombre">${pos.nombre || pos.cuenta}</div>
+                <div class="cartera-cantidad">${pos.cantidad} un. @ ${fmtEur.format(pos.precioCompra)}</div>
+            </div>
+            <div style="text-align: right;">
+                <div class="cartera-valor">${fmtEur.format(valor)}</div>
+                <div class="cartera-pnl ${pnlColorClass}">${pnlSign}${fmtEur.format(pnl)} (${pnlSign}${pctRent.toFixed(2)}%)</div>
+            </div>
+        </div>
+        `;
+    });
+
+    if(lista) lista.innerHTML = html;
+};
+
+// Hook inicial para refrescar datos al abrir
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if (window.UIEvents) {
+            window.UIEvents.on('datos:actualizados', function() {
+                if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+                const tabInv = document.getElementById('tab-inversiones');
+                if (tabInv && tabInv.classList.contains('active') && typeof window.renderizarCartera === 'function') {
+                    window.renderizarCartera();
+                }
+            });
+        }
+    }, 800);
+});
 </script>
 <div id="spotlight-modal">
 <button class="spotlight-close" onclick="cerrarSpotlight()"><span class="material-icons">close</span></button>
@@ -12485,7 +12042,6 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-</script>
 </script>
 </body>
 </html>
