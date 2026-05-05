@@ -8841,7 +8841,7 @@ window.guardarPosicion = async function() {
     
     window.mostrarToast(`Posición ${ticker} guardada`, "success");
     if("vibrate" in navigator) navigator.vibrate([40, 20, 80]); // Feedback éxito
-};
+}; // <-- AQUÍ SE CERRABA MAL TU CÓDIGO ANTERIOR
 
 window.editarPosicionCartera = function(id) {
     const pos = (window.datosCartera || []).find(p => p.id === id);
@@ -8880,7 +8880,13 @@ window.borrarPosicion = async function(id) {
     window.datosCartera = window.datosCartera.filter(p => p.id !== id);
     window.cerrarModalCartera();
     
-    window.calcularValoresCartera();
+    // FIX 2: Usar el recalculo global para no duplicar el patrimonio contable
+    if (typeof window.recalcularSaldosGlobal === 'function') {
+        window.recalcularSaldosGlobal();
+    } else {
+        window.calcularValoresCartera();
+    }
+    
     window.renderizarCartera();
     if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
     
@@ -8899,9 +8905,14 @@ window.calcularValoresCartera = function() {
 
     let costeTotal = 0;
     let valorTotal = 0;
-    let valorPorCuenta = {}; // Mapa para sobreescribir Rayos X
+    let valorPorCuenta = {}; 
 
     window.datosCartera.forEach(pos => {
+        // FIX 1: Forzar actualización silenciosa de BTC antes de sumar el total
+        if ((pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA') && window.precioBTC_EUR_Cache) {
+            pos.precioActual = window.precioBTC_EUR_Cache;
+        }
+
         const coste = pos.cantidad * pos.precioCompra;
         const valor = pos.cantidad * pos.precioActual;
         costeTotal += coste;
@@ -8949,14 +8960,23 @@ window.calcularValoresCartera = function() {
     updateClass('dash-cartera-pnl', pnlTotal >= 0 ? 'val-std-pos' : 'val-std-neg');
     updateClass('dash-cartera-rent', rentabilidad >= 0 ? 'val-std-pos' : 'val-std-neg');
 
+    // FIX 3: Actualizar Plusvalía en la pestaña PATRIMONIO
+    const pnlRow = document.getElementById('patri-cartera-pnl-row');
+    const pnlVal = document.getElementById('patri-cartera-pnl-val');
+    if (pnlRow && pnlVal && pnlTotal !== 0) {
+        pnlRow.style.display = 'block';
+        pnlVal.innerText = `${pnlSign}${window.formatearDatoMaestro(pnlTotal, 'moneda')}`;
+        pnlVal.style.color = colorStyle;
+    } else if (pnlRow) {
+        pnlRow.style.display = 'none';
+    }
+
     // C) SOBREESCRITURA INTELIGENTE EN PATRIMONIO (Rayos X)
-    // Se Suman los activos de inversión a la liquidez que pueda tener la cuenta de origen.
     if (window.mapaCuentas) {
         Object.keys(valorPorCuenta).forEach(ctaKey => {
             if(!window.mapaCuentas[ctaKey]) {
                 window.mapaCuentas[ctaKey] = { tipo: 'SIN CLASIFICAR', esInversion: true, saldoActual: 0 };
             }
-            // Sumamos el valor de la cartera a lo que ya hubiera calculado el motor contable
             window.mapaCuentas[ctaKey].saldoActual = (window.mapaCuentas[ctaKey].saldoActual || 0) + valorPorCuenta[ctaKey];
         });
     }
