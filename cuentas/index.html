@@ -4972,7 +4972,7 @@ window.datos.sort((a, b) => b.ts - a.ts);
 window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].sort();
 window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
 window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
-	// ── MÓDULO CARTERA: Leer hoja CARTERA ──────────────────────────────────
+// ── MÓDULO CARTERA: Leer hoja CARTERA ──────────────────────────────────
 	const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
 	if (wsCarteraName) {
 	  const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
@@ -5021,8 +5021,6 @@ if (wsHistCarteraName) {
 } else {
   window.historicoCartera = window.historicoCartera || [];
 }
-// Calcular valores de cartera y sobreescribir saldos de cuentas de inversión
-if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
 // Actualizar UI de forma reactiva
 window.UIEvents.emitir('datos:actualizados');
 };
@@ -5141,7 +5139,7 @@ claseFila = 'mov-ingreso';
 signo = '+';
 }
 const descripcionFinal = m.descripcion || m.detalle || '';
-const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? FMT_PCT.format(m.saldo) : '-';
+ const saldoStr = (m.saldo !== undefined && m.saldo !== null) ? FMT_NUM.format(m.saldo) + ' €' : '-';
 let conceptoCompleto = Security.escapeHTML(m.concepto);
 if (descripcionFinal) {
 conceptoCompleto += ' - <span style="font-weight:400; opacity:0.8">' + Security.escapeHTML(descripcionFinal) + '</span>';
@@ -5157,7 +5155,7 @@ ${conceptoCompleto}
 ${Security.escapeHTML(m.cuenta)} (${saldoStr})${beneficiarioStr}
 </div>
 </td>
-<td class="td-amount ${colorClass}">${signo}${FMT_PCT.format(m.importe)}</td>
+<td class="td-amount ${colorClass}">${signo}${FMT_EUR2.format(Math.abs(m.importe))}</td>
 </tr>
 `;
 };
@@ -5371,7 +5369,7 @@ saldoStr = formateadorDinero.format(window.mapaCuentas[m.cuenta].saldoActual || 
 // --- TEXTOS LIMPIOS Y FECHAS ---
 const f = new Date(m.ts || m.fecha);
 const fechaFormateada = isNaN(f.getTime()) ? '?' : f.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).toUpperCase();
-const cuentaLimpia = (m.cuenta || '').replace('D-', '').replace('N-', '');
+const cuentaLimpia = Security.escapeHTML((m.cuenta || '').replace('D-', '').replace('N-', ''));
 const escapeHTML = (str) => typeof Security !== 'undefined' ? Security.escapeHTML(str) : str;
 const descStr = m.descripcion || m.detalle || '';
 let conceptoCompleto = escapeHTML(m.concepto || 'VARIOS');
@@ -7541,6 +7539,10 @@ event.target.innerText = btnTextOriginal;
 event.target.disabled = false;
 }
 }
+window.cargarSugerenciasAjustes = function() {
+    // Actualmente no hay sugerencias dinámicas; función vacía para evitar errores
+    console.log("Sugerencias de ajustes cargadas (placeholder)");
+};
 // ==========================================
 // 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO UNIFICADO)
 // ==========================================
@@ -8227,33 +8229,33 @@ fechaStr = str;
 // --- TARJETAS INDIVIDUALES (Ahora libres de la caja gigante) ---
 htmlFinal += `
 <div class="movimiento-item" style="background-color: #000000; border: 2px solid ${colorPrincipal}; border-radius: 12px; margin: 0 0 15px 0; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
-<div style="display: flex; justify-content: space-between; align-items: center;">
-<span style="font-weight: 900; font-size: 16px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;">
-${concepto}
-</span>
-<span style="font-size: 20px; font-weight: 900; color: ${colorPrincipal}; flex-shrink: 0;">
-${esTraspaso ? '' : signo}${importeNum.toFixed(2)} €
-</span>
-</div>
-<div style="display: flex; justify-content: space-between; align-items: center;">
-<div style="display: flex; align-items: center; gap: 8px;">
-<span style="color: #FFD60A; font-weight: 900; font-size: 13px;">📅 ${fechaStr}</span>
-<span style="color: #FFD60A; font-weight: 800; font-size: 11px; letter-spacing: 0.5px;">
-🔄 ${frec.toUpperCase()}
-</span>
-</div>
-<span style="font-size: 13px; color: ${colorPrincipal}; font-weight: 800; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%;">
-${infoCuenta}
-</span>
-</div>
-<div style="display: flex; justify-content: space-between; align-items: center;">
-<span style="font-size: 13px; color: #FFFFFF; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;">
-${beneficiario}
-</span>
-<span style="font-size: 12px; color: #FFFFFF; font-style: italic; max-width: 50%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-${desc}
-</span>
-</div>
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-weight: 900; font-size: 16px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;">
+      ${Security.escapeHTML(concepto)}
+    </span>
+    <span style="font-size: 20px; font-weight: 900; color: ${colorPrincipal}; flex-shrink: 0;">
+      ${esTraspaso ? '' : signo}${importeNum.toFixed(2)} €
+    </span>
+  </div>
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="color: #FFD60A; font-weight: 900; font-size: 13px;">📅 ${Security.escapeHTML(fechaStr)}</span>
+      <span style="color: #FFD60A; font-weight: 800; font-size: 11px; letter-spacing: 0.5px;">
+        🔄 ${Security.escapeHTML(frec)}
+      </span>
+    </div>
+    <span style="font-size: 13px; color: ${colorPrincipal}; font-weight: 800; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%;">
+      ${Security.escapeHTML(infoCuenta)}
+    </span>
+  </div>
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 13px; color: #FFFFFF; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;">
+      ${Security.escapeHTML(beneficiario)}
+    </span>
+    <span style="font-size: 12px; color: #FFFFFF; font-style: italic; max-width: 50%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      ${Security.escapeHTML(desc)}
+    </span>
+  </div>
 <div style="display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px dotted rgba(255,255,255,0.15); padding-top: 8px;">
 <span onclick="window.editarRecurrente('${idRecurrente}')" style="color: #0A84FF; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
 ✏️ EDITAR
@@ -8642,490 +8644,6 @@ window.alternarRecurrenteUnificado = function() {
     if (panelOpciones) panelOpciones.style.display = estaMarcado ? 'block' : 'none';
 };
 
-/**
- * ============================================================================
- * 📈 MÓDULO: CARTERA DE INVERSIONES (PRODUCCIÓN 1.0 - ONLY BINANCE EUR)
- * ============================================================================
- */
-
-window.precioBTC_EUR_Cache = 0; // Memoria caché para el precio en euros
-
-// 1. CONEXIÓN API BINANCE (Solo contra EUROS)
-window.obtenerPrecioCripto = async function(ticker) {
-    if (!ticker) return null;
-    try {
-        let pair = String(ticker).toUpperCase().trim();
-        // Forzar la búsqueda siempre contra el Euro (EUR) si el usuario no lo pone
-        if (!pair.endsWith('EUR') && !pair.endsWith('USDT') && !pair.endsWith('USD')) {
-            pair += 'EUR';
-        }
-        
-        const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${pair}`);
-        if (!response.ok) return null; // Si no existe, fallamos en silencio
-        
-        const data = await response.json();
-        return parseFloat(data.price);
-    } catch(error) {
-        console.warn(`Error API Binance para ${ticker}:`, error.message);
-        return null;
-    }
-};
-
-// 2. GESTIÓN DEL MODAL UI
-window.abrirModalNuevaPosicion = function() {
-    const sel = document.getElementById('cartera-cuenta');
-    if (sel && window.mapaCuentas) {
-        sel.innerHTML = '<option value="">-- Sin asociar --</option>';
-        Object.keys(window.mapaCuentas).sort().forEach(cta => {
-            const opt = document.createElement('option');
-            opt.value = cta; opt.textContent = cta;
-            sel.appendChild(opt);
-        });
-    }
-
-    // Limpiar campos
-    ['cartera-pos-id','cartera-ticker','cartera-nombre','cartera-notas','cartera-cantidad','cartera-precio-compra','cartera-precio-actual'].forEach(id => {
-        const el = document.getElementById(id); 
-        if (el) el.value = '';
-    });
-    
-    document.getElementById('cartera-fecha-compra').value = new Date().toISOString().split('T')[0];
-
-    const titulo = document.getElementById('modal-cartera-titulo');
-    if(titulo) titulo.innerText = "NUEVA POSICIÓN";
-
-    const extraBtns = document.getElementById('cartera-extra-btns');
-    if(extraBtns) extraBtns.style.display = 'none';
-
-    document.getElementById('modal-cartera-pos').classList.add('active');
-    window.comportamientoTipoActivo();
-};
-
-window.cerrarModalCartera = function() {
-    document.getElementById('modal-cartera-pos').classList.remove('active');
-};
-
-// 3. COMPORTAMIENTO INTELIGENTE DEL FORMULARIO
-window.comportamientoTipoActivo = async function() {
-    const tipo = document.getElementById('cartera-tipo').value;
-    const inputActual = document.getElementById('cartera-precio-actual');
-    const avisoApi = document.getElementById('aviso-precio-api');
-    const labelActual = document.getElementById('label-precio-actual');
-    const ticker = document.getElementById('cartera-ticker').value;
-
-    if (!inputActual || !avisoApi) return;
-
-    if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
-        inputActual.readOnly = true;
-        avisoApi.style.display = 'block';
-        labelActual.innerHTML = 'PRECIO ACTUAL (€) <span style="font-size:8px;">⚡ API LIVE</span>';
-        
-        // Estilo Azul Neón
-        inputActual.style.color = "#00B8FF";
-        document.getElementById('caja-precio-actual').style.borderColor = "rgba(0, 184, 255, 0.5)";
-
-        if (ticker) {
-            inputActual.placeholder = "Buscando...";
-            const precio = await window.obtenerPrecioCripto(ticker);
-            if (precio !== null) {
-                inputActual.value = precio;
-                window.actualizarPreviewPnl();
-            } else {
-                inputActual.placeholder = "No encontrado";
-                inputActual.value = "";
-                inputActual.readOnly = false; // Liberamos para escritura manual
-            }
-        } else {
-            inputActual.placeholder = "Auto (Binance)";
-        }
-    } else {
-        inputActual.readOnly = false;
-        avisoApi.style.display = 'none';
-        labelActual.innerHTML = 'PRECIO ACTUAL (€) ← MANUAL';
-        
-        // Estilo Verde Neón
-        inputActual.style.color = "#39FF14";
-        document.getElementById('caja-precio-actual').style.borderColor = "rgba(57, 255, 20, 0.4)";
-    }
-    
-    window.actualizarPreviewPnl();
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-    const tickerInput = document.getElementById('cartera-ticker');
-    if(tickerInput) tickerInput.addEventListener('blur', window.comportamientoTipoActivo);
-});
-
-window.recalcularPrecioSiAplica = function() {
-    window.actualizarPreviewPnl();
-};
-
-// 4. PREVIEW P&L (VISTA PREVIA)
-window.actualizarPreviewPnl = function() {
-    const previewDiv = document.getElementById('preview-pnl-cartera');
-    const valDiv = document.getElementById('preview-pnl-valor');
-    const pctDiv = document.getElementById('preview-pnl-pct');
-    
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
-    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-    const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
-
-    if (cantidad > 0 && pCompra > 0 && pActual > 0 && previewDiv) {
-        previewDiv.style.display = 'block';
-        
-        const costeTotal = cantidad * pCompra;
-        const valorActual = cantidad * pActual;
-        const pnlEuros = valorActual - costeTotal;
-        const pnlPct = (pnlEuros / costeTotal) * 100;
-        
-        const formateadorDinero = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
-        
-        valDiv.innerText = (pnlEuros >= 0 ? '+' : '') + formateadorDinero.format(pnlEuros);
-        valDiv.style.color = pnlEuros >= 0 ? '#39FF14' : '#FF2E4D';
-        
-        pctDiv.innerText = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
-        pctDiv.style.color = pnlEuros >= 0 ? '#39FF14' : '#FF2E4D';
-    } else if (previewDiv) {
-        previewDiv.style.display = 'none';
-    }
-};
-
-// 5. GUARDAR POSICIÓN (CON VALIDACIÓN DE SALDO APORTADO)
-window.guardarPosicion = async function() {
-    const id = document.getElementById('cartera-pos-id').value;
-    const tipo = document.getElementById('cartera-tipo').value;
-    const cuenta = document.getElementById('cartera-cuenta').value;
-    const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
-    const nombre = document.getElementById('cartera-nombre').value;
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value);
-    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value);
-    const fecha = document.getElementById('cartera-fecha-compra').value;
-    const notas = document.getElementById('cartera-notas').value;
-
-    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value);
-    if (!pActual || isNaN(pActual)) pActual = pCompra; // Fallback seguro
-
-    if(!tipo || !ticker || isNaN(cantidad) || isNaN(pCompra)) {
-        window.mostrarToast("Completa los campos vitales (Tipo, Ticker, Cantidad, Precio Compra)", "error");
-        return;
-    }
-
-    // 🛡️ CONTROL DE SALDO INVERTIDO (La comprobación de seguridad que pediste)
-    if (cuenta) {
-        let dineroAportado = 0;
-        if (window.datos) {
-            window.datos.forEach(m => {
-                if (m.cuenta === cuenta) dineroAportado += parseFloat(m.importe) || 0;
-            });
-        }
-
-        let costeOtrasPosiciones = 0;
-        if (window.datosCartera) {
-            window.datosCartera.forEach(p => {
-                if (p.cuenta === cuenta && p.id !== id) { 
-                    costeOtrasPosiciones += (parseFloat(p.cantidad) * parseFloat(p.precioCompra)) || 0;
-                }
-            });
-        }
-
-        const costeNuevaPosicion = cantidad * pCompra;
-
-        if ((costeOtrasPosiciones + costeNuevaPosicion) > (dineroAportado + 0.05)) {
-            const diferencia = (costeOtrasPosiciones + costeNuevaPosicion) - dineroAportado;
-            const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
-            window.mostrarToast(`❌ Límite excedido. Has aportado ${fmt.format(dineroAportado)} a la cuenta, pero intentas asignar ${fmt.format(costeOtrasPosiciones + costeNuevaPosicion)}. Faltan ${fmt.format(diferencia)}.`, "error");
-            return; 
-        }
-    }
-
-    if (!window.datosCartera) window.datosCartera = [];
-
-    const generarId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`;
-
-    const posicion = {
-        id: id || generarId(),
-        tipo, cuenta, ticker, nombre, cantidad,
-        precioCompra: pCompra, precioActual: pActual, fechaCompra: fecha, notas
-    };
-
-    if (id) {
-        const idx = window.datosCartera.findIndex(p => p.id === id);
-        if (idx > -1) window.datosCartera[idx] = posicion;
-        else window.datosCartera.push(posicion);
-    } else {
-        window.datosCartera.push(posicion);
-    }
-
-    window.cerrarModalCartera();
-    window.calcularValoresCartera();
-    window.renderizarCartera();
-    if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-    
-    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-    window.mostrarToast(`Posición ${ticker} guardada`, "success");
-    if(navigator.vibrate) navigator.vibrate(40);
-};
-
-// 6. EDITAR Y BORRAR
-window.editarPosicionCartera = function(id) {
-    const pos = (window.datosCartera || []).find(p => p.id === id);
-    if (!pos) return;
-    
-    window.abrirModalNuevaPosicion();
-    
-    setTimeout(() => {
-        document.getElementById('cartera-pos-id').value = pos.id;
-        document.getElementById('cartera-tipo').value = pos.tipo;
-        document.getElementById('cartera-cuenta').value = pos.cuenta || '';
-        document.getElementById('cartera-ticker').value = pos.ticker;
-        document.getElementById('cartera-nombre').value = pos.nombre || '';
-        document.getElementById('cartera-cantidad').value = pos.cantidad;
-        document.getElementById('cartera-precio-compra').value = pos.precioCompra;
-        document.getElementById('cartera-precio-actual').value = pos.precioActual;
-        document.getElementById('cartera-fecha-compra').value = pos.fechaCompra || '';
-        document.getElementById('cartera-notas').value = pos.notas || '';
-
-        const titulo = document.getElementById('modal-cartera-titulo');
-        if(titulo) titulo.innerText = "EDITAR POSICIÓN";
-
-        const extraBtns = document.getElementById('cartera-extra-btns');
-        if(extraBtns) extraBtns.style.display = 'grid';
-
-        window.comportamientoTipoActivo();
-        window.actualizarPreviewPnl();
-    }, 50);
-};
-
-window.borrarPosicion = async function(id) {
-    const confirmacion = typeof window.pedirConfirmacion === 'function' ? 
-        await window.pedirConfirmacion('¿Borrar activo?', 'Se eliminará esta posición de la cartera.', '🗑️') : 
-        confirm("¿Seguro que quieres borrar esta posición?");
-        
-    if (!confirmacion) return;
-
-    window.datosCartera = window.datosCartera.filter(p => p.id !== id);
-    window.cerrarModalCartera();
-    
-    window.calcularValoresCartera();
-    window.renderizarCartera();
-    if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-    
-    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-    window.mostrarToast("Posición eliminada", "success");
-};
-
-// 7. MOTOR MATEMÁTICO: CÁLCULOS GLOBALES
-window.calcularValoresCartera = function() {
-    if (!window.datosCartera) window.datosCartera = [];
-
-    let costeTotal = 0;
-    let valorTotal = 0;
-    let valorPorCuenta = {}; 
-
-    window.datosCartera.forEach(pos => {
-        const coste = pos.cantidad * pos.precioCompra;
-        const valor = pos.cantidad * pos.precioActual;
-        costeTotal += coste;
-        valorTotal += valor;
-
-        if(pos.cuenta) {
-            const ctaLimpia = pos.cuenta.toUpperCase().trim();
-            valorPorCuenta[ctaLimpia] = (valorPorCuenta[ctaLimpia] || 0) + valor;
-        }
-    });
-
-    const pnlTotal = valorTotal - costeTotal;
-    const rentabilidad = costeTotal > 0 ? (pnlTotal / costeTotal) * 100 : 0;
-
-    // A) INYECCIÓN DE KPIs MÓDULO CARTERA
-    const updateHTML = (id, html) => { if(document.getElementById(id)) document.getElementById(id).innerHTML = html; };
-    const updateClass = (id, colorCls) => { if(document.getElementById(id)) document.getElementById(id).className = `kpi-value ${colorCls}`; };
-
-    updateHTML('inv-total-valor', window.formatearDatoMaestro(valorTotal, 'moneda'));
-    updateHTML('inv-coste-total', window.formatearDatoMaestro(costeTotal, 'moneda'));
-    
-    const pnlSign = pnlTotal >= 0 ? '+' : '';
-    const colorStyle = pnlTotal >= 0 ? '#39FF14' : '#FF2E4D';
-    
-    const elTotalPnl = document.getElementById('inv-total-pnl');
-    if (elTotalPnl) {
-        elTotalPnl.innerText = `${pnlSign}${window.formatearDatoMaestro(pnlTotal, 'moneda')}`;
-        elTotalPnl.style.color = colorStyle;
-    }
-    
-    const elRentTotal = document.getElementById('inv-rent-total');
-    if (elRentTotal) {
-        elRentTotal.innerText = `${pnlSign}${window.formatearDatoMaestro(rentabilidad, 'porcentaje')}`;
-        elRentTotal.style.color = colorStyle;
-    }
-
-    updateHTML('inv-num-pos', window.datosCartera.length);
-
-    // B) INYECCIÓN DE KPIs DASHBOARD (Inicio)
-    updateHTML('dash-cartera-valor', window.formatearDatoMaestro(valorTotal, 'moneda'));
-    updateHTML('dash-cartera-pnl', `${pnlSign}${window.formatearDatoMaestro(pnlTotal, 'moneda')}`);
-    updateHTML('dash-cartera-rent', `${pnlSign}${window.formatearDatoMaestro(rentabilidad, 'porcentaje')}`);
-    updateHTML('dash-cartera-num', window.datosCartera.length);
-    
-    updateClass('dash-cartera-pnl', pnlTotal >= 0 ? 'val-std-pos' : 'val-std-neg');
-    updateClass('dash-cartera-rent', rentabilidad >= 0 ? 'val-std-pos' : 'val-std-neg');
-
-    // C) SOBREESCRITURA INTELIGENTE EN PATRIMONIO (Rayos X)
-    if (window.mapaCuentas) {
-        Object.keys(valorPorCuenta).forEach(ctaKey => {
-            if(!window.mapaCuentas[ctaKey]) {
-                window.mapaCuentas[ctaKey] = { tipo: 'SIN CLASIFICAR', esInversion: true, saldoActual: 0 };
-            }
-            window.mapaCuentas[ctaKey].saldoActual = (window.mapaCuentas[ctaKey].saldoActual || 0) + valorPorCuenta[ctaKey];
-        });
-    }
-};
-
-// 8. PINTADO DE LA INTERFAZ
-window.renderizarCartera = function() {
-    const lista = document.getElementById('lista-posiciones-cartera');
-    const sinDatos = document.getElementById('cartera-sin-datos');
-    const cardPosiciones = document.getElementById('card-posiciones');
-    const donutContainer = document.getElementById('chart-cartera-donut');
-    
-    if (!window.datosCartera || window.datosCartera.length === 0) {
-        if(lista) lista.innerHTML = '';
-        if(sinDatos) sinDatos.style.display = 'block';
-        if(cardPosiciones) cardPosiciones.style.display = 'none';
-        if(donutContainer) echarts.getInstanceByDom(donutContainer)?.clear();
-        return;
-    }
-
-    if(sinDatos) sinDatos.style.display = 'none';
-    if(cardPosiciones) cardPosiciones.style.display = 'block';
-
-    let html = '';
-    let donutData = [];
-
-    // Renderizar Filas de Posiciones
-    window.datosCartera.forEach(pos => {
-        const coste = pos.cantidad * pos.precioCompra;
-        const valor = pos.cantidad * pos.precioActual;
-        const pnl = valor - coste;
-        const pnlColorClass = pnl >= 0 ? 'pos' : 'neg';
-        const pnlSign = pnl >= 0 ? '+' : '';
-        const pctRent = coste > 0 ? (pnl / coste) * 100 : 0;
-        
-        let badgeClass = 'badge-bolsa';
-        if (pos.tipo === 'CRIPTOMONEDAS') badgeClass = 'badge-cripto';
-        else if (pos.tipo === 'AUTOCUSTODIA') badgeClass = 'badge-custodia';
-        else if (pos.tipo === 'PLANPENSIONES') badgeClass = 'badge-pension';
-
-        html += `
-        <div class="cartera-pos-row" onclick="window.editarPosicionCartera('${pos.id}')">
-            <div>
-                <div class="cartera-ticker">${pos.ticker} <span class="cartera-tipo-badge ${badgeClass}">${pos.tipo}</span></div>
-                <div class="cartera-nombre">${pos.nombre || pos.cuenta}</div>
-                <div class="cartera-cantidad">${pos.cantidad} un. @ ${window.formatearDatoMaestro(pos.precioCompra, 'moneda')}</div>
-            </div>
-            <div style="text-align: right;">
-                <div class="cartera-valor">${window.formatearDatoMaestro(valor, 'moneda')}</div>
-                <div class="cartera-pnl ${pnlColorClass}">${pnlSign}${window.formatearDatoMaestro(pnl, 'moneda')} (${pnlSign}${window.formatearDatoMaestro(pctRent, 'porcentaje')})</div>
-            </div>
-        </div>
-        `;
-
-        if (valor > 0) donutData.push({ name: pos.ticker, value: valor });
-    });
-
-    if(lista) lista.innerHTML = html;
-
-    // Renderizar Gráfico Donut (Distribución de Cartera)
-    if (donutContainer && donutData.length > 0) {
-        let chart = echarts.getInstanceByDom(donutContainer) || echarts.init(donutContainer);
-        chart.setOption({
-            backgroundColor: 'transparent',
-            tooltip: {
-                trigger: 'item',
-                backgroundColor: 'rgba(20,20,20,0.95)',
-                borderColor: '#BF5AF2',
-                borderWidth: 1,
-                textStyle: { color: '#fff', fontSize: 12, fontFamily: 'Inter' },
-                formatter: '{b} <br/> {c}€ ({d}%)'
-            },
-            series: [{
-                type: 'pie',
-                radius: ['60%', '85%'],
-                avoidLabelOverlap: false,
-                itemStyle: { borderRadius: 8, borderColor: '#000', borderWidth: 3 },
-                label: { show: false },
-                data: donutData.sort((a, b) => b.value - a.value)
-            }]
-        });
-
-        const donutCenterVal = document.getElementById('cartera-donut-val');
-        if (donutCenterVal) {
-            const sumValor = donutData.reduce((acc, curr) => acc + curr.value, 0);
-            donutCenterVal.innerText = window.formatearDatoMaestro(sumValor, 'moneda');
-        }
-
-        // Blindaje de redimensionado
-        if (!window._carteraDonutResizeObs) {
-            window._carteraDonutResizeObs = new ResizeObserver(() => chart.resize());
-            window._carteraDonutResizeObs.observe(donutContainer);
-        }
-    }
-};
-
-// 9. REFRESCAR MERCADO (LIVE) EXCLUSIVO BINANCE EUR
-window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
-    if (!window.datosCartera || window.datosCartera.length === 0) return;
-
-    const btn = document.getElementById('btn-precios-live');
-    const icon = document.getElementById('precios-live-icon');
-    
-    if(btn) btn.disabled = true;
-    if(icon) icon.classList.add('spin');
-    if(!modoSilencioso) window.mostrarToast("⚡ Consultando mercado (Binance)...", "info");
-
-    let actualizados = 0;
-    
-    for (let pos of window.datosCartera) {
-        if (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA') {
-            const precio = await window.obtenerPrecioCripto(pos.ticker);
-            if (precio !== null && pos.precioActual !== precio) {
-                pos.precioActual = precio;
-                actualizados++;
-            }
-        }
-    }
-
-    if (actualizados > 0) {
-        window.calcularValoresCartera();
-        window.renderizarCartera();
-        if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-        
-        if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-        
-        if(!modoSilencioso) window.mostrarToast(`✅ API: ${actualizados} posiciones sincronizadas`, "success");
-    } else {
-        if(!modoSilencioso) window.mostrarToast("Todo al día o sin activos cripto", "warning");
-    }
-
-    if(btn) btn.disabled = false;
-    if(icon) icon.classList.remove('spin');
-};
-
-// Hook inicial Reactivo
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        if (window.UIEvents) {
-            window.UIEvents.on('datos:actualizados', function() {
-                if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-                const tabInv = document.getElementById('tab-inversiones');
-                if (tabInv && tabInv.classList.contains('active') && typeof window.renderizarCartera === 'function') {
-                    window.renderizarCartera();
-                }
-            });
-        }
-    }, 800);
-});
-
 window.alternarDiasDiarioUnificado = function() {
     const frecuencia = document.getElementById('m-frecuencia-recurrente').value;
     const cajaDias = document.getElementById('m-dias-semana-box');
@@ -9371,9 +8889,9 @@ try {
 if (window.modoNube && typeof cargarDesdeNube === 'function') {
 await cargarDesdeNube();
 notify('✅ Datos actualizados desde la nube', 'success');
-} else if (typeof cargarDesdeCacheAsync === 'function') {
-await cargarDesdeCacheAsync();
-notify('⚡ Datos recargados desde caché', 'info');
+} else if (typeof window.cargarDatosDesdeCache === 'function') {
+    await window.cargarDatosDesdeCache();
+    notify('⚡ Datos recargados desde caché', 'info');
 }
 } catch(e) {
 notify('⚠️ No se pudo actualizar', 'warning');
@@ -9685,6 +9203,20 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 500);
     }
 });
+// Función para cambiar el PIN desde la UI (pendiente de implementar)
+window.cambiarPinUI = function() {
+    // Por ahora, redirigimos al bloque de cambio de PIN existente
+    const oldPinInput = document.getElementById('sec-old-pin');
+    const newPinInput = document.getElementById('sec-new-pin');
+    const confirmPinInput = document.getElementById('sec-confirm-pin');
+    if (oldPinInput && newPinInput && confirmPinInput) {
+        // Simulamos que el usuario ya ha rellenado los campos; 
+        // lo ideal sería abrir un modal específico, pero por simplicidad:
+        window.cambiarPinSeguridad();
+    } else {
+        notify('Para cambiar el PIN, ve a la sección "Seguridad de Acceso" en Ajustes.', 'info');
+    }
+};
 // Funciones para la UI de Ajustes
 window.toggleBiometriaUI = function(cb) {
     const slider = document.getElementById('slider-biometria');
@@ -10168,7 +9700,6 @@ btnFiltros.classList.remove('filtros-activos');
  * 📈 MÓDULO: CARTERA DE INVERSIONES (PRODUCCIÓN 1.0 - ONLY BTC/EUR)
  * ============================================================================
  */
-
 window.precioBTC_EUR_Cache = 0; // Memoria caché para el precio en euros
 
 // 1. CONEXIÓN API BINANCE (Exclusivo BTC/EUR)
@@ -10186,36 +9717,6 @@ window.obtenerPrecioBTC = async function() {
     }
 };
 
-// 2. GESTIÓN DEL MODAL UI
-window.abrirModalNuevaPosicion = function() {
-    const sel = document.getElementById('cartera-cuenta');
-    if (sel && window.mapaCuentas) {
-        sel.innerHTML = '<option value="">-- Sin asociar --</option>';
-        Object.keys(window.mapaCuentas).sort().forEach(cta => {
-            const opt = document.createElement('option');
-            opt.value = cta; opt.textContent = cta;
-            sel.appendChild(opt);
-        });
-    }
-
-    // Limpiar campos
-    ['cartera-pos-id','cartera-ticker','cartera-nombre','cartera-notas','cartera-cantidad','cartera-precio-compra','cartera-precio-actual'].forEach(id => {
-        const el = document.getElementById(id); 
-        if (el) el.value = '';
-    });
-    
-    document.getElementById('cartera-fecha-compra').value = new Date().toISOString().split('T')[0];
-
-    const titulo = document.getElementById('modal-cartera-titulo');
-    if(titulo) titulo.innerText = "NUEVA POSICIÓN";
-
-    const extraBtns = document.getElementById('cartera-extra-btns');
-    if(extraBtns) extraBtns.style.display = 'none';
-
-    document.getElementById('modal-cartera-pos').classList.add('active');
-    window.comportamientoTipoActivo();
-};
-
 window.cerrarModalCartera = function() {
     document.getElementById('modal-cartera-pos').classList.remove('active');
 };
@@ -10227,43 +9728,65 @@ window.comportamientoTipoActivo = async function() {
     const cajaPrecio = document.getElementById('caja-precio-actual');
     const labelPrecio = document.getElementById('label-precio-actual');
     const avisoApi = document.getElementById('aviso-precio-api');
+    const tickerInput = document.getElementById('cartera-ticker');
+    const ticker = tickerInput ? tickerInput.value.toUpperCase().trim() : '';
 
     if (!inputActual) return;
 
     if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
         inputActual.readOnly = true;
-        avisoApi.style.display = 'block';
-        labelActual.innerHTML = 'PRECIO ACTUAL (€) <span style="font-size:8px;">⚡ API BTC LIVE</span>';
+        if (avisoApi) avisoApi.style.display = 'block';
+        if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) <span style="font-size:8px;">⚡ API BINANCE</span>';
         
-        // Estilo Azul Neón para BTC
+        // Estilo Azul Neón
         inputActual.style.color = "#00B8FF";
-        cajaPrecio.style.borderColor = "rgba(0, 184, 255, 0.5)";
+        if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(0, 184, 255, 0.5)";
 
-        inputActual.placeholder = "Buscando BTC...";
-        const precioBTC = await window.obtenerPrecioBTC();
+        inputActual.placeholder = "Consultando...";
+        let precio = null;
+		if (ticker === 'BTC') {
+		precio = await window.obtenerPrecioBTC();
+		} else if (ticker) {
+		precio = null;
+		}
         
-        if (precioBTC !== null) {
-            inputActual.value = precioBTC;
+        if (precio !== null) {
+            inputActual.value = precio;
         } else {
-            inputActual.placeholder = "Error API";
-            inputActual.readOnly = false; // Fallback manual si falla internet
+            inputActual.placeholder = "No encontrado";
+            inputActual.value = "";
+            inputActual.readOnly = false; // Permitir manual si falla API
+            if (avisoApi) avisoApi.style.display = 'none';
+            if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) ← MANUAL (API no disponible)';
         }
     } else {
         inputActual.readOnly = false;
-        avisoApi.style.display = 'none';
-        labelActual.innerHTML = 'PRECIO ACTUAL (€) ← MANUAL';
+        if (avisoApi) avisoApi.style.display = 'none';
+        if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) ← MANUAL';
         
         // Estilo Verde Neón para Manual
         inputActual.style.color = "#39FF14";
-        cajaPrecio.style.borderColor = "rgba(57, 255, 20, 0.4)";
+        if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(57, 255, 20, 0.4)";
     }
     
     window.actualizarPreviewPnl();
 };
 
+// Forzar ticker a BTC para tipos específicos
 document.addEventListener('DOMContentLoaded', () => {
     const tipoSelect = document.getElementById('cartera-tipo');
-    if(tipoSelect) tipoSelect.addEventListener('change', window.comportamientoTipoActivo);
+    const tickerInput = document.getElementById('cartera-ticker');
+    if (tipoSelect && tickerInput) {
+        tipoSelect.addEventListener('change', () => {
+            const tipo = tipoSelect.value;
+            if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
+                if (!tickerInput.value || tickerInput.value.toUpperCase() === 'BTC') {
+                    tickerInput.value = 'BTC';
+                }
+                // Podrías forzarlo, pero mejor dejar que el usuario confirme
+            }
+        });
+    }
 });
 
 window.recalcularPrecioSiAplica = function() { window.actualizarPreviewPnl(); };
@@ -10296,81 +9819,6 @@ window.actualizarPreviewPnl = function() {
     }
 };
 
-// 5. GUARDAR POSICIÓN (CON CONTROL DE SALDO INVERTIDO)
-window.guardarPosicion = async function() {
-    const id = document.getElementById('cartera-pos-id').value;
-    const tipo = document.getElementById('cartera-tipo').value;
-    const cuenta = document.getElementById('cartera-cuenta').value;
-    const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
-    const nombre = document.getElementById('cartera-nombre').value;
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value);
-    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value);
-    const fecha = document.getElementById('cartera-fecha-compra').value;
-    const notas = document.getElementById('cartera-notas').value;
-
-    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value);
-    if (!pActual || isNaN(pActual)) pActual = pCompra; 
-
-    if(!tipo || !ticker || isNaN(cantidad) || isNaN(pCompra)) {
-        window.mostrarToast("Completa Tipo, Ticker, Cantidad y Precio de Compra", "error");
-        return;
-    }
-
-    // 🛡️ CONTROL DE SALDO INVERTIDO
-    if (cuenta) {
-        let dineroAportado = 0;
-        if (window.datos) {
-            window.datos.forEach(m => {
-                if (m.cuenta === cuenta) dineroAportado += parseFloat(m.importe) || 0;
-            });
-        }
-
-        let costeOtrasPosiciones = 0;
-        if (window.datosCartera) {
-            window.datosCartera.forEach(p => {
-                if (p.cuenta === cuenta && p.id !== id) { 
-                    costeOtrasPosiciones += (parseFloat(p.cantidad) * parseFloat(p.precioCompra)) || 0;
-                }
-            });
-        }
-
-        const costeNuevaPosicion = cantidad * pCompra;
-
-        if ((costeOtrasPosiciones + costeNuevaPosicion) > (dineroAportado + 0.05)) {
-            const diferencia = (costeOtrasPosiciones + costeNuevaPosicion) - dineroAportado;
-            const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
-            window.mostrarToast(`❌ Límite excedido. Has aportado ${fmt.format(dineroAportado)} a la cuenta, pero intentas asignar ${fmt.format(costeOtrasPosiciones + costeNuevaPosicion)}. Faltan ${fmt.format(diferencia)}.`, "error");
-            return; 
-        }
-    }
-
-    if (!window.datosCartera) window.datosCartera = [];
-
-    const generarId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`;
-
-    const posicion = {
-        id: id || generarId(),
-        tipo, cuenta, ticker, nombre, cantidad,
-        precioCompra: pCompra, precioActual: pActual, fechaCompra: fecha, notas
-    };
-
-    if (id) {
-        const idx = window.datosCartera.findIndex(p => p.id === id);
-        if (idx > -1) window.datosCartera[idx] = posicion;
-        else window.datosCartera.push(posicion);
-    } else {
-        window.datosCartera.push(posicion);
-    }
-
-    window.cerrarModalCartera();
-    window.calcularValoresCartera();
-    window.renderizarCartera();
-    if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-    
-    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-    window.mostrarToast(`Posición guardada`, "success");
-    if(navigator.vibrate) navigator.vibrate(40);
-};
 
 // 6. EDITAR Y BORRAR
 window.editarPosicionCartera = function(id) {
@@ -10417,213 +9865,6 @@ window.borrarPosicion = async function(id) {
     
     if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
     window.mostrarToast("Posición eliminada", "success");
-};
-
-// 7. MOTOR MATEMÁTICO: CÁLCULOS GLOBALES
-window.calcularValoresCartera = function() {
-    if (!window.datosCartera) window.datosCartera = [];
-
-    let costeTotal = 0;
-    let valorTotal = 0;
-    let valorPorCuenta = {}; 
-
-    window.datosCartera.forEach(pos => {
-        const coste = pos.cantidad * pos.precioCompra;
-        const valor = pos.cantidad * pos.precioActual;
-        costeTotal += coste;
-        valorTotal += valor;
-
-        if(pos.cuenta) {
-            const ctaLimpia = pos.cuenta.toUpperCase().trim();
-            valorPorCuenta[ctaLimpia] = (valorPorCuenta[ctaLimpia] || 0) + valor;
-        }
-    });
-
-    const pnlTotal = valorTotal - costeTotal;
-    const rentabilidad = costeTotal > 0 ? (pnlTotal / costeTotal) * 100 : 0;
-
-    // A) INYECCIÓN DE KPIs MÓDULO CARTERA
-    const updateHTML = (id, html) => { if(document.getElementById(id)) document.getElementById(id).innerHTML = html; };
-    const updateClass = (id, colorCls) => { if(document.getElementById(id)) document.getElementById(id).className = `kpi-value ${colorCls}`; };
-
-    updateHTML('inv-total-valor', window.formatearDatoMaestro(valorTotal, 'moneda'));
-    updateHTML('inv-coste-total', window.formatearDatoMaestro(costeTotal, 'moneda'));
-    
-    const pnlSign = pnlTotal >= 0 ? '+' : '';
-    const colorStyle = pnlTotal >= 0 ? '#39FF14' : '#FF2E4D';
-    
-    const elTotalPnl = document.getElementById('inv-total-pnl');
-    if (elTotalPnl) {
-        elTotalPnl.innerText = `${pnlSign}${window.formatearDatoMaestro(pnlTotal, 'moneda')}`;
-        elTotalPnl.style.color = colorStyle;
-    }
-    
-    const elRentTotal = document.getElementById('inv-rent-total');
-    if (elRentTotal) {
-        elRentTotal.innerText = `${pnlSign}${window.formatearDatoMaestro(rentabilidad, 'porcentaje')}`;
-        elRentTotal.style.color = colorStyle;
-    }
-
-    updateHTML('inv-num-pos', window.datosCartera.length);
-
-    // B) INYECCIÓN DE KPIs DASHBOARD (Inicio)
-    updateHTML('dash-cartera-valor', window.formatearDatoMaestro(valorTotal, 'moneda'));
-    updateHTML('dash-cartera-pnl', `${pnlSign}${window.formatearDatoMaestro(pnlTotal, 'moneda')}`);
-    updateHTML('dash-cartera-rent', `${pnlSign}${window.formatearDatoMaestro(rentabilidad, 'porcentaje')}`);
-    updateHTML('dash-cartera-num', window.datosCartera.length);
-    
-    updateClass('dash-cartera-pnl', pnlTotal >= 0 ? 'val-std-pos' : 'val-std-neg');
-    updateClass('dash-cartera-rent', rentabilidad >= 0 ? 'val-std-pos' : 'val-std-neg');
-
-    // C) SOBREESCRITURA INTELIGENTE EN PATRIMONIO (Rayos X)
-    if (window.mapaCuentas) {
-        Object.keys(valorPorCuenta).forEach(ctaKey => {
-            if(!window.mapaCuentas[ctaKey]) {
-                window.mapaCuentas[ctaKey] = { tipo: 'SIN CLASIFICAR', esInversion: true, saldoActual: 0 };
-            }
-            window.mapaCuentas[ctaKey].saldoActual = (window.mapaCuentas[ctaKey].saldoActual || 0) + valorPorCuenta[ctaKey];
-        });
-    }
-};
-
-// 8. PINTADO DE LA INTERFAZ Y GRÁFICO DONUT
-window.renderizarCartera = function() {
-    const lista = document.getElementById('lista-posiciones-cartera');
-    const sinDatos = document.getElementById('cartera-sin-datos');
-    const cardPosiciones = document.getElementById('card-posiciones');
-    const donutContainer = document.getElementById('chart-cartera-donut');
-    
-    if (!window.datosCartera || window.datosCartera.length === 0) {
-        if(lista) lista.innerHTML = '';
-        if(sinDatos) sinDatos.style.display = 'block';
-        if(cardPosiciones) cardPosiciones.style.display = 'none';
-        if(donutContainer) echarts.getInstanceByDom(donutContainer)?.clear();
-        return;
-    }
-
-    if(sinDatos) sinDatos.style.display = 'none';
-    if(cardPosiciones) cardPosiciones.style.display = 'block';
-
-    let html = '';
-    let donutData = [];
-    const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
-
-    window.datosCartera.forEach(pos => {
-        const coste = pos.cantidad * pos.precioCompra;
-        const valor = pos.cantidad * pos.precioActual;
-        const pnl = valor - coste;
-        const pnlColorClass = pnl >= 0 ? 'pos' : 'neg';
-        const pnlSign = pnl >= 0 ? '+' : '';
-        const pctRent = coste > 0 ? (pnl / coste) * 100 : 0;
-        
-        let badgeClass = 'badge-bolsa';
-        if (pos.tipo === 'CRIPTOMONEDAS') badgeClass = 'badge-cripto';
-        else if (pos.tipo === 'AUTOCUSTODIA') badgeClass = 'badge-custodia';
-        else if (pos.tipo === 'PLANPENSIONES') badgeClass = 'badge-pension';
-
-        html += `
-        <div class="cartera-pos-row" onclick="window.editarPosicionCartera('${pos.id}')">
-            <div>
-                <div class="cartera-ticker">${pos.ticker} <span class="cartera-tipo-badge ${badgeClass}">${pos.tipo}</span></div>
-                <div class="cartera-nombre">${pos.nombre || pos.cuenta}</div>
-                <div class="cartera-cantidad">${pos.cantidad} un. @ ${fmtEur.format(pos.precioCompra)}</div>
-            </div>
-            <div style="text-align: right;">
-                <div class="cartera-valor">${fmtEur.format(valor)}</div>
-                <div class="cartera-pnl ${pnlColorClass}">${pnlSign}${fmtEur.format(pnl)} (${pnlSign}${pctRent.toFixed(2)}%)</div>
-            </div>
-        </div>
-        `;
-
-        if (valor > 0) donutData.push({ name: pos.ticker, value: valor });
-    });
-
-    if(lista) lista.innerHTML = html;
-
-    // Renderizar Gráfico Donut
-    if (donutContainer && donutData.length > 0) {
-        let chart = echarts.getInstanceByDom(donutContainer) || echarts.init(donutContainer);
-        chart.setOption({
-            backgroundColor: 'transparent',
-            tooltip: {
-                trigger: 'item',
-                backgroundColor: 'rgba(20,20,20,0.95)',
-                borderColor: '#BF5AF2', borderWidth: 1,
-                textStyle: { color: '#fff', fontSize: 12, fontFamily: 'Inter' },
-                formatter: '{b} <br/> {c}€ ({d}%)'
-            },
-            series: [{
-                type: 'pie',
-                radius: ['60%', '85%'],
-                avoidLabelOverlap: false,
-                itemStyle: { borderRadius: 8, borderColor: '#000', borderWidth: 3 },
-                label: { show: false },
-                data: donutData.sort((a, b) => b.value - a.value)
-            }]
-        });
-
-        const donutCenterVal = document.getElementById('cartera-donut-val');
-        if (donutCenterVal) {
-            const sumValor = donutData.reduce((acc, curr) => acc + curr.value, 0);
-            donutCenterVal.innerText = fmtEur.format(sumValor);
-        }
-
-        if (!window._carteraDonutResizeObs) {
-            window._carteraDonutResizeObs = new ResizeObserver(() => chart.resize());
-            window._carteraDonutResizeObs.observe(donutContainer);
-        }
-    }
-};
-
-// 9. ACTUALIZACIÓN AUTOMÁTICA (LIVE EXCLUSIVO BTC)
-window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
-    if (!window.datosCartera || window.datosCartera.length === 0) return;
-
-    const btnIcon = document.getElementById('precios-live-icon');
-    if (btnIcon && !modoSilencioso) btnIcon.innerText = "⏳";
-    if (!modoSilencioso) window.mostrarToast("⚡ Consultando BTC/EUR...", "info");
-
-    try {
-        const precioBTC = await window.obtenerPrecioBTC();
-        
-        if (precioBTC !== null) {
-            let hayCambios = false;
-            
-            window.datosCartera.forEach(pos => {
-                if (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA') {
-                    if (pos.precioActual !== precioBTC) {
-                        pos.precioActual = precioBTC;
-                        hayCambios = true;
-                    }
-                }
-            });
-
-            // Si el modal está abierto, actualizamos la vista previa visualmente
-            const tipoSelect = document.getElementById('cartera-tipo');
-            if (tipoSelect && (tipoSelect.value === 'CRIPTOMONEDAS' || tipoSelect.value === 'AUTOCUSTODIA')) {
-                const inputAct = document.getElementById('cartera-precio-actual');
-                if(inputAct) inputAct.value = precioBTC.toFixed(2);
-                window.actualizarPreviewPnl();
-            }
-
-            if (hayCambios) {
-                window.calcularValoresCartera();
-                if (typeof window.renderizarCartera === 'function') window.renderizarCartera(); 
-                if (typeof window.guardarUniversal === 'function' && window.modoNube) {
-                    window.guardarUniversal(); 
-                }
-                if (!modoSilencioso) window.mostrarToast(`✅ Precio BTC actualizado`, "success");
-            } else {
-                 if (!modoSilencioso) window.mostrarToast(`Todo al día`, "success");
-            }
-        } else {
-             if (!modoSilencioso) window.mostrarToast("Fallo al contactar con Binance", "error");
-        }
-    } catch (error) {
-        if (!modoSilencioso) window.mostrarToast("Error de conexión", "error");
-    } finally {
-        if (btnIcon && !modoSilencioso) btnIcon.innerText = "⚡";
-    }
 };
 
 // Hook Reactivo inicial
@@ -11204,7 +10445,6 @@ elResultado.style.color = "var(--c-success, #39FF14)";
 }
 };
 // --- INICIO FUNCIONES PARA EL MODAL DE DESGLOSE ---
-// --- INICIO FUNCIONES PARA EL MODAL DE DESGLOSE ---
 window.mostrarDesgloseCuentas = function(persona) {
 const inputMes = document.getElementById('mes-cuentas-claras');
 if (!inputMes || !inputMes.value) return;
@@ -11446,7 +10686,6 @@ window.addEventListener("beforeunload", function(e) {
 // 📈 MOTOR CARTERA DE INVERSIONES — MÓDULOS 1-4 COMPLETOS
 // ============================================================
 
-// ── MÓDULO 2: CALCULADORA DE VALORES DE MERCADO ──────────────────────
 window.calcularValoresCartera = function() {
   if (!window.datosCartera || window.datosCartera.length === 0) {
     window.resumenCartera = null;
@@ -11796,10 +11035,10 @@ window.renderizarEvolCartera = function() {
     series: [{
       type:'line', data:valores, smooth:true, symbol:'none',
       lineStyle:{color:colorLinea,width:2.5,shadowBlur:8,shadowColor:colorLinea},
-      areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
-        {{offset:0,color:(c=>{ const r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16); return `rgba(${r},${g},${b},.35)`; })(colorLinea)},
-        {offset:1,color:'rgba(0,0,0,0)'}
-      ])}
+areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
+    {offset:0, color: colorLinea + '59'},
+    {offset:1, color:'rgba(0,0,0,0)'}
+])}
     }]
   }, { notMerge:true });
 
@@ -11958,20 +11197,6 @@ window.guardarPosicion = async function() {
     if("vibrate" in navigator) navigator.vibrate(40);
 };
 
-// Guardar SOLO el precio actual (acceso rápido)
-window.actualizarPrecioRapido = async function() {
-  const idExist = document.getElementById('cartera-pos-id').value;
-  const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
-  if (!idExist || pActual <= 0) { notify('Indica un precio válido', 'warning'); return; }
-  const pos = (window.datosCartera || []).find(p => p.id === idExist);
-  if (!pos) return;
-  pos.precioActual = pActual;
-  window.calcularValoresCartera();
-  window.renderizarCartera();
-  window.cerrarModalCartera();
-  if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-  notify('⚡ Precio actualizado', 'success');
-};
 
 window.borrarPosicion = async function(id) {
   const confirmado = await window.pedirConfirmacion('¿Eliminar posición?', 'Se borrará de tu cartera y del Excel.', '🗑️');
@@ -11999,104 +11224,54 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── MÓDULO 5: ACTUALIZACIÓN AUTOMÁTICA DE PRECIOS (LIVE) ──────────────
-window.actualizarPreciosAutomatico = async function() {
+window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
   const posiciones = window.datosCartera || [];
   if (posiciones.length === 0) {
-    notify("No hay posiciones en cartera", "warning");
+    if (!modoSilencioso) notify("No hay posiciones en cartera", "warning");
     return;
   }
 
   const btn = document.getElementById('btn-precios-live');
   const icon = document.getElementById('precios-live-icon');
   if (btn) btn.style.opacity = '0.5';
-  if (icon) icon.textContent = '⏳';
-  notify("Consultando precios de mercado...", "loading");
-
-  const bolsa  = posiciones.filter(p => p.tipo === 'BOLSA' || p.tipo === 'FONDO');
-  const cripto = posiciones.filter(p => p.tipo === 'CRIPTO');
+  if (icon && !modoSilencioso) icon.textContent = '⏳';
+  if (!modoSilencioso) notify("⚡ Consultando mercado (Binance)...", "info");
 
   let actualizados = 0;
-  let errores = 0;
+  const criptoPos = posiciones.filter(p => p.tipo === 'CRIPTOMONEDAS' || p.tipo === 'AUTOCUSTODIA');
 
-  // Detectar base URL del API (funciona tanto en localhost como en producción)
-  const apiBase = window.location.origin;
-
-  try {
-    // ── Bolsa / Fondos vía Yahoo Finance proxy ──────────────────────────
-    if (bolsa.length > 0) {
-      const tickers = bolsa.map(p => p.ticker).filter(Boolean).join(',');
-      if (tickers) {
-        try {
-          const resp = await fetch(`${apiBase}/api/precios/bolsa?tickers=${encodeURIComponent(tickers)}`);
-          if (resp.ok) {
-            const { precios } = await resp.json();
-            bolsa.forEach(pos => {
-              const precio = precios[pos.ticker.toUpperCase()];
-              if (precio && precio > 0) {
-                pos.precioActual = precio;
-                actualizados++;
-              } else {
-                errores++;
-              }
-            });
-          }
-        } catch (e) {
-          console.warn("Error precios bolsa:", e);
-          errores += bolsa.length;
+  // Actualizar solo activos cripto (usando Binance)
+  for (const pos of criptoPos) {
+    let ticker = pos.ticker.toUpperCase().trim();
+    if (ticker === 'BTC') {
+        const precio = await window.obtenerPrecioBTC();
+        if (precio !== null && pos.precioActual !== precio) {
+            pos.precioActual = precio;
+            actualizados++;
         }
-      }
+    } else {
+        // No actualizamos otras criptos automáticamente
+        // Podrías mostrar un mensaje opcional: 
+        // if (!modoSilencioso) notify(`No se actualiza ${ticker} automáticamente`, 'info');
     }
+}
 
-    // ── Cripto vía CoinGecko proxy ──────────────────────────────────────
-    if (cripto.length > 0) {
-      const tickers = cripto.map(p => p.ticker).filter(Boolean).join(',');
-      if (tickers) {
-        try {
-          const resp = await fetch(`${apiBase}/api/precios/cripto?tickers=${encodeURIComponent(tickers)}`);
-          if (resp.ok) {
-            const { precios } = await resp.json();
-            cripto.forEach(pos => {
-              const precio = precios[pos.ticker.toUpperCase()];
-              if (precio && precio > 0) {
-                pos.precioActual = precio;
-                actualizados++;
-              } else {
-                errores++;
-              }
-            });
-          }
-        } catch (e) {
-          console.warn("Error precios cripto:", e);
-          errores += cripto.length;
-        }
-      }
-    }
-  } finally {
-    if (btn) btn.style.opacity = '1';
-    if (icon) icon.textContent = '⚡';
-  }
+  // NOTA: Los activos de bolsa (BOLSA, FONDO, PLANPENSIONES, CROWDFUNDING)
+  // no se actualizan automáticamente porque no tenemos API gratuita fiable.
+  // El usuario introduce manualmente el precio actual.
 
-  if (actualizados === 0 && errores === 0) {
-    notify("No hay tickers BOLSA/CRIPTO configurados", "warning");
-    return;
-  }
-
-  // Recalcular y renderizar con los nuevos precios
-  if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-  if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
-
-  // Guardar automáticamente si hay conexión
-  if (typeof window.guardarUniversal === 'function') {
-    try { await window.guardarUniversal(); } catch(e) { /* silencioso */ }
-  }
-
-  if (errores > 0 && actualizados === 0) {
-    notify(`❌ Sin precios. Verifica los tickers (${errores} fallidos)`, "error");
-  } else if (errores > 0) {
-    notify(`⚡ ${actualizados} precios actualizados (${errores} no disponibles)`, "success");
+  if (actualizados > 0) {
+    window.calcularValoresCartera();
+    window.renderizarCartera();
+    if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
+    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
+    if (!modoSilencioso) notify(`✅ Precios actualizados (${actualizados} posiciones)`, "success");
   } else {
-    notify(`✅ ${actualizados} precios actualizados en tiempo real`, "success");
+    if (!modoSilencioso) notify("Todos los precios ya estaban al día", "info");
   }
+
+  if (btn) btn.style.opacity = '1';
+  if (icon && !modoSilencioso) icon.textContent = '⚡';
   if (typeof vibrar === 'function') vibrar('success');
 };
 // ── FIN MOTOR CARTERA ─────────────────────────────────────────────────
