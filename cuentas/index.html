@@ -2763,7 +2763,7 @@ Ahora no
       </div>
       
       <div class="precio-input-wrap">
-        <label>PRECIO MEDIO COMPRA (€)</label>
+        <label id="label-precio-compra">PRECIO COMPRA (€ invertidos)</label>
         <input type="number" id="cartera-precio-compra" placeholder="0.00" step="any" inputmode="decimal" style="font-size:20px;" oninput="window.actualizarPreviewPnl()">
       </div>
 
@@ -9723,52 +9723,67 @@ window.cerrarModalCartera = function() {
 
 // 3. COMPORTAMIENTO INTELIGENTE DEL FORMULARIO
 window.comportamientoTipoActivo = async function() {
+    // 1. Obtener el tipo de activo seleccionado (¡primero!)
     const tipo = document.getElementById('cartera-tipo').value;
+    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+
+    // 2. Cambiar la etiqueta del campo "PRECIO COMPRA"
+    const labelCompra = document.getElementById('label-precio-compra');
+    if (labelCompra) {
+        labelCompra.innerText = esCripto 
+            ? 'PRECIO COMPRA (€ total invertido)' 
+            : 'PRECIO MEDIO COMPRA (€/ud)';
+    }
+
     const inputActual = document.getElementById('cartera-precio-actual');
     const cajaPrecio = document.getElementById('caja-precio-actual');
     const labelPrecio = document.getElementById('label-precio-actual');
     const avisoApi = document.getElementById('aviso-precio-api');
     const tickerInput = document.getElementById('cartera-ticker');
     const ticker = tickerInput ? tickerInput.value.toUpperCase().trim() : '';
+    const cantidadInput = document.getElementById('cartera-cantidad');
+    const cantidad = parseFloat(cantidadInput?.value) || 0;
 
     if (!inputActual) return;
 
-    if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
+    if (esCripto) {
+        // Para cripto, obtenemos el precio unitario de la API (solo BTC)
         inputActual.readOnly = true;
         if (avisoApi) avisoApi.style.display = 'block';
         if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) <span style="font-size:8px;">⚡ API BINANCE</span>';
-        
-        // Estilo Azul Neón
         inputActual.style.color = "#00B8FF";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(0, 184, 255, 0.5)";
-
         inputActual.placeholder = "Consultando...";
-        let precio = null;
-		if (ticker === 'BTC') {
-		precio = await window.obtenerPrecioBTC();
-		} else if (ticker) {
-		precio = null;
-		}
-        
-        if (precio !== null) {
-            inputActual.value = precio;
+
+        let precioUnitario = null;
+        if (ticker === 'BTC') {
+            precioUnitario = await window.obtenerPrecioBTC();
+        } else {
+            precioUnitario = null;
+        }
+
+        if (precioUnitario !== null && cantidad > 0) {
+            // 🔥 Punto 2: Asignar el VALOR TOTAL = cantidad * precio unitario
+            const valorTotal = cantidad * precioUnitario;
+            inputActual.value = valorTotal.toFixed(2);
+            inputActual.readOnly = false;   // Permitir edición manual si el usuario quiere ajustar
         } else {
             inputActual.placeholder = "No encontrado";
             inputActual.value = "";
-            inputActual.readOnly = false; // Permitir manual si falla API
+            inputActual.readOnly = false;
             if (avisoApi) avisoApi.style.display = 'none';
             if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) ← MANUAL (API no disponible)';
         }
     } else {
+        // Para activos normales (bolsa, pensiones, etc.) el precio es unitario y manual
         inputActual.readOnly = false;
         if (avisoApi) avisoApi.style.display = 'none';
-        if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) ← MANUAL';
-        
-        // Estilo Verde Neón para Manual
+        if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) ← MANUAL';
         inputActual.style.color = "#39FF14";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(57, 255, 20, 0.4)";
     }
-    
+
+    // Llamar a la actualización del preview (que ahora usará la nueva lógica)
     window.actualizarPreviewPnl();
 };
 
@@ -9796,19 +9811,31 @@ window.actualizarPreviewPnl = function() {
     const previewDiv = document.getElementById('preview-pnl-cartera');
     const valDiv = document.getElementById('preview-pnl-valor');
     const pctDiv = document.getElementById('preview-pnl-pct');
-    
+
+    const tipo = document.getElementById('cartera-tipo').value;
+    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+
     const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
-    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
+    let pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
     let pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
 
-    if (cantidad > 0 && pCompra > 0 && pActual > 0 && previewDiv) {
+    let costeTotal, valorActual;
+
+    if (esCripto) {
+        // Para cripto/autocustodia, los campos ya representan TOTALES (no unitarios)
+        costeTotal = pCompra;      // lo que invertiste en total
+        valorActual = pActual;     // valor actual total de la posición
+    } else {
+        // Para el resto de activos: precio unitario × cantidad
+        costeTotal = cantidad * pCompra;
+        valorActual = cantidad * pActual;
+    }
+
+    if (costeTotal > 0 && valorActual > 0 && previewDiv) {
         previewDiv.style.display = 'block';
-        
-        const costeTotal = cantidad * pCompra;
-        const valorActual = cantidad * pActual;
         const pnlEuros = valorActual - costeTotal;
         const pnlPct = (pnlEuros / costeTotal) * 100;
-        
+
         const fmt = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
         valDiv.innerText = (pnlEuros >= 0 ? '+' : '') + fmt.format(pnlEuros);
         valDiv.style.color = pnlEuros >= 0 ? '#39FF14' : '#FF2E4D';
@@ -10696,15 +10723,17 @@ window.calcularValoresCartera = function() {
   let totalValor = 0, totalCoste = 0;
 
   window.datosCartera.forEach(pos => {
-    const cuenta  = pos.cuenta || '';
-    const valPos  = pos.cantidad * pos.precioActual;
-    const cosPos  = pos.cantidad * pos.precioCompra;
-    if (cuenta) {
-      valorPorCuenta[cuenta]  = (valorPorCuenta[cuenta]  || 0) + valPos;
-      costePorCuenta[cuenta]  = (costePorCuenta[cuenta]  || 0) + cosPos;
+    const esCripto = (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA');
+    let costePos, valorPos;
+    if (esCripto) {
+        costePos = pos.precioCompra;   // ya es total
+        valorPos = pos.precioActual;   // ya es total
+    } else {
+        costePos = pos.cantidad * pos.precioCompra;
+        valorPos = pos.cantidad * pos.precioActual;
     }
-    totalValor += valPos;
-    totalCoste += cosPos;
+    totalCoste += costePos;
+    totalValor += valorPos;
   });
 
   // Sobreescribir saldoActual en mapaCuentas para las cuentas con posiciones
@@ -11104,6 +11133,21 @@ window.editarPosicion = function(id) {
 
 
 window.guardarPosicion = async function() {
+const tipo = document.getElementById('cartera-tipo').value;
+    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
+    let pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
+    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
+    
+    let precioCompraGuardar, precioActualGuardar;
+    if (esCripto) {
+        // pCompra y pActual ya son totales, los guardamos como están
+        precioCompraGuardar = pCompra;   // total cost
+        precioActualGuardar = pActual;   // total current value
+    } else {
+        precioCompraGuardar = pCompra;
+        precioActualGuardar = pActual;
+    }
     const id = document.getElementById('cartera-pos-id').value;
     const tipo = document.getElementById('cartera-tipo').value;
     const cuenta = document.getElementById('cartera-cuenta').value;
