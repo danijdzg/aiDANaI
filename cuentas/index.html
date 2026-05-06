@@ -10714,101 +10714,100 @@ window.addEventListener("beforeunload", function(e) {
 // ============================================================
 
 window.calcularValoresCartera = function() {
+  // Si no hay posiciones, limpiamos el resumen
   if (!window.datosCartera || window.datosCartera.length === 0) {
     window.resumenCartera = null;
     return;
   }
+
+  // Acumuladores por cuenta
   const valorPorCuenta = {};
   const costePorCuenta = {};
-  let totalValor = 0, totalCoste = 0;
 
+  // Totales globales
+  let totalValor = 0;
+  let totalCoste = 0;
+
+  // Recorrer todas las posiciones
   window.datosCartera.forEach(pos => {
-    const esCripto = (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA');
-    let costePos, valorPos;
-    if (esCripto) {
-        costePos = pos.precioCompra;   // ya es total
-        valorPos = pos.precioActual;   // ya es total
-    } else {
-        costePos = pos.cantidad * pos.precioCompra;
-        valorPos = pos.cantidad * pos.precioActual;
+    const cantidad = parseFloat(pos.cantidad) || 0;
+    const precioCompra = parseFloat(pos.precioCompra) || 0;
+    const precioActual = parseFloat(pos.precioActual) || 0;
+
+    // Cálculo uniforme: coste total y valor actual total = cantidad × precio unitario
+    const costeTotal = cantidad * precioCompra;
+    const valorActual = cantidad * precioActual;
+
+    // Acumular globalmente
+    totalCoste += costeTotal;
+    totalValor += valorActual;
+
+    // Acumular por cuenta (si tiene cuenta asociada)
+    const cuenta = pos.cuenta ? String(pos.cuenta).toUpperCase().trim() : null;
+    if (cuenta) {
+      costePorCuenta[cuenta] = (costePorCuenta[cuenta] || 0) + costeTotal;
+      valorPorCuenta[cuenta] = (valorPorCuenta[cuenta] || 0) + valorActual;
     }
-    totalCoste += costePos;
-    totalValor += valorPos;
   });
 
-  // Sobreescribir saldoActual en mapaCuentas para las cuentas con posiciones
+  // Actualizar mapaCuentas con los saldos provenientes de la cartera
   if (window.mapaCuentas) {
+    // Para cada cuenta con posiciones, sobrescribimos su saldoActual
     Object.keys(valorPorCuenta).forEach(cta => {
       if (window.mapaCuentas[cta]) {
-        window.mapaCuentas[cta].saldoActual  = valorPorCuenta[cta];
-        window.mapaCuentas[cta].costeTotal   = costePorCuenta[cta];
-        window.mapaCuentas[cta].plusvalia    = valorPorCuenta[cta] - costePorCuenta[cta];
+        window.mapaCuentas[cta].saldoActual = valorPorCuenta[cta];
+        window.mapaCuentas[cta].costeTotal = costePorCuenta[cta];
+        window.mapaCuentas[cta].plusvalia = valorPorCuenta[cta] - costePorCuenta[cta];
         window.mapaCuentas[cta].tieneCartera = true;
+      } else {
+        // Si la cuenta no existe en el mapa, la creamos con datos mínimos
+        window.mapaCuentas[cta] = {
+          nombre: cta,
+          tipo: 'INVERSIÓN',
+          esInversion: true,
+          saldoActual: valorPorCuenta[cta],
+          costeTotal: costePorCuenta[cta],
+          plusvalia: valorPorCuenta[cta] - costePorCuenta[cta],
+          tieneCartera: true
+        };
       }
     });
   }
 
-  const plusvalia   = totalValor - totalCoste;
-      // Cálculo de rentabilidad anualizada (TWR/Anualizada simple)
-      let rentabilidad = 0;
-      if (totalCoste > 0) {
-        // Rentabilidad absoluta simple
-        const rentAbs = (totalValor / totalCoste) - 1;
-        
-        // Intentar anualizar si tenemos fechas de compra
-        let ponderadoAnual = 0;
-        let totalPesos = 0;
-        const hoy = new Date();
-        
-        window.datosCartera.forEach(p => {
-          const val = p.cantidad * p.precioActual;
-          const cos = p.cantidad * p.precioCompra;
-          if (cos > 0) {
-            const rPos = (val / cos) - 1;
-            const fCompra = p.fechaCompra ? new Date(p.fechaCompra) : null;
-            
-            if (fCompra && !isNaN(fCompra.getTime())) {
-              const diffTime = Math.abs(hoy - fCompra);
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              const years = diffDays / 365.25;
-              
-              // Si ha pasado más de un mes, intentamos anualizar
-              if (years > 0.08) {
-                const rAnual = Math.pow(1 + rPos, 1 / years) - 1;
-                ponderadoAnual += rAnual * cos;
-              } else {
-                ponderadoAnual += rPos * cos; // Para periodos cortos usamos la simple
-              }
-            } else {
-              ponderadoAnual += rPos * cos;
-            }
-            totalPesos += cos;
-          }
-        });
-        
-        rentabilidad = totalPesos > 0 ? (ponderadoAnual / totalPesos) * 100 : rentAbs * 100;
-      }
+  // Cálculo de plusvalía y rentabilidad global
+  const plusvalia = totalValor - totalCoste;
+  let rentabilidad = 0;
+  if (totalCoste > 0) {
+    rentabilidad = (plusvalia / totalCoste) * 100;
+  }
 
-	  window.resumenCartera = {
-	    totalValor, totalCoste, plusvalia, rentabilidad,
-	    numPosiciones: window.datosCartera.length,
-	    posiciones: window.datosCartera
-	  };
+  // Almacenar el resumen global para usar en otras partes de la app
+  window.resumenCartera = {
+    totalValor: totalValor,
+    totalCoste: totalCoste,
+    plusvalia: plusvalia,
+    rentabilidad: rentabilidad,
+    numPosiciones: window.datosCartera.length,
+    posiciones: window.datosCartera
+  };
 
-  // Registrar punto en histórico (si el valor cambió)
+  // Registrar punto en el histórico de evolución (evitando duplicados del mismo día)
   const hoy = new Date();
   const hoyStr = hoy.toISOString().split('T')[0];
   window.historicoCartera = window.historicoCartera || [];
   const ultPunto = window.historicoCartera[window.historicoCartera.length - 1];
   const ultFechaStr = ultPunto ? new Date(ultPunto.ts).toISOString().split('T')[0] : null;
+
   if (ultFechaStr !== hoyStr && totalValor > 0) {
     window.historicoCartera.push({ fecha: hoy, ts: hoy.getTime(), valor: totalValor });
-  } else if (ultFechaStr === hoyStr && totalValor > 0 && ultPunto) {
-    ultPunto.valor = totalValor; // Actualizar punto del día
+  } else if (ultFechaStr === hoyStr && ultPunto) {
+    ultPunto.valor = totalValor;
   }
 
-  // Actualizar tarjeta del dashboard si está visible
-  window.actualizarDashCartera();
+  // Actualizar la tarjeta del dashboard si está visible
+  if (typeof window.actualizarDashCartera === 'function') {
+    window.actualizarDashCartera();
+  }
 };
 
 // ── MÓDULO 4: ACTUALIZAR TARJETA DASHBOARD ───────────────────────────
@@ -11153,9 +11152,6 @@ const tipo = document.getElementById('cartera-tipo').value;
     const cuenta = document.getElementById('cartera-cuenta').value;
     const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
     const nombre = document.getElementById('cartera-nombre').value;
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value);
-    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value);
-    const pActual = parseFloat(document.getElementById('cartera-precio-actual').value);
     const fecha = document.getElementById('cartera-fecha-compra').value;
     const notas = document.getElementById('cartera-notas').value;
 
