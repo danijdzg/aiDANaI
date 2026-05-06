@@ -9723,16 +9723,13 @@ window.cerrarModalCartera = function() {
 
 // 3. COMPORTAMIENTO INTELIGENTE DEL FORMULARIO
 window.comportamientoTipoActivo = async function() {
-    // 1. Obtener el tipo de activo seleccionado (¡primero!)
     const tipo = document.getElementById('cartera-tipo').value;
     const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
 
-    // 2. Cambiar la etiqueta del campo "PRECIO COMPRA"
+    // Etiqueta del campo PRECIO COMPRA (siempre unitario)
     const labelCompra = document.getElementById('label-precio-compra');
     if (labelCompra) {
-        labelCompra.innerText = esCripto 
-            ? 'PRECIO COMPRA (€ total invertido)' 
-            : 'PRECIO MEDIO COMPRA (€/ud)';
+        labelCompra.innerText = 'PRECIO MEDIO COMPRA (€/ud)';
     }
 
     const inputActual = document.getElementById('cartera-precio-actual');
@@ -9747,10 +9744,10 @@ window.comportamientoTipoActivo = async function() {
     if (!inputActual) return;
 
     if (esCripto) {
-        // Para cripto, obtenemos el precio unitario de la API (solo BTC)
+        // Obtener precio unitario (solo BTC)
         inputActual.readOnly = true;
         if (avisoApi) avisoApi.style.display = 'block';
-        if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) <span style="font-size:8px;">⚡ API BINANCE</span>';
+        labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) <span style="font-size:8px;">⚡ API BINANCE</span>';
         inputActual.style.color = "#00B8FF";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(0, 184, 255, 0.5)";
         inputActual.placeholder = "Consultando...";
@@ -9763,27 +9760,28 @@ window.comportamientoTipoActivo = async function() {
         }
 
         if (precioUnitario !== null && cantidad > 0) {
-            // 🔥 Punto 2: Asignar el VALOR TOTAL = cantidad * precio unitario
-            const valorTotal = cantidad * precioUnitario;
-            inputActual.value = valorTotal.toFixed(2);
-            inputActual.readOnly = false;   // Permitir edición manual si el usuario quiere ajustar
+            // Guardamos el precio unitario en el campo (aunque visualmente mostraremos el total)
+            inputActual.value = precioUnitario.toFixed(2);
+            inputActual.readOnly = false;   // permitir edición manual si se desea
+            // Mostrar también el valor total en un texto auxiliar (opcional)
+            const valorTotal = (cantidad * precioUnitario).toFixed(2);
+            if (avisoApi) avisoApi.innerHTML = `💡 Valor actual total: ${valorTotal} € (${cantidad} × ${precioUnitario} €/ud)`;
         } else {
             inputActual.placeholder = "No encontrado";
             inputActual.value = "";
             inputActual.readOnly = false;
             if (avisoApi) avisoApi.style.display = 'none';
-            if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€) ← MANUAL (API no disponible)';
+            labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) ← MANUAL (API no disponible)';
         }
     } else {
-        // Para activos normales (bolsa, pensiones, etc.) el precio es unitario y manual
+        // Activos normales: precio unitario manual
         inputActual.readOnly = false;
         if (avisoApi) avisoApi.style.display = 'none';
-        if (labelPrecio) labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) ← MANUAL';
+        labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) ← MANUAL';
         inputActual.style.color = "#39FF14";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(57, 255, 20, 0.4)";
     }
 
-    // Llamar a la actualización del preview (que ahora usará la nueva lógica)
     window.actualizarPreviewPnl();
 };
 
@@ -9812,24 +9810,12 @@ window.actualizarPreviewPnl = function() {
     const valDiv = document.getElementById('preview-pnl-valor');
     const pctDiv = document.getElementById('preview-pnl-pct');
 
-    const tipo = document.getElementById('cartera-tipo').value;
-    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
-
     const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
-    let pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
+    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
+    const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
 
-    let costeTotal, valorActual;
-
-    if (esCripto) {
-        // Para cripto/autocustodia, los campos ya representan TOTALES (no unitarios)
-        costeTotal = pCompra;      // lo que invertiste en total
-        valorActual = pActual;     // valor actual total de la posición
-    } else {
-        // Para el resto de activos: precio unitario × cantidad
-        costeTotal = cantidad * pCompra;
-        valorActual = cantidad * pActual;
-    }
+    const costeTotal = cantidad * pCompra;
+    const valorActual = cantidad * pActual;
 
     if (costeTotal > 0 && valorActual > 0 && previewDiv) {
         previewDiv.style.display = 'block';
@@ -11261,54 +11247,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── MÓDULO 5: ACTUALIZACIÓN AUTOMÁTICA DE PRECIOS (LIVE) ──────────────
 window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
-  const posiciones = window.datosCartera || [];
-  if (posiciones.length === 0) {
-    if (!modoSilencioso) notify("No hay posiciones en cartera", "warning");
-    return;
-  }
-
-  const btn = document.getElementById('btn-precios-live');
-  const icon = document.getElementById('precios-live-icon');
-  if (btn) btn.style.opacity = '0.5';
-  if (icon && !modoSilencioso) icon.textContent = '⏳';
-  if (!modoSilencioso) notify("⚡ Consultando mercado (Binance)...", "info");
-
-  let actualizados = 0;
-  const criptoPos = posiciones.filter(p => p.tipo === 'CRIPTOMONEDAS' || p.tipo === 'AUTOCUSTODIA');
-
-  // Actualizar solo activos cripto (usando Binance)
-  for (const pos of criptoPos) {
-    let ticker = pos.ticker.toUpperCase().trim();
-    if (ticker === 'BTC') {
-        const precio = await window.obtenerPrecioBTC();
-        if (precio !== null && pos.precioActual !== precio) {
-            pos.precioActual = precio;
-            actualizados++;
-        }
-    } else {
-        // No actualizamos otras criptos automáticamente
-        // Podrías mostrar un mensaje opcional: 
-        // if (!modoSilencioso) notify(`No se actualiza ${ticker} automáticamente`, 'info');
+    const posiciones = window.datosCartera || [];
+    if (posiciones.length === 0) {
+        if (!modoSilencioso) notify("No hay posiciones en cartera", "warning");
+        return;
     }
-}
 
-  // NOTA: Los activos de bolsa (BOLSA, FONDO, PLANPENSIONES, CROWDFUNDING)
-  // no se actualizan automáticamente porque no tenemos API gratuita fiable.
-  // El usuario introduce manualmente el precio actual.
+    const btn = document.getElementById('btn-precios-live');
+    const icon = document.getElementById('precios-live-icon');
+    if (btn) btn.style.opacity = '0.5';
+    if (icon && !modoSilencioso) icon.textContent = '⏳';
+    if (!modoSilencioso) notify("⚡ Consultando mercado (Binance)...", "info");
 
-  if (actualizados > 0) {
-    window.calcularValoresCartera();
-    window.renderizarCartera();
-    if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-    if (!modoSilencioso) notify(`✅ Precios actualizados (${actualizados} posiciones)`, "success");
-  } else {
-    if (!modoSilencioso) notify("Todos los precios ya estaban al día", "info");
-  }
+    let actualizados = 0;
+    const criptoPos = posiciones.filter(p => p.tipo === 'CRIPTOMONEDAS' || p.tipo === 'AUTOCUSTODIA');
 
-  if (btn) btn.style.opacity = '1';
-  if (icon && !modoSilencioso) icon.textContent = '⚡';
-  if (typeof vibrar === 'function') vibrar('success');
+    for (const pos of criptoPos) {
+        let ticker = pos.ticker.toUpperCase().trim();
+        if (ticker === 'BTC') {
+            const precioUnitario = await window.obtenerPrecioBTC();
+            if (precioUnitario !== null && pos.precioActual !== precioUnitario) {
+                pos.precioActual = precioUnitario;   // actualizamos el precio unitario
+                actualizados++;
+            }
+        }
+    }
+
+    if (actualizados > 0) {
+        window.calcularValoresCartera();
+        window.renderizarCartera();
+        if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
+        if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
+        if (!modoSilencioso) notify(`✅ Precios actualizados (${actualizados} posiciones)`, "success");
+    } else {
+        if (!modoSilencioso) notify("Todos los precios ya estaban al día", "info");
+    }
+
+    if (btn) btn.style.opacity = '1';
+    if (icon && !modoSilencioso) icon.textContent = '⚡';
+    if (typeof vibrar === 'function') vibrar('success');
 };
 // ── FIN MOTOR CARTERA ─────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
