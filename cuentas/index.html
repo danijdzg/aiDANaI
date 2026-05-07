@@ -7441,9 +7441,6 @@ notify('🔒 Actualizando PIN...', 'loading');
 await PinSecurity.guardarNuevo(newVal);
 // 5. Actualizar sesión activa
 PinSecurity.setSession(newVal);
-// --- SEGURIDAD: Almacenar el hash PBKDF2 de la clave biométrica, NUNCA Base64 (reversible) ---
-const hashBio = await PinSecurity.hashear ? await PinSecurity.hashear(newVal) : btoa(newVal + '_hashed');
-localStorage.setItem('aidanai_bio_key', hashBio);
 // 6. Re-encriptar el caché local con la nueva contraseña
 try {
 const rawEnc = localStorage.getItem('DATA_ENCRIPTADA');
@@ -8903,54 +8900,6 @@ window.actualizarPreviewPnl = function() {
     } else if (previewDiv) {
         previewDiv.style.display = 'none';
     }
-};
-
-
-// 6. EDITAR Y BORRAR
-window.editarPosicionCartera = function(id) {
-    const pos = (window.datosCartera || []).find(p => p.id === id);
-    if (!pos) return;
-    
-    window.abrirModalNuevaPosicion();
-    
-    setTimeout(() => {
-        document.getElementById('cartera-pos-id').value = pos.id;
-        document.getElementById('cartera-tipo').value = pos.tipo;
-        document.getElementById('cartera-cuenta').value = pos.cuenta || '';
-        document.getElementById('cartera-ticker').value = pos.ticker;
-        document.getElementById('cartera-nombre').value = pos.nombre || '';
-        document.getElementById('cartera-cantidad').value = pos.cantidad;
-        document.getElementById('cartera-precio-compra').value = pos.precioCompra;
-        document.getElementById('cartera-precio-actual').value = pos.precioActual;
-        document.getElementById('cartera-fecha-compra').value = pos.fechaCompra || '';
-        document.getElementById('cartera-notas').value = pos.notas || '';
-
-        const titulo = document.getElementById('modal-cartera-titulo');
-        if(titulo) titulo.innerText = "EDITAR POSICIÓN";
-
-        const extraBtns = document.getElementById('cartera-extra-btns');
-        if(extraBtns) extraBtns.style.display = 'grid';
-
-        window.comportamientoTipoActivo();
-    }, 50);
-};
-
-window.borrarPosicion = async function(id) {
-    const confirmacion = typeof window.pedirConfirmacion === 'function' ? 
-        await window.pedirConfirmacion('¿Borrar activo?', 'Se eliminará esta posición de la cartera.', '🗑️') : 
-        confirm("¿Seguro que quieres borrar esta posición?");
-        
-    if (!confirmacion) return;
-
-    window.datosCartera = window.datosCartera.filter(p => p.id !== id);
-    window.cerrarModalCartera();
-    
-    window.calcularValoresCartera();
-    window.renderizarCartera();
-    if(window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-    
-    if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-    window.mostrarToast("Posición eliminada", "success");
 };
 
 // Hook Reactivo inicial
