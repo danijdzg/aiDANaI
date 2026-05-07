@@ -5581,6 +5581,7 @@ if(campoImporte) {
         // Foco automático en el importe para un registro ultra-rápido
         setTimeout(() => { if(campoImporte) campoImporte.focus(); }, 150);
     } else {
+		window.idEnEdicion = true;
         const titulo = document.querySelector('#modal-manual h3');
         if(titulo) titulo.innerText = "EDITAR MOVIMIENTO";
         if(btnAction) btnAction.innerText = "ACTUALIZAR";
@@ -7871,6 +7872,7 @@ tipo = 'ingreso';
 }
 // CRÍTICO: Decirle al sistema global en qué modo estamos para que 'guardarManual' sepa poner el signo (-)
 window.modoTransaccionActual = tipo;
+window.idEnEdicion = mov.id;
 // 2. ABRIR EL MODAL (Pasamos 'true' para indicar que es edición)
 if(typeof abrirModal === 'function') abrirModal(true);
 // 3. CONFIGURAR COLORES VISUALES
@@ -8520,22 +8522,90 @@ e.preventDefault();
 });
 // --- OPCIÓN B: AUTOCOMPLETADO MÁGICO (VERSIÓN 4.0 - TRASPASOS INTELIGENTES) ---
 window.detectarMagia = function(texto) {
-// 1. Mínimo 3 letras para actuar
-if (!texto || texto.length < 3) return;
-// Si estamos editando (no creando), no tocar nada para evitar desastres
-if (window.idEnEdicion) return;
-const busqueda = texto.toLowerCase();
-// --- MODO 1: DETECCIÓN DE TRASPASOS ---
-// Si escribes "traspaso", "transf" o "bizum", activamos lógica especial
-if (busqueda.includes("traspaso") || busqueda.includes("transf")) {
-// A. Fijar Concepto a "TRASPASO"
-const selConcepto = document.getElementById('m-concepto');
-if (selConcepto) {
-selConcepto.value = "TRASPASO";
-// Efecto visual amarillo para indicar modo especial
-selConcepto.style.backgroundColor = "rgba(255, 214, 10, 0.2)";
-setTimeout(() => selConcepto.style.backgroundColor = "", 600);
-}
+    // 1. Validaciones iniciales
+    if (!texto || texto.length < 3) return;
+    if (window.idEnEdicion) return;  // No autocompletar si estamos editando
+
+    const busqueda = texto.toLowerCase();
+
+    // 2. Modo especial: Traspaso
+    if (busqueda.includes("traspaso") || busqueda.includes("transf") || busqueda.includes("bizum")) {
+        // Fijar concepto a "TRASPASO"
+        const selConcepto = document.getElementById('m-concepto');
+        if (selConcepto) {
+            selConcepto.value = "TRASPASO";
+            selConcepto.style.backgroundColor = "rgba(255, 214, 10, 0.2)";
+            setTimeout(() => selConcepto.style.backgroundColor = "", 600);
+        }
+        // Adivinar beneficiario según el dueño de la cuenta seleccionada
+        const selCuenta = document.getElementById('m-cuenta');
+        const selBen = document.getElementById('m-beneficiario');
+        if (selCuenta && selBen) {
+            const cuentaID = selCuenta.value.toUpperCase();
+            let dueno = "";
+            if (cuentaID.startsWith("D-")) dueno = "D";
+            else if (cuentaID.startsWith("N-")) dueno = "N";
+            else if (cuentaID.startsWith("C-")) dueno = "DN";
+            if (dueno) {
+                selBen.value = dueno;
+                selBen.style.backgroundColor = "rgba(255, 214, 10, 0.2)";
+                setTimeout(() => selBen.style.backgroundColor = "", 600);
+            }
+        }
+        return; // No seguir con el historial
+    }
+
+    // 3. Modo normal: buscar en el historial del mismo usuario
+    //    Obtener una copia de los movimientos filtrados por el usuario activo
+    let datosUsuario = window.datos || [];
+    if (typeof pasaFiltroPropietario === 'function') {
+        datosUsuario = datosUsuario.filter(m => pasaFiltroPropietario(m));
+    }
+
+    // 4. Ordenar de más reciente a más antiguo (por si acaso)
+    const movimientosOrdenados = [...datosUsuario].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+    // 5. Buscar el primer movimiento que coincida con el texto (descripción, beneficiario o concepto)
+    const encontrado = movimientosOrdenados.find(m => {
+        const desc = (m.descripcion || m.detalle || "").toLowerCase();
+        const ben = (m.beneficiario || "").toLowerCase();
+        const conc = (m.concepto || "").toLowerCase();
+        return desc.includes(busqueda) || ben.includes(busqueda) || conc.includes(busqueda);
+    });
+
+    if (!encontrado) return;
+
+    // 6. Rellenar los campos con los datos encontrados
+    const nuevaCuenta = encontrado.cuenta;
+    const nuevoConcepto = encontrado.concepto;
+    const nuevoBeneficiario = encontrado.beneficiario;
+
+    // Actualizar CUENTA
+    const selCuenta = document.getElementById('m-cuenta');
+    if (selCuenta && nuevaCuenta) {
+        selCuenta.value = nuevaCuenta;
+        selCuenta.style.transition = "background 0.2s";
+        selCuenta.style.backgroundColor = "rgba(0, 184, 255, 0.20)";
+        setTimeout(() => selCuenta.style.backgroundColor = "", 400);
+    }
+
+    // Actualizar CONCEPTO (solo si no es traspaso, pero ya salimos antes si era traspaso)
+    const selConcepto = document.getElementById('m-concepto');
+    if (selConcepto && nuevoConcepto) {
+        selConcepto.value = nuevoConcepto;
+        selConcepto.style.backgroundColor = "rgba(0, 184, 255, 0.20)";
+        setTimeout(() => selConcepto.style.backgroundColor = "", 400);
+    }
+
+    // Actualizar BENEFICIARIO
+    const selBeneficiario = document.getElementById('m-beneficiario');
+    if (selBeneficiario && nuevoBeneficiario) {
+        selBeneficiario.value = nuevoBeneficiario;
+        // También podemos darle feedback visual (opcional)
+        selBeneficiario.style.backgroundColor = "rgba(0, 184, 255, 0.20)";
+        setTimeout(() => selBeneficiario.style.backgroundColor = "", 400);
+    }
+};
 // B. Adivinar Beneficiario según el DUEÑO de la cuenta seleccionada
 const selCuenta = document.getElementById('m-cuenta');
 const selBen = document.getElementById('m-beneficiario');
