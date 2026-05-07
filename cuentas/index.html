@@ -2296,6 +2296,34 @@ body #fab-main:active {
     padding: 10px 0;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
+@keyframes shakeFintech {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+}
+.input-error-shake {
+    border: 2px solid #FF2E4D !important;
+    box-shadow: 0 0 12px rgba(255, 46, 77, 0.25) !important;
+    animation: shakeFintech 0.4s cubic-bezier(.36,.07,.19,.97) both !important;
+    background-color: rgba(255, 46, 77, 0.05) !important;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+/* --- Overlay para filtros (oscurece el fondo al abrirlos) --- */
+#fab-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    z-index: 8999;
+    display: none;
+    transition: opacity 0.3s ease;
+}
 </style>
 </head>
 <body>
@@ -2361,24 +2389,6 @@ body #fab-main:active {
 <div id="app-viewport"></div>
 <template id="plantilla-app-secreta">
 <canvas id="deep-space"></canvas>
-<div id="modal-fuente-datos" class="modal-backdrop-pro" style="display: none; z-index: 99999; background: rgba(0,0,0,0.9);">
-<div class="modal-card-pro" style="border: 1px solid var(--c-warning); box-shadow: 0 0 30px rgba(255, 214, 10, 0.2);">
-<div class="modal-icon-pro">⚠️</div>
-<h3 style="color: var(--c-warning); margin-bottom: 10px;">CONEXIÓN NO DETECTADA</h3>
-<p style="margin-bottom: 20px; color: #ccc;">No he podido acceder a tu OneDrive automáticamente. Para evitar errores, dime qué datos quieres usar:</p>
-<div class="modal-actions-pro" style="flex-direction: column; gap: 10px;">
-<button class="btn-primary-pro" onclick="document.getElementById('file-input').click(); cerrarModalFuente()" style="background: var(--c-primary); color: #000;">
-📂 CARGAR EXCEL LOCAL (PC)
-</button>
-<button class="btn-secondary-pro" onclick="cerrarModalFuente(); iniciarCargaNube()" style="border: 1px solid var(--c-success); color: var(--c-success);">
-☁️ REINTENTAR CONEXIÓN NUBE
-</button>
-<button class="btn-secondary-pro" onclick="cerrarModalFuente(); usarCacheSiExiste()" style="border: 1px solid #555; color: #888; font-size: 11px;">
-🕒 USAR ÚLTIMA COPIA (RIESGO DATOS VIEJOS)
-</button>
-</div>
-</div>
-</div>
 <div class="app-layout">
 <header>
 <div class="header-ultra-compact">
@@ -4484,59 +4494,6 @@ window.cerrarModalFuente = function() {
     }
 };
 
-/**
- * Fuerza el uso de la caché local si el usuario decide no cargar un nuevo Excel.
- * Expuesto en window para acceso directo desde el onclick del HTML.
- */
-/**
- * Intenta cargar los datos del Excel guardados en caché cifrada (localStorage).
- * Devuelve true si había datos, false si no.
- */
-window.cargarDatosDesdeCache = async function() {
-    try {
-        const claveCache = localStorage.getItem('aidanai_pw_v3');
-        const blob = localStorage.getItem('aidanai_cache_datos');
-        if (!blob || !claveCache) return false;
-        // Intentamos descifrar con el hash de PIN almacenado
-        const datos = await CryptoSystem.desencriptar(blob, claveCache);
-        if (datos && datos.movimientos && datos.movimientos.length > 0) {
-            window.datos = datos.movimientos;
-            window.mapaCuentas = datos.mapaCuentas || {};
-            window.listaCuentasConfig = datos.listaCuentasConfig || [];
-            window.listaConceptosConfig = datos.listaConceptosConfig || [];
-            window.listaBeneficiariosConfig = datos.listaBeneficiariosConfig || [];
-            window.datosCartera = datos.datosCartera || [];
-            window.historicoCartera = datos.historicoCartera || [];
-            window.datosRecurrentes = datos.datosRecurrentes || [];
-            return true;
-        }
-        return false;
-    } catch (e) {
-        console.warn("Cache no disponible o cifrado diferente:", e.message);
-        return false;
-    }
-};
-
-window.usarCacheSiExiste = async function() {
-    window.cerrarModalFuente();
-    try {
-        const hayDatos = await window.cargarDatosDesdeCache();
-        if (!hayDatos) {
-            if (typeof notify === 'function') notify("Sin caché local. Carga un Excel.", "warning");
-            // Dejamos la app operativa pero sin datos
-            window.datos = window.datos || [];
-            window.UIEvents.emitir('datos:actualizados');
-            return;
-        }
-        if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-        window.UIEvents.emitir('datos:actualizados');
-        if (typeof notify === 'function') notify("✅ Datos cargados desde caché local", "success");
-    } catch (error) {
-        console.error("Error al intentar usar la caché:", error);
-        window.datos = window.datos || [];
-        window.UIEvents.emitir('datos:actualizados');
-    }
-};
 // --- FUNCIONES PERFIL FINANCIERO ---
 window.guardarPerfilLocal = function() {
 const edad = document.getElementById('ajuste-edad').value;
@@ -5793,6 +5750,43 @@ const uuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto
 // ==========================================
 window.guardarManual = async function() {
 if (document.getElementById('btn-modal-action').disabled) return;
+// ========== VALIDACIÓN VISUAL (desde versión B) ==========
+const inputImporte = document.getElementById('m-cantidad');
+const inputConcepto = document.getElementById('m-concepto');
+let hayErrorVisual = false;
+
+const dispararErrorVisual = (input) => {
+    if (!input) return;
+    input.classList.remove('input-error-shake');
+    void input.offsetWidth; // fuerza reflow para reiniciar animación
+    input.classList.add('input-error-shake');
+    input.addEventListener('input', function clearError() {
+        input.classList.remove('input-error-shake');
+        input.removeEventListener('input', clearError);
+    }, { once: true });
+    hayErrorVisual = true;
+};
+
+// Validar importe
+const importeVal = inputImporte ? inputImporte.value.trim() : '';
+if (!importeVal || parseFloat(importeVal.replace('€', '').replace(',', '.')) === 0) {
+    dispararErrorVisual(inputImporte);
+}
+
+// Validar concepto solo si NO es traspaso (en traspaso se fuerza "TRASPASO")
+const modoActualTemp = window.modoTransaccionActual || 'gasto';
+if (modoActualTemp !== 'traspaso') {
+    const conceptoVal = inputConcepto ? inputConcepto.value : '';
+    if (!conceptoVal) {
+        dispararErrorVisual(inputConcepto);
+    }
+}
+
+if (hayErrorVisual) {
+    window.mostrarToast("Rellena los campos en rojo", "warning");
+    return; // Salimos sin bloquear el botón ni continuar
+}
+// ========== FIN VALIDACIÓN VISUAL ==========
 // 1. BLOQUEAMOS EL BOTÓN AL INSTANTE CON LA NUEVA FUNCIÓN (Mejora B)
 window.toggleBotonCarga('btn-modal-action', true);
 // --- VIBRACIÓN ---
@@ -7941,6 +7935,16 @@ const btn = document.getElementById('btn-modal-action');
 if(btn) btn.innerText = "ACTUALIZAR MOVIMIENTO";
 }, 50);
 };
+// Actualiza el mensaje de estado del backup en la pestaña de Ajustes
+function actualizarInfoBackup(hechoHoy) {
+    const el = document.getElementById('info-ultimo-backup');
+    if (!el) return;
+    if (hechoHoy) {
+        el.innerHTML = "<span style='color:var(--c-success)'>✅ Backup de hoy realizado y seguro.</span>";
+    } else {
+        el.innerHTML = "<span style='color:var(--c-warning)'>⚠️ Aún no has hecho copia hoy.</span>";
+    }
+}
 // ==========================================
 // 📥 FUNCIÓN DE EMERGENCIA: BACKUP LOCAL (CORREGIDO 3 HOJAS)
 // ==========================================
@@ -8893,15 +8897,14 @@ if (ptrText) ptrText.textContent = 'Actualizando...';
 }
 if (navigator.vibrate) navigator.vibrate([10, 50, 10]);
 try {
-if (window.modoNube && typeof cargarDesdeNube === 'function') {
-await cargarDesdeNube();
-notify('✅ Datos actualizados desde la nube', 'success');
-} else if (typeof window.cargarDatosDesdeCache === 'function') {
-    await window.cargarDatosDesdeCache();
-    notify('⚡ Datos recargados desde caché', 'info');
+    if (window.modoNube && typeof cargarDesdeNube === 'function') {
+        await cargarDesdeNube();
+        notify('✅ Datos actualizados desde la nube', 'success');
+    } else {
+    notify('⚠️ No se pudo actualizar. Modo local: recarga manual.', 'warning');
 }
 } catch(e) {
-notify('⚠️ No se pudo actualizar', 'warning');
+    notify('⚠️ No se pudo actualizar', 'warning');
 } finally {
 setTimeout(() => {
 if (indicator) indicator.classList.remove('visible', 'loading', 'releasing');
@@ -10616,36 +10619,24 @@ if (document.getElementById('mes-cuentas-claras')) window.actualizarCuentasClara
 // --- FIN LÓGICA CUENTAS CLARAS POR MES ---
 // --- REPARADOR MAESTRO DE FILTROS ---
 window.toggleFiltros = function(accionForzada = null) {
-    // 1. Identificar los elementos del DOM (Ajusta los IDs si en tu HTML se llaman diferente)
     const panelFiltros = document.getElementById('panel-filtros');
-    const overlay = document.getElementById('fab-overlay'); // o el ID que uses para oscurecer el fondo
-
-    // 2. Return Early: Si el panel no existe, no hacemos nada y evitamos que la app colapse
+    const overlay = document.getElementById('fab-overlay');
     if (!panelFiltros) return;
 
-    // 3. Determinar el estado actual y el futuro
-    // Comprobamos si está abierto ya sea por clase CSS o por estilo en línea
-    const estaAbierto = panelFiltros.classList.contains('active') || panelFiltros.style.display === 'flex' || panelFiltros.style.display === 'block';
-    
-    // Si pasamos 'abrir' o 'cerrar' forzamos ese estado, si no, lo alternamos (toggle)
-    const abrir = accionForzada === 'abrir' ? true : (accionForzada === 'cerrar' ? false : !estaAbierto);
+    const estaAbierto = panelFiltros.classList.contains('open') || 
+                        panelFiltros.style.display === 'flex' || 
+                        panelFiltros.style.display === 'block';
+    const abrir = accionForzada === 'abrir' ? true : 
+                  (accionForzada === 'cerrar' ? false : !estaAbierto);
 
-    // 4. Ejecutar cambios en la UI
     if (abrir) {
-        panelFiltros.classList.add('active');
-        panelFiltros.style.display = 'flex'; // O 'block', según tu CSS
-        if (overlay) {
-            overlay.style.display = 'block';
-            // Opcional: Cerrar los filtros si se hace clic fuera de ellos
-            overlay.onclick = () => window.toggleFiltros('cerrar');
-        }
+        panelFiltros.classList.add('open');
+        panelFiltros.style.display = 'flex';
+        if (overlay) overlay.style.display = 'block';
     } else {
-        panelFiltros.classList.remove('active');
+        panelFiltros.classList.remove('open');
         panelFiltros.style.display = 'none';
-        if (overlay) {
-            overlay.style.display = 'none';
-            overlay.onclick = null; // Limpiar memoria
-        }
+        if (overlay) overlay.style.display = 'none';
     }
 };
 // 2. Limpieza total de filtros de forma segura
@@ -10676,8 +10667,14 @@ window.aplicarFiltros = function() {
     window.filtros = filtros; // Sincronizar con el objeto global
     renderizar();
     window.actualizarChivatoFiltros();
+     // Cierra el panel y el overlay
     const panel = document.getElementById('panel-filtros');
-    if (panel) { panel.classList.remove('open'); panel.style.display = 'none'; }
+    const overlay = document.getElementById('fab-overlay');
+    if (panel) {
+        panel.classList.remove('open');
+        panel.style.display = 'none';
+    }
+    if (overlay) overlay.style.display = 'none';
 };
 // 4. Mejorar el botón visual para poder borrar filtros con una "X" directa
 window.actualizarChivatoFiltros = function() {
@@ -11327,5 +11324,6 @@ if ('serviceWorker' in navigator) {
 }
 
 </script>
+<div id="fab-overlay" style="display: none;" onclick="toggleFiltros('cerrar')"></div>
 </body>
 </html>
