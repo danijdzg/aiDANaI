@@ -3680,6 +3680,7 @@ const MSAL_CONFIG = {
 // ──────────────────────────────────────────────────────────────────────
 // 🧠 MÓDULO DE ESTADO CENTRAL (AppState) - BLINDADO CONTRA CIERRES
 // ──────────────────────────────────────────────────────────────────────
+window._appDesbloqueada = false;
 window.AppState = {
 isSaving: false,
 estadoSemaforo: 'verde',
@@ -8317,30 +8318,35 @@ window.verificarPinCriptografico = async function() {
 };
 // 4. DESBLOQUEO REAL — versión unificada
 window.desbloquearApp = function() {
-        // 1. Destruimos la pantalla de bloqueo visual
-        const overlay = document.getElementById('auth-overlay');
-        if (overlay) overlay.style.display = 'none'; 
+    // 1. Ocultamos la pantalla de bloqueo
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) overlay.style.display = 'none';
+
+    // 2. Inyectamos la aplicación solo la primera vez
+    const contenedor = document.getElementById('app-viewport');
+    if (contenedor && contenedor.children.length === 0) {
         const plantilla = document.getElementById('plantilla-app-secreta');
-        const contenedor = document.getElementById('app-viewport');
-        if (plantilla && contenedor) {
-            // 2. Inyectamos tu aplicación
-            contenedor.appendChild(plantilla.content.cloneNode(true)); 
-            // 3. ENCENDIDO QUIRÚRGICO: Solo encendemos el contenedor de la app 
-            // (respetando que tus modales y calculadoras sigan ocultos)
-            document.querySelectorAll('#app-viewport').forEach(el => {
-                el.style.display = 'flex';
-                el.style.opacity = '1';
-                el.style.visibility = 'visible';
-                el.classList.add('visible'); 
-            });
+        if (plantilla) {
+            contenedor.appendChild(plantilla.content.cloneNode(true));
         }
-        // 4. Arrancamos el motor financiero
-        if (typeof window.AppInitializer !== 'undefined') {
-            window.AppInitializer.iniciar();
-        } else if (typeof iniciarApp === 'function') {
-            iniciarApp();
-        }
-    };
+    }
+
+    // 3. Hacemos visible el contenedor
+    document.querySelectorAll('#app-viewport').forEach(el => {
+        el.style.display = 'flex';
+        el.style.opacity = '1';
+        el.style.visibility = 'visible';
+        el.classList.add('visible');
+    });
+
+    // 4. Marcamos que la app ya está desbloqueada (para que configurarSeguridad no se active)
+    window._appDesbloqueada = true;
+
+    // 5. Arrancamos el motor financiero (sin volver a mostrar el overlay)
+    if (typeof window.AppInitializer !== 'undefined') {
+        window.AppInitializer.iniciar();
+    }
+};
 // 5. DETECTOR DE MINIMIZADO
 document.addEventListener('visibilitychange', () => {
     const overlay = document.getElementById('auth-overlay');
@@ -8401,6 +8407,9 @@ await this.configurarCargaDatos();
 setTimeout(() => { this.revisarRecibosProximos(); }, 2000);
 },
 configurarSeguridad: function() {
+ // Si la app ya fue desbloqueada, no mostrar de nuevo el overlay
+    if (window._appDesbloqueada) return;
+
     // 🧹 Limpieza de seguridad: Borramos cualquier PIN que haya quedado
     // en caché de versiones vulnerables anteriores.
     sessionStorage.removeItem('aidanai_bio_key');
