@@ -7071,9 +7071,9 @@ const saldo = c.saldoActual || 0;
 const tipo = (c.tipo || '').toUpperCase();
 totalPatrimonio += saldo;
 if (tipo === 'AUTOCUSTODIA') {
-    // Si la cuenta tiene posiciones de cartera, usamos el coste total (precio de compra)
-    const coste = c.costeTotal !== undefined ? c.costeTotal : saldo;
-    totalAutocustodia += coste;
+    // const coste = c.costeTotal !== undefined ? c.costeTotal : saldo;
+    // totalAutocustodia += coste;
+    totalAutocustodia += saldo;
 } else if (tipo === 'PROPIEDAD' || tipo === 'INMUEBLE') {
 totalPropiedad += saldo;
 } else if (c.esInversion) {
@@ -9811,12 +9811,18 @@ window.calcularValoresCartera = function() {
     Object.keys(valorPorCuenta).forEach(cta => {
         const valorCartera = valorPorCuenta[cta];
         const coste = costePorCuenta[cta];
-        if (window.mapaCuentas[cta]) {
-            // Sumar el valor de la cartera al saldo existente (movimientos)
-            window.mapaCuentas[cta].saldoActual = (window.mapaCuentas[cta].saldoActual || 0) + valorCartera;
-            window.mapaCuentas[cta].costeTotal = (window.mapaCuentas[cta].costeTotal || 0) + coste;
-            window.mapaCuentas[cta].plusvalia = (window.mapaCuentas[cta].plusvalia || 0) + (valorCartera - coste);
-            window.mapaCuentas[cta].tieneCartera = true;
+        const infoCuenta = window.mapaCuentas[cta];
+        if (infoCuenta) {
+            const tipoCuenta = (infoCuenta.tipo || '').toUpperCase();
+            // 👇 La magia: para autocustodia usamos el coste, no el valor de mercado
+            if (tipoCuenta === 'AUTOCUSTODIA') {
+                infoCuenta.saldoActual = (infoCuenta.saldoActual || 0) + coste;
+            } else {
+                infoCuenta.saldoActual = (infoCuenta.saldoActual || 0) + valorCartera;
+            }
+            infoCuenta.costeTotal = (infoCuenta.costeTotal || 0) + coste;
+            infoCuenta.plusvalia = (infoCuenta.plusvalia || 0) + (valorCartera - coste);
+            infoCuenta.tieneCartera = true;
         } else {
             window.mapaCuentas[cta] = {
                 nombre: cta,
