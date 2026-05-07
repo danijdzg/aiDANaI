@@ -626,9 +626,6 @@ overflow: visible !important;
 .nav-item .material-icons { font-size: 20px; color: #FFFFFF; opacity: 1 !important; transition: all 0.3s; }
 .nav-item.active { color: var(--c-primary); }
 .nav-item.active .material-icons { color: var(--c-primary); text-shadow: 0 0 15px var(--c-primary); transform: translateY(-2px); }
-.fab-btn { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, var(--c-accent), #7000ff); color: #FFFFFF; font-size: 24px; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 0 15px rgba(191, 90, 242, 0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform: none; margin: 0; }
-.fab-btn:hover { transform: translateY(-12px) scale(1.05); box-shadow: 0 0 15px rgba(191, 90, 242, 0.5); }
-.fab-btn:active { transform: scale(0.95); }
 /* =========================================
 MODAL PRO FULLSCREEN (ESTILO APP NATIVA)
 ========================================= */
@@ -1786,7 +1783,6 @@ transition: all 0.2s;
 /* ============================================================ */
 /* ❌ MEJORA H: BOTÓN RÁPIDO DE BORRAR (Buscadores)             */
 /* ============================================================ */
-.search-wrapper { position: relative; width: 100%; }
 .btn-clear-input {
 position: absolute;
 right: 12px;
@@ -3588,6 +3584,28 @@ window.filtroUsuarioActual = 'todos';
 const DEBUG = false;
 function logDev(...args) { if (DEBUG) console.log(...args); }
 function warnDev(...args) { if (DEBUG) console.warn(...args); }
+// 🔄 SINCRONIZADOR DE FILTRO DE USUARIO (Getter/Setter reactivo)
+Object.defineProperty(window, 'filtroUsuarioActual', {
+    get() {
+        // Siempre devuelve el valor real del estado global
+        return window.AppState?.filtroUsuario || 'todos';
+    },
+    set(nuevoValor) {
+        // 1. Actualiza el objeto de estado principal
+        if (window.AppState) {
+            window.AppState.filtroUsuario = nuevoValor;
+        }
+        
+        // 2. Persiste para que no se pierda al recargar
+        localStorage.setItem('aidanai_ultimo_usuario', nuevoValor);
+        
+        // 3. Refresca la UI automáticamente (evento ya existente)
+        if (window.UIEvents) {
+            window.UIEvents.emitir('datos:actualizados');
+        }
+    },
+    configurable: true
+});
 // ============================================================
 // 🍞 SISTEMA TOAST FINTECH (Global Alert Override)
 // ============================================================
@@ -4964,28 +4982,24 @@ if(campoImporte) {
 // FIN SMART INPUT
     // 1. LIMPIEZA Y PREPARACIÓN VISUAL
     if (!esEdicion) {
-        window.idEnEdicion = null;
-        // Poner fecha de hoy
-        const hoy = new Date().toISOString().split('T')[0];
-        const elFecha = document.getElementById('m-fecha');
-        if(elFecha) elFecha.value = hoy;
-        if(campoImporte) campoImporte.value = '';
-        const elDesc = document.getElementById('m-desc');
-        if(elDesc) elDesc.value = '';
-        // Títulos y botones
-        const titulo = document.querySelector('#modal-manual h3');
-        if(titulo) titulo.innerText = "NUEVO MOVIMIENTO";
-        if(btnAction) btnAction.innerText = "GUARDAR";
-        if(areaExtras) areaExtras.style.display = 'none';
-        // Foco automático en el importe para un registro ultra-rápido
-        setTimeout(() => { if(campoImporte) campoImporte.focus(); }, 150);
-    } else {
-		window.idEnEdicion = true;
-        const titulo = document.querySelector('#modal-manual h3');
-        if(titulo) titulo.innerText = "EDITAR MOVIMIENTO";
-        if(btnAction) btnAction.innerText = "ACTUALIZAR";
-        if(areaExtras) areaExtras.style.display = 'grid';
-    }
+    window.idEnEdicion = null;
+    // Poner fecha de hoy
+    const hoy = new Date().toISOString().split('T')[0];
+    const elFecha = document.getElementById('m-fecha');
+    if (elFecha) elFecha.value = hoy;
+    if (campoImporte) campoImporte.value = '';
+    const elDesc = document.getElementById('m-desc');
+    if (elDesc) elDesc.value = '';
+    // Títulos y botones
+    if (btnAction) btnAction.innerText = "GUARDAR";
+    if (areaExtras) areaExtras.style.display = 'none';
+    // Foco automático en el importe para un registro ultra-rápido
+    setTimeout(() => { if (campoImporte) campoImporte.focus(); }, 150);
+} else {
+    // idEnEdicion se asigna después, en window.editarMovimiento
+    if (btnAction) btnAction.innerText = "ACTUALIZAR";
+    if (areaExtras) areaExtras.style.display = 'grid';
+}
     // 2. RECOPILAR DATOS (MODO ESTRICTO: SOLO EXCEL CONFIGURACIÓN)
     const sCuentas = new Set();
     const sConceptos = new Set();
@@ -7223,37 +7237,31 @@ setTimeout(window.actualizarBotonUsuarioVisual, 200);
 });
 // C. FUNCIÓN AL PULSAR EL BOTÓN
 window.toggleUsuario = function() {
-// 1. Cambiamos la variable de estado
-if (filtroUsuarioActual === 'todos') {
-filtroUsuarioActual = 'D';
-} else if (filtroUsuarioActual === 'D') {
-filtroUsuarioActual = 'N';
-} else {
-filtroUsuarioActual = 'todos';
-}
-// 2. Llamamos al motor visual para que pinte el cambio
-window.actualizarBotonUsuarioVisual();
-// 3. Filtrado de la variable global de datos
-if (window.datos && window.datos.length > 0) {
-if (typeof pasaFiltroPropietario === 'function') {
-window.datosPropietario = window.datos.filter(m => pasaFiltroPropietario(m));
-} else {
-window.datosPropietario = window.datos; // Fallback
-}
-}
-// 4. ACTUALIZACIÓN REACTIVA DE LA UI
-window.UIEvents.emitir('datos:actualizados');
-if (typeof window.calcularPresupuestoYComparativa === 'function') {
-window.calcularPresupuestoYComparativa();
-}
-// 5. ACTUALIZACIÓN DE GRÁFICOS (CON RETARDO)
-setTimeout(() => {
-let datosParaGrafico = window.datosPropietario || window.datos;
-if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion(datosParaGrafico);
-if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
-if(typeof renderTreeMap === 'function') renderTreeMap();
-}, 50);
-if(typeof vibrar === 'function') vibrar('tecla');
+    // 1. Cambiamos la variable de estado global (el setter lo hace todo)
+    if (window.filtroUsuarioActual === 'todos') {
+        window.filtroUsuarioActual = 'D';
+    } else if (window.filtroUsuarioActual === 'D') {
+        window.filtroUsuarioActual = 'N';
+    } else {
+        window.filtroUsuarioActual = 'todos';
+    }
+
+    // 2. Llamamos al motor visual para que pinte el cambio (botón de identidad)
+    window.actualizarBotonUsuarioVisual();
+
+    // 3. Filtrado de la variable global de datos (el setter ya emitió 'datos:actualizados'
+    //    que a su vez ejecuta renderizar, dashboard, etc., pero estos filtros adicionales
+    //    también deben actualizarse porque algunos los llama el evento)
+    
+    // 4. ACTUALIZACIÓN DE GRÁFICOS (CON RETARDO)
+    setTimeout(() => {
+        let datosParaGrafico = window.datosPropietario || window.datos;
+        if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion(datosParaGrafico);
+        if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+        if(typeof renderTreeMap === 'function') renderTreeMap();
+    }, 50);
+
+    if(typeof vibrar === 'function') vibrar('tecla');
 };
 // === FUNCIÓN DE EDICIÓN (VERSIÓN BLINDADA) ===
 window.editarMovimiento = function(idMov) {
@@ -8311,7 +8319,7 @@ window.verificarPinCriptografico = async function() {
 window.desbloquearApp = function() {
         // 1. Destruimos la pantalla de bloqueo visual
         const overlay = document.getElementById('auth-overlay');
-        if (overlay) overlay.remove(); 
+        if (overlay) overlay.style.display = 'none'; 
         const plantilla = document.getElementById('plantilla-app-secreta');
         const contenedor = document.getElementById('app-viewport');
         if (plantilla && contenedor) {
@@ -8375,6 +8383,13 @@ window.AppInitializer = {
 iniciar: async function() {
 // 1. MOTOR GRÁFICO DE FONDO (SpaceEngine)
 if (typeof SpaceEngine !== 'undefined') SpaceEngine.start();
+    // 1b. Restaurar filtro de usuario persistido
+    const usuarioGuardado = localStorage.getItem('aidanai_ultimo_usuario');
+    if (usuarioGuardado) {
+        window.AppState.filtroUsuario = usuarioGuardado;
+    } else {
+        window.AppState.filtroUsuario = 'todos';
+    }
 // 2. UI VISUAL: Forzamos botón inicial de identidad
 const btnName = document.getElementById('btn-identity-toggle');
 if (btnName) btnName.innerText = 'DN';
