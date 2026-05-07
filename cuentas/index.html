@@ -53,11 +53,6 @@ ESTILOS ORIGINALES DE INDEX.HTML
 --current-theme: var(--theme-dn);
 --bar-height: 70px;
 }
-/* 1. Aplicar color al Título */
-.logo {
-color: var(--current-theme) !important;
-transition: color 0.3s ease; /* Transición suave */
-}
 /* 2. Aplicar color a la Pestaña Activa del Pie de Página */
 .nav-item.active {
 color: var(--current-theme) !important;
@@ -1824,15 +1819,7 @@ opacity: 1;
 pointer-events: auto;
 transform: translateY(-50%) scale(1);
 }
-/* --- INICIO REFINAMIENTO UX: Ocultar elementos en PC --- */
-@media (hover: hover) and (pointer: fine) {
-    .hide-on-desktop {
-        display: none !important;
-        opacity: 0;
-        pointer-events: none;
-    }
-}
-/* --- FIN REFINAMIENTO UX --- */
+
 /* ────────────────────────────────────────────────────────────────────── */
 /* 🖱️ MICRO-INTERACCIONES FINTECH: BOTONES, MODALES Y NAVEGACIÓN          */
 /* ────────────────────────────────────────────────────────────────────── */
@@ -3601,10 +3588,6 @@ window.irPestana = function(p) {
                 if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
             } else if (p === 'inversiones') {
                 if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
-            } else if (p === 'salud') {
-                // Aseguramos que la llamada a renderizarRadar y actualizarRadar busque en window
-                if (typeof window.renderizarRadar === 'function') window.renderizarRadar();
-                if (typeof window.actualizarRadar === 'function') window.actualizarRadar();
             } else if (p === 'presupuesto') {
                 if (typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
             }
@@ -3779,11 +3762,6 @@ w = canvas.width = window.innerWidth;
 h = canvas.height = window.innerHeight;
 };
 const animate = () => {
-// 🔋 FIX BATERÍA: Si estamos en otra pestaña, pausamos el motor espacial
-if (window.pausarFondoAnimado) {
-animationId = requestAnimationFrame(animate);
-return;
-}
 // Limpieza de pantalla con negro puro
 ctx.globalAlpha = 1;
 ctx.fillStyle = CONFIG.bgColor;
@@ -4485,18 +4463,6 @@ if(barra) barra.innerText = "✅ Sincronizado";
     }
 }
 }
-// ✅ AÑADIR AL SCOPE GLOBAL (FUERA DE iniciarSistema)
-
-/**
- * Cierra el modal de selección de fuente de datos.
- * Expuesto en window para acceso directo desde el onclick del HTML.
- */
-window.cerrarModalFuente = function() {
-    const modal = document.getElementById('modal-fuente-datos');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-};
 
 // --- FUNCIONES PERFIL FINANCIERO ---
 window.guardarPerfilLocal = function() {
@@ -5518,22 +5484,6 @@ renderizar();
 const panel = document.getElementById('panel-filtros');
 if(panel) { panel.classList.remove('open'); panel.style.display = 'none'; }
 if(typeof window.actualizarChivatoFiltros === 'function') window.actualizarChivatoFiltros();
-}
-function cambiarOrden(campo) {
-if (window.ordenActivo.campo === campo) { window.ordenActivo.asc = !window.ordenActivo.asc; }
-else { window.ordenActivo.campo = campo; window.ordenActivo.asc = !(campo === 'ts' || campo === 'importe'); }
-renderizar();
-document.querySelectorAll('th').forEach(th => {
-th.style.color = 'var(--c-accent)';
-th.style.textShadow = 'none';
-th.style.borderBottom = '1px solid var(--c-accent)';
-});
-const thActivo = document.getElementById('th-' + campo);
-if(thActivo) {
-thActivo.style.color = 'var(--c-primary)';
-thActivo.style.textShadow = '0 0 10px var(--c-primary)';
-thActivo.style.borderBottom = '2px solid var(--c-primary)';
-}
 }
 function abrirModal(esEdicion = false) {
     const modal = document.getElementById('modal-manual');
@@ -7461,60 +7411,7 @@ window.renderizarRadarScoring = function(kpis) {
         window._radarResizeObs.observe(chartDom);
     }
 };
-// ==========================================
-// FIN SCORING FINANCIERO
-// ==========================================
-/* =========================================
-⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
-========================================= */
-async function guardarAjuste(tipo) {
-    if (!window.modoNube) return notify("☁️ Conéctate a la Nube para editar ajustes", "warning");
-const btnTextOriginal = event.target.innerText;
-event.target.innerText = "GUARDANDO...";
-event.target.disabled = true;
-// Función auxiliar local para mayúsculas
-const A_MAYUS = (t) => String(t || "").toUpperCase().trim();
-try {
-if (tipo === 'cuenta') {
-const nombre = A_MAYUS(document.getElementById('new-cta-nombre').value);
-const categoria = A_MAYUS(document.getElementById('new-cta-tipo').value);
-const esInv = document.getElementById('new-cta-inv').checked ? "SI" : "NO";
-if (!nombre) throw new Error("El nombre es obligatorio");
-// Guardar en Excel SIEMPRE EN MAYÚSCULAS
-await oneDrive.addRowToTable([nombre, categoria, esInv], 'TablaCuentas');
-window.mapaCuentas[nombre] = { tipo: categoria, esInversion: (esInv === "SI") };
-document.getElementById('new-cta-nombre').value = "";
-notify(`✅ Cuenta "${nombre}" creada`, 'success');
-}
-else if (tipo === 'concepto') {
-const val = A_MAYUS(document.getElementById('new-concepto').value);
-if (!val) throw new Error("Escribe un concepto");
-await oneDrive.addRowToTable([val], 'TablaConceptos');
-document.getElementById('new-concepto').value = "";
-notify(`✅ Concepto "${val}" añadido`, 'success');
-}
-else if (tipo === 'beneficiario') {
-const val = A_MAYUS(document.getElementById('new-benef').value);
-if (!val) throw new Error("Escribe un beneficiario");
-await oneDrive.addRowToTable([val], 'TablaBeneficiarios');
-document.getElementById('new-benef').value = "";
-notify(`✅ Beneficiario "${val}" añadido`, 'success');
-}
-vibrar('ingreso');
-// Actualizamos sugerencias
-if(typeof cargarSugerenciasAjustes === 'function') cargarSugerenciasAjustes();
-} catch (e) {
-console.error(e);
-notify("❌ Error en ajustes: " + e.message, "error");
-} finally {
-event.target.innerText = btnTextOriginal;
-event.target.disabled = false;
-}
-}
-window.cargarSugerenciasAjustes = function() {
-    // Actualmente no hay sugerencias dinámicas; función vacía para evitar errores
-    logDev("Sugerencias de ajustes cargadas (placeholder)");
-};
+
 // ==========================================
 // 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO UNIFICADO)
 // ==========================================
@@ -8440,48 +8337,6 @@ if (typeof guardarUniversal === 'function') {
 await guardarUniversal();
 }
 }
-// --- SOPORTE TECLADO FÍSICO PARA CALCULADORA ---
-document.addEventListener('keydown', function(e) {
-const modal = document.getElementById('modal-calculadora');
-// Solo actuar si la calculadora está abierta
-if (!modal || modal.style.display === 'none') return;
-const key = e.key;
-// Números 0-9
-if (/^[0-9]$/.test(key)) {
-window.addCalcNum(key);
-e.preventDefault();
-}
-// Puntos y comas
-if (key === '.' || key === ',') {
-window.addCalcNum('.');
-e.preventDefault();
-}
-// Operaciones
-if (key === '+') window.addCalcOp('+');
-if (key === '-') window.addCalcOp('-');
-if (key === '*') window.addCalcOp('*');
-if (key === '/') window.addCalcOp('/');
-// Enter = ACEPTAR (Guardar y cerrar)
-if (key === 'Enter') {
-window.cerrarCalculadora(true);
-e.preventDefault();
-}
-// Igual (=) = CALCULAR (Ver resultado intermedio)
-if (key === '=') {
-window.calcResult();
-e.preventDefault();
-}
-// Escape = CANCELAR (Cerrar sin guardar)
-if (key === 'Escape') {
-window.cerrarCalculadora(false);
-e.preventDefault();
-}
-// Borrar (Backspace/Supr) = Borrar pantalla (C)
-if (key === 'Backspace' || key === 'Delete') {
-window.clearCalc();
-e.preventDefault();
-}
-});
 // --- OPCIÓN B: AUTOCOMPLETADO MÁGICO (VERSIÓN 4.0 - TRASPASOS INTELIGENTES) ---
 window.detectarMagia = function(texto) {
     // 1. Validaciones iniciales
@@ -9221,25 +9076,12 @@ async function iniciarAutenticacion() {
         window.mostrarPin();
     }
 }
-// Auto-configuración inicial (Ocultar botón si es PC y ajustar el switch)
+// Auto-configuración inicial (ajustar el switch de biometría)
 document.addEventListener('DOMContentLoaded', () => {
-const bioToggle = document.getElementById('toggle-biometria');
-if (bioToggle) {
-bioToggle.checked = localStorage.getItem('aidanai_biometria') !== 'false';
-}
-// Detectar si el dispositivo actual tiene lector de huellas
-if (window.PublicKeyCredential) {
-window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-.then(disponible => {
-const btnHuella = document.getElementById('btn-biometria');
-if (btnHuella) {
-btnHuella.style.display = disponible ? 'flex' : 'none';
-}
-});
-} else {
-const btnHuella = document.getElementById('btn-biometria');
-if (btnHuella) btnHuella.style.display = 'none';
-}
+    const bioToggle = document.getElementById('toggle-biometria');
+    if (bioToggle) {
+        bioToggle.checked = localStorage.getItem('aidanai_biometria') !== 'false';
+    }
 });
 // ──────────────────────────────────────────────────────────────────────
 // 🚀 MOTOR DE ARRANQUE CENTRALIZADO (AppInitializer)
