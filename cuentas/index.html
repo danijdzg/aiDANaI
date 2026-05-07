@@ -3534,9 +3534,8 @@ window.ChartLifecycle = (function() {
                         window.renderizarGraficoEvolucion(window._datosEvoCache || window.datos);
                     }
                 } else if (tabActiva === 'salud') {
-                    if (typeof window.actualizarRadar === 'function') window.actualizarRadar();
-                    // El proyector FIRE suele necesitar los datos del dashboard
-                    if (typeof window.renderizarProyectorFIRE === 'function') {
+				// El radar se actualiza mediante actualizarDashboard, no necesita llamada directa
+				if (typeof window.renderizarProyectorFIRE === 'function') {
                         // Intentamos recuperar últimos cálculos si existen
                         const capital = window._lastTotalPatri || 0;
                         const ahorro = window._lastAhorro || 0;
@@ -7483,7 +7482,7 @@ const esInv = document.getElementById('new-cta-inv').checked ? "SI" : "NO";
 if (!nombre) throw new Error("El nombre es obligatorio");
 // Guardar en Excel SIEMPRE EN MAYÚSCULAS
 await oneDrive.addRowToTable([nombre, categoria, esInv], 'TablaCuentas');
-mapaCuentas[nombre] = { tipo: categoria, esInversion: (esInv === "SI") };
+window.mapaCuentas[nombre] = { tipo: categoria, esInversion: (esInv === "SI") };
 document.getElementById('new-cta-nombre').value = "";
 notify(`✅ Cuenta "${nombre}" creada`, 'success');
 }
@@ -8074,45 +8073,6 @@ if (typeof guardarUniversal === 'function' && window.modoNube) {
 // --- CONTROL DEL SEMÁFORO Y SEGURIDAD (V. DEFINITIVA UNIFICADA) ---
 // Acepta AMBOS conjuntos de aliases: {ok, cargando, error} y {verde, naranja, rojo, local}
 window.estadoConexion = 'ok';
-window.actualizarSemaforo = function(estado) {
-// ── Normalizar aliases para tener una sola rama de lógica ──
-if (estado === 'verde')                        estado = 'ok';
-if (estado === 'naranja' || estado === 'loading') estado = 'cargando';
-if (estado === 'rojo')                         estado = 'error';
-const el         = document.getElementById('sync-status');
-const textoSentry = document.getElementById('sentry-text');
-const sentryPanel = document.getElementById('data-sentry');
-const icono       = document.getElementById('sentry-icon');
-if (!el || !sentryPanel) return;
-el.className = 'status-dot';
-window.estadoConexion = estado;
-if (estado === 'ok') {
-el.classList.add('status-sync');
-sentryPanel.className = 'sentry-panel sentry-idle';
-if (icono) icono.innerText = '🛡️';
-if (textoSentry) textoSentry.innerText = 'ONEDRIVE CONECTADO';
-} else if (estado === 'cargando') {
-el.classList.add('status-saving');
-sentryPanel.className = 'sentry-panel sentry-working';
-if (icono) icono.innerText = '🔄';
-if (textoSentry) textoSentry.innerText = 'GUARDANDO DATOS...';
-} else if (estado === 'error' || estado === 'desconectado') {
-el.classList.add('status-error');
-sentryPanel.className = 'sentry-panel sentry-danger';
-if (icono) icono.innerText = '⚠️';
-if (textoSentry) textoSentry.innerText = 'PELIGRO: DESCONECTADO';
-window.estadoConexion = 'desconectado';
-} else if (estado === 'local') {
-// FIX 3: estado 'local' antes no era manejado y no mostraba nada
-el.classList.add('status-sync');
-sentryPanel.className = 'sentry-panel sentry-idle';
-if (icono) icono.innerText = '💾';
-if (textoSentry) textoSentry.innerText = 'MODO LOCAL SEGURO';
-} else {
-el.classList.add('status-none');
-sentryPanel.className = 'sentry-panel';
-}
-};
 // ==========================================
 // ⚙️ CONTROL DE TIPO RECURRENTE (Y FUNCIONES DE MODAL)
 // ==========================================
@@ -9435,9 +9395,7 @@ if (contenedorAlertas) contenedorAlertas.appendChild(alertaDiv);
 }
 }
 };
-// 2. LÓGICA DEL SEMÁFORO (UNIFICADA - ver definición principal en window.actualizarSemaforo más abajo)
-// Esta llamada delega en la función única ya definida que acepta ambos conjuntos de aliases.
-window.estadoSemaforo = 'verde';
+
 // --- INICIO LÓGICA DE INSTALACIÓN PWA ---
 window.eventoInstalacion = null;
 // Nota: el listener 'beforeinstallprompt' está registrado dentro de initPWA() para evitar duplicados.
