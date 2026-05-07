@@ -6631,12 +6631,35 @@ if (e && e.code === 'CONFLICT_412') {
 warnDev("🔄 Conflicto 412: Fusión inteligente en marcha...");
 notify("🔄 Fusionando datos de la nube...", "loading");
 try {
-const wbFresco = await oneDrive.loadFile();
-// 1. Esto actualiza window.datos con la versión limpia de la nube
-if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
-// 2. 🟢 MAGIA DE FUSIÓN: Comparamos la Nube con lo que intentábamos subir (datosFinales)
-datosFinales = window.fusionarMovimientos(window.datos, datosFinales);
-window.datos = datosFinales; // Guardamos el resultado fusionado definitivo
+    const wbFresco = await oneDrive.loadFile();
+    
+    // ---- INICIO MEJORA: guardar cartera local antes de sobrescribir ----
+    const carteraLocal = window.datosCartera ? JSON.parse(JSON.stringify(window.datosCartera)) : [];
+    const historicoLocal = window.historicoCartera ? JSON.parse(JSON.stringify(window.historicoCartera)) : [];
+    // ---- FIN MEJORA ----
+    
+    if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
+    
+    // ---- INICIO MEJORA: fusionar cartera (local prevalece) ----
+    if (carteraLocal.length > 0 || window.datosCartera.length > 0) {
+        const mapaCartera = new Map();
+        window.datosCartera.forEach(p => mapaCartera.set(p.id, p));
+        carteraLocal.forEach(p => mapaCartera.set(p.id, p));
+        window.datosCartera = Array.from(mapaCartera.values());
+    }
+    if (historicoLocal.length > 0 || window.historicoCartera.length > 0) {
+        const mapaHistorico = new Map();
+        window.historicoCartera.forEach(h => mapaHistorico.set(h.ts, h));
+        historicoLocal.forEach(h => mapaHistorico.set(h.ts, h));
+        window.historicoCartera = Array.from(mapaHistorico.values())
+            .sort((a,b) => a.ts - b.ts);
+    }
+    // ---- FIN MEJORA ----
+    
+    // 2. 🟢 MAGIA DE FUSIÓN: Comparamos la Nube con lo que intentábamos subir (datosFinales)
+    datosFinales = window.fusionarMovimientos(window.datos, datosFinales);
+    window.datos = datosFinales;
+    
 // 3. RECONSTRUIMOS EL EXCEL (Movimientos)
 wb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datosFinales.map(d => ({
@@ -6652,6 +6675,39 @@ XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dc2), "Configuracion");
 // 5. RECONSTRUIMOS EL EXCEL (Recurrentes)
 const lr2 = window.datosRecurrentes||[];
 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lr2.map(r=>({ID:r.id,PROXIMA_FECHA:r.fechaProx,FRECUENCIA:r.frecuencia,DIAS_SEMANA:r.diasSemana||"",TIPO_REGLA:r.tipoRegla||"gasto",CUENTA:r.cuenta,CUENTA_DESTINO:r.cuentaDestino||"",IMPORTE:r.importe,CONCEPTO:r.concepto,BENEFICIARIO:r.beneficiario||"",DESCRIPCION:r.descripcion||""})),{header:["ID","PROXIMA_FECHA","FRECUENCIA","DIAS_SEMANA","TIPO_REGLA","CUENTA","CUENTA_DESTINO","IMPORTE","CONCEPTO","BENEFICIARIO","DESCRIPCION"]}), "Recurrentes");
+// ── RECONSTRUIR HOJA CARTERA ──────────────────────────────────────
+if (window.datosCartera && window.datosCartera.length > 0) {
+    const filasCartera = window.datosCartera.map(p => ({
+        "ID": p.id,
+        "TICKER": p.ticker,
+        "NOMBRE": p.nombre,
+        "TIPO": p.tipo,
+        "CUENTA": p.cuenta,
+        "CANTIDAD": p.cantidad,
+        "PRECIO_COMPRA": p.precioCompra,
+        "PRECIO_ACTUAL": p.precioActual,
+        "FECHA_COMPRA": p.fechaCompra || "",
+        "NOTAS": p.notas || ""
+    }));
+    const wsCartera = XLSX.utils.json_to_sheet(filasCartera, {
+        header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","FECHA_COMPRA","NOTAS"]
+    });
+    XLSX.utils.book_append_sheet(wb, wsCartera, "Cartera");
+}
+
+// ── RECONSTRUIR HOJA HISTÓRICO_CARTERA ─────────────────────────────
+if (window.historicoCartera && window.historicoCartera.length > 0) {
+    const filasHist = window.historicoCartera.map(h => ({
+        "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
+        "VALOR": h.valor
+    }));
+    const wsHist = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR"] });
+    // Aplicar formato de fecha legible
+    Object.keys(wsHist).forEach(k => {
+        if (wsHist[k].t === 'd') wsHist[k].z = 'dd/mm/yyyy';
+    });
+    XLSX.utils.book_append_sheet(wb, wsHist, "Historico_Cartera");
+}
 await new Promise(r => setTimeout(r, 800));
 // Al terminar el catch sin errores, el bucle while vuelve a intentar la subida (intentos++)
 } catch(syncErr) {
