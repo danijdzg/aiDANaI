@@ -8152,7 +8152,14 @@ contenedor.parentElement.style.padding = "20px";
 contenedor.style.margin = "0";
 contenedor.style.backgroundColor = "transparent";
 contenedor.innerHTML = '';
-const listaCompleta = window.datosRecurrentes || [];
+let listaCompleta = window.datosRecurrentes || [];
+// 📌 NUEVO: filtrar recurrentes por usuario activo
+if (typeof pasaFiltroPropietario === 'function') {
+  listaCompleta = listaCompleta.filter(r => {
+    // las reglas recurrentes tienen 'cuenta', pasamos objeto simulado
+    return pasaFiltroPropietario({ cuenta: r.cuenta || '', beneficiario: '' });
+  });
+}
 if (listaCompleta.length === 0) {
 contenedor.innerHTML = `<div style="text-align:center; padding: 40px 20px; color: #FFFFFF;">No tienes movimientos fijos configurados.</div>`;
 return;
@@ -9347,7 +9354,7 @@ const proximos = recurrentes.filter(r => {
 if (!r.fechaProx) return false;
 const fechaRec = new Date(r.fechaProx);
 fechaRec.setHours(12,0,0,0);
-if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario(r)) return false;
+if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: r.cuenta || '', beneficiario: '' })) return false;
 return fechaRec >= hoy && fechaRec <= limite;
 }).sort((a,b) => new Date(a.fechaProx) - new Date(b.fechaProx));
 const alertaAntigua = document.getElementById('alerta-recibos-7d');
@@ -9531,7 +9538,10 @@ resultadosDiv.innerHTML = '';
 return;
 }
 const busqueda = texto.toLowerCase();
-const listaBusqueda = window.datos || [];
+let listaBusqueda = window.datos || [];
+if (typeof pasaFiltroPropietario === 'function') {
+  listaBusqueda = listaBusqueda.filter(m => pasaFiltroPropietario(m));
+}
 // 1. Buscamos de forma segura en las propiedades correctas
 const palabrasBusqueda = busqueda.split(' ').filter(p => p.trim() !== '');
 const encontrados = listaBusqueda.filter(m => {
@@ -9976,6 +9986,7 @@ let totalGastos2025 = 0;
 let totalGastos2026 = 0;
 let mesesConDatos2025 = new Set();
 datos.forEach(m => {
+if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return;   // 📌 NUEVO
 // 1. LIMPIEZA INICIAL: Ignoramos ingresos, traspasos y saldos iniciales
 const conceptoUp = String(m.concepto || '').toUpperCase().trim();
 const esTraspaso = m.tipo === 'traspaso' || conceptoUp.includes('TRASPASO');
@@ -10411,7 +10422,10 @@ document.getElementById('wrapped-overlay').style.display = 'none';
 window.actualizarCuentasClaras = function() {
 const inputMes = document.getElementById('mes-cuentas-claras');
 if (!inputMes) return;
-const datosReales = window.datos || [];
+let datosReales = window.datos || [];
+if (typeof pasaFiltroPropietario === 'function') {
+  datosReales = datosReales.filter(m => pasaFiltroPropietario(m));
+}
 // Si el selector está vacío (ej. al abrir la app), lo rellenamos con el mes actual
 if (!inputMes.value) {
 const hoy = new Date();
@@ -10703,24 +10717,30 @@ window.addEventListener("beforeunload", function(e) {
 // ============================================================
 // 📈 MOTOR CARTERA DE INVERSIONES — MÓDULOS 1-4 COMPLETOS
 // ============================================================
-
 window.calcularValoresCartera = function() {
-  // Si no hay posiciones, limpiamos el resumen
   if (!window.datosCartera || window.datosCartera.length === 0) {
     window.resumenCartera = null;
     return;
   }
 
-  // Acumuladores por cuenta
+  // 📌 NUEVO: filtrar posiciones por usuario activo
+  const posicionesFiltradas = window.datosCartera.filter(p => {
+    if (typeof pasaFiltroPropietario !== 'function') return true;
+    // pasamos un objeto simulado con la cuenta de la posición
+    return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
+  });
+
+  if (posicionesFiltradas.length === 0) {
+    window.resumenCartera = null;
+    return;
+  }
+
   const valorPorCuenta = {};
   const costePorCuenta = {};
-
-  // Totales globales
   let totalValor = 0;
   let totalCoste = 0;
 
-  // Recorrer todas las posiciones
-   window.datosCartera.forEach(pos => {
+  posicionesFiltradas.forEach(pos => {
     const cantidad = parseFloat(pos.cantidad) || 0;
     const precioCompra = parseFloat(pos.precioCompra) || 0;
     const precioActual = parseFloat(pos.precioActual) || 0;
@@ -10728,19 +10748,16 @@ window.calcularValoresCartera = function() {
 
     let costeTotal, valorActual;
     if (esCripto) {
-      // Cripto: precioCompra es importe total invertido, precioActual es unitario
       costeTotal = precioCompra;
       valorActual = cantidad * precioActual;
     } else {
-      // Resto: precioCompra es importe invertido, precioActual es valor actual total
       costeTotal = precioCompra;
-      valorActual = precioActual;  // cantidad siempre es 1
+      valorActual = precioActual;
     }
 
     totalCoste += costeTotal;
     totalValor += valorActual;
 
-    // Acumular por cuenta (si tiene cuenta asociada)
     const cuenta = pos.cuenta ? String(pos.cuenta).toUpperCase().trim() : null;
     if (cuenta) {
       costePorCuenta[cuenta] = (costePorCuenta[cuenta] || 0) + costeTotal;
@@ -10748,9 +10765,7 @@ window.calcularValoresCartera = function() {
     }
   });
 
-  // Actualizar mapaCuentas con los saldos provenientes de la cartera
   if (window.mapaCuentas) {
-    // Para cada cuenta con posiciones, sobrescribimos su saldoActual
     Object.keys(valorPorCuenta).forEach(cta => {
       if (window.mapaCuentas[cta]) {
         window.mapaCuentas[cta].saldoActual = valorPorCuenta[cta];
@@ -10758,7 +10773,6 @@ window.calcularValoresCartera = function() {
         window.mapaCuentas[cta].plusvalia = valorPorCuenta[cta] - costePorCuenta[cta];
         window.mapaCuentas[cta].tieneCartera = true;
       } else {
-        // Si la cuenta no existe en el mapa, la creamos con datos mínimos
         window.mapaCuentas[cta] = {
           nombre: cta,
           tipo: 'INVERSIÓN',
@@ -10772,37 +10786,30 @@ window.calcularValoresCartera = function() {
     });
   }
 
-  // Cálculo de plusvalía y rentabilidad global
   const plusvalia = totalValor - totalCoste;
   let rentabilidad = 0;
-  if (totalCoste > 0) {
-    rentabilidad = (plusvalia / totalCoste) * 100;
-  }
+  if (totalCoste > 0) rentabilidad = (plusvalia / totalCoste) * 100;
 
-  // Almacenar el resumen global para usar en otras partes de la app
   window.resumenCartera = {
-    totalValor: totalValor,
-    totalCoste: totalCoste,
-    plusvalia: plusvalia,
-    rentabilidad: rentabilidad,
-    numPosiciones: window.datosCartera.length,
-    posiciones: window.datosCartera
+    totalValor,
+    totalCoste,
+    plusvalia,
+    rentabilidad,
+    numPosiciones: posicionesFiltradas.length,
+    posiciones: posicionesFiltradas
   };
 
-  // Registrar punto en el histórico de evolución (evitando duplicados del mismo día)
   const hoy = new Date();
   const hoyStr = hoy.toISOString().split('T')[0];
   window.historicoCartera = window.historicoCartera || [];
   const ultPunto = window.historicoCartera[window.historicoCartera.length - 1];
   const ultFechaStr = ultPunto ? new Date(ultPunto.ts).toISOString().split('T')[0] : null;
-
   if (ultFechaStr !== hoyStr && totalValor > 0) {
     window.historicoCartera.push({ fecha: hoy, ts: hoy.getTime(), valor: totalValor });
   } else if (ultFechaStr === hoyStr && ultPunto) {
     ultPunto.valor = totalValor;
   }
 
-  // Actualizar la tarjeta del dashboard si está visible
   if (typeof window.actualizarDashCartera === 'function') {
     window.actualizarDashCartera();
   }
@@ -10894,9 +10901,14 @@ window.renderizarCartera = function() {
   const colorTipo = { BOLSA:'#0A84FF', CRIPTO:'#FF9F1B', AUTOCUSTODIA:'#39FF14', PENSION:'#BF5AF2', FONDO:'#00B8FF', OTRO:'#888' };
   const badgeTipo = { BOLSA:'badge-bolsa', CRIPTO:'badge-cripto', AUTOCUSTODIA:'badge-custodia', PENSION:'badge-pension', FONDO:'badge-bolsa', OTRO:'' };
   const emojiTipo = { BOLSA:'📈', CRIPTO:'🪙', AUTOCUSTODIA:'🔐', PENSION:'🏦', FONDO:'📊', OTRO:'💼' };
+	  // 📌 NUEVO: filtrar posiciones por usuario activo
+  const posicionesFiltradas = (window.datosCartera || []).filter(p => {
+    if (typeof pasaFiltroPropietario !== 'function') return true;
+    return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
+  });
 
-  (window.datosCartera || []).forEach(pos => {
-    const tipo = pos.tipo || 'OTRO';
+  posicionesFiltradas.forEach(pos => {
+      const tipo = pos.tipo || 'OTRO';
     if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
     const valPos = pos.cantidad * pos.precioActual;
     grupos[tipo].total += valPos;
