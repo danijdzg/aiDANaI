@@ -2757,10 +2757,10 @@ Ahora no
       </div>
       
       <!-- CANTIDAD (Admite 9 decimales) -->
-      <div class="precio-input-wrap">
-        <label>CANTIDAD / UNIDADES</label>
-        <input type="number" id="cartera-cantidad" placeholder="0.000000000" step="0.000000001" inputmode="decimal" style="font-size:20px;" oninput="window.recalcularPrecioSiAplica()">
-      </div>
+      <div class="precio-input-wrap" id="caja-cantidad">
+    <label>CANTIDAD / UNIDADES</label>
+    <input type="number" id="cartera-cantidad" placeholder="0.000000000" step="0.000000001" inputmode="decimal" style="font-size:20px;" oninput="window.recalcularPrecioSiAplica()">
+</div>
       
       <div class="precio-input-wrap">
         <label id="label-precio-compra">PRECIO COMPRA (€ invertidos)</label>
@@ -9726,62 +9726,60 @@ window.comportamientoTipoActivo = async function() {
     const tipo = document.getElementById('cartera-tipo').value;
     const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
 
-    // Etiqueta del campo PRECIO COMPRA (siempre unitario)
+    // Referencias DOM
+    const cajaCantidad = document.getElementById('caja-cantidad');
+    const inputCantidad = document.getElementById('cartera-cantidad');
     const labelCompra = document.getElementById('label-precio-compra');
-    if (labelCompra) {
-        labelCompra.innerText = 'PRECIO MEDIO COMPRA (€/ud)';
-    }
-
+    const labelActual = document.getElementById('label-precio-actual');
     const inputActual = document.getElementById('cartera-precio-actual');
-    const cajaPrecio = document.getElementById('caja-precio-actual');
-    const labelPrecio = document.getElementById('label-precio-actual');
     const avisoApi = document.getElementById('aviso-precio-api');
-    const tickerInput = document.getElementById('cartera-ticker');
-    const ticker = tickerInput ? tickerInput.value.toUpperCase().trim() : '';
-    const cantidadInput = document.getElementById('cartera-cantidad');
-    const cantidad = parseFloat(cantidadInput?.value) || 0;
-
-    if (!inputActual) return;
+    const cajaPrecio = document.getElementById('caja-precio-actual');
 
     if (esCripto) {
-        // Obtener precio unitario (solo BTC)
+        // Mostrar campo cantidad
+        if (cajaCantidad) cajaCantidad.style.display = 'flex';
+        // Etiquetas coherentes
+        if (labelCompra) labelCompra.innerText = 'IMPORTE INVERTIDO (€)';
+        if (labelActual) labelActual.innerHTML = 'PRECIO BTC/EUR (€) <span style="font-size:8px;">⚡ API BINANCE</span>';
+
+        // Intentar obtener precio unitario de Binance
         inputActual.readOnly = true;
-        if (avisoApi) avisoApi.style.display = 'block';
-        labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) <span style="font-size:8px;">⚡ API BINANCE</span>';
         inputActual.style.color = "#00B8FF";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(0, 184, 255, 0.5)";
         inputActual.placeholder = "Consultando...";
+        if (avisoApi) avisoApi.style.display = 'block';
+        avisoApi.innerText = "Valor total = cantidad × precio actual";
 
         let precioUnitario = null;
+        const tickerInput = document.getElementById('cartera-ticker');
+        const ticker = tickerInput ? tickerInput.value.toUpperCase().trim() : '';
         if (ticker === 'BTC') {
             precioUnitario = await window.obtenerPrecioBTC();
-        } else {
-            precioUnitario = null;
         }
-
-        if (precioUnitario !== null && cantidad > 0) {
-            // Guardamos el precio unitario en el campo (aunque visualmente mostraremos el total)
+        if (precioUnitario !== null) {
             inputActual.value = precioUnitario.toFixed(2);
-            inputActual.readOnly = false;   // permitir edición manual si se desea
-            // Mostrar también el valor total en un texto auxiliar (opcional)
-            const valorTotal = (cantidad * precioUnitario).toFixed(2);
-            if (avisoApi) avisoApi.innerHTML = `💡 Valor actual total: ${valorTotal} € (${cantidad} × ${precioUnitario} €/ud)`;
+            inputActual.readOnly = false; // permite ajuste manual
+            if (avisoApi) avisoApi.innerText = "Precio actualizado desde Binance. Puedes editarlo.";
         } else {
-            inputActual.placeholder = "No encontrado";
-            inputActual.value = "";
+            inputActual.value = '';
+            inputActual.placeholder = "Introduce precio manual";
             inputActual.readOnly = false;
-            if (avisoApi) avisoApi.style.display = 'none';
-            labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) ← MANUAL (API no disponible)';
+            if (avisoApi) avisoApi.innerText = "No se pudo conectar con Binance. Introduce el precio manualmente.";
+            labelActual.innerHTML = 'PRECIO BTC/EUR (€) ← MANUAL';
         }
     } else {
-        // Activos normales: precio unitario manual
+        // Resto de activos: ocultar cantidad y forzarla a 1
+        if (cajaCantidad) cajaCantidad.style.display = 'none';
+        inputCantidad.value = 1;
+        // Etiquetas para activos no cripto
+        if (labelCompra) labelCompra.innerText = 'IMPORTE INVERTIDO (€)';
+        if (labelActual) labelActual.innerText = 'VALOR ACTUAL (€) ← MANUAL';
         inputActual.readOnly = false;
-        if (avisoApi) avisoApi.style.display = 'none';
-        labelPrecio.innerHTML = 'PRECIO ACTUAL (€/ud) ← MANUAL';
         inputActual.style.color = "#39FF14";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(57, 255, 20, 0.4)";
+        inputActual.placeholder = "0.00";
+        if (avisoApi) avisoApi.style.display = 'none';
     }
-
     window.actualizarPreviewPnl();
 };
 
@@ -9806,22 +9804,29 @@ window.recalcularPrecioSiAplica = function() { window.actualizarPreviewPnl(); };
 
 // 4. PREVIEW P&L (VISTA PREVIA DE RENTABILIDAD)
 window.actualizarPreviewPnl = function() {
+    const tipo = document.getElementById('cartera-tipo').value;
+    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || (esCripto ? 0 : 1);
+    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
+    const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
+
+    let costeTotal, valorActual;
+    if (esCripto) {
+        costeTotal = pCompra;                      // importe total invertido
+        valorActual = cantidad * pActual;           // cantidad * precio unitario
+    } else {
+        costeTotal = pCompra;                      // importe invertido
+        valorActual = pActual;                     // valor actual total (campo ya es total)
+    }
+
     const previewDiv = document.getElementById('preview-pnl-cartera');
     const valDiv = document.getElementById('preview-pnl-valor');
     const pctDiv = document.getElementById('preview-pnl-pct');
 
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
-    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-    const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
-
-    const costeTotal = cantidad * pCompra;
-    const valorActual = cantidad * pActual;
-
-    if (costeTotal > 0 && valorActual > 0 && previewDiv) {
+    if (costeTotal > 0 && previewDiv) {
         previewDiv.style.display = 'block';
         const pnlEuros = valorActual - costeTotal;
         const pnlPct = (pnlEuros / costeTotal) * 100;
-
         const fmt = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
         valDiv.innerText = (pnlEuros >= 0 ? '+' : '') + fmt.format(pnlEuros);
         valDiv.style.color = pnlEuros >= 0 ? '#39FF14' : '#FF2E4D';
@@ -10715,16 +10720,23 @@ window.calcularValoresCartera = function() {
   let totalCoste = 0;
 
   // Recorrer todas las posiciones
-  window.datosCartera.forEach(pos => {
+   window.datosCartera.forEach(pos => {
     const cantidad = parseFloat(pos.cantidad) || 0;
     const precioCompra = parseFloat(pos.precioCompra) || 0;
     const precioActual = parseFloat(pos.precioActual) || 0;
+    const esCripto = (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA');
 
-    // Cálculo uniforme: coste total y valor actual total = cantidad × precio unitario
-    const costeTotal = cantidad * precioCompra;
-    const valorActual = cantidad * precioActual;
+    let costeTotal, valorActual;
+    if (esCripto) {
+      // Cripto: precioCompra es importe total invertido, precioActual es unitario
+      costeTotal = precioCompra;
+      valorActual = cantidad * precioActual;
+    } else {
+      // Resto: precioCompra es importe invertido, precioActual es valor actual total
+      costeTotal = precioCompra;
+      valorActual = precioActual;  // cantidad siempre es 1
+    }
 
-    // Acumular globalmente
     totalCoste += costeTotal;
     totalValor += valorActual;
 
@@ -10911,10 +10923,9 @@ window.renderizarCartera = function() {
       </div>
       <div id="${groupId}">`;
     g.posiciones.sort((a,b) => (b.cantidad*b.precioActual) - (a.cantidad*a.precioActual)).forEach(pos => {
-	      const valPos  = pos.cantidad * pos.precioActual;
-	      const cosPos  = pos.cantidad * pos.precioCompra;
-	      const pnlPos  = valPos - cosPos;
-          
+          const valPos  = pos.cantidad * pos.precioActual;
+          const cosPos  = pos.cantidad * pos.precioCompra;
+          const pnlPos  = valPos - cosPos;
           let rentPos = cosPos > 0 ? ((valPos / cosPos) - 1) * 100 : 0;
           const fCompra = pos.fechaCompra ? new Date(pos.fechaCompra) : null;
           if (fCompra && !isNaN(fCompra.getTime())) {
@@ -10923,24 +10934,27 @@ window.renderizarCartera = function() {
               rentPos = (Math.pow(1 + (rentPos/100), 1/years) - 1) * 100;
             }
           }
+          const pnlSig  = pnlPos >= 0 ? '+' : '';
+          const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
+          const cantStr = pos.cantidad >= 1 ? pos.cantidad.toFixed(2) : pos.cantidad.toFixed(6);
 
-	      const pnlSig  = pnlPos >= 0 ? '+' : '';
-      const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
-      const cantStr = pos.cantidad >= 1 ? pos.cantidad.toFixed(2) : pos.cantidad.toFixed(6);
-      html += `
-      <div class="cartera-pos-row" onclick="window.editarPosicion('${pos.id}')">
-        <div style="flex:1; min-width:0; padding-right:8px;">
-          <div class="cartera-ticker">${pos.ticker || pos.nombre}</div>
-          ${pos.nombre && pos.ticker ? `<div class="cartera-nombre">${pos.nombre}</div>` : ''}
-          <div class="cartera-cantidad">${cantStr} × ${fmt2(pos.precioActual)}</div>
-          <span class="cartera-tipo-badge ${badgeClass}">${tipo}</span>
-        </div>
-        <div style="text-align:right; flex-shrink:0;">
-          <div class="cartera-valor" style="color:#fff;">${fmt2(valPos)}</div>
-	          <div class="cartera-pnl ${pnlClass}">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%${pos.fechaCompra && (new Date() - new Date(pos.fechaCompra)) > 2592000000 ? ' an.' : ''})</div>
-	          <div style="font-size:9px; color:#555; margin-top:2px;">${pos.fechaCompra ? pos.fechaCompra.split('-').reverse().join('/') + ' · ' : ''}Compra: ${fmt2(pos.precioCompra)}</div>
-        </div>
-      </div>`;
+          // ✨ NUEVA LÓGICA DIFERENCIADA POR TIPO DE ACTIVO
+          const esCripto = (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA');
+
+          html += `
+          <div class="cartera-pos-row" onclick="window.editarPosicion('${pos.id}')">
+            <div style="flex:1; min-width:0; padding-right:8px;">
+              <div class="cartera-ticker">${pos.ticker || pos.nombre}</div>
+              ${pos.nombre && pos.ticker ? `<div class="cartera-nombre">${pos.nombre}</div>` : ''}
+              ${esCripto ? `<div class="cartera-cantidad">${cantStr} × ${fmt2(pos.precioActual)}</div>` : ''}
+              <span class="cartera-tipo-badge ${badgeClass}">${tipo}</span>
+            </div>
+            <div style="text-align:right; flex-shrink:0;">
+              <div class="cartera-valor" style="color:#fff;">${fmt2(valPos)}</div>
+              <div class="cartera-pnl ${pnlClass}">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%${pos.fechaCompra && (new Date() - new Date(pos.fechaCompra)) > 2592000000 ? ' an.' : ''})</div>
+              <div style="font-size:9px; color:#555; margin-top:2px;">${pos.fechaCompra ? pos.fechaCompra.split('-').reverse().join('/') + ' · ' : ''}Invertido: ${fmt2(pos.precioCompra)}</div>
+            </div>
+          </div>`;
     });
     html += `</div></div>`;
   });
@@ -11121,7 +11135,25 @@ window.guardarPosicion = async function() {
     // 1. Obtener valores del DOM (declaración única)
     const id = document.getElementById('cartera-pos-id').value;
     const tipo = document.getElementById('cartera-tipo').value;
-    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+        const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+
+    // Para no cripto, ignoramos la cantidad y forzamos 1
+    const cantidadFinal = esCripto ? cantidad : 1;
+    const pCompraFinal = pCompra;   // siempre es el importe total invertido
+    const pActualFinal = esCripto ? pActual : pActual;  // unitario para cripto, total para resto
+
+    const posicion = {
+        id: id || generarId(),
+        tipo,
+        cuenta,
+        ticker,
+        nombre,
+        cantidad: cantidadFinal,
+        precioCompra: pCompraFinal,
+        precioActual: pActualFinal,
+        fechaCompra: fecha,
+        notas
+    };
     const cuenta = document.getElementById('cartera-cuenta').value;
     const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
     const nombre = document.getElementById('cartera-nombre').value;
